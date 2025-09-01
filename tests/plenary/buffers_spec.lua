@@ -1,7 +1,8 @@
 describe("claudius.parse_buffer", function()
   it("parses a buffer with frontmatter and messages correctly", function()
-    -- Create a new scratch buffer
-    local bufnr = vim.api.nvim_create_buf(false, true)
+    -- Create a new buffer. The `scratch` option is set to false to ensure
+    -- the test environment is as close as possible to a real file buffer.
+    local bufnr = vim.api.nvim_create_buf(false, false)
 
     local lines = {
       "```lua",
