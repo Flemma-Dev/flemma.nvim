@@ -15,5 +15,5 @@ if [ -z "${PLENARY_PATH:-}" ]; then
 fi
 
 # Run tests in a clean Neovim instance
-nvim --headless --noplugin -u tests/minimal_init.vim \
-  -c "lua require('plenary.busted').run(os.getenv('PROJECT_ROOT') .. '/tests/')"
+nvim --headless \
+  -c "PlenaryBustedDirectory 'tests/' { minimal_init = 'tests/minimal_init.vim' }"
