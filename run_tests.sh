@@ -16,4 +16,4 @@ fi
 
 # Run tests in a clean Neovim instance
 nvim --headless --noplugin -u tests/minimal_init.vim \
-  -c "lua require('plenary.busted').run('tests/')"
+  -c "lua require('plenary.busted').run(os.getenv('PROJECT_ROOT') .. '/tests/')"
