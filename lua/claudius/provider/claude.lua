@@ -329,7 +329,7 @@ function M.process_response_line(self, line, callbacks)
   end
 
   -- Track output tokens from usage field in any event (including message_delta)
-  if data.usage and data.usage.output_tokens then
+  if type(data.usage) == "table" and data.usage.output_tokens then
     log.debug("claude.process_response_line(): ... Output tokens update: " .. data.usage.output_tokens)
     if callbacks.on_usage then
       callbacks.on_usage({

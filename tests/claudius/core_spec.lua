@@ -24,11 +24,11 @@ describe(":ClaudiusSend command", function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@System: Be brief.", "@You: Hello" })
 
     -- Arrange: Register a dummy fixture to prevent actual network calls.
-    -- The content of the fixture doesn't matter for this test.
+    -- The content of the fixture DOES matter, as it's processed by the provider.
     local claudius = require("claudius")
     local config = claudius._get_config()
     local default_claude_model = require("claudius.provider.config").get_model("claude")
-    base_provider_module.register_fixture(default_claude_model, "tests/fixtures/openai_hello_success_stream.txt")
+    base_provider_module.register_fixture(default_claude_model, "tests/fixtures/claude_hello_success_stream.txt")
 
     -- Act: Execute the ClaudiusSend command
     vim.cmd("ClaudiusSend")
