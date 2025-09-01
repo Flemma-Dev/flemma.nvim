@@ -16,4 +16,4 @@ fi
 
 # Run tests in a clean Neovim instance
 nvim --headless \
-  -c "PlenaryBustedDirectory 'tests/' { minimal_init = 'tests/minimal_init.vim' }"
+  -c "PlenaryBustedDirectory 'tests/' { minimal_init = 'tests/minimal_init.lua' }"
