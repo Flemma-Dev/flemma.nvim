@@ -158,8 +158,8 @@ describe(":ClaudiusSend command", function()
     local expected_error_message = "Claudius: " .. error_data.error.message
 
     local last_call = notify_spy.calls[#notify_spy.calls]
-    assert.equals(expected_error_message, last_call.refs[1]);
-    assert.equals(vim.log.levels.ERROR, last_call.refs[2]);
+    assert.equals(expected_error_message, last_call.refs[1])
+    assert.equals(vim.log.levels.ERROR, last_call.refs[2])
 
     -- Assert: Check that the buffer is modifiable and clean
     assert.is_true(vim.bo[bufnr].modifiable, "Buffer should be modifiable after an error")
