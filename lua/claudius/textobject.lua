@@ -1,3 +1,4 @@
+local log = require("claudius.logging")
 local M = {}
 
 -- Get the bounds of the current message
@@ -86,25 +87,13 @@ function M.setup(opts)
 
   -- Create text objects for inner message (i{key}) and around message (a{key})
   vim.keymap.set(
-    "x",
+    { "o", "x" },
     "i" .. key,
     ':<C-u>lua require("claudius.textobject").message_textobj("i")<CR>',
     { silent = true, buffer = true }
   )
   vim.keymap.set(
-    "o",
-    "i" .. key,
-    ':<C-u>lua require("claudius.textobject").message_textobj("i")<CR>',
-    { silent = true, buffer = true }
-  )
-  vim.keymap.set(
-    "x",
-    "a" .. key,
-    ':<C-u>lua require("claudius.textobject").message_textobj("a")<CR>',
-    { silent = true, buffer = true }
-  )
-  vim.keymap.set(
-    "o",
+    { "o", "x" },
     "a" .. key,
     ':<C-u>lua require("claudius.textobject").message_textobj("a")<CR>',
     { silent = true, buffer = true }
