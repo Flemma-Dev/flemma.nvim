@@ -44,13 +44,13 @@ describe("Claudius Text Objects", function()
     vim.wait(100) -- Wait for keys to be processed
 
     -- Assert
-    local start_pos = vim.fn.getpos("'<")
-    local end_pos = vim.fn.getpos("'>")
+    local start_pos = vim.fn.getpos("v")
+    local end_pos = vim.fn.getpos(".")
 
     -- Expected start: line 3, column 7 (after "@You: ")
-    assert.are.same({ bufnr, 3, 7 }, { start_pos[1], start_pos[2], start_pos[3] })
+    assert.are.same({ 3, 7 }, { start_pos[2], start_pos[3] })
     -- Expected end: line 5, end of line
-    assert.are.same({ bufnr, 5, 23 }, { end_pos[1], end_pos[2], end_pos[3] })
+    assert.are.same({ 5, 23 }, { end_pos[2], end_pos[3] })
   end)
 
   it("selects around message with 'am'", function()
@@ -62,12 +62,12 @@ describe("Claudius Text Objects", function()
     vim.wait(100) -- Wait for keys to be processed
 
     -- Assert
-    local start_pos = vim.fn.getpos("'<")
-    local end_pos = vim.fn.getpos("'>")
+    local start_pos = vim.fn.getpos("v")
+    local end_pos = vim.fn.getpos(".")
 
     -- Expected start: line 3, column 1
-    assert.are.same({ bufnr, 3, 1 }, { start_pos[1], start_pos[2], start_pos[3] })
+    assert.are.same({ 3, 1 }, { start_pos[2], start_pos[3] })
     -- Expected end: line 6, column 1 (on an empty line)
-    assert.are.same({ bufnr, 6, 1 }, { end_pos[1], end_pos[2], end_pos[3] })
+    assert.are.same({ 6, 1 }, { end_pos[2], end_pos[3] })
   end)
 end)
