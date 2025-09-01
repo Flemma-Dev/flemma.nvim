@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Change to the script's directory to ensure paths are correct
-cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 
 # Set PROJECT_ROOT to the current directory if it's not already set, and export it.
 export PROJECT_ROOT=${PROJECT_ROOT:-$(pwd)}

@@ -23,7 +23,10 @@ pkgs.mkShell {
     google-cloud-sdk
     libsecret
     pythonWithPackages
+    # NeoVim plug-ins
     plenary-nvim
+    # claudius-fmt tools
+    shfmt
 
     (pkgs.aider-chat.withOptional {
       withBrowser = true;
@@ -95,6 +98,9 @@ pkgs.mkShell {
         prettier --write \
           CHANGELOG.md \
           README.md
+
+        shfmt -w -i 2 -ci \
+          ./*.sh
       '';
     })
   ];
