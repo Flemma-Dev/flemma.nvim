@@ -88,20 +88,17 @@ This release marks a major transition for Claudius, evolving from a Claude-speci
 This version introduces significant internal refactoring and configuration changes. Please review the following and update your configuration if necessary:
 
 1.  **Configuration Option Renames:**
-
     - The `prefix_style` option within `setup({})` has been renamed to `role_style`.
       - **Migration:** Rename `prefix_style` to `role_style` in your `require("claudius").setup({...})` call.
     - The `ruler.style` option within `setup({})` has been renamed to `ruler.hl`.
       - **Migration:** Rename `ruler.style` to `ruler.hl` in your `setup({})` call.
 
 2.  **Highlight Group Renames (Affects Manual Linking Only):**
-
     - Internal syntax highlight groups used by `syntax/chat.vim` have been renamed from `Chat*` to `Claudius*` (e.g., `ChatSystem` ⇒ `ClaudiusSystem`, `ChatSystemPrefix` ⇒ `ClaudiusRoleSystem`).
     - **Migration:** This **only** affects users who were manually linking these highlight groups in their Neovim configuration (e.g., using `vim.cmd("highlight link ChatSystem MyCustomGroup")`). If you were doing this, update the source group name (e.g., `vim.cmd("highlight link ClaudiusSystem MyCustomGroup")`).
     - **Users configuring highlights _only_ via the `highlights` table in `setup()` are _not_ affected by this change.**
 
 3.  **Configuration Structure (`model`, `provider`, `parameters`):**
-
     - A new top-level `provider` option specifies the AI provider (`"claude"`, `"openai"`, `"vertex"`). It defaults to `"claude"` for backward compatibility.
     - The `model` option now defaults based on the selected `provider` if set to `nil`. If you specify a `model`, ensure it's valid for the selected provider.
     - Provider-specific parameters (currently only for Vertex AI) are now nested (e.g., `parameters = { vertex = { project_id = "..." } }`).
