@@ -1,8 +1,0 @@
-" Add the project root to the runtime path to find the 'lua' directory
-let &rtp = &rtp . ',' . expand('$PROJECT_ROOT')
-
-" Add plenary to the runtime path
-let &rtp = &rtp . ',' . expand('$PLENARY_PATH')
-
-" Initialize the plugin with default settings
-lua require('claudius').setup({})
