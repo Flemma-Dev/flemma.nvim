@@ -786,7 +786,7 @@ local function parse_message(bufnr, lines, start_idx, frontmatter_offset)
 
   local result = {
     type = msg_type,
-    content = table.concat(content, "\n"),
+    content = table.concat(content, "\n"):gsub("%s+$", ""),
     start_line = start_idx,
     end_line = i - 1,
   }
