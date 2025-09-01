@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 # Change to the script's directory to ensure paths are correct
-cd "$(dirname "$(readlink -f "$0")")"
+cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # Ensure PROJECT_ROOT and PLENARY_PATH are set, if not, exit.
 if [ -z "$PROJECT_ROOT" ] || [ -z "$PLENARY_PATH" ]; then
