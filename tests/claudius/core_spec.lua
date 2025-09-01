@@ -1,4 +1,4 @@
-local test_utils = require("plenary.test_utils")
+local stub = require("luassert.stub")
 
 describe(":ClaudiusSend command", function()
   local base_provider_module = require("claudius.provider.base")
@@ -125,8 +125,8 @@ describe(":ClaudiusSend command", function()
   end)
 
   it("handles an error response from a fixture", function()
-    -- Arrange: Spy on vim.notify
-    local notify_spy = test_utils.spy.on(vim, "notify")
+    -- Arrange: Stub vim.notify to prevent UI and capture calls
+    local notify_stub = stub(vim, "notify")
 
     -- Arrange: Switch to the OpenAI provider
     local claudius = require("claudius")
@@ -145,31 +145,19 @@ describe(":ClaudiusSend command", function()
 
     -- Wait for the notification to be called
     vim.wait(500, function()
-      return notify_spy.calls and #notify_spy.calls > 0
+      return #notify_stub.calls > 0
     end, 10, false)
 
     -- Assert: Check that vim.notify was called with the correct error message
-    assert.spy(notify_spy).was.called()
-
     -- Read expected error from fixture
     local file = io.open("tests/fixtures/openai_invalid_key_error.txt", "r")
     assert.is_not_nil(file, "Fixture file could not be opened")
     local fixture_content = file:read("*a")
     file:close()
     local error_data = vim.fn.json_decode(fixture_content)
-    local expected_error_message = error_data.error.message
+    local expected_error_message = "Claudius: " .. error_data.error.message
 
-    local actual_message = notify_spy.calls[1].args[1]
-    assert.is_not_nil(actual_message)
-    -- The plugin prepends "Claudius: "
-    assert.is_true(
-      actual_message:find("Claudius: " .. expected_error_message, 1, true),
-      "Notification message did not match expected error.\nExpected to find: 'Claudius: "
-        .. expected_error_message
-        .. "'\nActual: '"
-        .. actual_message
-        .. "'"
-    )
+    assert.stub(notify_stub).was_called_with(expected_error_message, vim.log.levels.ERROR)
 
     -- Assert: Check that the buffer is modifiable and clean
     assert.is_true(vim.bo[bufnr].modifiable, "Buffer should be modifiable after an error")
@@ -177,6 +165,6 @@ describe(":ClaudiusSend command", function()
     assert.are.same({ "@You: This will fail" }, final_lines, "Buffer content should not have spinner artifacts")
 
     -- Cleanup
-    notify_spy:revert()
+    notify_stub:revert()
   end)
 end)
