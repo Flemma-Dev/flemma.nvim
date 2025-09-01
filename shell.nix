@@ -7,6 +7,7 @@ let
   pythonWithPackages = python.withPackages (p: [
     p.google-cloud-aiplatform
   ]);
+  plenary-nvim = pkgs.vimPlugins.plenary-nvim;
 in
 pkgs.mkShell {
   name = "claudius-dev-shell";
@@ -14,12 +15,15 @@ pkgs.mkShell {
   shellHook = ''
     PROJECT_ROOT=$(pwd)
     export PROJECT_ROOT
+    PLENARY_PATH=${plenary-nvim}
+    export PLENARY_PATH
   '';
 
   buildInputs = with pkgs; [
     google-cloud-sdk
     libsecret
     pythonWithPackages
+    plenary-nvim
 
     (pkgs.aider-chat.withOptional {
       withBrowser = true;
