@@ -20,7 +20,6 @@ describe("Claudius Text Objects", function()
   local function setup_buffer_and_cursor()
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
-    vim.api.nvim_buf_set_option(bufnr, "filetype", "chat")
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
       "@System: System prompt.", -- line 1
       "", -- line 2
@@ -32,6 +31,7 @@ describe("Claudius Text Objects", function()
     })
     -- Place cursor in the middle of the "You" message
     vim.api.nvim_win_set_cursor(0, { 4, 5 })
+    vim.bo[bufnr].filetype = "chat"
     return bufnr
   end
 
