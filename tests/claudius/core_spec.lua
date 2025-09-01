@@ -55,10 +55,10 @@ describe(":ClaudiusSend command", function()
   it("formats the request body correctly for the OpenAI provider", function()
     -- Arrange: Switch to the OpenAI provider for this test
     local claudius = require("claudius")
-    claudius.switch("openai", "gpt-4o", {})
+    claudius.switch("openai", "o3", {})
 
     -- Arrange: Register a dummy fixture to prevent actual network calls.
-    base_provider_module.register_fixture("gpt-4o", "tests/fixtures/openai_hello_success_stream.txt")
+    base_provider_module.register_fixture("o3", "tests/fixtures/openai_hello_success_stream.txt")
 
     -- Arrange: Create a new buffer, make it current, and set its content
     local bufnr = vim.api.nvim_create_buf(false, false)
@@ -75,7 +75,7 @@ describe(":ClaudiusSend command", function()
     local config = claudius._get_config()
 
     local expected_body = {
-      model = "gpt-4o",
+      model = "o3",
       messages = {
         { role = "user", content = "Hello" },
       },
@@ -91,10 +91,10 @@ describe(":ClaudiusSend command", function()
   it("handles a successful streaming response from a fixture", function()
     -- Arrange: Switch to the OpenAI provider and model that matches the fixture
     local claudius = require("claudius")
-    claudius.switch("openai", "o3-2025-04-16", {})
+    claudius.switch("openai", "o3", {})
 
     -- Arrange: Register the fixture to be used by the provider
-    base_provider_module.register_fixture("o3-2025-04-16", "tests/fixtures/openai_hello_success_stream.txt")
+    base_provider_module.register_fixture("o3", "tests/fixtures/openai_hello_success_stream.txt")
 
     -- Arrange: Set up the buffer with an initial prompt
     local bufnr = vim.api.nvim_create_buf(false, false)
