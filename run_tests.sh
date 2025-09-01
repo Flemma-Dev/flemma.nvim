@@ -1,5 +1,8 @@
-#!/bin/sh
+#!/usr/bin/env bash
 set -e
+
+# Change to the script's directory to ensure paths are correct
+cd "$(dirname "$(readlink -f "$0")")"
 
 # Ensure PROJECT_ROOT and PLENARY_PATH are set, if not, exit.
 if [ -z "$PROJECT_ROOT" ] || [ -z "$PLENARY_PATH" ]; then
