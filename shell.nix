@@ -25,8 +25,6 @@ pkgs.mkShell {
     pythonWithPackages
     # NeoVim plug-ins
     plenary-nvim
-    # claudius-fmt tools
-    shfmt
 
     (pkgs.aider-chat.withOptional {
       withBrowser = true;
@@ -93,9 +91,6 @@ pkgs.mkShell {
 
         find . -name "*.md" -print0 | xargs -0 \
         prettier --write
-
-        find . -name "*.sh" -print0 | xargs -0 \
-        shfmt -w -i 2 -ci
       '';
     })
   ];
