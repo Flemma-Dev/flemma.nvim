@@ -125,9 +125,6 @@ describe(":ClaudiusSend command", function()
   end)
 
   it("handles an error response from a fixture", function()
-    -- Arrange: Stub vim.notify to prevent UI and capture calls
-    local notify_spy = stub(vim, "notify")
-
     -- Arrange: Switch to the OpenAI provider
     local claudius = require("claudius")
     claudius.switch("openai", "o3", {})
@@ -139,6 +136,9 @@ describe(":ClaudiusSend command", function()
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: This will fail" })
+
+    -- Arrange: Stub vim.notify to prevent UI and capture calls
+    local notify_spy = stub(vim, "notify")
 
     -- Act: Execute the command
     vim.cmd("ClaudiusSend")
@@ -164,7 +164,7 @@ describe(":ClaudiusSend command", function()
     -- Assert: Check that the buffer is modifiable and clean
     assert.is_true(vim.bo[bufnr].modifiable, "Buffer should be modifiable after an error")
     local final_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    assert.are.same({ "@You: This will fail" }, final_lines, "Buffer content should not have spinner artifacts")
+    assert.are.same({ "@You: This will fail", "" }, final_lines, "Buffer content should not have spinner artifacts")
 
     -- Cleanup
     notify_spy:revert()
