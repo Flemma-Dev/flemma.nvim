@@ -71,11 +71,8 @@ pkgs.mkShell {
           fi
         fi
 
-        aider \
-          lua/*/*.lua \
-          lua/*/*/*.lua \
-          syntax/*.vim \
-          README.md
+        # shellcheck disable=SC2046
+        aider $( find . -name "*.lua" -or -name README.md -or -path "*/syntax/*" )
 
         rm -f .aider-credentials.json || true
       '';
@@ -84,23 +81,21 @@ pkgs.mkShell {
     (writeShellApplication {
       name = "claudius-fmt";
       runtimeInputs = [
-        nixfmt-rfc-style
+        nixfmt-tree
         nodejs_22.pkgs.prettier
         stylua
       ];
       text = ''
-        find . -type f -name '*.nix' -exec nixfmt {} \;
+        treefmt
 
-        stylua --indent-type spaces --indent-width 2 \
-          lua/*/*.lua \
-          lua/*/*/*.lua
+        find . -name "*.lua" -print0 | xargs -0 \
+        stylua --indent-type spaces --indent-width 2
 
-        prettier --write \
-          CHANGELOG.md \
-          README.md
+        find . -name "*.md" -print0 | xargs -0 \
+        prettier --write
 
-        shfmt -w -i 2 -ci \
-          ./*.sh
+        find . -name "*.sh" -print0 | xargs -0 \
+        shfmt -w -i 2 -ci
       '';
     })
   ];
