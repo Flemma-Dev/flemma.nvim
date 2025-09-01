@@ -1,3 +1,5 @@
+local test_utils = require("plenary.test_utils")
+
 describe(":ClaudiusSend command", function()
   local base_provider_module = require("claudius.provider.base")
 
@@ -120,5 +122,61 @@ describe(":ClaudiusSend command", function()
       "@You: ",
     }
     assert.are.same(expected_lines, final_lines)
+  end)
+
+  it("handles an error response from a fixture", function()
+    -- Arrange: Spy on vim.notify
+    local notify_spy = test_utils.spy.on(vim, "notify")
+
+    -- Arrange: Switch to the OpenAI provider
+    local claudius = require("claudius")
+    claudius.switch("openai", "o3", {})
+
+    -- Arrange: Register the error fixture
+    base_provider_module.register_fixture("o3", "tests/fixtures/openai_invalid_key_error.txt")
+
+    -- Arrange: Set up the buffer
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: This will fail" })
+
+    -- Act: Execute the command
+    vim.cmd("ClaudiusSend")
+
+    -- Wait for the notification to be called
+    vim.wait(500, function()
+      return notify_spy.calls and #notify_spy.calls > 0
+    end, 10, false)
+
+    -- Assert: Check that vim.notify was called with the correct error message
+    assert.spy(notify_spy).was.called()
+
+    -- Read expected error from fixture
+    local file = io.open("tests/fixtures/openai_invalid_key_error.txt", "r")
+    assert.is_not_nil(file, "Fixture file could not be opened")
+    local fixture_content = file:read("*a")
+    file:close()
+    local error_data = vim.fn.json_decode(fixture_content)
+    local expected_error_message = error_data.error.message
+
+    local actual_message = notify_spy.calls[1].args[1]
+    assert.is_not_nil(actual_message)
+    -- The plugin prepends "Claudius: "
+    assert.is_true(
+      actual_message:find("Claudius: " .. expected_error_message, 1, true),
+      "Notification message did not match expected error.\nExpected to find: 'Claudius: "
+        .. expected_error_message
+        .. "'\nActual: '"
+        .. actual_message
+        .. "'"
+    )
+
+    -- Assert: Check that the buffer is modifiable and clean
+    assert.is_true(vim.bo[bufnr].modifiable, "Buffer should be modifiable after an error")
+    local final_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    assert.are.same({ "@You: This will fail" }, final_lines, "Buffer content should not have spinner artifacts")
+
+    -- Cleanup
+    notify_spy:revert()
   end)
 end)
