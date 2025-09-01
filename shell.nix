@@ -6,13 +6,11 @@ let
   python = pkgs.python312.override { inherit packageOverrides; };
   pythonWithPackages = python.withPackages (p: [
     p.google-cloud-aiplatform
-    p.google-generativeai
-    (p.aider-chat.withOptional {
-      withPlaywright = true;
-    })
   ]);
 in
 pkgs.mkShell {
+  name = "claudius-dev-shell";
+
   shellHook = ''
     PROJECT_ROOT=$(pwd)
     export PROJECT_ROOT
@@ -22,6 +20,11 @@ pkgs.mkShell {
     google-cloud-sdk
     libsecret
     pythonWithPackages
+
+    (pkgs.aider-chat.withOptional {
+      withBrowser = true;
+      withPlaywright = true;
+    })
 
     (writeShellApplication {
       name = "claudius-dev";

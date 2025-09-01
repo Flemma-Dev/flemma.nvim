@@ -4,12 +4,12 @@
 { fetchurl }:
 
 self: super: {
-  "google-cloud-aiplatform" = super.buildPythonPackage {
+  "google-cloud-aiplatform" = super.buildPythonPackage rec {
     pname = "google-cloud-aiplatform";
-    version = "1.88.0";
+    version = "1.108.0";
     src = fetchurl {
-      url = "https://files.pythonhosted.org/packages/ff/59/6a0921180a825e0bf034b39a591446ca17ff5fafa194b96cd0e502d0ca99/google_cloud_aiplatform-1.88.0-py2.py3-none-any.whl";
-      sha256 = "1wgncfzxnk55si0n0xsinqssc7g46zld7ip20q9il0jqnxvjaqvx";
+      url = "https://files.pythonhosted.org/packages/ca/09/403d8bddacb33ec67af5a981d6166f391a9c2a2cf163c2a6742bdf958966/google_cloud_aiplatform-1.108.0-py2.py3-none-any.whl";
+      sha256 = "19hv8cyjv891szpc7s89j05f384i4cbibj5dsnhy8kvh1nzc6090";
     };
     format = "wheel";
     doCheck = false;
@@ -17,18 +17,19 @@ self: super: {
     checkInputs = [ ];
     nativeBuildInputs = [ ];
     propagatedBuildInputs = [
-      super."docstring-parser"
-      super."google-api-core"
-      super."google-auth"
-      super."google-cloud-bigquery"
-      super."google-cloud-resource-manager"
-      super."google-cloud-storage"
-      super."packaging"
-      super."proto-plus"
-      super."protobuf"
-      super."pydantic"
-      super."shapely"
-      super."typing-extensions"
+      self."docstring-parser"
+      self."google-api-core"
+      self."google-auth"
+      self."google-cloud-bigquery"
+      self."google-cloud-resource-manager"
+      self."google-cloud-storage"
+      self."google-genai"
+      self."packaging"
+      self."proto-plus"
+      self."protobuf"
+      self."pydantic"
+      self."shapely"
+      self."typing-extensions"
     ];
   };
 }
