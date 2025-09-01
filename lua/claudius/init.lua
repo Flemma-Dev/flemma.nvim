@@ -1630,4 +1630,9 @@ function M.get_current_reasoning_setting()
   return nil
 end
 
+-- Get the internal config table for testing
+function M._get_config()
+  return config
+end
+
 return M
