@@ -96,4 +96,69 @@ describe(":ClaudiusSend command", function()
 
     assert.are.same(expected_body, captured_request_body)
   end)
+
+  it("handles a successful streaming response from a fixture", function()
+    -- Arrange: Switch to the OpenAI provider to match the fixture
+    local claudius = require("claudius")
+    claudius.switch("openai", "o3-2025-04-16", {})
+
+    -- Arrange: Override the mock send_request to simulate a fixture response
+    base_provider_module.send_request = function(provider_instance, _, callbacks)
+      -- Read the fixture file
+      local file = io.open("tests/fixtures/openai_hello_success_stream.txt", "r")
+      assert.is_not_nil(file, "Fixture file could not be opened")
+      local content = file:read("*a")
+      file:close()
+      local lines = vim.split(content, "\n", { plain = true })
+
+      -- Simulate the async stream
+      local function send_lines(index)
+        if index > #lines then
+          -- All lines sent, signal completion
+          vim.schedule(function()
+            callbacks.on_complete(0)
+          end)
+          return
+        end
+
+        local line = lines[index]
+        vim.schedule(function()
+          if callbacks.on_data then
+            callbacks.on_data(line)
+          end
+          provider_instance:process_response_line(line, callbacks)
+          send_lines(index + 1)
+        end)
+      end
+
+      send_lines(1) -- Start sending lines
+
+      return 1 -- Return a dummy job_id
+    end
+
+    -- Arrange: Set up the buffer with an initial prompt
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Hello" })
+
+    -- Act: Execute the command
+    vim.cmd("ClaudiusSend")
+
+    -- Wait for the response to be processed and the new prompt to be added
+    vim.wait(1000, function()
+      local final_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      return #final_lines == 5 and final_lines[5] == "@You: "
+    end)
+
+    -- Assert: Check the final buffer content
+    local final_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local expected_lines = {
+      "@You: Hello",
+      "",
+      "@Assistant: Hello! How can I help you today?",
+      "",
+      "@You: ",
+    }
+    assert.are.same(expected_lines, final_lines)
+  end)
 end)
