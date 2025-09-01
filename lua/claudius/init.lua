@@ -1,6 +1,7 @@
 --- Claudius plugin core functionality
 --- Provides chat interface and API integration
 local M = {}
+local last_request_body_for_testing = nil -- For testing purposes
 
 local buffers = require("claudius.buffers")
 local plugin_config = require("claudius.config")
@@ -1133,6 +1134,7 @@ function M.send_to_provider(opts)
 
   -- Create request body using the validated model stored in the provider
   local request_body = provider:create_request_body(formatted_messages, system_message)
+  last_request_body_for_testing = request_body -- Store for testing
 
   -- Log the request details (using the provider's stored model)
   log.debug(
@@ -1633,6 +1635,11 @@ end
 -- Get the internal config table for testing
 function M._get_config()
   return config
+end
+
+-- Get the last request body for testing
+function M._get_last_request_body()
+  return last_request_body_for_testing
 end
 
 return M

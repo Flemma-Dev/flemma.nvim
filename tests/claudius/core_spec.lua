@@ -1,23 +1,7 @@
 describe(":ClaudiusSend command", function()
   local base_provider_module = require("claudius.provider.base")
-  local original_send_request
-
-  -- Variable to capture the request body from the mock
-  local captured_request_body
 
   before_each(function()
-    -- Reset captured data for each test
-    captured_request_body = nil
-
-    -- Store the original function
-    original_send_request = base_provider_module.send_request
-
-    -- Mock the send_request function to capture its arguments and prevent network calls
-    base_provider_module.send_request = function(_, request_body, _)
-      captured_request_body = request_body
-      return 1 -- Return a dummy job_id to satisfy the caller
-    end
-
     -- Invalidate the main claudius module cache to ensure a clean setup for each test
     package.loaded["claudius"] = nil
     local claudius = require("claudius")
@@ -26,9 +10,8 @@ describe(":ClaudiusSend command", function()
   end)
 
   after_each(function()
-    -- Restore the original send_request function
-    base_provider_module.send_request = original_send_request
-    original_send_request = nil
+    -- Clear any registered fixtures to ensure test isolation
+    base_provider_module.clear_fixtures()
 
     -- Clean up any buffers created during the test
     vim.cmd("silent! %bdelete!")
@@ -40,14 +23,19 @@ describe(":ClaudiusSend command", function()
     vim.api.nvim_set_current_buf(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@System: Be brief.", "@You: Hello" })
 
+    -- Arrange: Register a dummy fixture to prevent actual network calls.
+    -- The content of the fixture doesn't matter for this test.
+    local claudius = require("claudius")
+    local config = claudius._get_config()
+    local default_claude_model = require("claudius.provider.config").get_model("claude")
+    base_provider_module.register_fixture(default_claude_model, "tests/fixtures/openai_hello_success_stream.txt")
+
     -- Act: Execute the ClaudiusSend command
     vim.cmd("ClaudiusSend")
 
     -- Assert: Check that the captured request body matches the expected format for Claude
-    assert.is_not_nil(captured_request_body, "send_request was not called")
-
-    local claudius = require("claudius")
-    local config = claudius._get_config()
+    local captured_request_body = claudius._get_last_request_body()
+    assert.is_not_nil(captured_request_body, "request_body was not captured")
     local default_claude_model = require("claudius.provider.config").get_model("claude")
 
     local expected_body = {
@@ -69,6 +57,9 @@ describe(":ClaudiusSend command", function()
     local claudius = require("claudius")
     claudius.switch("openai", "gpt-4o", {})
 
+    -- Arrange: Register a dummy fixture to prevent actual network calls.
+    base_provider_module.register_fixture("gpt-4o", "tests/fixtures/openai_hello_success_stream.txt")
+
     -- Arrange: Create a new buffer, make it current, and set its content
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
@@ -78,9 +69,9 @@ describe(":ClaudiusSend command", function()
     vim.cmd("ClaudiusSend")
 
     -- Assert: Check that the captured request body matches the expected format for OpenAI
-    assert.is_not_nil(captured_request_body, "send_request was not called")
+    local captured_request_body = claudius._get_last_request_body()
+    assert.is_not_nil(captured_request_body, "request_body was not captured")
 
-    local claudius = require("claudius")
     local config = claudius._get_config()
 
     local expected_body = {
@@ -98,43 +89,12 @@ describe(":ClaudiusSend command", function()
   end)
 
   it("handles a successful streaming response from a fixture", function()
-    -- Arrange: Switch to the OpenAI provider to match the fixture
+    -- Arrange: Switch to the OpenAI provider and model that matches the fixture
     local claudius = require("claudius")
     claudius.switch("openai", "o3-2025-04-16", {})
 
-    -- Arrange: Override the mock send_request to simulate a fixture response
-    base_provider_module.send_request = function(provider_instance, _, callbacks)
-      -- Read the fixture file
-      local file = io.open("tests/fixtures/openai_hello_success_stream.txt", "r")
-      assert.is_not_nil(file, "Fixture file could not be opened")
-      local content = file:read("*a")
-      file:close()
-      local lines = vim.split(content, "\n", { plain = true })
-
-      -- Simulate the async stream
-      local function send_lines(index)
-        if index > #lines then
-          -- All lines sent, signal completion
-          vim.schedule(function()
-            callbacks.on_complete(0)
-          end)
-          return
-        end
-
-        local line = lines[index]
-        vim.schedule(function()
-          if callbacks.on_data then
-            callbacks.on_data(line)
-          end
-          provider_instance:process_response_line(line, callbacks)
-          send_lines(index + 1)
-        end)
-      end
-
-      send_lines(1) -- Start sending lines
-
-      return 1 -- Return a dummy job_id
-    end
+    -- Arrange: Register the fixture to be used by the provider
+    base_provider_module.register_fixture("o3-2025-04-16", "tests/fixtures/openai_hello_success_stream.txt")
 
     -- Arrange: Set up the buffer with an initial prompt
     local bufnr = vim.api.nvim_create_buf(false, false)

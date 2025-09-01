@@ -16,6 +16,7 @@ local function url_decode(str)
 end
 
 local M = {}
+local registered_fixtures = {} -- For testing purposes
 
 -- Provider constructor
 function M.new(opts)
@@ -27,6 +28,18 @@ function M.new(opts)
   }, { __index = M })
 
   return provider
+end
+
+-- Register a fixture for testing purposes
+function M.register_fixture(model_name, fixture_path)
+  log.debug("base.register_fixture(): Registering fixture for model '" .. model_name .. "': " .. fixture_path)
+  registered_fixtures[model_name] = fixture_path
+end
+
+-- Clear all registered fixtures
+function M.clear_fixtures()
+  log.debug("base.clear_fixtures(): Clearing all registered fixtures.")
+  registered_fixtures = {}
 end
 
 -- Initialize the provider
@@ -224,18 +237,23 @@ function M.prepare_curl_command(self, tmp_file, headers, endpoint)
   return cmd
 end
 
--- Send request to API using curl
+-- Send request to API using curl or a test fixture
 function M.send_request(self, request_body, callbacks)
   -- Reset provider state before sending a new request
   self:reset()
 
-  -- Get API key
-  local api_key = self:get_api_key()
-  if not api_key then
-    if callbacks.on_error then
-      callbacks.on_error("No API key available")
+  -- Check for a registered fixture for the current model
+  local fixture_path = registered_fixtures[self.parameters.model]
+
+  if not fixture_path then
+    -- Get API key if not using a fixture
+    local api_key = self:get_api_key()
+    if not api_key then
+      if callbacks.on_error then
+        callbacks.on_error("No API key available")
+      end
+      return nil
     end
-    return nil
   end
 
   -- Create temporary file for request body
@@ -247,20 +265,28 @@ function M.send_request(self, request_body, callbacks)
     return nil
   end
 
-  -- Get headers and endpoint
-  local headers = self:get_request_headers()
-  local endpoint = self:get_endpoint()
+  local cmd
+  if fixture_path then
+    -- Use 'cat' to stream the fixture file content
+    cmd = { "cat", fixture_path }
+    log.debug("send_request(): Using fixture for model " .. self.parameters.model .. ": " .. fixture_path)
+    log.debug("send_request(): ... $ " .. table.concat(cmd, " "))
+  else
+    -- Get headers and endpoint for a real request
+    local headers = self:get_request_headers()
+    local endpoint = self:get_endpoint()
 
-  -- Prepare curl command
-  local cmd = self:prepare_curl_command(tmp_file, headers, endpoint)
+    -- Prepare curl command
+    cmd = self:prepare_curl_command(tmp_file, headers, endpoint)
 
-  -- Log the API request details
-  log.debug("send_request(): Sending request to endpoint: " .. endpoint)
-  local curl_cmd_log = format_curl_command_for_log(cmd)
-  -- Replace the temporary file path with @request.json for easier reproduction
-  curl_cmd_log = curl_cmd_log:gsub(vim.fn.escape(tmp_file, "%-%."), "request.json")
-  log.debug("send_request(): ... $ " .. curl_cmd_log)
-  log.debug("send_request(): ... @request.json <<< " .. vim.fn.json_encode(request_body))
+    -- Log the API request details
+    log.debug("send_request(): Sending request to endpoint: " .. endpoint)
+    local curl_cmd_log = format_curl_command_for_log(cmd)
+    -- Replace the temporary file path with @request.json for easier reproduction
+    curl_cmd_log = curl_cmd_log:gsub(vim.fn.escape(tmp_file, "%-%."), "request.json")
+    log.debug("send_request(): ... $ " .. curl_cmd_log)
+    log.debug("send_request(): ... @request.json <<< " .. vim.fn.json_encode(request_body))
+  end
 
   -- Start job
   local job_id = vim.fn.jobstart(cmd, {
