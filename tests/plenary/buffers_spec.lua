@@ -1,7 +1,7 @@
 describe("claudius.parse_buffer", function()
   it("parses a buffer with frontmatter and messages correctly", function()
-    local spy = require("luassert.spy")
-    spy.on(vim.api, "nvim_buf_get_lines")
+    -- Create a new scratch buffer
+    local bufnr = vim.api.nvim_create_buf(false, true)
 
     local lines = {
       "```lua",
@@ -12,10 +12,11 @@ describe("claudius.parse_buffer", function()
       "@You: Hello",
     }
 
-    vim.api.nvim_buf_get_lines:returns(lines)
+    -- Set the lines in the buffer
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
     local claudius = require("claudius")
-    local messages, frontmatter_code = claudius.parse_buffer(1)
+    local messages, frontmatter_code = claudius.parse_buffer(bufnr)
 
     -- Assertions
     assert.are.equal(2, #messages, "Should parse 2 messages")
@@ -27,7 +28,5 @@ describe("claudius.parse_buffer", function()
     assert.are.equal("Hello", messages[2].content)
 
     assert.are.equal("foo = 'bar'", frontmatter_code)
-
-    spy.restore()
   end)
 end)
