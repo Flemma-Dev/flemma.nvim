@@ -252,6 +252,7 @@ function M.create_request_body(self, formatted_messages, system_message)
                 inlineData = {
                   mimeType = chunk.mime_type,
                   data = encoded_data,
+                  displayName = vim.fn.fnamemodify(chunk.filename, ":t"),
                 },
               })
               log.debug(
