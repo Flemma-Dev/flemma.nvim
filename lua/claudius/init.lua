@@ -1091,6 +1091,9 @@ function M.send_to_provider(opts)
   env.__filename = chat_file_path
   env.__include_stack = { chat_file_path } -- Initialize stack with the main chat file
 
+  -- Collect all template evaluation errors before processing
+  local template_errors = {}
+
   for i, msg in ipairs(formatted_messages) do
     -- Look for {{expression}} patterns
     msg.content = msg.content:gsub("{{(.-)}}", function(expr)
@@ -1108,13 +1111,14 @@ function M.send_to_provider(opts)
           end
         end
 
-        local err_msg_for_notify = string.format(
-          "Template error (message %d) processing '{{%s}}' in '%s':\n%s",
-          i,
-          expr,
-          current_file_for_error,
-          result -- This is the detailed error from eval.lua
-        )
+        -- Collect error instead of showing immediately
+        table.insert(template_errors, {
+          message_index = i,
+          expression = expr,
+          file_path = current_file_for_error,
+          error_details = result,
+        })
+
         -- For logging, keep it on one line for easier parsing if needed
         local err_msg_for_log = string.format(
           "Template error (message %d) processing '{{%s}}' in '%s': %s",
@@ -1124,12 +1128,39 @@ function M.send_to_provider(opts)
           result
         )
         log.error("send_to_provider(): " .. err_msg_for_log)
-        vim.notify("Claudius: " .. err_msg_for_notify, vim.log.levels.ERROR)
         return "{{" .. expr .. "}}" -- Keep original on error
       end
       log.debug(string.format("send_to_provider(): ... Expression result (message %d): %s", i, log.inspect(result)))
       return tostring(result)
     end)
+  end
+
+  -- Show aggregated template errors if any occurred
+  if #template_errors > 0 then
+    local error_lines = {}
+    table.insert(
+      error_lines,
+      string.format(
+        "Template evaluation failed for %d expression%s:",
+        #template_errors,
+        #template_errors == 1 and "" or "s"
+      )
+    )
+
+    for _, error_info in ipairs(template_errors) do
+      table.insert(
+        error_lines,
+        string.format(
+          "• Message #%d: '{{%s}}' in '%s'",
+          error_info.message_index,
+          error_info.expression,
+          error_info.file_path
+        )
+      )
+      table.insert(error_lines, string.format("  %s", error_info.error_details))
+    end
+
+    vim.notify("Claudius: " .. table.concat(error_lines, "\n"), vim.log.levels.WARN)
   end
 
   -- Create request body using the validated model stored in the provider
