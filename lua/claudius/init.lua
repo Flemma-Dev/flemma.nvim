@@ -1073,7 +1073,7 @@ function M.send_to_provider(opts)
     -- Pass chat_file_path to set up __filename for include() in frontmatter
     local ok, result = pcall(require("claudius.frontmatter").execute, frontmatter_code, chat_file_path)
     if not ok then
-      vim.notify("Claudius: Frontmatter error - " .. result, vim.log.levels.ERROR)
+      vim.notify("Claudius: Frontmatter evaluation failed:\n• " .. result, vim.log.levels.ERROR)
       vim.bo[bufnr].modifiable = true -- Restore modifiable state
       return
     end
