@@ -364,5 +364,53 @@ describe("Base Provider", function()
       assert.are.equal("image/png", file2_chunk.mime_type)
       assert.are.equal("<xml>content</xml>", file2_chunk.content)
     end)
+
+    it("should handle MIME type overrides with trailing punctuation", function()
+      -- Create a temporary file
+      local tmp_file = os.tmpname()
+      local f = io.open(tmp_file, "w")
+      f:write("test content")
+      f:close()
+
+      -- Copy the temp file to a relative path in current directory for the test
+      local rel_file = "./" .. vim.fn.fnamemodify(tmp_file, ":t")
+      vim.fn.system("cp " .. tmp_file .. " " .. rel_file)
+
+      local provider = base.new({})
+      -- Reference with MIME type override and trailing punctuation (common in sentences)
+      local content = "Process @" .. rel_file .. ";type=text/plain."
+      local parser = provider:parse_message_content_chunks(content)
+
+      local chunks = {}
+      while true do
+        local status, chunk = coroutine.resume(parser)
+        if not status or not chunk then
+          break
+        end
+        table.insert(chunks, chunk)
+      end
+
+      -- Clean up
+      os.remove(tmp_file)
+      os.remove(rel_file)
+
+      -- Find the file chunk
+      local file_chunk = nil
+      for _, chunk in ipairs(chunks) do
+        if chunk.type == "file" then
+          file_chunk = chunk
+          break
+        end
+      end
+
+      assert.is_not_nil(file_chunk)
+      assert.are.equal("file", file_chunk.type)
+      assert.is_true(file_chunk.readable)
+      -- Verify that trailing punctuation is removed from MIME type
+      assert.are.equal("text/plain", file_chunk.mime_type)
+      -- Verify that the raw_filename includes the clean type override
+      assert.is_true(string.find(file_chunk.raw_filename, ";type=text/plain") ~= nil)
+      assert.is_false(string.find(file_chunk.raw_filename, "text/plain%.") ~= nil)
+    end)
   end)
 end)

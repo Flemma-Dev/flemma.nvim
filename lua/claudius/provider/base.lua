@@ -437,6 +437,9 @@ function M.parse_message_content_chunks(self, content_string)
           -- No MIME type override, use the full match as filename
           raw_file_match = full_match
           mime_type_override = nil
+        else
+          -- Remove trailing punctuation from MIME type override
+          mime_type_override = mime_type_override:gsub("[%p]+$", "")
         end
 
         local type_part = mime_type_override and (";type=" .. mime_type_override) or nil
