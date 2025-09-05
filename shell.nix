@@ -69,8 +69,22 @@ pkgs.mkShell {
           fi
         fi
 
+        if [ -z "''${OPENAI_API_KEY-}" ]; then
+          if command -v secret-tool >/dev/null 2>&1; then
+            OPENAI_API_KEY=$(secret-tool lookup service openai key api 2>/dev/null)
+            if [ -n "''${OPENAI_API_KEY-}" ]; then
+              export OPENAI_API_KEY
+              echo -e "\033[0;32m[claudius-dev] Retrieved OpenAI credentials from system keyring.\033[0m"
+            else
+              echo -e "\033[0;33m[claudius-dev] Warning: \$OPENAI_API_KEY was not set and not found in system keyring.\033[0m"
+            fi
+          else
+            echo -e "\033[0;33m[claudius-dev] Warning: \$OPENAI_API_KEY was not set and libsecret tools not available.\033[0m"
+          fi
+        fi
+
         # shellcheck disable=SC2046
-        aider $( find . -name "*.lua" -or -name README.md -or -path "*/syntax/*" )
+        aider $( find . -name "*.lua" -or -name README.md -or -path "*/syntax/*" ) "$@"
 
         rm -f .aider-credentials.json || true
       '';
