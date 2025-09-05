@@ -424,13 +424,23 @@ function M.parse_message_content_chunks(self, content_string)
     local current_pos = 1
     local warnings = {} -- Collect warnings to emit at the end
     -- Pattern matches "@" followed by "./" or "../", then any combination of "." or "/",
-    -- and finally one or more non-whitespace characters.
+    -- and finally one or more non-whitespace characters, with optional ";type=mime/type".
     local file_pattern = "@(%.%.?%/[%.%/]*%S+)"
 
     while current_pos <= #content_string do
-      local start_pos, end_pos, raw_file_match = string.find(content_string, file_pattern, current_pos)
+      local start_pos, end_pos, full_match = string.find(content_string, file_pattern, current_pos)
 
       if start_pos then
+        -- Check if the match contains a MIME type override
+        local raw_file_match, mime_type_override = string.match(full_match, "^([^;]+);type=(.+)$")
+        if not raw_file_match then
+          -- No MIME type override, use the full match as filename
+          raw_file_match = full_match
+          mime_type_override = nil
+        end
+
+        local type_part = mime_type_override and (";type=" .. mime_type_override) or nil
+
         -- Add preceding text if any
         local preceding_text = string.sub(content_string, current_pos, start_pos - 1)
         if #preceding_text > 0 then
@@ -442,19 +452,36 @@ function M.parse_message_content_chunks(self, content_string)
         -- URL-decode the filename
         local cleaned_filename = url_decode(filename_no_punctuation)
 
+        -- Construct the full raw match for logging (includes type override if present)
+        local full_raw_match = raw_file_match
+        if type_part then
+          full_raw_match = raw_file_match .. type_part
+        end
+
         log.debug(
           'base.parse_message_content_chunks: Found @file reference (raw: "'
-            .. raw_file_match
+            .. full_raw_match
             .. '", no_punct: "'
             .. filename_no_punctuation
             .. '", cleaned: "'
             .. cleaned_filename
+            .. '", mime_override: "'
+            .. (mime_type_override or "none")
             .. '").'
         )
 
         if vim.fn.filereadable(cleaned_filename) == 1 then
           log.debug('base.parse_message_content_chunks: File exists and is readable: "' .. cleaned_filename .. '"')
-          local mime_type, mime_err = mime_util.get_mime_type(cleaned_filename)
+          local mime_type, mime_err
+
+          if mime_type_override then
+            -- Use the overridden MIME type
+            mime_type = mime_type_override
+            log.debug('base.parse_message_content_chunks: Using overridden MIME type: "' .. mime_type .. '"')
+          else
+            -- Auto-detect MIME type
+            mime_type, mime_err = mime_util.get_mime_type(cleaned_filename)
+          end
 
           if mime_type then
             local file_handle, read_err = io.open(cleaned_filename, "rb")
@@ -466,7 +493,7 @@ function M.parse_message_content_chunks(self, content_string)
                 coroutine.yield({
                   type = "file",
                   filename = cleaned_filename,
-                  raw_filename = raw_file_match,
+                  raw_filename = full_raw_match,
                   content = file_content_binary,
                   mime_type = mime_type,
                   readable = true,
@@ -479,13 +506,13 @@ function M.parse_message_content_chunks(self, content_string)
                 -- Collect warning for later emission
                 table.insert(warnings, {
                   filename = cleaned_filename,
-                  raw_filename = raw_file_match,
+                  raw_filename = full_raw_match,
                   error = error_msg,
                 })
                 coroutine.yield({
                   type = "file",
                   filename = cleaned_filename,
-                  raw_filename = raw_file_match,
+                  raw_filename = full_raw_match,
                   readable = false,
                   error = error_msg,
                 })
@@ -501,13 +528,13 @@ function M.parse_message_content_chunks(self, content_string)
               -- Collect warning for later emission
               table.insert(warnings, {
                 filename = cleaned_filename,
-                raw_filename = raw_file_match,
+                raw_filename = full_raw_match,
                 error = error_msg,
               })
               coroutine.yield({
                 type = "file",
                 filename = cleaned_filename,
-                raw_filename = raw_file_match,
+                raw_filename = full_raw_match,
                 readable = false,
                 error = error_msg,
               })
@@ -544,13 +571,13 @@ function M.parse_message_content_chunks(self, content_string)
           -- Collect warning for later emission
           table.insert(warnings, {
             filename = cleaned_filename,
-            raw_filename = raw_file_match,
+            raw_filename = full_raw_match,
             error = error_msg,
           })
           coroutine.yield({
             type = "file",
             filename = cleaned_filename,
-            raw_filename = raw_file_match,
+            raw_filename = full_raw_match,
             readable = false,
             error = error_msg,
           })

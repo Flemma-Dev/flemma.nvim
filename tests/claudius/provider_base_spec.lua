@@ -258,5 +258,111 @@ describe("Base Provider", function()
       assert.is_true(string.find(notification.message, "could not be processed") ~= nil)
       assert.are.equal("Claudius File Warnings", notification.opts.title)
     end)
+
+    it("should handle MIME type overrides in file references", function()
+      -- Create a temporary JSON file
+      local tmp_file = os.tmpname()
+      local f = io.open(tmp_file, "w")
+      f:write('{"test": "content"}')
+      f:close()
+
+      -- Copy the temp file to a relative path in current directory for the test
+      local rel_file = "./" .. vim.fn.fnamemodify(tmp_file, ":t")
+      vim.fn.system("cp " .. tmp_file .. " " .. rel_file)
+
+      local provider = base.new({})
+      -- Reference the file with a MIME type override
+      local content = "Process @" .. rel_file .. ";type=text/plain as plain text."
+      local parser = provider:parse_message_content_chunks(content)
+
+      local chunks = {}
+      while true do
+        local status, chunk = coroutine.resume(parser)
+        if not status or not chunk then
+          break
+        end
+        table.insert(chunks, chunk)
+      end
+
+      -- Clean up
+      os.remove(tmp_file)
+      os.remove(rel_file)
+
+      -- Find the file chunk
+      local file_chunk = nil
+      for _, chunk in ipairs(chunks) do
+        if chunk.type == "file" then
+          file_chunk = chunk
+          break
+        end
+      end
+
+      assert.is_not_nil(file_chunk)
+      assert.are.equal("file", file_chunk.type)
+      assert.is_true(file_chunk.readable)
+      assert.are.equal('{"test": "content"}', file_chunk.content)
+      -- Verify that the overridden MIME type is used instead of auto-detected
+      assert.are.equal("text/plain", file_chunk.mime_type)
+      -- Verify that the raw_filename includes the type override
+      assert.is_true(string.find(file_chunk.raw_filename, ";type=text/plain") ~= nil)
+    end)
+
+    it("should handle multiple files with different MIME type overrides", function()
+      -- Create two temporary files
+      local tmp_file1 = os.tmpname()
+      local f1 = io.open(tmp_file1, "w")
+      f1:write('{"key": "value"}')
+      f1:close()
+
+      local tmp_file2 = os.tmpname()
+      local f2 = io.open(tmp_file2, "w")
+      f2:write("<xml>content</xml>")
+      f2:close()
+
+      -- Copy the temp files to relative paths in current directory for the test
+      local rel_file1 = "./" .. vim.fn.fnamemodify(tmp_file1, ":t")
+      local rel_file2 = "./" .. vim.fn.fnamemodify(tmp_file2, ":t")
+      vim.fn.system("cp " .. tmp_file1 .. " " .. rel_file1)
+      vim.fn.system("cp " .. tmp_file2 .. " " .. rel_file2)
+
+      local provider = base.new({})
+      local content = "Read @" .. rel_file1 .. ";type=text/plain and @" .. rel_file2 .. ";type=image/png files."
+      local parser = provider:parse_message_content_chunks(content)
+
+      local chunks = {}
+      while true do
+        local status, chunk = coroutine.resume(parser)
+        if not status or not chunk then
+          break
+        end
+        table.insert(chunks, chunk)
+      end
+
+      -- Clean up
+      os.remove(tmp_file1)
+      os.remove(tmp_file2)
+      os.remove(rel_file1)
+      os.remove(rel_file2)
+
+      -- Find file chunks
+      local file_chunks = {}
+      for _, chunk in ipairs(chunks) do
+        if chunk.type == "file" then
+          table.insert(file_chunks, chunk)
+        end
+      end
+
+      assert.are.equal(2, #file_chunks)
+
+      -- Verify first file
+      local file1_chunk = file_chunks[1]
+      assert.are.equal("text/plain", file1_chunk.mime_type)
+      assert.are.equal('{"key": "value"}', file1_chunk.content)
+
+      -- Verify second file
+      local file2_chunk = file_chunks[2]
+      assert.are.equal("image/png", file2_chunk.mime_type)
+      assert.are.equal("<xml>content</xml>", file2_chunk.content)
+    end)
   end)
 end)
