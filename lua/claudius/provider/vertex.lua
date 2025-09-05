@@ -216,6 +216,8 @@ end
 function M.create_request_body(self, formatted_messages, system_message)
   -- Convert formatted_messages to Vertex AI format
   local contents = {}
+  local collected_warnings = {} -- Collect all warnings to notify user
+
   for _, msg in ipairs(formatted_messages) do
     local parts = {}
     if msg.role == "user" then
@@ -226,7 +228,12 @@ function M.create_request_body(self, formatted_messages, system_message)
           break
         end
 
-        if chunk.type == "text" then
+        if chunk.type == "warnings" then
+          -- Collect warnings for later user notification
+          for _, warning in ipairs(chunk.warnings) do
+            table.insert(collected_warnings, warning)
+          end
+        elseif chunk.type == "text" then
           if chunk.value and #chunk.value > 0 then
             table.insert(parts, { text = chunk.value })
           end
@@ -256,15 +263,7 @@ function M.create_request_body(self, formatted_messages, system_message)
               )
             end
           else
-            log.warn(
-              'create_request_body: @file reference "'
-                .. chunk.raw_filename
-                .. '" (cleaned: "'
-                .. chunk.filename
-                .. '") not readable or missing data. Error: '
-                .. (chunk.error or "unknown")
-                .. ". Inserting raw text."
-            )
+            -- File not readable or missing data - fallback to raw text
             table.insert(parts, { text = "@" .. chunk.raw_filename })
           end
         end
@@ -367,6 +366,21 @@ function M.create_request_body(self, formatted_messages, system_message)
         { text = system_message },
       },
     }
+  end
+
+  -- Notify user of any file-related warnings
+  if #collected_warnings > 0 then
+    local warning_messages = {}
+    for _, warning in ipairs(collected_warnings) do
+      table.insert(warning_messages, warning.raw_filename .. ": " .. warning.error)
+    end
+
+    vim.notify(
+      "Claudius (Vertex AI): Some @file references could not be processed:\n• "
+        .. table.concat(warning_messages, "\n• "),
+      vim.log.levels.WARN,
+      { title = "Claudius File Warnings" }
+    )
   end
 
   return request_body

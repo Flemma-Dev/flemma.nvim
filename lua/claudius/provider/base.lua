@@ -394,7 +394,7 @@ end
 
 -- Parse message content into chunks of text or file references using a coroutine.
 -- This function returns a coroutine that, when resumed, yields chunks of the input string.
--- Chunks can be of type "text" or "file".
+-- Chunks can be of type "text", "file", or "warnings".
 --
 -- "text" chunks have a `value` field containing the text segment.
 -- "file" chunks represent `@./path/to/file.ext` references and include:
@@ -404,6 +404,10 @@ end
 --   - `mime_type`: The detected MIME type of the file if readable.
 --   - `readable`: A boolean indicating if the file was found and readable.
 --   - `error`: An error message if the file was not readable or an error occurred.
+-- "warnings" chunks contain a `warnings` array with objects containing:
+--   - `filename`: The cleaned filename that caused the warning.
+--   - `raw_filename`: The original filename reference.
+--   - `error`: The error message describing the issue.
 --
 -- @param self The provider instance (not directly used in this static-like method but kept for consistency).
 -- @param content_string string The string content to parse.
@@ -418,6 +422,7 @@ function M.parse_message_content_chunks(self, content_string)
     end
 
     local current_pos = 1
+    local warnings = {} -- Collect warnings to emit at the end
     -- Pattern matches "@" followed by "./" or "../", then any combination of "." or "/",
     -- and finally one or more non-whitespace characters.
     local file_pattern = "@(%.%.?%/[%.%/]*%S+)"
@@ -467,59 +472,87 @@ function M.parse_message_content_chunks(self, content_string)
                   readable = true,
                 })
               else
+                local error_msg = "Failed to read content"
                 log.error(
                   'base.parse_message_content_chunks: Failed to read content from file: "' .. cleaned_filename .. '"'
                 )
+                -- Collect warning for later emission
+                table.insert(warnings, {
+                  filename = cleaned_filename,
+                  raw_filename = raw_file_match,
+                  error = error_msg,
+                })
                 coroutine.yield({
                   type = "file",
                   filename = cleaned_filename,
                   raw_filename = raw_file_match,
                   readable = false,
-                  error = "Failed to read content",
+                  error = error_msg,
                 })
               end
             else
+              local error_msg = "Failed to open file: " .. (read_err or "unknown")
               log.error(
                 'base.parse_message_content_chunks: Failed to open file for reading: "'
                   .. cleaned_filename
                   .. '" Error: '
                   .. (read_err or "unknown")
               )
+              -- Collect warning for later emission
+              table.insert(warnings, {
+                filename = cleaned_filename,
+                raw_filename = raw_file_match,
+                error = error_msg,
+              })
               coroutine.yield({
                 type = "file",
                 filename = cleaned_filename,
                 raw_filename = raw_file_match,
                 readable = false,
-                error = "Failed to open file: " .. (read_err or "unknown"),
+                error = error_msg,
               })
             end
           else
+            local error_msg = "Failed to get MIME type: " .. (mime_err or "unknown")
             log.error(
               'base.parse_message_content_chunks: Failed to get MIME type for file: "'
                 .. cleaned_filename
                 .. '" Error: '
                 .. (mime_err or "unknown")
             )
+            -- Collect warning for later emission
+            table.insert(warnings, {
+              filename = cleaned_filename,
+              raw_filename = raw_file_match,
+              error = error_msg,
+            })
             coroutine.yield({
               type = "file",
               filename = cleaned_filename,
               raw_filename = raw_file_match,
               readable = false,
-              error = "Failed to get MIME type: " .. (mime_err or "unknown"),
+              error = error_msg,
             })
           end
         else
+          local error_msg = "File not found or not readable"
           log.warn(
             'base.parse_message_content_chunks: @file reference not found or not readable: "'
               .. cleaned_filename
-              .. '". Yielding as unreadable.'
+              .. '". Collecting warning.'
           )
+          -- Collect warning for later emission
+          table.insert(warnings, {
+            filename = cleaned_filename,
+            raw_filename = raw_file_match,
+            error = error_msg,
+          })
           coroutine.yield({
             type = "file",
             filename = cleaned_filename,
             raw_filename = raw_file_match,
             readable = false,
-            error = "File not found or not readable",
+            error = error_msg,
           })
         end
         current_pos = end_pos + 1
@@ -531,6 +564,15 @@ function M.parse_message_content_chunks(self, content_string)
         end
         break -- Exit loop
       end
+    end
+
+    -- Emit warnings chunk at the end if we have any warnings
+    if #warnings > 0 then
+      log.debug("base.parse_message_content_chunks: Emitting warnings chunk with " .. #warnings .. " warnings")
+      coroutine.yield({
+        type = "warnings",
+        warnings = warnings,
+      })
     end
   end
   return coroutine.create(chunkify)

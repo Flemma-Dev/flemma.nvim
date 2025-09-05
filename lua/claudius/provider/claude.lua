@@ -52,6 +52,8 @@ end
 -- Create request body for Claude API
 function M.create_request_body(self, formatted_messages, system_message)
   local api_messages = {}
+  local collected_warnings = {} -- Collect all warnings to notify user
+
   for _, msg in ipairs(formatted_messages) do
     if msg.role == "user" then
       local content_blocks = {} -- Will hold {type="text", text=...} or {type="image", source=...} etc.
@@ -63,7 +65,12 @@ function M.create_request_body(self, formatted_messages, system_message)
           break
         end
 
-        if chunk.type == "text" then
+        if chunk.type == "warnings" then
+          -- Collect warnings for later user notification
+          for _, warning in ipairs(chunk.warnings) do
+            table.insert(collected_warnings, warning)
+          end
+        elseif chunk.type == "text" then
           if chunk.value and #chunk.value > 0 then
             table.insert(content_blocks, { type = "text", text = chunk.value })
           end
@@ -131,16 +138,7 @@ function M.create_request_body(self, formatted_messages, system_message)
               table.insert(content_blocks, { type = "text", text = "@" .. chunk.raw_filename })
             end
           else
-            -- File not readable or missing essential data
-            log.warn(
-              'claude.create_request_body: @file reference "'
-                .. chunk.raw_filename
-                .. '" (cleaned: "'
-                .. chunk.filename
-                .. '") not readable or missing data. Error: '
-                .. (chunk.error or "unknown")
-                .. ". Inserting raw text."
-            )
+            -- File not readable or missing essential data - fallback to raw text
             table.insert(content_blocks, { type = "text", text = "@" .. chunk.raw_filename })
           end
         end
@@ -181,6 +179,21 @@ function M.create_request_body(self, formatted_messages, system_message)
     temperature = self.parameters.temperature,
     stream = true,
   }
+
+  -- Notify user of any file-related warnings
+  if #collected_warnings > 0 then
+    local warning_messages = {}
+    for _, warning in ipairs(collected_warnings) do
+      table.insert(warning_messages, warning.raw_filename .. ": " .. warning.error)
+    end
+
+    vim.notify(
+      "Claudius (Claude): Some @file references could not be processed:\n• "
+        .. table.concat(warning_messages, "\n• "),
+      vim.log.levels.WARN,
+      { title = "Claudius File Warnings" }
+    )
+  end
 
   return request_body
 end
