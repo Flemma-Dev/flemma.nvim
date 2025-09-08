@@ -3,7 +3,6 @@ local M = {}
 
 local log = require("flemma.logging")
 local provider_config = require("flemma.provider.config")
-local plugin_config = require("flemma.config")
 local models = require("flemma.models")
 
 --- Validates that a provider name is supported
@@ -28,7 +27,7 @@ end
 function M.validate_and_get_model(model_name, provider_name)
   local original_model = model_name
   local validated_model = provider_config.get_appropriate_model(original_model, provider_name)
-  
+
   -- Log if we had to switch models during validation
   if validated_model ~= original_model and original_model ~= nil then
     local warn_msg = string.format(
@@ -39,7 +38,7 @@ function M.validate_and_get_model(model_name, provider_name)
     )
     vim.notify(warn_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
     log.warn(warn_msg)
-    
+
     log.info(
       "validate_and_get_model(): Model "
         .. log.inspect(original_model)
@@ -56,7 +55,7 @@ function M.validate_and_get_model(model_name, provider_name)
         .. log.inspect(validated_model)
     )
   end
-  
+
   return validated_model, nil
 end
 
@@ -87,7 +86,6 @@ function M.validate_parameters(provider_name, model_name, parameters)
     end
 
     -- Check for temperature <> 1.0 with OpenAI o-series models when reasoning is active
-    local reasoning_value = parameters.reasoning
     local temp_value = parameters.temperature
     local model_info = models.providers.openai
       and models.providers.openai.models

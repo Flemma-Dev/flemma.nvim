@@ -8,7 +8,7 @@ local models_data = require("flemma.models")
 local function get_all_models_with_pricing()
   local all_models = {}
 
-  for provider_name, provider in pairs(models_data.providers) do
+  for _, provider in pairs(models_data.providers) do
     for model_name, model in pairs(provider.models) do
       if model.pricing then
         all_models[model_name] = model.pricing

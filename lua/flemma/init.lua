@@ -37,13 +37,6 @@ local config = {}
 
 local ns_id = vim.api.nvim_create_namespace("flemma")
 
--- Session-wide usage tracking
-local session_usage = {
-  input_tokens = 0,
-  output_tokens = 0,
-  thoughts_tokens = 0,
-}
-
 -- Execute a command in the context of a specific buffer
 local function buffer_cmd(bufnr, cmd)
   local winid = vim.fn.bufwinid(bufnr)
@@ -227,26 +220,26 @@ end
 -- Initialize or switch provider based on configuration
 local function initialize_provider(provider_name, model_name, parameters)
   -- Prepare configuration using the centralized config manager
-  local config, err = config_manager.prepare_config(provider_name, model_name, parameters)
-  if not config then
+  local provider_config, err = config_manager.prepare_config(provider_name, model_name, parameters)
+  if not provider_config then
     vim.notify(err, vim.log.levels.ERROR)
     return nil
   end
 
   -- Apply the configuration to global state
-  config_manager.apply_config(config)
+  config_manager.apply_config(provider_config)
 
   -- Create a fresh provider instance with the merged parameters
   local new_provider
-  if config.provider == "openai" then
-    new_provider = require("flemma.provider.openai").new(config.parameters)
-  elseif config.provider == "vertex" then
-    new_provider = require("flemma.provider.vertex").new(config.parameters)
-  elseif config.provider == "claude" then
-    new_provider = require("flemma.provider.claude").new(config.parameters)
+  if provider_config.provider == "openai" then
+    new_provider = require("flemma.provider.openai").new(provider_config.parameters)
+  elseif provider_config.provider == "vertex" then
+    new_provider = require("flemma.provider.vertex").new(provider_config.parameters)
+  elseif provider_config.provider == "claude" then
+    new_provider = require("flemma.provider.claude").new(provider_config.parameters)
   else
     -- This should never happen since config_manager validates the provider
-    local err_msg = "initialize_provider(): Invalid provider after validation: " .. tostring(config.provider)
+    local err_msg = "initialize_provider(): Invalid provider after validation: " .. tostring(provider_config.provider)
     log.error(err_msg)
     return nil
   end
@@ -342,7 +335,6 @@ M.setup = function(user_opts)
 
   -- Define syntax highlighting and Tree-sitter configuration
   local function set_syntax()
-    local bufnr = vim.api.nvim_get_current_buf()
     local syntax_config = state.get_config()
 
     -- Explicitly load our syntax file
@@ -815,10 +807,10 @@ M.cleanup_spinner = function(bufnr)
   local original_modifiable = vim.bo[bufnr].modifiable
   vim.bo[bufnr].modifiable = true -- Allow plugin modifications
 
-  local state = buffers.get_state(bufnr)
-  if state.spinner_timer then
-    vim.fn.timer_stop(state.spinner_timer)
-    state.spinner_timer = nil
+  local buffer_state = buffers.get_state(bufnr)
+  if buffer_state.spinner_timer then
+    vim.fn.timer_stop(buffer_state.spinner_timer)
+    buffer_state.spinner_timer = nil
   end
 
   vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1) -- Clear rulers/virtual text
@@ -899,7 +891,7 @@ local function start_loading_spinner(bufnr)
     vim.bo[bufnr].modifiable = original_modifiable_timer -- Restore state after spinner update
   end, { ["repeat"] = -1 })
 
-  state.spinner_timer = timer
+  buffer_state.spinner_timer = timer
   return timer
 end
 
@@ -1576,28 +1568,6 @@ function M.get_current_provider_name()
     return current_config.provider
   end
   return nil
-end
-
--- Get the current reasoning setting if applicable for OpenAI
-function M.get_current_reasoning_setting()
-  local current_config = state.get_config()
-  if
-    current_config
-    and current_config.provider == "openai"
-    and current_config.parameters
-    and current_config.parameters.reasoning
-  then
-    local reasoning = current_config.parameters.reasoning
-    if reasoning == "low" or reasoning == "medium" or reasoning == "high" then
-      return reasoning
-    end
-  end
-  return nil
-end
-
--- Get the internal config table for testing
-function M._get_config()
-  return state.get_config()
 end
 
 -- Get the last request body for testing

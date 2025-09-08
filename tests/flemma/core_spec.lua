@@ -2,6 +2,7 @@ local stub = require("luassert.stub")
 
 describe(":FlemmaSend command", function()
   local base_provider_module = require("flemma.provider.base")
+  local state = require("flemma.state")
 
   before_each(function()
     -- Invalidate the main flemma module cache to ensure a clean setup for each test
@@ -28,7 +29,8 @@ describe(":FlemmaSend command", function()
     -- Arrange: Register a dummy fixture to prevent actual network calls.
     -- The content of the fixture DOES matter, as it's processed by the provider.
     local flemma = require("flemma")
-    local config = flemma._get_config()
+    local state = require("flemma.state")
+    local config = state.get_config()
     local default_claude_model = require("flemma.provider.config").get_model("claude")
     base_provider_module.register_fixture(default_claude_model, "tests/fixtures/claude_hello_success_stream.txt")
 
@@ -74,7 +76,7 @@ describe(":FlemmaSend command", function()
     local captured_request_body = flemma._get_last_request_body()
     assert.is_not_nil(captured_request_body, "request_body was not captured")
 
-    local config = flemma._get_config()
+    local config = state.get_config()
 
     local expected_body = {
       model = "o3",
@@ -227,7 +229,11 @@ describe(":FlemmaSend command", function()
     for _, call in ipairs(notify_spy.calls) do
       local msg = call.refs[1]
       local level = call.refs[2]
-      if level == vim.log.levels.WARN and msg and string.find(msg, "Model 'gpt%-6' is not valid for provider 'openai'") then
+      if
+        level == vim.log.levels.WARN
+        and msg
+        and string.find(msg, "Model 'gpt%-6' is not valid for provider 'openai'")
+      then
         saw_warn = true
         break
       end
@@ -236,7 +242,7 @@ describe(":FlemmaSend command", function()
 
     -- Assert: Model fell back to the provider default
     local default_openai_model = require("flemma.provider.config").get_model("openai")
-    local cfg = flemma._get_config()
+    local cfg = state.get_config()
     assert.equals(default_openai_model, cfg.model, "Should fall back to provider default model")
 
     -- Cleanup

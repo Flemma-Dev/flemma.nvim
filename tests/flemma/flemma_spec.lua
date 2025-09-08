@@ -1,3 +1,5 @@
+local state = require("flemma.state")
+
 describe("flemma.setup", function()
   it("can be required without errors", function()
     local ok, flemma = pcall(require, "flemma")
@@ -14,7 +16,7 @@ describe("flemma.setup", function()
       },
     })
 
-    local config = flemma._get_config()
+    local config = state.get_config()
 
     -- Check that user-provided values are set
     assert.are.equal("openai", config.provider)

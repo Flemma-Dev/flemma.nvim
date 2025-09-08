@@ -128,10 +128,10 @@ function M.get_api_key(self)
   local project_id = self.parameters.project_id
 
   -- First try to get token from environment variable
-  local token = os.getenv("VERTEX_AI_ACCESS_TOKEN")
-  if token and #token > 0 then
-    self.state.api_key = token
-    return token
+  local env_token = os.getenv("VERTEX_AI_ACCESS_TOKEN")
+  if env_token and #env_token > 0 then
+    self.state.api_key = env_token
+    return env_token
   end
 
   -- Try to get service account JSON from keyring
@@ -146,11 +146,11 @@ function M.get_api_key(self)
   if service_account_json and service_account_json:match("service_account") then
     log.debug("vertex.get_api_key(): Found service account JSON, attempting to generate access token")
 
-    local token, err = generate_access_token(service_account_json)
-    if token then
+    local generated_token, err = generate_access_token(service_account_json)
+    if generated_token then
       log.debug("vertex.get_api_key(): Successfully generated access token from service account")
-      self.state.api_key = token
-      return token
+      self.state.api_key = generated_token
+      return generated_token
     else
       log.error("vertex.get_api_key(): Failed to generate access token: " .. (err or "unknown error"))
       if err then

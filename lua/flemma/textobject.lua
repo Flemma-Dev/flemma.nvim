@@ -1,4 +1,3 @@
-local log = require("flemma.logging")
 local M = {}
 
 -- Get the bounds of the current message

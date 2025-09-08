@@ -4,6 +4,28 @@ local lualine_component = require("lualine.component")
 -- Create a new component for displaying the Flemma model
 local flemma_model_component = lualine_component:extend()
 
+-- Get the current reasoning setting if applicable for OpenAI
+local function get_current_reasoning_setting()
+  local state_ok, state = pcall(require, "flemma.state")
+  if not state_ok or not state then
+    return nil
+  end
+
+  local current_config = state.get_config()
+  if
+    current_config
+    and current_config.provider == "openai"
+    and current_config.parameters
+    and current_config.parameters.reasoning
+  then
+    local reasoning = current_config.parameters.reasoning
+    if reasoning == "low" or reasoning == "medium" or reasoning == "high" then
+      return reasoning
+    end
+  end
+  return nil
+end
+
 --- Updates the status of the component.
 -- This function is called by lualine to get the text to display.
 function flemma_model_component:update_status()
@@ -17,7 +39,7 @@ function flemma_model_component:update_status()
       end
 
       local provider_name = flemma.get_current_provider_name and flemma.get_current_provider_name()
-      local reasoning_setting = flemma.get_current_reasoning_setting and flemma.get_current_reasoning_setting()
+      local reasoning_setting = get_current_reasoning_setting()
 
       if
         provider_name == "openai"
