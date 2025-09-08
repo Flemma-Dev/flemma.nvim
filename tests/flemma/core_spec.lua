@@ -203,4 +203,43 @@ describe(":FlemmaSend command", function()
     -- Cleanup
     notify_spy:revert()
   end)
+
+  it("warns and falls back to the default model when an invalid model is requested", function()
+    -- Arrange
+    local flemma = require("flemma")
+
+    -- Stub notifications
+    local notify_spy = stub(vim, "notify")
+
+    -- Act: Attempt to switch to an invalid model on a valid provider
+    local result = flemma.switch("openai", "gpt-6", {})
+
+    -- Assert: switch returns a provider instance
+    assert.is_not_nil(result, "switch should succeed when provider is valid, even if model is invalid")
+
+    -- Wait for notify to capture calls
+    vim.wait(50, function()
+      return #notify_spy.calls > 0
+    end, 10, false)
+
+    -- Assert: A warn notification about model fallback was emitted
+    local saw_warn = false
+    for _, call in ipairs(notify_spy.calls) do
+      local msg = call.refs[1]
+      local level = call.refs[2]
+      if level == vim.log.levels.WARN and msg and string.find(msg, "Model 'gpt%-6' is not valid for provider 'openai'") then
+        saw_warn = true
+        break
+      end
+    end
+    assert.is_true(saw_warn, "Should warn about invalid model fallback")
+
+    -- Assert: Model fell back to the provider default
+    local default_openai_model = require("flemma.provider.config").get_model("openai")
+    local cfg = flemma._get_config()
+    assert.equals(default_openai_model, cfg.model, "Should fall back to provider default model")
+
+    -- Cleanup
+    notify_spy:revert()
+  end)
 end)

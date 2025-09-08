@@ -243,6 +243,15 @@ local function initialize_provider(provider_name, model_name, parameters)
 
   -- Log if we had to switch models during initialization/switch
   if validated_model ~= original_model and original_model ~= nil then
+    local warn_msg = string.format(
+      "Flemma: Model '%s' is not valid for provider '%s'. Using default: '%s'.",
+      tostring(original_model),
+      tostring(provider_name),
+      tostring(validated_model)
+    )
+    vim.notify(warn_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
+    log.warn(warn_msg)
+
     log.info(
       "initialize_provider(): Model "
         .. log.inspect(original_model)
