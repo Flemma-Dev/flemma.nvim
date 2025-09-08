@@ -1,6 +1,9 @@
 --- Buffer state management for Flemma
 local M = {}
 
+local log = require("flemma.logging")
+local state = require("flemma.state")
+
 -- Store buffer-local state
 local buffer_state = {}
 
@@ -176,6 +179,104 @@ function M.get_fold_text()
 
   -- Create fold text: role type + first line + number of lines
   return string.format("%s %s... (%d lines)", role_type, content_preview_for_message:sub(1, 50), total_fold_lines)
+end
+
+-- Parse a single message from lines
+local function parse_message(bufnr, lines, start_idx, frontmatter_offset)
+  local line = lines[start_idx]
+  local msg_type = line:match("^@([%w]+):")
+  if not msg_type then
+    return nil, start_idx
+  end
+
+  local content = {}
+  local i = start_idx
+  -- Remove the role marker (e.g., @You:) from the first line
+  local first_content = line:sub(#msg_type + 3)
+  if first_content:match("%S") then
+    content[#content + 1] = first_content:gsub("^%s*", "")
+  end
+
+  i = i + 1
+  -- Collect lines until we hit another role marker or end of buffer
+  while i <= #lines do
+    local next_line = lines[i]
+    if next_line:match("^@[%w]+:") then
+      break
+    end
+    if next_line:match("%S") or #content > 0 then
+      content[#content + 1] = next_line
+    end
+    i = i + 1
+  end
+
+  local result = {
+    type = msg_type,
+    content = table.concat(content, "\n"):gsub("%s+$", ""),
+    start_line = start_idx,
+    end_line = i - 1,
+  }
+
+  -- Place signs for the message, adjusting for frontmatter
+  require("flemma.ui").place_signs(
+    bufnr,
+    result.start_line + frontmatter_offset,
+    result.end_line + frontmatter_offset,
+    msg_type
+  )
+
+  return result, i - 1
+end
+
+-- Parse the entire buffer into a sequence of messages
+function M.parse_buffer(bufnr)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local messages = {}
+
+  -- Handle frontmatter if present
+  local frontmatter = require("flemma.frontmatter")
+  local fm_code, content = frontmatter.parse(lines)
+
+  -- Calculate frontmatter offset for sign placement
+  local frontmatter_offset = 0
+  if fm_code then
+    -- Count lines in frontmatter (code + delimiters)
+    frontmatter_offset = #vim.split(fm_code, "\n", true) + 2
+  end
+
+  -- If no frontmatter was found, use all lines as content
+  content = content or lines
+
+  local i = 1
+  while i <= #content do
+    local msg, last_idx = parse_message(bufnr, content, i, frontmatter_offset)
+    if msg then
+      messages[#messages + 1] = msg
+      i = last_idx + 1
+    else
+      i = i + 1
+    end
+  end
+
+  return messages, fm_code
+end
+
+-- Execute a command in the context of a specific buffer
+function M.buffer_cmd(bufnr, cmd)
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid == -1 then
+    -- If buffer has no window, do nothing
+    return
+  end
+  vim.fn.win_execute(winid, "noautocmd " .. cmd)
+end
+
+-- Helper function to auto-write the buffer if enabled
+function M.auto_write_buffer(bufnr)
+  if state.get_config().editing.auto_write and vim.bo[bufnr].modified then
+    log.debug("auto_write_buffer(): bufnr = " .. bufnr)
+    M.buffer_cmd(bufnr, "silent! write")
+  end
 end
 
 return M

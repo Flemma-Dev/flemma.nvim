@@ -8,6 +8,8 @@ local provider_config = require("flemma.provider.config")
 local state = require("flemma.state")
 local textobject = require("flemma.textobject")
 local core = require("flemma.core")
+local ui = require("flemma.ui")
+local buffers = require("flemma.buffers")
 
 -- Helper function to set highlight groups
 -- Accepts either a highlight group name to link to, or a hex color string (e.g., "#ff0000")
@@ -187,23 +189,8 @@ M.setup = function(user_opts)
     set_highlight("FlemmaRuler", syntax_config.ruler.hl)
   end
 
-  -- Set up folding expression
-  local function setup_folding()
-    vim.wo.foldmethod = "expr"
-    vim.wo.foldexpr = 'v:lua.require("flemma.buffers").get_fold_level(v:lnum)'
-    vim.wo.foldtext = 'v:lua.require("flemma.buffers").get_fold_text()'
-    -- Start with all folds open
-    vim.wo.foldlevel = 99
-  end
-
-  -- Add autocmd for updating rulers and signs (debounced via CursorHold)
-  vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter", "VimResized", "CursorHold", "CursorHoldI" }, {
-    pattern = "*.chat",
-    callback = function(ev)
-      -- Use the new function for debounced updates
-      core.update_ui(ev.buf)
-    end,
-  })
+  -- Set up UI module
+  ui.setup()
 
   -- Create user commands
   vim.api.nvim_create_user_command("FlemmaSend", function()
@@ -220,10 +207,10 @@ M.setup = function(user_opts)
 
   vim.api.nvim_create_user_command("FlemmaSendAndInsert", function()
     local bufnr = vim.api.nvim_get_current_buf()
-    core.buffer_cmd(bufnr, "stopinsert")
+    buffers.buffer_cmd(bufnr, "stopinsert")
     M.send_to_provider({
       on_complete = function()
-        core.buffer_cmd(bufnr, "startinsert!")
+        buffers.buffer_cmd(bufnr, "startinsert!")
       end,
     })
   end, {})
@@ -399,7 +386,7 @@ M.setup = function(user_opts)
     pattern = "*.chat",
     callback = function()
       vim.bo.filetype = "chat"
-      setup_folding()
+      ui.setup_folding()
 
       -- Disable textwidth if configured
       if config.editing.disable_textwidth then
@@ -460,10 +447,10 @@ M.setup = function(user_opts)
         if config.keymaps.insert.send then
           vim.keymap.set("i", config.keymaps.insert.send, function()
             local bufnr = vim.api.nvim_get_current_buf()
-            core.buffer_cmd(bufnr, "stopinsert")
+            buffers.buffer_cmd(bufnr, "stopinsert")
             M.send_to_provider({
               on_complete = function()
-                core.buffer_cmd(bufnr, "startinsert!")
+                buffers.buffer_cmd(bufnr, "startinsert!")
               end,
             })
           end, { buffer = true, desc = "Send to Flemma and continue editing" })
@@ -473,109 +460,6 @@ M.setup = function(user_opts)
   end
 end
 
--- Place signs for a message
-local function place_signs(bufnr, start_line, end_line, role)
-  if not config.signs.enabled then
-    return
-  end
-
-  -- Map the display role ("You", "System", "Assistant") to the internal config key ("user", "system", "assistant")
-  local internal_role_key = string.lower(role) -- Default to lowercase
-  if role == "You" then
-    internal_role_key = "user" -- Map "You" specifically to "user"
-  end
-
-  local sign_name = "flemma_" .. internal_role_key -- Construct sign name like "flemma_user"
-  local sign_config = config.signs[internal_role_key] -- Look up config using "user", "system", etc.
-
-  -- Check if the sign is actually defined before trying to place it
-  if vim.fn.sign_getdefined(sign_name) == {} then
-    log.debug("place_signs(): Sign not defined: " .. sign_name .. " for role " .. role)
-    return
-  end
-
-  if sign_config and sign_config.hl ~= false then
-    for lnum = start_line, end_line do
-      vim.fn.sign_place(0, "flemma_ns", sign_name, bufnr, { lnum = lnum })
-    end
-  end
-end
-
--- Parse a single message from lines
-local function parse_message(bufnr, lines, start_idx, frontmatter_offset)
-  local line = lines[start_idx]
-  local msg_type = line:match("^@([%w]+):")
-  if not msg_type then
-    return nil, start_idx
-  end
-
-  local content = {}
-  local i = start_idx
-  -- Remove the role marker (e.g., @You:) from the first line
-  local first_content = line:sub(#msg_type + 3)
-  if first_content:match("%S") then
-    content[#content + 1] = first_content:gsub("^%s*", "")
-  end
-
-  i = i + 1
-  -- Collect lines until we hit another role marker or end of buffer
-  while i <= #lines do
-    local next_line = lines[i]
-    if next_line:match("^@[%w]+:") then
-      break
-    end
-    if next_line:match("%S") or #content > 0 then
-      content[#content + 1] = next_line
-    end
-    i = i + 1
-  end
-
-  local result = {
-    type = msg_type,
-    content = table.concat(content, "\n"):gsub("%s+$", ""),
-    start_line = start_idx,
-    end_line = i - 1,
-  }
-
-  -- Place signs for the message, adjusting for frontmatter
-  place_signs(bufnr, result.start_line + frontmatter_offset, result.end_line + frontmatter_offset, msg_type)
-
-  return result, i - 1
-end
-
--- Parse the entire buffer into a sequence of messages
-function M.parse_buffer(bufnr)
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local messages = {}
-
-  -- Handle frontmatter if present
-  local frontmatter = require("flemma.frontmatter")
-  local fm_code, content = frontmatter.parse(lines)
-
-  -- Calculate frontmatter offset for sign placement
-  local frontmatter_offset = 0
-  if fm_code then
-    -- Count lines in frontmatter (code + delimiters)
-    frontmatter_offset = #vim.split(fm_code, "\n", true) + 2
-  end
-
-  -- If no frontmatter was found, use all lines as content
-  content = content or lines
-
-  local i = 1
-  while i <= #content do
-    local msg, last_idx = parse_message(bufnr, content, i, frontmatter_offset)
-    if msg then
-      messages[#messages + 1] = msg
-      i = last_idx + 1
-    else
-      i = i + 1
-    end
-  end
-
-  return messages, fm_code
-end
-
 -- Cancel ongoing request if any (wrapper)
 M.cancel_request = function()
   return core.cancel_request()
@@ -583,12 +467,17 @@ end
 
 -- Clean up spinner and prepare for response (wrapper)
 M.cleanup_spinner = function(bufnr)
-  return core.cleanup_spinner(bufnr)
+  return ui.cleanup_spinner(bufnr)
 end
 
 -- Handle the AI provider interaction (wrapper)
 M.send_to_provider = function(opts)
   return core.send_to_provider(opts)
+end
+
+-- Parse buffer (wrapper)
+M.parse_buffer = function(bufnr)
+  return buffers.parse_buffer(bufnr)
 end
 
 -- Legacy function for backward compatibility

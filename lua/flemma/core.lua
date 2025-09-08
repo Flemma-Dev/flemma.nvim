@@ -6,243 +6,10 @@ local buffers = require("flemma.buffers")
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local config_manager = require("flemma.core.config_manager")
+local ui = require("flemma.ui")
 
 -- For testing purposes
 local last_request_body_for_testing = nil
-
-local ns_id = vim.api.nvim_create_namespace("flemma")
-
--- Execute a command in the context of a specific buffer
-function M.buffer_cmd(bufnr, cmd)
-  local winid = vim.fn.bufwinid(bufnr)
-  if winid == -1 then
-    -- If buffer has no window, do nothing
-    return
-  end
-  vim.fn.win_execute(winid, "noautocmd " .. cmd)
-end
-
--- Helper function to add rulers
-local function add_rulers(bufnr)
-  -- Clear existing extmarks
-  vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
-
-  -- Get buffer lines
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-
-  for i, line in ipairs(lines) do
-    if line:match("^@[%w]+:") then
-      -- If this isn't the first line, add a ruler before it
-      if i > 1 then
-        -- Create virtual line with ruler using the FlemmaRuler highlight group
-        local ruler_text = string.rep(state.get_config().ruler.char, math.floor(vim.api.nvim_win_get_width(0) * 1))
-        vim.api.nvim_buf_set_extmark(bufnr, ns_id, i - 1, 0, {
-          virt_lines = { { { ruler_text, "FlemmaRuler" } } }, -- Use defined group
-          virt_lines_above = true,
-        })
-      end
-    end
-  end
-end
-
--- Helper function to fold the last thinking block in a buffer
-local function fold_last_thinking_block(bufnr)
-  log.debug("fold_last_thinking_block(): Attempting to fold last thinking block in buffer " .. bufnr)
-  local num_lines = vim.api.nvim_buf_line_count(bufnr)
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false) -- 0-indexed lines
-
-  -- Find the line number of the last @You: prompt to define the search boundary.
-  -- We search upwards from this prompt.
-  local last_you_prompt_lnum_0idx = -1
-  for l = num_lines - 1, 0, -1 do -- Iterate 0-indexed line numbers
-    if lines[l + 1]:match("^@You:%s*") then -- lines table is 1-indexed
-      last_you_prompt_lnum_0idx = l
-      break
-    end
-  end
-
-  if last_you_prompt_lnum_0idx == -1 then
-    log.debug("fold_last_thinking_block(): Could not find the last @You: prompt. Aborting.")
-    return
-  end
-
-  local end_think_lnum_0idx = -1
-  -- Search for </thinking> upwards from just before the last @You: prompt.
-  -- Stop if we hit another message type, ensuring we're in the last message block.
-  for l = last_you_prompt_lnum_0idx - 1, 0, -1 do
-    if lines[l + 1]:match("^</thinking>$") then
-      end_think_lnum_0idx = l
-      break
-    end
-    -- If we encounter another role marker before finding </thinking>,
-    -- it means the last message block didn't have a thinking tag.
-    if lines[l + 1]:match("^@[%w]+:") then
-      log.debug(
-        "fold_last_thinking_block(): Encountered another role marker before </thinking> in the last message segment."
-      )
-      return
-    end
-  end
-
-  if end_think_lnum_0idx == -1 then
-    log.debug("fold_last_thinking_block(): No </thinking> tag found in the last message segment.")
-    return
-  end
-
-  local start_think_lnum_0idx = -1
-  -- Search for <thinking> upwards from just before the found </thinking> tag.
-  -- Stop if we hit another message type.
-  for l = end_think_lnum_0idx - 1, 0, -1 do
-    if lines[l + 1]:match("^<thinking>$") then
-      start_think_lnum_0idx = l
-      break
-    end
-    if lines[l + 1]:match("^@[%w]+:") then
-      log.debug("fold_last_thinking_block(): Encountered another role marker before finding matching <thinking> tag.")
-      return
-    end
-  end
-
-  if start_think_lnum_0idx ~= -1 and start_think_lnum_0idx < end_think_lnum_0idx then
-    log.debug(
-      string.format(
-        "fold_last_thinking_block(): Found thinking block from line %d to %d (1-indexed). Closing fold.",
-        start_think_lnum_0idx + 1,
-        end_think_lnum_0idx + 1
-      )
-    )
-    local winid = vim.fn.bufwinid(bufnr)
-    if winid ~= -1 then
-      -- vim.cmd uses 1-based line numbers
-      vim.fn.win_execute(
-        winid,
-        string.format("%d,%d foldclose", start_think_lnum_0idx + 1, end_think_lnum_0idx + 1) -- Corrected to foldclose and added space
-      )
-      log.debug("fold_last_thinking_block(): Executed foldclose command via win_execute.")
-    else
-      log.debug("fold_last_thinking_block(): Buffer " .. bufnr .. " has no window. Cannot close fold.")
-    end
-  else
-    log.debug(
-      "fold_last_thinking_block(): No matching <thinking> tag found for the last </thinking> tag, or order is incorrect."
-    )
-  end
-end
-
--- Helper function to force UI update (rulers and signs)
-local function update_ui(bufnr)
-  -- Ensure buffer is valid before proceeding
-  if not vim.api.nvim_buf_is_valid(bufnr) then
-    log.debug("update_ui(): Invalid buffer: " .. bufnr)
-    return
-  end
-  add_rulers(bufnr)
-  -- Clear and reapply all signs
-  vim.fn.sign_unplace("flemma_ns", { buffer = bufnr })
-  -- We need access to the parse_buffer function from init.lua
-  require("flemma").parse_buffer(bufnr) -- This will reapply signs
-end
-
--- Helper function to auto-write the buffer if enabled
-local function auto_write_buffer(bufnr)
-  if state.get_config().editing.auto_write and vim.bo[bufnr].modified then
-    log.debug("auto_write_buffer(): bufnr = " .. bufnr)
-    M.buffer_cmd(bufnr, "silent! write")
-  end
-end
-
--- Show loading spinner
-local function start_loading_spinner(bufnr)
-  local original_modifiable_initial = vim.bo[bufnr].modifiable
-  vim.bo[bufnr].modifiable = true -- Allow plugin modifications for initial message
-
-  local buffer_state = buffers.get_state(bufnr)
-  local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
-  local frame = 1
-
-  -- Clear any existing virtual text
-  vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
-
-  -- Check if we need to add a blank line
-  local buffer_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  if #buffer_lines > 0 and buffer_lines[#buffer_lines]:match("%S") then
-    vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "", "@Assistant: Thinking..." })
-  else
-    vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "@Assistant: Thinking..." })
-  end
-  -- Immediately update UI after adding the thinking message
-  update_ui(bufnr)
-  vim.bo[bufnr].modifiable = original_modifiable_initial -- Restore state after initial message
-
-  local timer = vim.fn.timer_start(100, function()
-    if not buffer_state.current_request then
-      return
-    end
-
-    local original_modifiable_timer = vim.bo[bufnr].modifiable
-    vim.bo[bufnr].modifiable = true -- Allow plugin modifications for spinner update
-
-    frame = (frame % #spinner_frames) + 1
-    local text = "@Assistant: " .. spinner_frames[frame] .. " Thinking..."
-    local last_line = vim.api.nvim_buf_line_count(bufnr)
-    M.buffer_cmd(bufnr, "undojoin")
-    vim.api.nvim_buf_set_lines(bufnr, last_line - 1, last_line, false, { text })
-    -- Force UI update during spinner animation
-    update_ui(bufnr)
-
-    vim.bo[bufnr].modifiable = original_modifiable_timer -- Restore state after spinner update
-  end, { ["repeat"] = -1 })
-
-  buffer_state.spinner_timer = timer
-  return timer
-end
-
--- Clean up spinner and prepare for response
-M.cleanup_spinner = function(bufnr)
-  local original_modifiable = vim.bo[bufnr].modifiable
-  vim.bo[bufnr].modifiable = true -- Allow plugin modifications
-
-  local buffer_state = buffers.get_state(bufnr)
-  if buffer_state.spinner_timer then
-    vim.fn.timer_stop(buffer_state.spinner_timer)
-    buffer_state.spinner_timer = nil
-  end
-
-  vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1) -- Clear rulers/virtual text
-
-  local line_count = vim.api.nvim_buf_line_count(bufnr)
-  if line_count == 0 then
-    update_ui(bufnr) -- Ensure UI is clean even if buffer is empty
-    return
-  end
-
-  local last_line_content = vim.api.nvim_buf_get_lines(bufnr, line_count - 1, line_count, false)[1]
-
-  -- Only modify lines if the last line is actually the spinner message
-  if last_line_content and last_line_content:match("^@Assistant: .*Thinking%.%.%.$") then
-    M.buffer_cmd(bufnr, "undojoin") -- Group changes for undo
-
-    -- Get the line before the "Thinking..." message (if it exists)
-    local prev_line_actual_content = nil
-    if line_count > 1 then
-      prev_line_actual_content = vim.api.nvim_buf_get_lines(bufnr, line_count - 2, line_count - 1, false)[1]
-    end
-
-    -- Ensure we maintain a blank line if needed, or remove the spinner line
-    if prev_line_actual_content and prev_line_actual_content:match("%S") then
-      -- Previous line has content, replace spinner line with a blank line
-      vim.api.nvim_buf_set_lines(bufnr, line_count - 1, line_count, false, { "" })
-    else
-      -- Previous line is blank or doesn't exist, remove the spinner line entirely
-      vim.api.nvim_buf_set_lines(bufnr, line_count - 1, line_count, false, {})
-    end
-  else
-    log.debug("cleanup_spinner(): Last line is not the 'Thinking...' message, not modifying lines.")
-  end
-
-  update_ui(bufnr) -- Force UI update after cleaning up spinner
-  vim.bo[bufnr].modifiable = original_modifiable -- Restore previous modifiable state
-end
 
 -- Initialize or switch provider based on configuration (local function)
 local function initialize_provider(provider_name, model_name, parameters)
@@ -380,12 +147,12 @@ function M.cancel_request()
       -- If we're still showing the thinking message, remove it
       if last_line_content:match("^@Assistant:.*Thinking%.%.%.$") then
         log.debug("cancel_request(): ... Cleaning up 'Thinking...' message")
-        M.cleanup_spinner(bufnr)
+        ui.cleanup_spinner(bufnr)
       end
 
       -- Auto-write if enabled and we've received some content
       if buffer_state.request_cancelled and not last_line_content:match("^@Assistant:.*Thinking%.%.%.$") then
-        auto_write_buffer(bufnr)
+        buffers.auto_write_buffer(bufnr)
       end
 
       vim.bo[bufnr].modifiable = true -- Restore modifiable state
@@ -396,7 +163,7 @@ function M.cancel_request()
       end
       vim.notify(msg, vim.log.levels.INFO)
       -- Force UI update after cancellation
-      update_ui(bufnr)
+      ui.update_ui(bufnr)
     end
   else
     log.debug("cancel_request(): No current request found")
@@ -507,7 +274,7 @@ function M.send_to_provider(opts)
       .. log.inspect(current_provider.parameters.model)
   )
 
-  local spinner_timer = start_loading_spinner(bufnr) -- Handles its own modifiable toggles for writes
+  local spinner_timer = ui.start_loading_spinner(bufnr) -- Handles its own modifiable toggles for writes
   local response_started = false
 
   -- Format usage information for display
@@ -617,14 +384,14 @@ function M.send_to_provider(opts)
         if spinner_timer then
           vim.fn.timer_stop(spinner_timer)
         end
-        M.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
+        ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
         buffer_state.current_request = nil
         buffer_state.api_error_occurred = true -- Set flag indicating API error
 
         vim.bo[bufnr].modifiable = true -- Restore modifiable state
 
         -- Auto-write on error if enabled
-        auto_write_buffer(bufnr)
+        buffers.auto_write_buffer(bufnr)
 
         local notify_msg = "Flemma: " .. msg
         if log.is_enabled() then
@@ -663,7 +430,7 @@ function M.send_to_provider(opts)
         })
 
         -- Auto-write when response is complete
-        auto_write_buffer(bufnr)
+        buffers.auto_write_buffer(bufnr)
 
         -- Format and display usage information using our custom notification
         local usage_str = format_usage(buffer_state.current_usage, state.get_session_usage())
@@ -703,23 +470,23 @@ function M.send_to_provider(opts)
 
           if not response_started then
             -- Clean up spinner and ensure blank line
-            M.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
+            ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
             last_line = vim.api.nvim_buf_line_count(bufnr)
 
             -- Check if response starts with a code fence
             if content_lines[1]:match("^```") then
               -- Add a newline before the code fence
-              M.buffer_cmd(bufnr, "undojoin")
+              buffers.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant:", content_lines[1] })
             else
               -- Start with @Assistant: prefix as normal
-              M.buffer_cmd(bufnr, "undojoin")
+              buffers.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant: " .. content_lines[1] })
             end
 
             -- Add remaining lines if any
             if #content_lines > 1 then
-              M.buffer_cmd(bufnr, "undojoin")
+              buffers.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(bufnr, last_line + 1, last_line + 1, false, { unpack(content_lines, 2) })
             end
           else
@@ -728,7 +495,7 @@ function M.send_to_provider(opts)
 
             if #content_lines == 1 then
               -- Just append to the last line
-              M.buffer_cmd(bufnr, "undojoin")
+              buffers.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(
                 bufnr,
                 last_line - 1,
@@ -738,7 +505,7 @@ function M.send_to_provider(opts)
               )
             else
               -- First chunk goes to the end of the last line
-              M.buffer_cmd(bufnr, "undojoin")
+              buffers.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(
                 bufnr,
                 last_line - 1,
@@ -748,14 +515,14 @@ function M.send_to_provider(opts)
               )
 
               -- Remaining lines get added as new lines
-              M.buffer_cmd(bufnr, "undojoin")
+              buffers.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { unpack(content_lines, 2) })
             end
           end
 
           response_started = true
           -- Force UI update after appending content
-          update_ui(bufnr)
+          ui.update_ui(bufnr)
         end
         vim.bo[bufnr].modifiable = original_modifiable_for_on_content -- Restore to likely false
       end)
@@ -776,7 +543,7 @@ function M.send_to_provider(opts)
 
         -- Stop the spinner timer if it's still active.
         -- on_content might have already stopped it if response_started.
-        -- M.cleanup_spinner will also try to stop state.spinner_timer.
+        -- ui.cleanup_spinner will also try to stop state.spinner_timer.
         if spinner_timer then
           vim.fn.timer_stop(spinner_timer)
           spinner_timer = nil
@@ -794,10 +561,10 @@ function M.send_to_provider(opts)
             )
             buffer_state.api_error_occurred = false -- Reset flag for next request
             if not response_started then
-              M.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
+              ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
             end
-            auto_write_buffer(bufnr) -- Still auto-write if configured
-            update_ui(bufnr) -- Update UI
+            buffers.auto_write_buffer(bufnr) -- Still auto-write if configured
+            ui.update_ui(bufnr) -- Update UI
             return -- Do not proceed to add new prompt or call opts.on_complete
           end
 
@@ -805,7 +572,7 @@ function M.send_to_provider(opts)
             log.info(
               "send_to_provider(): on_complete: cURL success (code 0), no API error, but no response content was processed."
             )
-            M.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
+            ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
           end
 
           -- Add new "@You:" prompt for the next message (buffer is already modifiable)
@@ -824,7 +591,7 @@ function M.send_to_provider(opts)
             cursor_line_offset = 2
           end
 
-          M.buffer_cmd(bufnr, "undojoin")
+          buffers.buffer_cmd(bufnr, "undojoin")
           vim.api.nvim_buf_set_lines(bufnr, last_line_idx, last_line_idx, false, lines_to_insert)
 
           local new_prompt_line_num = last_line_idx + cursor_line_offset - 1
@@ -841,9 +608,9 @@ function M.send_to_provider(opts)
             end
           end
 
-          auto_write_buffer(bufnr)
-          update_ui(bufnr)
-          fold_last_thinking_block(bufnr) -- Attempt to fold the last thinking block
+          buffers.auto_write_buffer(bufnr)
+          ui.update_ui(bufnr)
+          ui.fold_last_thinking_block(bufnr) -- Attempt to fold the last thinking block
 
           if opts.on_complete then -- For FlemmaSendAndInsert
             opts.on_complete()
@@ -851,7 +618,7 @@ function M.send_to_provider(opts)
         else
           -- cURL request failed (exit code ~= 0)
           -- Buffer is already set to modifiable = true
-          M.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
+          ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
 
           local error_msg
           if code == 6 then -- CURLE_COULDNT_RESOLVE_HOST
@@ -878,8 +645,8 @@ function M.send_to_provider(opts)
           end
           vim.notify(error_msg, vim.log.levels.ERROR)
 
-          auto_write_buffer(bufnr) -- Auto-write if enabled, even on error
-          update_ui(bufnr) -- Update UI to remove any artifacts
+          buffers.auto_write_buffer(bufnr) -- Auto-write if enabled, even on error
+          ui.update_ui(bufnr) -- Update UI to remove any artifacts
         end
       end)
     end,
@@ -897,7 +664,7 @@ function M.send_to_provider(opts)
         state.spinner_timer = nil
       end
     end
-    M.cleanup_spinner(bufnr) -- Clean up any "Thinking..." message, handles its own modifiable toggles
+    ui.cleanup_spinner(bufnr) -- Clean up any "Thinking..." message, handles its own modifiable toggles
     vim.bo[bufnr].modifiable = true -- Restore modifiable state
     return
   end
@@ -911,7 +678,7 @@ end
 
 -- Expose UI update function
 function M.update_ui(bufnr)
-  return update_ui(bufnr)
+  return ui.update_ui(bufnr)
 end
 
 return M
