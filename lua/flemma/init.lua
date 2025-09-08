@@ -7,6 +7,7 @@ local buffers = require("flemma.buffers")
 local plugin_config = require("flemma.config")
 local log = require("flemma.logging")
 local provider_config = require("flemma.provider.config")
+local state = require("flemma.state")
 local textobject = require("flemma.textobject")
 local models = require("flemma.models")
 
@@ -108,7 +109,7 @@ local function add_rulers(bufnr)
       -- If this isn't the first line, add a ruler before it
       if i > 1 then
         -- Create virtual line with ruler using the FlemmaRuler highlight group
-        local ruler_text = string.rep(config.ruler.char, math.floor(vim.api.nvim_win_get_width(0) * 1))
+        local ruler_text = string.rep(state.get_config().ruler.char, math.floor(vim.api.nvim_win_get_width(0) * 1))
         vim.api.nvim_buf_set_extmark(bufnr, ns_id, i - 1, 0, {
           virt_lines = { { { ruler_text, "FlemmaRuler" } } }, -- Use defined group
           virt_lines_above = true,
@@ -217,7 +218,7 @@ end
 
 -- Helper function to auto-write the buffer if enabled
 local function auto_write_buffer(bufnr)
-  if config.editing.auto_write and vim.bo[bufnr].modified then
+  if state.get_config().editing.auto_write and vim.bo[bufnr].modified then
     log.debug("auto_write_buffer(): bufnr = " .. bufnr)
     buffer_cmd(bufnr, "silent! write")
   end
@@ -271,7 +272,9 @@ local function initialize_provider(provider_name, model_name, parameters)
 
   -- Use the validated model for the final provider configuration
   -- Also update the global config table so format_usage gets the correct model
-  config.model = validated_model
+  local updated_config = state.get_config()
+  updated_config.model = validated_model
+  state.set_config(updated_config)
 
   -- Prepare the final parameters table by merging base and provider-specific settings
   local merged_params = {}
@@ -369,7 +372,7 @@ local function initialize_provider(provider_name, model_name, parameters)
   end
 
   -- Update the global provider reference
-  provider = new_provider
+  state.set_provider(new_provider)
 
   return new_provider
 end
@@ -380,10 +383,13 @@ M.setup = function(user_opts)
   user_opts = user_opts or {}
   config = vim.tbl_deep_extend("force", plugin_config.defaults, user_opts)
 
+  -- Store config in state module
+  state.set_config(config)
+
   -- Configure logging based on user settings
   log.configure({
-    enabled = config.logging.enabled,
-    path = config.logging.path,
+    enabled = state.get_config().logging.enabled,
+    path = state.get_config().logging.path,
   })
 
   -- Associate .chat files with the markdown treesitter parser
@@ -392,7 +398,8 @@ M.setup = function(user_opts)
   log.info("setup(): Flemma starting...")
 
   -- Initialize provider based on the merged config
-  initialize_provider(config.provider, config.model, config.parameters)
+  local current_config = state.get_config()
+  initialize_provider(current_config.provider, current_config.model, current_config.parameters)
 
   -- Helper function to toggle logging
   local function toggle_logging(enable)
@@ -418,12 +425,13 @@ M.setup = function(user_opts)
   })
 
   -- Define sign groups for each role
-  if config.signs.enabled then
+  current_config = state.get_config()
+  if current_config.signs.enabled then
     -- Define signs using internal keys ('user', 'system', 'assistant')
     local signs = {
-      ["user"] = { config = config.signs.user, highlight = config.highlights.user },
-      ["system"] = { config = config.signs.system, highlight = config.highlights.system },
-      ["assistant"] = { config = config.signs.assistant, highlight = config.highlights.assistant },
+      ["user"] = { config = current_config.signs.user, highlight = current_config.highlights.user },
+      ["system"] = { config = current_config.signs.system, highlight = current_config.highlights.system },
+      ["assistant"] = { config = current_config.signs.assistant, highlight = current_config.highlights.assistant },
     }
     -- Iterate using internal keys
     for internal_role_key, sign_data in pairs(signs) do
@@ -438,14 +446,14 @@ M.setup = function(user_opts)
         -- Define the sign using the internal key (e.g., flemma_user)
         local sign_name = "flemma_" .. internal_role_key
         vim.fn.sign_define(sign_name, {
-          text = sign_data.config.char or config.signs.char,
+          text = sign_data.config.char or current_config.signs.char,
           texthl = sign_hl_group, -- Use the linked group
         })
       else
         -- Define the sign without a highlight group if hl is false
         local sign_name = "flemma_" .. internal_role_key
         vim.fn.sign_define(sign_name, {
-          text = sign_data.config.char or config.signs.char,
+          text = sign_data.config.char or current_config.signs.char,
           -- texthl is omitted
         })
       end
@@ -455,16 +463,17 @@ M.setup = function(user_opts)
   -- Define syntax highlighting and Tree-sitter configuration
   local function set_syntax()
     local bufnr = vim.api.nvim_get_current_buf()
+    local syntax_config = state.get_config()
 
     -- Explicitly load our syntax file
     vim.cmd("runtime! syntax/chat.vim")
 
     -- Set highlights based on user config (link or hex color)
-    set_highlight("FlemmaSystem", config.highlights.system)
-    set_highlight("FlemmaUser", config.highlights.user)
-    set_highlight("FlemmaAssistant", config.highlights.assistant)
-    set_highlight("FlemmaUserLuaExpression", config.highlights.user_lua_expression) -- Highlight for {{expression}} in user messages
-    set_highlight("FlemmaUserFileReference", config.highlights.user_file_reference) -- Highlight for @./file in user messages
+    set_highlight("FlemmaSystem", syntax_config.highlights.system)
+    set_highlight("FlemmaUser", syntax_config.highlights.user)
+    set_highlight("FlemmaAssistant", syntax_config.highlights.assistant)
+    set_highlight("FlemmaUserLuaExpression", syntax_config.highlights.user_lua_expression) -- Highlight for {{expression}} in user messages
+    set_highlight("FlemmaUserFileReference", syntax_config.highlights.user_file_reference) -- Highlight for @./file in user messages
 
     -- Set up role marker highlights (e.g., @You:, @System:)
     -- Use existing highlight groups which are now correctly defined by set_highlight
@@ -474,13 +483,13 @@ M.setup = function(user_opts)
       execute 'highlight FlemmaRoleUser guifg=' . synIDattr(synIDtrans(hlID("FlemmaUser")), "fg", "gui") . ' gui=%s'
       execute 'highlight FlemmaRoleAssistant guifg=' . synIDattr(synIDtrans(hlID("FlemmaAssistant")), "fg", "gui") . ' gui=%s'
     ]],
-      config.role_style,
-      config.role_style,
-      config.role_style
+      syntax_config.role_style,
+      syntax_config.role_style,
+      syntax_config.role_style
     ))
 
     -- Set ruler highlight group
-    set_highlight("FlemmaRuler", config.ruler.hl)
+    set_highlight("FlemmaRuler", syntax_config.ruler.hl)
   end
 
   -- Set up folding expression
@@ -874,17 +883,18 @@ end
 -- Cancel ongoing request if any
 function M.cancel_request()
   local bufnr = vim.api.nvim_get_current_buf()
-  local state = buffers.get_state(bufnr)
+  local buffer_state = buffers.get_state(bufnr)
 
-  if state.current_request then
-    log.info("cancel_request(): job_id = " .. tostring(state.current_request))
+  if buffer_state.current_request then
+    log.info("cancel_request(): job_id = " .. tostring(buffer_state.current_request))
 
     -- Mark as cancelled
-    state.request_cancelled = true
+    buffer_state.request_cancelled = true
 
     -- Use provider to cancel the request
-    if provider:cancel_request(state.current_request) then
-      state.current_request = nil
+    local current_provider = state.get_provider()
+    if current_provider and current_provider:cancel_request(buffer_state.current_request) then
+      buffer_state.current_request = nil
 
       -- Clean up the buffer
       local last_line = vim.api.nvim_buf_line_count(bufnr)
@@ -897,7 +907,7 @@ function M.cancel_request()
       end
 
       -- Auto-write if enabled and we've received some content
-      if state.request_cancelled and not last_line_content:match("^@Assistant:.*Thinking%.%.%.$") then
+      if buffer_state.request_cancelled and not last_line_content:match("^@Assistant:.*Thinking%.%.%.$") then
         auto_write_buffer(bufnr)
       end
 
@@ -972,7 +982,7 @@ local function start_loading_spinner(bufnr)
   local original_modifiable_initial = vim.bo[bufnr].modifiable
   vim.bo[bufnr].modifiable = true -- Allow plugin modifications for initial message
 
-  local state = buffers.get_state(bufnr)
+  local buffer_state = buffers.get_state(bufnr)
   local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
   local frame = 1
 
@@ -991,7 +1001,7 @@ local function start_loading_spinner(bufnr)
   vim.bo[bufnr].modifiable = original_modifiable_initial -- Restore state after initial message
 
   local timer = vim.fn.timer_start(100, function()
-    if not state.current_request then
+    if not buffer_state.current_request then
       return
     end
 
@@ -1017,17 +1027,17 @@ end
 function M.send_to_provider(opts)
   opts = opts or {}
   local bufnr = vim.api.nvim_get_current_buf()
-  local state = buffers.get_state(bufnr)
+  local buffer_state = buffers.get_state(bufnr)
 
   -- Check if there's already a request in progress
-  if state.current_request then
+  if buffer_state.current_request then
     vim.notify("Flemma: A request is already in progress. Use <C-c> to cancel it first.", vim.log.levels.WARN)
     return
   end
 
   log.info("send_to_provider(): Starting new request for buffer " .. bufnr)
-  state.request_cancelled = false
-  state.api_error_occurred = false -- Initialize flag for API errors
+  buffer_state.request_cancelled = false
+  buffer_state.api_error_occurred = false -- Initialize flag for API errors
 
   -- Make buffer non-modifiable by user during request
   vim.bo[bufnr].modifiable = false
@@ -1036,7 +1046,8 @@ function M.send_to_provider(opts)
   auto_write_buffer(bufnr)
 
   -- Ensure we have a valid provider
-  if not provider then
+  local current_provider = state.get_provider()
+  if not current_provider then
     log.error("send_to_provider(): Provider not initialized")
     vim.notify("Flemma: Provider not initialized", vim.log.levels.ERROR)
     vim.bo[bufnr].modifiable = true -- Restore modifiable state
@@ -1045,7 +1056,7 @@ function M.send_to_provider(opts)
 
   -- Check if we need to prompt for API key
   local api_key_result, api_key_error = pcall(function()
-    return provider:get_api_key()
+    return current_provider:get_api_key()
   end)
 
   if not api_key_result then
@@ -1067,7 +1078,7 @@ function M.send_to_provider(opts)
     return
   end
 
-  if not api_key_error and not provider.state.api_key then
+  if not api_key_error and not current_provider.state.api_key then
     log.info("send_to_provider(): No API key found, prompting user")
     vim.ui.input({
       prompt = "Enter your API key: ",
@@ -1077,7 +1088,7 @@ function M.send_to_provider(opts)
       relative = "editor",
     }, function(input)
       if input then
-        provider.state.api_key = input
+        current_provider.state.api_key = input
         log.info("send_to_provider(): API key set via prompt")
         -- Continue with the Flemma request immediately
         M.send_to_provider() -- This recursive call will handle modifiable state
@@ -1121,7 +1132,7 @@ function M.send_to_provider(opts)
     template_vars = result
   end
 
-  local formatted_messages, system_message = provider:format_messages(messages)
+  local formatted_messages, system_message = current_provider:format_messages(messages)
 
   -- Process template expressions in messages
   local eval = require("flemma.eval")
@@ -1204,15 +1215,15 @@ function M.send_to_provider(opts)
   end
 
   -- Create request body using the validated model stored in the provider
-  local request_body = provider:create_request_body(formatted_messages, system_message)
+  local request_body = current_provider:create_request_body(formatted_messages, system_message)
   last_request_body_for_testing = request_body -- Store for testing
 
   -- Log the request details (using the provider's stored model)
   log.debug(
     "send_to_provider(): Sending request for provider "
-      .. log.inspect(config.provider)
+      .. log.inspect(state.get_config().provider)
       .. " with model "
-      .. log.inspect(provider.parameters.model)
+      .. log.inspect(current_provider.parameters.model)
   )
 
   local spinner_timer = start_loading_spinner(bufnr) -- Handles its own modifiable toggles for writes
@@ -1296,7 +1307,7 @@ function M.send_to_provider(opts)
   end
 
   -- Reset usage tracking for this buffer
-  state.current_usage = {
+  buffer_state.current_usage = {
     input_tokens = 0,
     output_tokens = 0,
     thoughts_tokens = 0,
@@ -1318,8 +1329,8 @@ function M.send_to_provider(opts)
           vim.fn.timer_stop(spinner_timer)
         end
         M.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
-        state.current_request = nil
-        state.api_error_occurred = true -- Set flag indicating API error
+        buffer_state.current_request = nil
+        buffer_state.api_error_occurred = true -- Set flag indicating API error
 
         vim.bo[bufnr].modifiable = true -- Restore modifiable state
 
@@ -1345,34 +1356,36 @@ function M.send_to_provider(opts)
 
     on_usage = function(usage_data)
       if usage_data.type == "input" then
-        state.current_usage.input_tokens = usage_data.tokens
+        buffer_state.current_usage.input_tokens = usage_data.tokens
       elseif usage_data.type == "output" then
-        state.current_usage.output_tokens = usage_data.tokens
+        buffer_state.current_usage.output_tokens = usage_data.tokens
       elseif usage_data.type == "thoughts" then
-        state.current_usage.thoughts_tokens = usage_data.tokens
+        buffer_state.current_usage.thoughts_tokens = usage_data.tokens
       end
     end,
 
     on_message_complete = function()
       vim.schedule(function()
         -- Update session totals
-        session_usage.input_tokens = session_usage.input_tokens + (state.current_usage.input_tokens or 0)
-        session_usage.output_tokens = session_usage.output_tokens + (state.current_usage.output_tokens or 0)
-        session_usage.thoughts_tokens = session_usage.thoughts_tokens + (state.current_usage.thoughts_tokens or 0)
+        state.update_session_usage({
+          input_tokens = buffer_state.current_usage.input_tokens or 0,
+          output_tokens = buffer_state.current_usage.output_tokens or 0,
+          thoughts_tokens = buffer_state.current_usage.thoughts_tokens or 0,
+        })
 
         -- Auto-write when response is complete
         auto_write_buffer(bufnr)
 
         -- Format and display usage information using our custom notification
-        local usage_str = format_usage(state.current_usage, session_usage)
+        local usage_str = format_usage(buffer_state.current_usage, state.get_session_usage())
         if usage_str ~= "" then
-          local notify_opts = vim.tbl_deep_extend("force", config.notify, {
+          local notify_opts = vim.tbl_deep_extend("force", state.get_config().notify, {
             title = "Usage",
           })
           require("flemma.notify").show(usage_str, notify_opts)
         end
         -- Reset current usage for next request
-        state.current_usage = {
+        buffer_state.current_usage = {
           input_tokens = 0,
           output_tokens = 0,
           thoughts_tokens = 0,
@@ -1450,7 +1463,7 @@ function M.send_to_provider(opts)
     on_complete = function(code)
       vim.schedule(function()
         -- If the request was cancelled, M.cancel_request() handles cleanup including modifiable.
-        if state.request_cancelled then
+        if buffer_state.request_cancelled then
           -- M.cancel_request should have already set modifiable = true
           -- and stopped the spinner.
           if spinner_timer then
@@ -1467,18 +1480,18 @@ function M.send_to_provider(opts)
           vim.fn.timer_stop(spinner_timer)
           spinner_timer = nil
         end
-        state.current_request = nil -- Mark request as no longer current
+        buffer_state.current_request = nil -- Mark request as no longer current
 
         -- Ensure buffer is modifiable for final operations and user interaction
         vim.bo[bufnr].modifiable = true
 
         if code == 0 then
           -- cURL request completed successfully (exit code 0)
-          if state.api_error_occurred then
+          if buffer_state.api_error_occurred then
             log.info(
               "send_to_provider(): on_complete: cURL success (code 0), but an API error was previously handled. Skipping new prompt."
             )
-            state.api_error_occurred = false -- Reset flag for next request
+            buffer_state.api_error_occurred = false -- Reset flag for next request
             if not response_started then
               M.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
             end
@@ -1549,7 +1562,7 @@ function M.send_to_provider(opts)
               code
             )
           elseif code == 28 then -- cURL timeout error
-            local timeout_value = provider.parameters.timeout or config.parameters.timeout -- Get effective timeout
+            local timeout_value = current_provider.parameters.timeout or state.get_config().parameters.timeout -- Get effective timeout
             error_msg = string.format(
               "Flemma: cURL request timed out (exit code %d). Timeout is %s seconds.",
               code,
@@ -1572,9 +1585,9 @@ function M.send_to_provider(opts)
   }
 
   -- Send the request using the provider
-  state.current_request = provider:send_request(request_body, callbacks)
+  buffer_state.current_request = current_provider:send_request(request_body, callbacks)
 
-  if not state.current_request or state.current_request == 0 or state.current_request == -1 then
+  if not buffer_state.current_request or buffer_state.current_request == 0 or buffer_state.current_request == -1 then
     log.error("send_to_provider(): Failed to start provider job.")
     if spinner_timer then -- Ensure spinner_timer is valid before trying to stop
       vim.fn.timer_stop(spinner_timer)
@@ -1599,8 +1612,8 @@ function M.switch(provider_name, model_name, parameters)
 
   -- Check for ongoing requests
   local bufnr = vim.api.nvim_get_current_buf()
-  local state = buffers.get_state(bufnr)
-  if state.current_request then
+  local buffer_state = buffers.get_state(bufnr)
+  if buffer_state.current_request then
     vim.notify("Flemma: Cannot switch providers while a request is in progress.", vim.log.levels.WARN)
     return
   end
@@ -1682,30 +1695,33 @@ end
 
 -- Get the current model name
 function M.get_current_model_name()
-  if config and config.model then
-    return config.model
+  local current_config = state.get_config()
+  if current_config and current_config.model then
+    return current_config.model
   end
   return nil -- Or an empty string, depending on desired behavior for uninitialized model
 end
 
 -- Get the current provider name
 function M.get_current_provider_name()
-  if config and config.provider then
-    return config.provider
+  local current_config = state.get_config()
+  if current_config and current_config.provider then
+    return current_config.provider
   end
   return nil
 end
 
 -- Get the current reasoning setting if applicable for OpenAI
 function M.get_current_reasoning_setting()
+  local current_config = state.get_config()
   if
-    config
-    and config.provider == "openai"
-    and config.parameters
-    and config.parameters.openai
-    and config.parameters.openai.reasoning
+    current_config
+    and current_config.provider == "openai"
+    and current_config.parameters
+    and current_config.parameters.openai
+    and current_config.parameters.openai.reasoning
   then
-    local reasoning = config.parameters.openai.reasoning
+    local reasoning = current_config.parameters.openai.reasoning
     if reasoning == "low" or reasoning == "medium" or reasoning == "high" then
       return reasoning
     end
@@ -1715,7 +1731,7 @@ end
 
 -- Get the internal config table for testing
 function M._get_config()
-  return config
+  return state.get_config()
 end
 
 -- Get the last request body for testing
