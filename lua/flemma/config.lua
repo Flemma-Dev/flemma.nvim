@@ -1,8 +1,5 @@
 --- Flemma default configuration
-local M = {}
-
--- Default configuration values
-M.defaults = {
+return {
   highlights = {
     system = "Special", -- Highlight group or hex color (e.g., "#ffccaa") for system messages
     user = "Normal", -- Highlight group or hex color for user messages
@@ -75,10 +72,3 @@ M.defaults = {
     enabled = true, -- Set to false to disable all keymaps
   },
 }
-
--- Check if a parameter key is a general parameter applicable to all providers
-function M.is_general_parameter(key)
-  return key == "max_tokens" or key == "temperature" or key == "timeout" or key == "connect_timeout"
-end
-
-return M

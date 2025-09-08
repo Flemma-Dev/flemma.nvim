@@ -254,7 +254,7 @@ end
 M.setup = function(user_opts)
   -- Merge user config with defaults from the config module
   user_opts = user_opts or {}
-  config = vim.tbl_deep_extend("force", plugin_config.defaults, user_opts)
+  config = vim.tbl_deep_extend("force", plugin_config, user_opts)
 
   -- Store config in state module
   state.set_config(config)
@@ -1503,7 +1503,7 @@ function M.switch(provider_name, model_name, parameters)
   -- Merge the provided parameters into the correct parameter locations
   for k, v in pairs(parameters) do
     -- Check if it's a general parameter
-    if plugin_config.is_general_parameter(k) then
+    if config_manager.is_general_parameter(k) then
       new_config.parameters[k] = v
     else
       -- Assume it's a provider-specific parameter

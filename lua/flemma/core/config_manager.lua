@@ -6,6 +6,13 @@ local plugin_config = require("flemma.config")
 local state = require("flemma.state")
 local validation = require("flemma.core.validation")
 
+--- Check if a parameter key is a general parameter applicable to all providers
+-- @param key string The parameter key to check
+-- @return boolean True if the key is a general parameter
+local function is_general_parameter(key)
+  return key == "max_tokens" or key == "temperature" or key == "timeout" or key == "connect_timeout"
+end
+
 --- Merges parameters for a provider, handling general and provider-specific parameters
 -- @param base_params table Base parameters (may contain provider-specific sub-tables)
 -- @param provider_name string The provider name
@@ -19,7 +26,7 @@ function M.merge_parameters(base_params, provider_name, provider_overrides)
   -- 1. Copy all non-provider-specific keys from the base parameters
   for k, v in pairs(base_params) do
     -- Only copy if it's not a provider-specific table or if it's a general parameter
-    if type(v) ~= "table" or plugin_config.is_general_parameter(k) then
+    if type(v) ~= "table" or is_general_parameter(k) then
       merged_params[k] = v
     end
   end
@@ -90,6 +97,13 @@ function M.apply_config(config)
       .. ", model: "
       .. log.inspect(config.model)
   )
+end
+
+--- Check if a parameter key is a general parameter applicable to all providers
+-- @param key string The parameter key to check
+-- @return boolean True if the key is a general parameter
+function M.is_general_parameter(key)
+  return is_general_parameter(key)
 end
 
 return M
