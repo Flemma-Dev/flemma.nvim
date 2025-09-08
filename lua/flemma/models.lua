@@ -1,4 +1,4 @@
---- Claudius model definitions - DATA ONLY
+--- Flemma model definitions - DATA ONLY
 --- Centralized configuration for all supported models across providers
 --- Contains model lists, defaults, and pricing information
 --- This file is data-only and contains no functions

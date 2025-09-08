@@ -1,8 +1,8 @@
---- Google Vertex AI provider for Claudius
+--- Google Vertex AI provider for Flemma
 --- Implements the Google Vertex AI API integration
-local base = require("claudius.provider.base")
-local log = require("claudius.logging")
--- local mime_util = require("claudius.mime") -- Moved to base provider
+local base = require("flemma.provider.base")
+local log = require("flemma.logging")
+-- local mime_util = require("flemma.mime") -- Moved to base provider
 local M = {}
 
 -- Private helper to validate required configuration
@@ -10,7 +10,7 @@ local function _validate_config(self)
   local project_id = self.parameters.project_id
   if not project_id or project_id == "" then
     error(
-      "Vertex AI project_id is required. Please configure it in `parameters.vertex.project_id` or via :ClaudiusSwitch.",
+      "Vertex AI project_id is required. Please configure it in `parameters.vertex.project_id` or via :FlemmaSwitch.",
       0
     )
   end
@@ -135,7 +135,7 @@ function M.get_api_key(self)
   end
 
   -- Try to get service account JSON from keyring
-  local service_account_json = require("claudius.provider.base").get_api_key(self, {
+  local service_account_json = require("flemma.provider.base").get_api_key(self, {
     env_var_name = "VERTEX_SERVICE_ACCOUNT",
     keyring_service_name = "vertex",
     keyring_key_name = "api",
@@ -377,10 +377,10 @@ function M.create_request_body(self, formatted_messages, system_message)
     end
 
     vim.notify(
-      "Claudius (Vertex AI): Some @file references could not be processed:\n• "
+      "Flemma (Vertex AI): Some @file references could not be processed:\n• "
         .. table.concat(warning_messages, "\n• "),
       vim.log.levels.WARN,
-      { title = "Claudius File Warnings" }
+      { title = "Flemma File Warnings" }
     )
   end
 

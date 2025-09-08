@@ -1,5 +1,5 @@
 --- MIME type detection utility
-local log = require("claudius.logging")
+local log = require("flemma.logging")
 local M = {}
 
 -- Cache for file command availability check

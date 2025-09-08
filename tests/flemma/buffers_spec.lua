@@ -1,4 +1,4 @@
-describe("claudius.parse_buffer", function()
+describe("flemma.parse_buffer", function()
   it("parses a buffer with frontmatter and messages correctly", function()
     -- Create a new buffer. The `scratch` option is set to false to ensure
     -- the test environment is as close as possible to a real file buffer.
@@ -16,8 +16,8 @@ describe("claudius.parse_buffer", function()
     -- Set the lines in the buffer
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-    local claudius = require("claudius")
-    local messages, frontmatter_code = claudius.parse_buffer(bufnr)
+    local flemma = require("flemma")
+    local messages, frontmatter_code = flemma.parse_buffer(bufnr)
 
     -- Assertions
     assert.are.equal(2, #messages, "Should parse 2 messages")

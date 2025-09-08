@@ -1,11 +1,11 @@
---- Claudius logging functionality
+--- Flemma logging functionality
 --- Provides centralized logging capabilities with custom inspect
 local M = {}
 
 -- Default configuration
 local config = {
   enabled = false,
-  path = vim.fn.stdpath("cache") .. "/claudius.log",
+  path = vim.fn.stdpath("cache") .. "/flemma.log",
 }
 
 -- Write a log message to the log file

@@ -1,13 +1,13 @@
---- Claudius plugin core functionality
+--- Flemma plugin core functionality
 --- Provides chat interface and API integration
 local M = {}
 local last_request_body_for_testing = nil -- For testing purposes
 
-local buffers = require("claudius.buffers")
-local plugin_config = require("claudius.config")
-local log = require("claudius.logging")
-local provider_config = require("claudius.provider.config")
-local textobject = require("claudius.textobject")
+local buffers = require("flemma.buffers")
+local plugin_config = require("flemma.config")
+local log = require("flemma.logging")
+local provider_config = require("flemma.provider.config")
+local textobject = require("flemma.textobject")
 
 local provider = nil
 
@@ -33,7 +33,7 @@ end
 -- Module configuration (will hold merged user opts and defaults)
 local config = {}
 
-local ns_id = vim.api.nvim_create_namespace("claudius")
+local ns_id = vim.api.nvim_create_namespace("flemma")
 
 -- Session-wide usage tracking
 local session_usage = {
@@ -106,10 +106,10 @@ local function add_rulers(bufnr)
     if line:match("^@[%w]+:") then
       -- If this isn't the first line, add a ruler before it
       if i > 1 then
-        -- Create virtual line with ruler using the ClaudiusRuler highlight group
+        -- Create virtual line with ruler using the FlemmaRuler highlight group
         local ruler_text = string.rep(config.ruler.char, math.floor(vim.api.nvim_win_get_width(0) * 1))
         vim.api.nvim_buf_set_extmark(bufnr, ns_id, i - 1, 0, {
-          virt_lines = { { { ruler_text, "ClaudiusRuler" } } }, -- Use defined group
+          virt_lines = { { { ruler_text, "FlemmaRuler" } } }, -- Use defined group
           virt_lines_above = true,
         })
       end
@@ -210,7 +210,7 @@ local function update_ui(bufnr)
   end
   add_rulers(bufnr)
   -- Clear and reapply all signs
-  vim.fn.sign_unplace("claudius_ns", { buffer = bufnr })
+  vim.fn.sign_unplace("flemma_ns", { buffer = bufnr })
   M.parse_buffer(bufnr) -- This will reapply signs
 end
 
@@ -279,10 +279,10 @@ local function initialize_provider(provider_name, model_name, parameters)
       -- Check if the model name starts with "o"
       if string.sub(validated_model, 1, 1) ~= "o" then
         local warning_msg = string.format(
-          "Claudius: The 'reasoning' parameter is only supported for OpenAI o-series models (e.g., 'o1-preview'). Using it with '%s' may lead to undefined behavior.",
+          "Flemma: The 'reasoning' parameter is only supported for OpenAI o-series models (e.g., 'o1-preview'). Using it with '%s' may lead to undefined behavior.",
           validated_model
         )
-        vim.notify(warning_msg, vim.log.levels.WARN, { title = "Claudius Configuration" })
+        vim.notify(warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
         log.warn(warning_msg)
       end
     end
@@ -301,10 +301,10 @@ local function initialize_provider(provider_name, model_name, parameters)
       and temp_value ~= 1.0
     then
       local temp_warning_msg = string.format(
-        "Claudius: For OpenAI o-series models with 'reasoning' active, 'temperature' must be 1 or omitted. Current value is '%s'. The API will likely reject this.",
+        "Flemma: For OpenAI o-series models with 'reasoning' active, 'temperature' must be 1 or omitted. Current value is '%s'. The API will likely reject this.",
         tostring(temp_value)
       )
-      vim.notify(temp_warning_msg, vim.log.levels.WARN, { title = "Claudius Configuration" })
+      vim.notify(temp_warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
       log.warn(temp_warning_msg)
     end
   end
@@ -320,12 +320,12 @@ local function initialize_provider(provider_name, model_name, parameters)
   -- Create a fresh provider instance with the merged parameters
   local new_provider
   if provider_name == "openai" then
-    new_provider = require("claudius.provider.openai").new(merged_params)
+    new_provider = require("flemma.provider.openai").new(merged_params)
   elseif provider_name == "vertex" then
-    new_provider = require("claudius.provider.vertex").new(merged_params)
+    new_provider = require("flemma.provider.vertex").new(merged_params)
   else
     -- Default to Claude if not specified (or if provider_name is 'claude')
-    new_provider = require("claudius.provider.claude").new(merged_params)
+    new_provider = require("flemma.provider.claude").new(merged_params)
   end
 
   -- Update the global provider reference
@@ -349,7 +349,7 @@ M.setup = function(user_opts)
   -- Associate .chat files with the markdown treesitter parser
   vim.treesitter.language.register("markdown", { "chat" })
 
-  log.info("setup(): Claudius starting...")
+  log.info("setup(): Flemma starting...")
 
   -- Initialize provider based on the merged config
   initialize_provider(config.provider, config.model, config.parameters)
@@ -361,9 +361,9 @@ M.setup = function(user_opts)
     end
     log.set_enabled(enable)
     if enable then
-      vim.notify("Claudius: Logging enabled - " .. log.get_path())
+      vim.notify("Flemma: Logging enabled - " .. log.get_path())
     else
-      vim.notify("Claudius: Logging disabled")
+      vim.notify("Flemma: Logging disabled")
     end
   end
 
@@ -387,23 +387,23 @@ M.setup = function(user_opts)
     }
     -- Iterate using internal keys
     for internal_role_key, sign_data in pairs(signs) do
-      -- Define the specific highlight group name for the sign (e.g., ClaudiusSignUser)
-      local sign_hl_group = "ClaudiusSign" .. internal_role_key:sub(1, 1):upper() .. internal_role_key:sub(2)
+      -- Define the specific highlight group name for the sign (e.g., FlemmaSignUser)
+      local sign_hl_group = "FlemmaSign" .. internal_role_key:sub(1, 1):upper() .. internal_role_key:sub(2)
 
       -- Set the sign highlight group if highlighting is enabled
       if sign_data.config.hl ~= false then
         local target_hl = sign_data.config.hl == true and sign_data.highlight or sign_data.config.hl
         set_highlight(sign_hl_group, target_hl) -- Use the helper function
 
-        -- Define the sign using the internal key (e.g., claudius_user)
-        local sign_name = "claudius_" .. internal_role_key
+        -- Define the sign using the internal key (e.g., flemma_user)
+        local sign_name = "flemma_" .. internal_role_key
         vim.fn.sign_define(sign_name, {
           text = sign_data.config.char or config.signs.char,
           texthl = sign_hl_group, -- Use the linked group
         })
       else
         -- Define the sign without a highlight group if hl is false
-        local sign_name = "claudius_" .. internal_role_key
+        local sign_name = "flemma_" .. internal_role_key
         vim.fn.sign_define(sign_name, {
           text = sign_data.config.char or config.signs.char,
           -- texthl is omitted
@@ -420,19 +420,19 @@ M.setup = function(user_opts)
     vim.cmd("runtime! syntax/chat.vim")
 
     -- Set highlights based on user config (link or hex color)
-    set_highlight("ClaudiusSystem", config.highlights.system)
-    set_highlight("ClaudiusUser", config.highlights.user)
-    set_highlight("ClaudiusAssistant", config.highlights.assistant)
-    set_highlight("ClaudiusUserLuaExpression", config.highlights.user_lua_expression) -- Highlight for {{expression}} in user messages
-    set_highlight("ClaudiusUserFileReference", config.highlights.user_file_reference) -- Highlight for @./file in user messages
+    set_highlight("FlemmaSystem", config.highlights.system)
+    set_highlight("FlemmaUser", config.highlights.user)
+    set_highlight("FlemmaAssistant", config.highlights.assistant)
+    set_highlight("FlemmaUserLuaExpression", config.highlights.user_lua_expression) -- Highlight for {{expression}} in user messages
+    set_highlight("FlemmaUserFileReference", config.highlights.user_file_reference) -- Highlight for @./file in user messages
 
     -- Set up role marker highlights (e.g., @You:, @System:)
     -- Use existing highlight groups which are now correctly defined by set_highlight
     vim.cmd(string.format(
       [[
-      execute 'highlight ClaudiusRoleSystem guifg=' . synIDattr(synIDtrans(hlID("ClaudiusSystem")), "fg", "gui") . ' gui=%s'
-      execute 'highlight ClaudiusRoleUser guifg=' . synIDattr(synIDtrans(hlID("ClaudiusUser")), "fg", "gui") . ' gui=%s'
-      execute 'highlight ClaudiusRoleAssistant guifg=' . synIDattr(synIDtrans(hlID("ClaudiusAssistant")), "fg", "gui") . ' gui=%s'
+      execute 'highlight FlemmaRoleSystem guifg=' . synIDattr(synIDtrans(hlID("FlemmaSystem")), "fg", "gui") . ' gui=%s'
+      execute 'highlight FlemmaRoleUser guifg=' . synIDattr(synIDtrans(hlID("FlemmaUser")), "fg", "gui") . ' gui=%s'
+      execute 'highlight FlemmaRoleAssistant guifg=' . synIDattr(synIDtrans(hlID("FlemmaAssistant")), "fg", "gui") . ' gui=%s'
     ]],
       config.role_style,
       config.role_style,
@@ -440,14 +440,14 @@ M.setup = function(user_opts)
     ))
 
     -- Set ruler highlight group
-    set_highlight("ClaudiusRuler", config.ruler.hl)
+    set_highlight("FlemmaRuler", config.ruler.hl)
   end
 
   -- Set up folding expression
   local function setup_folding()
     vim.wo.foldmethod = "expr"
-    vim.wo.foldexpr = 'v:lua.require("claudius.buffers").get_fold_level(v:lnum)'
-    vim.wo.foldtext = 'v:lua.require("claudius.buffers").get_fold_text()'
+    vim.wo.foldexpr = 'v:lua.require("flemma.buffers").get_fold_level(v:lnum)'
+    vim.wo.foldtext = 'v:lua.require("flemma.buffers").get_fold_text()'
     -- Start with all folds open
     vim.wo.foldlevel = 99
   end
@@ -462,19 +462,19 @@ M.setup = function(user_opts)
   })
 
   -- Create user commands
-  vim.api.nvim_create_user_command("ClaudiusSend", function()
+  vim.api.nvim_create_user_command("FlemmaSend", function()
     M.send_to_provider()
   end, {})
 
-  vim.api.nvim_create_user_command("ClaudiusCancel", function()
+  vim.api.nvim_create_user_command("FlemmaCancel", function()
     M.cancel_request()
   end, {})
 
-  vim.api.nvim_create_user_command("ClaudiusImport", function()
-    require("claudius.import").import_buffer()
+  vim.api.nvim_create_user_command("FlemmaImport", function()
+    require("flemma.import").import_buffer()
   end, {})
 
-  vim.api.nvim_create_user_command("ClaudiusSendAndInsert", function()
+  vim.api.nvim_create_user_command("FlemmaSendAndInsert", function()
     local bufnr = vim.api.nvim_get_current_buf()
     buffer_cmd(bufnr, "stopinsert")
     M.send_to_provider({
@@ -510,7 +510,7 @@ M.setup = function(user_opts)
   end
 
   -- Command to switch providers
-  vim.api.nvim_create_user_command("ClaudiusSwitch", function(opts)
+  vim.api.nvim_create_user_command("FlemmaSwitch", function(opts)
     local args = opts.fargs
 
     if #args == 0 then
@@ -523,14 +523,14 @@ M.setup = function(user_opts)
 
       vim.ui.select(providers, { prompt = "Select Provider:" }, function(selected_provider)
         if not selected_provider then
-          vim.notify("Claudius: Provider selection cancelled", vim.log.levels.INFO)
+          vim.notify("Flemma: Provider selection cancelled", vim.log.levels.INFO)
           return
         end
 
         -- Get models for the selected provider (unsorted)
         local models = provider_config.models[selected_provider] or {}
         if type(models) ~= "table" or #models == 0 then
-          vim.notify("Claudius: No models found for provider " .. selected_provider, vim.log.levels.WARN)
+          vim.notify("Flemma: No models found for provider " .. selected_provider, vim.log.levels.WARN)
           -- Switch to provider with default model
           M.switch(selected_provider, nil, {})
           return
@@ -538,7 +538,7 @@ M.setup = function(user_opts)
 
         vim.ui.select(models, { prompt = "Select Model for " .. selected_provider .. ":" }, function(selected_model)
           if not selected_model then
-            vim.notify("Claudius: Model selection cancelled", vim.log.levels.INFO)
+            vim.notify("Flemma: Model selection cancelled", vim.log.levels.INFO)
             return
           end
           -- Call M.switch with selected provider and model, no extra params
@@ -604,26 +604,26 @@ M.setup = function(user_opts)
   })
 
   -- Navigation commands
-  vim.api.nvim_create_user_command("ClaudiusNextMessage", function()
+  vim.api.nvim_create_user_command("FlemmaNextMessage", function()
     find_next_message()
   end, {})
 
-  vim.api.nvim_create_user_command("ClaudiusPrevMessage", function()
+  vim.api.nvim_create_user_command("FlemmaPrevMessage", function()
     find_prev_message()
   end, {})
 
   -- Logging commands
-  vim.api.nvim_create_user_command("ClaudiusEnableLogging", function()
+  vim.api.nvim_create_user_command("FlemmaEnableLogging", function()
     toggle_logging(true)
   end, {})
 
-  vim.api.nvim_create_user_command("ClaudiusDisableLogging", function()
+  vim.api.nvim_create_user_command("FlemmaDisableLogging", function()
     toggle_logging(false)
   end, {})
 
-  vim.api.nvim_create_user_command("ClaudiusOpenLog", function()
+  vim.api.nvim_create_user_command("FlemmaOpenLog", function()
     if not log.is_enabled() then
-      vim.notify("Claudius: Logging is currently disabled", vim.log.levels.WARN)
+      vim.notify("Flemma: Logging is currently disabled", vim.log.levels.WARN)
       -- Give user time to see the warning
       vim.defer_fn(function()
         vim.cmd("tabedit " .. log.get_path())
@@ -634,8 +634,8 @@ M.setup = function(user_opts)
   end, {})
 
   -- Command to recall last notification
-  vim.api.nvim_create_user_command("ClaudiusRecallNotification", function()
-    require("claudius.notify").recall_last()
+  vim.api.nvim_create_user_command("FlemmaRecallNotification", function()
+    require("flemma.notify").recall_last()
   end, {
     desc = "Recall the last notification",
   })
@@ -668,7 +668,7 @@ M.setup = function(user_opts)
     end,
   })
 
-  -- Set up the mappings for Claudius interaction if enabled
+  -- Set up the mappings for Flemma interaction if enabled
   if config.keymaps.enabled then
     vim.api.nvim_create_autocmd("FileType", {
       pattern = "chat",
@@ -677,7 +677,7 @@ M.setup = function(user_opts)
         if config.keymaps.normal.send then
           vim.keymap.set("n", config.keymaps.normal.send, function()
             M.send_to_provider()
-          end, { buffer = true, desc = "Send to Claudius" })
+          end, { buffer = true, desc = "Send to Flemma" })
         end
 
         if config.keymaps.normal.cancel then
@@ -685,7 +685,7 @@ M.setup = function(user_opts)
             "n",
             config.keymaps.normal.cancel,
             M.cancel_request,
-            { buffer = true, desc = "Cancel Claudius Request" }
+            { buffer = true, desc = "Cancel Flemma Request" }
           )
         end
 
@@ -721,7 +721,7 @@ M.setup = function(user_opts)
                 buffer_cmd(bufnr, "startinsert!")
               end,
             })
-          end, { buffer = true, desc = "Send to Claudius and continue editing" })
+          end, { buffer = true, desc = "Send to Flemma and continue editing" })
         end
       end,
     })
@@ -740,7 +740,7 @@ local function place_signs(bufnr, start_line, end_line, role)
     internal_role_key = "user" -- Map "You" specifically to "user"
   end
 
-  local sign_name = "claudius_" .. internal_role_key -- Construct sign name like "claudius_user"
+  local sign_name = "flemma_" .. internal_role_key -- Construct sign name like "flemma_user"
   local sign_config = config.signs[internal_role_key] -- Look up config using "user", "system", etc.
 
   -- Check if the sign is actually defined before trying to place it
@@ -751,7 +751,7 @@ local function place_signs(bufnr, start_line, end_line, role)
 
   if sign_config and sign_config.hl ~= false then
     for lnum = start_line, end_line do
-      vim.fn.sign_place(0, "claudius_ns", sign_name, bufnr, { lnum = lnum })
+      vim.fn.sign_place(0, "flemma_ns", sign_name, bufnr, { lnum = lnum })
     end
   end
 end
@@ -804,7 +804,7 @@ function M.parse_buffer(bufnr)
   local messages = {}
 
   -- Handle frontmatter if present
-  local frontmatter = require("claudius.frontmatter")
+  local frontmatter = require("flemma.frontmatter")
   local fm_code, content = frontmatter.parse(lines)
 
   -- Calculate frontmatter offset for sign placement
@@ -863,7 +863,7 @@ function M.cancel_request()
 
       vim.bo[bufnr].modifiable = true -- Restore modifiable state
 
-      local msg = "Claudius: Request cancelled"
+      local msg = "Flemma: Request cancelled"
       if log.is_enabled() then
         msg = msg .. ". See " .. log.get_path() .. " for details"
       end
@@ -981,7 +981,7 @@ function M.send_to_provider(opts)
 
   -- Check if there's already a request in progress
   if state.current_request then
-    vim.notify("Claudius: A request is already in progress. Use <C-c> to cancel it first.", vim.log.levels.WARN)
+    vim.notify("Flemma: A request is already in progress. Use <C-c> to cancel it first.", vim.log.levels.WARN)
     return
   end
 
@@ -998,7 +998,7 @@ function M.send_to_provider(opts)
   -- Ensure we have a valid provider
   if not provider then
     log.error("send_to_provider(): Provider not initialized")
-    vim.notify("Claudius: Provider not initialized", vim.log.levels.ERROR)
+    vim.notify("Flemma: Provider not initialized", vim.log.levels.ERROR)
     vim.bo[bufnr].modifiable = true -- Restore modifiable state
     return
   end
@@ -1017,12 +1017,12 @@ function M.send_to_provider(opts)
 
     if auth_notes then
       -- Show a more detailed alert with the auth notes
-      require("claudius.notify").alert(
+      require("flemma.notify").alert(
         tostring(api_key_error):gsub("%s+$", "") .. "\n\n---\n\n" .. auth_notes,
-        { title = "Claudius - Authentication Error: " .. config.provider }
+        { title = "Flemma - Authentication Error: " .. config.provider }
       )
     else
-      require("claudius.notify").alert(tostring(api_key_error), { title = "Claudius - Authentication Error" })
+      require("flemma.notify").alert(tostring(api_key_error), { title = "Flemma - Authentication Error" })
     end
     return
   end
@@ -1033,17 +1033,17 @@ function M.send_to_provider(opts)
       prompt = "Enter your API key: ",
       default = "",
       border = "rounded",
-      title = " Claudius - API Key Required ",
+      title = " Flemma - API Key Required ",
       relative = "editor",
     }, function(input)
       if input then
         provider.state.api_key = input
         log.info("send_to_provider(): API key set via prompt")
-        -- Continue with the Claudius request immediately
+        -- Continue with the Flemma request immediately
         M.send_to_provider() -- This recursive call will handle modifiable state
       else
         log.error("send_to_provider(): API key prompt cancelled by user")
-        vim.notify("Claudius: API key required to continue", vim.log.levels.ERROR)
+        vim.notify("Flemma: API key required to continue", vim.log.levels.ERROR)
         vim.bo[bufnr].modifiable = true -- Restore modifiable state
       end
     end)
@@ -1054,7 +1054,7 @@ function M.send_to_provider(opts)
 
   local messages, frontmatter_code = M.parse_buffer(bufnr)
   if #messages == 0 then
-    vim.notify("Claudius: No messages found in buffer", vim.log.levels.WARN)
+    vim.notify("Flemma: No messages found in buffer", vim.log.levels.WARN)
     vim.bo[bufnr].modifiable = true -- Restore modifiable state
     return
   end
@@ -1071,9 +1071,9 @@ function M.send_to_provider(opts)
         .. log.inspect(frontmatter_code)
     )
     -- Pass chat_file_path to set up __filename for include() in frontmatter
-    local ok, result = pcall(require("claudius.frontmatter").execute, frontmatter_code, chat_file_path)
+    local ok, result = pcall(require("flemma.frontmatter").execute, frontmatter_code, chat_file_path)
     if not ok then
-      vim.notify("Claudius: Frontmatter evaluation failed:\n• " .. result, vim.log.levels.ERROR)
+      vim.notify("Flemma: Frontmatter evaluation failed:\n• " .. result, vim.log.levels.ERROR)
       vim.bo[bufnr].modifiable = true -- Restore modifiable state
       return
     end
@@ -1084,7 +1084,7 @@ function M.send_to_provider(opts)
   local formatted_messages, system_message = provider:format_messages(messages)
 
   -- Process template expressions in messages
-  local eval = require("claudius.eval")
+  local eval = require("flemma.eval")
   -- Create base env for message templating, extending with frontmatter variables
   local env = vim.tbl_extend("force", eval.create_safe_env(), template_vars)
   -- Set __filename and __include_stack for include() in message content
@@ -1160,7 +1160,7 @@ function M.send_to_provider(opts)
       table.insert(error_lines, string.format("  %s", error_info.error_details))
     end
 
-    vim.notify("Claudius: " .. table.concat(error_lines, "\n"), vim.log.levels.WARN)
+    vim.notify("Flemma: " .. table.concat(error_lines, "\n"), vim.log.levels.WARN)
   end
 
   -- Create request body using the validated model stored in the provider
@@ -1180,7 +1180,7 @@ function M.send_to_provider(opts)
 
   -- Format usage information for display
   local function format_usage(current, session)
-    local pricing = require("claudius.pricing")
+    local pricing = require("flemma.pricing")
     local lines = {}
 
     -- Request usage
@@ -1286,7 +1286,7 @@ function M.send_to_provider(opts)
         -- Auto-write on error if enabled
         auto_write_buffer(bufnr)
 
-        local notify_msg = "Claudius: " .. msg
+        local notify_msg = "Flemma: " .. msg
         if log.is_enabled() then
           notify_msg = notify_msg .. ". See " .. log.get_path() .. " for details"
         end
@@ -1329,7 +1329,7 @@ function M.send_to_provider(opts)
           local notify_opts = vim.tbl_deep_extend("force", config.notify, {
             title = "Usage",
           })
-          require("claudius.notify").show(usage_str, notify_opts)
+          require("flemma.notify").show(usage_str, notify_opts)
         end
         -- Reset current usage for next request
         state.current_usage = {
@@ -1491,7 +1491,7 @@ function M.send_to_provider(opts)
           update_ui(bufnr)
           fold_last_thinking_block(bufnr) -- Attempt to fold the last thinking block
 
-          if opts.on_complete then -- For ClaudiusSendAndInsert
+          if opts.on_complete then -- For FlemmaSendAndInsert
             opts.on_complete()
           end
         else
@@ -1502,21 +1502,21 @@ function M.send_to_provider(opts)
           local error_msg
           if code == 6 then -- CURLE_COULDNT_RESOLVE_HOST
             error_msg =
-              string.format("Claudius: cURL could not resolve host (exit code %d). Check network or hostname.", code)
+              string.format("Flemma: cURL could not resolve host (exit code %d). Check network or hostname.", code)
           elseif code == 7 then -- CURLE_COULDNT_CONNECT
             error_msg = string.format(
-              "Claudius: cURL could not connect to host (exit code %d). Check network or if the host is up.",
+              "Flemma: cURL could not connect to host (exit code %d). Check network or if the host is up.",
               code
             )
           elseif code == 28 then -- cURL timeout error
             local timeout_value = provider.parameters.timeout or config.parameters.timeout -- Get effective timeout
             error_msg = string.format(
-              "Claudius: cURL request timed out (exit code %d). Timeout is %s seconds.",
+              "Flemma: cURL request timed out (exit code %d). Timeout is %s seconds.",
               code,
               tostring(timeout_value)
             )
           else -- Other cURL errors
-            error_msg = string.format("Claudius: cURL request failed (exit code %d).", code)
+            error_msg = string.format("Flemma: cURL request failed (exit code %d).", code)
           end
 
           if log.is_enabled() then
@@ -1553,7 +1553,7 @@ end
 -- Switch to a different provider or model
 function M.switch(provider_name, model_name, parameters)
   if not provider_name then
-    vim.notify("Claudius: Provider name is required", vim.log.levels.ERROR)
+    vim.notify("Flemma: Provider name is required", vim.log.levels.ERROR)
     return
   end
 
@@ -1561,7 +1561,7 @@ function M.switch(provider_name, model_name, parameters)
   local bufnr = vim.api.nvim_get_current_buf()
   local state = buffers.get_state(bufnr)
   if state.current_request then
-    vim.notify("Claudius: Cannot switch providers while a request is in progress.", vim.log.levels.WARN)
+    vim.notify("Flemma: Cannot switch providers while a request is in progress.", vim.log.levels.WARN)
     return
   end
 
@@ -1616,7 +1616,7 @@ function M.switch(provider_name, model_name, parameters)
 
   -- Notify the user
   local model_info = config.model and (" with model " .. config.model) or ""
-  vim.notify("Claudius: Switched to " .. config.provider .. model_info, vim.log.levels.INFO)
+  vim.notify("Flemma: Switched to " .. config.provider .. model_info, vim.log.levels.INFO)
 
   -- Refresh lualine if available to update the model component
   local lualine_ok, lualine = pcall(require, "lualine")

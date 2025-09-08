@@ -1,8 +1,8 @@
---- Claudius pricing functionality
+--- Flemma pricing functionality
 local M = {}
 
 -- Load models from centralized models.lua
-local models_data = require("claudius.models")
+local models_data = require("flemma.models")
 
 -- Get all models with pricing (extract from data-only models.lua)
 local function get_all_models_with_pricing()

@@ -1,11 +1,11 @@
-describe("claudius.eval", function()
+describe("flemma.eval", function()
   local eval
 
   -- Before each test, get a fresh instance of the eval module
   before_each(function()
     -- Invalidate the package cache to ensure we get a fresh module
-    package.loaded["claudius.eval"] = nil
-    eval = require("claudius.eval")
+    package.loaded["flemma.eval"] = nil
+    eval = require("flemma.eval")
   end)
 
   describe("create_safe_env", function()

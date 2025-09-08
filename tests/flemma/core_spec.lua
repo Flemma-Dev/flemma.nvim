@@ -1,14 +1,14 @@
 local stub = require("luassert.stub")
 
-describe(":ClaudiusSend command", function()
-  local base_provider_module = require("claudius.provider.base")
+describe(":FlemmaSend command", function()
+  local base_provider_module = require("flemma.provider.base")
 
   before_each(function()
-    -- Invalidate the main claudius module cache to ensure a clean setup for each test
-    package.loaded["claudius"] = nil
-    local claudius = require("claudius")
+    -- Invalidate the main flemma module cache to ensure a clean setup for each test
+    package.loaded["flemma"] = nil
+    local flemma = require("flemma")
     -- Setup with default configuration. Specific tests can override this.
-    claudius.setup({})
+    flemma.setup({})
   end)
 
   after_each(function()
@@ -27,18 +27,18 @@ describe(":ClaudiusSend command", function()
 
     -- Arrange: Register a dummy fixture to prevent actual network calls.
     -- The content of the fixture DOES matter, as it's processed by the provider.
-    local claudius = require("claudius")
-    local config = claudius._get_config()
-    local default_claude_model = require("claudius.provider.config").get_model("claude")
+    local flemma = require("flemma")
+    local config = flemma._get_config()
+    local default_claude_model = require("flemma.provider.config").get_model("claude")
     base_provider_module.register_fixture(default_claude_model, "tests/fixtures/claude_hello_success_stream.txt")
 
-    -- Act: Execute the ClaudiusSend command
-    vim.cmd("ClaudiusSend")
+    -- Act: Execute the FlemmaSend command
+    vim.cmd("FlemmaSend")
 
     -- Assert: Check that the captured request body matches the expected format for Claude
-    local captured_request_body = claudius._get_last_request_body()
+    local captured_request_body = flemma._get_last_request_body()
     assert.is_not_nil(captured_request_body, "request_body was not captured")
-    local default_claude_model = require("claudius.provider.config").get_model("claude")
+    local default_claude_model = require("flemma.provider.config").get_model("claude")
 
     local expected_body = {
       model = default_claude_model,
@@ -56,8 +56,8 @@ describe(":ClaudiusSend command", function()
 
   it("formats the request body correctly for the OpenAI provider", function()
     -- Arrange: Switch to the OpenAI provider for this test
-    local claudius = require("claudius")
-    claudius.switch("openai", "o3", {})
+    local flemma = require("flemma")
+    flemma.switch("openai", "o3", {})
 
     -- Arrange: Register a dummy fixture to prevent actual network calls.
     base_provider_module.register_fixture("o3", "tests/fixtures/openai_hello_success_stream.txt")
@@ -67,14 +67,14 @@ describe(":ClaudiusSend command", function()
     vim.api.nvim_set_current_buf(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Hello" })
 
-    -- Act: Execute the ClaudiusSend command
-    vim.cmd("ClaudiusSend")
+    -- Act: Execute the FlemmaSend command
+    vim.cmd("FlemmaSend")
 
     -- Assert: Check that the captured request body matches the expected format for OpenAI
-    local captured_request_body = claudius._get_last_request_body()
+    local captured_request_body = flemma._get_last_request_body()
     assert.is_not_nil(captured_request_body, "request_body was not captured")
 
-    local config = claudius._get_config()
+    local config = flemma._get_config()
 
     local expected_body = {
       model = "o3",
@@ -92,8 +92,8 @@ describe(":ClaudiusSend command", function()
 
   it("handles a successful streaming response from a fixture", function()
     -- Arrange: Switch to the OpenAI provider and model that matches the fixture
-    local claudius = require("claudius")
-    claudius.switch("openai", "o3", {})
+    local flemma = require("flemma")
+    flemma.switch("openai", "o3", {})
 
     -- Arrange: Register the fixture to be used by the provider
     base_provider_module.register_fixture("o3", "tests/fixtures/openai_hello_success_stream.txt")
@@ -104,7 +104,7 @@ describe(":ClaudiusSend command", function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Hello" })
 
     -- Act: Execute the command
-    vim.cmd("ClaudiusSend")
+    vim.cmd("FlemmaSend")
 
     -- Wait for the response to be processed and the new prompt to be added
     vim.wait(1000, function()
@@ -126,8 +126,8 @@ describe(":ClaudiusSend command", function()
 
   it("handles an error response from a fixture", function()
     -- Arrange: Switch to the OpenAI provider
-    local claudius = require("claudius")
-    claudius.switch("openai", "o3", {})
+    local flemma = require("flemma")
+    flemma.switch("openai", "o3", {})
 
     -- Arrange: Register the error fixture
     base_provider_module.register_fixture("o3", "tests/fixtures/openai_invalid_key_error.txt")
@@ -141,7 +141,7 @@ describe(":ClaudiusSend command", function()
     local notify_spy = stub(vim, "notify")
 
     -- Act: Execute the command
-    vim.cmd("ClaudiusSend")
+    vim.cmd("FlemmaSend")
 
     -- Wait for the notification to be called
     vim.wait(500, function()
@@ -155,7 +155,7 @@ describe(":ClaudiusSend command", function()
     local fixture_content = file:read("*a")
     file:close()
     local error_data = vim.fn.json_decode(fixture_content)
-    local expected_error_message = "Claudius: " .. error_data.error.message
+    local expected_error_message = "Flemma: " .. error_data.error.message
 
     local last_call = notify_spy.calls[#notify_spy.calls]
     assert.equals(expected_error_message, last_call.refs[1])

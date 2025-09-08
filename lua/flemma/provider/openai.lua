@@ -1,7 +1,7 @@
---- OpenAI provider for Claudius
+--- OpenAI provider for Flemma
 --- Implements the OpenAI API integration
-local base = require("claudius.provider.base")
-local log = require("claudius.logging")
+local base = require("flemma.provider.base")
+local log = require("flemma.logging")
 local M = {}
 
 -- Create a new OpenAI provider instance
@@ -31,7 +31,7 @@ end
 -- Get API key from environment, keyring, or prompt
 function M.get_api_key(self)
   -- Call the base implementation with OpenAI-specific parameters
-  return require("claudius.provider.base").get_api_key(self, {
+  return require("flemma.provider.base").get_api_key(self, {
     env_var_name = "OPENAI_API_KEY",
     keyring_service_name = "openai",
     keyring_key_name = "api",
@@ -158,11 +158,11 @@ function M.create_request_body(self, formatted_messages, _)
               )
             else
               vim.notify(
-                "Claudius (OpenAI): @file reference with MIME type '"
+                "Flemma (OpenAI): @file reference with MIME type '"
                   .. chunk.mime_type
                   .. "' is not supported for direct inclusion. The reference will be sent as text.",
                 vim.log.levels.WARN,
-                { title = "Claudius Notification" }
+                { title = "Flemma Notification" }
               )
               table.insert(content_parts_for_api, { type = "text", text = "@" .. chunk.raw_filename })
             end
@@ -241,10 +241,9 @@ function M.create_request_body(self, formatted_messages, _)
     end
 
     vim.notify(
-      "Claudius (OpenAI): Some @file references could not be processed:\n• "
-        .. table.concat(warning_messages, "\n• "),
+      "Flemma (OpenAI): Some @file references could not be processed:\n• " .. table.concat(warning_messages, "\n• "),
       vim.log.levels.WARN,
-      { title = "Claudius File Warnings" }
+      { title = "Flemma File Warnings" }
     )
   end
 

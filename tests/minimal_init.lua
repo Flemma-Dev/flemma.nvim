@@ -5,4 +5,4 @@ vim.opt.rtp:append(os.getenv("PROJECT_ROOT"))
 vim.opt.swapfile = false
 
 -- Initialize the plugin with default settings
-require("claudius").setup({})
+require("flemma").setup({})

@@ -1,7 +1,7 @@
---- Base provider for Claudius
+--- Base provider for Flemma
 --- Defines the interface that all providers must implement
-local log = require("claudius.logging")
-local mime_util = require("claudius.mime")
+local log = require("flemma.logging")
+local mime_util = require("flemma.mime")
 
 -- Helper function to URL-decode a string
 local function url_decode(str)
@@ -149,7 +149,7 @@ local function create_temp_file(request_body)
   local tmp_name = tmp_file:match("[/\\]([^/\\]+)$")
   -- Use the same separator that was in the original path
   local sep = tmp_file:match("[/\\]")
-  tmp_file = tmp_dir .. sep .. "claudius_" .. tmp_name
+  tmp_file = tmp_dir .. sep .. "flemma_" .. tmp_name
 
   local f = io.open(tmp_file, "w")
   if not f then

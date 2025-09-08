@@ -1,13 +1,13 @@
 local stub = require("luassert.stub")
 
 describe("Lualine component", function()
-  local claudius_component
+  local flemma_component
 
   before_each(function()
     -- Clean up any buffers created during previous tests
     vim.cmd("silent! %bdelete!")
 
-    -- Mock lualine.component before requiring the claudius component
+    -- Mock lualine.component before requiring the flemma component
     package.preload["lualine.component"] = function()
       return {
         extend = function()
@@ -17,15 +17,15 @@ describe("Lualine component", function()
     end
 
     -- Invalidate caches to ensure we get fresh modules
-    package.loaded["claudius"] = nil
-    package.loaded["claudius.config"] = nil
-    package.loaded["lualine.components.claudius"] = nil
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["lualine.components.flemma"] = nil
 
     -- Load the component to be tested
-    claudius_component = require("lualine.components.claudius")
+    flemma_component = require("lualine.components.flemma")
 
-    -- Initialize claudius with default settings
-    require("claudius").setup({})
+    -- Initialize flemma with default settings
+    require("flemma").setup({})
 
     -- Set up a chat buffer
     local bufnr = vim.api.nvim_create_buf(false, false)
@@ -42,11 +42,11 @@ describe("Lualine component", function()
 
   it("should display model and reasoning when applicable", function()
     -- Arrange
-    local claudius = require("claudius")
-    claudius.switch("openai", "o1-mini", { reasoning = "high", temperature = 1 })
+    local flemma = require("flemma")
+    flemma.switch("openai", "o1-mini", { reasoning = "high", temperature = 1 })
 
     -- Act
-    local status = claudius_component:update_status()
+    local status = flemma_component:update_status()
 
     -- Assert
     assert.are.equal("o1-mini (high)", status)
@@ -54,11 +54,11 @@ describe("Lualine component", function()
 
   it("should display only the model name when reasoning is not set for an o-series model", function()
     -- Arrange
-    local claudius = require("claudius")
-    claudius.switch("openai", "o1-mini", {}) -- No reasoning parameter
+    local flemma = require("flemma")
+    flemma.switch("openai", "o1-mini", {}) -- No reasoning parameter
 
     -- Act
-    local status = claudius_component:update_status()
+    local status = flemma_component:update_status()
 
     -- Assert
     assert.are.equal("o1-mini", status)
@@ -66,11 +66,11 @@ describe("Lualine component", function()
 
   it("should display only the model name for non-o-series models", function()
     -- Arrange
-    local claudius = require("claudius")
-    claudius.switch("openai", "gpt-4o", { reasoning = "high" }) -- Reasoning should be ignored
+    local flemma = require("flemma")
+    flemma.switch("openai", "gpt-4o", { reasoning = "high" }) -- Reasoning should be ignored
 
     -- Act
-    local status = claudius_component:update_status()
+    local status = flemma_component:update_status()
 
     -- Assert
     assert.are.equal("gpt-4o", status)
@@ -78,11 +78,11 @@ describe("Lualine component", function()
 
   it("should display only the model name for non-openai providers", function()
     -- Arrange
-    local claudius = require("claudius")
-    claudius.switch("claude", "claude-3-5-sonnet", {})
+    local flemma = require("flemma")
+    flemma.switch("claude", "claude-3-5-sonnet", {})
 
     -- Act
-    local status = claudius_component:update_status()
+    local status = flemma_component:update_status()
 
     -- Assert
     assert.are.equal("claude-3-5-sonnet", status)
@@ -91,11 +91,11 @@ describe("Lualine component", function()
   it("should return an empty string if filetype is not 'chat'", function()
     -- Arrange
     vim.bo.filetype = "lua"
-    local claudius = require("claudius")
-    claudius.switch("openai", "o1-mini", { reasoning = "high" })
+    local flemma = require("flemma")
+    flemma.switch("openai", "o1-mini", { reasoning = "high" })
 
     -- Act
-    local status = claudius_component:update_status()
+    local status = flemma_component:update_status()
 
     -- Assert
     assert.are.equal("", status)
@@ -103,13 +103,13 @@ describe("Lualine component", function()
 
   it("should return an empty string if model is not set", function()
     -- Arrange
-    local claudius = require("claudius")
-    local s = stub.new(claudius, "get_current_model_name", function()
+    local flemma = require("flemma")
+    local s = stub.new(flemma, "get_current_model_name", function()
       return nil
     end)
 
     -- Act
-    local status = claudius_component:update_status()
+    local status = flemma_component:update_status()
 
     -- Assert
     assert.are.equal("", status)

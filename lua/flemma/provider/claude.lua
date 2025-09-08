@@ -1,7 +1,7 @@
---- Claude provider for Claudius
+--- Claude provider for Flemma
 --- Implements the Claude API integration
-local base = require("claudius.provider.base")
-local log = require("claudius.logging")
+local base = require("flemma.provider.base")
+local log = require("flemma.logging")
 local M = {}
 
 -- Create a new Claude provider instance
@@ -19,7 +19,7 @@ end
 -- Get API key from environment, keyring, or prompt
 function M.get_api_key(self)
   -- Call the base implementation with Claude-specific parameters
-  return require("claudius.provider.base").get_api_key(self, {
+  return require("flemma.provider.base").get_api_key(self, {
     env_var_name = "ANTHROPIC_API_KEY",
     keyring_service_name = "anthropic",
     keyring_key_name = "api",
@@ -129,11 +129,11 @@ function M.create_request_body(self, formatted_messages, system_message)
             else
               -- Unsupported MIME type for direct inclusion
               vim.notify(
-                "Claudius (Claude): @file reference with MIME type '"
+                "Flemma (Claude): @file reference with MIME type '"
                   .. chunk.mime_type
                   .. "' is not supported for direct inclusion. The reference will be sent as text.",
                 vim.log.levels.WARN,
-                { title = "Claudius Notification" }
+                { title = "Flemma Notification" }
               )
               table.insert(content_blocks, { type = "text", text = "@" .. chunk.raw_filename })
             end
@@ -188,10 +188,9 @@ function M.create_request_body(self, formatted_messages, system_message)
     end
 
     vim.notify(
-      "Claudius (Claude): Some @file references could not be processed:\n• "
-        .. table.concat(warning_messages, "\n• "),
+      "Flemma (Claude): Some @file references could not be processed:\n• " .. table.concat(warning_messages, "\n• "),
       vim.log.levels.WARN,
-      { title = "Claudius File Warnings" }
+      { title = "Flemma File Warnings" }
     )
   end
 

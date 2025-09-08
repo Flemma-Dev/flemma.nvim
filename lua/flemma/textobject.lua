@@ -1,4 +1,4 @@
-local log = require("claudius.logging")
+local log = require("flemma.logging")
 local M = {}
 
 -- Get the bounds of the current message
@@ -89,13 +89,13 @@ function M.setup(opts)
   vim.keymap.set(
     { "o", "x" },
     "i" .. key,
-    ':<C-u>lua require("claudius.textobject").message_textobj("i")<CR>',
+    ':<C-u>lua require("flemma.textobject").message_textobj("i")<CR>',
     { silent = true, buffer = true }
   )
   vim.keymap.set(
     { "o", "x" },
     "a" .. key,
-    ':<C-u>lua require("claudius.textobject").message_textobj("a")<CR>',
+    ':<C-u>lua require("flemma.textobject").message_textobj("a")<CR>',
     { silent = true, buffer = true }
   )
 end

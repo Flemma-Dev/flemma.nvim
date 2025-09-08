@@ -1,7 +1,7 @@
---- Frontmatter handling for Claudius chat files
+--- Frontmatter handling for Flemma chat files
 local M = {}
 
-local eval = require("claudius.eval")
+local eval = require("flemma.eval")
 
 -- Parse frontmatter from lines
 function M.parse(lines)

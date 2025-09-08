@@ -1,4 +1,4 @@
---- Claudius default configuration
+--- Flemma default configuration
 local M = {}
 
 -- Default configuration values
@@ -31,7 +31,7 @@ M.defaults = {
       hl = true, -- Inherit from highlights.assistant, set false to disable, or provide specific group/hex color
     },
   },
-  notify = require("claudius.notify").default_opts,
+  notify = require("flemma.notify").default_opts,
   pricing = {
     enabled = true, -- Whether to show pricing information in notifications
   },
@@ -60,7 +60,7 @@ M.defaults = {
   },
   logging = {
     enabled = false, -- Logging disabled by default
-    path = vim.fn.stdpath("cache") .. "/claudius.log", -- Default log path
+    path = vim.fn.stdpath("cache") .. "/flemma.log", -- Default log path
   },
   keymaps = {
     normal = {

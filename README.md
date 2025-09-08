@@ -1,8 +1,8 @@
-# Claudius 🤖
+# Flemma 🤖
 
 Transform Neovim into your AI conversation companion with a native interface to multiple AI providers.
 
-<img src="assets/screenshoty.png" alt="A screenshot of Claudius in action" />
+<img src="assets/screenshoty.png" alt="A screenshot of Flemma in action" />
 <br />
 
 | 🚀 Instant Integration                                         | ⚡ Power Features                                                     | 🛠️ Developer Experience          |
@@ -19,14 +19,14 @@ Using your preferred package manager, for example with lazy.nvim:
 
 ```lua
 {
-    "StanAngeloff/claudius.nvim",
+    "Flemma-Dev/flemma.nvim",
     opts = {},
 }
 ```
 
 ## Requirements
 
-Claudius requires:
+Flemma requires:
 
 - Neovim with Tree-sitter support _(required for core functionality)_
 - Tree-sitter markdown parser _(required for message formatting and syntax highlighting)_
@@ -75,7 +75,7 @@ The plugin works out of the box with sensible defaults, but you can customize va
 <summary>Plugin defaults…</summary>
 
 ```lua
-require("claudius").setup({
+require("flemma").setup({
     provider = "claude",  -- AI provider: "claude", "openai", or "vertex"
     model = nil,  -- Uses provider defaults if nil (see below)
     -- Claude default: "claude-3-7-sonnet-20250219"
@@ -191,44 +191,44 @@ You can disable the default keymaps by setting `keymaps.enable = false` and defi
 
 ```lua
 -- Example custom keymaps
-vim.keymap.set('n', '<Leader>cs', '<cmd>ClaudiusSend<cr>')
-vim.keymap.set('n', '<Leader>cc', '<cmd>ClaudiusCancel<cr>')
-vim.keymap.set('i', '<C-s>', '<cmd>ClaudiusSendAndInsert<cr>')
-vim.keymap.set('n', '<Leader>cn', '<cmd>ClaudiusNextMessage<cr>')
-vim.keymap.set('n', '<Leader>cp', '<cmd>ClaudiusPrevMessage<cr>')
+vim.keymap.set('n', '<Leader>cs', '<cmd>FlemmaSend<cr>')
+vim.keymap.set('n', '<Leader>cc', '<cmd>FlemmaCancel<cr>')
+vim.keymap.set('i', '<C-s>', '<cmd>FlemmaSendAndInsert<cr>')
+vim.keymap.set('n', '<Leader>cn', '<cmd>FlemmaNextMessage<cr>')
+vim.keymap.set('n', '<Leader>cp', '<cmd>FlemmaPrevMessage<cr>')
 ```
 
 #### Core Commands
 
-- `ClaudiusSend` - Send the current conversation to the configured AI provider
-- `ClaudiusCancel` - Cancel an ongoing request
-- `ClaudiusSendAndInsert` - Send to AI and return to insert mode
-- `ClaudiusSwitch` - Switch between providers _(e.g., `:ClaudiusSwitch openai gpt-4o`)_. If called with no arguments, it provides an interactive selection menu.
-- `ClaudiusRecallNotification` - Recall the last notification _(useful for reviewing usage statistics)_
+- `FlemmaSend` - Send the current conversation to the configured AI provider
+- `FlemmaCancel` - Cancel an ongoing request
+- `FlemmaSendAndInsert` - Send to AI and return to insert mode
+- `FlemmaSwitch` - Switch between providers _(e.g., `:FlemmaSwitch openai gpt-4o`)_. If called with no arguments, it provides an interactive selection menu.
+- `FlemmaRecallNotification` - Recall the last notification _(useful for reviewing usage statistics)_
 
 #### Navigation Commands
 
-- `ClaudiusNextMessage` - Jump to next message _(<kbd>]m</kbd> by default)_
-- `ClaudiusPrevMessage` - Jump to previous message _(<kbd>[m</kbd> by default)_
+- `FlemmaNextMessage` - Jump to next message _(<kbd>]m</kbd> by default)_
+- `FlemmaPrevMessage` - Jump to previous message _(<kbd>[m</kbd> by default)_
 
 #### Import Command
 
-- `ClaudiusImport` - Convert a Claude Workbench API call into chat format
+- `FlemmaImport` - Convert a Claude Workbench API call into chat format
 
 #### Logging Commands
 
-- `ClaudiusEnableLogging` - Enable logging of API requests and responses
-- `ClaudiusDisableLogging` - Disable logging _(default state)_
-- `ClaudiusOpenLog` - Open the log file in a new tab
+- `FlemmaEnableLogging` - Enable logging of API requests and responses
+- `FlemmaDisableLogging` - Disable logging _(default state)_
+- `FlemmaOpenLog` - Open the log file in a new tab
 
 Logging is disabled by default to prevent sensitive data from being written to disk. When troubleshooting issues:
 
-1. Enable logging with `:ClaudiusEnableLogging`
+1. Enable logging with `:FlemmaEnableLogging`
 2. Reproduce the problem
-3. Check the log with `:ClaudiusOpenLog`
-4. Disable logging with `:ClaudiusDisableLogging` when done
+3. Check the log with `:FlemmaOpenLog`
+4. Disable logging with `:FlemmaDisableLogging` when done
 
-The log file is stored at `~/.cache/nvim/claudius.log` _(or equivalent on your system)_ and contains:
+The log file is stored at `~/.cache/nvim/flemma.log` _(or equivalent on your system)_ and contains:
 
 - API request details
 - Response data
@@ -237,22 +237,22 @@ The log file is stored at `~/.cache/nvim/claudius.log` _(or equivalent on your s
 
 ### Switching Providers
 
-You can switch between AI providers at any time using the `:ClaudiusSwitch` command:
+You can switch between AI providers at any time using the `:FlemmaSwitch` command:
 
 ```yaml
-:ClaudiusSwitch # Interactive provider/model selection
-:ClaudiusSwitch claude # Switch to Claude with default model
-:ClaudiusSwitch openai gpt-4o # Switch to OpenAI with specific model
-:ClaudiusSwitch vertex gemini-2.5-pro project_id=my-project # Switch to Vertex AI with project ID
-:ClaudiusSwitch claude claude-3-7-sonnet-20250219 temperature=0.2 max_tokens=1000 connect_timeout=5 timeout=60 # Multiple parameters, including general ones
-:ClaudiusSwitch vertex gemini-2.5-pro project_id=my-project thinking_budget=1000 # Vertex AI with thinking budget
+:FlemmaSwitch # Interactive provider/model selection
+:FlemmaSwitch claude # Switch to Claude with default model
+:FlemmaSwitch openai gpt-4o # Switch to OpenAI with specific model
+:FlemmaSwitch vertex gemini-2.5-pro project_id=my-project # Switch to Vertex AI with project ID
+:FlemmaSwitch claude claude-3-7-sonnet-20250219 temperature=0.2 max_tokens=1000 connect_timeout=5 timeout=60 # Multiple parameters, including general ones
+:FlemmaSwitch vertex gemini-2.5-pro project_id=my-project thinking_budget=1000 # Vertex AI with thinking budget
 ```
 
 This allows you to compare responses from different AI models without restarting Neovim.
 
 ### Lualine Integration
 
-Claudius includes a component to display the currently active AI model in your Lualine status bar. To use it, add the component to your Lualine configuration:
+Flemma includes a component to display the currently active AI model in your Lualine status bar. To use it, add the component to your Lualine configuration:
 
 ```lua
 -- Example Lualine setup
@@ -263,7 +263,7 @@ require('lualine').setup {
   sections = {
     lualine_a = {'mode'},
     -- ... other sections
-    lualine_x = {{ "claudius", icon = "🧠" }, 'encoding', 'filetype'}, -- Add Claudius model component with icon
+    lualine_x = {{ "flemma", icon = "🧠" }, 'encoding', 'filetype'}, -- Add Flemma model component with icon
     -- ... other sections
   },
   -- ...
@@ -367,13 +367,13 @@ You can import conversations from the Claude Workbench _(console.anthropic.com)_
 3. Change the language to TypeScript
 4. Use the "Copy Code" button to copy the code snippet
 5. Paste the code into a new buffer in Neovim
-6. Run `:ClaudiusImport` to convert it to a .chat file
+6. Run `:FlemmaImport` to convert it to a .chat file
 
-The command will parse the API call and convert it into Claudius's chat format.
+The command will parse the API call and convert it into Flemma's chat format.
 
 ## About
 
-Claudius aims to provide a simple, native-feeling interface for having conversations with AI models directly in Neovim. Originally built for Claude _(hence the name)_, it now supports multiple AI providers including OpenAI and Google Vertex AI. The plugin focuses on being lightweight and following Vim/Neovim conventions.
+Flemma aims to provide a simple, native-feeling interface for having conversations with AI models directly in Neovim. Originally built for Claude _(hence the name)_, it now supports multiple AI providers including OpenAI and Google Vertex AI. The plugin focuses on being lightweight and following Vim/Neovim conventions.
 
 ## Contributing
 
@@ -398,8 +398,8 @@ The project uses Nix for development environment management. This ensures all co
    ```
 
 2. Available development commands:
-   - `claudius-dev`: Starts an Aider session with the correct files loaded
-   - `claudius-fmt`: Reformats the codebase using:
+   - `flemma-dev`: Starts an Aider session with the correct files loaded
+   - `flemma-fmt`: Reformats the codebase using:
      - nixfmt for .nix files
      - stylua for Lua files
      - prettier for Markdown
@@ -409,7 +409,7 @@ The project uses Nix for development environment management. This ensures all co
 You can test changes without installing the plugin by running:
 
 ```bash
-nvim --cmd "set runtimepath+=`pwd`" -c 'lua require("claudius").setup({})' -c ':edit example.chat'
+nvim --cmd "set runtimepath+=`pwd`" -c 'lua require("flemma").setup({})' -c ':edit example.chat'
 ```
 
 This command:
@@ -426,7 +426,7 @@ While I encourage contributors to explore AI-assisted development, particularly 
 
 - **Consider Using Aider**: I recommend trying [Aider](https://aider.chat) for making changes - it's how this entire project was built
 - **Document AI Interactions**: If using AI tools, keep chat logs of significant conversations
-- **Use Formatting Tools**: Run `claudius-fmt` before committing to maintain consistent style
+- **Use Formatting Tools**: Run `flemma-fmt` before committing to maintain consistent style
 - **Test Changes**: Use the quick testing command above to verify functionality
 - **Keep Focus**: Make small, focused changes in each development session
 

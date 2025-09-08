@@ -1,4 +1,4 @@
---- Import functionality for Claudius
+--- Import functionality for Flemma
 --- Converts Claude Workbench API calls to chat format
 local M = {}
 
@@ -105,7 +105,7 @@ function M.import_buffer()
     local tmp_path = os.tmpname()
     local tmp_dir = tmp_path:match("^(.+)[/\\]")
     local sep = tmp_path:match("[/\\]")
-    local debug_file = io.open(tmp_dir .. sep .. "claudius_import_debug.log", "w")
+    local debug_file = io.open(tmp_dir .. sep .. "flemma_import_debug.log", "w")
     if debug_file then
       debug_file:write("Original content:\n")
       debug_file:write(content .. "\n\n")
@@ -115,7 +115,7 @@ function M.import_buffer()
     end
 
     vim.notify(
-      "Failed to parse API call data. Debug info written to " .. tmp_dir .. sep .. "claudius_import_debug.log",
+      "Failed to parse API call data. Debug info written to " .. tmp_dir .. sep .. "flemma_import_debug.log",
       vim.log.levels.ERROR
     )
     return

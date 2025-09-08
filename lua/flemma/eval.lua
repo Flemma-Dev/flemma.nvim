@@ -1,4 +1,4 @@
---- Safe environment and execution for Lua code in Claudius, where safe is a loose term.
+--- Safe environment and execution for Lua code in Flemma, where safe is a loose term.
 local M = {}
 
 local function include_delegate(relative_path, env_of_caller, eval_expression_func, create_safe_env_func)

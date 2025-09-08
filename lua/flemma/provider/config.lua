@@ -1,9 +1,9 @@
---- Claudius provider defaults
+--- Flemma provider defaults
 --- Centralized configuration for provider-specific defaults
 local M = {}
 
 -- Load models from centralized models.lua
-local models_data = require("claudius.models")
+local models_data = require("flemma.models")
 
 -- Helper function to get all available models for a provider as a list
 local function get_provider_models(provider_name)

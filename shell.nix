@@ -10,7 +10,7 @@ let
   plenary-nvim = pkgs.vimPlugins.plenary-nvim;
 in
 pkgs.mkShell {
-  name = "claudius-dev-shell";
+  name = "flemma-dev-shell";
 
   shellHook = ''
     PROJECT_ROOT=$(pwd)
@@ -32,7 +32,7 @@ pkgs.mkShell {
     })
 
     (writeShellApplication {
-      name = "claudius-dev";
+      name = "flemma-dev";
       text = ''
         set +e
 
@@ -41,12 +41,12 @@ pkgs.mkShell {
             VERTEXAI_PROJECT=$(grep -oP '(?<=^VERTEXAI_PROJECT=).*' "$PROJECT_ROOT/.env")
             if [ -n "''${VERTEXAI_PROJECT-}" ]; then
               export VERTEXAI_PROJECT
-              echo -e "\033[0;32m[claudius-dev] Loaded Vertex project name from .env file: $VERTEXAI_PROJECT\033[0m"
+              echo -e "\033[0;32m[flemma-dev] Loaded Vertex project name from .env file: $VERTEXAI_PROJECT\033[0m"
             else
-              echo -e "\033[0;33m[claudius-dev] Warning: \$VERTEXAI_PROJECT was not set in .env file.\033[0m"
+              echo -e "\033[0;33m[flemma-dev] Warning: \$VERTEXAI_PROJECT was not set in .env file.\033[0m"
             fi
           else
-            echo -e "\033[0;33m[claudius-dev] Warning: \$VERTEXAI_PROJECT was not set and no .env file found.\033[0m"
+            echo -e "\033[0;33m[flemma-dev] Warning: \$VERTEXAI_PROJECT was not set and no .env file found.\033[0m"
           fi
         fi
 
@@ -60,12 +60,12 @@ pkgs.mkShell {
               echo "$CREDENTIALS" >"$PROJECT_ROOT/.aider-credentials.json"
               GOOGLE_APPLICATION_CREDENTIALS="$PROJECT_ROOT/.aider-credentials.json"
               export GOOGLE_APPLICATION_CREDENTIALS
-              echo -e "\033[0;32m[claudius-dev] Retrieved Google credentials from system keyring.\033[0m"
+              echo -e "\033[0;32m[flemma-dev] Retrieved Google credentials from system keyring.\033[0m"
             else
-              echo -e "\033[0;33m[claudius-dev] Warning: \$GOOGLE_APPLICATION_CREDENTIALS was not set and not found in system keyring.\033[0m"
+              echo -e "\033[0;33m[flemma-dev] Warning: \$GOOGLE_APPLICATION_CREDENTIALS was not set and not found in system keyring.\033[0m"
             fi
           else
-            echo -e "\033[0;33m[claudius-dev] Warning: \$GOOGLE_APPLICATION_CREDENTIALS was not set and libsecret tools not available.\033[0m"
+            echo -e "\033[0;33m[flemma-dev] Warning: \$GOOGLE_APPLICATION_CREDENTIALS was not set and libsecret tools not available.\033[0m"
           fi
         fi
 
@@ -74,12 +74,12 @@ pkgs.mkShell {
             OPENAI_API_KEY=$(secret-tool lookup service openai key api 2>/dev/null)
             if [ -n "''${OPENAI_API_KEY-}" ]; then
               export OPENAI_API_KEY
-              echo -e "\033[0;32m[claudius-dev] Retrieved OpenAI credentials from system keyring.\033[0m"
+              echo -e "\033[0;32m[flemma-dev] Retrieved OpenAI credentials from system keyring.\033[0m"
             else
-              echo -e "\033[0;33m[claudius-dev] Warning: \$OPENAI_API_KEY was not set and not found in system keyring.\033[0m"
+              echo -e "\033[0;33m[flemma-dev] Warning: \$OPENAI_API_KEY was not set and not found in system keyring.\033[0m"
             fi
           else
-            echo -e "\033[0;33m[claudius-dev] Warning: \$OPENAI_API_KEY was not set and libsecret tools not available.\033[0m"
+            echo -e "\033[0;33m[flemma-dev] Warning: \$OPENAI_API_KEY was not set and libsecret tools not available.\033[0m"
           fi
         fi
 
@@ -91,7 +91,7 @@ pkgs.mkShell {
     })
 
     (writeShellApplication {
-      name = "claudius-fmt";
+      name = "flemma-fmt";
       runtimeInputs = [
         nixfmt-tree
         nodejs_22.pkgs.prettier

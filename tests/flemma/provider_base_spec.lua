@@ -1,6 +1,6 @@
 --- Test file for the base provider functionality
 describe("Base Provider", function()
-  local base = require("claudius.provider.base")
+  local base = require("flemma.provider.base")
 
   before_each(function()
     -- Clear any registered fixtures
@@ -222,7 +222,7 @@ describe("Base Provider", function()
     end)
 
     it("should integrate with provider to show user notifications for warnings", function()
-      local claude = require("claudius.provider.claude")
+      local claude = require("flemma.provider.claude")
 
       -- Create a Claude provider instance
       local provider = claude.new({ model = "claude-3-5-sonnet", max_tokens = 1000, temperature = 0.7 })
@@ -256,7 +256,7 @@ describe("Base Provider", function()
       assert.is_true(string.find(notification.message, "missing_file.txt") ~= nil)
       assert.is_true(string.find(notification.message, "another_missing.txt") ~= nil)
       assert.is_true(string.find(notification.message, "could not be processed") ~= nil)
-      assert.are.equal("Claudius File Warnings", notification.opts.title)
+      assert.are.equal("Flemma File Warnings", notification.opts.title)
     end)
 
     it("should handle MIME type overrides in file references", function()

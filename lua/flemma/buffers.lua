@@ -1,4 +1,4 @@
---- Buffer state management for Claudius
+--- Buffer state management for Flemma
 local M = {}
 
 -- Store buffer-local state

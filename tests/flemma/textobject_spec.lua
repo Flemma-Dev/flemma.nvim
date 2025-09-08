@@ -1,12 +1,12 @@
-describe("Claudius Text Objects", function()
-  local claudius
+describe("Flemma Text Objects", function()
+  local flemma
 
   before_each(function()
-    -- Invalidate the main claudius module cache to ensure a clean setup for each test
-    package.loaded["claudius"] = nil
-    claudius = require("claudius")
+    -- Invalidate the main flemma module cache to ensure a clean setup for each test
+    package.loaded["flemma"] = nil
+    flemma = require("flemma")
     -- Setup with default configuration.
-    claudius.setup({})
+    flemma.setup({})
 
     -- Clean up any buffers created during previous tests
     vim.cmd("silent! %bdelete!")
