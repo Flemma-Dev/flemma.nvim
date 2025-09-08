@@ -43,13 +43,13 @@ describe("Lualine component", function()
   it("should display model and reasoning when applicable", function()
     -- Arrange
     local flemma = require("flemma")
-    flemma.switch("openai", "o1-mini", { reasoning = "high", temperature = 1 })
+    flemma.switch("openai", "o3", { reasoning = "high", temperature = 1 })
 
     -- Act
     local status = flemma_component:update_status()
 
     -- Assert
-    assert.are.equal("o1-mini (high)", status)
+    assert.are.equal("o3 (high)", status)
   end)
 
   it("should display only the model name when reasoning is not set for an o-series model", function()

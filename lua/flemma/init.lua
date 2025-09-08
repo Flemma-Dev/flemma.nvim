@@ -9,7 +9,7 @@ local log = require("flemma.logging")
 local provider_config = require("flemma.provider.config")
 local state = require("flemma.state")
 local textobject = require("flemma.textobject")
-local models = require("flemma.models")
+local config_manager = require("flemma.core.config_manager")
 
 local provider = nil
 
@@ -226,148 +226,28 @@ end
 
 -- Initialize or switch provider based on configuration
 local function initialize_provider(provider_name, model_name, parameters)
-  -- Validate provider name early to avoid silent fallback
-  if provider_name ~= "openai" and provider_name ~= "vertex" and provider_name ~= "claude" then
-    local err = string.format(
-      "Flemma: Unknown provider '%s'. Supported providers are: %s",
-      tostring(provider_name),
-      table.concat({ "claude", "openai", "vertex" }, ", ")
-    )
+  -- Prepare configuration using the centralized config manager
+  local config, err = config_manager.prepare_config(provider_name, model_name, parameters)
+  if not config then
     vim.notify(err, vim.log.levels.ERROR)
-    log.error("initialize_provider(): " .. err)
     return nil
   end
 
-  -- Validate and potentially update the model based on the provider
-  local original_model = model_name -- Could be nil
-  local validated_model = provider_config.get_appropriate_model(original_model, provider_name)
-
-  -- Log if we had to switch models during initialization/switch
-  if validated_model ~= original_model and original_model ~= nil then
-    local warn_msg = string.format(
-      "Flemma: Model '%s' is not valid for provider '%s'. Using default: '%s'.",
-      tostring(original_model),
-      tostring(provider_name),
-      tostring(validated_model)
-    )
-    vim.notify(warn_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
-    log.warn(warn_msg)
-
-    log.info(
-      "initialize_provider(): Model "
-        .. log.inspect(original_model)
-        .. " is not valid for provider "
-        .. log.inspect(provider_name)
-        .. ". Using default: "
-        .. log.inspect(validated_model)
-    )
-  elseif original_model == nil then
-    log.debug(
-      "initialize_provider(): Using default model for provider "
-        .. log.inspect(provider_name)
-        .. ": "
-        .. log.inspect(validated_model)
-    )
-  end
-
-  -- Use the validated model for the final provider configuration
-  -- Also update the global config table so format_usage gets the correct model
-  local updated_config = state.get_config()
-  updated_config.model = validated_model
-  state.set_config(updated_config)
-
-  -- Prepare the final parameters table by merging base and provider-specific settings
-  local merged_params = {}
-  local base_params = parameters or {}
-  local provider_overrides = base_params[provider_name] or {}
-
-  -- 1. Copy all non-provider-specific keys from the base parameters
-  for k, v in pairs(base_params) do
-    -- Only copy if it's not a provider-specific table or if it's a general parameter
-    if type(v) ~= "table" or plugin_config.is_general_parameter(k) then
-      merged_params[k] = v
-    end
-  end
-  -- 2. Merge the provider-specific overrides, potentially overwriting general keys
-  for k, v in pairs(provider_overrides) do
-    merged_params[k] = v
-  end
-
-  -- Set the validated model in the merged parameters
-  merged_params.model = validated_model
-
-  -- Check for reasoning parameter support based on models.lua data
-  if provider_name == "openai" then
-    local reasoning_value = merged_params.reasoning
-    if reasoning_value ~= nil and reasoning_value ~= "" then
-      local model_info = models.providers.openai
-        and models.providers.openai.models
-        and models.providers.openai.models[validated_model]
-      local supports_reasoning_effort = model_info and model_info.supports_reasoning_effort == true
-
-      if not supports_reasoning_effort then
-        local warning_msg = string.format(
-          "Flemma: The 'reasoning' parameter is not supported by the selected OpenAI model '%s'. It may be ignored or cause an API error.",
-          validated_model
-        )
-        vim.notify(warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
-        log.warn(warning_msg)
-      end
-    end
-  end
-
-  -- Check for temperature <> 1.0 with OpenAI o-series models when reasoning is active
-  if provider_name == "openai" then
-    local reasoning_value = merged_params.reasoning
-    local temp_value = merged_params.temperature
-    local model_info = models.providers.openai
-      and models.providers.openai.models
-      and models.providers.openai.models[validated_model]
-    local supports_reasoning_effort = model_info and model_info.supports_reasoning_effort == true
-
-    if
-      reasoning_value ~= nil
-      and reasoning_value ~= ""
-      and supports_reasoning_effort
-      and string.sub(validated_model, 1, 1) == "o"
-      and temp_value ~= nil
-      and temp_value ~= 1
-      and temp_value ~= 1.0
-    then
-      local temp_warning_msg = string.format(
-        "Flemma: For OpenAI o-series models with 'reasoning' active, 'temperature' must be 1 or omitted. Current value is '%s'. The API will likely reject this.",
-        tostring(temp_value)
-      )
-      vim.notify(temp_warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
-      log.warn(temp_warning_msg)
-    end
-  end
-
-  -- Log the final configuration being passed to the provider constructor
-  log.debug(
-    "initialize_provider(): Initializing provider "
-      .. log.inspect(provider_name)
-      .. " with config: "
-      .. log.inspect(merged_params)
-  )
+  -- Apply the configuration to global state
+  config_manager.apply_config(config)
 
   -- Create a fresh provider instance with the merged parameters
   local new_provider
-  if provider_name == "openai" then
-    new_provider = require("flemma.provider.openai").new(merged_params)
-  elseif provider_name == "vertex" then
-    new_provider = require("flemma.provider.vertex").new(merged_params)
-  elseif provider_name == "claude" then
-    new_provider = require("flemma.provider.claude").new(merged_params)
+  if config.provider == "openai" then
+    new_provider = require("flemma.provider.openai").new(config.parameters)
+  elseif config.provider == "vertex" then
+    new_provider = require("flemma.provider.vertex").new(config.parameters)
+  elseif config.provider == "claude" then
+    new_provider = require("flemma.provider.claude").new(config.parameters)
   else
-    local supported = { "claude", "openai", "vertex" }
-    local err = string.format(
-      "Flemma: Unknown provider '%s'. Supported providers are: %s",
-      tostring(provider_name),
-      table.concat(supported, ", ")
-    )
-    vim.notify(err, vim.log.levels.ERROR)
-    log.error("initialize_provider(): " .. err)
+    -- This should never happen since config_manager validates the provider
+    local err_msg = "initialize_provider(): Invalid provider after validation: " .. tostring(config.provider)
+    log.error(err_msg)
     return nil
   end
 
@@ -1624,13 +1504,7 @@ function M.switch(provider_name, model_name, parameters)
   -- Create a new configuration by merging the current config with the provided options
   local new_config = vim.tbl_deep_extend("force", {}, config)
 
-  -- Update provider
-  new_config.provider = provider_name
-
-  -- Update model if specified, otherwise reset to use provider default
-  new_config.model = model_name or nil
-
-  -- Ensure parameters table and provider-specific sub-table exist
+  -- Ensure parameters table and provider-specific sub-table exist for parameter merging
   new_config.parameters = new_config.parameters or {}
   new_config.parameters[provider_name] = new_config.parameters[provider_name] or {}
 
@@ -1645,32 +1519,25 @@ function M.switch(provider_name, model_name, parameters)
     end
   end
 
-  -- Log the relevant configuration being used for the new provider
-  log.debug(
-    "switch(): provider = "
-      .. log.inspect(new_config.provider)
-      .. ", model = "
-      .. log.inspect(new_config.model)
-      .. ", parameters = "
-      .. log.inspect(new_config.parameters)
-  )
-
-  -- Initialize the new provider with a clean state using the proposed config,
+  -- Initialize the new provider using the centralized approach
   -- but do not commit the global config until validation succeeds.
   local prev_provider = provider
   provider = nil -- Clear the current provider
-  local new_provider = initialize_provider(new_config.provider, new_config.model, new_config.parameters) -- Pass individual args
+  local new_provider = initialize_provider(provider_name, model_name, new_config.parameters)
 
   if not new_provider then
     -- Restore previous provider and keep existing config unchanged.
     provider = prev_provider
-    log.warn("switch(): Aborting switch due to invalid provider: " .. log.inspect(new_config.provider))
+    log.warn("switch(): Aborting switch due to invalid provider: " .. log.inspect(provider_name))
     return nil
   end
 
   -- Commit the new configuration now that initialization succeeded.
-  new_config.model = new_provider.parameters and new_provider.parameters.model or new_config.model
-  config = new_config
+  -- The config has already been updated by initialize_provider via config_manager.apply_config
+  local updated_config = state.get_config()
+  config.provider = updated_config.provider
+  config.model = updated_config.model
+  config.parameters = updated_config.parameters
 
   -- Force the new provider to clear its API key cache
   if new_provider and new_provider.state then
@@ -1718,10 +1585,9 @@ function M.get_current_reasoning_setting()
     current_config
     and current_config.provider == "openai"
     and current_config.parameters
-    and current_config.parameters.openai
-    and current_config.parameters.openai.reasoning
+    and current_config.parameters.reasoning
   then
-    local reasoning = current_config.parameters.openai.reasoning
+    local reasoning = current_config.parameters.reasoning
     if reasoning == "low" or reasoning == "medium" or reasoning == "high" then
       return reasoning
     end
