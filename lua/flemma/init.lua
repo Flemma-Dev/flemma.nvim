@@ -1666,7 +1666,7 @@ function M.switch(provider_name, model_name, parameters)
 
   -- Notify the user
   local model_info = config.model and (" with model '" .. config.model .. "'") or ""
-  vim.notify("Flemma: Switched to '" .. config.provider .. "'" .. model_info, vim.log.levels.INFO)
+  vim.notify("Flemma: Switched to '" .. config.provider .. "'" .. model_info .. ".", vim.log.levels.INFO)
 
   -- Refresh lualine if available to update the model component
   local lualine_ok, lualine = pcall(require, "lualine")
