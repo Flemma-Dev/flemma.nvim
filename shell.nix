@@ -23,7 +23,7 @@ pkgs.mkShell {
     google-cloud-sdk
     libsecret
     pythonWithPackages
-    # NeoVim plug-ins
+    # Neovim plug-ins
     plenary-nvim
 
     (pkgs.aider-chat.withOptional {
