@@ -225,6 +225,18 @@ end
 
 -- Initialize or switch provider based on configuration
 local function initialize_provider(provider_name, model_name, parameters)
+  -- Validate provider name early to avoid silent fallback
+  if provider_name ~= "openai" and provider_name ~= "vertex" and provider_name ~= "claude" then
+    local err = string.format(
+      "Flemma: Unknown provider '%s'. Supported providers are: %s",
+      tostring(provider_name),
+      table.concat({ "claude", "openai", "vertex" }, ", ")
+    )
+    vim.notify(err, vim.log.levels.ERROR)
+    log.error("initialize_provider(): " .. err)
+    return nil
+  end
+
   -- Validate and potentially update the model based on the provider
   local original_model = model_name -- Could be nil
   local validated_model = provider_config.get_appropriate_model(original_model, provider_name)
@@ -333,9 +345,18 @@ local function initialize_provider(provider_name, model_name, parameters)
     new_provider = require("flemma.provider.openai").new(merged_params)
   elseif provider_name == "vertex" then
     new_provider = require("flemma.provider.vertex").new(merged_params)
-  else
-    -- Default to Claude if not specified (or if provider_name is 'claude')
+  elseif provider_name == "claude" then
     new_provider = require("flemma.provider.claude").new(merged_params)
+  else
+    local supported = { "claude", "openai", "vertex" }
+    local err = string.format(
+      "Flemma: Unknown provider '%s'. Supported providers are: %s",
+      tostring(provider_name),
+      table.concat(supported, ", ")
+    )
+    vim.notify(err, vim.log.levels.ERROR)
+    log.error("initialize_provider(): " .. err)
+    return nil
   end
 
   -- Update the global provider reference
@@ -1612,12 +1633,22 @@ function M.switch(provider_name, model_name, parameters)
       .. log.inspect(new_config.parameters)
   )
 
-  -- Update the global config
-  config = new_config
-
-  -- Initialize the new provider with a clean state using the updated config
+  -- Initialize the new provider with a clean state using the proposed config,
+  -- but do not commit the global config until validation succeeds.
+  local prev_provider = provider
   provider = nil -- Clear the current provider
   local new_provider = initialize_provider(new_config.provider, new_config.model, new_config.parameters) -- Pass individual args
+
+  if not new_provider then
+    -- Restore previous provider and keep existing config unchanged.
+    provider = prev_provider
+    log.warn("switch(): Aborting switch due to invalid provider: " .. log.inspect(new_config.provider))
+    return nil
+  end
+
+  -- Commit the new configuration now that initialization succeeded.
+  new_config.model = new_provider.parameters and new_provider.parameters.model or new_config.model
+  config = new_config
 
   -- Force the new provider to clear its API key cache
   if new_provider and new_provider.state then

@@ -169,4 +169,38 @@ describe(":FlemmaSend command", function()
     -- Cleanup
     notify_spy:revert()
   end)
+
+  it("errors and does not switch when an unknown provider is requested", function()
+    -- Arrange: Ensure we start from a valid, known provider (default is Claude)
+    local flemma = require("flemma")
+    local original_provider = flemma.get_current_provider_name()
+    assert.is_not_nil(original_provider, "Original provider should be set")
+
+    -- Arrange: Stub notifications to capture the error
+    local notify_spy = stub(vim, "notify")
+
+    -- Act: Attempt to switch to an unsupported provider
+    local result = flemma.switch("huggingface", nil, {})
+
+    -- Allow a brief moment for any notify to be recorded (synchronous in this case)
+    vim.wait(50, function()
+      return #notify_spy.calls > 0
+    end, 10, false)
+
+    -- Assert: switch should fail and return nil
+    assert.is_nil(result, "switch should return nil for unknown provider")
+
+    -- Assert: Provider should remain unchanged
+    local current_provider = flemma.get_current_provider_name()
+    assert.equals(original_provider, current_provider, "Provider should remain unchanged on invalid switch")
+
+    -- Assert: An error notification was emitted
+    local last_call = notify_spy.calls[#notify_spy.calls]
+    assert.is_not_nil(last_call, "vim.notify should have been called")
+    assert.equals(vim.log.levels.ERROR, last_call.refs[2], "Notification should be an error")
+    assert.is_true(string.find(last_call.refs[1], "Unknown provider 'huggingface'") ~= nil)
+
+    -- Cleanup
+    notify_spy:revert()
+  end)
 end)
