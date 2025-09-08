@@ -223,42 +223,49 @@ return {
             input = 1.25, -- $1.25 per million input tokens
             output = 10.0, -- $10 per million output tokens
           },
+          supports_reasoning_effort = true,
         },
         ["gpt-5-mini"] = {
           pricing = {
             input = 0.25, -- $0.25 per million input tokens
             output = 2.0, -- $2 per million output tokens
           },
+          supports_reasoning_effort = true,
         },
         ["gpt-5-nano"] = {
           pricing = {
             input = 0.05, -- $0.05 per million input tokens
             output = 0.40, -- $0.40 per million output tokens
           },
+          supports_reasoning_effort = true,
         },
         ["gpt-5-chat-latest"] = {
           pricing = {
             input = 1.25, -- $1.25 per million input tokens
             output = 10.0, -- $10 per million output tokens
           },
+          supports_reasoning_effort = true,
         },
         ["gpt-5-2025-08-07"] = {
           pricing = {
             input = 1.25, -- $1.25 per million input tokens
             output = 10.0, -- $10 per million output tokens
           },
+          supports_reasoning_effort = true,
         },
         ["gpt-5-mini-2025-08-07"] = {
           pricing = {
             input = 0.25, -- $0.25 per million input tokens
             output = 2.0, -- $2 per million output tokens
           },
+          supports_reasoning_effort = true,
         },
         ["gpt-5-nano-2025-08-07"] = {
           pricing = {
             input = 0.05, -- $0.05 per million input tokens
             output = 0.40, -- $0.40 per million output tokens
           },
+          supports_reasoning_effort = true,
         },
 
         -- GPT-4.5 models (Preview, to be deprecated July 2025)
@@ -385,12 +392,14 @@ return {
             input = 15.0, -- $15 per million input tokens
             output = 60.0, -- $60 per million output tokens
           },
+          supports_reasoning_effort = true,
         },
         ["o1-2024-12-17"] = {
           pricing = {
             input = 15.0, -- $15 per million input tokens
             output = 60.0, -- $60 per million output tokens
           },
+          supports_reasoning_effort = true,
         },
         ["o1-pro"] = {
           pricing = {
@@ -409,24 +418,28 @@ return {
             input = 2.0, -- $2.00 per million input tokens
             output = 8.0, -- $8.00 per million output tokens
           },
+          supports_reasoning_effort = true,
         },
         ["o3-2025-04-16"] = {
           pricing = {
             input = 2.0, -- $2.00 per million input tokens
             output = 8.0, -- $8.00 per million output tokens
           },
+          supports_reasoning_effort = true,
         },
         ["o3-mini"] = {
           pricing = {
             input = 1.10, -- $1.10 per million input tokens
             output = 4.40, -- $4.40 per million output tokens
           },
+          supports_reasoning_effort = true,
         },
         ["o3-mini-2025-01-31"] = {
           pricing = {
             input = 1.10, -- $1.10 per million input tokens
             output = 4.40, -- $4.40 per million output tokens
           },
+          supports_reasoning_effort = true,
         },
         ["o1-mini"] = {
           pricing = {
@@ -451,6 +464,7 @@ return {
             input = 4.0, -- $4.00 per million input tokens
             output = 16.0, -- $16.00 per million output tokens
           },
+          supports_reasoning_effort = true,
         },
 
         -- Search and specialized models

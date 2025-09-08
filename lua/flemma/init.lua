@@ -8,6 +8,7 @@ local plugin_config = require("flemma.config")
 local log = require("flemma.logging")
 local provider_config = require("flemma.provider.config")
 local textobject = require("flemma.textobject")
+local models = require("flemma.models")
 
 local provider = nil
 
@@ -271,15 +272,18 @@ local function initialize_provider(provider_name, model_name, parameters)
   -- Set the validated model in the merged parameters
   merged_params.model = validated_model
 
-  -- Check for reasoning parameter with non-o-series OpenAI models
+  -- Check for reasoning parameter support based on models.lua data
   if provider_name == "openai" then
     local reasoning_value = merged_params.reasoning
-    -- Ensure reasoning_value is checked against nil and empty string
     if reasoning_value ~= nil and reasoning_value ~= "" then
-      -- Check if the model name starts with "o"
-      if string.sub(validated_model, 1, 1) ~= "o" then
+      local model_info = models.providers.openai
+        and models.providers.openai.models
+        and models.providers.openai.models[validated_model]
+      local supports_reasoning_effort = model_info and model_info.supports_reasoning_effort == true
+
+      if not supports_reasoning_effort then
         local warning_msg = string.format(
-          "Flemma: The 'reasoning' parameter is only supported for OpenAI o-series models (e.g., 'o1-preview'). Using it with '%s' may lead to undefined behavior.",
+          "Flemma: The 'reasoning' parameter is not supported by the selected OpenAI model '%s'. It may be ignored or cause an API error.",
           validated_model
         )
         vim.notify(warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
@@ -288,13 +292,19 @@ local function initialize_provider(provider_name, model_name, parameters)
     end
   end
 
-  -- Check for temperature <> 1.0 with o-series OpenAI models when reasoning is active
+  -- Check for temperature <> 1.0 with OpenAI o-series models when reasoning is active
   if provider_name == "openai" then
     local reasoning_value = merged_params.reasoning
     local temp_value = merged_params.temperature
+    local model_info = models.providers.openai
+      and models.providers.openai.models
+      and models.providers.openai.models[validated_model]
+    local supports_reasoning_effort = model_info and model_info.supports_reasoning_effort == true
+
     if
       reasoning_value ~= nil
       and reasoning_value ~= ""
+      and supports_reasoning_effort
       and string.sub(validated_model, 1, 1) == "o"
       and temp_value ~= nil
       and temp_value ~= 1
