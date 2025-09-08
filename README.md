@@ -1,4 +1,4 @@
-# Flemma 🤖
+# Flemma 🪶
 
 Transform Neovim into your AI conversation companion with a native interface to multiple AI providers.
 
