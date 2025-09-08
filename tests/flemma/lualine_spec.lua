@@ -42,8 +42,8 @@ describe("Lualine component", function()
 
   it("should display model and reasoning when applicable", function()
     -- Arrange
-    local flemma = require("flemma")
-    flemma.switch("openai", "o3", { reasoning = "high", temperature = 1 })
+    local core = require("flemma.core")
+    core.switch_provider("openai", "o3", { reasoning = "high", temperature = 1 })
 
     -- Act
     local status = flemma_component:update_status()
@@ -54,8 +54,8 @@ describe("Lualine component", function()
 
   it("should display only the model name when reasoning is not set for an o-series model", function()
     -- Arrange
-    local flemma = require("flemma")
-    flemma.switch("openai", "o1-mini", {}) -- No reasoning parameter
+    local core = require("flemma.core")
+    core.switch_provider("openai", "o1-mini", {}) -- No reasoning parameter
 
     -- Act
     local status = flemma_component:update_status()
@@ -66,8 +66,8 @@ describe("Lualine component", function()
 
   it("should display only the model name for non-o-series models", function()
     -- Arrange
-    local flemma = require("flemma")
-    flemma.switch("openai", "gpt-4o", { reasoning = "high" }) -- Reasoning should be ignored
+    local core = require("flemma.core")
+    core.switch_provider("openai", "gpt-4o", { reasoning = "high" }) -- Reasoning should be ignored
 
     -- Act
     local status = flemma_component:update_status()
@@ -78,8 +78,8 @@ describe("Lualine component", function()
 
   it("should display only the model name for non-openai providers", function()
     -- Arrange
-    local flemma = require("flemma")
-    flemma.switch("claude", "claude-3-5-sonnet", {})
+    local core = require("flemma.core")
+    core.switch_provider("claude", "claude-3-5-sonnet", {})
 
     -- Act
     local status = flemma_component:update_status()
@@ -91,8 +91,8 @@ describe("Lualine component", function()
   it("should return an empty string if filetype is not 'chat'", function()
     -- Arrange
     vim.bo.filetype = "lua"
-    local flemma = require("flemma")
-    flemma.switch("openai", "o1-mini", { reasoning = "high" })
+    local core = require("flemma.core")
+    core.switch_provider("openai", "o1-mini", { reasoning = "high" })
 
     -- Act
     local status = flemma_component:update_status()
