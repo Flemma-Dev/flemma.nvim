@@ -2,6 +2,7 @@
   pkgs ? import <nixpkgs> { },
 }:
 let
+  nodejs = pkgs.nodejs_22;
   packageOverrides = pkgs.callPackage ./python-packages.nix { };
   python = pkgs.python312.override { inherit packageOverrides; };
   pythonWithPackages = python.withPackages (p: [
@@ -20,6 +21,7 @@ pkgs.mkShell {
   '';
 
   buildInputs = with pkgs; [
+    nodejs.pkgs.pnpm
     google-cloud-sdk
     libsecret
     pythonWithPackages
@@ -106,6 +108,11 @@ pkgs.mkShell {
         find . -name "*.md" -print0 | xargs -0 \
         prettier --write
       '';
+    })
+
+    (writeShellApplication {
+      name = "flemma-amp";
+      text = "exec pnpm --silent --package=@sourcegraph/amp@latest dlx -- amp \"$@\"";
     })
   ];
 }
