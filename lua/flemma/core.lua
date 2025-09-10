@@ -371,14 +371,6 @@ function M.send_to_provider(opts)
 
   -- Set up callbacks for the provider
   local callbacks = {
-    on_data = function(line)
-      -- Don't log here as it's already logged in process_response_line
-    end,
-
-    on_stderr = function(line)
-      log.error("send_to_provider(): callbacks.on_stderr: " .. line)
-    end,
-
     on_error = function(msg)
       vim.schedule(function()
         if spinner_timer then
@@ -401,15 +393,6 @@ function M.send_to_provider(opts)
       end)
     end,
 
-    on_done = function()
-      vim.schedule(function()
-        -- This callback is called by the provider's on_exit handler.
-        -- Most finalization logic (spinner, state, UI, prompt) is now handled
-        -- in on_complete based on the cURL exit code and response_started state.
-        log.debug("send_to_provider(): callbacks.on_done called.")
-      end)
-    end,
-
     on_usage = function(usage_data)
       if usage_data.type == "input" then
         buffer_state.current_usage.input_tokens = usage_data.tokens
@@ -420,7 +403,7 @@ function M.send_to_provider(opts)
       end
     end,
 
-    on_message_complete = function()
+    on_response_complete = function()
       vim.schedule(function()
         -- Update session totals
         state.update_session_usage({
@@ -528,7 +511,7 @@ function M.send_to_provider(opts)
       end)
     end,
 
-    on_complete = function(code)
+    on_request_complete = function(code)
       vim.schedule(function()
         -- If the request was cancelled, M.cancel_request() handles cleanup including modifiable.
         if buffer_state.request_cancelled then
@@ -557,7 +540,7 @@ function M.send_to_provider(opts)
           -- cURL request completed successfully (exit code 0)
           if buffer_state.api_error_occurred then
             log.info(
-              "send_to_provider(): on_complete: cURL success (code 0), but an API error was previously handled. Skipping new prompt."
+              "send_to_provider(): on_request_complete: cURL success (code 0), but an API error was previously handled. Skipping new prompt."
             )
             buffer_state.api_error_occurred = false -- Reset flag for next request
             if not response_started then
@@ -565,12 +548,12 @@ function M.send_to_provider(opts)
             end
             buffers.auto_write_buffer(bufnr) -- Still auto-write if configured
             ui.update_ui(bufnr) -- Update UI
-            return -- Do not proceed to add new prompt or call opts.on_complete
+            return -- Do not proceed to add new prompt or call opts.on_request_complete
           end
 
           if not response_started then
             log.info(
-              "send_to_provider(): on_complete: cURL success (code 0), no API error, but no response content was processed."
+              "send_to_provider(): on_request_complete: cURL success (code 0), no API error, but no response content was processed."
             )
             ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
           end
@@ -612,8 +595,8 @@ function M.send_to_provider(opts)
           ui.update_ui(bufnr)
           ui.fold_last_thinking_block(bufnr) -- Attempt to fold the last thinking block
 
-          if opts.on_complete then -- For FlemmaSendAndInsert
-            opts.on_complete()
+          if opts.on_request_complete then -- For FlemmaSendAndInsert
+            opts.on_request_complete()
           end
         else
           -- cURL request failed (exit code ~= 0)
@@ -670,12 +653,12 @@ function M.send_to_provider(opts)
     process_response_line_fn = function(line, cb)
       return current_provider:process_response_line(line, cb)
     end,
+    finalize_response_fn = function(exit_code, cb)
+      return current_provider:finalize_response(exit_code, cb)
+    end,
     reset_fn = function()
       return current_provider:reset()
     end,
-    check_unprocessed_json_fn = current_provider.check_unprocessed_json and function(cb)
-      return current_provider:check_unprocessed_json(cb)
-    end or nil,
   })
 
   if not buffer_state.current_request or buffer_state.current_request == 0 or buffer_state.current_request == -1 then

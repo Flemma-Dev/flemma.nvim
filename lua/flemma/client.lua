@@ -143,9 +143,9 @@ end
 ---@field endpoint string The API endpoint URL
 ---@field parameters table Provider parameters (for timeouts, model name, etc.)
 ---@field callbacks table Callback functions for handling responses
----@field process_response_line_fn? function Optional function to process each response line
+---@field process_response_line_fn? function Function to process each response line
+---@field finalize_response_fn? function Function to finalize provider response processing
 ---@field reset_fn? function Optional function to reset provider state
----@field check_unprocessed_json_fn? function Optional function to check for unprocessed JSON
 
 -- Send request to API using curl or a test fixture
 ---@param opts ClientRequestOptions Request configuration
@@ -200,11 +200,7 @@ function M.send_request(opts)
             -- Log the raw response line
             log.debug("send_request(): on_stdout: " .. line)
 
-            if opts.callbacks.on_data then
-              opts.callbacks.on_data(line) -- Pass raw line to on_data callback
-            end
-
-            -- Process the response line (without duplicate logging)
+            -- Process the response line (single path)
             if opts.process_response_line_fn then
               opts.process_response_line_fn(line, opts.callbacks)
             end
@@ -216,12 +212,8 @@ function M.send_request(opts)
       if data then
         for _, line in ipairs(data) do
           if line and #line > 0 then
-            -- Log stderr output
-            log.error("send_request(): on_stderr: " .. line)
-
-            if opts.callbacks.on_stderr then
-              opts.callbacks.on_stderr(line)
-            end
+            -- Log stderr output directly
+            log.error("send_request(): stderr: " .. line)
           end
         end
       end
@@ -233,13 +225,14 @@ function M.send_request(opts)
       -- Log exit code
       log.info("send_request(): on_exit: Request completed with exit code: " .. tostring(code))
 
-      -- Check for unprocessed JSON if the provider supports it
-      if opts.check_unprocessed_json_fn then
-        opts.check_unprocessed_json_fn(opts.callbacks)
+      -- Finalize provider response processing
+      if opts.finalize_response_fn then
+        opts.finalize_response_fn(code, opts.callbacks)
       end
 
-      if opts.callbacks.on_complete then
-        opts.callbacks.on_complete(code)
+      -- Handle common request completion callback
+      if opts.callbacks.on_request_complete then
+        opts.callbacks.on_request_complete(code)
       end
     end,
   })

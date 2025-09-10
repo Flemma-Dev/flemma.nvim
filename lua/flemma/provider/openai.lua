@@ -265,7 +265,11 @@ function M.get_endpoint(self)
   return self.endpoint
 end
 
--- Process a response line from OpenAI API
+--- Process a single line of OpenAI API streaming response
+--- Parses OpenAI's server-sent events format and extracts content, usage, and completion information
+---@param self table The OpenAI provider instance
+---@param line string A single line from the OpenAI API response stream
+---@param callbacks ProviderCallbacks Table of callback functions to handle parsed data
 function M.process_response_line(self, line, callbacks)
   -- Skip empty lines
   if not line or line == "" then
@@ -313,9 +317,9 @@ function M.process_response_line(self, line, callbacks)
           )
         end
 
-        -- Signal message completion (this is the only place we should call it)
-        if callbacks.on_message_complete then
-          callbacks.on_message_complete()
+        -- Signal response completion (this is the only place we should call it)
+        if callbacks.on_response_complete then
+          callbacks.on_response_complete()
         end
       end
       return
@@ -352,10 +356,6 @@ function M.process_response_line(self, line, callbacks)
   -- Handle [DONE] message
   if json_str == "[DONE]" then
     log.debug("openai.process_response_line(): Received [DONE] message")
-
-    if callbacks.on_done then
-      callbacks.on_done()
-    end
     return
   end
 
@@ -442,11 +442,14 @@ function M.process_response_line(self, line, callbacks)
     and data.choices[1].finish_reason ~= nil
   then
     log.debug("openai.process_response_line(): Received finish_reason: " .. log.inspect(data.choices[1].finish_reason))
-    -- We'll let the final chunk with usage information trigger on_message_complete
+    -- We'll let the final chunk with usage information trigger on_response_complete
   end
 end
 
--- Check unprocessed JSON responses (called by base provider on_exit)
+--- Check for unprocessed JSON responses when request completes
+--- Called by base provider's finalize_response method to handle any remaining buffered data
+---@param self table The OpenAI provider instance
+---@param callbacks ProviderCallbacks Table of callback functions for error handling
 function M.check_unprocessed_json(self, callbacks)
   if not self.response_accumulator.has_processed_content and #self.response_accumulator.lines > 0 then
     if not self:check_accumulated_response(callbacks) then
@@ -455,7 +458,11 @@ function M.check_unprocessed_json(self, callbacks)
   end
 end
 
--- Check accumulated response for multi-line JSON error responses
+--- Check accumulated response lines for multi-line JSON error responses
+--- Attempts to parse concatenated response lines as JSON to extract error information
+---@param self table The OpenAI provider instance
+---@param callbacks ProviderCallbacks Table of callback functions for error handling
+---@return boolean success True if error was found and handled, false otherwise
 function M.check_accumulated_response(self, callbacks)
   if #self.response_accumulator.lines == 0 then
     return false

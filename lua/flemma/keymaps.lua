@@ -60,7 +60,7 @@ M.setup = function()
             local bufnr = vim.api.nvim_get_current_buf()
             buffers.buffer_cmd(bufnr, "stopinsert")
             core.send_to_provider({
-              on_complete = function()
+              on_request_complete = function()
                 buffers.buffer_cmd(bufnr, "startinsert!")
               end,
             })

@@ -3,6 +3,17 @@
 local log = require("flemma.logging")
 local mime_util = require("flemma.mime")
 
+---@class UsageData
+---@field type "input"|"output"|"thoughts" Type of token usage
+---@field tokens number Number of tokens used
+
+---@class ProviderCallbacks
+---@field on_error fun(message: string) Called when an API error occurs
+---@field on_usage fun(usage_data: UsageData) Called when token usage information is received
+---@field on_response_complete fun() Called when the AI response content is complete
+---@field on_content fun(text: string) Called when response content is received
+---@field on_thinking? fun(text: string) Called when thinking/reasoning content is received (optional)
+
 -- Helper function to URL-decode a string
 local function url_decode(str)
   if not str then
@@ -127,7 +138,12 @@ function M.get_endpoint(self)
   -- To be implemented by specific providers
 end
 
--- Process response line (to be implemented by specific providers)
+--- Process a single line of API response data
+--- This method is called for each line of data received from the streaming API response.
+--- Providers should parse the line, extract content/usage information, and call appropriate callbacks.
+---@param self table The provider instance
+---@param line string A single line from the API response stream
+---@param callbacks ProviderCallbacks Table of callback functions to handle parsed data
 function M.process_response_line(self, line, callbacks)
   -- To be implemented by specific providers
 end
@@ -137,6 +153,18 @@ end
 function M.reset(self)
   -- Base implementation does nothing by default
   -- Providers can override this to reset their specific state
+end
+
+--- Finalize response processing and handle provider-specific cleanup
+--- This method is called when the HTTP request process completes, allowing providers
+--- to perform cleanup tasks like processing any remaining buffered data.
+---@param self table The provider instance
+---@param exit_code number The HTTP request exit code (0 for success, non-zero for failure)
+---@param callbacks ProviderCallbacks Table of callback functions for any remaining data processing
+function M.finalize_response(self, exit_code, callbacks)
+  if self.check_unprocessed_json then
+    self:check_unprocessed_json(callbacks)
+  end
 end
 
 -- Parse message content into chunks of text or file references using a coroutine.

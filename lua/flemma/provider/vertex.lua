@@ -441,7 +441,11 @@ function M.get_endpoint(self)
   return endpoint
 end
 
--- Process a response line from Vertex AI API (Server-Sent Events format)
+--- Process a single line of Vertex AI API streaming response
+--- Parses Vertex AI's JSON response format and extracts content, reasoning, usage, and completion information
+---@param self table The Vertex AI provider instance
+---@param line string A single line from the Vertex AI API response stream
+---@param callbacks ProviderCallbacks Table of callback functions to handle parsed data
 function M.process_response_line(self, line, callbacks)
   -- Skip empty lines
   if not line or line == "" or line == "\r" then
@@ -569,20 +573,19 @@ function M.process_response_line(self, line, callbacks)
       self.response_accumulator.accumulated_thoughts = "" -- Reset for next potential full message
     end
 
-    -- Signal message completion (after all content, including thoughts, has been sent)
-    if callbacks.on_message_complete then
-      callbacks.on_message_complete()
+    -- Signal response completion (after all content, including thoughts, has been sent)
+    if callbacks.on_response_complete then
+      callbacks.on_response_complete()
     end
 
-    -- Signal done (end of this specific API call)
-    if callbacks.on_done then
-      callbacks.on_done()
-    end
     return -- Important to return after handling finishReason
   end
 end
 
--- Check unprocessed JSON responses (called by base provider on_exit)
+--- Check for unprocessed JSON responses when request completes
+--- Called by base provider's finalize_response method to handle any remaining buffered data
+---@param self table The Vertex AI provider instance
+---@param callbacks ProviderCallbacks Table of callback functions for error handling
 function M.check_unprocessed_json(self, callbacks)
   -- Check accumulated response if we haven't processed any content
   if not self.response_accumulator.has_processed_content and #self.response_accumulator.lines > 0 then
@@ -592,7 +595,11 @@ function M.check_unprocessed_json(self, callbacks)
   end
 end
 
--- Check accumulated response for multi-line JSON responses
+--- Check accumulated response lines for multi-line JSON responses
+--- Attempts to parse concatenated response lines as JSON to extract content and error information
+---@param self table The Vertex AI provider instance
+---@param callbacks ProviderCallbacks Table of callback functions for content and error handling
+---@return boolean success True if content or error was found and handled, false otherwise
 function M.check_accumulated_response(self, callbacks)
   -- If we have accumulated lines, try to parse them as a complete JSON response
   if #self.response_accumulator.lines == 0 then

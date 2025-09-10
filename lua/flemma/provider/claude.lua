@@ -213,7 +213,11 @@ function M.get_endpoint(self)
   return self.endpoint
 end
 
--- Process a response line from Claude API
+--- Process a single line of Claude API streaming response
+--- Parses Claude's server-sent events format and extracts content, usage, and error information
+---@param self table The Claude provider instance
+---@param line string A single line from the Claude API response stream
+---@param callbacks ProviderCallbacks Table of callback functions to handle parsed data
 function M.process_response_line(self, line, callbacks)
   -- Skip empty lines
   if not line or line == "" then
@@ -276,10 +280,6 @@ function M.process_response_line(self, line, callbacks)
   -- Handle [DONE] message (Note: Claude doesn't typically send [DONE])
   if json_str == "[DONE]" then
     log.debug("claude.process_response_line(): Received [DONE] message from Claude API (unexpected)")
-
-    if callbacks.on_done then
-      callbacks.on_done()
-    end
     return
   end
 
@@ -360,14 +360,8 @@ function M.process_response_line(self, line, callbacks)
   -- Handle message_stop event
   if data.type == "message_stop" then
     log.debug("claude.process_response_line(): Received message_stop event")
-    if callbacks.on_message_complete then
-      callbacks.on_message_complete()
-    end
-
-    -- Also trigger on_done to ensure we clean up properly
-    -- This is important when Claude returns no new content
-    if callbacks.on_done then
-      callbacks.on_done()
+    if callbacks.on_response_complete then
+      callbacks.on_response_complete()
     end
   end
 
