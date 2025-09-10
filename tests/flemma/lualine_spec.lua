@@ -79,13 +79,13 @@ describe("Lualine component", function()
   it("should display only the model name for non-openai providers", function()
     -- Arrange
     local core = require("flemma.core")
-    core.switch_provider("claude", "claude-3-5-sonnet", {})
+    core.switch_provider("claude", "claude-sonnet-4-0", {})
 
     -- Act
     local status = flemma_component:update_status()
 
     -- Assert
-    assert.are.equal("claude-3-5-sonnet", status)
+    assert.are.equal("claude-sonnet-4-0", status)
   end)
 
   it("should return an empty string if filetype is not 'chat'", function()
