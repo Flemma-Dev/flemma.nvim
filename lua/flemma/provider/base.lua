@@ -608,4 +608,10 @@ function M.parse_message_content_chunks(self, content_string)
   return coroutine.create(chunkify)
 end
 
+-- Try to import from buffer lines (to be implemented by specific providers)
+function M.try_import_from_buffer(self, lines)
+  -- To be implemented by specific providers
+  return nil
+end
+
 return M

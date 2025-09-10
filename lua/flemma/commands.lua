@@ -57,7 +57,24 @@ local function setup_commands()
   end, {})
 
   vim.api.nvim_create_user_command("FlemmaImport", function()
-    require("flemma.import").import_buffer()
+    local state = require("flemma.state")
+    local provider = state.get_provider()
+
+    if not provider or not provider.try_import_from_buffer then
+      vim.notify("FlemmaImport: Current provider does not support importing", vim.log.levels.ERROR)
+      return
+    end
+
+    local bufnr = vim.api.nvim_get_current_buf()
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+
+    local chat_content = provider:try_import_from_buffer(lines)
+    if chat_content then
+      -- Replace buffer contents with the imported chat
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.split(chat_content, "\n", {}))
+      -- Set filetype to chat
+      vim.bo[bufnr].filetype = "chat"
+    end
   end, {})
 
   vim.api.nvim_create_user_command("FlemmaSendAndInsert", function()
