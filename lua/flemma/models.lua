@@ -6,7 +6,7 @@
 return {
   providers = {
     claude = {
-      default = "claude-sonnet-4",
+      default = "claude-sonnet-4-0",
       models = {
         -- Claude Opus 4.1 (as of Sep 2025)
         ["claude-opus-4-1"] = {
@@ -22,13 +22,6 @@ return {
           },
         },
 
-        -- Claude Opus 4
-        ["claude-opus-4"] = {
-          pricing = {
-            input = 15.0, -- $15 per million input tokens
-            output = 75.0, -- $75 per million output tokens
-          },
-        },
         ["claude-opus-4-0"] = {
           pricing = {
             input = 15.0, -- $15 per million input tokens
@@ -42,13 +35,6 @@ return {
           },
         },
 
-        -- Claude Sonnet 4
-        ["claude-sonnet-4"] = {
-          pricing = {
-            input = 3.0, -- $3 per million input tokens
-            output = 15.0, -- $15 per million output tokens
-          },
-        },
         ["claude-sonnet-4-0"] = {
           pricing = {
             input = 3.0, -- $3 per million input tokens
@@ -63,12 +49,6 @@ return {
         },
 
         -- Claude Sonnet 3.7
-        ["claude-3-7-sonnet"] = {
-          pricing = {
-            input = 3.0, -- $3 per million input tokens
-            output = 15.0, -- $15 per million output tokens
-          },
-        },
         ["claude-3-7-sonnet-latest"] = {
           pricing = {
             input = 3.0, -- $3 per million input tokens
@@ -83,7 +63,7 @@ return {
         },
 
         -- Claude Haiku 3.5
-        ["claude-3-5-haiku"] = {
+        ["claude-3-5-haiku-latest"] = {
           pricing = {
             input = 0.80, -- $0.80 per million input tokens
             output = 4.0, -- $4 per million output tokens
@@ -103,37 +83,12 @@ return {
         },
 
         -- Claude Haiku 3
-        ["claude-3-haiku"] = {
-          pricing = {
-            input = 0.25, -- $0.25 per million input tokens
-            output = 1.25, -- $1.25 per million output tokens
-          },
-        },
         ["claude-3-haiku-20240307"] = {
           pricing = {
             input = 0.25, -- $0.25 per million input tokens
             output = 1.25, -- $1.25 per million output tokens
           },
         },
-
-        -- Legacy Claude models (keeping for compatibility)
-        ["claude-3-5-sonnet"] = {
-          pricing = {
-            input = 3.0, -- $3 per million input tokens
-            output = 15.0, -- $15 per million output tokens
-          },
-        },
-        ["claude-3-5-sonnet-20241022"] = {
-          pricing = {
-            input = 3.0, -- $3 per million input tokens
-            output = 15.0, -- $15 per million output tokens
-          },
-        },
-        ["claude-3-opus-20240229"] = {},
-        ["claude-3-sonnet-20240229"] = {},
-        ["claude-2.1"] = {},
-        ["claude-2.0"] = {},
-        ["claude-instant-1.2"] = {},
       },
     },
 
