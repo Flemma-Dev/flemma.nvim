@@ -2,6 +2,7 @@
 --- Implements the OpenAI API integration
 local base = require("flemma.provider.base")
 local log = require("flemma.logging")
+local content_parser = require("flemma.content_parser")
 local M = {}
 
 -- Create a new OpenAI provider instance
@@ -89,7 +90,7 @@ function M.create_request_body(self, formatted_messages, _)
       local content_parts_for_api = {} -- Holds {type="text", text=...} or other part types
       local has_multimedia_part = false -- Flag if content must be an array (e.g., for images, PDFs)
 
-      local content_parser_coro = self:parse_message_content_chunks(msg.content)
+      local content_parser_coro = content_parser.parse(msg.content)
       while true do
         local status, chunk = coroutine.resume(content_parser_coro)
         if not status or not chunk then -- Coroutine finished or errored

@@ -3,6 +3,7 @@
 local base = require("flemma.provider.base")
 local log = require("flemma.logging")
 -- local mime_util = require("flemma.mime") -- Moved to base provider
+local content_parser = require("flemma.content_parser")
 local M = {}
 
 -- Private helper to validate required configuration
@@ -221,7 +222,7 @@ function M.create_request_body(self, formatted_messages, system_message)
   for _, msg in ipairs(formatted_messages) do
     local parts = {}
     if msg.role == "user" then
-      local content_parser_coro = self:parse_message_content_chunks(msg.content)
+      local content_parser_coro = content_parser.parse(msg.content)
       while true do
         local status, chunk = coroutine.resume(content_parser_coro)
         if not status or not chunk then -- Coroutine finished or errored

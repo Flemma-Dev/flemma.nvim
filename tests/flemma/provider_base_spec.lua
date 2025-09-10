@@ -1,6 +1,7 @@
 --- Test file for the base provider functionality
 describe("Base Provider", function()
   local base = require("flemma.provider.base")
+  local content_parser = require("flemma.content_parser")
   local client = require("flemma.client")
 
   before_each(function()
@@ -17,7 +18,7 @@ describe("Base Provider", function()
     it("should handle text-only content", function()
       local provider = base.new({})
       local content = "Hello, this is just text content."
-      local parser = provider:parse_message_content_chunks(content)
+      local parser = content_parser.parse(content)
 
       local chunks = {}
       while true do
@@ -47,7 +48,7 @@ describe("Base Provider", function()
       local rel_file = "./" .. vim.fn.fnamemodify(tmp_file, ":t")
       vim.fn.system("cp " .. tmp_file .. " " .. rel_file)
 
-      local parser = provider:parse_message_content_chunks(content)
+      local parser = content_parser.parse(content)
 
       local chunks = {}
       while true do
@@ -86,7 +87,7 @@ describe("Base Provider", function()
       local provider = base.new({})
       local non_existent_file = "./this_file_does_not_exist.txt"
       local content = "Please read @" .. non_existent_file .. " and process it."
-      local parser = provider:parse_message_content_chunks(content)
+      local parser = content_parser.parse(content)
 
       local chunks = {}
       while true do
@@ -123,7 +124,7 @@ describe("Base Provider", function()
     it("should handle multiple non-existent files", function()
       local provider = base.new({})
       local content = "Read @./missing1.txt and @./missing2.txt files."
-      local parser = provider:parse_message_content_chunks(content)
+      local parser = content_parser.parse(content)
 
       local chunks = {}
       while true do
@@ -151,7 +152,7 @@ describe("Base Provider", function()
     it("should emit warnings chunk for unreadable files", function()
       local provider = base.new({})
       local content = "Read @./missing1.txt and @./missing2.txt files."
-      local parser = provider:parse_message_content_chunks(content)
+      local parser = content_parser.parse(content)
 
       local chunks = {}
       while true do
@@ -193,7 +194,7 @@ describe("Base Provider", function()
       -- URL encode the space as %20
       local encoded_path = "./file%20with%20spaces.txt"
       local content = "Read @" .. encoded_path .. " please."
-      local parser = provider:parse_message_content_chunks(content)
+      local parser = content_parser.parse(content)
 
       local chunks = {}
       while true do
@@ -274,7 +275,7 @@ describe("Base Provider", function()
       local provider = base.new({})
       -- Reference the file with a MIME type override
       local content = "Process @" .. rel_file .. ";type=text/plain as plain text."
-      local parser = provider:parse_message_content_chunks(content)
+      local parser = content_parser.parse(content)
 
       local chunks = {}
       while true do
@@ -328,7 +329,7 @@ describe("Base Provider", function()
 
       local provider = base.new({})
       local content = "Read @" .. rel_file1 .. ";type=text/plain and @" .. rel_file2 .. ";type=image/png files."
-      local parser = provider:parse_message_content_chunks(content)
+      local parser = content_parser.parse(content)
 
       local chunks = {}
       while true do
@@ -380,7 +381,7 @@ describe("Base Provider", function()
       local provider = base.new({})
       -- Reference with MIME type override and trailing punctuation (common in sentences)
       local content = "Process @" .. rel_file .. ";type=text/plain."
-      local parser = provider:parse_message_content_chunks(content)
+      local parser = content_parser.parse(content)
 
       local chunks = {}
       while true do

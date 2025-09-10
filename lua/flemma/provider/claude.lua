@@ -2,6 +2,7 @@
 --- Implements the Claude API integration
 local base = require("flemma.provider.base")
 local log = require("flemma.logging")
+local content_parser = require("flemma.content_parser")
 local M = {}
 
 -- Create a new Claude provider instance
@@ -57,7 +58,7 @@ function M.create_request_body(self, formatted_messages, system_message)
   for _, msg in ipairs(formatted_messages) do
     if msg.role == "user" then
       local content_blocks = {} -- Will hold {type="text", text=...} or {type="image", source=...} etc.
-      local content_parser_coro = self:parse_message_content_chunks(msg.content)
+      local content_parser_coro = content_parser.parse(msg.content)
 
       while true do
         local status, chunk = coroutine.resume(content_parser_coro)
