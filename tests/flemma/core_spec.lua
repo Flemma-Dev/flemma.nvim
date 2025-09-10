@@ -1,7 +1,7 @@
 local stub = require("luassert.stub")
 
 describe(":FlemmaSend command", function()
-  local base_provider_module = require("flemma.provider.base")
+  local client = require("flemma.client")
 
   before_each(function()
     -- Invalidate the main flemma module cache to ensure a clean setup for each test
@@ -13,7 +13,7 @@ describe(":FlemmaSend command", function()
 
   after_each(function()
     -- Clear any registered fixtures to ensure test isolation
-    base_provider_module.clear_fixtures()
+    client.clear_fixtures()
 
     -- Clean up any buffers created during the test
     vim.cmd("silent! %bdelete!")
@@ -31,7 +31,7 @@ describe(":FlemmaSend command", function()
     local state = require("flemma.state")
     local config = state.get_config()
     local default_claude_model = require("flemma.provider.config").get_model("claude")
-    base_provider_module.register_fixture(default_claude_model, "tests/fixtures/claude_hello_success_stream.txt")
+    client.register_fixture("api%.anthropic%.com", "tests/fixtures/claude_hello_success_stream.txt")
 
     -- Act: Execute the FlemmaSend command
     vim.cmd("FlemmaSend")
@@ -60,7 +60,7 @@ describe(":FlemmaSend command", function()
     core.switch_provider("openai", "o3", {})
 
     -- Arrange: Register a dummy fixture to prevent actual network calls.
-    base_provider_module.register_fixture("o3", "tests/fixtures/openai_hello_success_stream.txt")
+    client.register_fixture("api%.openai%.com", "tests/fixtures/openai_hello_success_stream.txt")
 
     -- Arrange: Create a new buffer, make it current, and set its content
     local bufnr = vim.api.nvim_create_buf(false, false)
@@ -98,7 +98,7 @@ describe(":FlemmaSend command", function()
     core.switch_provider("openai", "o3", {})
 
     -- Arrange: Register the fixture to be used by the provider
-    base_provider_module.register_fixture("o3", "tests/fixtures/openai_hello_success_stream.txt")
+    client.register_fixture("api%.openai%.com", "tests/fixtures/openai_hello_success_stream.txt")
 
     -- Arrange: Set up the buffer with an initial prompt
     local bufnr = vim.api.nvim_create_buf(false, false)
@@ -132,7 +132,7 @@ describe(":FlemmaSend command", function()
     core.switch_provider("openai", "o3", {})
 
     -- Arrange: Register the error fixture
-    base_provider_module.register_fixture("o3", "tests/fixtures/openai_invalid_key_error.txt")
+    client.register_fixture("api%.openai%.com", "tests/fixtures/openai_invalid_key_error.txt")
 
     -- Arrange: Set up the buffer
     local bufnr = vim.api.nvim_create_buf(false, false)

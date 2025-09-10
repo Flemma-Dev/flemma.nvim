@@ -135,9 +135,9 @@ function M.cancel_request()
     -- Mark as cancelled
     buffer_state.request_cancelled = true
 
-    -- Use provider to cancel the request
-    local current_provider = state.get_provider()
-    if current_provider and current_provider:cancel_request(buffer_state.current_request) then
+    -- Use client to cancel the request
+    local client = require("flemma.client")
+    if client.cancel_request(buffer_state.current_request) then
       buffer_state.current_request = nil
 
       -- Clean up the buffer
@@ -652,8 +652,31 @@ function M.send_to_provider(opts)
     end,
   }
 
-  -- Send the request using the provider
-  buffer_state.current_request = current_provider:send_request(request_body, callbacks)
+  -- Get headers and endpoint from the provider
+  local headers = current_provider:get_request_headers()
+  local endpoint = current_provider:get_endpoint()
+
+  -- The client will handle fixture matching and API key validation
+
+  local client = require("flemma.client")
+
+  -- Send the request using the client
+  buffer_state.current_request = client.send_request({
+    request_body = request_body,
+    headers = headers,
+    endpoint = endpoint,
+    parameters = current_provider.parameters,
+    callbacks = callbacks,
+    process_response_line_fn = function(line, cb)
+      return current_provider:process_response_line(line, cb)
+    end,
+    reset_fn = function()
+      return current_provider:reset()
+    end,
+    check_unprocessed_json_fn = current_provider.check_unprocessed_json and function(cb)
+      return current_provider:check_unprocessed_json(cb)
+    end or nil,
+  })
 
   if not buffer_state.current_request or buffer_state.current_request == 0 or buffer_state.current_request == -1 then
     log.error("send_to_provider(): Failed to start provider job.")

@@ -1,10 +1,11 @@
 --- Test file for the base provider functionality
 describe("Base Provider", function()
   local base = require("flemma.provider.base")
+  local client = require("flemma.client")
 
   before_each(function()
-    -- Clear any registered fixtures
-    base.clear_fixtures()
+    -- Clear any registered fixtures (now handled by client)
+    client.clear_fixtures()
   end)
 
   after_each(function()
