@@ -13,8 +13,16 @@ function M.new(merged_config)
   provider.endpoint = "https://api.anthropic.com/v1/messages"
   provider.api_version = "2023-06-01"
 
+  provider:reset()
+
   -- Set metatable to use Claude methods
   return setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
+end
+
+-- Reset provider state (called by base.new and before new requests)
+function M.reset(self)
+  base.reset(self)
+  log.debug("claude.reset(): Reset Claude provider state")
 end
 
 -- Get API key from environment, keyring, or prompt
@@ -245,7 +253,10 @@ function M.process_response_line(self, line, callbacks)
   -- Check for expected format: lines should start with "event: " or "data: "
   if not (line:match("^event: ") or line:match("^data: ")) then
     -- This is not a standard SSE line or potentially a non-SSE JSON error
-    log.debug("claude.process_response_line(): Received non-SSE line: " .. line)
+    log.debug("claude.process_response_line(): Received non-SSE line, adding to accumulator: " .. line)
+
+    -- Add to response accumulator for potential multi-line JSON response
+    self:_buffer_response_line(line)
 
     -- Try parsing as a direct JSON error response
     local parse_ok, error_json = pcall(vim.fn.json_decode, line)
@@ -263,8 +274,7 @@ function M.process_response_line(self, line, callbacks)
       return
     end
 
-    -- If we can't parse it as an error, log and ignore
-    log.error("claude.process_response_line(): Ignoring unrecognized Claude API response line: " .. line)
+    -- If we can't parse it as an error, it will be handled by base class finalize_response
     return
   end
 
@@ -387,6 +397,7 @@ function M.process_response_line(self, line, callbacks)
 
     if data.delta.type == "text_delta" and data.delta.text then
       log.debug("claude.process_response_line(): ... Content text delta: " .. log.inspect(data.delta.text))
+      self:_mark_response_successful() -- Mark that we've received actual content
 
       if callbacks.on_content then
         callbacks.on_content(data.delta.text)

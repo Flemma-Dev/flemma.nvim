@@ -136,11 +136,92 @@ function M.process_response_line(self, line, callbacks)
   -- To be implemented by specific providers
 end
 
+-- Create a new response buffer for accumulating non-processable lines
+function M._new_response_buffer(self)
+  self._response_buffer = {
+    lines = {},
+    successful = false,
+    extra = {},
+  }
+end
+
+-- Buffer a non-processable response line for later analysis
+function M._buffer_response_line(self, line)
+  if not self._response_buffer then
+    self:_new_response_buffer()
+  end
+  table.insert(self._response_buffer.lines, line)
+end
+
+-- Mark that response processing has been successful
+function M._mark_response_successful(self)
+  if not self._response_buffer then
+    self:_new_response_buffer()
+  end
+  self._response_buffer.successful = true
+end
+
+-- Check buffered response lines for JSON errors
+function M._check_buffered_response(self, callbacks)
+  if not self._response_buffer or #self._response_buffer.lines == 0 then
+    return false
+  end
+
+  local body = table.concat(self._response_buffer.lines, "\n")
+  local ok, data = pcall(vim.fn.json_decode, body)
+  if not ok then
+    return false
+  end
+
+  local msg = self:extract_json_response_error(data)
+  if msg and callbacks.on_error then
+    callbacks.on_error(msg)
+    return true
+  end
+  return false
+end
+
+-- Extract error message from response JSON data (override point for providers)
+-- Base implementation handles common error patterns across different APIs
+function M.extract_json_response_error(self, data)
+  if type(data) ~= "table" then
+    return nil
+  end
+
+  -- Try common error patterns in order of likelihood
+
+  -- Pattern 1: { error: { message: "..." } } (OpenAI, Claude style)
+  if data.error and type(data.error) == "table" and data.error.message then
+    return data.error.message
+  end
+
+  -- Pattern 2: { error: "..." } (simple error string)
+  if data.error and type(data.error) == "string" then
+    return data.error
+  end
+
+  -- Pattern 3: { message: "..." } (direct message field)
+  if data.message and type(data.message) == "string" then
+    return data.message
+  end
+
+  -- Pattern 4: { errors: [{ message: "..." }] } (array of errors)
+  if data.errors and type(data.errors) == "table" and #data.errors > 0 then
+    local first_error = data.errors[1]
+    if type(first_error) == "table" and first_error.message then
+      return first_error.message
+    end
+  end
+
+  -- No recognizable error pattern found
+  return nil
+end
+
 -- Reset provider state before a new request
 -- This can be overridden by specific providers to reset their state
 function M.reset(self)
-  -- Base implementation does nothing by default
-  -- Providers can override this to reset their specific state
+  -- Create response buffer for all providers
+  self:_new_response_buffer()
 end
 
 --- Finalize response processing and handle provider-specific cleanup
@@ -150,8 +231,9 @@ end
 ---@param exit_code number The HTTP request exit code (0 for success, non-zero for failure)
 ---@param callbacks ProviderCallbacks Table of callback functions for any remaining data processing
 function M.finalize_response(self, exit_code, callbacks)
-  if self.check_unprocessed_json then
-    self:check_unprocessed_json(callbacks)
+  -- Check buffered response if we haven't processed content successfully
+  if self._response_buffer and not self._response_buffer.successful then
+    self:_check_buffered_response(callbacks)
   end
 end
 

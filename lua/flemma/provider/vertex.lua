@@ -113,11 +113,18 @@ function M.new(provider_config)
   -- Set the API version
   provider.api_version = "v1" -- Or potentially make this configurable in future
 
-  -- Initialize response accumulator by calling reset
   provider:reset()
 
   -- Set metatable to use Vertex AI methods
   return setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
+end
+
+-- Reset provider state before a new request
+function M.reset(self)
+  base.reset(self)
+  -- Add Vertex-specific extension
+  self._response_buffer.extra.accumulated_thoughts = ""
+  log.debug("vertex.reset(): Reset Vertex AI provider state")
 end
 
 -- Get access token from environment, keyring, or prompt
@@ -459,7 +466,7 @@ function M.process_response_line(self, line, callbacks)
     log.debug("vertex.process_response_line(): Received non-SSE line, adding to accumulator: " .. line)
 
     -- Add to response accumulator for potential multi-line JSON response
-    table.insert(self.response_accumulator.lines, line)
+    self:_buffer_response_line(line)
 
     -- Try parsing as a direct JSON error response (for single-line errors)
     local ok, error_data = pcall(vim.fn.json_decode, line)
@@ -521,11 +528,11 @@ function M.process_response_line(self, line, callbacks)
     for _, part in ipairs(data.candidates[1].content.parts) do
       if part.thought and part.text and #part.text > 0 then
         log.debug("vertex.process_response_line(): Accumulating thought text: " .. log.inspect(part.text))
-        self.response_accumulator.accumulated_thoughts = (self.response_accumulator.accumulated_thoughts or "")
+        self._response_buffer.extra.accumulated_thoughts = (self._response_buffer.extra.accumulated_thoughts or "")
           .. part.text
       elseif not part.thought and part.text and #part.text > 0 then -- Not a thought, but has text
         log.debug("vertex.process_response_line(): ... Content text: " .. log.inspect(part.text))
-        self.response_accumulator.has_processed_content = true
+        self:_mark_response_successful()
         if callbacks.on_content then
           callbacks.on_content(part.text)
         end
@@ -557,9 +564,9 @@ function M.process_response_line(self, line, callbacks)
     )
 
     -- Append aggregated thoughts if any
-    if self.response_accumulator.accumulated_thoughts and #self.response_accumulator.accumulated_thoughts > 0 then
+    if self._response_buffer.extra.accumulated_thoughts and #self._response_buffer.extra.accumulated_thoughts > 0 then
       -- Strip leading/trailing whitespace (including newlines) from thoughts
-      local stripped_thoughts = vim.trim(self.response_accumulator.accumulated_thoughts)
+      local stripped_thoughts = vim.trim(self._response_buffer.extra.accumulated_thoughts)
       -- Construct the thoughts block according to specified formatting:
       -- - Two newlines for separation (ensuring at least one blank line) from previous content.
       -- - <thinking> tag followed by a newline.
@@ -571,7 +578,7 @@ function M.process_response_line(self, line, callbacks)
       if callbacks.on_content then
         callbacks.on_content(thoughts_block)
       end
-      self.response_accumulator.accumulated_thoughts = "" -- Reset for next potential full message
+      self._response_buffer.extra.accumulated_thoughts = "" -- Reset for next potential full message
     end
 
     -- Signal response completion (after all content, including thoughts, has been sent)
@@ -583,49 +590,11 @@ function M.process_response_line(self, line, callbacks)
   end
 end
 
---- Check for unprocessed JSON responses when request completes
---- Called by base provider's finalize_response method to handle any remaining buffered data
----@param self table The Vertex AI provider instance
----@param callbacks ProviderCallbacks Table of callback functions for error handling
-function M.check_unprocessed_json(self, callbacks)
-  -- Check accumulated response if we haven't processed any content
-  if not self.response_accumulator.has_processed_content and #self.response_accumulator.lines > 0 then
-    if not self:check_accumulated_response(callbacks) then
-      log.debug("vertex.check_unprocessed_json(): No actionable content found in accumulated response")
-    end
-  end
-end
+-- Override base class error extraction to handle Vertex AI specific error formats
+function M.extract_json_response_error(self, data)
+  -- First try Vertex AI specific patterns
 
---- Check accumulated response lines for multi-line JSON responses
---- Attempts to parse concatenated response lines as JSON to extract content and error information
----@param self table The Vertex AI provider instance
----@param callbacks ProviderCallbacks Table of callback functions for content and error handling
----@return boolean success True if content or error was found and handled, false otherwise
-function M.check_accumulated_response(self, callbacks)
-  -- If we have accumulated lines, try to parse them as a complete JSON response
-  if #self.response_accumulator.lines == 0 then
-    return false
-  end
-
-  log.debug(
-    "vertex.check_accumulated_response(): Checking accumulated response with "
-      .. #self.response_accumulator.lines
-      .. " lines"
-  )
-
-  -- Join all accumulated lines
-  local full_response = table.concat(self.response_accumulator.lines, "\n")
-
-  -- Try to parse as JSON
-  local ok, data = pcall(vim.fn.json_decode, full_response)
-  if not ok then
-    log.debug(
-      "vertex.check_accumulated_response(): Failed to parse accumulated response as JSON. Content: " .. full_response
-    )
-    return false
-  end
-
-  -- Check if it's an array response with error
+  -- Pattern 1: Array response with error [{ error: { ... } }]
   if vim.tbl_islist(data) and #data > 0 and type(data[1]) == "table" and data[1].error then
     local error_data = data[1]
     local msg = "Vertex AI API error"
@@ -653,42 +622,11 @@ function M.check_accumulated_response(self, callbacks)
       end
     end
 
-    log.error("vertex.check_accumulated_response(): Parsed error from accumulated response: " .. log.inspect(msg))
-
-    if callbacks.on_error then
-      callbacks.on_error(msg) -- Keep original message for user notification
-    end
-    return true
+    return msg
   end
 
-  -- Check for direct error object
-  if type(data) == "table" and data.error then
-    local msg = "Vertex AI API error"
-    if data.error.message then
-      msg = data.error.message
-    end
-
-    log.error("vertex.check_accumulated_response(): Parsed error from accumulated response: " .. log.inspect(msg))
-
-    if callbacks.on_error then
-      callbacks.on_error(msg) -- Keep original message for user notification
-    end
-    return true
-  end
-
-  return false
-end
-
--- Reset provider state before a new request
-function M.reset(self)
-  -- Reset the response accumulator
-  self.response_accumulator = {
-    lines = {},
-    has_processed_content = false,
-    accumulated_thoughts = "", -- Initialize for storing thought summaries
-  }
-
-  log.debug("vertex.reset(): Reset Vertex AI provider state (response accumulator with thoughts)")
+  -- If Vertex-specific patterns don't match, fall back to base class patterns
+  return base.extract_json_response_error(self, data)
 end
 
 return M
