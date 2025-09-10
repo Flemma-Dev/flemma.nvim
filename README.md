@@ -1,5 +1,29 @@
 # Flemma 🪶
 
+> [!CAUTION]
+> **Plugin Under Major Refactoring**
+>
+> Flemma (formerly Claudius) is currently undergoing significant refactoring and rebranding. The plugin will be in a state of flux for the next couple of weeks as I implement major improvements to the codebase architecture and add extensive new functionality.
+>
+> **What to expect:**
+>
+> - Core functionality will remain stable
+> - Configuration options may change
+> - New features are actively being added
+> - Some temporary breaking changes may occur
+>
+> **A short list of features planned:**
+>
+> - **MCP servers & tool calling** - Connect to external tools and data sources via Model Context Protocol, plus allow conversations to query other specialized "agents"
+> - **Enhanced thinking support** - Preserve and reuse model reasoning tokens across requests for continued thinking
+> - **Chainable multi-buffer workflows** - Enable chat buffers to call other specialized Flemma buffers as tools for complex multi-step reasoning
+> - **Provider presets** - Quick switching between pre-configured model setups
+> - **YAML frontmatter** - Additional templating options beyond Lua
+> - **Project cost tracking** - Persistent usage and cost monitoring across sessions
+> - **Floating scratchpad** - Quick access popup for temporary conversations
+>
+> **Recommendation:** Pin to a specific commit if you need stability, or follow along for the latest improvements. The plugin is evolving into the most comprehensive AI chat interface for Neovim with support for all major providers and many exciting features planned.
+
 Transform Neovim into your AI conversation companion with a native interface to multiple AI providers.
 
 <img src="assets/screenshoty.png" alt="A screenshot of Flemma in action" />
@@ -82,14 +106,17 @@ require("flemma").setup({
     -- OpenAI default: "gpt-4o"
     -- Vertex default: "gemini-2.5-pro"
     parameters = {
-        max_tokens = nil,  -- Set to nil to use default (4000)
-        temperature = nil,  -- Set to nil to use default (0.7)
-        timeout = 120, -- Default cURL request timeout in seconds
-        connect_timeout = 10, -- Default cURL connection timeout in seconds
+        max_tokens = 4000, -- Default max tokens for all providers
+        temperature = 0.7, -- Default temperature for all providers
+        timeout = 120, -- Default response timeout for cURL requests
+        connect_timeout = 10, -- Default connection timeout for cURL requests
         vertex = {
             project_id = nil,  -- Google Cloud project ID (required for Vertex AI)
-            location = "us-central1",  -- Google Cloud region
-            thinking_budget = nil, -- Optional. Budget for model thinking, in tokens. `nil` or `0` disables thinking. Values `>= 1` enable thinking with the specified budget (integer part taken).
+            location = "global",  -- Google Cloud region
+            thinking_budget = nil, -- Optional. Budget for model thinking, in tokens. nil or 0 disables thinking. Values >= 1 enable thinking with the specified budget.
+        },
+        openai = {
+            reasoning = nil, -- Optional. "low", "medium", "high". Controls reasoning effort.
         },
     },
     highlights = {
@@ -123,6 +150,10 @@ require("flemma").setup({
     editing = {
         disable_textwidth = true,  -- Whether to disable textwidth in chat buffers
         auto_write = false,        -- Whether to automatically write the buffer after changes
+    },
+    logging = {
+        enabled = false, -- Logging disabled by default
+        path = vim.fn.stdpath("cache") .. "/flemma.log", -- Default log path
     },
     pricing = {
         enabled = true,  -- Whether to show pricing information in notifications
@@ -384,9 +415,9 @@ The project uses Nix for development environment management. This ensures all co
 #### Prerequisites
 
 1. Install [Nix](https://nixos.org/download.html)
-2. Set up your Anthropic API key:
+2. Set up your OpenAI API key:
    ```bash
-   export ANTHROPIC_API_KEY=your_key_here
+   export OPENAI_API_KEY=your_key_here
    ```
 
 #### Development Workflow
@@ -399,17 +430,20 @@ The project uses Nix for development environment management. This ensures all co
 
 2. Available development commands:
    - `flemma-dev`: Starts an Aider session with the correct files loaded
+   - `flemma-amp`: Starts an Amp CLI session
    - `flemma-fmt`: Reformats the codebase using:
-     - nixfmt for .nix files
-     - stylua for Lua files
-     - prettier for Markdown
+     - `nixfmt` for .nix files
+     - StyLua for Lua files
+     - Prettier for Markdown
 
 #### Quick Testing
 
 You can test changes without installing the plugin by running:
 
 ```bash
-nvim --cmd "set runtimepath+=`pwd`" -c 'lua require("flemma").setup({})' -c ':edit example.chat'
+nvim --cmd "set runtimepath+=`pwd`" \
+  -c 'lua require("flemma").setup({})' \
+  -c ':edit example.chat'
 ```
 
 This command:
@@ -420,18 +454,18 @@ This command:
 
 ### Development Guidelines
 
-This project represents a unique experiment in AI-driven development. From its inception to the present day, every single line of code has been written using [Aider](https://aider.chat), demonstrating the potential of AI-assisted development in creating quality software.
+This project represents a unique experiment in AI-driven development. From its inception to the present day, every single line of code has been written using [Aider](https://aider.chat/) and [Amp](https://ampcode.com/), demonstrating the potential of AI-assisted development in creating quality software.
 
-While I encourage contributors to explore AI-assisted development, particularly with Aider, I welcome all forms of quality contributions. The project's development guidelines are:
+While I encourage contributors to explore AI-assisted development, particularly with Amp, I welcome all forms of quality contributions. The project's development guidelines are:
 
-- **Consider Using Aider**: I recommend trying [Aider](https://aider.chat) for making changes - it's how this entire project was built
+- **Consider Using Aider or Amp**: I recommend trying [Aider](https://aider.chat/) or [Amp](https://ampcode.com/) for making changes - it's how this entire project was built
 - **Document AI Interactions**: If using AI tools, keep chat logs of significant conversations
 - **Use Formatting Tools**: Run `flemma-fmt` before committing to maintain consistent style
 - **Test Changes**: Use the quick testing command above to verify functionality
 - **Keep Focus**: Make small, focused changes in each development session
 
 > [!NOTE]
-> This project started as an experiment in pure AI-driven development, and to this day, every line of code has been written exclusively through Aider. I continue to maintain this approach in my own development while welcoming contributions from all developers who share a commitment to quality.
+> This project started as an experiment in pure AI-driven development, and to this day, every line of code has been written exclusively through AI tools like Aider and Amp. I continue to maintain this approach in my own development while welcoming contributions from all developers who share a commitment to quality.
 
 The goal is to demonstrate how far we can push AI-assisted development while maintaining code quality. Whether you choose to work with AI or write code directly, focus on creating clear, maintainable solutions.
 
