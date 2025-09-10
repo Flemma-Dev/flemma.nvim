@@ -262,6 +262,31 @@ function M.send_to_provider(opts)
     vim.notify("Flemma: " .. table.concat(error_lines, "\n"), vim.log.levels.WARN)
   end
 
+  -- Get endpoint first to check for fixtures
+  local endpoint = current_provider:get_endpoint()
+
+  -- Check if there's a fixture for this endpoint (for testing)
+  local client = require("flemma.client")
+  local fixture_path = client.find_fixture_for_endpoint(endpoint)
+
+  -- Only get API key and headers if not using a fixture
+  local headers
+  if not fixture_path then
+    -- Get API key if not using a fixture
+    local api_key = current_provider:get_api_key()
+    if not api_key then
+      vim.notify(
+        "Flemma: No API key available for provider '" .. state.get_config().provider .. "'.",
+        vim.log.levels.ERROR
+      )
+      return nil
+    end
+    headers = current_provider:get_request_headers()
+  else
+    -- For fixtures, provide dummy headers since they won't be used
+    headers = { "content-type: application/json" }
+  end
+
   -- Create request body using the validated model stored in the provider
   local request_body = current_provider:create_request_body(formatted_messages, system_message)
   last_request_body_for_testing = request_body -- Store for testing
@@ -635,13 +660,7 @@ function M.send_to_provider(opts)
     end,
   }
 
-  -- Get headers and endpoint from the provider
-  local headers = current_provider:get_request_headers()
-  local endpoint = current_provider:get_endpoint()
-
-  -- The client will handle fixture matching and API key validation
-
-  local client = require("flemma.client")
+  -- Headers and endpoint are already obtained above with API key validation
 
   -- Send the request using the client
   buffer_state.current_request = client.send_request({

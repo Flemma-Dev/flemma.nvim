@@ -22,7 +22,7 @@ function M.clear_fixtures()
 end
 
 -- Find fixture for a given endpoint
-local function find_fixture_for_endpoint(endpoint)
+function M.find_fixture_for_endpoint(endpoint)
   for pattern, fixture_path in pairs(registered_fixtures) do
     if endpoint:match(pattern) then
       log.debug(
@@ -157,7 +157,7 @@ function M.send_request(opts)
   end
 
   -- Check for registered fixture for this endpoint
-  local fixture_path = find_fixture_for_endpoint(opts.endpoint)
+  local fixture_path = M.find_fixture_for_endpoint(opts.endpoint)
 
   -- If no fixture, we'll use the real API with headers provided by the provider
   -- The provider's get_request_headers() already handles API key validation
