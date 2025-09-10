@@ -211,7 +211,7 @@ function M.send_to_provider(opts)
   end
 
   -- Parse messages from buffer using init module
-  local messages = require("flemma").parse_buffer(bufnr)
+  local messages = require("flemma.buffers").parse_buffer(bufnr)
 
   if #messages == 0 then
     log.warn("send_to_provider(): No messages found in buffer")

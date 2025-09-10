@@ -258,7 +258,7 @@ function M.update_ui(bufnr)
   -- Clear and reapply all signs
   vim.fn.sign_unplace("flemma_ns", { buffer = bufnr })
   -- We need access to the parse_buffer function from init.lua
-  require("flemma").parse_buffer(bufnr) -- This will reapply signs
+  require("flemma.buffers").parse_buffer(bufnr) -- This will reapply signs
 end
 
 -- Set up UI-related autocmds and initialization

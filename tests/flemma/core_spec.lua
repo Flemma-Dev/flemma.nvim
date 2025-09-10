@@ -37,7 +37,7 @@ describe(":FlemmaSend command", function()
     vim.cmd("FlemmaSend")
 
     -- Assert: Check that the captured request body matches the expected format for Claude
-    local captured_request_body = flemma._get_last_request_body()
+    local captured_request_body = require("flemma.core")._get_last_request_body()
     assert.is_not_nil(captured_request_body, "request_body was not captured")
 
     local expected_body = {
@@ -73,7 +73,7 @@ describe(":FlemmaSend command", function()
     -- Assert: Check that the captured request body matches the expected format for OpenAI
     local flemma = require("flemma")
     local state = require("flemma.state")
-    local captured_request_body = flemma._get_last_request_body()
+    local captured_request_body = require("flemma.core")._get_last_request_body()
     assert.is_not_nil(captured_request_body, "request_body was not captured")
 
     local config = state.get_config()

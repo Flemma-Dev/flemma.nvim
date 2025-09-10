@@ -84,31 +84,6 @@ M.setup = function(user_opts)
   })
 end
 
--- Cancel ongoing request if any (wrapper)
-M.cancel_request = function()
-  return core.cancel_request()
-end
-
--- Clean up spinner and prepare for response (wrapper)
-M.cleanup_spinner = function(bufnr)
-  return ui.cleanup_spinner(bufnr)
-end
-
--- Handle the AI provider interaction (wrapper)
-M.send_to_provider = function(opts)
-  return core.send_to_provider(opts)
-end
-
--- Parse buffer (wrapper)
-M.parse_buffer = function(bufnr)
-  return buffers.parse_buffer(bufnr)
-end
-
--- Legacy function for backward compatibility
-function M._get_last_request_body()
-  return core._get_last_request_body()
-end
-
 -- Get the current model name
 function M.get_current_model_name()
   local current_config = state.get_config()
