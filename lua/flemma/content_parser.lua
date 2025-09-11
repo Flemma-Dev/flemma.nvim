@@ -74,15 +74,17 @@ function M.parse(content_string)
           coroutine.yield({ type = "text", value = preceding_text })
         end
 
-        -- Clean the matched filename (remove trailing punctuation)
+        -- Clean the matched filename (remove trailing punctuation) and capture the stripped punctuation
         local filename_no_punctuation = raw_file_match:gsub("[%p]+$", "")
+        local stripped_punctuation = raw_file_match:sub(#filename_no_punctuation + 1)
         -- URL-decode the filename
         local cleaned_filename = url_decode(filename_no_punctuation)
 
         -- Construct the full raw match for logging (includes type override if present)
-        local full_raw_match = raw_file_match
+        -- For raw_filename, we want the clean filename without trailing punctuation
+        local full_raw_match = filename_no_punctuation
         if type_part then
-          full_raw_match = raw_file_match .. type_part
+          full_raw_match = filename_no_punctuation .. type_part
         end
 
         log.debug(
@@ -175,13 +177,13 @@ function M.parse(content_string)
             -- Collect warning for later emission
             table.insert(warnings, {
               filename = cleaned_filename,
-              raw_filename = raw_file_match,
+              raw_filename = full_raw_match,
               error = error_msg,
             })
             coroutine.yield({
               type = "file",
               filename = cleaned_filename,
-              raw_filename = raw_file_match,
+              raw_filename = full_raw_match,
               readable = false,
               error = error_msg,
             })
@@ -207,7 +209,10 @@ function M.parse(content_string)
             error = error_msg,
           })
         end
-        current_pos = end_pos + 1
+        -- Update current_pos to the start of any stripped punctuation
+        -- If there was no punctuation stripped, this will be end_pos + 1 as before
+        -- If there was punctuation stripped, this will point to the punctuation
+        current_pos = start_pos + 1 + #filename_no_punctuation + (type_part and #type_part or 0)
       else
         -- No more @file references found, add remaining text
         local remaining_text = string.sub(content_string, current_pos)

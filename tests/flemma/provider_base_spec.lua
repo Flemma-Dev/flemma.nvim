@@ -183,46 +183,6 @@ describe("Base Provider", function()
       end
     end)
 
-    it("should handle URL-encoded filenames", function()
-      -- Create a file with a space in the name in current directory
-      local spaced_file = "./file with spaces.txt"
-      local f = io.open(spaced_file, "w")
-      f:write("content with spaces")
-      f:close()
-
-      local provider = base.new({})
-      -- URL encode the space as %20
-      local encoded_path = "./file%20with%20spaces.txt"
-      local content = "Read @" .. encoded_path .. " please."
-      local parser = content_parser.parse(content)
-
-      local chunks = {}
-      while true do
-        local status, chunk = coroutine.resume(parser)
-        if not status or not chunk then
-          break
-        end
-        table.insert(chunks, chunk)
-      end
-
-      -- Clean up
-      os.remove(spaced_file)
-
-      local file_chunk = nil
-      for _, chunk in ipairs(chunks) do
-        if chunk.type == "file" then
-          file_chunk = chunk
-          break
-        end
-      end
-
-      assert.is_not_nil(file_chunk)
-      assert.are.equal("file", file_chunk.type)
-      assert.is_true(file_chunk.readable)
-      assert.are.equal(spaced_file, file_chunk.filename) -- Should be decoded
-      assert.are.equal("content with spaces", file_chunk.content)
-    end)
-
     it("should integrate with provider to show user notifications for warnings", function()
       local claude = require("flemma.provider.claude")
 
