@@ -156,6 +156,142 @@ describe("flemma.templating", function()
     end)
   end)
 
+  describe("relative and nested include() calls", function()
+    it("should resolve relative paths correctly with nested includes", function()
+      -- Get path to fixtures directory
+      local test_dir = vim.fn.fnamemodify(debug.getinfo(1).source:sub(2), ":h:h") .. "/fixtures/include_test"
+      local main_file = test_dir .. "/main.chat"
+
+      -- Read the content from the fixture file
+      local file = io.open(main_file, "r")
+      assert.is_not_nil(file, "Could not open test fixture file: " .. main_file)
+      local content = file:read("*a")
+      file:close()
+
+      -- Create a buffer with the main content
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      local lines = vim.split(content, "\n", { plain = true })
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Set the buffer name to simulate the file path for include resolution
+      vim.api.nvim_buf_set_name(bufnr, main_file)
+
+      -- Parse messages from the buffer
+      local messages = buffers.parse_buffer(bufnr)
+
+      -- Create evaluation environment with filename and include stack
+      local eval_env = eval.create_safe_env()
+      eval_env.__filename = main_file
+      eval_env.__include_stack = {}
+
+      -- Process expressions in the message content
+      assert.are.equal(1, #messages, "Should parse 1 message")
+      assert.are.equal("You", messages[1].type)
+
+      local processed_content = process_expressions(messages[1].content, eval_env)
+
+      -- Verify the nested includes are resolved correctly
+      -- Expected: "Main prompt. Including Base content. Including This is a nested detail."
+      -- Note: trim trailing whitespace that might come from file reads
+      local expected = "Main prompt. Including Base content. Including This is a nested detail."
+      assert.are.equal(expected, processed_content:gsub("%s+$", ""))
+    end)
+
+    it("should handle multiple levels of nested includes correctly", function()
+      -- Create a more complex nested structure in memory for this test
+      local temp_dir = vim.fn.tempname() .. "_include_test"
+      vim.fn.mkdir(temp_dir, "p")
+      vim.fn.mkdir(temp_dir .. "/level1", "p")
+      vim.fn.mkdir(temp_dir .. "/level1/level2", "p")
+
+      -- Create test files
+      local level2_file = temp_dir .. "/level1/level2/deep.txt"
+      local level1_file = temp_dir .. "/level1/middle.txt"
+      local main_file = temp_dir .. "/main.chat"
+
+      -- Write content to files
+      local f = io.open(level2_file, "w")
+      f:write("Deep content")
+      f:close()
+
+      f = io.open(level1_file, "w")
+      f:write("Middle content with {{ include('./level2/deep.txt') }}")
+      f:close()
+
+      f = io.open(main_file, "w")
+      f:write("@You: Root content with {{ include('./level1/middle.txt') }}")
+      f:close()
+
+      -- Read and process
+      f = io.open(main_file, "r")
+      local content = f:read("*a")
+      f:close()
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      local lines = vim.split(content, "\n", { plain = true })
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+      vim.api.nvim_buf_set_name(bufnr, main_file)
+
+      local messages = buffers.parse_buffer(bufnr)
+      local eval_env = eval.create_safe_env()
+      eval_env.__filename = main_file
+      eval_env.__include_stack = {}
+
+      local processed_content = process_expressions(messages[1].content, eval_env)
+
+      assert.are.equal("Root content with Middle content with Deep content", processed_content:gsub("%s+$", ""))
+
+      -- Clean up temp files
+      vim.fn.delete(temp_dir, "rf")
+    end)
+
+    it("should detect circular includes and prevent infinite recursion", function()
+      -- Create circular include structure
+      local temp_dir = vim.fn.tempname() .. "_circular_test"
+      vim.fn.mkdir(temp_dir, "p")
+
+      local file_a = temp_dir .. "/a.txt"
+      local file_b = temp_dir .. "/b.txt"
+      local main_file = temp_dir .. "/main.chat"
+
+      -- Create circular references: a includes b, b includes a
+      local f = io.open(file_a, "w")
+      f:write("A includes {{ include('./b.txt') }}")
+      f:close()
+
+      f = io.open(file_b, "w")
+      f:write("B includes {{ include('./a.txt') }}")
+      f:close()
+
+      f = io.open(main_file, "w")
+      f:write("@You: Main includes {{ include('./a.txt') }}")
+      f:close()
+
+      -- Read and process - this should error
+      f = io.open(main_file, "r")
+      local content = f:read("*a")
+      f:close()
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      local lines = vim.split(content, "\n", { plain = true })
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+      vim.api.nvim_buf_set_name(bufnr, main_file)
+
+      local messages = buffers.parse_buffer(bufnr)
+      local eval_env = eval.create_safe_env()
+      eval_env.__filename = main_file
+      eval_env.__include_stack = {}
+
+      -- Should throw error about circular include
+      assert.has_error(function()
+        process_expressions(messages[1].content, eval_env)
+      end)
+
+      -- Clean up temp files
+      vim.fn.delete(temp_dir, "rf")
+    end)
+  end)
+
   describe("integration with FlemmaSend workflow", function()
     -- This test simulates how the templating system should integrate with the main send workflow
     -- It mocks the provider to capture the processed messages
