@@ -209,10 +209,11 @@ function M.create_request_body(self, formatted_messages, _)
     },
   }
 
-  -- Conditionally set max_tokens or max_completion_tokens and add reasoning_effort
+  -- Use max_completion_tokens for all OpenAI models (recommended by OpenAI)
+  request_body.max_completion_tokens = self.parameters.max_tokens
+
   if self.parameters.reasoning and self.parameters.reasoning ~= "" then
-    request_body.max_completion_tokens = self.parameters.max_tokens
-    request_body.reasoning_effort = self.parameters.reasoning -- Add reasoning_effort
+    request_body.reasoning_effort = self.parameters.reasoning
     log.debug(
       "openai.create_request_body: Using max_completion_tokens: "
         .. tostring(self.parameters.max_tokens)
@@ -220,10 +221,9 @@ function M.create_request_body(self, formatted_messages, _)
         .. self.parameters.reasoning
     )
   else
-    request_body.max_tokens = self.parameters.max_tokens
-    request_body.temperature = self.parameters.temperature -- Set temperature if not using reasoning
+    request_body.temperature = self.parameters.temperature
     log.debug(
-      "openai.create_request_body: Using max_tokens: "
+      "openai.create_request_body: Using max_completion_tokens: "
         .. tostring(self.parameters.max_tokens)
         .. " and temperature: "
         .. tostring(self.parameters.temperature)

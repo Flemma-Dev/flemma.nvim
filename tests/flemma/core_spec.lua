@@ -85,7 +85,7 @@ describe(":FlemmaSend command", function()
       },
       stream = true,
       stream_options = { include_usage = true },
-      max_tokens = config.parameters.max_tokens,
+      max_completion_tokens = config.parameters.max_tokens,
       temperature = config.parameters.temperature,
     }
 
