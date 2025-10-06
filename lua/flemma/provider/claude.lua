@@ -35,7 +35,11 @@ function M.get_api_key(self)
   })
 end
 
--- Format messages for Claude API
+---Format messages for Claude API
+---
+---@param messages table[] The messages to format
+---@return table[] formatted_messages The formatted messages
+---@return string|nil system_message The extracted system message
 function M.format_messages(self, messages)
   local formatted = {}
   local system_message = nil -- System message is handled in create_request_body
@@ -58,15 +62,20 @@ function M.format_messages(self, messages)
   return formatted, system_message
 end
 
--- Create request body for Claude API
-function M.create_request_body(self, formatted_messages, system_message)
+---Create request body for Claude API
+---
+---@param formatted_messages table[] The formatted messages
+---@param system_message string|nil The system message
+---@param context Context The shared context object for resolving file paths
+---@return table request_body The request body for the API
+function M.create_request_body(self, formatted_messages, system_message, context)
   local api_messages = {}
   local collected_warnings = {} -- Collect all warnings to notify user
 
   for _, msg in ipairs(formatted_messages) do
     if msg.role == "user" then
       local content_blocks = {} -- Will hold {type="text", text=...} or {type="image", source=...} etc.
-      local content_parser_coro = content_parser.parse(msg.content)
+      local content_parser_coro = content_parser.parse(msg.content, context)
 
       while true do
         local status, chunk = coroutine.resume(content_parser_coro)

@@ -210,8 +210,11 @@ function M.send_to_provider(opts)
     return
   end
 
+  -- Create context ONCE for the entire pipeline (used by frontmatter, @./file refs, etc.)
+  local context = require("flemma.context").from_buffer(bufnr)
+
   -- Parse messages from buffer using init module
-  local messages = require("flemma.buffers").parse_buffer(bufnr)
+  local messages = require("flemma.buffers").parse_buffer(bufnr, context)
 
   if #messages == 0 then
     log.warn("send_to_provider(): No messages found in buffer")
@@ -288,7 +291,7 @@ function M.send_to_provider(opts)
   end
 
   -- Create request body using the validated model stored in the provider
-  local request_body = current_provider:create_request_body(formatted_messages, system_message)
+  local request_body = current_provider:create_request_body(formatted_messages, system_message, context)
   last_request_body_for_testing = request_body -- Store for testing
 
   -- Log the request details (using the provider's stored model)

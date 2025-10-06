@@ -36,8 +36,12 @@ function M.parse(lines)
   return table.concat(frontmatter, "\n"), content
 end
 
--- Execute frontmatter code in a safe environment
-function M.execute(code, chat_file_path)
+---Execute frontmatter code in a safe environment
+---
+---@param code string The Lua code from frontmatter
+---@param context Context The shared context object with __filename and __include_stack
+---@return table environment The environment with frontmatter variables
+function M.execute(code, context)
   if not code then
     return {}
   end
@@ -45,14 +49,11 @@ function M.execute(code, chat_file_path)
   -- Create a base environment for frontmatter execution
   local env_for_frontmatter = eval.create_safe_env()
 
-  -- Set __filename and __include_stack if chat_file_path is provided,
-  -- enabling include() usage within frontmatter.
-  if chat_file_path and chat_file_path ~= "" then
-    env_for_frontmatter.__filename = chat_file_path
-    env_for_frontmatter.__include_stack = { chat_file_path }
-  else
-    -- If chat_file_path is not available, include() will error if called from frontmatter,
-    -- as __filename would be nil. This is acceptable as include() primarily makes sense with a file context.
+  -- Explicitly set required fields from context for include() support
+  if context then
+    env_for_frontmatter.__filename = context.__filename
+    env_for_frontmatter.__include_stack = context.__include_stack
+      or (context.__filename and { context.__filename } or nil)
   end
 
   return eval.execute_safe(code, env_for_frontmatter)

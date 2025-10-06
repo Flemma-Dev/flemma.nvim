@@ -187,7 +187,11 @@ function M.get_api_key(self)
   return nil
 end
 
--- Format messages for Vertex AI API
+---Format messages for Vertex AI API
+---
+---@param messages table[] The messages to format
+---@return table[] formatted_messages The formatted messages
+---@return string|nil system_content The extracted system message
 function M.format_messages(self, messages)
   local formatted = {}
   local system_content = nil
@@ -220,8 +224,13 @@ function M.format_messages(self, messages)
   return formatted, system_content
 end
 
--- Create request body for Vertex AI API
-function M.create_request_body(self, formatted_messages, system_message)
+---Create request body for Vertex AI API
+---
+---@param formatted_messages table[] The formatted messages
+---@param system_message string|nil The system message
+---@param context Context The shared context object for resolving file paths
+---@return table request_body The request body for the API
+function M.create_request_body(self, formatted_messages, system_message, context)
   -- Convert formatted_messages to Vertex AI format
   local contents = {}
   local collected_warnings = {} -- Collect all warnings to notify user
@@ -229,7 +238,7 @@ function M.create_request_body(self, formatted_messages, system_message)
   for _, msg in ipairs(formatted_messages) do
     local parts = {}
     if msg.role == "user" then
-      local content_parser_coro = content_parser.parse(msg.content)
+      local content_parser_coro = content_parser.parse(msg.content, context)
       while true do
         local status, chunk = coroutine.resume(content_parser_coro)
         if not status or not chunk then -- Coroutine finished or errored

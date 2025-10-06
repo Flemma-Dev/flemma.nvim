@@ -180,6 +180,191 @@ describe("File References and Path Parsing", function()
     end)
   end)
 
+  describe("buffer-relative path resolution", function()
+    it("resolves file paths relative to buffer directory instead of working directory", function()
+      -- Create a temporary directory structure
+      local temp_dir = vim.fn.tempname() .. "_file_ref_test"
+      vim.fn.mkdir(temp_dir, "p")
+      vim.fn.mkdir(temp_dir .. "/subdir", "p")
+
+      -- Create a test file in the subdirectory
+      local test_file_path = temp_dir .. "/subdir/data.txt"
+      local test_file = io.open(test_file_path, "w")
+      test_file:write("Test file content from subdir")
+      test_file:close()
+
+      -- Mock vim.fn.filereadable to return success
+      local filereadable_stub = create_stub(vim.fn, "filereadable")
+      filereadable_stub.returns(1)
+
+      -- Mock mime_util.get_mime_type
+      local mime_util = require("flemma.mime")
+      local mime_stub = create_stub(mime_util, "get_mime_type")
+      mime_stub.returns("text/plain", nil)
+
+      -- Mock io.open to return our test file content
+      local mock_file = {
+        read = function(self, mode)
+          if mode == "*a" then
+            return "Test file content from subdir"
+          end
+        end,
+        close = function(self) end,
+      }
+      local io_open_stub = create_stub(io, "open")
+      io_open_stub.returns(mock_file)
+
+      -- Test with context containing __filename (unified with eval environment pattern)
+      local context = { __filename = temp_dir .. "/subdir/test.chat" }
+      local test_content = "Check @./data.txt"
+      local parser = content_parser.parse(test_content, context)
+
+      local chunks = {}
+      while true do
+        local status, chunk = coroutine.resume(parser)
+        if not status or not chunk then
+          break
+        end
+        table.insert(chunks, chunk)
+      end
+
+      local file_chunk = nil
+      for _, chunk in ipairs(chunks) do
+        if chunk.type == "file" then
+          file_chunk = chunk
+          break
+        end
+      end
+
+      assert.is_not_nil(file_chunk)
+      assert.equals("file", file_chunk.type)
+      -- The filename should be resolved relative to buffer_dir
+      assert.equals(temp_dir .. "/subdir/data.txt", file_chunk.filename)
+      assert.equals("./data.txt", file_chunk.raw_filename)
+
+      -- Verify that vim.fn.filereadable was called with the resolved path
+      assert.stub(filereadable_stub).was_called_with(temp_dir .. "/subdir/data.txt")
+
+      -- Clean up
+      vim.fn.delete(temp_dir, "rf")
+    end)
+
+    it("handles parent directory references relative to buffer", function()
+      -- Create a temporary directory structure
+      local temp_dir = vim.fn.tempname() .. "_file_ref_parent_test"
+      vim.fn.mkdir(temp_dir, "p")
+      vim.fn.mkdir(temp_dir .. "/subdir", "p")
+
+      -- Create a test file in the parent directory
+      local test_file_path = temp_dir .. "/parent.txt"
+      local test_file = io.open(test_file_path, "w")
+      test_file:write("Parent file content")
+      test_file:close()
+
+      -- Mock vim.fn.filereadable to return success
+      local filereadable_stub = create_stub(vim.fn, "filereadable")
+      filereadable_stub.returns(1)
+
+      -- Mock mime_util.get_mime_type
+      local mime_util = require("flemma.mime")
+      local mime_stub = create_stub(mime_util, "get_mime_type")
+      mime_stub.returns("text/plain", nil)
+
+      -- Mock io.open
+      local mock_file = {
+        read = function(self, mode)
+          if mode == "*a" then
+            return "Parent file content"
+          end
+        end,
+        close = function(self) end,
+      }
+      local io_open_stub = create_stub(io, "open")
+      io_open_stub.returns(mock_file)
+
+      -- Test with context containing __filename in subdir, referencing parent
+      local context = { __filename = temp_dir .. "/subdir/test.chat" }
+      local test_content = "Check @../parent.txt"
+      local parser = content_parser.parse(test_content, context)
+
+      local chunks = {}
+      while true do
+        local status, chunk = coroutine.resume(parser)
+        if not status or not chunk then
+          break
+        end
+        table.insert(chunks, chunk)
+      end
+
+      local file_chunk = nil
+      for _, chunk in ipairs(chunks) do
+        if chunk.type == "file" then
+          file_chunk = chunk
+          break
+        end
+      end
+
+      assert.is_not_nil(file_chunk)
+      -- The filename should be resolved relative to buffer_dir
+      assert.equals(temp_dir .. "/parent.txt", file_chunk.filename)
+      assert.equals("../parent.txt", file_chunk.raw_filename)
+
+      -- Clean up
+      vim.fn.delete(temp_dir, "rf")
+    end)
+
+    it("uses working directory when context is nil or has no __filename", function()
+      -- Mock vim.fn.filereadable to return success
+      local filereadable_stub = create_stub(vim.fn, "filereadable")
+      filereadable_stub.returns(1)
+
+      -- Mock mime_util.get_mime_type
+      local mime_util = require("flemma.mime")
+      local mime_stub = create_stub(mime_util, "get_mime_type")
+      mime_stub.returns("text/plain", nil)
+
+      -- Mock io.open
+      local mock_file = {
+        read = function(self, mode)
+          if mode == "*a" then
+            return "content"
+          end
+        end,
+        close = function(self) end,
+      }
+      local io_open_stub = create_stub(io, "open")
+      io_open_stub.returns(mock_file)
+
+      -- Test without context (should use working directory)
+      local test_content = "Check @./file.txt"
+      local parser = content_parser.parse(test_content, nil)
+
+      local chunks = {}
+      while true do
+        local status, chunk = coroutine.resume(parser)
+        if not status or not chunk then
+          break
+        end
+        table.insert(chunks, chunk)
+      end
+
+      local file_chunk = nil
+      for _, chunk in ipairs(chunks) do
+        if chunk.type == "file" then
+          file_chunk = chunk
+          break
+        end
+      end
+
+      assert.is_not_nil(file_chunk)
+      -- The filename should remain as-is (not resolved)
+      assert.equals("./file.txt", file_chunk.filename)
+
+      -- Verify that vim.fn.filereadable was called with the non-resolved path
+      assert.stub(filereadable_stub).was_called_with("./file.txt")
+    end)
+  end)
+
   describe("trailing punctuation handling", function()
     it("removes various types of trailing punctuation from file paths", function()
       -- Mock vim.fn.filereadable to return success

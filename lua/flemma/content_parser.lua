@@ -17,26 +17,28 @@ end
 
 local M = {}
 
--- Parse message content into chunks of text or file references using a coroutine.
--- This function returns a coroutine that, when resumed, yields chunks of the input string.
--- Chunks can be of type "text", "file", or "warnings".
---
--- "text" chunks have a `value` field containing the text segment.
--- "file" chunks represent `@./path/to/file.ext` references and include:
---   - `filename`: The cleaned path to the file.
---   - `raw_filename`: The originally matched filename string (e.g., "./path/to/file.ext").
---   - `content`: The binary content of the file if readable.
---   - `mime_type`: The detected MIME type of the file if readable.
---   - `readable`: A boolean indicating if the file was found and readable.
---   - `error`: An error message if the file was not readable or an error occurred.
--- "warnings" chunks contain a `warnings` array with objects containing:
---   - `filename`: The cleaned filename that caused the warning.
---   - `raw_filename`: The original filename reference.
---   - `error`: The error message describing the issue.
---
--- @param content_string string The string content to parse.
--- @return coroutine A coroutine that yields parsed chunks.
-function M.parse(content_string)
+---Parse message content into chunks of text or file references using a coroutine
+---
+---This function returns a coroutine that, when resumed, yields chunks of the input string.
+---Chunks can be of type "text", "file", or "warnings".
+---
+---"text" chunks have a `value` field containing the text segment.
+---"file" chunks represent `@./path/to/file.ext` references and include:
+---  - `filename`: The cleaned path to the file.
+---  - `raw_filename`: The originally matched filename string (e.g., "./path/to/file.ext").
+---  - `content`: The binary content of the file if readable.
+---  - `mime_type`: The detected MIME type of the file if readable.
+---  - `readable`: A boolean indicating if the file was found and readable.
+---  - `error`: An error message if the file was not readable or an error occurred.
+---"warnings" chunks contain a `warnings` array with objects containing:
+---  - `filename`: The cleaned filename that caused the warning.
+---  - `raw_filename`: The original filename reference.
+---  - `error`: The error message describing the issue.
+---
+---@param content_string string The string content to parse
+---@param context Context|nil Optional context with __filename for resolving relative paths
+---@return thread coroutine A coroutine that yields parsed chunks
+function M.parse(content_string, context)
   -- Inner function that implements the parsing logic for the coroutine.
   -- It iterates through the content_string, identifying text segments and
   -- file references, yielding them one by one.
@@ -79,6 +81,13 @@ function M.parse(content_string)
         local stripped_punctuation = raw_file_match:sub(#filename_no_punctuation + 1)
         -- URL-decode the filename
         local cleaned_filename = url_decode(filename_no_punctuation)
+
+        -- If context with __filename is provided and filename is relative, resolve it relative to buffer directory
+        -- This mirrors the include() behavior from eval.lua
+        if context and context.__filename and cleaned_filename:match("^%.%.?/") then
+          local buffer_dir = vim.fn.fnamemodify(context.__filename, ":h")
+          cleaned_filename = vim.fn.simplify(buffer_dir .. "/" .. cleaned_filename)
+        end
 
         -- Construct the full raw match for logging (includes type override if present)
         -- For raw_filename, we want the clean filename without trailing punctuation

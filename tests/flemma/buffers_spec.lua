@@ -17,7 +17,8 @@ describe("flemma.parse_buffer", function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
     local flemma = require("flemma")
-    local messages, frontmatter_code = require("flemma.buffers").parse_buffer(bufnr)
+    local context = require("flemma.context").from_file("test.chat")
+    local messages, frontmatter_code = require("flemma.buffers").parse_buffer(bufnr, context)
 
     -- Assertions
     assert.are.equal(2, #messages, "Should parse 2 messages")

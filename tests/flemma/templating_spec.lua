@@ -27,11 +27,12 @@ describe("flemma.templating", function()
 
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      -- Parse buffer to get messages and frontmatter
-      local messages, frontmatter_code = buffers.parse_buffer(bufnr)
+      -- Create context and parse buffer (frontmatter will be executed automatically)
+      local context = require("flemma.context").from_file("test.chat")
+      local messages, frontmatter_code = buffers.parse_buffer(bufnr, context)
 
-      -- Execute frontmatter to get environment
-      local frontmatter_env = frontmatter.execute(frontmatter_code, "test.chat")
+      -- Execute frontmatter again to get environment for testing
+      local frontmatter_env = frontmatter.execute(frontmatter_code, context)
 
       -- Create evaluation environment with frontmatter variables
       local eval_env = eval.create_safe_env()
@@ -66,8 +67,9 @@ describe("flemma.templating", function()
 
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      local messages, frontmatter_code = buffers.parse_buffer(bufnr)
-      local frontmatter_env = frontmatter.execute(frontmatter_code, "test.chat")
+      local context = require("flemma.context").from_file("test.chat")
+      local messages, frontmatter_code = buffers.parse_buffer(bufnr, context)
+      local frontmatter_env = frontmatter.execute(frontmatter_code, context)
 
       local eval_env = eval.create_safe_env()
       for k, v in pairs(frontmatter_env) do
@@ -92,8 +94,9 @@ describe("flemma.templating", function()
 
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      local messages, frontmatter_code = buffers.parse_buffer(bufnr)
-      local frontmatter_env = frontmatter.execute(frontmatter_code, "test.chat")
+      local context = require("flemma.context").from_file("test.chat")
+      local messages, frontmatter_code = buffers.parse_buffer(bufnr, context)
+      local frontmatter_env = frontmatter.execute(frontmatter_code, context)
 
       local eval_env = eval.create_safe_env()
       for k, v in pairs(frontmatter_env) do
@@ -117,8 +120,9 @@ describe("flemma.templating", function()
 
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      local messages, frontmatter_code = buffers.parse_buffer(bufnr)
-      local frontmatter_env = frontmatter.execute(frontmatter_code, "test.chat")
+      local context = require("flemma.context").from_file("test.chat")
+      local messages, frontmatter_code = buffers.parse_buffer(bufnr, context)
+      local frontmatter_env = frontmatter.execute(frontmatter_code, context)
 
       local eval_env = eval.create_safe_env()
       for k, v in pairs(frontmatter_env) do
@@ -142,8 +146,9 @@ describe("flemma.templating", function()
 
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      local messages, frontmatter_code = buffers.parse_buffer(bufnr)
-      local frontmatter_env = frontmatter.execute(frontmatter_code, "test.chat")
+      local context = require("flemma.context").from_file("test.chat")
+      local messages, frontmatter_code = buffers.parse_buffer(bufnr, context)
+      local frontmatter_env = frontmatter.execute(frontmatter_code, context)
 
       local eval_env = eval.create_safe_env()
       for k, v in pairs(frontmatter_env) do
@@ -311,8 +316,9 @@ describe("flemma.templating", function()
       -- This test focuses on the templating logic rather than provider integration
 
       -- Parse and process the buffer content
-      local messages, frontmatter_code = buffers.parse_buffer(bufnr)
-      local frontmatter_env = frontmatter.execute(frontmatter_code, "test.chat")
+      local context = require("flemma.context").from_file("test.chat")
+      local messages, frontmatter_code = buffers.parse_buffer(bufnr, context)
+      local frontmatter_env = frontmatter.execute(frontmatter_code, context)
 
       local eval_env = eval.create_safe_env()
       for k, v in pairs(frontmatter_env) do

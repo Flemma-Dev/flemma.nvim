@@ -106,13 +106,22 @@ function M.get_api_key(self, opts)
   return self.state.api_key
 end
 
--- Format messages for API (to be implemented by specific providers)
+---Format messages for API (to be implemented by specific providers)
+---
+---@param messages table[] The messages to format
+---@return table[] formatted_messages The formatted messages
+---@return string|nil system_message The extracted system message
 function M.format_messages(self, messages)
   -- To be implemented by specific providers
 end
 
--- Create request body (to be implemented by specific providers)
-function M.create_request_body(self, formatted_messages, system_message)
+---Create request body (to be implemented by specific providers)
+---
+---@param formatted_messages table[] The formatted messages
+---@param system_message string|nil The system message
+---@param context Context The shared context object for resolving file paths
+---@return table request_body The request body for the API
+function M.create_request_body(self, formatted_messages, system_message, context)
   -- To be implemented by specific providers
 end
 

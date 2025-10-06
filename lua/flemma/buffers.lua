@@ -228,14 +228,24 @@ local function parse_message(bufnr, lines, start_idx, frontmatter_offset)
   return result, i - 1
 end
 
--- Parse the entire buffer into a sequence of messages
-function M.parse_buffer(bufnr)
+---Parse the entire buffer into a sequence of messages
+---
+---@param bufnr number The buffer number
+---@param context Context The shared context object for frontmatter execution and file path resolution
+---@return table[] messages The parsed messages
+---@return string|nil frontmatter_code The frontmatter code if present
+function M.parse_buffer(bufnr, context)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local messages = {}
 
-  -- Handle frontmatter if present
+  -- Handle frontmatter if present (using shared context)
   local frontmatter = require("flemma.frontmatter")
   local fm_code, content = frontmatter.parse(lines)
+
+  -- Execute frontmatter if present (context is optional unless include() is used)
+  if fm_code then
+    frontmatter.execute(fm_code, context)
+  end
 
   -- Calculate frontmatter offset for sign placement
   local frontmatter_offset = 0

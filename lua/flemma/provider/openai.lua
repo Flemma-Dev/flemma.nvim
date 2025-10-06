@@ -35,7 +35,11 @@ function M.get_api_key(self)
   })
 end
 
--- Format messages for OpenAI API
+---Format messages for OpenAI API
+---
+---@param messages table[] The messages to format
+---@return table[] formatted_messages The formatted messages
+---@return string|nil system_message The extracted system message
 function M.format_messages(self, messages)
   local formatted = {}
   local system_message = nil
@@ -76,8 +80,13 @@ function M.format_messages(self, messages)
   return formatted, system_message -- Return formatted messages and the extracted system message
 end
 
--- Create request body for OpenAI API
-function M.create_request_body(self, formatted_messages, _)
+---Create request body for OpenAI API
+---
+---@param formatted_messages table[] The formatted messages
+---@param _ string|nil The system message (unused, included in formatted_messages)
+---@param context Context The shared context object for resolving file paths
+---@return table request_body The request body for the API
+function M.create_request_body(self, formatted_messages, _, context)
   local api_messages = {}
   local collected_warnings = {} -- Collect all warnings to notify user
 
@@ -86,7 +95,7 @@ function M.create_request_body(self, formatted_messages, _)
       local content_parts_for_api = {} -- Holds {type="text", text=...} or other part types
       local has_multimedia_part = false -- Flag if content must be an array (e.g., for images, PDFs)
 
-      local content_parser_coro = content_parser.parse(msg.content)
+      local content_parser_coro = content_parser.parse(msg.content, context)
       while true do
         local status, chunk = coroutine.resume(content_parser_coro)
         if not status or not chunk then -- Coroutine finished or errored
