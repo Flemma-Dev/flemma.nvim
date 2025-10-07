@@ -3,11 +3,23 @@ local M = {}
 
 local eval = require("flemma.eval")
 local context_util = require("flemma.context")
+local parsers_registry = require("flemma.frontmatter.parsers")
+
+-- Register built-in parsers
+parsers_registry.register("lua", require("flemma.frontmatter.parsers.lua").parse)
+parsers_registry.register("json", require("flemma.frontmatter.parsers.json").parse)
 
 -- Parse frontmatter from lines
+-- Returns: (language, code, content) or (nil, nil, lines)
 function M.parse(lines)
-  if not lines[1] or not lines[1]:match("^```lua%s*$") then
-    return nil, lines
+  if not lines[1] then
+    return nil, nil, lines
+  end
+
+  -- Extract language identifier from opening fence
+  local language = lines[1]:match("^```(%w+)%s*$")
+  if not language then
+    return nil, nil, lines
   end
 
   local frontmatter = {}
@@ -26,7 +38,7 @@ function M.parse(lines)
 
   -- If we never found the closing ```, treat everything as content
   if in_frontmatter then
-    return nil, lines
+    return nil, nil, lines
   end
 
   -- Collect remaining lines as content
@@ -34,7 +46,7 @@ function M.parse(lines)
     table.insert(content, lines[i])
   end
 
-  return table.concat(frontmatter, "\n"), content
+  return language, table.concat(frontmatter, "\n"), content
 end
 
 ---Execute frontmatter code in a safe environment
@@ -42,10 +54,11 @@ end
 ---Returns a context object (clone of the input context) extended with
 ---user-defined variables from the frontmatter code.
 ---
----@param code string The Lua code from frontmatter
+---@param language string The language identifier (e.g., "lua", "json")
+---@param code string The frontmatter code
 ---@param context Context The shared context object
 ---@return Context exec_context A context object with user-defined variables added
-function M.execute(code, context)
+function M.execute(language, code, context)
   -- Start with a cloned context (or empty table if no context)
   local exec_context = context_util.clone(context)
 
@@ -54,19 +67,23 @@ function M.execute(code, context)
     return exec_context
   end
 
-  -- Create a base safe environment and merge in the context
-  local env_for_frontmatter = eval.create_safe_env()
-
-  -- Add all context fields to the execution environment
-  for k, v in pairs(exec_context) do
-    env_for_frontmatter[k] = v
+  -- Get the appropriate parser for the language
+  local parser = parsers_registry.get(language)
+  if not parser then
+    error(
+      string.format(
+        "Unsupported frontmatter language '%s'. Supported: %s",
+        language,
+        table.concat(parsers_registry.supported_languages(), ", ")
+      )
+    )
   end
 
-  -- Execute and get user-defined globals
-  local user_globals = eval.execute_safe(code, env_for_frontmatter)
+  -- Parse the frontmatter code using the language-specific parser
+  local frontmatter_vars = parser(code, exec_context)
 
-  -- Add user-defined variables to the execution context
-  for k, v in pairs(user_globals) do
+  -- Add parsed variables to the execution context
+  for k, v in pairs(frontmatter_vars) do
     exec_context[k] = v
   end
 

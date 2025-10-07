@@ -52,8 +52,8 @@ function M.get_fold_level(lnum)
   local next_line_num = lnum + 1
   local last_buf_line = vim.fn.line("$")
 
-  -- Level 3 folds: ```lua ... ``` (only if ```lua is on the first line)
-  if lnum == 1 and line:match("^```lua$") then
+  -- Level 3 folds: ```<language> ... ``` (only if on the first line)
+  if lnum == 1 and line:match("^```%w+$") then
     return ">3"
   elseif line:match("^```$") then
     return "<3"
@@ -91,12 +91,13 @@ function M.get_fold_text()
   local total_fold_lines = foldend_lnum - foldstart_lnum + 1
 
   -- Check for frontmatter fold (level 3) - only if it started on line 1
-  if foldstart_lnum == 1 and first_line_content:match("^```lua$") then
+  local fm_language = first_line_content:match("^```(%w+)$")
+  if foldstart_lnum == 1 and fm_language then
     local preview = get_fold_content_preview(foldstart_lnum, foldend_lnum)
     if preview ~= "" then
-      return string.format("```lua %s ``` (%d lines)", preview, total_fold_lines)
+      return string.format("```%s %s ``` (%d lines)", fm_language, preview, total_fold_lines)
     else
-      return string.format("```lua (%d lines)", total_fold_lines)
+      return string.format("```%s (%d lines)", fm_language, total_fold_lines)
     end
   end
 
@@ -415,7 +416,7 @@ function M.update_ui(bufnr)
   -- Parse messages for sign placement without executing frontmatter
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local frontmatter = require("flemma.frontmatter")
-  local fm_code, content = frontmatter.parse(lines)
+  local fm_language, fm_code, content = frontmatter.parse(lines)
 
   local frontmatter_offset = 0
   if fm_code then

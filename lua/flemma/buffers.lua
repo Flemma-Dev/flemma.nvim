@@ -135,17 +135,21 @@ function M.parse_buffer(bufnr, context)
 
   -- Handle frontmatter if present (using shared context)
   local frontmatter = require("flemma.frontmatter")
-  local fm_code, content = frontmatter.parse(lines)
+  local fm_language, fm_code, content = frontmatter.parse(lines)
 
   -- Execute frontmatter if present (returns a context object with user variables)
   local fm_context = {}
-  if fm_code then
-    local ok, context_or_err = pcall(frontmatter.execute, fm_code, context)
+  if fm_code and fm_language then
+    local ok, context_or_err = pcall(frontmatter.execute, fm_language, fm_code, context)
     if ok then
       fm_context = context_or_err
     else
       log.error("parse_buffer(): Frontmatter execution error: " .. tostring(context_or_err))
-      vim.notify("Flemma: Frontmatter error: " .. tostring(context_or_err), vim.log.levels.ERROR)
+      local error_lines = {
+        string.format("Frontmatter (%s) execution error:", fm_language),
+        string.format("  %s", tostring(context_or_err)),
+      }
+      vim.notify("Flemma: " .. table.concat(error_lines, "\n"), vim.log.levels.WARN)
       fm_context = require("flemma.context").clone(context)
     end
   else

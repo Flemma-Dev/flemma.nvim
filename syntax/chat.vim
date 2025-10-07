@@ -24,14 +24,16 @@ syntax match FlemmaThinkingTag "^<thinking>$" contained
 syntax match FlemmaThinkingTag "^</thinking>$" contained
 
 " Define Frontmatter Tags (for highlighting the delimiters themselves)
-syntax match FlemmaFrontmatterTag "^```lua$" contained
+" Only match supported languages: lua, json
+syntax match FlemmaFrontmatterTag "^```\(lua\|json\)$" contained
 syntax match FlemmaFrontmatterTag "^```$" contained
 
 " Define regions
-" Frontmatter Block Region (top-level)
-" This region starts with ```lua on the first line of the file and ends with ```.
-" It contains the tags themselves (FlemmaFrontmatterTag) and Lua syntax for the content.
-syntax region FlemmaFrontmatterBlock start="\%1l^```lua$" end="^```$" keepend contains=FlemmaFrontmatterTag,@Lua
+" Frontmatter Block Regions (top-level)
+" These regions start with ```<language> on the first line of the file and end with ```.
+" Each contains the tags themselves (FlemmaFrontmatterTag) and language-specific syntax.
+syntax region FlemmaFrontmatterBlockLua start="\%1l^```lua$" end="^```$" keepend contains=FlemmaFrontmatterTag,@Lua
+syntax region FlemmaFrontmatterBlockJson start="\%1l^```json$" end="^```$" keepend contains=FlemmaFrontmatterTag,@JSON
 
 " System region
 syntax region FlemmaSystem start='^@System:' end='\(^@\(You\|Assistant\):\)\@=\|\%$' contains=FlemmaRoleSystem,@Markdown
