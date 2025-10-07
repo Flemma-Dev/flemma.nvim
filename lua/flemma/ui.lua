@@ -156,19 +156,22 @@ function M.start_loading_spinner(bufnr)
   local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
   local frame = 1
 
-  -- Clear any existing virtual text
-  vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
+  vim.schedule(function()
+    -- Clear any existing virtual text
+    vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
-  -- Check if we need to add a blank line
-  local buffer_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  if #buffer_lines > 0 and buffer_lines[#buffer_lines]:match("%S") then
-    vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "", "@Assistant: Thinking..." })
-  else
-    vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "@Assistant: Thinking..." })
-  end
-  -- Immediately update UI after adding the thinking message
-  M.update_ui(bufnr)
-  vim.bo[bufnr].modifiable = original_modifiable_initial -- Restore state after initial message
+    -- Check if we need to add a blank line
+    vim.bo[bufnr].modifiable = true
+    local buffer_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    if #buffer_lines > 0 and buffer_lines[#buffer_lines]:match("%S") then
+      vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "", "@Assistant: Thinking..." })
+    else
+      vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "@Assistant: Thinking..." })
+    end
+    -- Immediately update UI after adding the thinking message
+    M.update_ui(bufnr)
+    vim.bo[bufnr].modifiable = original_modifiable_initial
+  end)
 
   local timer = vim.fn.timer_start(100, function()
     if not buffer_state.current_request then
