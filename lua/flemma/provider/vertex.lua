@@ -356,17 +356,7 @@ function M.get_endpoint(self)
 
   -- Access project_id and location directly from self.parameters
   local project_id = self.parameters.project_id
-  local location = self.parameters.location
-
-  -- We still need project_id and location for the URL construction.
-
-  if not location then
-    log.error( -- Location has a default, so erroring might be too strict, but logging is fine.
-      "vertex.get_endpoint(): Vertex AI location is required but missing in parameters: "
-        .. log.inspect(self.parameters)
-    ) -- Should have a default, but check anyway
-    return nil
-  end
+  local location = self.parameters.location or "global" -- Fallback to default if missing
 
   -- Ensure we're using the streamGenerateContent endpoint with SSE format
   local hostname
