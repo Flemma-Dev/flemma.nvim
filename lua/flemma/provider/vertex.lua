@@ -200,7 +200,7 @@ function M.build_request(self, prompt, context)
   for _, msg in ipairs(prompt.history) do
     -- Map canonical role to Vertex-specific role
     local vertex_role = msg.role == "assistant" and "model" or msg.role
-    
+
     local parts = {}
     if msg.role == "user" then
       -- Parse content into generic parts
@@ -224,7 +224,9 @@ function M.build_request(self, prompt, context)
               displayName = vim.fn.fnamemodify(part.filename, ":t"),
             },
           })
-          log.debug('build_request: Added inlineData part for "' .. part.filename .. '" (MIME: ' .. part.mime_type .. ")")
+          log.debug(
+            'build_request: Added inlineData part for "' .. part.filename .. '" (MIME: ' .. part.mime_type .. ")"
+          )
         elseif part.kind == "unsupported_file" then
           table.insert(parts, { text = "@" .. part.raw_filename })
         end

@@ -112,7 +112,10 @@ function M.notify_warnings(provider_name, warnings)
   end
 
   vim.notify(
-    "Flemma (" .. provider_name .. "): Some @file references could not be processed:\n• " .. table.concat(warning_messages, "\n• "),
+    "Flemma ("
+      .. provider_name
+      .. "): Some @file references could not be processed:\n• "
+      .. table.concat(warning_messages, "\n• "),
     vim.log.levels.WARN,
     { title = "Flemma File Warnings" }
   )
