@@ -1,7 +1,5 @@
 describe("flemma.parse_buffer", function()
   it("parses a buffer with frontmatter and messages correctly", function()
-    -- Create a new buffer. The `scratch` option is set to false to ensure
-    -- the test environment is as close as possible to a real file buffer.
     local bufnr = vim.api.nvim_create_buf(false, false)
 
     local lines = {
@@ -13,14 +11,12 @@ describe("flemma.parse_buffer", function()
       "@You: Hello",
     }
 
-    -- Set the lines in the buffer
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
     local flemma = require("flemma")
     local context = require("flemma.context").from_file("test.chat")
     local messages, frontmatter_code = require("flemma.buffers").parse_buffer(bufnr, context)
 
-    -- Assertions
     assert.are.equal(2, #messages, "Should parse 2 messages")
 
     assert.are.equal("System", messages[1].type)
@@ -30,5 +26,45 @@ describe("flemma.parse_buffer", function()
     assert.are.equal("Hello", messages[2].content)
 
     assert.are.equal("foo = 'bar'", frontmatter_code)
+  end)
+
+  it("does not execute frontmatter during UI update", function()
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.bo[bufnr].filetype = "chat"
+
+    local lines = {
+      "```lua",
+      "this is a syntax error!!!",
+      "```",
+      "@System: Be helpful.",
+      "@You: Hello",
+    }
+
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+    local ui = require("flemma.ui")
+    assert.has_no_errors(function()
+      ui.update_ui(bufnr)
+    end, "UI update should not execute frontmatter with syntax error")
+  end)
+
+  it("does execute frontmatter during parse_buffer and reports syntax errors", function()
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.bo[bufnr].filetype = "chat"
+
+    local lines = {
+      "```lua",
+      "this is a syntax error!!!",
+      "```",
+      "@System: Be helpful.",
+      "@You: Hello",
+    }
+
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+    local context = require("flemma.context").from_file("test.chat")
+    assert.has_error(function()
+      require("flemma.buffers").parse_buffer(bufnr, context)
+    end)
   end)
 end)

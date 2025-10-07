@@ -257,8 +257,19 @@ function M.update_ui(bufnr)
   M.add_rulers(bufnr)
   -- Clear and reapply all signs
   vim.fn.sign_unplace("flemma_ns", { buffer = bufnr })
-  -- We need access to the parse_buffer function from init.lua
-  require("flemma.buffers").parse_buffer(bufnr) -- This will reapply signs
+
+  -- Parse messages for sign placement without executing frontmatter
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local frontmatter = require("flemma.frontmatter")
+  local fm_code, content = frontmatter.parse(lines)
+
+  local frontmatter_offset = 0
+  if fm_code then
+    frontmatter_offset = #vim.split(fm_code, "\n", true) + 2
+  end
+
+  content = content or lines
+  require("flemma.buffers").parse_messages(bufnr, content, frontmatter_offset)
 end
 
 -- Set up UI-related autocmds and initialization
