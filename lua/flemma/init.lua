@@ -64,24 +64,8 @@ M.setup = function(user_opts)
   -- Set up highlighting
   highlight.setup()
 
-  -- Create the filetype detection
-  vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
-    pattern = "*.chat",
-    callback = function()
-      vim.bo.filetype = "chat"
-      ui.setup_folding()
-
-      -- Disable textwidth if configured
-      if config.editing.disable_textwidth then
-        vim.bo.textwidth = 0
-      end
-
-      -- Set autowrite if configured
-      if config.editing.auto_write then
-        vim.opt_local.autowrite = true
-      end
-    end,
-  })
+  -- Set up chat filetype handling
+  ui.setup_chat_filetype_autocmds()
 end
 
 -- Get the current model name

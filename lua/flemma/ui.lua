@@ -5,6 +5,120 @@ local M = {}
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local buffers = require("flemma.buffers")
+local config = require("flemma.config")
+
+-- Constants for fold text preview
+local MAX_CONTENT_PREVIEW_LINES = 10
+local MAX_CONTENT_PREVIEW_LENGTH = 72
+local CONTENT_PREVIEW_NEWLINE_CHAR = "⤶"
+local CONTENT_PREVIEW_TRUNCATION_MARKER = "..."
+
+-- Helper function to generate content preview for folds
+local function get_fold_content_preview(fold_start_lnum, fold_end_lnum)
+  local content_lines = {}
+  local num_content_lines_in_fold = fold_end_lnum - fold_start_lnum - 1
+
+  if num_content_lines_in_fold <= 0 then
+    return ""
+  end
+
+  local lines_to_fetch = math.min(num_content_lines_in_fold, MAX_CONTENT_PREVIEW_LINES)
+
+  for i = 1, lines_to_fetch do
+    local current_content_line_num = fold_start_lnum + i
+    local line_text = vim.fn.getline(current_content_line_num)
+    table.insert(content_lines, vim.fn.trim(line_text))
+  end
+
+  local preview_str = table.concat(content_lines, CONTENT_PREVIEW_NEWLINE_CHAR)
+  preview_str = vim.fn.trim(preview_str)
+
+  if #preview_str > MAX_CONTENT_PREVIEW_LENGTH then
+    local truncated_length = MAX_CONTENT_PREVIEW_LENGTH - #CONTENT_PREVIEW_TRUNCATION_MARKER
+    if truncated_length < 0 then
+      truncated_length = 0
+    end
+
+    preview_str = preview_str:sub(1, truncated_length)
+    preview_str = preview_str .. CONTENT_PREVIEW_TRUNCATION_MARKER
+  end
+
+  return preview_str
+end
+
+-- Folding functions
+function M.get_fold_level(lnum)
+  local line = vim.fn.getline(lnum)
+  local next_line_num = lnum + 1
+  local last_buf_line = vim.fn.line("$")
+
+  -- Level 3 folds: ```lua ... ``` (only if ```lua is on the first line)
+  if lnum == 1 and line:match("^```lua$") then
+    return ">3"
+  elseif line:match("^```$") then
+    return "<3"
+  end
+
+  -- Level 2 folds: <thinking>...</thinking>
+  if line:match("^<thinking>$") then
+    return ">2"
+  elseif line:match("^</thinking>$") then
+    return "<2"
+  end
+
+  -- Level 1 folds: @Role:...
+  if line:match("^@[%w]+:") then
+    return ">1"
+  end
+
+  -- Check for end of level 1 fold
+  if next_line_num <= last_buf_line then
+    local next_line_content = vim.fn.getline(next_line_num)
+    if next_line_content:match("^@[%w]+:") then
+      return "<1"
+    end
+  elseif lnum == last_buf_line then
+    return "<1"
+  end
+
+  return "="
+end
+
+function M.get_fold_text()
+  local foldstart_lnum = vim.v.foldstart
+  local foldend_lnum = vim.v.foldend
+  local first_line_content = vim.fn.getline(foldstart_lnum)
+  local total_fold_lines = foldend_lnum - foldstart_lnum + 1
+
+  -- Check for frontmatter fold (level 3) - only if it started on line 1
+  if foldstart_lnum == 1 and first_line_content:match("^```lua$") then
+    local preview = get_fold_content_preview(foldstart_lnum, foldend_lnum)
+    if preview ~= "" then
+      return string.format("```lua %s ``` (%d lines)", preview, total_fold_lines)
+    else
+      return string.format("```lua (%d lines)", total_fold_lines)
+    end
+  end
+
+  -- Check if this is a thinking fold (level 2)
+  if first_line_content:match("^<thinking>$") then
+    local preview = get_fold_content_preview(foldstart_lnum, foldend_lnum)
+    if preview ~= "" then
+      return string.format("<thinking> %s </thinking> (%d lines)", preview, total_fold_lines)
+    else
+      return string.format("<thinking> (%d lines)", total_fold_lines)
+    end
+  end
+
+  -- Message folds (level 1)
+  local role_type = first_line_content:match("^(@[%w]+:)")
+  if not role_type then
+    return first_line_content
+  end
+
+  local content_preview_for_message = first_line_content:sub(#role_type + 1):gsub("^%s*", "")
+  return string.format("%s %s... (%d lines)", role_type, content_preview_for_message:sub(1, 50), total_fold_lines)
+end
 
 -- Define namespace for our extmarks
 local ns_id = vim.api.nvim_create_namespace("flemma")
@@ -193,12 +307,18 @@ function M.fold_last_thinking_block(bufnr)
     )
     local winid = vim.fn.bufwinid(bufnr)
     if winid ~= -1 then
-      -- vim.cmd uses 1-based line numbers
-      vim.fn.win_execute(
-        winid,
-        string.format("%d,%d foldclose", start_think_lnum_0idx + 1, end_think_lnum_0idx + 1) -- Corrected to foldclose and added space
-      )
-      log.debug("fold_last_thinking_block(): Executed foldclose command via win_execute.")
+      -- Check if a fold actually exists at this line before trying to close it
+      local fold_exists = vim.fn.win_execute(winid, string.format("echo foldlevel(%d)", start_think_lnum_0idx + 1))
+      if tonumber(vim.trim(fold_exists)) and tonumber(vim.trim(fold_exists)) > 0 then
+        vim.fn.win_execute(winid, string.format("%d,%d foldclose", start_think_lnum_0idx + 1, end_think_lnum_0idx + 1))
+        log.debug("fold_last_thinking_block(): Executed foldclose command via win_execute.")
+      else
+        log.debug(
+          "fold_last_thinking_block(): No fold exists at line "
+            .. (start_think_lnum_0idx + 1)
+            .. ". Skipping foldclose."
+        )
+      end
     else
       log.debug("fold_last_thinking_block(): Buffer " .. bufnr .. " has no window. Cannot close fold.")
     end
@@ -241,10 +361,44 @@ end
 -- Set up folding expression
 function M.setup_folding()
   vim.wo.foldmethod = "expr"
-  vim.wo.foldexpr = 'v:lua.require("flemma.buffers").get_fold_level(v:lnum)'
-  vim.wo.foldtext = 'v:lua.require("flemma.buffers").get_fold_text()'
+  vim.wo.foldexpr = 'v:lua.require("flemma.ui").get_fold_level(v:lnum)'
+  vim.wo.foldtext = 'v:lua.require("flemma.ui").get_fold_text()'
   -- Start with all folds open
   vim.wo.foldlevel = 99
+end
+
+-- Set up chat filetype autocmds
+function M.setup_chat_filetype_autocmds()
+  -- Handle .chat file detection
+  vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
+    pattern = "*.chat",
+    callback = function()
+      vim.bo.filetype = "chat"
+      M.setup_folding()
+
+      if config.editing.disable_textwidth then
+        vim.bo.textwidth = 0
+      end
+
+      if config.editing.auto_write then
+        vim.opt_local.autowrite = true
+      end
+    end,
+  })
+
+  -- Handle manual filetype changes to 'chat'
+  vim.api.nvim_create_autocmd("FileType", {
+    pattern = "chat",
+    callback = function()
+      M.setup_folding()
+      if config.editing.disable_textwidth then
+        vim.bo.textwidth = 0
+      end
+      if config.editing.auto_write then
+        vim.opt_local.autowrite = true
+      end
+    end,
+  })
 end
 
 -- Helper function to force UI update (rulers and signs)
