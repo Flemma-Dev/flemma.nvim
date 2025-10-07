@@ -117,8 +117,23 @@ function M.parse(content_string, context)
             mime_type = mime_type_override
             log.debug('content_parser.parse: Using overridden MIME type: "' .. mime_type .. '"')
           else
-            -- Auto-detect MIME type
-            mime_type, mime_err = mime_util.get_mime_type(cleaned_filename)
+            -- Auto-detect MIME type with pcall to handle 'file' command missing
+            local ok, result, err = pcall(mime_util.get_mime_type, cleaned_filename)
+            if ok then
+              mime_type, mime_err = result, err
+            else
+              -- 'file' command is missing, try fallback by extension
+              log.warn(
+                'content_parser.parse: MIME detection failed (likely missing "file" command), trying extension fallback for "'
+                  .. cleaned_filename
+                  .. '": '
+                  .. tostring(result)
+              )
+              mime_type = mime_util.get_mime_by_extension(cleaned_filename)
+              if not mime_type then
+                mime_err = "Unable to determine MIME type: 'file' command unavailable and no known extension"
+              end
+            end
           end
 
           if mime_type then

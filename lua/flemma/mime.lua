@@ -5,6 +5,83 @@ local M = {}
 -- Cache for file command availability check
 local file_command_available = nil
 
+-- MIME types by extension tailored for AI chat interface (fallback when 'file' command is unavailable)
+local MIME_BY_EXTENSION = {
+  -- Documentation & markup
+  txt = "text/plain",
+  md = "text/markdown",
+  markdown = "text/markdown",
+  rst = "text/x-rst",
+  org = "text/org",
+  -- Config & data
+  json = "application/json",
+  yaml = "application/yaml",
+  yml = "application/yaml",
+  toml = "application/toml",
+  xml = "application/xml",
+  csv = "text/csv",
+  sql = "application/sql",
+  -- Web frontend
+  html = "text/html",
+  htm = "text/html",
+  css = "text/css",
+  scss = "text/x-scss",
+  sass = "text/x-sass",
+  js = "application/javascript",
+  mjs = "application/javascript",
+  cjs = "application/javascript",
+  jsx = "text/jsx",
+  ts = "application/typescript",
+  tsx = "text/tsx",
+  vue = "text/x-vue",
+  svelte = "text/x-svelte",
+  -- Programming languages
+  py = "text/x-python",
+  rb = "text/x-ruby",
+  go = "text/x-go",
+  rs = "text/x-rust",
+  c = "text/x-c",
+  cpp = "text/x-c++",
+  cc = "text/x-c++",
+  cxx = "text/x-c++",
+  h = "text/x-c",
+  hpp = "text/x-c++",
+  java = "text/x-java",
+  kt = "text/x-kotlin",
+  swift = "text/x-swift",
+  php = "text/x-php",
+  sh = "text/x-shellscript",
+  bash = "text/x-shellscript",
+  zsh = "text/x-shellscript",
+  fish = "text/x-shellscript",
+  lua = "text/x-lua",
+  vim = "text/x-vim",
+  el = "text/x-emacs-lisp",
+  clj = "text/x-clojure",
+  -- Images (for vision capabilities)
+  png = "image/png",
+  jpg = "image/jpeg",
+  jpeg = "image/jpeg",
+  gif = "image/gif",
+  svg = "image/svg+xml",
+  webp = "image/webp",
+  bmp = "image/bmp",
+  -- Documents
+  pdf = "application/pdf",
+}
+
+--- Fallback MIME detection based on file extension
+--- @param filepath string The path to the file.
+--- @return string|nil The detected MIME type, or nil if unknown.
+local function get_mime_by_extension(filepath)
+  local ext = filepath:match("%.([^%.]+)$")
+  if ext then
+    ext = ext:lower()
+    return MIME_BY_EXTENSION[ext]
+  end
+  return nil
+end
+
 --- Gets the MIME type of a file using the 'file' command.
 --- @param filepath string The path to the file.
 --- @return string|nil The detected MIME type, or nil if an error occurred.
@@ -68,5 +145,8 @@ function M.get_mime_type(filepath)
     return nil, err_msg
   end
 end
+
+--- Publicly expose the extension-based fallback
+M.get_mime_by_extension = get_mime_by_extension
 
 return M
