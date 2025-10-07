@@ -2,7 +2,7 @@
 --- Implements the Claude API integration
 local base = require("flemma.provider.base")
 local log = require("flemma.logging")
-local content_parser = require("flemma.content_parser")
+local message_parts = require("flemma.message_parts")
 local M = {}
 
 -- Create a new Claude provider instance
@@ -28,137 +28,61 @@ end
 -- Get API key from environment, keyring, or prompt
 function M.get_api_key(self)
   -- Call the base implementation with Claude-specific parameters
-  return require("flemma.provider.base").get_api_key(self, {
+  return base.get_api_key(self, {
     env_var_name = "ANTHROPIC_API_KEY",
     keyring_service_name = "anthropic",
     keyring_key_name = "api",
   })
 end
 
----Format messages for Claude API
+---Build request body for Claude API
 ---
----@param messages table[] The messages to format
----@return table[] formatted_messages The formatted messages
----@return string|nil system_message The extracted system message
-function M.format_messages(self, messages)
-  local formatted = {}
-  local system_message = nil -- System message is handled in create_request_body
-
-  for _, msg in ipairs(messages) do
-    local role = msg.type == "You" and "user" or msg.type == "Assistant" and "assistant" or nil
-
-    if role then
-      table.insert(formatted, {
-        role = role,
-        content = msg.content:gsub("%s+$", ""), -- Content is passed through directly
-      })
-    end
-    -- Extract system message if found
-    if msg.type == "System" then
-      system_message = msg.content:gsub("%s+$", "")
-    end
-  end
-
-  return formatted, system_message
-end
-
----Create request body for Claude API
----
----@param formatted_messages table[] The formatted messages
----@param system_message string|nil The system message
+---@param prompt Prompt The prepared prompt with history and system
 ---@param context Context The shared context object for resolving file paths
 ---@return table request_body The request body for the API
-function M.create_request_body(self, formatted_messages, system_message, context)
+function M.build_request(self, prompt, context)
   local api_messages = {}
   local collected_warnings = {} -- Collect all warnings to notify user
 
-  for _, msg in ipairs(formatted_messages) do
+  for _, msg in ipairs(prompt.history) do
     if msg.role == "user" then
-      local content_blocks = {} -- Will hold {type="text", text=...} or {type="image", source=...} etc.
-      local content_parser_coro = content_parser.parse(msg.content, context)
+      -- Parse content into generic parts
+      local parts, warnings = message_parts.parse(msg.content, context)
+      for _, warning in ipairs(warnings) do
+        table.insert(collected_warnings, warning)
+      end
 
-      while true do
-        local status, chunk = coroutine.resume(content_parser_coro)
-        if not status or not chunk then -- Coroutine finished or errored
-          break
-        end
+      -- Map generic parts to Claude-specific format
+      local content_blocks = {}
 
-        if chunk.type == "warnings" then
-          -- Collect warnings for later user notification
-          for _, warning in ipairs(chunk.warnings) do
-            table.insert(collected_warnings, warning)
-          end
-        elseif chunk.type == "text" then
-          if chunk.value and #chunk.value > 0 then
-            table.insert(content_blocks, { type = "text", text = chunk.value })
-          end
-        elseif chunk.type == "file" then
-          if chunk.readable and chunk.content and chunk.mime_type then
-            local encoded_data
-            if
-              chunk.mime_type == "image/jpeg"
-              or chunk.mime_type == "image/png"
-              or chunk.mime_type == "image/gif"
-              or chunk.mime_type == "image/webp"
-            then
-              encoded_data = vim.base64.encode(chunk.content)
-              table.insert(content_blocks, {
-                type = "image",
-                source = {
-                  type = "base64",
-                  media_type = chunk.mime_type,
-                  data = encoded_data,
-                },
-              })
-              log.debug(
-                'claude.create_request_body: Added image part for "'
-                  .. chunk.filename
-                  .. '" (MIME: '
-                  .. chunk.mime_type
-                  .. ")"
-              )
-            elseif chunk.mime_type == "application/pdf" then
-              encoded_data = vim.base64.encode(chunk.content)
-              table.insert(content_blocks, {
-                type = "document",
-                source = {
-                  type = "base64",
-                  media_type = chunk.mime_type, -- API expects "application/pdf"
-                  data = encoded_data,
-                },
-              })
-              log.debug(
-                'claude.create_request_body: Added document part for "'
-                  .. chunk.filename
-                  .. '" (MIME: '
-                  .. chunk.mime_type
-                  .. ")"
-              )
-            elseif chunk.mime_type:sub(1, 5) == "text/" then
-              -- Embed content of text files directly
-              table.insert(content_blocks, { type = "text", text = chunk.content })
-              log.debug(
-                'claude.create_request_body: Added text part for "'
-                  .. chunk.filename
-                  .. '" (MIME: '
-                  .. chunk.mime_type
-                  .. ")"
-              )
-            else
-              -- Unsupported MIME type for direct inclusion
-              vim.notify(
-                "Flemma (Claude): @file reference with MIME type '"
-                  .. chunk.mime_type
-                  .. "' is not supported for direct inclusion. The reference will be sent as text.",
-                vim.log.levels.WARN,
-                { title = "Flemma Notification" }
-              )
-              table.insert(content_blocks, { type = "text", text = "@" .. chunk.raw_filename })
-            end
-          else
-            -- File not readable or missing essential data - fallback to raw text
-            table.insert(content_blocks, { type = "text", text = "@" .. chunk.raw_filename })
-          end
+      for _, part in ipairs(parts) do
+        if part.kind == "text" then
+          table.insert(content_blocks, { type = "text", text = part.text })
+        elseif part.kind == "image" then
+          table.insert(content_blocks, {
+            type = "image",
+            source = {
+              type = "base64",
+              media_type = part.mime_type,
+              data = part.data,
+            },
+          })
+          log.debug('claude.build_request: Added image part for "' .. part.filename .. '" (MIME: ' .. part.mime_type .. ")")
+        elseif part.kind == "pdf" then
+          table.insert(content_blocks, {
+            type = "document",
+            source = {
+              type = "base64",
+              media_type = part.mime_type,
+              data = part.data,
+            },
+          })
+          log.debug('claude.build_request: Added document part for "' .. part.filename .. '" (MIME: ' .. part.mime_type .. ")")
+        elseif part.kind == "text_file" then
+          table.insert(content_blocks, { type = "text", text = part.text })
+          log.debug('claude.build_request: Added text part for "' .. part.filename .. '" (MIME: ' .. part.mime_type .. ")")
+        elseif part.kind == "unsupported_file" then
+          table.insert(content_blocks, { type = "text", text = "@" .. part.raw_filename })
         end
       end
 
@@ -168,9 +92,9 @@ function M.create_request_body(self, formatted_messages, system_message, context
       else
         -- Original content was empty/whitespace, or resulted in no processable blocks.
         -- Use the original string content, trimmed, as per Claude API (string | object[]).
-        final_user_content = msg.content:gsub("%s+$", "")
+        final_user_content = vim.trim(msg.content)
         log.debug(
-          "claude.create_request_body: User content resulted in empty 'content_blocks'. Using original string content: \""
+          "claude.build_request: User content resulted in empty 'content_blocks'. Using original string content: \""
             .. final_user_content
             .. '"'
         )
@@ -184,7 +108,7 @@ function M.create_request_body(self, formatted_messages, system_message, context
       -- Assuming assistant messages are always text.
       table.insert(api_messages, {
         role = msg.role,
-        content = { { type = "text", text = msg.content } }, -- Already trimmed by format_messages
+        content = { { type = "text", text = msg.content } }, -- Already trimmed by prepare_prompt
       })
     end
   end
@@ -192,25 +116,14 @@ function M.create_request_body(self, formatted_messages, system_message, context
   local request_body = {
     model = self.parameters.model,
     messages = api_messages,
-    system = system_message,
+    system = prompt.system,
     max_tokens = self.parameters.max_tokens,
     temperature = self.parameters.temperature,
     stream = true,
   }
 
   -- Notify user of any file-related warnings
-  if #collected_warnings > 0 then
-    local warning_messages = {}
-    for _, warning in ipairs(collected_warnings) do
-      table.insert(warning_messages, warning.raw_filename .. ": " .. warning.error)
-    end
-
-    vim.notify(
-      "Flemma (Claude): Some @file references could not be processed:\n• " .. table.concat(warning_messages, "\n• "),
-      vim.log.levels.WARN,
-      { title = "Flemma File Warnings" }
-    )
-  end
+  message_parts.notify_warnings("Claude", collected_warnings)
 
   return request_body
 end
@@ -227,10 +140,6 @@ function M.get_request_headers(self)
 end
 
 -- Get API endpoint
-function M.get_endpoint(self)
-  return self.endpoint
-end
-
 --- Process a single line of Claude API streaming response
 --- Parses Claude's server-sent events format and extracts content, usage, and error information
 ---@param self table The Claude provider instance

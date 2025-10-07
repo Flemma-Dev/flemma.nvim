@@ -1,7 +1,6 @@
 --- Base provider for Flemma
 --- Defines the interface that all providers must implement
 local log = require("flemma.logging")
-local mime_util = require("flemma.mime")
 
 ---@class UsageData
 ---@field type "input"|"output"|"thoughts" Type of token usage
@@ -106,22 +105,62 @@ function M.get_api_key(self, opts)
   return self.state.api_key
 end
 
----Format messages for API (to be implemented by specific providers)
+---@class Prompt
+---@field history table[] User/assistant messages only (canonical roles: 'user', 'assistant')
+---@field system string|nil The system instruction, if any
+
+---Prepare prompt from raw messages
 ---
----@param messages table[] The messages to format
----@return table[] formatted_messages The formatted messages
----@return string|nil system_message The extracted system message
-function M.format_messages(self, messages)
-  -- To be implemented by specific providers
+---This is a default implementation that normalizes messages into a provider-agnostic
+---Prompt structure with canonical roles ('user' and 'assistant'). System messages
+---are extracted separately. If multiple system messages exist, last one wins.
+---
+---Providers can override this if they need custom normalization, but in most cases
+---the provider-specific role mapping should happen in build_request instead.
+---
+---@param messages table[] The raw messages to prepare
+---@return Prompt prompt The prepared prompt with history and system (canonical roles)
+function M.prepare_prompt(self, messages)
+  local history = {}
+  local system = nil
+
+  -- Extract system message (last wins policy)
+  for _, msg in ipairs(messages) do
+    if msg.type == "System" then
+      system = vim.trim(msg.content or "")
+    end
+  end
+
+  -- Add user and assistant messages with canonical roles
+  for _, msg in ipairs(messages) do
+    local role = nil
+    if msg.type == "You" then
+      role = "user"
+    elseif msg.type == "Assistant" then
+      role = "assistant"
+    end
+
+    if role then
+      table.insert(history, {
+        role = role,
+        content = vim.trim(msg.content or ""),
+      })
+    end
+  end
+
+  return { history = history, system = system }
 end
 
----Create request body (to be implemented by specific providers)
+---Build request body for API (to be implemented by specific providers)
 ---
----@param formatted_messages table[] The formatted messages
----@param system_message string|nil The system message
+---Contract: This method receives a prepared Prompt and converts it into the
+---provider's specific API request format. Each provider decides how to incorporate
+---the system instruction into its wire format.
+---
+---@param prompt Prompt The prepared prompt with history and system
 ---@param context Context The shared context object for resolving file paths
 ---@return table request_body The request body for the API
-function M.create_request_body(self, formatted_messages, system_message, context)
+function M.build_request(self, prompt, context)
   -- To be implemented by specific providers
 end
 
@@ -132,7 +171,9 @@ end
 
 -- Get API endpoint (to be implemented by specific providers)
 function M.get_endpoint(self)
-  -- To be implemented by specific providers
+  -- Default implementation returns self.endpoint
+  -- Providers like Vertex can override to construct dynamic URLs
+  return self.endpoint
 end
 
 --- Process a single line of API response data

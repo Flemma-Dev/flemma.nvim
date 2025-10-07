@@ -201,8 +201,8 @@ describe("Base Provider", function()
         { type = "You", content = "Please read @./missing_file.txt and @./another_missing.txt" },
       }
 
-      local formatted_messages, system_message = provider:format_messages(messages)
-      local request_body = provider:create_request_body(formatted_messages, system_message)
+      local prompt = provider:prepare_prompt(messages)
+      local request_body = provider:build_request(prompt)
 
       -- Restore original vim.notify
       vim.notify = original_notify

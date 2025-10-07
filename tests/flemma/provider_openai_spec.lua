@@ -7,7 +7,7 @@ describe("OpenAI Provider", function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  describe("create_request_body", function()
+  describe("build_request", function()
     it("should use max_completion_tokens for all OpenAI models", function()
       local test_cases = {
         { model = "gpt-4o", max_tokens = 1000 },
@@ -29,8 +29,8 @@ describe("OpenAI Provider", function()
           { type = "You", content = "Hello" },
         }
 
-        local formatted_messages, system_message = provider:format_messages(messages)
-        local request_body = provider:create_request_body(formatted_messages, system_message)
+        local prompt = provider:prepare_prompt(messages)
+        local request_body = provider:build_request(prompt)
 
         -- Verify max_completion_tokens is used (not max_tokens)
         assert.is_not_nil(
@@ -60,8 +60,8 @@ describe("OpenAI Provider", function()
         { type = "You", content = "Solve this problem" },
       }
 
-      local formatted_messages, system_message = provider:format_messages(messages)
-      local request_body = provider:create_request_body(formatted_messages, system_message)
+      local prompt = provider:prepare_prompt(messages)
+      local request_body = provider:build_request(prompt)
 
       assert.equals(4000, request_body.max_completion_tokens)
       assert.equals("high", request_body.reasoning_effort)
@@ -79,8 +79,8 @@ describe("OpenAI Provider", function()
         { type = "You", content = "Hello" },
       }
 
-      local formatted_messages, system_message = provider:format_messages(messages)
-      local request_body = provider:create_request_body(formatted_messages, system_message)
+      local prompt = provider:prepare_prompt(messages)
+      local request_body = provider:build_request(prompt)
 
       assert.equals(1000, request_body.max_completion_tokens)
       assert.equals(0.5, request_body.temperature)

@@ -243,11 +243,11 @@ function M.send_to_provider(opts)
     vim.notify("Flemma: " .. table.concat(error_lines, "\n"), vim.log.levels.WARN)
   end
 
-  -- Format messages using provider and get system message
-  local formatted_messages, system_message = current_provider:format_messages(processed_messages)
+  -- Prepare prompt using provider
+  local prompt = current_provider:prepare_prompt(processed_messages)
 
-  log.debug("send_to_provider(): Formatted messages for provider: " .. log.inspect(formatted_messages))
-  log.debug("send_to_provider(): System message: " .. log.inspect(system_message))
+  log.debug("send_to_provider(): Prompt history for provider: " .. log.inspect(prompt.history))
+  log.debug("send_to_provider(): System instruction: " .. log.inspect(prompt.system))
 
   -- Check for pending Lua expression evaluation errors
   if #validation_errors > 0 then
@@ -290,8 +290,8 @@ function M.send_to_provider(opts)
     headers = { "content-type: application/json" }
   end
 
-  -- Create request body using the validated model stored in the provider
-  local request_body = current_provider:create_request_body(formatted_messages, system_message, context)
+  -- Build request body using the validated model stored in the provider
+  local request_body = current_provider:build_request(prompt, context)
   last_request_body_for_testing = request_body -- Store for testing
 
   -- Log the request details (using the provider's stored model)

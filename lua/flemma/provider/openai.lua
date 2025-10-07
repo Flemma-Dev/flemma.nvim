@@ -2,7 +2,7 @@
 --- Implements the OpenAI API integration
 local base = require("flemma.provider.base")
 local log = require("flemma.logging")
-local content_parser = require("flemma.content_parser")
+local message_parts = require("flemma.message_parts")
 local M = {}
 
 -- Create a new OpenAI provider instance
@@ -28,168 +28,84 @@ end
 -- Get API key from environment, keyring, or prompt
 function M.get_api_key(self)
   -- Call the base implementation with OpenAI-specific parameters
-  return require("flemma.provider.base").get_api_key(self, {
+  return base.get_api_key(self, {
     env_var_name = "OPENAI_API_KEY",
     keyring_service_name = "openai",
     keyring_key_name = "api",
   })
 end
 
----Format messages for OpenAI API
+---Build request body for OpenAI API
 ---
----@param messages table[] The messages to format
----@return table[] formatted_messages The formatted messages
----@return string|nil system_message The extracted system message
-function M.format_messages(self, messages)
-  local formatted = {}
-  local system_message = nil
-
-  -- Look for system message in the messages
-  for _, msg in ipairs(messages) do
-    if msg.type == "System" then
-      system_message = msg.content:gsub("%s+$", "")
-      break -- Assuming only one system message is relevant
-    end
-  end
-
-  -- Add system message if found
-  if system_message then
-    table.insert(formatted, {
-      role = "system",
-      content = system_message,
-    })
-  end
-
-  -- Add user and assistant messages
-  for _, msg in ipairs(messages) do
-    local role = nil
-    if msg.type == "You" then
-      role = "user"
-    elseif msg.type == "Assistant" then
-      role = "assistant"
-    end
-
-    if role and role ~= "system" then -- Skip system messages as we've handled them
-      table.insert(formatted, {
-        role = role,
-        content = msg.content:gsub("%s+$", ""), -- Content is passed through directly
-      })
-    end
-  end
-
-  return formatted, system_message -- Return formatted messages and the extracted system message
-end
-
----Create request body for OpenAI API
----
----@param formatted_messages table[] The formatted messages
----@param _ string|nil The system message (unused, included in formatted_messages)
+---@param prompt Prompt The prepared prompt with history and system
 ---@param context Context The shared context object for resolving file paths
 ---@return table request_body The request body for the API
-function M.create_request_body(self, formatted_messages, _, context)
+function M.build_request(self, prompt, context)
   local api_messages = {}
   local collected_warnings = {} -- Collect all warnings to notify user
 
-  for _, msg in ipairs(formatted_messages) do
+  -- Add system message first if present
+  if prompt.system and #prompt.system > 0 then
+    table.insert(api_messages, {
+      role = "system",
+      content = prompt.system,
+    })
+  end
+
+  for _, msg in ipairs(prompt.history) do
     if msg.role == "user" then
-      local content_parts_for_api = {} -- Holds {type="text", text=...} or other part types
-      local has_multimedia_part = false -- Flag if content must be an array (e.g., for images, PDFs)
+      -- Parse content into generic parts
+      local parts, warnings = message_parts.parse(msg.content, context)
+      for _, warning in ipairs(warnings) do
+        table.insert(collected_warnings, warning)
+      end
 
-      local content_parser_coro = content_parser.parse(msg.content, context)
-      while true do
-        local status, chunk = coroutine.resume(content_parser_coro)
-        if not status or not chunk then -- Coroutine finished or errored
-          break
-        end
+      -- Map generic parts to OpenAI-specific format
+      local content_parts_for_api = {}
+      local has_multimedia_part = false
 
-        if chunk.type == "warnings" then
-          -- Collect warnings for later user notification
-          for _, warning in ipairs(chunk.warnings) do
-            table.insert(collected_warnings, warning)
-          end
-        elseif chunk.type == "text" then
-          if chunk.value and #chunk.value > 0 then
-            table.insert(content_parts_for_api, { type = "text", text = chunk.value })
-          end
-        elseif chunk.type == "file" then
-          if chunk.readable and chunk.content and chunk.mime_type then
-            local encoded_data
-            if
-              chunk.mime_type == "image/jpeg"
-              or chunk.mime_type == "image/png"
-              or chunk.mime_type == "image/webp"
-              or chunk.mime_type == "image/gif"
-            then
-              encoded_data = vim.base64.encode(chunk.content)
-              table.insert(content_parts_for_api, {
-                type = "image_url",
-                image_url = {
-                  url = "data:" .. chunk.mime_type .. ";base64," .. encoded_data,
-                  detail = "auto", -- Or "low", "high" as per OpenAI docs
-                },
-              })
-              has_multimedia_part = true
-              log.debug(
-                'openai.create_request_body: Added image_url part for "'
-                  .. chunk.filename
-                  .. '" (MIME: '
-                  .. chunk.mime_type
-                  .. ")"
-              )
-            elseif chunk.mime_type == "application/pdf" then
-              encoded_data = vim.base64.encode(chunk.content)
-              table.insert(content_parts_for_api, {
-                type = "file",
-                file = {
-                  filename = chunk.filename, -- The actual filename
-                  file_data = "data:application/pdf;base64," .. encoded_data,
-                },
-              })
-              has_multimedia_part = true
-              log.debug(
-                'openai.create_request_body: Added file part for PDF "'
-                  .. chunk.filename
-                  .. '" (MIME: '
-                  .. chunk.mime_type
-                  .. ")"
-              )
-            elseif chunk.mime_type:sub(1, 5) == "text/" then
-              table.insert(content_parts_for_api, { type = "text", text = chunk.content })
-              log.debug(
-                'openai.create_request_body: Added text part for "'
-                  .. chunk.filename
-                  .. '" (MIME: '
-                  .. chunk.mime_type
-                  .. ")"
-              )
-            else
-              vim.notify(
-                "Flemma (OpenAI): @file reference with MIME type '"
-                  .. chunk.mime_type
-                  .. "' is not supported for direct inclusion. The reference will be sent as text.",
-                vim.log.levels.WARN,
-                { title = "Flemma Notification" }
-              )
-              table.insert(content_parts_for_api, { type = "text", text = "@" .. chunk.raw_filename })
-            end
-          else
-            -- File not readable or missing essential data - fallback to raw text
-            table.insert(content_parts_for_api, { type = "text", text = "@" .. chunk.raw_filename })
-          end
+      for _, part in ipairs(parts) do
+        if part.kind == "text" then
+          table.insert(content_parts_for_api, { type = "text", text = part.text })
+        elseif part.kind == "image" then
+          table.insert(content_parts_for_api, {
+            type = "image_url",
+            image_url = {
+              url = part.data_url,
+              detail = "auto",
+            },
+          })
+          has_multimedia_part = true
+          log.debug('openai.build_request: Added image_url part for "' .. part.filename .. '" (MIME: ' .. part.mime_type .. ")")
+        elseif part.kind == "pdf" then
+          table.insert(content_parts_for_api, {
+            type = "file",
+            file = {
+              filename = part.filename,
+              file_data = part.data_url,
+            },
+          })
+          has_multimedia_part = true
+          log.debug('openai.build_request: Added file part for PDF "' .. part.filename .. '" (MIME: ' .. part.mime_type .. ")")
+        elseif part.kind == "text_file" then
+          table.insert(content_parts_for_api, { type = "text", text = part.text })
+          log.debug('openai.build_request: Added text part for "' .. part.filename .. '" (MIME: ' .. part.mime_type .. ")")
+        elseif part.kind == "unsupported_file" then
+          table.insert(content_parts_for_api, { type = "text", text = "@" .. part.raw_filename })
         end
       end
 
       local final_api_content
       if #content_parts_for_api == 0 then
-        final_api_content = msg.content:gsub("%s+$", "") -- Original trimmed string if no parts generated
+        final_api_content = vim.trim(msg.content)
       elseif has_multimedia_part then
-        final_api_content = content_parts_for_api -- Array of parts if multimedia content is present
+        final_api_content = content_parts_for_api
       else
-        -- Concatenate all text parts into a single string if only text parts exist
+        -- Concatenate all text parts into a single string
         local text_only_accumulator = {}
-        for _, part in ipairs(content_parts_for_api) do
-          if part.type == "text" and part.text then
-            table.insert(text_only_accumulator, part.text)
+        for _, api_part in ipairs(content_parts_for_api) do
+          if api_part.type == "text" and api_part.text then
+            table.insert(text_only_accumulator, api_part.text)
           end
         end
         final_api_content = table.concat(text_only_accumulator)
@@ -202,7 +118,7 @@ function M.create_request_body(self, formatted_messages, _, context)
     else -- Assistant or System messages
       table.insert(api_messages, {
         role = msg.role,
-        content = msg.content, -- Already trimmed by format_messages
+        content = msg.content, -- Already trimmed by prepare_prompt
       })
     end
   end
@@ -224,7 +140,7 @@ function M.create_request_body(self, formatted_messages, _, context)
   if self.parameters.reasoning and self.parameters.reasoning ~= "" then
     request_body.reasoning_effort = self.parameters.reasoning
     log.debug(
-      "openai.create_request_body: Using max_completion_tokens: "
+      "openai.build_request: Using max_completion_tokens: "
         .. tostring(self.parameters.max_tokens)
         .. " and reasoning_effort: "
         .. self.parameters.reasoning
@@ -232,7 +148,7 @@ function M.create_request_body(self, formatted_messages, _, context)
   else
     request_body.temperature = self.parameters.temperature
     log.debug(
-      "openai.create_request_body: Using max_completion_tokens: "
+      "openai.build_request: Using max_completion_tokens: "
         .. tostring(self.parameters.max_tokens)
         .. " and temperature: "
         .. tostring(self.parameters.temperature)
@@ -240,18 +156,7 @@ function M.create_request_body(self, formatted_messages, _, context)
   end
 
   -- Notify user of any file-related warnings
-  if #collected_warnings > 0 then
-    local warning_messages = {}
-    for _, warning in ipairs(collected_warnings) do
-      table.insert(warning_messages, warning.raw_filename .. ": " .. warning.error)
-    end
-
-    vim.notify(
-      "Flemma (OpenAI): Some @file references could not be processed:\n• " .. table.concat(warning_messages, "\n• "),
-      vim.log.levels.WARN,
-      { title = "Flemma File Warnings" }
-    )
-  end
+  message_parts.notify_warnings("OpenAI", collected_warnings)
 
   return request_body
 end
@@ -267,10 +172,6 @@ function M.get_request_headers(self)
 end
 
 -- Get API endpoint
-function M.get_endpoint(self)
-  return self.endpoint
-end
-
 --- Process a single line of OpenAI API streaming response
 --- Parses OpenAI's server-sent events format and extracts content, usage, and completion information
 ---@param self table The OpenAI provider instance

@@ -3,7 +3,7 @@
 local base = require("flemma.provider.base")
 local log = require("flemma.logging")
 -- local mime_util = require("flemma.mime") -- Moved to base provider
-local content_parser = require("flemma.content_parser")
+local message_parts = require("flemma.message_parts")
 local M = {}
 
 -- Private helper to validate required configuration
@@ -143,7 +143,7 @@ function M.get_api_key(self)
   end
 
   -- Try to get service account JSON from keyring
-  local service_account_json = require("flemma.provider.base").get_api_key(self, {
+  local service_account_json = base.get_api_key(self, {
     env_var_name = "VERTEX_SERVICE_ACCOUNT",
     keyring_service_name = "vertex",
     keyring_key_name = "api",
@@ -187,103 +187,46 @@ function M.get_api_key(self)
   return nil
 end
 
----Format messages for Vertex AI API
+---Build request body for Vertex AI API
 ---
----@param messages table[] The messages to format
----@return table[] formatted_messages The formatted messages
----@return string|nil system_content The extracted system message
-function M.format_messages(self, messages)
-  local formatted = {}
-  local system_content = nil
-
-  -- Look for system message in the messages
-  for _, msg in ipairs(messages) do
-    if msg.type == "System" then
-      system_content = msg.content:gsub("%s+$", "")
-      break -- Assuming only one system message is relevant
-    end
-  end
-
-  -- Add user and assistant messages
-  for _, msg in ipairs(messages) do
-    local role = nil
-    if msg.type == "You" then
-      role = "user"
-    elseif msg.type == "Assistant" then
-      role = "model"
-    end
-
-    if role then
-      table.insert(formatted, {
-        role = role,
-        content = msg.content:gsub("%s+$", ""),
-      })
-    end
-  end
-
-  return formatted, system_content
-end
-
----Create request body for Vertex AI API
----
----@param formatted_messages table[] The formatted messages
----@param system_message string|nil The system message
+---@param prompt Prompt The prepared prompt with history and system
 ---@param context Context The shared context object for resolving file paths
 ---@return table request_body The request body for the API
-function M.create_request_body(self, formatted_messages, system_message, context)
-  -- Convert formatted_messages to Vertex AI format
+function M.build_request(self, prompt, context)
+  -- Convert prompt.history to Vertex AI format
   local contents = {}
   local collected_warnings = {} -- Collect all warnings to notify user
 
-  for _, msg in ipairs(formatted_messages) do
+  for _, msg in ipairs(prompt.history) do
+    -- Map canonical role to Vertex-specific role
+    local vertex_role = msg.role == "assistant" and "model" or msg.role
+    
     local parts = {}
     if msg.role == "user" then
-      local content_parser_coro = content_parser.parse(msg.content, context)
-      while true do
-        local status, chunk = coroutine.resume(content_parser_coro)
-        if not status or not chunk then -- Coroutine finished or errored
-          break
-        end
+      -- Parse content into generic parts
+      local generic_parts, warnings = message_parts.parse(msg.content, context)
+      for _, warning in ipairs(warnings) do
+        table.insert(collected_warnings, warning)
+      end
 
-        if chunk.type == "warnings" then
-          -- Collect warnings for later user notification
-          for _, warning in ipairs(chunk.warnings) do
-            table.insert(collected_warnings, warning)
-          end
-        elseif chunk.type == "text" then
-          if chunk.value and #chunk.value > 0 then
-            table.insert(parts, { text = chunk.value })
-          end
-        elseif chunk.type == "file" then
-          if chunk.readable and chunk.content and chunk.mime_type then
-            if chunk.mime_type:sub(1, 5) == "text/" then
-              -- Send as text part
-              table.insert(parts, { text = chunk.content })
-              log.debug(
-                'create_request_body: Added text part for "' .. chunk.filename .. '" (MIME: ' .. chunk.mime_type .. ")"
-              )
-            else
-              -- Send as inlineData part (binary)
-              local encoded_data = vim.base64.encode(chunk.content) -- Use Neovim 0.10+ API
-              table.insert(parts, {
-                inlineData = {
-                  mimeType = chunk.mime_type,
-                  data = encoded_data,
-                  displayName = vim.fn.fnamemodify(chunk.filename, ":t"),
-                },
-              })
-              log.debug(
-                'create_request_body: Added inlineData part for "'
-                  .. chunk.filename
-                  .. '" (MIME: '
-                  .. chunk.mime_type
-                  .. ")"
-              )
-            end
-          else
-            -- File not readable or missing data - fallback to raw text
-            table.insert(parts, { text = "@" .. chunk.raw_filename })
-          end
+      -- Map generic parts to Vertex-specific format
+      for _, part in ipairs(generic_parts) do
+        if part.kind == "text" then
+          table.insert(parts, { text = part.text })
+        elseif part.kind == "text_file" then
+          table.insert(parts, { text = part.text })
+          log.debug('build_request: Added text part for "' .. part.filename .. '" (MIME: ' .. part.mime_type .. ")")
+        elseif part.kind == "image" or part.kind == "pdf" then
+          table.insert(parts, {
+            inlineData = {
+              mimeType = part.mime_type,
+              data = part.data,
+              displayName = vim.fn.fnamemodify(part.filename, ":t"),
+            },
+          })
+          log.debug('build_request: Added inlineData part for "' .. part.filename .. '" (MIME: ' .. part.mime_type .. ")")
+        elseif part.kind == "unsupported_file" then
+          table.insert(parts, { text = "@" .. part.raw_filename })
         end
       end
 
@@ -292,14 +235,14 @@ function M.create_request_body(self, formatted_messages, system_message, context
       -- or if the parser yields nothing for some valid non-empty inputs.
       if #parts == 0 and msg.content and #msg.content > 0 then
         log.debug(
-          "create_request_body: User content resulted in empty 'parts' after parsing. Original content: \""
+          "build_request: User content resulted in empty 'parts' after parsing. Original content: \""
             .. msg.content
             .. '". Adding original content as a single text part as fallback.'
         )
         table.insert(parts, { text = msg.content })
       elseif #parts == 0 then -- Original content was empty or only whitespace, or parser yielded nothing.
         log.debug(
-          "create_request_body: User content resulted in empty 'parts' (likely empty or whitespace input). Original content: \""
+          "build_request: User content resulted in empty 'parts' (likely empty or whitespace input). Original content: \""
             .. (msg.content or "")
             .. '". Adding an empty text part.'
         )
@@ -312,9 +255,9 @@ function M.create_request_body(self, formatted_messages, system_message, context
       table.insert(parts, { text = content_without_thoughts })
     end
 
-    -- Add the message with its role and parts to the contents list
+    -- Add the message with its Vertex-specific role and parts to the contents list
     table.insert(contents, {
-      role = msg.role,
+      role = vertex_role,
       parts = parts,
     })
   end
@@ -337,7 +280,7 @@ function M.create_request_body(self, formatted_messages, system_message, context
     api_budget_value = math.floor(configured_budget)
     add_thinking_config = true -- Set to true as budget is valid for thinking
     log.debug(
-      "create_request_body: Vertex AI thinking_budget is "
+      "build_request: Vertex AI thinking_budget is "
         .. tostring(configured_budget)
         .. ". Enabling thinking and setting API thinkingBudget to: "
         .. api_budget_value
@@ -345,16 +288,16 @@ function M.create_request_body(self, formatted_messages, system_message, context
     )
   elseif configured_budget == 0 then
     -- Thinking is explicitly disabled by setting budget to 0
-    log.debug("create_request_body: Vertex AI thinking_budget is 0. Thinking is disabled. Not sending thinkingConfig.")
+    log.debug("build_request: Vertex AI thinking_budget is 0. Thinking is disabled. Not sending thinkingConfig.")
     -- add_thinking_config remains false
   elseif configured_budget == nil then
     -- Thinking budget is not set (nil), so default behavior (no thinkingConfig)
-    log.debug("create_request_body: Vertex AI thinking_budget is nil. Not sending thinkingConfig.")
+    log.debug("build_request: Vertex AI thinking_budget is nil. Not sending thinkingConfig.")
     -- add_thinking_config remains false
   else
     -- Handles negative numbers or other invalid types if they somehow get here.
     log.warn(
-      "create_request_body: Vertex AI thinking_budget ("
+      "build_request: Vertex AI thinking_budget ("
         .. log.inspect(configured_budget)
         .. ") is invalid. Not sending thinkingConfig."
     )
@@ -369,37 +312,25 @@ function M.create_request_body(self, formatted_messages, system_message, context
       includeThoughts = true, -- If thinkingConfig is sent, includeThoughts should be true
     }
     log.debug(
-      "create_request_body: Vertex AI thinkingConfig included with thinkingBudget: "
+      "build_request: Vertex AI thinkingConfig included with thinkingBudget: "
         .. api_budget_value
         .. " and includeThoughts: true."
     )
   else
-    log.debug("create_request_body: Vertex AI thinkingConfig not included in the request.")
+    log.debug("build_request: Vertex AI thinkingConfig not included in the request.")
   end
 
   -- Add system instruction if provided
-  if system_message then
+  if prompt.system then
     request_body.systemInstruction = {
       parts = {
-        { text = system_message },
+        { text = prompt.system },
       },
     }
   end
 
   -- Notify user of any file-related warnings
-  if #collected_warnings > 0 then
-    local warning_messages = {}
-    for _, warning in ipairs(collected_warnings) do
-      table.insert(warning_messages, warning.raw_filename .. ": " .. warning.error)
-    end
-
-    vim.notify(
-      "Flemma (Vertex AI): Some @file references could not be processed:\n• "
-        .. table.concat(warning_messages, "\n• "),
-      vim.log.levels.WARN,
-      { title = "Flemma File Warnings" }
-    )
-  end
+  message_parts.notify_warnings("Vertex AI", collected_warnings)
 
   return request_body
 end

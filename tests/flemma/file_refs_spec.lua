@@ -625,9 +625,9 @@ describe("File References and Path Parsing", function()
           { type = "You", content = "Look at @./image.png" },
         }
 
-        -- Format messages and create request body
-        local formatted_messages, system_message = provider:format_messages(messages)
-        local request_body = provider:create_request_body(formatted_messages, system_message)
+        -- Prepare prompt and build request body
+        local prompt = provider:prepare_prompt(messages)
+        local request_body = provider:build_request(prompt)
 
         -- Verify request body format
         assert.is_not_nil(request_body)
@@ -689,9 +689,9 @@ describe("File References and Path Parsing", function()
           { type = "You", content = "Review @./document.pdf" },
         }
 
-        -- Format messages and create request body
-        local formatted_messages, system_message = provider:format_messages(messages)
-        local request_body = provider:create_request_body(formatted_messages, system_message)
+        -- Prepare prompt and build request body
+        local prompt = provider:prepare_prompt(messages)
+        local request_body = provider:build_request(prompt)
 
         -- Verify request body format
         assert.is_not_nil(request_body)
@@ -742,9 +742,9 @@ describe("File References and Path Parsing", function()
           { type = "You", content = "Read @./notes.txt" },
         }
 
-        -- Format messages and create request body
-        local formatted_messages, system_message = provider:format_messages(messages)
-        local request_body = provider:create_request_body(formatted_messages, system_message)
+        -- Prepare prompt and build request body
+        local prompt = provider:prepare_prompt(messages)
+        local request_body = provider:build_request(prompt)
 
         -- Verify request body format
         assert.is_not_nil(request_body)
@@ -794,9 +794,9 @@ describe("File References and Path Parsing", function()
           { type = "You", content = "Analyze @./chart.png" },
         }
 
-        -- Format messages and create request body
-        local formatted_messages, system_message = provider:format_messages(messages)
-        local request_body = provider:create_request_body(formatted_messages, system_message)
+        -- Prepare prompt and build request body
+        local prompt = provider:prepare_prompt(messages)
+        local request_body = provider:build_request(prompt)
 
         -- Verify request body format
         assert.is_not_nil(request_body)
@@ -858,9 +858,9 @@ describe("File References and Path Parsing", function()
           { type = "You", content = "Summarize @./report.pdf" },
         }
 
-        -- Format messages and create request body
-        local formatted_messages, system_message = provider:format_messages(messages)
-        local request_body = provider:create_request_body(formatted_messages, system_message)
+        -- Prepare prompt and build request body
+        local prompt = provider:prepare_prompt(messages)
+        local request_body = provider:build_request(prompt)
 
         -- Verify request body format
         assert.is_not_nil(request_body)
@@ -911,9 +911,9 @@ describe("File References and Path Parsing", function()
           { type = "You", content = "Process @./data.txt" },
         }
 
-        -- Format messages and create request body
-        local formatted_messages, system_message = provider:format_messages(messages)
-        local request_body = provider:create_request_body(formatted_messages, system_message)
+        -- Prepare prompt and build request body
+        local prompt = provider:prepare_prompt(messages)
+        local request_body = provider:build_request(prompt)
 
         -- Verify request body format
         assert.is_not_nil(request_body)
@@ -970,9 +970,9 @@ describe("File References and Path Parsing", function()
           { type = "You", content = "Describe @./photo.png" },
         }
 
-        -- Format messages and create request body
-        local formatted_messages, system_message = provider:format_messages(messages)
-        local request_body = provider:create_request_body(formatted_messages, system_message)
+        -- Prepare prompt and build request body
+        local prompt = provider:prepare_prompt(messages)
+        local request_body = provider:build_request(prompt)
 
         -- Verify request body format
         assert.is_not_nil(request_body)
@@ -1033,9 +1033,9 @@ describe("File References and Path Parsing", function()
           { type = "You", content = "Analyze @./study.pdf" },
         }
 
-        -- Format messages and create request body
-        local formatted_messages, system_message = provider:format_messages(messages)
-        local request_body = provider:create_request_body(formatted_messages, system_message)
+        -- Prepare prompt and build request body
+        local prompt = provider:prepare_prompt(messages)
+        local request_body = provider:build_request(prompt)
 
         -- Verify request body format
         assert.is_not_nil(request_body)
@@ -1085,9 +1085,9 @@ describe("File References and Path Parsing", function()
           { type = "You", content = "Check @./config.txt" },
         }
 
-        -- Format messages and create request body
-        local formatted_messages, system_message = provider:format_messages(messages)
-        local request_body = provider:create_request_body(formatted_messages, system_message)
+        -- Prepare prompt and build request body
+        local prompt = provider:prepare_prompt(messages)
+        local request_body = provider:build_request(prompt)
 
         -- Verify request body format
         assert.is_not_nil(request_body)
