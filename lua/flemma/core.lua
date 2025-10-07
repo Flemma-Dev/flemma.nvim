@@ -214,7 +214,7 @@ function M.send_to_provider(opts)
   local context = require("flemma.context").from_buffer(bufnr)
 
   -- Parse messages from buffer using init module
-  local messages = require("flemma.buffers").parse_buffer(bufnr, context)
+  local messages, fm_code, fm_context = require("flemma.buffers").parse_buffer(bufnr, context)
 
   if #messages == 0 then
     log.warn("send_to_provider(): No messages found in buffer")
@@ -223,15 +223,31 @@ function M.send_to_provider(opts)
     return
   end
 
-  -- Process and validate messages
-  local processed_messages = messages
-  local validation_errors = {} -- No validation errors for now
+  -- Process {{}} template expressions in message content
+  -- Note: fm_context is a cloned context with user-defined variables from frontmatter
+  local eval = require("flemma.eval")
+  local processed_messages = {}
+  local validation_errors = {}
+
+  for _, msg in ipairs(messages) do
+    local new_content, errs = eval.interpolate(msg.content, fm_context or {})
+    local new_msg = vim.deepcopy(msg)
+    new_msg.content = new_content
+    table.insert(processed_messages, new_msg)
+
+    -- Collect validation errors with file context
+    for _, e in ipairs(errs) do
+      e.file_path = context and context.__filename or "N/A"
+      table.insert(validation_errors, e)
+    end
+  end
+
   log.debug("send_to_provider(): Processed messages count: " .. #processed_messages)
 
+  -- Notify user of any template expression errors (but continue with request)
   if #validation_errors > 0 then
-    log.warn("send_to_provider(): Lua expression evaluation errors occurred")
-    vim.bo[bufnr].modifiable = true -- Restore modifiable state before returning
-    local error_lines = { "Lua expression evaluation errors:" }
+    log.warn("send_to_provider(): Lua expression evaluation errors occurred (request will still be sent)")
+    local error_lines = { "Lua expression evaluation errors (request will still be sent):" }
     for _, error_info in ipairs(validation_errors) do
       table.insert(
         error_lines,
@@ -241,6 +257,7 @@ function M.send_to_provider(opts)
     end
 
     vim.notify("Flemma: " .. table.concat(error_lines, "\n"), vim.log.levels.WARN)
+    -- Continue with the request - user might intentionally have {{ }} in their text
   end
 
   -- Prepare prompt using provider
@@ -248,22 +265,6 @@ function M.send_to_provider(opts)
 
   log.debug("send_to_provider(): Prompt history for provider: " .. log.inspect(prompt.history))
   log.debug("send_to_provider(): System instruction: " .. log.inspect(prompt.system))
-
-  -- Check for pending Lua expression evaluation errors
-  if #validation_errors > 0 then
-    log.warn("send_to_provider(): Cannot proceed due to Lua expression errors.")
-    -- Show error notification
-    local error_lines = { "Cannot send request due to Lua expression evaluation errors:" }
-    for _, error_info in ipairs(validation_errors) do
-      table.insert(
-        error_lines,
-        string.format("  Expression: %s (File: %s)", error_info.expression, error_info.file_path)
-      )
-      table.insert(error_lines, string.format("  %s", error_info.error_details))
-    end
-
-    vim.notify("Flemma: " .. table.concat(error_lines, "\n"), vim.log.levels.WARN)
-  end
 
   -- Get endpoint first to check for fixtures
   local endpoint = current_provider:get_endpoint()

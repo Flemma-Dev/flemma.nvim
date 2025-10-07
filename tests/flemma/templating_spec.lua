@@ -29,26 +29,18 @@ describe("flemma.templating", function()
 
       -- Create context and parse buffer (frontmatter will be executed automatically)
       local context = require("flemma.context").from_file("test.chat")
-      local messages, frontmatter_code = buffers.parse_buffer(bufnr, context)
+      local messages, frontmatter_code, fm_context = buffers.parse_buffer(bufnr, context)
 
-      -- Execute frontmatter again to get environment for testing
-      local frontmatter_env = frontmatter.execute(frontmatter_code, context)
-
-      -- Create evaluation environment with frontmatter variables
-      local eval_env = eval.create_safe_env()
-      for k, v in pairs(frontmatter_env) do
-        eval_env[k] = v
-      end
-
-      -- Process expressions in messages
+      -- Process expressions in messages using the new interpolate function
       assert.are.equal(1, #messages, "Should parse 1 message")
       assert.are.equal("You", messages[1].type)
 
-      -- Simulate expression processing (this would be done by the main plugin)
-      local processed_content = process_expressions(messages[1].content, eval_env)
+      -- Use the actual eval.interpolate function (matches the real workflow)
+      local processed_content, errors = eval.interpolate(messages[1].content, fm_context)
 
       -- Verify the templated content is correctly evaluated
       assert.are.equal("Value is world and greeting is Hello, Claude", processed_content)
+      assert.are.equal(0, #errors, "Should have no errors")
     end)
 
     it("should handle complex expressions with function calls", function()
@@ -68,17 +60,12 @@ describe("flemma.templating", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       local context = require("flemma.context").from_file("test.chat")
-      local messages, frontmatter_code = buffers.parse_buffer(bufnr, context)
-      local frontmatter_env = frontmatter.execute(frontmatter_code, context)
+      local messages, frontmatter_code, fm_context = buffers.parse_buffer(bufnr, context)
 
-      local eval_env = eval.create_safe_env()
-      for k, v in pairs(frontmatter_env) do
-        eval_env[k] = v
-      end
-
-      local processed_content = process_expressions(messages[1].content, eval_env)
+      local processed_content, errors = eval.interpolate(messages[1].content, fm_context)
 
       assert.are.equal("Current user: ALICE (admin)", processed_content)
+      assert.are.equal(0, #errors)
     end)
 
     it("should handle multiple expressions in the same message", function()
@@ -95,17 +82,12 @@ describe("flemma.templating", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       local context = require("flemma.context").from_file("test.chat")
-      local messages, frontmatter_code = buffers.parse_buffer(bufnr, context)
-      local frontmatter_env = frontmatter.execute(frontmatter_code, context)
+      local messages, frontmatter_code, fm_context = buffers.parse_buffer(bufnr, context)
 
-      local eval_env = eval.create_safe_env()
-      for k, v in pairs(frontmatter_env) do
-        eval_env[k] = v
-      end
-
-      local processed_content = process_expressions(messages[1].content, eval_env)
+      local processed_content, errors = eval.interpolate(messages[1].content, fm_context)
 
       assert.are.equal("5 + 3 = 8", processed_content)
+      assert.are.equal(0, #errors)
     end)
 
     it("should work with messages that have no expressions", function()
@@ -121,17 +103,12 @@ describe("flemma.templating", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       local context = require("flemma.context").from_file("test.chat")
-      local messages, frontmatter_code = buffers.parse_buffer(bufnr, context)
-      local frontmatter_env = frontmatter.execute(frontmatter_code, context)
+      local messages, frontmatter_code, fm_context = buffers.parse_buffer(bufnr, context)
 
-      local eval_env = eval.create_safe_env()
-      for k, v in pairs(frontmatter_env) do
-        eval_env[k] = v
-      end
-
-      local processed_content = process_expressions(messages[1].content, eval_env)
+      local processed_content, errors = eval.interpolate(messages[1].content, fm_context)
 
       assert.are.equal("This is a plain message without templates", processed_content)
+      assert.are.equal(0, #errors)
     end)
 
     it("should handle expressions accessing safe environment functions", function()
@@ -147,17 +124,12 @@ describe("flemma.templating", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       local context = require("flemma.context").from_file("test.chat")
-      local messages, frontmatter_code = buffers.parse_buffer(bufnr, context)
-      local frontmatter_env = frontmatter.execute(frontmatter_code, context)
+      local messages, frontmatter_code, fm_context = buffers.parse_buffer(bufnr, context)
 
-      local eval_env = eval.create_safe_env()
-      for k, v in pairs(frontmatter_env) do
-        eval_env[k] = v
-      end
-
-      local processed_content = process_expressions(messages[1].content, eval_env)
+      local processed_content, errors = eval.interpolate(messages[1].content, fm_context)
 
       assert.are.equal("Uppercase: HELLO WORLD", processed_content)
+      assert.are.equal(0, #errors)
     end)
   end)
 
@@ -298,8 +270,7 @@ describe("flemma.templating", function()
   end)
 
   describe("integration with FlemmaSend workflow", function()
-    -- This test simulates how the templating system should integrate with the main send workflow
-    -- It mocks the provider to capture the processed messages
+    -- This test simulates how the templating system integrates with the main send workflow
     it("should process templates before sending to provider", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
 
@@ -313,27 +284,24 @@ describe("flemma.templating", function()
 
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      -- This test focuses on the templating logic rather than provider integration
-
-      -- Parse and process the buffer content
+      -- Parse and process the buffer content (simulates core.lua workflow)
       local context = require("flemma.context").from_file("test.chat")
-      local messages, frontmatter_code = buffers.parse_buffer(bufnr, context)
-      local frontmatter_env = frontmatter.execute(frontmatter_code, context)
+      local messages, fm_code, fm_context = buffers.parse_buffer(bufnr, context)
 
-      local eval_env = eval.create_safe_env()
-      for k, v in pairs(frontmatter_env) do
-        eval_env[k] = v
+      -- Process expressions in messages using the real interpolate function
+      local processed_messages = {}
+      for _, msg in ipairs(messages) do
+        local new_content, errors = eval.interpolate(msg.content, fm_context)
+        local new_msg = vim.deepcopy(msg)
+        new_msg.content = new_content
+        table.insert(processed_messages, new_msg)
+        assert.are.equal(0, #errors, "Should have no errors")
       end
 
-      -- Process expressions in messages (this should be part of the main flow)
-      for _, message in ipairs(messages) do
-        message.content = process_expressions(message.content, eval_env)
-      end
-
-      -- Verify the processed messages directly since we're testing the templating logic
-      assert.are.equal(1, #messages)
-      assert.are.equal("You", messages[1].type)
-      assert.are.equal("Value is world and greeting is Hello, Claude", messages[1].content)
+      -- Verify the processed messages
+      assert.are.equal(1, #processed_messages)
+      assert.are.equal("You", processed_messages[1].type)
+      assert.are.equal("Value is world and greeting is Hello, Claude", processed_messages[1].content)
     end)
   end)
 end)

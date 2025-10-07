@@ -235,4 +235,43 @@ function M.eval_expression(expr, env)
   return eval_result
 end
 
+-- Interpolate {{}} expressions in content
+-- Returns processed content and array of errors
+function M.interpolate(content, env)
+  if not content then
+    return "", {}
+  end
+
+  -- Use provided env or create empty table
+  env = env or {}
+
+  -- Ensure env has the base safe environment capabilities
+  ensure_env_capabilities(env, M.eval_expression, M.create_safe_env)
+
+  -- Merge base safe env with provided env
+  local base_env = M.create_safe_env()
+  for k, v in pairs(base_env) do
+    if env[k] == nil then
+      env[k] = v
+    end
+  end
+
+  local errors = {}
+  local processed = tostring(content):gsub("{{(.-)}}", function(inner_expr)
+    local ok, result = pcall(M.eval_expression, inner_expr, env)
+    if not ok then
+      table.insert(errors, {
+        expression = inner_expr,
+        error_details = result,
+      })
+      -- Keep the original expression on error
+      return "{{" .. inner_expr .. "}}"
+    end
+    -- Convert result to string, nil becomes empty string
+    return result == nil and "" or tostring(result)
+  end)
+
+  return processed, errors
+end
+
 return M

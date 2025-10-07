@@ -43,4 +43,21 @@ function M.from_file(file_path)
   return context
 end
 
+---Deep clone a context object
+---
+---Creates a deep copy of the context, including all internal fields.
+---This is used to create execution contexts that can be extended with
+---user-defined variables without modifying the original context.
+---
+---@param context Context The context to clone
+---@return Context cloned_context A deep copy of the context
+function M.clone(context)
+  if not context then
+    return {}
+  end
+
+  -- Use vim.deepcopy to handle all fields, including nested tables
+  return vim.deepcopy(context)
+end
+
 return M

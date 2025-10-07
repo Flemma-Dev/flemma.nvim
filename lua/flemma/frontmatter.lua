@@ -2,6 +2,7 @@
 local M = {}
 
 local eval = require("flemma.eval")
+local context_util = require("flemma.context")
 
 -- Parse frontmatter from lines
 function M.parse(lines)
@@ -38,25 +39,38 @@ end
 
 ---Execute frontmatter code in a safe environment
 ---
+---Returns a context object (clone of the input context) extended with
+---user-defined variables from the frontmatter code.
+---
 ---@param code string The Lua code from frontmatter
----@param context Context The shared context object with __filename and __include_stack
----@return table environment The environment with frontmatter variables
+---@param context Context The shared context object
+---@return Context exec_context A context object with user-defined variables added
 function M.execute(code, context)
+  -- Start with a cloned context (or empty table if no context)
+  local exec_context = context_util.clone(context)
+
+  -- If no code, return the cloned context as-is
   if not code then
-    return {}
+    return exec_context
   end
 
-  -- Create a base environment for frontmatter execution
+  -- Create a base safe environment and merge in the context
   local env_for_frontmatter = eval.create_safe_env()
 
-  -- Explicitly set required fields from context for include() support
-  if context then
-    env_for_frontmatter.__filename = context.__filename
-    env_for_frontmatter.__include_stack = context.__include_stack
-      or (context.__filename and { context.__filename } or nil)
+  -- Add all context fields to the execution environment
+  for k, v in pairs(exec_context) do
+    env_for_frontmatter[k] = v
   end
 
-  return eval.execute_safe(code, env_for_frontmatter)
+  -- Execute and get user-defined globals
+  local user_globals = eval.execute_safe(code, env_for_frontmatter)
+
+  -- Add user-defined variables to the execution context
+  for k, v in pairs(user_globals) do
+    exec_context[k] = v
+  end
+
+  return exec_context
 end
 
 return M

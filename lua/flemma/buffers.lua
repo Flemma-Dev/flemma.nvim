@@ -129,6 +129,7 @@ end
 ---@param context Context The shared context object for frontmatter execution and file path resolution
 ---@return table[] messages The parsed messages
 ---@return string|nil frontmatter_code The frontmatter code if present
+---@return Context frontmatter_context The execution context with frontmatter variables
 function M.parse_buffer(bufnr, context)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
@@ -136,9 +137,20 @@ function M.parse_buffer(bufnr, context)
   local frontmatter = require("flemma.frontmatter")
   local fm_code, content = frontmatter.parse(lines)
 
-  -- Execute frontmatter if present (context is optional unless include() is used)
+  -- Execute frontmatter if present (returns a context object with user variables)
+  local fm_context = {}
   if fm_code then
-    frontmatter.execute(fm_code, context)
+    local ok, context_or_err = pcall(frontmatter.execute, fm_code, context)
+    if ok then
+      fm_context = context_or_err
+    else
+      log.error("parse_buffer(): Frontmatter execution error: " .. tostring(context_or_err))
+      vim.notify("Flemma: Frontmatter error: " .. tostring(context_or_err), vim.log.levels.ERROR)
+      fm_context = require("flemma.context").clone(context)
+    end
+  else
+    -- No frontmatter, just clone the context
+    fm_context = require("flemma.context").clone(context)
   end
 
   -- Calculate frontmatter offset for sign placement
@@ -153,7 +165,7 @@ function M.parse_buffer(bufnr, context)
 
   local messages = M.parse_messages(bufnr, content, frontmatter_offset)
 
-  return messages, fm_code
+  return messages, fm_code, fm_context
 end
 
 -- Execute a command in the context of a specific buffer

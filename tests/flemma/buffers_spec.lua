@@ -15,7 +15,7 @@ describe("flemma.parse_buffer", function()
 
     local flemma = require("flemma")
     local context = require("flemma.context").from_file("test.chat")
-    local messages, frontmatter_code = require("flemma.buffers").parse_buffer(bufnr, context)
+    local messages, frontmatter_code, fm_context = require("flemma.buffers").parse_buffer(bufnr, context)
 
     assert.are.equal(2, #messages, "Should parse 2 messages")
 
@@ -26,6 +26,7 @@ describe("flemma.parse_buffer", function()
     assert.are.equal("Hello", messages[2].content)
 
     assert.are.equal("foo = 'bar'", frontmatter_code)
+    assert.are.equal("bar", fm_context.foo)
   end)
 
   it("does not execute frontmatter during UI update", function()
@@ -63,8 +64,11 @@ describe("flemma.parse_buffer", function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
     local context = require("flemma.context").from_file("test.chat")
-    assert.has_error(function()
-      require("flemma.buffers").parse_buffer(bufnr, context)
-    end)
+    -- Should not error, but should return cloned context (with no user vars) and notify user
+    local messages, fm_code, fm_context = require("flemma.buffers").parse_buffer(bufnr, context)
+    assert.are.equal(2, #messages)
+    assert.is_not_nil(fm_code)
+    -- fm_context should still have __filename from cloned context
+    assert.are.equal("test.chat", fm_context.__filename)
   end)
 end)
