@@ -226,7 +226,7 @@ function M.place_signs(bufnr, start_line, end_line, role)
   local sign_config = config.signs[internal_role_key] -- Look up config using "user", "system", etc.
 
   -- Check if the sign is actually defined before trying to place it
-  if vim.fn.sign_getdefined(sign_name) == {} then
+  if vim.tbl_isempty(vim.fn.sign_getdefined(sign_name)) then
     log.debug("place_signs(): Sign not defined: " .. sign_name .. " for role " .. role)
     return
   end
