@@ -4,16 +4,17 @@ local M = {}
 local log = require("flemma.logging")
 local provider_config = require("flemma.provider.config")
 local models = require("flemma.models")
+local providers_registry = require("flemma.provider.providers")
 
 --- Validates that a provider name is supported
 -- @param provider_name string The provider name to validate
 -- @return boolean, string|nil true if valid, or false with error message
 function M.validate_provider(provider_name)
-  if provider_name ~= "openai" and provider_name ~= "vertex" and provider_name ~= "claude" then
+  if not providers_registry.has(provider_name) then
     local err = string.format(
       "Flemma: Unknown provider '%s'. Supported providers are: %s",
       tostring(provider_name),
-      table.concat({ "claude", "openai", "vertex" }, ", ")
+      table.concat(providers_registry.supported_providers(), ", ")
     )
     return false, err
   end

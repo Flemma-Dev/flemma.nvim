@@ -30,18 +30,6 @@ for provider_name, provider_data in pairs(models_data.providers) do
   M.models[provider_name] = get_provider_models(provider_name)
 end
 
--- Authentication notes for providers
-M.auth_notes = {
-  vertex = [[
-## Authentication Options
-
-Vertex AI requires OAuth2 authentication. You can:
-1. Set VERTEX_AI_ACCESS_TOKEN environment variable with a valid access token
-2. Store a service account JSON in the keyring (requires gcloud CLI)
-3. Set VERTEX_SERVICE_ACCOUNT environment variable with the service account JSON
-]],
-}
-
 -- Get the default model for a provider
 function M.get_model(provider_name)
   local provider = models_data.providers[provider_name]

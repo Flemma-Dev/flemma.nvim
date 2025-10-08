@@ -36,7 +36,7 @@ local function find_matching_model(model_name)
   end
 
   -- Try progressively shorter combinations from the start
-  local current = parts[1] -- Start with "claude"
+  local current = parts[1] -- Start with the first part (provider name)
   for i = 2, #parts do
     current = current .. "-" .. parts[i]
     if M.models[current] then

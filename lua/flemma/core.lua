@@ -7,6 +7,7 @@ local log = require("flemma.logging")
 local state = require("flemma.state")
 local config_manager = require("flemma.core.config_manager")
 local ui = require("flemma.ui")
+local providers_registry = require("flemma.provider.providers")
 
 -- For testing purposes
 local last_request_body_for_testing = nil
@@ -24,19 +25,14 @@ local function initialize_provider(provider_name, model_name, parameters)
   config_manager.apply_config(provider_config)
 
   -- Create a fresh provider instance with the merged parameters
-  local new_provider
-  if provider_config.provider == "openai" then
-    new_provider = require("flemma.provider.openai").new(provider_config.parameters)
-  elseif provider_config.provider == "vertex" then
-    new_provider = require("flemma.provider.vertex").new(provider_config.parameters)
-  elseif provider_config.provider == "claude" then
-    new_provider = require("flemma.provider.claude").new(provider_config.parameters)
-  else
-    -- This should never happen since config_manager validates the provider
+  local provider_module = providers_registry.get(provider_config.provider)
+  if not provider_module then
     local err_msg = "initialize_provider(): Invalid provider after validation: " .. tostring(provider_config.provider)
     log.error(err_msg)
     return nil
   end
+
+  local new_provider = require(provider_module).new(provider_config.parameters)
 
   -- Update the global provider reference
   state.set_provider(new_provider)
