@@ -67,26 +67,22 @@ local function include_delegate(relative_path, env_of_caller, eval_expression_fu
     new_include_env.__variables = vim.deepcopy(env_of_caller.__variables)
   end
 
-  -- Process the content: evaluate {{ }} expressions which may contain nested include() or produce @./ refs
-  local processed_content = content:gsub("{{(.-)}}", function(inner_expr)
-    local ok, presult = pcall(eval_expression_func, inner_expr, new_include_env)
-    if not ok then
-      error(presult)
-    end
-    return presult == nil and "" or tostring(presult)
-  end)
-
-  -- Now parse the processed content for @./ file references and resolve them inline
+  -- Use unified parser to handle both {{ }} expressions and @./ file references in one pass
   local parser = require("flemma.parser")
+  local segments = parser.parse_inline_content(content)
 
-  -- Parse content as segments (no frontmatter, no message roles)
-  local segments = parser.parse_inline_content(processed_content)
-
-  -- Build final output by resolving file refs
+  -- Build final output by processing each segment type
   local result_parts = {}
   for _, seg in ipairs(segments) do
     if seg.kind == "text" then
       table.insert(result_parts, seg.value)
+    elseif seg.kind == "expression" then
+      -- Evaluate {{ }} expression
+      local ok, presult = pcall(eval_expression_func, seg.code, new_include_env)
+      if not ok then
+        error(presult)
+      end
+      table.insert(result_parts, presult == nil and "" or tostring(presult))
     elseif seg.kind == "file_reference" then
       -- Resolve file reference relative to target_path
       local filename = seg.path
@@ -277,45 +273,6 @@ function M.eval_expression(expr, env)
   end
 
   return eval_result
-end
-
--- Interpolate {{}} expressions in content
--- Returns processed content and array of errors
-function M.interpolate(content, env)
-  if not content then
-    return "", {}
-  end
-
-  -- Use provided env or create empty table
-  env = env or {}
-
-  -- Ensure env has the base safe environment capabilities
-  ensure_env_capabilities(env, M.eval_expression, M.create_safe_env)
-
-  -- Merge base safe env with provided env
-  local base_env = M.create_safe_env()
-  for k, v in pairs(base_env) do
-    if env[k] == nil then
-      env[k] = v
-    end
-  end
-
-  local errors = {}
-  local processed = tostring(content):gsub("{{(.-)}}", function(inner_expr)
-    local ok, result = pcall(M.eval_expression, inner_expr, env)
-    if not ok then
-      table.insert(errors, {
-        expression = inner_expr,
-        error_details = result,
-      })
-      -- Keep the original expression on error
-      return "{{" .. inner_expr .. "}}"
-    end
-    -- Convert result to string, nil becomes empty string
-    return result == nil and "" or tostring(result)
-  end)
-
-  return processed, errors
 end
 
 return M
