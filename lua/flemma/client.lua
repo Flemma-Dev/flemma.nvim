@@ -247,7 +247,13 @@ function M.cancel_request(job_id)
   end
 
   -- Get the process ID
-  local pid = vim.fn.jobpid(job_id)
+  local ok, pid = pcall(vim.fn.jobpid, job_id)
+
+  if not ok then
+    log.warn("Failed to get job PID for cancellation (job may have already completed): " .. tostring(job_id))
+    vim.notify("Flemma: Request already completed or terminated", vim.log.levels.WARN)
+    return false
+  end
 
   -- Send SIGINT first for clean connection termination
   if pid then
