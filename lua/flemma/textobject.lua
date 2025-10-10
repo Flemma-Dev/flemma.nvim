@@ -37,11 +37,28 @@ local function get_message_bounds()
     role_type_end = role_type_end + 1
   end
 
+  -- Check if there's content on the same line as the role
+  local has_content_on_first_line = role_type_end <= #lines[start_line]
+
+  -- Trim leading empty lines after role type for inner selection
+  local inner_start_line = start_line
+  local inner_start_col = role_type_end
+  if not has_content_on_first_line then
+    while
+      inner_start_line < inner_end and (not lines[inner_start_line + 1] or lines[inner_start_line + 1]:match("^%s*$"))
+    do
+      inner_start_line = inner_start_line + 1
+    end
+    inner_start_line = inner_start_line + 1
+    inner_start_col = 1
+  end
+
   return {
     start_line = start_line,
     end_line = end_line,
+    inner_start_line = inner_start_line,
+    inner_start_col = inner_start_col,
     inner_end = inner_end,
-    role_type_end = role_type_end - 1,
   }
 end
 
@@ -61,15 +78,15 @@ function M.message_textobj(type)
   end
 
   if type == "i" then -- inner message
-    -- Start at first character after the role type
-    vim.cmd(string.format("normal! %dG%d|v", bounds.start_line, bounds.role_type_end + 1))
+    -- Start at first non-whitespace content
+    vim.cmd(string.format("normal! %dG%d|v", bounds.inner_start_line, bounds.inner_start_col))
     -- Move to last non-empty line
-    vim.cmd(string.format("normal! %dG$", bounds.inner_end))
+    vim.cmd(string.format("normal! %dGg_", bounds.inner_end))
   else -- around message
     -- Start at beginning of first line
     vim.cmd(string.format("normal! %dG0v", bounds.start_line))
     -- Move to end of last line
-    vim.cmd(string.format("normal! %dG$", bounds.end_line))
+    vim.cmd(string.format("normal! %dGg_", bounds.inner_end))
   end
 end
 
