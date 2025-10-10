@@ -242,9 +242,8 @@ end
 function M.fold_last_thinking_block(bufnr)
   log.debug("fold_last_thinking_block(): Attempting to fold last thinking block in buffer " .. bufnr)
   
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local parser = require("flemma.parser")
-  local doc = parser.parse_lines(lines)
+  local doc = parser.get_parsed_document(bufnr)
 
   if #doc.messages == 0 then
     log.debug("fold_last_thinking_block(): No messages found in buffer.")
@@ -390,9 +389,8 @@ function M.update_ui(bufnr)
   end
 
   -- Parse messages using AST
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local parser = require("flemma.parser")
-  local doc = parser.parse_lines(lines)
+  local doc = parser.get_parsed_document(bufnr)
 
   M.add_rulers(bufnr, doc)
 

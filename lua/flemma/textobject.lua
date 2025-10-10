@@ -5,8 +5,9 @@ local parser = require("flemma.parser")
 -- Get the bounds of the current message
 local function get_message_bounds()
   local cur_line = vim.api.nvim_win_get_cursor(0)[1]
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local doc = parser.parse_lines(lines)
+  local bufnr = vim.api.nvim_get_current_buf()
+  local doc = parser.get_parsed_document(bufnr)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
   -- Find the message containing the current line
   local current_msg = nil

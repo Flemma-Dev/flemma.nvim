@@ -7,8 +7,9 @@ local parser = require("flemma.parser")
 -- Find the next message marker in the buffer and move cursor
 function M.find_next_message()
   local cur_line = vim.api.nvim_win_get_cursor(0)[1]
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local doc = parser.parse_lines(lines)
+  local bufnr = vim.api.nvim_get_current_buf()
+  local doc = parser.get_parsed_document(bufnr)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
   for _, msg in ipairs(doc.messages) do
     if msg.position.start_line > cur_line then
@@ -28,8 +29,9 @@ end
 -- Find the previous message marker in the buffer and move cursor
 function M.find_prev_message()
   local cur_line = vim.api.nvim_win_get_cursor(0)[1]
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local doc = parser.parse_lines(lines)
+  local bufnr = vim.api.nvim_get_current_buf()
+  local doc = parser.get_parsed_document(bufnr)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
   -- Iterate in reverse to find the previous message
   for i = #doc.messages, 1, -1 do
