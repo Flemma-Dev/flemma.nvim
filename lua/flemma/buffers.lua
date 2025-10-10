@@ -2,6 +2,7 @@
 local M = {}
 
 local state = require("flemma.state")
+local client = require("flemma.client")
 
 -- Store buffer-local state
 local buffer_state = {}
@@ -14,6 +15,7 @@ function M.init_buffer(bufnr)
     current_usage = {
       input_tokens = 0,
       output_tokens = 0,
+      thoughts_tokens = 0,
     },
   }
 end
@@ -21,12 +23,15 @@ end
 -- Cleanup any outstanding jobs/timers and remove stored state for a buffer.
 -- Intended to be called on buffer lifecycle events (BufWipeout/BufUnload/BufDelete) for chat buffers.
 function M.cleanup_buffer(bufnr)
-  if buffer_state[bufnr] then
-    if buffer_state[bufnr].current_request then
-      vim.fn.jobstop(buffer_state[bufnr].current_request)
+  local st = buffer_state[bufnr]
+  if st then
+    if st.current_request then
+      -- Mark as cancelled and use client to terminate the job cleanly
+      st.request_cancelled = true
+      client.cancel_request(st.current_request)
     end
-    if buffer_state[bufnr].spinner_timer then
-      vim.fn.timer_stop(buffer_state[bufnr].spinner_timer)
+    if st.spinner_timer then
+      vim.fn.timer_stop(st.spinner_timer)
     end
     buffer_state[bufnr] = nil
   end
