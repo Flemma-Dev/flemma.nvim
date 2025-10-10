@@ -37,15 +37,4 @@ function M.has(language)
   return parser_modules[language] ~= nil or parsers[language] ~= nil
 end
 
----Get list of supported languages
----@return string[] languages Array of supported language identifiers
-function M.supported_languages()
-  local languages = {}
-  for language in pairs(parsers) do
-    table.insert(languages, language)
-  end
-  table.sort(languages)
-  return languages
-end
-
 return M

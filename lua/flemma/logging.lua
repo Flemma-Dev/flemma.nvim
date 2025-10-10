@@ -71,11 +71,6 @@ function M.get_path()
   return config.path
 end
 
--- Set the log path
-function M.set_path(path)
-  config.path = path
-end
-
 -- Configure the logging module
 function M.configure(opts)
   if opts then

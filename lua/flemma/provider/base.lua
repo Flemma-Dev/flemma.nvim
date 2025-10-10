@@ -27,11 +27,6 @@ function M.new(opts)
   return provider
 end
 
--- Initialize the provider
-function M.init(self)
-  -- To be implemented by specific providers
-end
-
 -- Try to get API key from system keyring (local helper function)
 local function try_keyring(service_name, key_name, project_id)
   if vim.fn.has("linux") == 1 then
