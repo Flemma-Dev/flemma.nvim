@@ -414,6 +414,17 @@ function M.setup()
       require("flemma.core").update_ui(ev.buf)
     end,
   })
+
+  -- Ensure buffer-local state gets cleaned up when chat buffers are removed.
+  -- This prevents leaking timers or jobs if a buffer is deleted while a request/spinner is active.
+  vim.api.nvim_create_autocmd({ "BufWipeout", "BufUnload", "BufDelete" }, {
+    pattern = "*",
+    callback = function(ev)
+      if vim.bo[ev.buf].filetype == "chat" or string.match(vim.api.nvim_buf_get_name(ev.buf), "%.chat$") then
+        buffers.cleanup_buffer(ev.buf)
+      end
+    end,
+  })
 end
 
 return M

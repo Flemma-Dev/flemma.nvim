@@ -18,6 +18,8 @@ function M.init_buffer(bufnr)
   }
 end
 
+-- Cleanup any outstanding jobs/timers and remove stored state for a buffer.
+-- Intended to be called on buffer lifecycle events (BufWipeout/BufUnload/BufDelete) for chat buffers.
 function M.cleanup_buffer(bufnr)
   if buffer_state[bufnr] then
     if buffer_state[bufnr].current_request then
