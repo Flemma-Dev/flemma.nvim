@@ -1,6 +1,6 @@
 --- Test file for OpenAI provider functionality
 describe("OpenAI Provider", function()
-  local openai = require("flemma.provider.openai")
+  local openai = require("flemma.provider.providers.openai")
 
   after_each(function()
     -- Clean up any buffers created during the test

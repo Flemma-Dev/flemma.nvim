@@ -11,9 +11,6 @@ local commands = require("flemma.commands")
 local keymaps = require("flemma.keymaps")
 local highlight = require("flemma.highlight")
 
--- Load frontmatter module to register built-in parsers
-require("flemma.frontmatter")
-
 -- Module configuration (will hold merged user opts and defaults)
 local config = {}
 

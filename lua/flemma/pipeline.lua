@@ -1,16 +1,16 @@
 local parser = require("flemma.parser")
-local evaluator = require("flemma.evaluator")
-local ast_to_parts = require("flemma.ast_to_parts")
+local processor = require("flemma.processor")
+local ast = require("flemma.ast")
 
 local M = {}
 
 --- Run full pipeline for given buffer lines and context
 --- Returns:
 ---  - prompt: { history=[{role, parts, content}], system=string|nil } canonical roles
----  - evaluated: evaluator output with diagnostics array
+---  - evaluated: processor output with diagnostics array
 function M.run(lines, context)
   local doc = parser.parse_lines(lines)
-  local evaluated = evaluator.evaluate(doc, context or {})
+  local evaluated = processor.evaluate(doc, context or {})
 
   local history = {}
   local system = nil
@@ -22,7 +22,7 @@ function M.run(lines, context)
     elseif msg.role == "Assistant" then
       role = "assistant"
     elseif msg.role == "System" then
-      local parts = ast_to_parts.to_generic_parts(msg.parts)
+      local parts = ast.to_generic_parts(msg.parts)
       local sys_text = {}
       for _, p in ipairs(parts) do
         if p.kind == "text" or p.kind == "text_file" then
@@ -35,7 +35,7 @@ function M.run(lines, context)
     if role then
       table.insert(history, {
         role = role,
-        parts = ast_to_parts.to_generic_parts(msg.parts),
+        parts = ast.to_generic_parts(msg.parts),
         content = nil,
       })
     end

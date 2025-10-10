@@ -1,8 +1,8 @@
 local ast = require("flemma.ast")
 local ctx = require("flemma.context")
 local parser = require("flemma.parser")
-local evaluator = require("flemma.evaluator")
-local mapper = require("flemma.ast_to_parts")
+local processor = require("flemma.processor")
+local ast = require("flemma.ast")
 local pipeline = require("flemma.pipeline")
 
 describe("AST and Context", function()
@@ -140,7 +140,7 @@ describe("Parser", function()
   end)
 end)
 
-describe("Evaluator", function()
+describe("Processor", function()
   local function setup_fixtures()
     os.execute("mkdir -p tests/fixtures")
     local f = io.open("tests/fixtures/a.txt", "w")
@@ -167,7 +167,7 @@ describe("Evaluator", function()
       "@You: File1: {{ 'hello' }} and File2: @./a.txt.",
     }
     local doc = parser.parse_lines(lines)
-    local out = evaluator.evaluate(doc, base)
+    local out = processor.evaluate(doc, base)
     assert.equals(1, #out.messages)
     local parts = out.messages[1].parts
     local kinds = {}
@@ -190,7 +190,7 @@ describe("Evaluator", function()
       "@You: See @./my%20file.txt!",
     }
     local doc = parser.parse_lines(lines)
-    local out = evaluator.evaluate(doc, base)
+    local out = processor.evaluate(doc, base)
     local parts = out.messages[1].parts
     assert.equals("file", parts[2].kind)
     assert.equals("text", parts[3].kind)
@@ -206,7 +206,7 @@ describe("Evaluator", function()
       "@You: Img: @./sample.bin;type=image/png",
     }
     local doc = parser.parse_lines(lines)
-    local out = evaluator.evaluate(doc, base2)
+    local out = processor.evaluate(doc, base2)
     local parts = out.messages[1].parts
     assert.equals("file", parts[2].kind)
     assert.equals("image/png", parts[2].mime_type)
@@ -218,8 +218,8 @@ describe("Evaluator", function()
     }
     local b = ctx.from_file("tests/fixtures/loop1.txt")
     local doc = parser.parse_lines(lines)
-    local ok, res = pcall(evaluator.evaluate, doc, b)
-    assert.is_true(ok, "Evaluator should not crash; include() error handled in expression eval as text")
+    local ok, res = pcall(processor.evaluate, doc, b)
+    assert.is_true(ok, "Processor should not crash; include() error handled in expression eval as text")
   end)
 
   it("resolves @./ file references inside included content", function()
@@ -232,7 +232,7 @@ describe("Evaluator", function()
     }
     local b = ctx.from_file("tests/fixtures/doc.chat")
     local doc = parser.parse_lines(lines)
-    local out = evaluator.evaluate(doc, b)
+    local out = processor.evaluate(doc, b)
     -- include() should have resolved @./a.txt to its content
     local text_parts = {}
     for _, p in ipairs(out.messages[1].parts) do
@@ -250,7 +250,7 @@ describe("Evaluator", function()
       "@Assistant: {{ 1 + 1 }} and @./a.txt should be literal",
     }
     local doc = parser.parse_lines(lines)
-    local out = evaluator.evaluate(doc, base)
+    local out = processor.evaluate(doc, base)
     local parts = out.messages[1].parts
     assert.equals(1, #parts)
     assert.equals("text", parts[1].kind)
@@ -264,7 +264,7 @@ describe("Evaluator", function()
       "@You: {{ 1 / 'x' }}",
     }
     local doc = parser.parse_lines(lines)
-    local out = evaluator.evaluate(doc, base)
+    local out = processor.evaluate(doc, base)
     assert.is_true(#out.diagnostics > 0, "Should collect diagnostics")
     local expr_diags = vim.tbl_filter(function(d)
       return d.type == "expression"
@@ -286,7 +286,7 @@ describe("Evaluator", function()
       "the answer is 42.",
     }
     local doc = parser.parse_lines(lines)
-    local out = evaluator.evaluate(doc, ctx.from_file("tests/fixtures/doc.chat"))
+    local out = processor.evaluate(doc, ctx.from_file("tests/fixtures/doc.chat"))
 
     -- Check that thinking nodes are preserved as parts
     local parts = out.messages[1].parts
@@ -314,7 +314,7 @@ end)
 
 describe("AST to Parts Mapper", function()
   it("maps parts to generic provider format", function()
-    local parts = mapper.to_generic_parts({
+    local parts = ast.to_generic_parts({
       { kind = "text", text = "hi" },
       { kind = "file", filename = "x.png", mime_type = "image/png", data = "abcd" },
       { kind = "file", filename = "x.pdf", mime_type = "application/pdf", data = "pdf" },
@@ -375,7 +375,7 @@ end)
 
 describe("Provider Integration", function()
   it("builds Claude request from pipeline output", function()
-    local claude = require("flemma.provider.claude")
+    local claude = require("flemma.provider.providers.claude")
     local provider = claude.new({ model = "claude-3-haiku-20240307", max_tokens = 256, temperature = 0 })
 
     local lines = {
@@ -391,7 +391,7 @@ describe("Provider Integration", function()
   end)
 
   it("builds OpenAI request from pipeline output", function()
-    local openai = require("flemma.provider.openai")
+    local openai = require("flemma.provider.providers.openai")
     local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 100, temperature = 0 })
 
     local lines = {

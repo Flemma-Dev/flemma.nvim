@@ -5,7 +5,7 @@ local M = {}
 local buffers = require("flemma.buffers")
 local log = require("flemma.logging")
 local state = require("flemma.state")
-local config_manager = require("flemma.core.config_manager")
+local config_manager = require("flemma.core.config.manager")
 local ui = require("flemma.ui")
 local providers_registry = require("flemma.provider.providers")
 

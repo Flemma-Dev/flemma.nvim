@@ -1,6 +1,6 @@
 --- Test file for Claude provider functionality
 describe("Claude Provider", function()
-  local claude = require("flemma.provider.claude")
+  local claude = require("flemma.provider.providers.claude")
 
   after_each(function()
     -- Clean up any buffers created during the test

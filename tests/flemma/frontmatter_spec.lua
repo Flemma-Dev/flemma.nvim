@@ -1,6 +1,6 @@
 describe("flemma.frontmatter", function()
   local parser = require("flemma.parser")
-  local evaluator = require("flemma.evaluator")
+  local processor = require("flemma.processor")
   local pipeline = require("flemma.pipeline")
   local ctx = require("flemma.context")
 
@@ -50,7 +50,7 @@ describe("flemma.frontmatter", function()
     end)
   end)
 
-  describe("execute via evaluator with Lua", function()
+  describe("execute via processor with Lua", function()
     it("should execute Lua frontmatter and make variables available to expressions", function()
       local lines = {
         "```lua",
@@ -99,7 +99,7 @@ describe("flemma.frontmatter", function()
     end)
   end)
 
-  describe("execute via evaluator with JSON", function()
+  describe("execute via processor with JSON", function()
     it("should parse JSON frontmatter and make variables available to expressions", function()
       local lines = {
         "```json",
@@ -177,7 +177,7 @@ describe("flemma.frontmatter", function()
       }
       local doc = parser.parse_lines(lines)
       local context = ctx.from_file("test.chat")
-      local evaluated = evaluator.evaluate(doc, context)
+      local evaluated = processor.evaluate(doc, context)
 
       -- Should have error diagnostic
       assert.is_true(#evaluated.diagnostics > 0)
@@ -199,7 +199,7 @@ describe("flemma.frontmatter", function()
       }
       local doc = parser.parse_lines(lines)
       local context = ctx.from_file("test.chat")
-      local evaluated = evaluator.evaluate(doc, context)
+      local evaluated = processor.evaluate(doc, context)
 
       -- Should have error diagnostic
       assert.is_true(#evaluated.diagnostics > 0)
@@ -223,7 +223,7 @@ describe("flemma.frontmatter", function()
       }
       local doc = parser.parse_lines(lines)
       local context = ctx.from_file("test.chat")
-      local evaluated = evaluator.evaluate(doc, context)
+      local evaluated = processor.evaluate(doc, context)
 
       -- Should have error diagnostic
       assert.is_true(#evaluated.diagnostics > 0)

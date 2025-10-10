@@ -3,9 +3,9 @@
 local M = {}
 
 local providers = {
-  openai = "flemma.provider.openai",
-  vertex = "flemma.provider.vertex",
-  claude = "flemma.provider.claude",
+  openai = "flemma.provider.providers.openai",
+  vertex = "flemma.provider.providers.vertex",
+  claude = "flemma.provider.providers.claude",
 }
 
 ---Get a provider module path for a specific provider name

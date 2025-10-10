@@ -1,7 +1,7 @@
 local stub = require("luassert.stub")
 
 describe("File References and Path Parsing", function()
-  local parser, evaluator, context_util
+  local parser, processor, context_util
   local stubs = {}
 
   local function create_stub(obj, method, replacement)
@@ -13,10 +13,10 @@ describe("File References and Path Parsing", function()
   before_each(function()
     -- Clear the module cache to ensure fresh state
     package.loaded["flemma.parser"] = nil
-    package.loaded["flemma.evaluator"] = nil
+    package.loaded["flemma.processor"] = nil
     package.loaded["flemma.context"] = nil
     parser = require("flemma.parser")
-    evaluator = require("flemma.evaluator")
+    processor = require("flemma.processor")
     context_util = require("flemma.context")
     stubs = {}
   end)
@@ -33,7 +33,7 @@ describe("File References and Path Parsing", function()
   local function parse_and_get_file_parts(content, context)
     local lines = { "@You: " .. content }
     local doc = parser.parse_lines(lines)
-    local result = evaluator.evaluate(doc, context or {})
+    local result = processor.evaluate(doc, context or {})
 
     local file_parts = {}
     local file_diags = vim.tbl_filter(function(d)
@@ -425,7 +425,7 @@ describe("File References and Path Parsing", function()
     describe("Claude Provider", function()
       it("formats PNG images correctly", function()
         -- Setup Claude provider
-        local claude = require("flemma.provider.claude")
+        local claude = require("flemma.provider.providers.claude")
         local provider = claude.new({ model = "claude-sonnet-4-0", max_tokens = 1000 })
 
         -- Mock file operations
@@ -490,7 +490,7 @@ describe("File References and Path Parsing", function()
 
       it("formats PDF documents correctly", function()
         -- Setup Claude provider
-        local claude = require("flemma.provider.claude")
+        local claude = require("flemma.provider.providers.claude")
         local provider = claude.new({ model = "claude-sonnet-4-0", max_tokens = 1000 })
 
         -- Mock file operations
@@ -544,7 +544,7 @@ describe("File References and Path Parsing", function()
 
       it("formats text files correctly", function()
         -- Setup Claude provider
-        local claude = require("flemma.provider.claude")
+        local claude = require("flemma.provider.providers.claude")
         local provider = claude.new({ model = "claude-sonnet-4-0", max_tokens = 1000 })
 
         -- Mock file operations
@@ -597,7 +597,7 @@ describe("File References and Path Parsing", function()
     describe("OpenAI Provider", function()
       it("formats PNG images correctly", function()
         -- Setup OpenAI provider
-        local openai = require("flemma.provider.openai")
+        local openai = require("flemma.provider.providers.openai")
         local provider = openai.new({ model = "gpt-4o", max_tokens = 1000 })
 
         -- Mock file operations
@@ -662,7 +662,7 @@ describe("File References and Path Parsing", function()
 
       it("formats PDF documents correctly", function()
         -- Setup OpenAI provider
-        local openai = require("flemma.provider.openai")
+        local openai = require("flemma.provider.providers.openai")
         local provider = openai.new({ model = "gpt-4o", max_tokens = 1000 })
 
         -- Mock file operations
@@ -716,7 +716,7 @@ describe("File References and Path Parsing", function()
 
       it("formats text files correctly", function()
         -- Setup OpenAI provider
-        local openai = require("flemma.provider.openai")
+        local openai = require("flemma.provider.providers.openai")
         local provider = openai.new({ model = "gpt-4o", max_tokens = 1000 })
 
         -- Mock file operations
@@ -776,7 +776,7 @@ describe("File References and Path Parsing", function()
     describe("Vertex AI Provider", function()
       it("formats PNG images correctly", function()
         -- Setup Vertex AI provider
-        local vertex = require("flemma.provider.vertex")
+        local vertex = require("flemma.provider.providers.vertex")
         local provider = vertex.new({ model = "gemini-2.5-pro", max_tokens = 1000, project_id = "test-project" })
 
         -- Mock file operations
@@ -840,7 +840,7 @@ describe("File References and Path Parsing", function()
 
       it("formats PDF documents correctly", function()
         -- Setup Vertex AI provider
-        local vertex = require("flemma.provider.vertex")
+        local vertex = require("flemma.provider.providers.vertex")
         local provider = vertex.new({ model = "gemini-2.5-pro", max_tokens = 1000, project_id = "test-project" })
 
         -- Mock file operations
@@ -893,7 +893,7 @@ describe("File References and Path Parsing", function()
 
       it("formats text files correctly", function()
         -- Setup Vertex AI provider
-        local vertex = require("flemma.provider.vertex")
+        local vertex = require("flemma.provider.providers.vertex")
         local provider = vertex.new({ model = "gemini-2.5-pro", max_tokens = 1000, project_id = "test-project" })
 
         -- Mock file operations
