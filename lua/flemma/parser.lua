@@ -13,16 +13,35 @@ end
 -- Unified segment parser: parse text for {{ }} expressions and @./ file references
 -- Returns array of AST segments (text, expression, file_reference)
 -- Note: <thinking> tags are NOT parsed here - only in @Assistant messages
-local function parse_segments(text)
+-- base_line: optional 1-indexed line number for accurate position tracking
+local function parse_segments(text, base_line)
   local segments = {}
   if text == "" or text == nil then return segments end
+  base_line = base_line or 0
+  
   local idx = 1
   local s = text
+  local current_line = base_line
+  local line_start_idx = 1
 
   local function emit_text(str) 
     if str and #str > 0 then 
       table.insert(segments, ast.text(str)) 
     end 
+  end
+  
+  local function char_to_line_col(pos)
+    -- Count newlines up to pos to determine line and column
+    local line = base_line
+    local last_newline = 0
+    for i = 1, pos - 1 do
+      if s:sub(i, i) == "\n" then
+        line = line + 1
+        last_newline = i
+      end
+    end
+    local col = pos - last_newline
+    return line, col
   end
 
   while idx <= #s do
@@ -47,7 +66,8 @@ local function parse_segments(text)
     emit_text(s:sub(idx, next_start - 1))
 
     if next_kind == "expr" then
-      table.insert(segments, ast.expression(payload, { line = 0, col = next_start }))
+      local line, col = char_to_line_col(next_start)
+      table.insert(segments, ast.expression(payload, { start_line = line, start_col = col }))
     elseif next_kind == "file" then
       local raw_file_match, mime_with_punct = payload:match("^([^;]+);type=(.+)$")
       local mime_override = nil
@@ -65,13 +85,14 @@ local function parse_segments(text)
       end
       
       local cleaned_path = url_decode(raw_file_match)
+      local line, col = char_to_line_col(next_start)
 
       table.insert(segments, ast.file_reference(
         mime_override and (raw_file_match .. ";type=" .. mime_override) or raw_file_match,
         cleaned_path,
         mime_override,
         #trailing_punct > 0 and trailing_punct or nil,
-        { line = 0, col = next_start }
+        { start_line = line, start_col = col }
       ))
     end
     idx = next_end + 1
@@ -191,7 +212,9 @@ local function parse_message(lines, start_idx, line_offset)
     segments = parse_assistant_segments(content_lines, content_start_line)
   else
     local content = table.concat(content_lines, "\n")
-    segments = parse_segments(content)
+    -- Calculate base line for non-Assistant messages
+    local content_start_line = (content_first and content_first:match("%S")) and start_idx + line_offset or (start_idx + 1 + line_offset)
+    segments = parse_segments(content, content_start_line)
   end
 
   local msg = ast.message(role, segments, { 
@@ -206,7 +229,7 @@ function M.parse_lines(lines)
   local errors = {}
   local fm, _, body, body_start = parse_frontmatter(lines)
   local messages = {}
-  local i = body and 1 or 1
+  local i = 1
   local content_lines = body or lines
   -- Calculate line offset: if frontmatter exists, messages start after it
   local line_offset = body and (body_start - 1) or 0

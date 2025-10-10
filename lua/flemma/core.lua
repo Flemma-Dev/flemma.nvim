@@ -242,6 +242,9 @@ function M.send_to_provider(opts)
     local function format_position(pos)
       if not pos then return "" end
       if pos.start_line then
+        if pos.start_col then
+          return string.format(":%d:%d", pos.start_line, pos.start_col)
+        end
         return string.format(":%d", pos.start_line)
       end
       return ""
