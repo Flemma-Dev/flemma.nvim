@@ -2,7 +2,7 @@ local ast = require("flemma.ast")
 local ctxutil = require("flemma.context")
 local eval = require("flemma.eval")
 local mime_util = require("flemma.mime")
-local frontmatter = require("flemma.frontmatter")
+local frontmatter_parsers = require("flemma.frontmatter.parsers")
 
 local M = {}
 
@@ -22,38 +22,61 @@ local function detect_mime(path, override)
   return mime_util.get_mime_by_extension(path)
 end
 
+local function to_text(v)
+  if v == nil then return "" end
+  if type(v) == "table" then
+    local ok, json = pcall(vim.fn.json_encode, v)
+    if ok then return json end
+  end
+  return tostring(v)
+end
+
 --- Evaluate a document AST.
 --- Returns:
---- - evaluated: { messages = { role, parts=[{kind,text|mime|data|...}] }, errors, expression_errors }
---- - warnings: array of { filename, raw, error }
+--- - evaluated: { messages = { role, parts=[{kind,text|mime|data|...}] }, diagnostics }
 function M.evaluate(doc, base_context)
-  local warnings = {}
-  local expression_errors = {}
+  -- Use doc.errors as the unified diagnostics array (parser may have populated it)
+  local diagnostics = doc.errors or {}
   local context = ctxutil.clone(base_context or {})
 
   -- 1) Frontmatter execution using the parser registry
   if doc.frontmatter then
     local fm = doc.frontmatter
-    local parser = frontmatter.get(fm.language)
+    local parser = frontmatter_parsers.get(fm.language)
     
     if parser then
       local ok, result = pcall(parser, fm.code, context)
       if ok then
-        context = ctxutil.extend(context, result)
+        if type(result) == "table" then
+          context = ctxutil.extend(context, result)
+        else
+          table.insert(diagnostics, {
+            type = "frontmatter",
+            severity = "warning",
+            language = fm.language,
+            error = "Frontmatter parser returned non-table; ignoring",
+            position = fm.position,
+            source_file = context.__filename or "N/A",
+          })
+        end
       else
-        table.insert(doc.errors, {
+        table.insert(diagnostics, {
           type = "frontmatter",
+          severity = "error",
           language = fm.language,
           error = tostring(result),
           position = fm.position,
+          source_file = context.__filename or "N/A",
         })
       end
     else
-      table.insert(doc.errors, {
+      table.insert(diagnostics, {
         type = "frontmatter",
+        severity = "error",
         language = fm.language,
         error = "Unsupported frontmatter language: " .. tostring(fm.language),
         position = fm.position,
+        source_file = context.__filename or "N/A",
       })
     end
   end
@@ -77,17 +100,19 @@ function M.evaluate(doc, base_context)
         local ok, result = pcall(eval.eval_expression, seg.code, env)
         if not ok then
           -- Collect the error for reporting
-          table.insert(expression_errors, {
+          table.insert(diagnostics, {
+            type = "expression",
+            severity = "warning",
             expression = seg.code,
             error = tostring(result),
             position = seg.position,
             message_role = msg.role,
-            file_path = context.__filename or "N/A",
+            source_file = context.__filename or "N/A",
           })
           -- Keep original expression text in output
           table.insert(parts, { kind = "text", text = "{{" .. (seg.code or "") .. "}}" })
         else
-          local str_result = result == nil and "" or tostring(result)
+          local str_result = to_text(result)
           if str_result and #str_result > 0 then
             table.insert(parts, { kind = "text", text = str_result })
           end
@@ -111,7 +136,9 @@ function M.evaluate(doc, base_context)
               data = data,
             })
           else
-            table.insert(warnings, { 
+            table.insert(diagnostics, { 
+              type = "file",
+              severity = "warning",
               filename = filename, 
               raw = seg.raw, 
               error = err or "read error",
@@ -122,7 +149,9 @@ function M.evaluate(doc, base_context)
           end
         else
           local err = "File not found or MIME undetermined"
-          table.insert(warnings, { 
+          table.insert(diagnostics, { 
+            type = "file",
+            severity = "warning",
             filename = filename, 
             raw = seg.raw, 
             error = err,
@@ -146,9 +175,8 @@ function M.evaluate(doc, base_context)
 
   return {
     messages = evaluated_messages,
-    errors = doc.errors,
-    expression_errors = expression_errors,
-  }, warnings
+    diagnostics = diagnostics,
+  }
 end
 
 return M

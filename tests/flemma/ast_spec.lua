@@ -134,7 +134,7 @@ describe("Evaluator", function()
       "@You: File1: {{ 'hello' }} and File2: @./a.txt.",
     }
     local doc = parser.parse_lines(lines)
-    local out, warnings = evaluator.evaluate(doc, base)
+    local out = evaluator.evaluate(doc, base)
     assert.equals(1, #out.messages)
     local parts = out.messages[1].parts
     local kinds = {}
@@ -145,7 +145,8 @@ describe("Evaluator", function()
     assert.equals("text", kinds[1])
     assert.equals("text", kinds[2])
     assert.equals("file", kinds[4])
-    assert.equals(0, #warnings)
+    local file_diags = vim.tbl_filter(function(d) return d.type == "file" end, out.diagnostics or {})
+    assert.equals(0, #file_diags)
   end)
 
   it("handles URL-encoded filename and trailing punctuation", function()
@@ -154,7 +155,7 @@ describe("Evaluator", function()
       "@You: See @./my%20file.txt!",
     }
     local doc = parser.parse_lines(lines)
-    local out, warnings = evaluator.evaluate(doc, base)
+    local out = evaluator.evaluate(doc, base)
     local parts = out.messages[1].parts
     assert.equals("file", parts[2].kind)
     assert.equals("text", parts[3].kind)
@@ -170,7 +171,7 @@ describe("Evaluator", function()
       "@You: Img: @./sample.bin;type=image/png",
     }
     local doc = parser.parse_lines(lines)
-    local out, warnings = evaluator.evaluate(doc, base2)
+    local out = evaluator.evaluate(doc, base2)
     local parts = out.messages[1].parts
     assert.equals("file", parts[2].kind)
     assert.equals("image/png", parts[2].mime_type)
@@ -196,7 +197,7 @@ describe("Evaluator", function()
     }
     local b = ctx.from_file("tests/fixtures/doc.chat")
     local doc = parser.parse_lines(lines)
-    local out, warnings = evaluator.evaluate(doc, b)
+    local out = evaluator.evaluate(doc, b)
     -- include() should have resolved @./a.txt to its content
     local text_parts = {}
     for _, p in ipairs(out.messages[1].parts) do
@@ -214,7 +215,7 @@ describe("Evaluator", function()
       "@Assistant: {{ 1 + 1 }} and @./a.txt should be literal",
     }
     local doc = parser.parse_lines(lines)
-    local out, warnings = evaluator.evaluate(doc, base)
+    local out = evaluator.evaluate(doc, base)
     local parts = out.messages[1].parts
     assert.equals(1, #parts)
     assert.equals("text", parts[1].kind)
@@ -228,9 +229,12 @@ describe("Evaluator", function()
       "@You: {{ 1 / 'x' }}",
     }
     local doc = parser.parse_lines(lines)
-    local out, warnings = evaluator.evaluate(doc, base)
-    assert.is_true(#out.expression_errors > 0, "Should collect expression errors")
-    assert.is_true(out.expression_errors[1].expression:match("1 / 'x'") ~= nil)
+    local out = evaluator.evaluate(doc, base)
+    assert.is_true(#out.diagnostics > 0, "Should collect diagnostics")
+    local expr_diags = vim.tbl_filter(function(d) return d.type == "expression" end, out.diagnostics)
+    assert.is_true(#expr_diags > 0, "Should collect expression errors")
+    assert.is_true(expr_diags[1].expression:match("1 / 'x'") ~= nil)
+    assert.equals("warning", expr_diags[1].severity)
     -- Output should still contain the original expression
     local text = out.messages[1].parts[1].text
     assert.is_true(text:match("{{") ~= nil, "Failed expression should remain in output")
@@ -241,7 +245,7 @@ describe("Evaluator", function()
       "@Assistant: I think <thinking>internal thought</thinking> the answer is 42.",
     }
     local doc = parser.parse_lines(lines)
-    local out, warnings = evaluator.evaluate(doc, ctx.from_file("tests/fixtures/doc.chat"))
+    local out = evaluator.evaluate(doc, ctx.from_file("tests/fixtures/doc.chat"))
     
     -- Check that thinking nodes are preserved as parts
     local parts = out.messages[1].parts
@@ -292,7 +296,7 @@ describe("Pipeline Integration", function()
       "@You: Hello",
       "@Assistant: Hi there!",
     }
-    local prompt, evaluated, warnings = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt, evaluated = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
     assert.equals("You are helpful.", prompt.system)
     assert.equals(2, #prompt.history)
   end)
@@ -306,7 +310,7 @@ describe("Pipeline Integration", function()
       "@Assistant: Got it",
     }
     
-    local prompt, evaluated, warnings = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt, evaluated = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
     
     assert.is_nil(prompt.system)
     assert.equals(2, #prompt.history)
@@ -315,12 +319,16 @@ describe("Pipeline Integration", function()
     local user_msg = prompt.history[1]
     assert.equals("user", user_msg.role)
     local has_world = false
+    local all_text = {}
     for _, p in ipairs(user_msg.parts) do
-      if p.kind == "text" and p.text:match("World") then
-        has_world = true
+      if p.kind == "text" or p.kind == "text_file" then
+        table.insert(all_text, p.text or "")
+        if (p.text or ""):match("World") then
+          has_world = true
+        end
       end
     end
-    assert.is_true(has_world, "Expression should be evaluated to 'World'")
+    assert.is_true(has_world, "Expression should be evaluated to 'World'. Got: " .. table.concat(all_text, "|"))
   end)
 end)
 
@@ -334,7 +342,7 @@ describe("Provider Integration", function()
       "@You: Hello",
       "@Assistant: Hi there!",
     }
-    local prompt, evaluated, warnings = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt, evaluated = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
     local req = provider:build_request(prompt, {})
     assert.is_not_nil(req.model)
     assert.equals("table", type(req.messages))
@@ -353,7 +361,7 @@ describe("Provider Integration", function()
       "@Assistant: Got it",
     }
     
-    local prompt, evaluated, warnings = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt, evaluated = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
     local req = provider:build_request(prompt, {})
     assert.equals("user", req.messages[1].role)
   end)

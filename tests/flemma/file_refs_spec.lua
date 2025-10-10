@@ -33,9 +33,10 @@ describe("File References and Path Parsing", function()
   local function parse_and_get_file_parts(content, context)
     local lines = { "@You: " .. content }
     local doc = parser.parse_lines(lines)
-    local result, warnings = evaluator.evaluate(doc, context or {})
+    local result = evaluator.evaluate(doc, context or {})
     
     local file_parts = {}
+    local file_diags = vim.tbl_filter(function(d) return d.type == "file" end, result.diagnostics or {})
     for _, msg in ipairs(result.messages) do
       for _, part in ipairs(msg.parts) do
         if part.kind == "file" then
@@ -44,7 +45,7 @@ describe("File References and Path Parsing", function()
       end
     end
     
-    return file_parts, warnings
+    return file_parts, file_diags
   end
 
   describe("URL-encoded file path parsing", function()
@@ -449,7 +450,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Look at @./image.png",
         }
-        local prompt, evaluated, warnings = pipeline.run(lines, {})
+        local prompt, evaluated = pipeline.run(lines, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -514,7 +515,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Review @./document.pdf",
         }
-        local prompt, evaluated, warnings = pipeline.run(lines, {})
+        local prompt, evaluated = pipeline.run(lines, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -568,7 +569,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Read @./notes.txt",
         }
-        local prompt, evaluated, warnings = pipeline.run(lines, {})
+        local prompt, evaluated = pipeline.run(lines, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -621,7 +622,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Analyze @./chart.png",
         }
-        local prompt, evaluated, warnings = pipeline.run(lines, {})
+        local prompt, evaluated = pipeline.run(lines, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -686,7 +687,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Summarize @./report.pdf",
         }
-        local prompt, evaluated, warnings = pipeline.run(lines, {})
+        local prompt, evaluated = pipeline.run(lines, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -740,7 +741,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Process @./data.txt",
         }
-        local prompt, evaluated, warnings = pipeline.run(lines, {})
+        local prompt, evaluated = pipeline.run(lines, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -800,7 +801,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Describe @./photo.png",
         }
-        local prompt, evaluated, warnings = pipeline.run(lines, {})
+        local prompt, evaluated = pipeline.run(lines, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -864,7 +865,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Analyze @./study.pdf",
         }
-        local prompt, evaluated, warnings = pipeline.run(lines, {})
+        local prompt, evaluated = pipeline.run(lines, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -917,7 +918,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Check @./config.txt",
         }
-        local prompt, evaluated, warnings = pipeline.run(lines, {})
+        local prompt, evaluated = pipeline.run(lines, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)

@@ -7,11 +7,10 @@ local M = {}
 --- Run full pipeline for given buffer lines and context
 --- Returns:
 ---  - prompt: { history=[{role, parts, content}], system=string|nil } canonical roles
----  - evaluated: evaluator output for debug/use
----  - warnings: file warnings
+---  - evaluated: evaluator output with diagnostics array
 function M.run(lines, context)
   local doc = parser.parse_lines(lines)
-  local evaluated, warnings = evaluator.evaluate(doc, context or {})
+  local evaluated = evaluator.evaluate(doc, context or {})
   
   local history = {}
   local system = nil
@@ -42,7 +41,7 @@ function M.run(lines, context)
     end
   end
 
-  return { history = history, system = system }, evaluated, warnings
+  return { history = history, system = system }, evaluated
 end
 
 return M

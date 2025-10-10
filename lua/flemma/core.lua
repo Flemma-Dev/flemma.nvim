@@ -210,14 +210,9 @@ function M.send_to_provider(opts)
   local context = require("flemma.context").from_buffer(bufnr)
 
   -- Run the new AST-based pipeline
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local buf_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local pipeline = require("flemma.pipeline")
-  local prompt, evaluated, file_warnings = pipeline.run(lines, context)
-
-  -- Display frontmatter and evaluation errors to user
-  if #evaluated.errors > 0 then
-    vim.notify("Flemma errors:\n" .. table.concat(evaluated.errors, "\n"), vim.log.levels.WARN)
-  end
+  local prompt, evaluated = pipeline.run(buf_lines, context)
 
   if #prompt.history == 0 then
     log.warn("send_to_provider(): No messages found in buffer")
@@ -228,32 +223,85 @@ function M.send_to_provider(opts)
 
   log.debug("send_to_provider(): Processed messages count: " .. #prompt.history)
 
-  -- Notify user of any expression evaluation errors (but continue with request)
-  local validation_errors = evaluated.expression_errors or {}
-  if #validation_errors > 0 then
-    log.warn("send_to_provider(): Lua expression evaluation errors occurred (request will still be sent)")
-    local error_lines = { "Lua expression evaluation errors (request will still be sent):" }
-    for _, error_info in ipairs(validation_errors) do
-      table.insert(
-        error_lines,
-        string.format("  Expression: %s (File: %s)", error_info.expression, error_info.file_path)
-      )
-      table.insert(error_lines, string.format("  %s", error_info.error))
+  -- Display diagnostics to user if any
+  local diagnostics = evaluated.diagnostics or {}
+  if #diagnostics > 0 then
+    local has_errors = false
+    local by_type = { frontmatter = {}, expression = {}, file = {} }
+    
+    for _, diag in ipairs(diagnostics) do
+      if diag.severity == "error" then has_errors = true end
+      local type_bucket = by_type[diag.type] or {}
+      table.insert(type_bucket, diag)
+      by_type[diag.type] = type_bucket
     end
-
-    vim.notify("Flemma: " .. table.concat(error_lines, "\n"), vim.log.levels.WARN)
-  end
-  
-  -- Notify about file warnings
-  if file_warnings and #file_warnings > 0 then
-    local warning_lines = { "File reference warnings:" }
-    for _, w in ipairs(file_warnings) do
-      table.insert(
-        warning_lines, 
-        string.format("  %s: %s (in %s)", w.filename or w.raw, w.error, w.source_file)
-      )
+    
+    local lines = {}
+    local max_per_type = 5
+    
+    local function format_position(pos)
+      if not pos then return "" end
+      if pos.start_line then
+        return string.format(":%d", pos.start_line)
+      end
+      return ""
     end
-    vim.notify("Flemma: " .. table.concat(warning_lines, "\n"), vim.log.levels.WARN)
+    
+    -- Format frontmatter errors
+    if #by_type.frontmatter > 0 then
+      table.insert(lines, "Frontmatter errors:")
+      for i, d in ipairs(by_type.frontmatter) do
+        if i <= max_per_type then
+          local loc = (d.source_file or "N/A") .. format_position(d.position)
+          table.insert(lines, string.format("  [%s] %s", loc, d.error))
+        elseif i == max_per_type + 1 then
+          table.insert(lines, string.format("  ... and %d more", #by_type.frontmatter - max_per_type))
+          break
+        end
+      end
+    end
+    
+    -- Format expression errors (non-fatal warnings)
+    if #by_type.expression > 0 then
+      table.insert(lines, "Expression evaluation errors (request will still be sent):")
+      for i, d in ipairs(by_type.expression) do
+        if i <= max_per_type then
+          local loc = (d.source_file or "N/A") .. format_position(d.position)
+          local role_info = d.message_role and (" in @" .. d.message_role) or ""
+          table.insert(lines, string.format("  [%s%s] %s", loc, role_info, d.error))
+          table.insert(lines, string.format("    Expression: {{ %s }}", d.expression or ""))
+        elseif i == max_per_type + 1 then
+          table.insert(lines, string.format("  ... and %d more", #by_type.expression - max_per_type))
+          break
+        end
+      end
+    end
+    
+    -- Format file reference warnings
+    if #by_type.file > 0 then
+      table.insert(lines, "File reference errors:")
+      for i, d in ipairs(by_type.file) do
+        if i <= max_per_type then
+          local loc = (d.source_file or "N/A") .. format_position(d.position)
+          local ref = d.filename or d.raw or "unknown"
+          table.insert(lines, string.format("  [%s] %s: %s", loc, ref, d.error))
+        elseif i == max_per_type + 1 then
+          table.insert(lines, string.format("  ... and %d more", #by_type.file - max_per_type))
+          break
+        end
+      end
+    end
+    
+    local level = has_errors and vim.log.levels.ERROR or vim.log.levels.WARN
+    vim.notify("Flemma diagnostics:\n" .. table.concat(lines, "\n"), level)
+    log.warn("send_to_provider(): Diagnostics occurred: " .. #diagnostics .. " total")
+    
+    -- Block request if there are critical errors (frontmatter parsing failures)
+    if has_errors then
+      log.error("send_to_provider(): Blocking request due to critical errors")
+      vim.bo[bufnr].modifiable = true
+      return
+    end
   end
 
   log.debug("send_to_provider(): Prompt history for provider: " .. log.inspect(prompt.history))
