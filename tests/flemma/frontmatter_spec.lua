@@ -1,8 +1,10 @@
 describe("flemma.frontmatter", function()
-  local frontmatter = require("flemma.frontmatter")
-  local context_util = require("flemma.context")
+  local parser = require("flemma.parser")
+  local evaluator = require("flemma.evaluator")
+  local pipeline = require("flemma.pipeline")
+  local ctx = require("flemma.context")
 
-  describe("parse", function()
+  describe("parse via AST", function()
     it("should parse Lua frontmatter", function()
       local lines = {
         "```lua",
@@ -10,10 +12,10 @@ describe("flemma.frontmatter", function()
         "```",
         "@You: test",
       }
-      local language, code, content = frontmatter.parse(lines)
-      assert.are.equal("lua", language)
-      assert.are.equal("x = 5", code)
-      assert.are.same({ "@You: test" }, content)
+      local doc = parser.parse_lines(lines)
+      assert.is_not_nil(doc.frontmatter)
+      assert.are.equal("lua", doc.frontmatter.language)
+      assert.are.equal("x = 5", doc.frontmatter.code)
     end)
 
     it("should parse JSON frontmatter", function()
@@ -23,122 +25,221 @@ describe("flemma.frontmatter", function()
         "```",
         "@You: test",
       }
-      local language, code, content = frontmatter.parse(lines)
-      assert.are.equal("json", language)
-      assert.are.equal('{"name": "Alice", "age": 30}', code)
-      assert.are.same({ "@You: test" }, content)
+      local doc = parser.parse_lines(lines)
+      assert.is_not_nil(doc.frontmatter)
+      assert.are.equal("json", doc.frontmatter.language)
+      assert.are.equal('{"name": "Alice", "age": 30}', doc.frontmatter.code)
     end)
 
-    it("should return nil for no frontmatter", function()
+    it("should return nil frontmatter when none present", function()
       local lines = {
         "@You: test",
       }
-      local language, code, content = frontmatter.parse(lines)
-      assert.is_nil(language)
-      assert.is_nil(code)
-      assert.are.same(lines, content)
+      local doc = parser.parse_lines(lines)
+      assert.is_nil(doc.frontmatter)
     end)
 
-    it("should return nil for unclosed frontmatter", function()
+    it("should return nil frontmatter for unclosed fence", function()
       local lines = {
         "```lua",
         "x = 5",
         "@You: test",
       }
-      local language, code, content = frontmatter.parse(lines)
-      assert.is_nil(language)
-      assert.is_nil(code)
-      assert.are.same(lines, content)
+      local doc = parser.parse_lines(lines)
+      assert.is_nil(doc.frontmatter)
     end)
   end)
 
-  describe("execute with Lua", function()
-    it("should execute Lua frontmatter and add variables to context", function()
-      local code = "my_var = 'hello'\nmy_num = 42"
-      local context = context_util.from_file("test.chat")
-      local result = frontmatter.execute("lua", code, context)
+  describe("execute via evaluator with Lua", function()
+    it("should execute Lua frontmatter and make variables available to expressions", function()
+      local lines = {
+        "```lua",
+        "my_var = 'hello'",
+        "my_num = 42",
+        "```",
+        "@You: Value is {{ my_var }} and number is {{ my_num }}",
+      }
+      local base_context = ctx.from_file("test.chat")
+      local prompt, evaluated = pipeline.run(lines, base_context)
 
-      assert.are.equal("hello", result.my_var)
-      assert.are.equal(42, result.my_num)
-      assert.are.equal("test.chat", result.__filename)
+      -- Check that expressions were evaluated using frontmatter variables
+      assert.are.equal(1, #prompt.history)
+      local user_msg = prompt.history[1]
+      local all_text = {}
+      for _, p in ipairs(user_msg.parts) do
+        if p.kind == "text" then
+          table.insert(all_text, p.text or "")
+        end
+      end
+      local content = table.concat(all_text, "")
+      assert.are.equal("Value is hello and number is 42", content)
     end)
 
     it("should support Lua functions in frontmatter", function()
-      local code = "greet = function(name) return 'Hello, ' .. name end"
-      local context = context_util.from_file("test.chat")
-      local result = frontmatter.execute("lua", code, context)
+      local lines = {
+        "```lua",
+        "greet = function(name) return 'Hello, ' .. name end",
+        "```",
+        "@You: {{ greet('World') }}",
+      }
+      local base_context = ctx.from_file("test.chat")
+      local prompt, evaluated = pipeline.run(lines, base_context)
 
-      assert.is_function(result.greet)
-      assert.are.equal("Hello, World", result.greet("World"))
+      -- Check that function was called successfully
+      assert.are.equal(1, #prompt.history)
+      local user_msg = prompt.history[1]
+      local all_text = {}
+      for _, p in ipairs(user_msg.parts) do
+        if p.kind == "text" then
+          table.insert(all_text, p.text or "")
+        end
+      end
+      local content = table.concat(all_text, "")
+      assert.are.equal("Hello, World", content)
     end)
   end)
 
-  describe("execute with JSON", function()
-    it("should parse JSON frontmatter and add variables to context", function()
-      local code = '{"name": "Alice", "age": 30, "active": true}'
-      local context = context_util.from_file("test.chat")
-      local result = frontmatter.execute("json", code, context)
+  describe("execute via evaluator with JSON", function()
+    it("should parse JSON frontmatter and make variables available to expressions", function()
+      local lines = {
+        "```json",
+        '{"name": "Alice", "age": 30}',
+        "```",
+        "@You: Name is {{ name }} and age is {{ age }}",
+      }
+      local base_context = ctx.from_file("test.chat")
+      local prompt, evaluated = pipeline.run(lines, base_context)
 
-      assert.are.equal("Alice", result.name)
-      assert.are.equal(30, result.age)
-      assert.is_true(result.active)
-      assert.are.equal("test.chat", result.__filename)
+      -- Check that expressions were evaluated using frontmatter variables
+      assert.are.equal(1, #prompt.history)
+      local user_msg = prompt.history[1]
+      local all_text = {}
+      for _, p in ipairs(user_msg.parts) do
+        if p.kind == "text" then
+          table.insert(all_text, p.text or "")
+        end
+      end
+      local content = table.concat(all_text, "")
+      assert.are.equal("Name is Alice and age is 30", content)
     end)
 
     it("should handle nested JSON objects", function()
-      local code = '{"user": {"name": "Bob", "role": "admin"}, "count": 5}'
-      local context = context_util.from_file("test.chat")
-      local result = frontmatter.execute("json", code, context)
+      local lines = {
+        "```json",
+        '{"user": {"name": "Bob", "role": "admin"}}',
+        "```",
+        "@You: User {{ user.name }} has role {{ user.role }}",
+      }
+      local base_context = ctx.from_file("test.chat")
+      local prompt, evaluated = pipeline.run(lines, base_context)
 
-      assert.is_table(result.user)
-      assert.are.equal("Bob", result.user.name)
-      assert.are.equal("admin", result.user.role)
-      assert.are.equal(5, result.count)
+      -- Check nested access works
+      assert.are.equal(1, #prompt.history)
+      local user_msg = prompt.history[1]
+      local all_text = {}
+      for _, p in ipairs(user_msg.parts) do
+        if p.kind == "text" then
+          table.insert(all_text, p.text or "")
+        end
+      end
+      local content = table.concat(all_text, "")
+      assert.are.equal("User Bob has role admin", content)
     end)
 
     it("should handle JSON arrays", function()
-      local code = '{"tags": ["important", "urgent"], "version": 2}'
-      local context = context_util.from_file("test.chat")
-      local result = frontmatter.execute("json", code, context)
+      local lines = {
+        "```json",
+        '{"tags": ["important", "urgent"]}',
+        "```",
+        "@You: First tag is {{ tags[1] }} and second is {{ tags[2] }}",
+      }
+      local base_context = ctx.from_file("test.chat")
+      local prompt, evaluated = pipeline.run(lines, base_context)
 
-      assert.is_table(result.tags)
-      assert.are.equal(2, #result.tags)
-      assert.are.equal("important", result.tags[1])
-      assert.are.equal("urgent", result.tags[2])
-      assert.are.equal(2, result.version)
+      -- Check array access works
+      assert.are.equal(1, #prompt.history)
+      local user_msg = prompt.history[1]
+      local all_text = {}
+      for _, p in ipairs(user_msg.parts) do
+        if p.kind == "text" then
+          table.insert(all_text, p.text or "")
+        end
+      end
+      local content = table.concat(all_text, "")
+      assert.are.equal("First tag is important and second is urgent", content)
     end)
 
-    it("should error on invalid JSON", function()
-      local code = '{"invalid": json}'
-      local context = context_util.from_file("test.chat")
+    it("should report error on invalid JSON", function()
+      local lines = {
+        "```json",
+        '{"invalid": json}',
+        "```",
+      }
+      local doc = parser.parse_lines(lines)
+      local context = ctx.from_file("test.chat")
+      local evaluated = evaluator.evaluate(doc, context)
 
-      local ok, err = pcall(frontmatter.execute, "json", code, context)
-      assert.is_false(ok)
-      assert.is_truthy(err:match("JSON parse error"))
+      -- Should have error diagnostic
+      assert.is_true(#evaluated.diagnostics > 0)
+      local has_json_error = false
+      for _, diag in ipairs(evaluated.diagnostics) do
+        if diag.type == "frontmatter" and diag.severity == "error" then
+          has_json_error = true
+          assert.is_truthy(diag.error:match("JSON"))
+        end
+      end
+      assert.is_true(has_json_error)
     end)
 
-    it("should error on non-object JSON", function()
-      local code = '"just a string"'
-      local context = context_util.from_file("test.chat")
+    it("should report error on non-object JSON", function()
+      local lines = {
+        "```json",
+        '"just a string"',
+        "```",
+      }
+      local doc = parser.parse_lines(lines)
+      local context = ctx.from_file("test.chat")
+      local evaluated = evaluator.evaluate(doc, context)
 
-      local ok, err = pcall(frontmatter.execute, "json", code, context)
-      assert.is_false(ok)
-      assert.is_truthy(err:match("JSON frontmatter must be an object"))
+      -- Should have error diagnostic
+      assert.is_true(#evaluated.diagnostics > 0)
+      local has_object_error = false
+      for _, diag in ipairs(evaluated.diagnostics) do
+        if diag.type == "frontmatter" and diag.severity == "error" then
+          has_object_error = true
+          assert.is_truthy(diag.error:match("object"))
+        end
+      end
+      assert.is_true(has_object_error)
     end)
   end)
 
   describe("execute with unsupported language", function()
-    it("should error for unsupported language", function()
-      local code = "some yaml content"
-      local context = context_util.from_file("test.chat")
+    it("should report error for unsupported language", function()
+      local lines = {
+        "```yaml",
+        "some: yaml",
+        "```",
+      }
+      local doc = parser.parse_lines(lines)
+      local context = ctx.from_file("test.chat")
+      local evaluated = evaluator.evaluate(doc, context)
 
-      local ok, err = pcall(frontmatter.execute, "yaml", code, context)
-      assert.is_false(ok)
-      assert.is_truthy(err:match("Unsupported frontmatter language 'yaml'"))
+      -- Should have error diagnostic
+      assert.is_true(#evaluated.diagnostics > 0)
+      local has_unsupported_error = false
+      for _, diag in ipairs(evaluated.diagnostics) do
+        if diag.type == "frontmatter" and diag.severity == "error" then
+          has_unsupported_error = true
+          assert.is_truthy(diag.error:match("Unsupported"))
+          assert.is_truthy(diag.error:match("yaml"))
+        end
+      end
+      assert.is_true(has_unsupported_error)
     end)
   end)
 
-  describe("integration with templating", function()
+  describe("integration with templating via pipeline", function()
     it("should use JSON frontmatter variables in Lua expressions", function()
       local lines = {
         "```json",
@@ -147,20 +248,23 @@ describe("flemma.frontmatter", function()
         "@You: {{ greeting .. ', ' .. name }}!",
       }
 
-      -- Parse frontmatter and content
-      local language, code, content = frontmatter.parse(lines)
-      assert.are.equal("json", language)
+      local context = ctx.from_file("test.chat")
+      local prompt, evaluated = pipeline.run(lines, context)
 
-      -- Execute frontmatter to get context
-      local context = require("flemma.context").from_file("test.chat")
-      local fm_context = frontmatter.execute(language, code, context)
+      -- Check that expression was evaluated
+      assert.are.equal(1, #prompt.history)
+      local user_msg = prompt.history[1]
+      assert.are.equal("user", user_msg.role)
 
-      -- Process expressions using the frontmatter context
-      local eval = require("flemma.eval")
-      local processed_content, errors = eval.interpolate("{{ greeting .. ', ' .. name }}!", fm_context)
-
-      assert.are.equal("Hello, World!", processed_content)
-      assert.are.equal(0, #errors)
+      -- Extract text from parts
+      local all_text = {}
+      for _, p in ipairs(user_msg.parts) do
+        if p.kind == "text" then
+          table.insert(all_text, p.text or "")
+        end
+      end
+      local content = table.concat(all_text, "")
+      assert.are.equal("Hello, World!", content)
     end)
   end)
 end)
