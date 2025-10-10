@@ -89,7 +89,11 @@ describe("Parser", function()
 
   it("parses thinking tags in Assistant messages", function()
     local lines = {
-      "@Assistant: I think <thinking>this is my internal thought</thinking> that the answer is 42.",
+      "@Assistant: I think",
+      "<thinking>",
+      "this is my internal thought",
+      "</thinking>",
+      "that the answer is 42.",
     }
     local doc = parser.parse_lines(lines)
     local msg = doc.messages[1]
@@ -104,6 +108,35 @@ describe("Parser", function()
       end
     end
     assert.is_true(has_thinking, "Should have parsed thinking node")
+  end)
+
+  it("parses thinking tags with line positions when on separate lines", function()
+    local lines = {
+      "@Assistant: Here is my response",
+      "<thinking>",
+      "internal thought process",
+      "more thinking",
+      "</thinking>",
+      "The answer is 42.",
+    }
+    local doc = parser.parse_lines(lines)
+    local msg = doc.messages[1]
+    assert.equals("Assistant", msg.role)
+    
+    -- Find thinking segment
+    local thinking_seg = nil
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "thinking" then
+        thinking_seg = seg
+        break
+      end
+    end
+    
+    assert.is_not_nil(thinking_seg, "Should have thinking segment")
+    assert.equals("internal thought process\nmore thinking", thinking_seg.content)
+    assert.is_not_nil(thinking_seg.position, "Thinking segment should have position")
+    assert.equals(2, thinking_seg.position.start_line, "Thinking should start at line 2")
+    assert.equals(5, thinking_seg.position.end_line, "Thinking should end at line 5")
   end)
 end)
 
@@ -242,7 +275,11 @@ describe("Evaluator", function()
 
   it("preserves thinking nodes in evaluation", function()
     local lines = {
-      "@Assistant: I think <thinking>internal thought</thinking> the answer is 42.",
+      "@Assistant: I think",
+      "<thinking>",
+      "internal thought",
+      "</thinking>",
+      "the answer is 42.",
     }
     local doc = parser.parse_lines(lines)
     local out = evaluator.evaluate(doc, ctx.from_file("tests/fixtures/doc.chat"))

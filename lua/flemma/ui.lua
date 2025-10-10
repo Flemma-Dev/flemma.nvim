@@ -125,24 +125,19 @@ end
 local ns_id = vim.api.nvim_create_namespace("flemma")
 
 -- Add rulers between messages
-function M.add_rulers(bufnr)
+function M.add_rulers(bufnr, doc)
   -- Clear existing extmarks
   vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
-  -- Get buffer lines
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-
-  for i, line in ipairs(lines) do
-    if line:match("^@[%w]+:") then
-      -- If this isn't the first line, add a ruler before it
-      if i > 1 then
-        -- Create virtual line with ruler using the FlemmaRuler highlight group
-        local ruler_text = string.rep(state.get_config().ruler.char, math.floor(vim.api.nvim_win_get_width(0) * 1))
-        vim.api.nvim_buf_set_extmark(bufnr, ns_id, i - 1, 0, {
-          virt_lines = { { { ruler_text, "FlemmaRuler" } } }, -- Use defined group
-          virt_lines_above = true,
-        })
-      end
+  for i, msg in ipairs(doc.messages) do
+    -- If this isn't the first message, add a ruler before it
+    if i > 1 then
+      -- Create virtual line with ruler using the FlemmaRuler highlight group
+      local ruler_text = string.rep(state.get_config().ruler.char, math.floor(vim.api.nvim_win_get_width(0) * 1))
+      vim.api.nvim_buf_set_extmark(bufnr, ns_id, msg.position.start_line - 1, 0, {
+        virt_lines = { { { ruler_text, "FlemmaRuler" } } }, -- Use defined group
+        virt_lines_above = true,
+      })
     end
   end
 end
@@ -246,90 +241,71 @@ end
 -- Helper function to fold the last thinking block in a buffer
 function M.fold_last_thinking_block(bufnr)
   log.debug("fold_last_thinking_block(): Attempting to fold last thinking block in buffer " .. bufnr)
-  local num_lines = vim.api.nvim_buf_line_count(bufnr)
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false) -- 0-indexed lines
+  
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local parser = require("flemma.parser")
+  local doc = parser.parse_lines(lines)
 
-  -- Find the line number of the last @You: prompt to define the search boundary.
-  -- We search upwards from this prompt.
-  local last_you_prompt_lnum_0idx = -1
-  for l = num_lines - 1, 0, -1 do -- Iterate 0-indexed line numbers
-    if lines[l + 1]:match("^@You:%s*") then -- lines table is 1-indexed
-      last_you_prompt_lnum_0idx = l
-      break
-    end
-  end
-
-  if last_you_prompt_lnum_0idx == -1 then
-    log.debug("fold_last_thinking_block(): Could not find the last @You: prompt. Aborting.")
+  if #doc.messages == 0 then
+    log.debug("fold_last_thinking_block(): No messages found in buffer.")
     return
   end
 
-  local end_think_lnum_0idx = -1
-  -- Search for </thinking> upwards from just before the last @You: prompt.
-  -- Stop if we hit another message type, ensuring we're in the last message block.
-  for l = last_you_prompt_lnum_0idx - 1, 0, -1 do
-    if lines[l + 1]:match("^</thinking>$") then
-      end_think_lnum_0idx = l
-      break
-    end
-    -- If we encounter another role marker before finding </thinking>,
-    -- it means the last message block didn't have a thinking tag.
-    if lines[l + 1]:match("^@[%w]+:") then
-      log.debug(
-        "fold_last_thinking_block(): Encountered another role marker before </thinking> in the last message segment."
-      )
-      return
-    end
-  end
-
-  if end_think_lnum_0idx == -1 then
-    log.debug("fold_last_thinking_block(): No </thinking> tag found in the last message segment.")
+  local last_message = doc.messages[#doc.messages]
+  
+  if last_message.role ~= "You" then
+    log.debug("fold_last_thinking_block(): Last message is not from @You:. Aborting.")
     return
   end
 
-  local start_think_lnum_0idx = -1
-  -- Search for <thinking> upwards from just before the found </thinking> tag.
-  -- Stop if we hit another message type.
-  for l = end_think_lnum_0idx - 1, 0, -1 do
-    if lines[l + 1]:match("^<thinking>$") then
-      start_think_lnum_0idx = l
+  if #doc.messages < 2 then
+    log.debug("fold_last_thinking_block(): Not enough messages to have a thinking block before @You:.")
+    return
+  end
+
+  local second_to_last = doc.messages[#doc.messages - 1]
+  
+  -- Find thinking segment in the second-to-last message's segments
+  local thinking_segment = nil
+  for _, segment in ipairs(second_to_last.segments) do
+    if segment.kind == "thinking" then
+      thinking_segment = segment
       break
-    end
-    if lines[l + 1]:match("^@[%w]+:") then
-      log.debug("fold_last_thinking_block(): Encountered another role marker before finding matching <thinking> tag.")
-      return
     end
   end
 
-  if start_think_lnum_0idx ~= -1 and start_think_lnum_0idx < end_think_lnum_0idx then
-    log.debug(
-      string.format(
-        "fold_last_thinking_block(): Found thinking block from line %d to %d (1-indexed). Closing fold.",
-        start_think_lnum_0idx + 1,
-        end_think_lnum_0idx + 1
-      )
+  if not thinking_segment then
+    log.debug("fold_last_thinking_block(): No thinking block found in the second-to-last message.")
+    return
+  end
+
+  if not thinking_segment.position then
+    log.debug("fold_last_thinking_block(): Thinking segment missing position information.")
+    return
+  end
+
+  local start_lnum_1idx = thinking_segment.position.start_line
+  local end_lnum_1idx = thinking_segment.position.end_line
+
+  log.debug(
+    string.format(
+      "fold_last_thinking_block(): Found thinking block from line %d to %d (1-indexed). Closing fold.",
+      start_lnum_1idx,
+      end_lnum_1idx
     )
-    local winid = vim.fn.bufwinid(bufnr)
-    if winid ~= -1 then
-      -- Check if a fold actually exists at this line before trying to close it
-      local fold_exists = vim.fn.win_execute(winid, string.format("echo foldlevel(%d)", start_think_lnum_0idx + 1))
-      if tonumber(vim.trim(fold_exists)) and tonumber(vim.trim(fold_exists)) > 0 then
-        vim.fn.win_execute(winid, string.format("%d,%d foldclose", start_think_lnum_0idx + 1, end_think_lnum_0idx + 1))
-        log.debug("fold_last_thinking_block(): Executed foldclose command via win_execute.")
-      else
-        log.debug(
-          "fold_last_thinking_block(): No fold exists at line "
-            .. (start_think_lnum_0idx + 1)
-            .. ". Skipping foldclose."
-        )
-      end
+  )
+
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid ~= -1 then
+    local fold_exists = vim.fn.win_execute(winid, string.format("echo foldlevel(%d)", start_lnum_1idx))
+    if tonumber(vim.trim(fold_exists)) and tonumber(vim.trim(fold_exists)) > 0 then
+      vim.fn.win_execute(winid, string.format("%d,%d foldclose", start_lnum_1idx, end_lnum_1idx))
+      log.debug("fold_last_thinking_block(): Executed foldclose command via win_execute.")
     else
-      log.debug("fold_last_thinking_block(): Buffer " .. bufnr .. " has no window. Cannot close fold.")
+      log.debug("fold_last_thinking_block(): No fold exists at line " .. start_lnum_1idx .. ". Skipping foldclose.")
     end
   else
-    log.debug(
-      "fold_last_thinking_block(): No matching <thinking> tag found for the last </thinking> tag, or order is incorrect."
-    )
+    log.debug("fold_last_thinking_block(): Buffer " .. bufnr .. " has no window. Cannot close fold.")
   end
 end
 
@@ -412,14 +388,16 @@ function M.update_ui(bufnr)
     log.debug("update_ui(): Invalid buffer: " .. bufnr)
     return
   end
-  M.add_rulers(bufnr)
-  -- Clear and reapply all signs
-  vim.fn.sign_unplace("flemma_ns", { buffer = bufnr })
 
-  -- Parse messages using AST for sign placement
+  -- Parse messages using AST
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local parser = require("flemma.parser")
   local doc = parser.parse_lines(lines)
+
+  M.add_rulers(bufnr, doc)
+
+  -- Clear and reapply all signs
+  vim.fn.sign_unplace("flemma_ns", { buffer = bufnr })
 
   -- Place signs for each message based on AST positions
   for _, msg in ipairs(doc.messages) do

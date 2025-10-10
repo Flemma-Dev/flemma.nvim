@@ -81,11 +81,11 @@ local function parse_segments(text)
 end
 
 -- Parse assistant messages - only extract <thinking> tags, treat rest as text
-local function parse_assistant_segments(text)
+-- lines: array of content lines (without the @Assistant: prefix)
+-- base_line_num: the line number where the message content starts (1-indexed)
+local function parse_assistant_segments(lines, base_line_num)
   local segments = {}
-  if text == "" or text == nil then return { ast.text("") } end
-  local idx = 1
-  local s = text
+  if not lines or #lines == 0 then return { ast.text("") } end
   
   local function emit_text(str)
     if str and #str > 0 then
@@ -93,21 +93,41 @@ local function parse_assistant_segments(text)
     end
   end
   
-  while idx <= #s do
-    local think_start, think_end, think_content = s:find("<thinking>(.-)</thinking>", idx)
+  local i = 1
+  while i <= #lines do
+    local line = lines[i]
+    local current_line_num = base_line_num + i - 1
     
-    if not think_start then
-      emit_text(s:sub(idx))
-      break
+    -- Check for thinking tags on their own lines
+    if line:match("^<thinking>$") then
+      local thinking_start_line = current_line_num
+      local thinking_content_lines = {}
+      i = i + 1
+      
+      -- Collect thinking content until closing tag
+      while i <= #lines do
+        if lines[i]:match("^</thinking>$") then
+          local thinking_end_line = base_line_num + i - 1
+          local thinking_content = table.concat(thinking_content_lines, "\n")
+          table.insert(segments, ast.thinking(thinking_content, { 
+            start_line = thinking_start_line, 
+            end_line = thinking_end_line 
+          }))
+          i = i + 1
+          break
+        else
+          table.insert(thinking_content_lines, lines[i])
+          i = i + 1
+        end
+      end
+    else
+      -- Regular text line
+      emit_text(line)
+      if i < #lines then
+        emit_text("\n")
+      end
+      i = i + 1
     end
-    
-    -- Emit text before thinking tag
-    emit_text(s:sub(idx, think_start - 1))
-    
-    -- Add thinking node
-    table.insert(segments, ast.thinking(think_content, { line = 0, col = think_start }))
-    
-    idx = think_end + 1
   end
   
   return segments
@@ -163,13 +183,14 @@ local function parse_message(lines, start_idx, line_offset)
     i = i + 1
   end
 
-  local content = table.concat(content_lines, "\n")
-  
   -- For @Assistant messages, only parse thinking tags (no expressions or file refs)
   local segments
   if role == "Assistant" then
-    segments = parse_assistant_segments(content)
+    -- Pass content_lines and the line number where content starts (after the @Assistant: line)
+    local content_start_line = (content_first and content_first:match("%S")) and start_idx + line_offset or (start_idx + 1 + line_offset)
+    segments = parse_assistant_segments(content_lines, content_start_line)
   else
+    local content = table.concat(content_lines, "\n")
     segments = parse_segments(content)
   end
 
