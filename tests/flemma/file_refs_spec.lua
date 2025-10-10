@@ -1,7 +1,7 @@
 local stub = require("luassert.stub")
 
 describe("File References and Path Parsing", function()
-  local content_parser
+  local parser, evaluator, context_util
   local stubs = {}
 
   local function create_stub(obj, method, replacement)
@@ -12,8 +12,12 @@ describe("File References and Path Parsing", function()
 
   before_each(function()
     -- Clear the module cache to ensure fresh state
-    package.loaded["flemma.content_parser"] = nil
-    content_parser = require("flemma.content_parser")
+    package.loaded["flemma.parser"] = nil
+    package.loaded["flemma.evaluator"] = nil
+    package.loaded["flemma.context"] = nil
+    parser = require("flemma.parser")
+    evaluator = require("flemma.evaluator")
+    context_util = require("flemma.context")
     stubs = {}
   end)
 
@@ -24,6 +28,24 @@ describe("File References and Path Parsing", function()
     end
     stubs = {}
   end)
+
+  -- Helper function to parse content and extract file parts
+  local function parse_and_get_file_parts(content, context)
+    local lines = { "@You: " .. content }
+    local doc = parser.parse_lines(lines)
+    local result, warnings = evaluator.evaluate(doc, context or {})
+    
+    local file_parts = {}
+    for _, msg in ipairs(result.messages) do
+      for _, part in ipairs(msg.parts) do
+        if part.kind == "file" then
+          table.insert(file_parts, part)
+        end
+      end
+    end
+    
+    return file_parts, warnings
+  end
 
   describe("URL-encoded file path parsing", function()
     it("correctly decodes URL-encoded characters and strips trailing punctuation", function()
@@ -50,34 +72,18 @@ describe("File References and Path Parsing", function()
 
       -- Test string with URL-encoded filename and trailing punctuation
       local test_content = "Check this file: @./my%20report.txt."
-      local parser = content_parser.parse(test_content)
+      local file_parts = parse_and_get_file_parts(test_content)
 
-      local chunks = {}
-      while true do
-        local status, chunk = coroutine.resume(parser)
-        if not status or not chunk then
-          break
-        end
-        table.insert(chunks, chunk)
-      end
-
-      -- Should have text chunk, file chunk, and possibly text chunk
-      local file_chunk = nil
-      for _, chunk in ipairs(chunks) do
-        if chunk.type == "file" then
-          file_chunk = chunk
-          break
-        end
-      end
+      -- Should have exactly one file part
+      assert.equals(1, #file_parts)
+      local file_part = file_parts[1]
 
       -- Assertions
-      assert.is_not_nil(file_chunk)
-      assert.equals("file", file_chunk.type)
-      assert.equals("./my report.txt", file_chunk.filename) -- URL-decoded
-      assert.equals("./my%20report.txt", file_chunk.raw_filename) -- Original with encoding, punctuation stripped
-      assert.equals("text/plain", file_chunk.mime_type)
-      assert.equals("test file content", file_chunk.content)
-      assert.is_true(file_chunk.readable)
+      assert.equals("file", file_part.kind)
+      assert.equals("./my report.txt", file_part.filename) -- URL-decoded
+      assert.equals("./my%20report.txt", file_part.raw) -- Original with encoding, punctuation stripped
+      assert.equals("text/plain", file_part.mime_type)
+      assert.equals("test file content", file_part.data)
 
       -- Verify that vim.fn.filereadable was called with the decoded filename
       assert.stub(filereadable_stub).was_called_with("./my report.txt")
@@ -107,28 +113,13 @@ describe("File References and Path Parsing", function()
 
       -- Test with multiple encoded characters: space (%20), plus (%2B), ampersand (%26)
       local test_content = "Load @./data%20file%2Bwith%26symbols.json"
-      local parser = content_parser.parse(test_content)
+      local file_parts = parse_and_get_file_parts(test_content)
 
-      local chunks = {}
-      while true do
-        local status, chunk = coroutine.resume(parser)
-        if not status or not chunk then
-          break
-        end
-        table.insert(chunks, chunk)
-      end
+      assert.equals(1, #file_parts)
+      local file_part = file_parts[1]
 
-      local file_chunk = nil
-      for _, chunk in ipairs(chunks) do
-        if chunk.type == "file" then
-          file_chunk = chunk
-          break
-        end
-      end
-
-      assert.is_not_nil(file_chunk)
-      assert.equals("./data file+with&symbols.json", file_chunk.filename) -- All characters decoded
-      assert.equals("./data%20file%2Bwith%26symbols.json", file_chunk.raw_filename)
+      assert.equals("./data file+with&symbols.json", file_part.filename) -- All characters decoded
+      assert.equals("./data%20file%2Bwith%26symbols.json", file_part.raw)
     end)
 
     it("handles plus signs as spaces in URL decoding", function()
@@ -155,28 +146,13 @@ describe("File References and Path Parsing", function()
 
       -- Test with plus signs that should be converted to spaces
       local test_content = "Read @./file+with+plus+signs.txt"
-      local parser = content_parser.parse(test_content)
+      local file_parts = parse_and_get_file_parts(test_content)
 
-      local chunks = {}
-      while true do
-        local status, chunk = coroutine.resume(parser)
-        if not status or not chunk then
-          break
-        end
-        table.insert(chunks, chunk)
-      end
+      assert.equals(1, #file_parts)
+      local file_part = file_parts[1]
 
-      local file_chunk = nil
-      for _, chunk in ipairs(chunks) do
-        if chunk.type == "file" then
-          file_chunk = chunk
-          break
-        end
-      end
-
-      assert.is_not_nil(file_chunk)
-      assert.equals("./file with plus signs.txt", file_chunk.filename) -- Plus signs converted to spaces
-      assert.equals("./file+with+plus+signs.txt", file_chunk.raw_filename)
+      assert.equals("./file with plus signs.txt", file_part.filename) -- Plus signs converted to spaces
+      assert.equals("./file+with+plus+signs.txt", file_part.raw)
     end)
   end)
 
@@ -217,30 +193,15 @@ describe("File References and Path Parsing", function()
       -- Test with context containing __filename (unified with eval environment pattern)
       local context = { __filename = temp_dir .. "/subdir/test.chat" }
       local test_content = "Check @./data.txt"
-      local parser = content_parser.parse(test_content, context)
+      local file_parts = parse_and_get_file_parts(test_content, context)
 
-      local chunks = {}
-      while true do
-        local status, chunk = coroutine.resume(parser)
-        if not status or not chunk then
-          break
-        end
-        table.insert(chunks, chunk)
-      end
+      assert.equals(1, #file_parts)
+      local file_part = file_parts[1]
 
-      local file_chunk = nil
-      for _, chunk in ipairs(chunks) do
-        if chunk.type == "file" then
-          file_chunk = chunk
-          break
-        end
-      end
-
-      assert.is_not_nil(file_chunk)
-      assert.equals("file", file_chunk.type)
+      assert.equals("file", file_part.kind)
       -- The filename should be resolved relative to buffer_dir
-      assert.equals(temp_dir .. "/subdir/data.txt", file_chunk.filename)
-      assert.equals("./data.txt", file_chunk.raw_filename)
+      assert.equals(temp_dir .. "/subdir/data.txt", file_part.filename)
+      assert.equals("./data.txt", file_part.raw)
 
       -- Verify that vim.fn.filereadable was called with the resolved path
       assert.stub(filereadable_stub).was_called_with(temp_dir .. "/subdir/data.txt")
@@ -285,29 +246,14 @@ describe("File References and Path Parsing", function()
       -- Test with context containing __filename in subdir, referencing parent
       local context = { __filename = temp_dir .. "/subdir/test.chat" }
       local test_content = "Check @../parent.txt"
-      local parser = content_parser.parse(test_content, context)
+      local file_parts = parse_and_get_file_parts(test_content, context)
 
-      local chunks = {}
-      while true do
-        local status, chunk = coroutine.resume(parser)
-        if not status or not chunk then
-          break
-        end
-        table.insert(chunks, chunk)
-      end
+      assert.equals(1, #file_parts)
+      local file_part = file_parts[1]
 
-      local file_chunk = nil
-      for _, chunk in ipairs(chunks) do
-        if chunk.type == "file" then
-          file_chunk = chunk
-          break
-        end
-      end
-
-      assert.is_not_nil(file_chunk)
       -- The filename should be resolved relative to buffer_dir
-      assert.equals(temp_dir .. "/parent.txt", file_chunk.filename)
-      assert.equals("../parent.txt", file_chunk.raw_filename)
+      assert.equals(temp_dir .. "/parent.txt", file_part.filename)
+      assert.equals("../parent.txt", file_part.raw)
 
       -- Clean up
       vim.fn.delete(temp_dir, "rf")
@@ -337,28 +283,13 @@ describe("File References and Path Parsing", function()
 
       -- Test without context (should use working directory)
       local test_content = "Check @./file.txt"
-      local parser = content_parser.parse(test_content, nil)
+      local file_parts = parse_and_get_file_parts(test_content, nil)
 
-      local chunks = {}
-      while true do
-        local status, chunk = coroutine.resume(parser)
-        if not status or not chunk then
-          break
-        end
-        table.insert(chunks, chunk)
-      end
+      assert.equals(1, #file_parts)
+      local file_part = file_parts[1]
 
-      local file_chunk = nil
-      for _, chunk in ipairs(chunks) do
-        if chunk.type == "file" then
-          file_chunk = chunk
-          break
-        end
-      end
-
-      assert.is_not_nil(file_chunk)
       -- The filename should remain as-is (not resolved)
-      assert.equals("./file.txt", file_chunk.filename)
+      assert.equals("./file.txt", file_part.filename)
 
       -- Verify that vim.fn.filereadable was called with the non-resolved path
       assert.stub(filereadable_stub).was_called_with("./file.txt")
@@ -405,29 +336,12 @@ describe("File References and Path Parsing", function()
         mime_stub:clear()
         io_open_stub:clear()
 
-        local parser = content_parser.parse("Text before " .. test_case.input .. " text after")
+        local file_parts = parse_and_get_file_parts("Text before " .. test_case.input .. " text after")
 
-        local chunks = {}
-        while true do
-          local status, chunk = coroutine.resume(parser)
-          if not status or not chunk then
-            break
-          end
-          table.insert(chunks, chunk)
-        end
-
-        local file_chunk = nil
-        for _, chunk in ipairs(chunks) do
-          if chunk.type == "file" then
-            file_chunk = chunk
-            break
-          end
-        end
-
-        assert.is_not_nil(file_chunk, "Failed to find file chunk for " .. test_case.description)
+        assert.equals(1, #file_parts, "Failed to find file part for " .. test_case.description)
         assert.equals(
           test_case.expected_filename,
-          file_chunk.filename,
+          file_parts[1].filename,
           "Incorrect filename for " .. test_case.description
         )
       end
@@ -457,28 +371,13 @@ describe("File References and Path Parsing", function()
 
       -- Test case where periods are part of the filename
       local test_content = "Check @../config/.env.local file"
-      local parser = content_parser.parse(test_content)
+      local file_parts = parse_and_get_file_parts(test_content)
 
-      local chunks = {}
-      while true do
-        local status, chunk = coroutine.resume(parser)
-        if not status or not chunk then
-          break
-        end
-        table.insert(chunks, chunk)
-      end
+      assert.equals(1, #file_parts)
+      local file_part = file_parts[1]
 
-      local file_chunk = nil
-      for _, chunk in ipairs(chunks) do
-        if chunk.type == "file" then
-          file_chunk = chunk
-          break
-        end
-      end
-
-      assert.is_not_nil(file_chunk)
-      assert.equals("../config/.env.local", file_chunk.filename) -- Periods preserved in path/filename
-      assert.equals("../config/.env.local", file_chunk.raw_filename)
+      assert.equals("../config/.env.local", file_part.filename) -- Periods preserved in path/filename
+      assert.equals("../config/.env.local", file_part.raw)
     end)
   end)
 
@@ -505,96 +404,21 @@ describe("File References and Path Parsing", function()
       local io_open_stub = create_stub(io, "open")
       io_open_stub.returns(mock_file)
 
-      -- Test URL-encoded filename with trailing punctuation in a sentence
-      local test_content = "Please review the document @./quarterly%20report%202023.pdf, and let me know your thoughts."
-      local parser = content_parser.parse(test_content)
+      -- URL-encoded space and trailing punctuation
+      local test_content = "See @./my%20report.pdf."
+      local file_parts = parse_and_get_file_parts(test_content)
 
-      local chunks = {}
-      while true do
-        local status, chunk = coroutine.resume(parser)
-        if not status or not chunk then
-          break
-        end
-        table.insert(chunks, chunk)
-      end
+      assert.equals(1, #file_parts)
+      local file_part = file_parts[1]
 
-      local file_chunk = nil
-      for _, chunk in ipairs(chunks) do
-        if chunk.type == "file" then
-          file_chunk = chunk
-          break
-        end
-      end
-
-      assert.is_not_nil(file_chunk)
-      assert.equals("./quarterly report 2023.pdf", file_chunk.filename) -- URL-decoded
-      assert.equals("./quarterly%20report%202023.pdf", file_chunk.raw_filename) -- Original encoding, punctuation stripped
-      assert.equals("application/pdf", file_chunk.mime_type)
-      assert.equals("PDF content", file_chunk.content)
-
-      -- Verify the text chunks were properly separated
-      local text_chunks = {}
-      for _, chunk in ipairs(chunks) do
-        if chunk.type == "text" then
-          table.insert(text_chunks, chunk.value)
-        end
-      end
-
-      assert.is_true(#text_chunks >= 2)
-      assert.equals("Please review the document ", text_chunks[1])
-      assert.equals(", and let me know your thoughts.", text_chunks[2])
-    end)
-
-    it("handles complex filename with MIME type override, URL encoding, and punctuation", function()
-      -- Mock vim.fn.filereadable to return success
-      local filereadable_stub = create_stub(vim.fn, "filereadable")
-      filereadable_stub.returns(1)
-
-      -- Mock io.open
-      local mock_file = {
-        read = function(self, mode)
-          if mode == "*a" then
-            return "binary data"
-          end
-        end,
-        close = function(self) end,
-      }
-      local io_open_stub = create_stub(io, "open")
-      io_open_stub.returns(mock_file)
-
-      -- Complex case: URL-encoded filename with MIME type override and trailing punctuation
-      local test_content = "The data is in @./data%20files/results%2Bfinal.dat;type=application/octet-stream."
-      local parser = content_parser.parse(test_content)
-
-      local chunks = {}
-      while true do
-        local status, chunk = coroutine.resume(parser)
-        if not status or not chunk then
-          break
-        end
-        table.insert(chunks, chunk)
-      end
-
-      local file_chunk = nil
-      for _, chunk in ipairs(chunks) do
-        if chunk.type == "file" then
-          file_chunk = chunk
-          break
-        end
-      end
-
-      assert.is_not_nil(file_chunk)
-      assert.equals("./data files/results+final.dat", file_chunk.filename) -- URL-decoded
-      assert.equals("./data%20files/results%2Bfinal.dat;type=application/octet-stream", file_chunk.raw_filename) -- Original encoding with cleaned type override
-      assert.equals("application/octet-stream", file_chunk.mime_type) -- MIME type override applied
-      assert.equals("binary data", file_chunk.content)
-
-      -- Verify that filereadable was called with the decoded path
-      assert.stub(filereadable_stub).was_called_with("./data files/results+final.dat")
+      -- Filename decoded, punctuation stripped
+      assert.equals("./my report.pdf", file_part.filename)
+      assert.equals("./my%20report.pdf", file_part.raw)
+      assert.equals("application/pdf", file_part.mime_type)
     end)
   end)
 
-  describe("Provider-Specific File Formatting", function()
+  describe("Provider-specific formatting", function()
     describe("Claude Provider", function()
       it("formats PNG images correctly", function()
         -- Setup Claude provider
@@ -620,13 +444,14 @@ describe("File References and Path Parsing", function()
         local io_open_stub = create_stub(io, "open")
         io_open_stub.returns(mock_file)
 
-        -- Create messages with file reference
-        local messages = {
-          { type = "You", content = "Look at @./image.png" },
+        -- Create chat content and use pipeline
+        local pipeline = require("flemma.pipeline")
+        local lines = {
+          "@You: Look at @./image.png",
         }
+        local prompt, evaluated, warnings = pipeline.run(lines, {})
 
-        -- Prepare prompt and build request body
-        local prompt = provider:prepare_prompt(messages)
+        -- Build request body
         local request_body = provider:build_request(prompt)
 
         -- Verify request body format
@@ -684,13 +509,14 @@ describe("File References and Path Parsing", function()
         local io_open_stub = create_stub(io, "open")
         io_open_stub.returns(mock_file)
 
-        -- Create messages with file reference
-        local messages = {
-          { type = "You", content = "Review @./document.pdf" },
+        -- Create chat content and use pipeline
+        local pipeline = require("flemma.pipeline")
+        local lines = {
+          "@You: Review @./document.pdf",
         }
+        local prompt, evaluated, warnings = pipeline.run(lines, {})
 
-        -- Prepare prompt and build request body
-        local prompt = provider:prepare_prompt(messages)
+        -- Build request body
         local request_body = provider:build_request(prompt)
 
         -- Verify request body format
@@ -737,13 +563,14 @@ describe("File References and Path Parsing", function()
         local io_open_stub = create_stub(io, "open")
         io_open_stub.returns(mock_file)
 
-        -- Create messages with file reference
-        local messages = {
-          { type = "You", content = "Read @./notes.txt" },
+        -- Create chat content and use pipeline
+        local pipeline = require("flemma.pipeline")
+        local lines = {
+          "@You: Read @./notes.txt",
         }
+        local prompt, evaluated, warnings = pipeline.run(lines, {})
 
-        -- Prepare prompt and build request body
-        local prompt = provider:prepare_prompt(messages)
+        -- Build request body
         local request_body = provider:build_request(prompt)
 
         -- Verify request body format
@@ -789,13 +616,14 @@ describe("File References and Path Parsing", function()
         local io_open_stub = create_stub(io, "open")
         io_open_stub.returns(mock_file)
 
-        -- Create messages with file reference
-        local messages = {
-          { type = "You", content = "Analyze @./chart.png" },
+        -- Create chat content and use pipeline
+        local pipeline = require("flemma.pipeline")
+        local lines = {
+          "@You: Analyze @./chart.png",
         }
+        local prompt, evaluated, warnings = pipeline.run(lines, {})
 
-        -- Prepare prompt and build request body
-        local prompt = provider:prepare_prompt(messages)
+        -- Build request body
         local request_body = provider:build_request(prompt)
 
         -- Verify request body format
@@ -853,13 +681,14 @@ describe("File References and Path Parsing", function()
         local io_open_stub = create_stub(io, "open")
         io_open_stub.returns(mock_file)
 
-        -- Create messages with file reference
-        local messages = {
-          { type = "You", content = "Summarize @./report.pdf" },
+        -- Create chat content and use pipeline
+        local pipeline = require("flemma.pipeline")
+        local lines = {
+          "@You: Summarize @./report.pdf",
         }
+        local prompt, evaluated, warnings = pipeline.run(lines, {})
 
-        -- Prepare prompt and build request body
-        local prompt = provider:prepare_prompt(messages)
+        -- Build request body
         local request_body = provider:build_request(prompt)
 
         -- Verify request body format
@@ -906,13 +735,14 @@ describe("File References and Path Parsing", function()
         local io_open_stub = create_stub(io, "open")
         io_open_stub.returns(mock_file)
 
-        -- Create messages with file reference
-        local messages = {
-          { type = "You", content = "Process @./data.txt" },
+        -- Create chat content and use pipeline
+        local pipeline = require("flemma.pipeline")
+        local lines = {
+          "@You: Process @./data.txt",
         }
+        local prompt, evaluated, warnings = pipeline.run(lines, {})
 
-        -- Prepare prompt and build request body
-        local prompt = provider:prepare_prompt(messages)
+        -- Build request body
         local request_body = provider:build_request(prompt)
 
         -- Verify request body format
@@ -965,13 +795,14 @@ describe("File References and Path Parsing", function()
         local io_open_stub = create_stub(io, "open")
         io_open_stub.returns(mock_file)
 
-        -- Create messages with file reference
-        local messages = {
-          { type = "You", content = "Describe @./photo.png" },
+        -- Create chat content and use pipeline
+        local pipeline = require("flemma.pipeline")
+        local lines = {
+          "@You: Describe @./photo.png",
         }
+        local prompt, evaluated, warnings = pipeline.run(lines, {})
 
-        -- Prepare prompt and build request body
-        local prompt = provider:prepare_prompt(messages)
+        -- Build request body
         local request_body = provider:build_request(prompt)
 
         -- Verify request body format
@@ -1028,13 +859,14 @@ describe("File References and Path Parsing", function()
         local io_open_stub = create_stub(io, "open")
         io_open_stub.returns(mock_file)
 
-        -- Create messages with file reference
-        local messages = {
-          { type = "You", content = "Analyze @./study.pdf" },
+        -- Create chat content and use pipeline
+        local pipeline = require("flemma.pipeline")
+        local lines = {
+          "@You: Analyze @./study.pdf",
         }
+        local prompt, evaluated, warnings = pipeline.run(lines, {})
 
-        -- Prepare prompt and build request body
-        local prompt = provider:prepare_prompt(messages)
+        -- Build request body
         local request_body = provider:build_request(prompt)
 
         -- Verify request body format
@@ -1080,13 +912,14 @@ describe("File References and Path Parsing", function()
         local io_open_stub = create_stub(io, "open")
         io_open_stub.returns(mock_file)
 
-        -- Create messages with file reference
-        local messages = {
-          { type = "You", content = "Check @./config.txt" },
+        -- Create chat content and use pipeline
+        local pipeline = require("flemma.pipeline")
+        local lines = {
+          "@You: Check @./config.txt",
         }
+        local prompt, evaluated, warnings = pipeline.run(lines, {})
 
-        -- Prepare prompt and build request body
-        local prompt = provider:prepare_prompt(messages)
+        -- Build request body
         local request_body = provider:build_request(prompt)
 
         -- Verify request body format

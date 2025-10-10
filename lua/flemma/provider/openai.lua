@@ -2,7 +2,6 @@
 --- Implements the OpenAI API integration
 local base = require("flemma.provider.base")
 local log = require("flemma.logging")
-local message_parts = require("flemma.message_parts")
 local M = {}
 
 -- Create a new OpenAI provider instance
@@ -37,12 +36,11 @@ end
 
 ---Build request body for OpenAI API
 ---
----@param prompt Prompt The prepared prompt with history and system
----@param context Context The shared context object for resolving file paths
+---@param prompt Prompt The prepared prompt with history and system (from pipeline)
+---@param context Context The shared context object (not used, parts already resolved)
 ---@return table request_body The request body for the API
 function M.build_request(self, prompt, context)
   local api_messages = {}
-  local collected_warnings = {} -- Collect all warnings to notify user
 
   -- Add system message first if present
   if prompt.system and #prompt.system > 0 then
@@ -54,17 +52,11 @@ function M.build_request(self, prompt, context)
 
   for _, msg in ipairs(prompt.history) do
     if msg.role == "user" then
-      -- Parse content into generic parts
-      local parts, warnings = message_parts.parse(msg.content, context)
-      for _, warning in ipairs(warnings) do
-        table.insert(collected_warnings, warning)
-      end
-
-      -- Map generic parts to OpenAI-specific format
+      -- Map generic parts (already resolved by pipeline) to OpenAI-specific format
       local content_parts_for_api = {}
       local has_multimedia_part = false
 
-      for _, part in ipairs(parts) do
+      for _, part in ipairs(msg.parts or {}) do
         if part.kind == "text" then
           table.insert(content_parts_for_api, { type = "text", text = part.text })
         elseif part.kind == "image" then
@@ -77,33 +69,33 @@ function M.build_request(self, prompt, context)
           })
           has_multimedia_part = true
           log.debug(
-            'openai.build_request: Added image_url part for "' .. part.filename .. '" (MIME: ' .. part.mime_type .. ")"
+            'openai.build_request: Added image_url part for "' .. (part.filename or "image") .. '" (MIME: ' .. part.mime_type .. ")"
           )
         elseif part.kind == "pdf" then
           table.insert(content_parts_for_api, {
             type = "file",
             file = {
-              filename = part.filename,
+              filename = part.filename or "document.pdf",
               file_data = part.data_url,
             },
           })
           has_multimedia_part = true
           log.debug(
-            'openai.build_request: Added file part for PDF "' .. part.filename .. '" (MIME: ' .. part.mime_type .. ")"
+            'openai.build_request: Added file part for PDF "' .. (part.filename or "document") .. '" (MIME: ' .. part.mime_type .. ")"
           )
         elseif part.kind == "text_file" then
           table.insert(content_parts_for_api, { type = "text", text = part.text })
           log.debug(
-            'openai.build_request: Added text part for "' .. part.filename .. '" (MIME: ' .. part.mime_type .. ")"
+            'openai.build_request: Added text part for "' .. (part.filename or "text_file") .. '" (MIME: ' .. part.mime_type .. ")"
           )
         elseif part.kind == "unsupported_file" then
-          table.insert(content_parts_for_api, { type = "text", text = "@" .. part.raw_filename })
+          table.insert(content_parts_for_api, { type = "text", text = "@" .. (part.raw_filename or "") })
         end
       end
 
       local final_api_content
       if #content_parts_for_api == 0 then
-        final_api_content = vim.trim(msg.content)
+        final_api_content = ""
       elseif has_multimedia_part then
         final_api_content = content_parts_for_api
       else
@@ -121,10 +113,19 @@ function M.build_request(self, prompt, context)
         role = msg.role,
         content = final_api_content,
       })
-    else -- Assistant or System messages
+    elseif msg.role == "assistant" then
+      -- Extract text from parts, skip thinking nodes
+      local text_parts = {}
+      for _, p in ipairs(msg.parts or {}) do
+        if p.kind == "text" then
+          table.insert(text_parts, p.text or "")
+        elseif p.kind == "thinking" then
+          -- Skip thinking nodes - OpenAI doesn't need them
+        end
+      end
       table.insert(api_messages, {
         role = msg.role,
-        content = msg.content, -- Already trimmed by prepare_prompt
+        content = table.concat(text_parts, ""),
       })
     end
   end
@@ -160,9 +161,6 @@ function M.build_request(self, prompt, context)
         .. tostring(self.parameters.temperature)
     )
   end
-
-  -- Notify user of any file-related warnings
-  message_parts.notify_warnings("OpenAI", collected_warnings)
 
   return request_body
 end

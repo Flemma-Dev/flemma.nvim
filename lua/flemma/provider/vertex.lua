@@ -2,8 +2,6 @@
 --- Implements the Google Vertex AI API integration
 local base = require("flemma.provider.base")
 local log = require("flemma.logging")
--- local mime_util = require("flemma.mime") -- Moved to base provider
-local message_parts = require("flemma.message_parts")
 local M = {}
 
 -- Private helper to validate required configuration
@@ -195,7 +193,6 @@ end
 function M.build_request(self, prompt, context)
   -- Convert prompt.history to Vertex AI format
   local contents = {}
-  local collected_warnings = {} -- Collect all warnings to notify user
 
   for _, msg in ipairs(prompt.history) do
     -- Map canonical role to Vertex-specific role
@@ -203,58 +200,45 @@ function M.build_request(self, prompt, context)
 
     local parts = {}
     if msg.role == "user" then
-      -- Parse content into generic parts
-      local generic_parts, warnings = message_parts.parse(msg.content, context)
-      for _, warning in ipairs(warnings) do
-        table.insert(collected_warnings, warning)
-      end
-
-      -- Map generic parts to Vertex-specific format
-      for _, part in ipairs(generic_parts) do
+      -- Map generic parts (already resolved by pipeline) to Vertex-specific format
+      for _, part in ipairs(msg.parts or {}) do
         if part.kind == "text" then
           table.insert(parts, { text = part.text })
         elseif part.kind == "text_file" then
           table.insert(parts, { text = part.text })
-          log.debug('build_request: Added text part for "' .. part.filename .. '" (MIME: ' .. part.mime_type .. ")")
+          log.debug('build_request: Added text part for "' .. (part.filename or "text_file") .. '" (MIME: ' .. part.mime_type .. ")")
         elseif part.kind == "image" or part.kind == "pdf" then
           table.insert(parts, {
             inlineData = {
               mimeType = part.mime_type,
               data = part.data,
-              displayName = vim.fn.fnamemodify(part.filename, ":t"),
+              displayName = part.filename and vim.fn.fnamemodify(part.filename, ":t") or "file",
             },
           })
           log.debug(
-            'build_request: Added inlineData part for "' .. part.filename .. '" (MIME: ' .. part.mime_type .. ")"
+            'build_request: Added inlineData part for "' .. (part.filename or "file") .. '" (MIME: ' .. part.mime_type .. ")"
           )
         elseif part.kind == "unsupported_file" then
-          table.insert(parts, { text = "@" .. part.raw_filename })
+          table.insert(parts, { text = "@" .. (part.raw_filename or "") })
         end
       end
 
-      -- Ensure parts is not empty if the original message content was not empty.
-      -- This handles cases where content might be, e.g., only unreadable files
-      -- or if the parser yields nothing for some valid non-empty inputs.
-      if #parts == 0 and msg.content and #msg.content > 0 then
-        log.debug(
-          "build_request: User content resulted in empty 'parts' after parsing. Original content: \""
-            .. msg.content
-            .. '". Adding original content as a single text part as fallback.'
-        )
-        table.insert(parts, { text = msg.content })
-      elseif #parts == 0 then -- Original content was empty or only whitespace, or parser yielded nothing.
-        log.debug(
-          "build_request: User content resulted in empty 'parts' (likely empty or whitespace input). Original content: \""
-            .. (msg.content or "")
-            .. '". Adding an empty text part.'
-        )
-        -- Vertex might require a 'parts' array, even if it contains an empty text string.
+      -- Ensure parts is not empty
+      if #parts == 0 then
+        log.debug("build_request: User content resulted in empty 'parts'. Adding an empty text part.")
         table.insert(parts, { text = "" })
       end
     else
-      -- For model messages, strip out <thinking>...</thinking> blocks and add the content as a single text part
-      local content_without_thoughts = msg.content:gsub("\n?<thinking>.-</thinking>\n?", "")
-      table.insert(parts, { text = content_without_thoughts })
+      -- For model/assistant messages, extract text from parts and skip thinking nodes
+      local text_parts = {}
+      for _, p in ipairs(msg.parts or {}) do
+        if p.kind == "text" then
+          table.insert(text_parts, p.text or "")
+        elseif p.kind == "thinking" then
+          -- Skip thinking nodes - Vertex handles extended thinking internally
+        end
+      end
+      table.insert(parts, { text = table.concat(text_parts, "") })
     end
 
     -- Add the message with its Vertex-specific role and parts to the contents list
@@ -330,9 +314,6 @@ function M.build_request(self, prompt, context)
       },
     }
   end
-
-  -- Notify user of any file-related warnings
-  message_parts.notify_warnings("Vertex AI", collected_warnings)
 
   return request_body
 end

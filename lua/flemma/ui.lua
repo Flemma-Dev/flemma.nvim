@@ -416,18 +416,15 @@ function M.update_ui(bufnr)
   -- Clear and reapply all signs
   vim.fn.sign_unplace("flemma_ns", { buffer = bufnr })
 
-  -- Parse messages for sign placement without executing frontmatter
+  -- Parse messages using AST for sign placement
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local frontmatter = require("flemma.frontmatter")
-  local fm_language, fm_code, content = frontmatter.parse(lines)
+  local parser = require("flemma.parser")
+  local doc = parser.parse_lines(lines)
 
-  local frontmatter_offset = 0
-  if fm_code then
-    frontmatter_offset = #vim.split(fm_code, "\n", true) + 2
+  -- Place signs for each message based on AST positions
+  for _, msg in ipairs(doc.messages) do
+    M.place_signs(bufnr, msg.position.start_line, msg.position.end_line, msg.role)
   end
-
-  content = content or lines
-  require("flemma.buffers").parse_messages(bufnr, content, frontmatter_offset)
 end
 
 -- Set up UI-related autocmds and initialization

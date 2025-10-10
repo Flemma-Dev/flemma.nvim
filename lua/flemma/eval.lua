@@ -19,7 +19,7 @@ local function include_delegate(relative_path, env_of_caller, eval_expression_fu
   if vim.fs.abspath(calling_file_path) == calling_file_path then
     base_dir = vim.fn.fnamemodify(calling_file_path, ":h")
   else
-    local dir_of_calling_file = vim.fn.fnamemodify(calling_file_path, ":h") -- Returns '.' if no path part, or the path part
+    local dir_of_calling_file = vim.fn.fnamemodify(calling_file_path, ":h")
     if dir_of_calling_file == "" or dir_of_calling_file == "." then
       base_dir = vim.fn.getcwd()
     else
@@ -56,23 +56,68 @@ local function include_delegate(relative_path, env_of_caller, eval_expression_fu
   local content = file:read("*a")
   file:close()
 
-  local new_include_env = create_safe_env_func() -- Create a fresh base environment
+  -- Create new environment for included file
+  local new_include_env = create_safe_env_func()
   new_include_env.__filename = target_path
   new_include_env.__include_stack = vim.deepcopy(env_of_caller.__include_stack)
   table.insert(new_include_env.__include_stack, target_path)
+  
+  -- Copy user variables from caller environment
+  if env_of_caller.__variables then
+    new_include_env.__variables = vim.deepcopy(env_of_caller.__variables)
+  end
 
-  -- Expressions in the included file will be evaluated using new_include_env.
-  -- M.eval_expression (as eval_expression_func) will ensure new_include_env.include is set up.
+  -- Process the content: evaluate {{ }} expressions which may contain nested include() or produce @./ refs
   local processed_content = content:gsub("{{(.-)}}", function(inner_expr)
     local ok, presult = pcall(eval_expression_func, inner_expr, new_include_env)
     if not ok then
-      -- presult is the error string from eval_expression_func, already contextualized.
       error(presult)
     end
-    return presult
+    return presult == nil and "" or tostring(presult)
   end)
 
-  return processed_content
+  -- Now parse the processed content for @./ file references and resolve them inline
+  local parser = require("flemma.parser")
+  local ctxutil = require("flemma.context")
+  
+  -- Parse content as segments (no frontmatter, no message roles)
+  local segments = parser.parse_inline_content(processed_content)
+  
+  -- Build final output by resolving file refs
+  local result_parts = {}
+  for _, seg in ipairs(segments) do
+    if seg.kind == "text" then
+      table.insert(result_parts, seg.value)
+    elseif seg.kind == "file_reference" then
+      -- Resolve file reference relative to target_path
+      local filename = seg.path
+      if filename:match("^%.%.?/") then
+        local file_dir = vim.fn.fnamemodify(target_path, ":h")
+        filename = vim.fn.simplify(file_dir .. "/" .. filename)
+      end
+      
+      -- Read the file and insert its content
+      if vim.fn.filereadable(filename) == 1 then
+        local ref_file, ref_err = io.open(filename, "r")
+        if ref_file then
+          local ref_content = ref_file:read("*a")
+          ref_file:close()
+          table.insert(result_parts, ref_content)
+        else
+          error(string.format("Failed to read referenced file '%s': %s", filename, ref_err or "unknown"))
+        end
+      else
+        error(string.format("Referenced file not found: '%s' (from %s)", filename, target_path))
+      end
+      
+      -- Add trailing punctuation back if present
+      if seg.trailing_punct then
+        table.insert(result_parts, seg.trailing_punct)
+      end
+    end
+  end
+
+  return table.concat(result_parts, "")
 end
 
 local function ensure_env_capabilities(env, eval_expr_fn, create_env_fn)

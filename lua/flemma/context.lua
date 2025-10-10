@@ -60,4 +60,44 @@ function M.clone(context)
   return vim.deepcopy(context)
 end
 
+---Extend a context with user-defined variables (returns a deep copy)
+---@param base Context
+---@param vars table
+---@return Context
+function M.extend(base, vars)
+  local c = M.clone(base)
+  c.__variables = c.__variables or {}
+  for k, v in pairs(vars or {}) do
+    c.__variables[k] = v
+  end
+  return c
+end
+
+---Create a new context for an included file (push to include stack)
+---@param base Context
+---@param child_filename string
+---@return Context
+function M.for_include(base, child_filename)
+  local c = M.clone(base)
+  c.__filename = child_filename
+  c.__include_stack = vim.deepcopy(base.__include_stack or {})
+  table.insert(c.__include_stack, child_filename)
+  return c
+end
+
+---Prepare a safe eval environment from a Context
+---@param ctx Context
+---@return table env
+function M.to_eval_env(ctx)
+  local eval = require("flemma.eval")
+  local env = eval.create_safe_env()
+  env.__filename = ctx.__filename
+  env.__include_stack = vim.deepcopy(ctx.__include_stack or { ctx.__filename })
+  -- Merge user vars
+  for k, v in pairs((ctx.__variables or {})) do
+    env[k] = v
+  end
+  return env
+end
+
 return M

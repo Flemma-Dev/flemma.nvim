@@ -1,30 +1,28 @@
 local M = {}
 
+local parser = require("flemma.parser")
+
 -- Get the bounds of the current message
 local function get_message_bounds()
   local cur_line = vim.api.nvim_win_get_cursor(0)[1]
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local doc = parser.parse_lines(lines)
 
-  -- Find start of current message
-  local start_line = cur_line
-  while start_line > 0 and not lines[start_line]:match("^@[%w]+:") do
-    start_line = start_line - 1
-  end
-
-  -- If we didn't find a message start, return nil
-  if start_line == 0 and not lines[1]:match("^@[%w]+:") then
-    return nil
-  end
-
-  -- Find end of message
-  local end_line = cur_line
-  while end_line < #lines do
-    end_line = end_line + 1
-    if lines[end_line] and lines[end_line]:match("^@[%w]+:") then
-      end_line = end_line - 1
+  -- Find the message containing the current line
+  local current_msg = nil
+  for _, msg in ipairs(doc.messages) do
+    if msg.position.start_line <= cur_line and msg.position.end_line >= cur_line then
+      current_msg = msg
       break
     end
   end
+
+  if not current_msg then
+    return nil
+  end
+
+  local start_line = current_msg.position.start_line
+  local end_line = current_msg.position.end_line
 
   -- Trim trailing empty lines for inner selection
   local inner_end = end_line
@@ -42,7 +40,7 @@ local function get_message_bounds()
     start_line = start_line,
     end_line = end_line,
     inner_end = inner_end,
-    role_type_end = role_type_end - 1, -- Column index of the last char of the marker + space
+    role_type_end = role_type_end - 1,
   }
 end
 

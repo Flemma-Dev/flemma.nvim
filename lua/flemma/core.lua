@@ -209,38 +209,27 @@ function M.send_to_provider(opts)
   -- Create context ONCE for the entire pipeline (used by frontmatter, @./file refs, etc.)
   local context = require("flemma.context").from_buffer(bufnr)
 
-  -- Parse messages from buffer using init module
-  local messages, fm_code, fm_context = require("flemma.buffers").parse_buffer(bufnr, context)
+  -- Run the new AST-based pipeline
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local pipeline = require("flemma.pipeline")
+  local prompt, evaluated, file_warnings = pipeline.run(lines, context)
 
-  if #messages == 0 then
+  -- Display frontmatter and evaluation errors to user
+  if #evaluated.errors > 0 then
+    vim.notify("Flemma errors:\n" .. table.concat(evaluated.errors, "\n"), vim.log.levels.WARN)
+  end
+
+  if #prompt.history == 0 then
     log.warn("send_to_provider(): No messages found in buffer")
     vim.notify("Flemma: No messages found in buffer.", vim.log.levels.WARN)
     vim.bo[bufnr].modifiable = true -- Restore modifiable state
     return
   end
 
-  -- Process {{}} template expressions in message content
-  -- Note: fm_context is a cloned context with user-defined variables from frontmatter
-  local eval = require("flemma.eval")
-  local processed_messages = {}
-  local validation_errors = {}
+  log.debug("send_to_provider(): Processed messages count: " .. #prompt.history)
 
-  for _, msg in ipairs(messages) do
-    local new_content, errs = eval.interpolate(msg.content, fm_context or {})
-    local new_msg = vim.deepcopy(msg)
-    new_msg.content = new_content
-    table.insert(processed_messages, new_msg)
-
-    -- Collect validation errors with file context
-    for _, e in ipairs(errs) do
-      e.file_path = context and context.__filename or "N/A"
-      table.insert(validation_errors, e)
-    end
-  end
-
-  log.debug("send_to_provider(): Processed messages count: " .. #processed_messages)
-
-  -- Notify user of any template expression errors (but continue with request)
+  -- Notify user of any expression evaluation errors (but continue with request)
+  local validation_errors = evaluated.expression_errors or {}
   if #validation_errors > 0 then
     log.warn("send_to_provider(): Lua expression evaluation errors occurred (request will still be sent)")
     local error_lines = { "Lua expression evaluation errors (request will still be sent):" }
@@ -249,15 +238,23 @@ function M.send_to_provider(opts)
         error_lines,
         string.format("  Expression: %s (File: %s)", error_info.expression, error_info.file_path)
       )
-      table.insert(error_lines, string.format("  %s", error_info.error_details))
+      table.insert(error_lines, string.format("  %s", error_info.error))
     end
 
     vim.notify("Flemma: " .. table.concat(error_lines, "\n"), vim.log.levels.WARN)
-    -- Continue with the request - user might intentionally have {{ }} in their text
   end
-
-  -- Prepare prompt using provider
-  local prompt = current_provider:prepare_prompt(processed_messages)
+  
+  -- Notify about file warnings
+  if file_warnings and #file_warnings > 0 then
+    local warning_lines = { "File reference warnings:" }
+    for _, w in ipairs(file_warnings) do
+      table.insert(
+        warning_lines, 
+        string.format("  %s: %s (in %s)", w.filename or w.raw, w.error, w.source_file)
+      )
+    end
+    vim.notify("Flemma: " .. table.concat(warning_lines, "\n"), vim.log.levels.WARN)
+  end
 
   log.debug("send_to_provider(): Prompt history for provider: " .. log.inspect(prompt.history))
   log.debug("send_to_provider(): System instruction: " .. log.inspect(prompt.system))

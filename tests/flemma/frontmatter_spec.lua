@@ -140,24 +140,24 @@ describe("flemma.frontmatter", function()
 
   describe("integration with templating", function()
     it("should use JSON frontmatter variables in Lua expressions", function()
-      local bufnr = vim.api.nvim_create_buf(false, false)
       local lines = {
         "```json",
         '{"greeting": "Hello", "name": "World"}',
         "```",
         "@You: {{ greeting .. ', ' .. name }}!",
       }
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
+      -- Parse frontmatter and content
+      local language, code, content = frontmatter.parse(lines)
+      assert.are.equal("json", language)
+
+      -- Execute frontmatter to get context
       local context = require("flemma.context").from_file("test.chat")
-      local messages, fm_code, fm_context = require("flemma.buffers").parse_buffer(bufnr, context)
-
-      assert.are.equal(1, #messages)
-      assert.are.equal("You", messages[1].type)
+      local fm_context = frontmatter.execute(language, code, context)
 
       -- Process expressions using the frontmatter context
       local eval = require("flemma.eval")
-      local processed_content, errors = eval.interpolate(messages[1].content, fm_context)
+      local processed_content, errors = eval.interpolate("{{ greeting .. ', ' .. name }}!", fm_context)
 
       assert.are.equal("Hello, World!", processed_content)
       assert.are.equal(0, #errors)

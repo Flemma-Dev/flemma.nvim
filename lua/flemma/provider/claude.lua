@@ -2,7 +2,6 @@
 --- Implements the Claude API integration
 local base = require("flemma.provider.base")
 local log = require("flemma.logging")
-local message_parts = require("flemma.message_parts")
 local M = {}
 
 -- Create a new Claude provider instance
@@ -37,25 +36,18 @@ end
 
 ---Build request body for Claude API
 ---
----@param prompt Prompt The prepared prompt with history and system
----@param context Context The shared context object for resolving file paths
+---@param prompt Prompt The prepared prompt with history and system (from pipeline)
+---@param context Context The shared context object (not used, parts already resolved)
 ---@return table request_body The request body for the API
 function M.build_request(self, prompt, context)
   local api_messages = {}
-  local collected_warnings = {} -- Collect all warnings to notify user
 
   for _, msg in ipairs(prompt.history) do
     if msg.role == "user" then
-      -- Parse content into generic parts
-      local parts, warnings = message_parts.parse(msg.content, context)
-      for _, warning in ipairs(warnings) do
-        table.insert(collected_warnings, warning)
-      end
-
-      -- Map generic parts to Claude-specific format
+      -- Map generic parts (already resolved by pipeline) to Claude-specific format
       local content_blocks = {}
 
-      for _, part in ipairs(parts) do
+      for _, part in ipairs(msg.parts or {}) do
         if part.kind == "text" then
           table.insert(content_blocks, { type = "text", text = part.text })
         elseif part.kind == "image" then
@@ -68,7 +60,7 @@ function M.build_request(self, prompt, context)
             },
           })
           log.debug(
-            'claude.build_request: Added image part for "' .. part.filename .. '" (MIME: ' .. part.mime_type .. ")"
+            'claude.build_request: Added image part for "' .. (part.filename or "image") .. '" (MIME: ' .. part.mime_type .. ")"
           )
         elseif part.kind == "pdf" then
           table.insert(content_blocks, {
@@ -80,41 +72,36 @@ function M.build_request(self, prompt, context)
             },
           })
           log.debug(
-            'claude.build_request: Added document part for "' .. part.filename .. '" (MIME: ' .. part.mime_type .. ")"
+            'claude.build_request: Added document part for "' .. (part.filename or "document") .. '" (MIME: ' .. part.mime_type .. ")"
           )
         elseif part.kind == "text_file" then
           table.insert(content_blocks, { type = "text", text = part.text })
           log.debug(
-            'claude.build_request: Added text part for "' .. part.filename .. '" (MIME: ' .. part.mime_type .. ")"
+            'claude.build_request: Added text part for "' .. (part.filename or "text_file") .. '" (MIME: ' .. part.mime_type .. ")"
           )
         elseif part.kind == "unsupported_file" then
-          table.insert(content_blocks, { type = "text", text = "@" .. part.raw_filename })
+          table.insert(content_blocks, { type = "text", text = "@" .. (part.raw_filename or "") })
         end
       end
 
-      local final_user_content
-      if #content_blocks > 0 then
-        final_user_content = content_blocks
-      else
-        -- Original content was empty/whitespace, or resulted in no processable blocks.
-        -- Use the original string content, trimmed, as per Claude API (string | object[]).
-        final_user_content = vim.trim(msg.content)
-        log.debug(
-          "claude.build_request: User content resulted in empty 'content_blocks'. Using original string content: \""
-            .. final_user_content
-            .. '"'
-        )
-      end
+      local final_user_content = #content_blocks > 0 and content_blocks or ""
       table.insert(api_messages, {
         role = msg.role,
         content = final_user_content,
       })
-    elseif msg.role == "assistant" then -- Assistant messages in the request history
-      -- Assistant message content should also be in the new block structure.
-      -- Assuming assistant messages are always text.
+    elseif msg.role == "assistant" then
+      -- Extract text from parts, skip thinking nodes
+      local text_parts = {}
+      for _, p in ipairs(msg.parts or {}) do
+        if p.kind == "text" then
+          table.insert(text_parts, p.text or "")
+        elseif p.kind == "thinking" then
+          -- Skip thinking nodes - Claude doesn't need them
+        end
+      end
       table.insert(api_messages, {
         role = msg.role,
-        content = { { type = "text", text = msg.content } }, -- Already trimmed by prepare_prompt
+        content = { { type = "text", text = table.concat(text_parts, "") } },
       })
     end
   end
@@ -127,9 +114,6 @@ function M.build_request(self, prompt, context)
     temperature = self.parameters.temperature,
     stream = true,
   }
-
-  -- Notify user of any file-related warnings
-  message_parts.notify_warnings("Claude", collected_warnings)
 
   return request_body
 end
