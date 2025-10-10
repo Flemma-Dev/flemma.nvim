@@ -207,6 +207,7 @@ function M.cleanup_spinner(bufnr)
   local line_count = vim.api.nvim_buf_line_count(bufnr)
   if line_count == 0 then
     M.update_ui(bufnr) -- Ensure UI is clean even if buffer is empty
+    vim.bo[bufnr].modifiable = original_modifiable -- Restore modifiable before return
     return
   end
 
