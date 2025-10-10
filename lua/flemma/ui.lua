@@ -130,8 +130,8 @@ function M.add_rulers(bufnr, doc)
   vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
   for i, msg in ipairs(doc.messages) do
-    -- If this isn't the first message, add a ruler before it
-    if i > 1 then
+    -- Add a ruler before each message after the first, and before the first if frontmatter exists
+    if i > 1 or (i == 1 and doc.frontmatter ~= nil) then
       -- Create virtual line with ruler using the FlemmaRuler highlight group
       local ruler_text = string.rep(state.get_config().ruler.char, math.floor(vim.api.nvim_win_get_width(0) * 1))
       vim.api.nvim_buf_set_extmark(bufnr, ns_id, msg.position.start_line - 1, 0, {
