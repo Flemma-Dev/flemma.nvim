@@ -60,7 +60,11 @@ function M.build_request(self, prompt, context)
             },
           })
           log.debug(
-            'claude.build_request: Added image part for "' .. (part.filename or "image") .. '" (MIME: ' .. part.mime_type .. ")"
+            'claude.build_request: Added image part for "'
+              .. (part.filename or "image")
+              .. '" (MIME: '
+              .. part.mime_type
+              .. ")"
           )
         elseif part.kind == "pdf" then
           table.insert(content_blocks, {
@@ -72,12 +76,20 @@ function M.build_request(self, prompt, context)
             },
           })
           log.debug(
-            'claude.build_request: Added document part for "' .. (part.filename or "document") .. '" (MIME: ' .. part.mime_type .. ")"
+            'claude.build_request: Added document part for "'
+              .. (part.filename or "document")
+              .. '" (MIME: '
+              .. part.mime_type
+              .. ")"
           )
         elseif part.kind == "text_file" then
           table.insert(content_blocks, { type = "text", text = part.text })
           log.debug(
-            'claude.build_request: Added text part for "' .. (part.filename or "text_file") .. '" (MIME: ' .. part.mime_type .. ")"
+            'claude.build_request: Added text part for "'
+              .. (part.filename or "text_file")
+              .. '" (MIME: '
+              .. part.mime_type
+              .. ")"
           )
         elseif part.kind == "unsupported_file" then
           table.insert(content_blocks, { type = "text", text = "@" .. (part.raw_filename or "") })

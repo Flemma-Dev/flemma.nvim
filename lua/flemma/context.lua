@@ -4,6 +4,7 @@
 ---@class Context
 ---@field __filename string|nil The absolute path to the current buffer/file
 ---@field __include_stack string[]|nil Stack of included files for circular reference detection
+---@field __variables table<string, any>|nil User-defined variables for execution contexts
 
 local M = {}
 

@@ -4,13 +4,9 @@ local M = {}
 
 local plugin_config = require("flemma.config")
 local log = require("flemma.logging")
-local provider_config = require("flemma.provider.config")
 local state = require("flemma.state")
-local textobject = require("flemma.textobject")
 local core = require("flemma.core")
 local ui = require("flemma.ui")
-local buffers = require("flemma.buffers")
-local navigation = require("flemma.navigation")
 local commands = require("flemma.commands")
 local keymaps = require("flemma.keymaps")
 local highlight = require("flemma.highlight")

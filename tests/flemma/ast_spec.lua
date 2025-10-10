@@ -7,11 +7,11 @@ local pipeline = require("flemma.pipeline")
 
 describe("AST and Context", function()
   it("creates AST nodes with proper structure", function()
-    local d = ast.document(nil, {}, {}, {start_line=1, end_line=1})
+    local d = ast.document(nil, {}, {}, { start_line = 1, end_line = 1 })
     assert.equals("document", d.kind)
     assert.equals(1, d.position.start_line)
 
-    local m = ast.message("You", { ast.text("hi") }, {start_line=2, end_line=3})
+    local m = ast.message("You", { ast.text("hi") }, { start_line = 2, end_line = 3 })
     assert.equals("You", m.role)
     assert.equals("text", m.segments[1].kind)
   end)
@@ -65,8 +65,8 @@ describe("Parser", function()
     local m1 = doc.messages[1]
     assert.equals("You", m1.role)
     local kinds = {}
-    for _, s in ipairs(m1.segments) do 
-      kinds[#kinds+1] = s.kind 
+    for _, s in ipairs(m1.segments) do
+      kinds[#kinds + 1] = s.kind
     end
     -- Expected: text("Hello "), expression, text(" world "), file_reference, text(".")
     assert.equals("text", kinds[1])
@@ -98,7 +98,7 @@ describe("Parser", function()
     local doc = parser.parse_lines(lines)
     local msg = doc.messages[1]
     assert.equals("Assistant", msg.role)
-    
+
     -- Check segments include thinking node
     local has_thinking = false
     for _, seg in ipairs(msg.segments) do
@@ -122,7 +122,7 @@ describe("Parser", function()
     local doc = parser.parse_lines(lines)
     local msg = doc.messages[1]
     assert.equals("Assistant", msg.role)
-    
+
     -- Find thinking segment
     local thinking_seg = nil
     for _, seg in ipairs(msg.segments) do
@@ -131,7 +131,7 @@ describe("Parser", function()
         break
       end
     end
-    
+
     assert.is_not_nil(thinking_seg, "Should have thinking segment")
     assert.equals("internal thought process\nmore thinking", thinking_seg.content)
     assert.is_not_nil(thinking_seg.position, "Thinking segment should have position")
@@ -171,14 +171,16 @@ describe("Evaluator", function()
     assert.equals(1, #out.messages)
     local parts = out.messages[1].parts
     local kinds = {}
-    for _, p in ipairs(parts) do 
-      kinds[#kinds+1] = p.kind 
+    for _, p in ipairs(parts) do
+      kinds[#kinds + 1] = p.kind
     end
     -- Expected: text("File1: "), text("hello"), text(" and File2: "), file, text(".")
     assert.equals("text", kinds[1])
     assert.equals("text", kinds[2])
     assert.equals("file", kinds[4])
-    local file_diags = vim.tbl_filter(function(d) return d.type == "file" end, out.diagnostics or {})
+    local file_diags = vim.tbl_filter(function(d)
+      return d.type == "file"
+    end, out.diagnostics or {})
     assert.equals(0, #file_diags)
   end)
 
@@ -224,7 +226,7 @@ describe("Evaluator", function()
     local f = io.open("tests/fixtures/with_ref.txt", "w")
     f:write("Content: @./a.txt here")
     f:close()
-    
+
     local lines = {
       "@You: {{ include('./with_ref.txt') }}",
     }
@@ -264,7 +266,9 @@ describe("Evaluator", function()
     local doc = parser.parse_lines(lines)
     local out = evaluator.evaluate(doc, base)
     assert.is_true(#out.diagnostics > 0, "Should collect diagnostics")
-    local expr_diags = vim.tbl_filter(function(d) return d.type == "expression" end, out.diagnostics)
+    local expr_diags = vim.tbl_filter(function(d)
+      return d.type == "expression"
+    end, out.diagnostics)
     assert.is_true(#expr_diags > 0, "Should collect expression errors")
     assert.is_true(expr_diags[1].expression:match("1 / 'x'") ~= nil)
     assert.equals("warning", expr_diags[1].severity)
@@ -283,7 +287,7 @@ describe("Evaluator", function()
     }
     local doc = parser.parse_lines(lines)
     local out = evaluator.evaluate(doc, ctx.from_file("tests/fixtures/doc.chat"))
-    
+
     -- Check that thinking nodes are preserved as parts
     local parts = out.messages[1].parts
     local has_thinking = false
@@ -294,7 +298,7 @@ describe("Evaluator", function()
       end
     end
     assert.is_true(has_thinking, "Thinking should be preserved as a part")
-    
+
     -- Check text parts exist
     local text_parts = {}
     for _, p in ipairs(parts) do
@@ -346,12 +350,12 @@ describe("Pipeline Integration", function()
       "@You: Hello {{ name }}! See @./tests/fixtures/a.txt",
       "@Assistant: Got it",
     }
-    
+
     local prompt, evaluated = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
-    
+
     assert.is_nil(prompt.system)
     assert.equals(2, #prompt.history)
-    
+
     -- Check that expression was evaluated
     local user_msg = prompt.history[1]
     assert.equals("user", user_msg.role)
@@ -373,7 +377,7 @@ describe("Provider Integration", function()
   it("builds Claude request from pipeline output", function()
     local claude = require("flemma.provider.claude")
     local provider = claude.new({ model = "claude-3-haiku-20240307", max_tokens = 256, temperature = 0 })
-    
+
     local lines = {
       "@System: You are helpful.",
       "@You: Hello",
@@ -389,7 +393,7 @@ describe("Provider Integration", function()
   it("builds OpenAI request from pipeline output", function()
     local openai = require("flemma.provider.openai")
     local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 100, temperature = 0 })
-    
+
     local lines = {
       "```lua",
       "name = 'World'",
@@ -397,7 +401,7 @@ describe("Provider Integration", function()
       "@You: Hello {{ name }}! See @./tests/fixtures/a.txt",
       "@Assistant: Got it",
     }
-    
+
     local prompt, evaluated = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
     local req = provider:build_request(prompt, {})
     assert.equals("user", req.messages[1].role)

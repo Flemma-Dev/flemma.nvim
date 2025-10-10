@@ -46,7 +46,9 @@ end
 
 function M.buffer_cmd(bufnr, cmd)
   local winid = vim.fn.bufwinid(bufnr)
-  if winid == -1 then return end
+  if winid == -1 then
+    return
+  end
   vim.fn.win_execute(winid, "noautocmd " .. cmd)
 end
 

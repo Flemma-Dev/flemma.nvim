@@ -69,12 +69,6 @@ return {
             output = 4.0, -- $4 per million output tokens
           },
         },
-        ["claude-3-5-haiku-latest"] = {
-          pricing = {
-            input = 0.80, -- $0.80 per million input tokens
-            output = 4.0, -- $4 per million output tokens
-          },
-        },
         ["claude-3-5-haiku-20241022"] = {
           pricing = {
             input = 0.80, -- $0.80 per million input tokens

@@ -2,7 +2,6 @@
 local M = {}
 
 local log = require("flemma.logging")
-local plugin_config = require("flemma.config")
 local state = require("flemma.state")
 local validation = require("flemma.core.validation")
 

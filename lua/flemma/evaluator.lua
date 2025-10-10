@@ -1,4 +1,3 @@
-local ast = require("flemma.ast")
 local ctxutil = require("flemma.context")
 local eval = require("flemma.eval")
 local mime_util = require("flemma.mime")
@@ -8,25 +7,37 @@ local M = {}
 
 local function safe_read_binary(path)
   local f, err = io.open(path, "rb")
-  if not f then return nil, ("Failed to open file: " .. (err or "unknown")) end
+  if not f then
+    return nil, ("Failed to open file: " .. (err or "unknown"))
+  end
   local data = f:read("*a")
   f:close()
-  if not data then return nil, "Failed to read content" end
+  if not data then
+    return nil, "Failed to read content"
+  end
   return data, nil
 end
 
 local function detect_mime(path, override)
-  if override and #override > 0 then return override end
+  if override and #override > 0 then
+    return override
+  end
   local ok, mt, _ = pcall(mime_util.get_mime_type, path)
-  if ok and mt then return mt end
+  if ok and mt then
+    return mt
+  end
   return mime_util.get_mime_by_extension(path)
 end
 
 local function to_text(v)
-  if v == nil then return "" end
+  if v == nil then
+    return ""
+  end
   if type(v) == "table" then
     local ok, json = pcall(vim.fn.json_encode, v)
-    if ok then return json end
+    if ok then
+      return json
+    end
   end
   return tostring(v)
 end
@@ -43,7 +54,7 @@ function M.evaluate(doc, base_context)
   if doc.frontmatter then
     local fm = doc.frontmatter
     local parser = frontmatter_parsers.get(fm.language)
-    
+
     if parser then
       local ok, result = pcall(parser, fm.code, context)
       if ok then
@@ -136,11 +147,11 @@ function M.evaluate(doc, base_context)
               data = data,
             })
           else
-            table.insert(diagnostics, { 
+            table.insert(diagnostics, {
               type = "file",
               severity = "warning",
-              filename = filename, 
-              raw = seg.raw, 
+              filename = filename,
+              raw = seg.raw,
               error = err or "read error",
               position = seg.position,
               source_file = context.__filename or "N/A",
@@ -149,11 +160,11 @@ function M.evaluate(doc, base_context)
           end
         else
           local err = "File not found or MIME undetermined"
-          table.insert(diagnostics, { 
+          table.insert(diagnostics, {
             type = "file",
             severity = "warning",
-            filename = filename, 
-            raw = seg.raw, 
+            filename = filename,
+            raw = seg.raw,
             error = err,
             position = seg.position,
             source_file = context.__filename or "N/A",

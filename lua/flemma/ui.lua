@@ -242,7 +242,7 @@ end
 -- Helper function to fold the last thinking block in a buffer
 function M.fold_last_thinking_block(bufnr)
   log.debug("fold_last_thinking_block(): Attempting to fold last thinking block in buffer " .. bufnr)
-  
+
   local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
 
@@ -252,7 +252,7 @@ function M.fold_last_thinking_block(bufnr)
   end
 
   local last_message = doc.messages[#doc.messages]
-  
+
   if last_message.role ~= "You" then
     log.debug("fold_last_thinking_block(): Last message is not from @You:. Aborting.")
     return
@@ -264,7 +264,7 @@ function M.fold_last_thinking_block(bufnr)
   end
 
   local second_to_last = doc.messages[#doc.messages - 1]
-  
+
   -- Find thinking segment in the second-to-last message's segments
   local thinking_segment = nil
   for _, segment in ipairs(second_to_last.segments) do
@@ -311,8 +311,8 @@ end
 
 -- Place signs for a message
 function M.place_signs(bufnr, start_line, end_line, role)
-  local config = state.get_config()
-  if not config.signs.enabled then
+  local current_config = state.get_config()
+  if not current_config.signs.enabled then
     return
   end
 
@@ -323,7 +323,7 @@ function M.place_signs(bufnr, start_line, end_line, role)
   end
 
   local sign_name = "flemma_" .. internal_role_key -- Construct sign name like "flemma_user"
-  local sign_config = config.signs[internal_role_key] -- Look up config using "user", "system", etc.
+  local sign_config = current_config.signs[internal_role_key] -- Look up config using "user", "system", etc.
 
   -- Check if the sign is actually defined before trying to place it
   if vim.tbl_isempty(vim.fn.sign_getdefined(sign_name)) then

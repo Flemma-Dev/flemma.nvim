@@ -10,13 +10,13 @@ function M.to_generic_parts(evaluated_parts)
       end
     elseif p.kind == "file" then
       local mt = p.mime_type or ""
-      if mt:sub(1,6) == "image/" then
+      if mt:sub(1, 6) == "image/" then
         local encoded = vim.base64.encode(p.data or "")
         table.insert(parts, {
           kind = "image",
           mime_type = mt,
           data = encoded,
-          data_url = "data:"..mt..";base64,"..encoded,
+          data_url = "data:" .. mt .. ";base64," .. encoded,
           filename = p.filename,
         })
       elseif mt == "application/pdf" then
@@ -25,10 +25,10 @@ function M.to_generic_parts(evaluated_parts)
           kind = "pdf",
           mime_type = mt,
           data = encoded,
-          data_url = "data:application/pdf;base64,"..encoded,
+          data_url = "data:application/pdf;base64," .. encoded,
           filename = p.filename,
         })
-      elseif mt:sub(1,5) == "text/" then
+      elseif mt:sub(1, 5) == "text/" then
         table.insert(parts, {
           kind = "text_file",
           mime_type = mt,

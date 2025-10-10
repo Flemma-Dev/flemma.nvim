@@ -4,9 +4,13 @@ local M = {}
 
 -- Utilities
 local function url_decode(str)
-  if not str then return nil end
+  if not str then
+    return nil
+  end
   str = string.gsub(str, "+", " ")
-  str = string.gsub(str, "%%(%x%x)", function(h) return string.char(tonumber(h, 16)) end)
+  str = string.gsub(str, "%%(%x%x)", function(h)
+    return string.char(tonumber(h, 16))
+  end)
   return str
 end
 
@@ -16,20 +20,20 @@ end
 -- base_line: optional 1-indexed line number for accurate position tracking
 local function parse_segments(text, base_line)
   local segments = {}
-  if text == "" or text == nil then return segments end
+  if text == "" or text == nil then
+    return segments
+  end
   base_line = base_line or 0
-  
+
   local idx = 1
   local s = text
-  local current_line = base_line
-  local line_start_idx = 1
 
-  local function emit_text(str) 
-    if str and #str > 0 then 
-      table.insert(segments, ast.text(str)) 
-    end 
+  local function emit_text(str)
+    if str and #str > 0 then
+      table.insert(segments, ast.text(str))
+    end
   end
-  
+
   local function char_to_line_col(pos)
     -- Count newlines up to pos to determine line and column
     local line = base_line
@@ -72,7 +76,7 @@ local function parse_segments(text, base_line)
       local raw_file_match, mime_with_punct = payload:match("^([^;]+);type=(.+)$")
       local mime_override = nil
       local trailing_punct = nil
-      
+
       if not raw_file_match then
         raw_file_match = payload
         local filename_no_punct = raw_file_match:gsub("[%p]+$", "")
@@ -83,17 +87,20 @@ local function parse_segments(text, base_line)
         trailing_punct = mime_with_punct:sub(#mime_no_punct + 1)
         mime_override = mime_no_punct
       end
-      
+
       local cleaned_path = url_decode(raw_file_match)
       local line, col = char_to_line_col(next_start)
 
-      table.insert(segments, ast.file_reference(
-        mime_override and (raw_file_match .. ";type=" .. mime_override) or raw_file_match,
-        cleaned_path,
-        mime_override,
-        #trailing_punct > 0 and trailing_punct or nil,
-        { start_line = line, start_col = col }
-      ))
+      table.insert(
+        segments,
+        ast.file_reference(
+          mime_override and (raw_file_match .. ";type=" .. mime_override) or raw_file_match,
+          cleaned_path,
+          mime_override,
+          #trailing_punct > 0 and trailing_punct or nil,
+          { start_line = line, start_col = col }
+        )
+      )
     end
     idx = next_end + 1
   end
@@ -106,34 +113,39 @@ end
 -- base_line_num: the line number where the message content starts (1-indexed)
 local function parse_assistant_segments(lines, base_line_num)
   local segments = {}
-  if not lines or #lines == 0 then return { ast.text("") } end
-  
+  if not lines or #lines == 0 then
+    return { ast.text("") }
+  end
+
   local function emit_text(str)
     if str and #str > 0 then
       table.insert(segments, ast.text(str))
     end
   end
-  
+
   local i = 1
   while i <= #lines do
     local line = lines[i]
     local current_line_num = base_line_num + i - 1
-    
+
     -- Check for thinking tags on their own lines
     if line:match("^<thinking>$") then
       local thinking_start_line = current_line_num
       local thinking_content_lines = {}
       i = i + 1
-      
+
       -- Collect thinking content until closing tag
       while i <= #lines do
         if lines[i]:match("^</thinking>$") then
           local thinking_end_line = base_line_num + i - 1
           local thinking_content = table.concat(thinking_content_lines, "\n")
-          table.insert(segments, ast.thinking(thinking_content, { 
-            start_line = thinking_start_line, 
-            end_line = thinking_end_line 
-          }))
+          table.insert(
+            segments,
+            ast.thinking(thinking_content, {
+              start_line = thinking_start_line,
+              end_line = thinking_end_line,
+            })
+          )
           i = i + 1
           break
         else
@@ -150,20 +162,24 @@ local function parse_assistant_segments(lines, base_line_num)
       i = i + 1
     end
   end
-  
+
   return segments
 end
 
 -- Split into frontmatter and body lines. Frontmatter fence: ```language ... ```
 local function parse_frontmatter(lines)
-  if not lines[1] then return nil, nil, lines, 1 end
+  if not lines[1] then
+    return nil, nil, lines, 1
+  end
   local language = lines[1]:match("^```(%w+)%s*$")
-  if not language then return nil, nil, lines, 1 end
+  if not language then
+    return nil, nil, lines, 1
+  end
 
   local fm_lines = {}
   local body_start = 2
   local closing_idx = nil
-  for i=2,#lines do
+  for i = 2, #lines do
     if lines[i]:match("^```%s*$") then
       closing_idx = i
       body_start = i + 1
@@ -175,7 +191,9 @@ local function parse_frontmatter(lines)
     return nil, nil, lines, 1
   end
   local body = {}
-  for i = body_start, #lines do table.insert(body, lines[i]) end
+  for i = body_start, #lines do
+    table.insert(body, lines[i])
+  end
   local fm = ast.frontmatter(language, table.concat(fm_lines, "\n"), { start_line = 1, end_line = closing_idx })
   return fm, fm_lines, body, body_start
 end
@@ -185,9 +203,13 @@ end
 local function parse_message(lines, start_idx, line_offset)
   line_offset = line_offset or 0
   local line = lines[start_idx]
-  if not line then return nil, start_idx end
+  if not line then
+    return nil, start_idx
+  end
   local role = line:match("^@([%w]+):")
-  if not role then return nil, start_idx end
+  if not role then
+    return nil, start_idx
+  end
 
   local content_first = line:sub(#role + 3)
   local content_lines = {}
@@ -199,7 +221,9 @@ local function parse_message(lines, start_idx, line_offset)
   local i = start_idx + 1
   while i <= #lines do
     local next_line = lines[i]
-    if next_line:match("^@[%w]+:") then break end
+    if next_line:match("^@[%w]+:") then
+      break
+    end
     table.insert(content_lines, next_line)
     i = i + 1
   end
@@ -208,18 +232,20 @@ local function parse_message(lines, start_idx, line_offset)
   local segments
   if role == "Assistant" then
     -- Pass content_lines and the line number where content starts (after the @Assistant: line)
-    local content_start_line = (content_first and content_first:match("%S")) and start_idx + line_offset or (start_idx + 1 + line_offset)
+    local content_start_line = (content_first and content_first:match("%S")) and start_idx + line_offset
+      or (start_idx + 1 + line_offset)
     segments = parse_assistant_segments(content_lines, content_start_line)
   else
     local content = table.concat(content_lines, "\n")
     -- Calculate base line for non-Assistant messages
-    local content_start_line = (content_first and content_first:match("%S")) and start_idx + line_offset or (start_idx + 1 + line_offset)
+    local content_start_line = (content_first and content_first:match("%S")) and start_idx + line_offset
+      or (start_idx + 1 + line_offset)
     segments = parse_segments(content, content_start_line)
   end
 
-  local msg = ast.message(role, segments, { 
-    start_line = start_idx + line_offset, 
-    end_line = (i - 1) + line_offset 
+  local msg = ast.message(role, segments, {
+    start_line = start_idx + line_offset,
+    end_line = (i - 1) + line_offset,
   })
   return msg, (i - 1)
 end
@@ -260,21 +286,21 @@ function M.get_parsed_document(bufnr)
   local buffers = require("flemma.buffers")
   local state = buffers.get_state(bufnr)
   local current_tick = vim.api.nvim_buf_get_changedtick(bufnr)
-  
+
   -- Return cached if still valid
   if state.ast_cache and state.ast_cache.changedtick == current_tick then
     return state.ast_cache.document
   end
-  
+
   -- Parse and cache
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local doc = M.parse_lines(lines)
-  
+
   state.ast_cache = {
     changedtick = current_tick,
-    document = doc
+    document = doc,
   }
-  
+
   return doc
 end
 

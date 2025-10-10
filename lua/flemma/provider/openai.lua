@@ -69,7 +69,11 @@ function M.build_request(self, prompt, context)
           })
           has_multimedia_part = true
           log.debug(
-            'openai.build_request: Added image_url part for "' .. (part.filename or "image") .. '" (MIME: ' .. part.mime_type .. ")"
+            'openai.build_request: Added image_url part for "'
+              .. (part.filename or "image")
+              .. '" (MIME: '
+              .. part.mime_type
+              .. ")"
           )
         elseif part.kind == "pdf" then
           table.insert(content_parts_for_api, {
@@ -81,12 +85,20 @@ function M.build_request(self, prompt, context)
           })
           has_multimedia_part = true
           log.debug(
-            'openai.build_request: Added file part for PDF "' .. (part.filename or "document") .. '" (MIME: ' .. part.mime_type .. ")"
+            'openai.build_request: Added file part for PDF "'
+              .. (part.filename or "document")
+              .. '" (MIME: '
+              .. part.mime_type
+              .. ")"
           )
         elseif part.kind == "text_file" then
           table.insert(content_parts_for_api, { type = "text", text = part.text })
           log.debug(
-            'openai.build_request: Added text part for "' .. (part.filename or "text_file") .. '" (MIME: ' .. part.mime_type .. ")"
+            'openai.build_request: Added text part for "'
+              .. (part.filename or "text_file")
+              .. '" (MIME: '
+              .. part.mime_type
+              .. ")"
           )
         elseif part.kind == "unsupported_file" then
           table.insert(content_parts_for_api, { type = "text", text = "@" .. (part.raw_filename or "") })

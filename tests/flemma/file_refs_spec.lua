@@ -34,9 +34,11 @@ describe("File References and Path Parsing", function()
     local lines = { "@You: " .. content }
     local doc = parser.parse_lines(lines)
     local result = evaluator.evaluate(doc, context or {})
-    
+
     local file_parts = {}
-    local file_diags = vim.tbl_filter(function(d) return d.type == "file" end, result.diagnostics or {})
+    local file_diags = vim.tbl_filter(function(d)
+      return d.type == "file"
+    end, result.diagnostics or {})
     for _, msg in ipairs(result.messages) do
       for _, part in ipairs(msg.parts) do
         if part.kind == "file" then
@@ -44,7 +46,7 @@ describe("File References and Path Parsing", function()
         end
       end
     end
-    
+
     return file_parts, file_diags
   end
 

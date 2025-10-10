@@ -12,12 +12,12 @@ describe(":FlemmaSend command", function()
     package.loaded["flemma.core.config_manager"] = nil
     package.loaded["flemma.provider.config"] = nil
     package.loaded["flemma.models"] = nil
-    
+
     flemma = require("flemma")
     state = require("flemma.state")
     core = require("flemma.core")
     provider_config = require("flemma.provider.config")
-    
+
     -- Setup with default configuration. Specific tests can override this.
     flemma.setup({})
   end)

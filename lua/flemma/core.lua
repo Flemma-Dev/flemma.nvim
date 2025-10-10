@@ -228,19 +228,23 @@ function M.send_to_provider(opts)
   if #diagnostics > 0 then
     local has_errors = false
     local by_type = { frontmatter = {}, expression = {}, file = {} }
-    
+
     for _, diag in ipairs(diagnostics) do
-      if diag.severity == "error" then has_errors = true end
+      if diag.severity == "error" then
+        has_errors = true
+      end
       local type_bucket = by_type[diag.type] or {}
       table.insert(type_bucket, diag)
       by_type[diag.type] = type_bucket
     end
-    
-    local lines = {}
+
+    local diagnostic_lines = {}
     local max_per_type = 5
-    
+
     local function format_position(pos)
-      if not pos then return "" end
+      if not pos then
+        return ""
+      end
       if pos.start_line then
         if pos.start_col then
           return string.format(":%d:%d", pos.start_line, pos.start_col)
@@ -249,56 +253,56 @@ function M.send_to_provider(opts)
       end
       return ""
     end
-    
+
     -- Format frontmatter errors
     if #by_type.frontmatter > 0 then
-      table.insert(lines, "Frontmatter errors:")
+      table.insert(diagnostic_lines, "Frontmatter errors:")
       for i, d in ipairs(by_type.frontmatter) do
         if i <= max_per_type then
           local loc = (d.source_file or "N/A") .. format_position(d.position)
-          table.insert(lines, string.format("  [%s] %s", loc, d.error))
+          table.insert(diagnostic_lines, string.format("  [%s] %s", loc, d.error))
         elseif i == max_per_type + 1 then
-          table.insert(lines, string.format("  ... and %d more", #by_type.frontmatter - max_per_type))
+          table.insert(diagnostic_lines, string.format("  ... and %d more", #by_type.frontmatter - max_per_type))
           break
         end
       end
     end
-    
+
     -- Format expression errors (non-fatal warnings)
     if #by_type.expression > 0 then
-      table.insert(lines, "Expression evaluation errors (request will still be sent):")
+      table.insert(diagnostic_lines, "Expression evaluation errors (request will still be sent):")
       for i, d in ipairs(by_type.expression) do
         if i <= max_per_type then
           local loc = (d.source_file or "N/A") .. format_position(d.position)
           local role_info = d.message_role and (" in @" .. d.message_role) or ""
-          table.insert(lines, string.format("  [%s%s] %s", loc, role_info, d.error))
-          table.insert(lines, string.format("    Expression: {{ %s }}", d.expression or ""))
+          table.insert(diagnostic_lines, string.format("  [%s%s] %s", loc, role_info, d.error))
+          table.insert(diagnostic_lines, string.format("    Expression: {{ %s }}", d.expression or ""))
         elseif i == max_per_type + 1 then
-          table.insert(lines, string.format("  ... and %d more", #by_type.expression - max_per_type))
+          table.insert(diagnostic_lines, string.format("  ... and %d more", #by_type.expression - max_per_type))
           break
         end
       end
     end
-    
+
     -- Format file reference warnings
     if #by_type.file > 0 then
-      table.insert(lines, "File reference errors:")
+      table.insert(diagnostic_lines, "File reference errors:")
       for i, d in ipairs(by_type.file) do
         if i <= max_per_type then
           local loc = (d.source_file or "N/A") .. format_position(d.position)
           local ref = d.filename or d.raw or "unknown"
-          table.insert(lines, string.format("  [%s] %s: %s", loc, ref, d.error))
+          table.insert(diagnostic_lines, string.format("  [%s] %s: %s", loc, ref, d.error))
         elseif i == max_per_type + 1 then
-          table.insert(lines, string.format("  ... and %d more", #by_type.file - max_per_type))
+          table.insert(diagnostic_lines, string.format("  ... and %d more", #by_type.file - max_per_type))
           break
         end
       end
     end
-    
+
     local level = has_errors and vim.log.levels.ERROR or vim.log.levels.WARN
-    vim.notify("Flemma diagnostics:\n" .. table.concat(lines, "\n"), level)
+    vim.notify("Flemma diagnostics:\n" .. table.concat(diagnostic_lines, "\n"), level)
     log.warn("send_to_provider(): Diagnostics occurred: " .. #diagnostics .. " total")
-    
+
     -- Block request if there are critical errors (frontmatter parsing failures)
     if has_errors then
       log.error("send_to_provider(): Blocking request due to critical errors")

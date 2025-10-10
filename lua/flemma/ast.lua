@@ -2,7 +2,13 @@ local M = {}
 
 -- Constructors for AST nodes. Positions are 1-based line/column.
 function M.document(frontmatter, messages, errors, pos)
-  return { kind = "document", frontmatter = frontmatter, messages = messages or {}, errors = errors or {}, position = pos }
+  return {
+    kind = "document",
+    frontmatter = frontmatter,
+    messages = messages or {},
+    errors = errors or {},
+    position = pos,
+  }
 end
 
 function M.frontmatter(language, code, pos)

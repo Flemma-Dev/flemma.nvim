@@ -61,7 +61,7 @@ local function include_delegate(relative_path, env_of_caller, eval_expression_fu
   new_include_env.__filename = target_path
   new_include_env.__include_stack = vim.deepcopy(env_of_caller.__include_stack)
   table.insert(new_include_env.__include_stack, target_path)
-  
+
   -- Copy user variables from caller environment
   if env_of_caller.__variables then
     new_include_env.__variables = vim.deepcopy(env_of_caller.__variables)
@@ -78,11 +78,10 @@ local function include_delegate(relative_path, env_of_caller, eval_expression_fu
 
   -- Now parse the processed content for @./ file references and resolve them inline
   local parser = require("flemma.parser")
-  local ctxutil = require("flemma.context")
-  
+
   -- Parse content as segments (no frontmatter, no message roles)
   local segments = parser.parse_inline_content(processed_content)
-  
+
   -- Build final output by resolving file refs
   local result_parts = {}
   for _, seg in ipairs(segments) do
@@ -95,7 +94,7 @@ local function include_delegate(relative_path, env_of_caller, eval_expression_fu
         local file_dir = vim.fn.fnamemodify(target_path, ":h")
         filename = vim.fn.simplify(file_dir .. "/" .. filename)
       end
-      
+
       -- Read the file and insert its content
       if vim.fn.filereadable(filename) == 1 then
         local ref_file, ref_err = io.open(filename, "r")
@@ -109,7 +108,7 @@ local function include_delegate(relative_path, env_of_caller, eval_expression_fu
       else
         error(string.format("Referenced file not found: '%s' (from %s)", filename, target_path))
       end
-      
+
       -- Add trailing punctuation back if present
       if seg.trailing_punct then
         table.insert(result_parts, seg.trailing_punct)

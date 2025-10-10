@@ -206,7 +206,13 @@ function M.build_request(self, prompt, context)
           table.insert(parts, { text = part.text })
         elseif part.kind == "text_file" then
           table.insert(parts, { text = part.text })
-          log.debug('build_request: Added text part for "' .. (part.filename or "text_file") .. '" (MIME: ' .. part.mime_type .. ")")
+          log.debug(
+            'build_request: Added text part for "'
+              .. (part.filename or "text_file")
+              .. '" (MIME: '
+              .. part.mime_type
+              .. ")"
+          )
         elseif part.kind == "image" or part.kind == "pdf" then
           table.insert(parts, {
             inlineData = {
@@ -216,7 +222,11 @@ function M.build_request(self, prompt, context)
             },
           })
           log.debug(
-            'build_request: Added inlineData part for "' .. (part.filename or "file") .. '" (MIME: ' .. part.mime_type .. ")"
+            'build_request: Added inlineData part for "'
+              .. (part.filename or "file")
+              .. '" (MIME: '
+              .. part.mime_type
+              .. ")"
           )
         elseif part.kind == "unsupported_file" then
           table.insert(parts, { text = "@" .. (part.raw_filename or "") })
