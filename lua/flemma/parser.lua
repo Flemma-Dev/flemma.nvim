@@ -140,7 +140,9 @@ local function parse_frontmatter(lines)
 end
 
 -- Parse message role line: @Role:
-local function parse_message(lines, start_idx)
+-- line_offset: offset to add to line numbers (for frontmatter adjustment)
+local function parse_message(lines, start_idx, line_offset)
+  line_offset = line_offset or 0
   local line = lines[start_idx]
   if not line then return nil, start_idx end
   local role = line:match("^@([%w]+):")
@@ -171,7 +173,10 @@ local function parse_message(lines, start_idx)
     segments = parse_segments(content)
   end
 
-  local msg = ast.message(role, segments, { start_line = start_idx, end_line = (i - 1) })
+  local msg = ast.message(role, segments, { 
+    start_line = start_idx + line_offset, 
+    end_line = (i - 1) + line_offset 
+  })
   return msg, (i - 1)
 end
 
@@ -182,9 +187,11 @@ function M.parse_lines(lines)
   local messages = {}
   local i = body and 1 or 1
   local content_lines = body or lines
+  -- Calculate line offset: if frontmatter exists, messages start after it
+  local line_offset = body and (body_start - 1) or 0
 
   while i <= #content_lines do
-    local msg, last = parse_message(content_lines, i)
+    local msg, last = parse_message(content_lines, i, line_offset)
     if msg then
       table.insert(messages, msg)
       i = last + 1
