@@ -1,7 +1,7 @@
 local stub = require("luassert.stub")
 
 describe("Lualine component", function()
-  local flemma_component
+  local flemma_component, flemma, core
 
   before_each(function()
     -- Clean up any buffers created during previous tests
@@ -19,13 +19,16 @@ describe("Lualine component", function()
     -- Invalidate caches to ensure we get fresh modules
     package.loaded["flemma"] = nil
     package.loaded["flemma.config"] = nil
+    package.loaded["flemma.core"] = nil
     package.loaded["lualine.components.flemma"] = nil
 
     -- Load the component to be tested
     flemma_component = require("lualine.components.flemma")
 
     -- Initialize flemma with default settings
-    require("flemma").setup({})
+    flemma = require("flemma")
+    core = require("flemma.core")
+    flemma.setup({})
 
     -- Set up a chat buffer
     local bufnr = vim.api.nvim_create_buf(false, false)
@@ -42,7 +45,6 @@ describe("Lualine component", function()
 
   it("should display model and reasoning when applicable", function()
     -- Arrange
-    local core = require("flemma.core")
     core.switch_provider("openai", "o3", { reasoning = "high", temperature = 1 })
 
     -- Act
@@ -54,7 +56,6 @@ describe("Lualine component", function()
 
   it("should display only the model name when reasoning is not set for an o-series model", function()
     -- Arrange
-    local core = require("flemma.core")
     core.switch_provider("openai", "o1-mini", {}) -- No reasoning parameter
 
     -- Act
@@ -66,7 +67,6 @@ describe("Lualine component", function()
 
   it("should display only the model name for non-o-series models", function()
     -- Arrange
-    local core = require("flemma.core")
     core.switch_provider("openai", "gpt-4o", { reasoning = "high" }) -- Reasoning should be ignored
 
     -- Act
@@ -78,7 +78,6 @@ describe("Lualine component", function()
 
   it("should display only the model name for non-openai providers", function()
     -- Arrange
-    local core = require("flemma.core")
     core.switch_provider("claude", "claude-sonnet-4-0", {})
 
     -- Act
@@ -91,7 +90,6 @@ describe("Lualine component", function()
   it("should return an empty string if filetype is not 'chat'", function()
     -- Arrange
     vim.bo.filetype = "lua"
-    local core = require("flemma.core")
     core.switch_provider("openai", "o1-mini", { reasoning = "high" })
 
     -- Act
@@ -103,7 +101,6 @@ describe("Lualine component", function()
 
   it("should return an empty string if model is not set", function()
     -- Arrange
-    local flemma = require("flemma")
     local s = stub.new(flemma, "get_current_model_name", function()
       return nil
     end)

@@ -2,11 +2,22 @@ local stub = require("luassert.stub")
 
 describe(":FlemmaSend command", function()
   local client = require("flemma.client")
+  local flemma, state, core, provider_config
 
   before_each(function()
     -- Invalidate the main flemma module cache to ensure a clean setup for each test
     package.loaded["flemma"] = nil
-    local flemma = require("flemma")
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.core"] = nil
+    package.loaded["flemma.core.config_manager"] = nil
+    package.loaded["flemma.provider.config"] = nil
+    package.loaded["flemma.models"] = nil
+    
+    flemma = require("flemma")
+    state = require("flemma.state")
+    core = require("flemma.core")
+    provider_config = require("flemma.provider.config")
+    
     -- Setup with default configuration. Specific tests can override this.
     flemma.setup({})
   end)
@@ -27,17 +38,15 @@ describe(":FlemmaSend command", function()
 
     -- Arrange: Register a dummy fixture to prevent actual network calls.
     -- The content of the fixture DOES matter, as it's processed by the provider.
-    local flemma = require("flemma")
-    local state = require("flemma.state")
     local config = state.get_config()
-    local default_claude_model = require("flemma.provider.config").get_model("claude")
+    local default_claude_model = provider_config.get_model("claude")
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/claude_hello_success_stream.txt")
 
     -- Act: Execute the FlemmaSend command
     vim.cmd("FlemmaSend")
 
     -- Assert: Check that the captured request body matches the expected format for Claude
-    local captured_request_body = require("flemma.core")._get_last_request_body()
+    local captured_request_body = core._get_last_request_body()
     assert.is_not_nil(captured_request_body, "request_body was not captured")
 
     local expected_body = {
@@ -56,7 +65,6 @@ describe(":FlemmaSend command", function()
 
   it("formats the request body correctly for the OpenAI provider", function()
     -- Arrange: Switch to the OpenAI provider for this test
-    local core = require("flemma.core")
     core.switch_provider("openai", "o3", {})
 
     -- Arrange: Register a dummy fixture to prevent actual network calls.
@@ -71,9 +79,7 @@ describe(":FlemmaSend command", function()
     vim.cmd("FlemmaSend")
 
     -- Assert: Check that the captured request body matches the expected format for OpenAI
-    local flemma = require("flemma")
-    local state = require("flemma.state")
-    local captured_request_body = require("flemma.core")._get_last_request_body()
+    local captured_request_body = core._get_last_request_body()
     assert.is_not_nil(captured_request_body, "request_body was not captured")
 
     local config = state.get_config()
@@ -94,7 +100,6 @@ describe(":FlemmaSend command", function()
 
   it("handles a successful streaming response from a fixture", function()
     -- Arrange: Switch to the OpenAI provider and model that matches the fixture
-    local core = require("flemma.core")
     core.switch_provider("openai", "o3", {})
 
     -- Arrange: Register the fixture to be used by the provider
@@ -128,7 +133,6 @@ describe(":FlemmaSend command", function()
 
   it("handles an error response from a fixture", function()
     -- Arrange: Switch to the OpenAI provider
-    local core = require("flemma.core")
     core.switch_provider("openai", "o3", {})
 
     -- Arrange: Register the error fixture
@@ -174,7 +178,6 @@ describe(":FlemmaSend command", function()
 
   it("errors and does not switch when an unknown provider is requested", function()
     -- Arrange: Ensure we start from a valid, known provider (default is Claude)
-    local flemma = require("flemma")
     local original_provider = flemma.get_current_provider_name()
     assert.is_not_nil(original_provider, "Original provider should be set")
 
@@ -182,7 +185,6 @@ describe(":FlemmaSend command", function()
     local notify_spy = stub(vim, "notify")
 
     -- Act: Attempt to switch to an unsupported provider
-    local core = require("flemma.core")
     local result = core.switch_provider("huggingface", nil, {})
 
     -- Allow a brief moment for any notify to be recorded (synchronous in this case)
@@ -208,14 +210,10 @@ describe(":FlemmaSend command", function()
   end)
 
   it("warns and falls back to the default model when an invalid model is requested", function()
-    -- Arrange
-    local state = require("flemma.state")
-
-    -- Stub notifications
+    -- Arrange: Stub notifications
     local notify_spy = stub(vim, "notify")
 
     -- Act: Attempt to switch to an invalid model on a valid provider
-    local core = require("flemma.core")
     local result = core.switch_provider("openai", "gpt-6", {})
 
     -- Assert: switch returns a provider instance
@@ -243,7 +241,7 @@ describe(":FlemmaSend command", function()
     assert.is_true(saw_warn, "Should warn about invalid model fallback")
 
     -- Assert: Model fell back to the provider default
-    local default_openai_model = require("flemma.provider.config").get_model("openai")
+    local default_openai_model = provider_config.get_model("openai")
     local cfg = state.get_config()
     assert.equals(default_openai_model, cfg.model, "Should fall back to provider default model")
 
