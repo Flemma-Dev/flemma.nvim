@@ -2,7 +2,6 @@ local ast = require("flemma.ast")
 local ctx = require("flemma.context")
 local parser = require("flemma.parser")
 local processor = require("flemma.processor")
-local ast = require("flemma.ast")
 local pipeline = require("flemma.pipeline")
 
 describe("AST and Context", function()
