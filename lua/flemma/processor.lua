@@ -67,7 +67,7 @@ function M.evaluate(doc, base_context)
             language = fm.language,
             error = "Frontmatter parser returned non-table; ignoring",
             position = fm.position,
-            source_file = context.__filename or "N/A",
+            source_file = context:get_filename() or "N/A",
           })
         end
       else
@@ -77,7 +77,7 @@ function M.evaluate(doc, base_context)
           language = fm.language,
           error = tostring(result),
           position = fm.position,
-          source_file = context.__filename or "N/A",
+          source_file = context:get_filename() or "N/A",
         })
       end
     else
@@ -87,7 +87,7 @@ function M.evaluate(doc, base_context)
         language = fm.language,
         error = "Unsupported frontmatter language: " .. tostring(fm.language),
         position = fm.position,
-        source_file = context.__filename or "N/A",
+        source_file = context:get_filename() or "N/A",
       })
     end
   end
@@ -118,7 +118,7 @@ function M.evaluate(doc, base_context)
             error = tostring(result),
             position = seg.position,
             message_role = msg.role,
-            source_file = context.__filename or "N/A",
+            source_file = context:get_filename() or "N/A",
           })
           -- Keep original expression text in output
           table.insert(parts, { kind = "text", text = "{{" .. (seg.code or "") .. "}}" })
@@ -130,10 +130,13 @@ function M.evaluate(doc, base_context)
         end
       elseif seg.kind == "file_reference" then
         local filename = seg.path
-        -- Resolve relative to context.__filename
-        if context and context.__filename and filename:match("^%.%.?/") then
-          local buffer_dir = vim.fn.fnamemodify(context.__filename, ":h")
-          filename = vim.fn.simplify(buffer_dir .. "/" .. filename)
+        -- Resolve relative to context filename
+        if context then
+          local ctx_filename = context:get_filename()
+          if ctx_filename and filename:match("^%.%.?/") then
+            local buffer_dir = vim.fn.fnamemodify(ctx_filename, ":h")
+            filename = vim.fn.simplify(buffer_dir .. "/" .. filename)
+          end
         end
         local mime = detect_mime(filename, seg.mime_override)
         if vim.fn.filereadable(filename) == 1 and mime then
@@ -154,7 +157,7 @@ function M.evaluate(doc, base_context)
               raw = seg.raw,
               error = err or "read error",
               position = seg.position,
-              source_file = context.__filename or "N/A",
+              source_file = context:get_filename() or "N/A",
             })
             table.insert(parts, { kind = "unsupported_file", raw = seg.raw })
           end
@@ -167,7 +170,7 @@ function M.evaluate(doc, base_context)
             raw = seg.raw,
             error = err,
             position = seg.position,
-            source_file = context.__filename or "N/A",
+            source_file = context:get_filename() or "N/A",
           })
           table.insert(parts, { kind = "unsupported_file", raw = seg.raw })
         end

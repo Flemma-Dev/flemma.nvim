@@ -1,4 +1,11 @@
 --- Safe environment and execution for Lua code in Flemma, where safe is a loose term.
+---
+--- Reserved environment fields:
+---   __filename       - Current file path for error reporting and path resolution
+---   __include_stack  - Stack of included files for circular reference detection
+---
+--- User-defined variables from frontmatter are stored as top-level keys in the environment.
+
 local M = {}
 
 local function include_delegate(relative_path, env_of_caller, eval_expression_func, create_safe_env_func)
@@ -57,15 +64,11 @@ local function include_delegate(relative_path, env_of_caller, eval_expression_fu
   file:close()
 
   -- Create new environment for included file
+  -- Includes are isolated - they do NOT inherit user variables from the caller
   local new_include_env = create_safe_env_func()
   new_include_env.__filename = target_path
   new_include_env.__include_stack = vim.deepcopy(env_of_caller.__include_stack)
   table.insert(new_include_env.__include_stack, target_path)
-
-  -- Copy user variables from caller environment
-  if env_of_caller.__variables then
-    new_include_env.__variables = vim.deepcopy(env_of_caller.__variables)
-  end
 
   -- Use unified parser to handle both {{ }} expressions and @./ file references in one pass
   local parser = require("flemma.parser")
@@ -126,9 +129,11 @@ local function ensure_env_capabilities(env, eval_expr_fn, create_env_fn)
 end
 
 -- Create a safe environment for executing Lua code
+--
+-- User-defined variables from frontmatter are merged as top-level keys by context.to_eval_env().
+-- The 'include' function is added by ensure_env_capabilities to capture the correct environment.
+-- Reserved internal fields (__filename, __include_stack) are set by context.to_eval_env().
 function M.create_safe_env()
-  -- Note: The 'include' function is not added here directly.
-  -- It will be added by ensure_env_capabilities, allowing it to capture the correct 'env'.
   return {
     -- String manipulation
     string = {

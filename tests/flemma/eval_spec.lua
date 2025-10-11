@@ -51,4 +51,36 @@ describe("flemma.eval", function()
       assert.is_nil(globals.existing_var)
     end)
   end)
+
+  describe("include() isolation", function()
+    it("should NOT propagate user variables from caller environment to included file", function()
+      -- Setup: Create test files
+      local temp_dir = vim.fn.tempname() .. "_include_isolation_test"
+      vim.fn.mkdir(temp_dir, "p")
+
+      -- Create an included file that uses a variable from the parent
+      local include_file = temp_dir .. "/child.txt"
+      local f = io.open(include_file, "w")
+      f:write("Hello {{ name }}!")
+      f:close()
+
+      -- Create parent file
+      local parent_file = temp_dir .. "/parent.chat"
+
+      -- Create environment with user variable 'name'
+      local env = eval.create_safe_env()
+      env.__filename = parent_file
+      env.__include_stack = { parent_file }
+      env.name = "World" -- User variable defined in frontmatter
+
+      -- Call include() - included files are isolated, should NOT have access to 'name'
+      local result = eval.eval_expression("include('child.txt')", env)
+
+      -- The variable is not propagated, so the expression evaluates to empty
+      assert.are.equal("Hello !", result)
+
+      -- Cleanup
+      vim.fn.delete(temp_dir, "rf")
+    end)
+  end)
 end)

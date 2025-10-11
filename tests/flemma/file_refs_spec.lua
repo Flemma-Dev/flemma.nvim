@@ -193,8 +193,8 @@ describe("File References and Path Parsing", function()
       local io_open_stub = create_stub(io, "open")
       io_open_stub.returns(mock_file)
 
-      -- Test with context containing __filename (unified with eval environment pattern)
-      local context = { __filename = temp_dir .. "/subdir/test.chat" }
+      -- Test with context containing filename
+      local context = context_util.from_file(temp_dir .. "/subdir/test.chat")
       local test_content = "Check @./data.txt"
       local file_parts = parse_and_get_file_parts(test_content, context)
 
@@ -246,8 +246,8 @@ describe("File References and Path Parsing", function()
       local io_open_stub = create_stub(io, "open")
       io_open_stub.returns(mock_file)
 
-      -- Test with context containing __filename in subdir, referencing parent
-      local context = { __filename = temp_dir .. "/subdir/test.chat" }
+      -- Test with context containing filename in subdir, referencing parent
+      local context = context_util.from_file(temp_dir .. "/subdir/test.chat")
       local test_content = "Check @../parent.txt"
       local file_parts = parse_and_get_file_parts(test_content, context)
 
@@ -262,7 +262,7 @@ describe("File References and Path Parsing", function()
       vim.fn.delete(temp_dir, "rf")
     end)
 
-    it("uses working directory when context is nil or has no __filename", function()
+    it("uses working directory when context is nil or has no filename", function()
       -- Mock vim.fn.filereadable to return success
       local filereadable_stub = create_stub(vim.fn, "filereadable")
       filereadable_stub.returns(1)
