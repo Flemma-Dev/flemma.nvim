@@ -4,6 +4,9 @@ local base = require("flemma.provider.base")
 local log = require("flemma.logging")
 local M = {}
 
+-- Inherit from base provider
+setmetatable(M, { __index = base })
+
 -- Private helper to validate required configuration
 local function _validate_config(self)
   local project_id = self.parameters.project_id

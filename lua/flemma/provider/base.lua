@@ -288,4 +288,13 @@ function M.try_import_from_buffer(self, lines)
   return nil
 end
 
+---Validate provider-specific parameters (base implementation)
+---Providers can override this to add custom validation logic
+---@param model_name string The model name
+---@param parameters table The parameters to validate
+---@return boolean success True if validation passes (warnings don't fail)
+function M.validate_parameters(model_name, parameters)
+  return true
+end
+
 return M

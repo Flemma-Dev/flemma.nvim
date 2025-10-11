@@ -2,7 +2,11 @@
 --- Implements the OpenAI API integration
 local base = require("flemma.provider.base")
 local log = require("flemma.logging")
+local models = require("flemma.models")
 local M = {}
+
+-- Inherit from base provider
+setmetatable(M, { __index = base })
 
 -- Create a new OpenAI provider instance
 function M.new(merged_config)
@@ -367,6 +371,56 @@ function M.process_response_line(self, line, callbacks)
     log.debug("openai.process_response_line(): Received finish_reason: " .. log.inspect(data.choices[1].finish_reason))
     -- We'll let the final chunk with usage information trigger on_response_complete
   end
+end
+
+---Validate provider-specific parameters
+---@param model_name string The model name
+---@param parameters table The parameters to validate
+---@return boolean success True if validation passes (warnings don't fail)
+function M.validate_parameters(model_name, parameters)
+  -- Check for reasoning parameter support
+  local reasoning_value = parameters.reasoning
+  if reasoning_value ~= nil and reasoning_value ~= "" then
+    local model_info = models.providers.openai
+      and models.providers.openai.models
+      and models.providers.openai.models[model_name]
+    local supports_reasoning_effort = model_info and model_info.supports_reasoning_effort == true
+
+    if not supports_reasoning_effort then
+      local warning_msg = string.format(
+        "Flemma: The 'reasoning' parameter is not supported by the selected OpenAI model '%s'. It may be ignored or cause an API error.",
+        model_name
+      )
+      vim.notify(warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
+      log.warn(warning_msg)
+    end
+  end
+
+  -- Check for temperature <> 1.0 with OpenAI o-series models when reasoning is active
+  local temp_value = parameters.temperature
+  local model_info = models.providers.openai
+    and models.providers.openai.models
+    and models.providers.openai.models[model_name]
+  local supports_reasoning_effort = model_info and model_info.supports_reasoning_effort == true
+
+  if
+    reasoning_value ~= nil
+    and reasoning_value ~= ""
+    and supports_reasoning_effort
+    and string.sub(model_name, 1, 1) == "o"
+    and temp_value ~= nil
+    and temp_value ~= 1
+    and temp_value ~= 1.0
+  then
+    local temp_warning_msg = string.format(
+      "Flemma: For OpenAI o-series models with 'reasoning' active, 'temperature' must be 1 or omitted. Current value is '%s'. The API will likely reject this.",
+      tostring(temp_value)
+    )
+    vim.notify(temp_warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
+    log.warn(temp_warning_msg)
+  end
+
+  return true
 end
 
 return M

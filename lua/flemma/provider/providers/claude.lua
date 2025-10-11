@@ -4,6 +4,9 @@ local base = require("flemma.provider.base")
 local log = require("flemma.logging")
 local M = {}
 
+-- Inherit from base provider
+setmetatable(M, { __index = base })
+
 -- Create a new Claude provider instance
 function M.new(merged_config)
   local provider = base.new(merged_config) -- Pass the already merged config to base
