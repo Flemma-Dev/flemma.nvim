@@ -7,21 +7,27 @@ local state = require("flemma.state")
 local core = require("flemma.core")
 
 -- Helper function to set highlight groups
--- Accepts either a highlight group name to link to, or a hex color string (e.g., "#ff0000")
+-- Accepts either:
+--   - a highlight group name to link to (string)
+--   - a hex color string (e.g., "#ff0000")
+--   - a table with highlight attributes (e.g., { fg = "#ff0000", bold = true })
 local function set_highlight(group_name, value)
-  if type(value) ~= "string" then
-    log.error(string.format("set_highlight(): Invalid value type for group %s: %s", group_name, type(value)))
-    return
-  end
-
-  if value:sub(1, 1) == "#" then
-    -- Assume it's a hex color for foreground
-    -- Add default = true to respect pre-existing user definitions
-    vim.api.nvim_set_hl(0, group_name, { fg = value, default = true })
+  if type(value) == "table" then
+    local hl_opts = vim.tbl_extend("force", {}, value)
+    hl_opts.default = true
+    vim.api.nvim_set_hl(0, group_name, hl_opts)
+  elseif type(value) == "string" then
+    if value:sub(1, 1) == "#" then
+      -- Assume it's a hex color for foreground
+      -- Add default = true to respect pre-existing user definitions
+      vim.api.nvim_set_hl(0, group_name, { fg = value, default = true })
+    else
+      -- Assume it's a highlight group name to link
+      -- Use the API function to link the highlight group in the global namespace (0)
+      vim.api.nvim_set_hl(0, group_name, { link = value, default = true })
+    end
   else
-    -- Assume it's a highlight group name to link
-    -- Use the API function to link the highlight group in the global namespace (0)
-    vim.api.nvim_set_hl(0, group_name, { link = value, default = true })
+    log.error(string.format("set_highlight(): Invalid value type for group %s: %s", group_name, type(value)))
   end
 end
 
