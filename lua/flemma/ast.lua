@@ -42,9 +42,11 @@ function M.thinking(content, pos)
   return { kind = "thinking", content = content, position = pos }
 end
 
--- Evaluated message parts -> GenericPart[]
-function M.to_generic_parts(evaluated_parts)
+-- Evaluated message parts -> GenericPart[], diagnostics[]
+-- Returns both the generic parts and any diagnostics generated during conversion
+function M.to_generic_parts(evaluated_parts, source_file)
   local parts = {}
+  local diagnostics = {}
   for _, p in ipairs(evaluated_parts or {}) do
     if p.kind == "text" then
       if p.text and #p.text > 0 then
@@ -78,13 +80,34 @@ function M.to_generic_parts(evaluated_parts)
           filename = p.filename,
         })
       else
+        -- Unsupported file type - emit diagnostic
+        local err = "Unsupported MIME type: " .. mt
+        table.insert(diagnostics, {
+          type = "file",
+          severity = "warning",
+          filename = p.filename or p.raw,
+          raw = p.raw or p.filename,
+          error = err,
+          position = p.position,
+          source_file = source_file or "N/A",
+        })
         table.insert(parts, { kind = "unsupported_file", raw_filename = p.raw or p.filename })
       end
     elseif p.kind == "unsupported_file" then
+      -- Already unsupported - emit diagnostic
+      table.insert(diagnostics, {
+        type = "file",
+        severity = "warning",
+        filename = p.raw or "unknown",
+        raw = p.raw,
+        error = "Unsupported file type",
+        position = p.position,
+        source_file = source_file or "N/A",
+      })
       table.insert(parts, { kind = "unsupported_file", raw_filename = p.raw })
     end
   end
-  return parts
+  return parts, diagnostics
 end
 
 return M

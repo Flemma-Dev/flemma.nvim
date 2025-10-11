@@ -943,4 +943,99 @@ describe("File References and Path Parsing", function()
       end)
     end)
   end)
+
+  describe("Unsupported file diagnostics", function()
+    it("emits diagnostics for symlinks (inode/symlink MIME type)", function()
+      -- Mock vim.fn.filereadable to return success
+      local filereadable_stub = create_stub(vim.fn, "filereadable")
+      filereadable_stub.returns(1)
+
+      -- Mock mime_util.get_mime_type to return symlink MIME type
+      local mime_util = require("flemma.mime")
+      local mime_stub = create_stub(mime_util, "get_mime_type")
+      mime_stub.returns("inode/symlink", nil)
+
+      -- Mock io.open to fail (symlink might not be directly readable)
+      local io_open_stub = create_stub(io, "open")
+      io_open_stub.returns(nil, "cannot read symlink")
+
+      -- Use pipeline to process the file reference
+      local pipeline = require("flemma.pipeline")
+      local lines = {
+        "@You: File @./symlink-file.sh",
+      }
+      local prompt, evaluated = pipeline.run(lines, {})
+
+      -- Check diagnostics
+      local file_diags = vim.tbl_filter(function(d)
+        return d.type == "file"
+      end, evaluated.diagnostics or {})
+
+      -- Should have at least one file diagnostic
+      assert.is_true(#file_diags >= 1, "Expected at least one file diagnostic")
+
+      -- Check the diagnostic contains appropriate information
+      local found_unsupported = false
+      for _, diag in ipairs(file_diags) do
+        if diag.error and (diag.error:match("Unsupported") or diag.error:match("read error")) then
+          found_unsupported = true
+          assert.equals("warning", diag.severity)
+          break
+        end
+      end
+
+      assert.is_true(found_unsupported, "Expected to find unsupported file diagnostic")
+    end)
+
+    it("emits diagnostics for binary files (application/octet-stream)", function()
+      -- Mock vim.fn.filereadable to return success
+      local filereadable_stub = create_stub(vim.fn, "filereadable")
+      filereadable_stub.returns(1)
+
+      -- Mock mime_util.get_mime_type to return binary MIME type
+      local mime_util = require("flemma.mime")
+      local mime_stub = create_stub(mime_util, "get_mime_type")
+      mime_stub.returns("application/octet-stream", nil)
+
+      -- Mock io.open to return binary content
+      local mock_file = {
+        read = function(self, mode)
+          if mode == "*a" then
+            return "\x00\x01\x02\x03\x04"
+          end
+        end,
+        close = function(self) end,
+      }
+      local io_open_stub = create_stub(io, "open")
+      io_open_stub.returns(mock_file)
+
+      -- Use pipeline to process the file reference
+      local pipeline = require("flemma.pipeline")
+      local lines = {
+        "@You: Binary file @./binary.bin",
+      }
+      local prompt, evaluated = pipeline.run(lines, {})
+
+      -- Check diagnostics
+      local file_diags = vim.tbl_filter(function(d)
+        return d.type == "file"
+      end, evaluated.diagnostics or {})
+
+      -- Should have at least one file diagnostic for unsupported MIME type
+      assert.is_true(#file_diags >= 1, "Expected at least one file diagnostic")
+
+      -- Check the diagnostic mentions unsupported MIME type
+      local found_unsupported = false
+      for _, diag in ipairs(file_diags) do
+        if diag.error and diag.error:match("Unsupported MIME type") then
+          found_unsupported = true
+          assert.equals("warning", diag.severity)
+          assert.is_true(diag.error:match("application/octet%-stream") ~= nil)
+          break
+        end
+      end
+
+      assert.is_true(found_unsupported, "Expected to find unsupported MIME type diagnostic")
+    end)
+  end)
 end)
