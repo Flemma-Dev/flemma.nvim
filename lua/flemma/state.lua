@@ -2,15 +2,12 @@
 --- Centralizes all shared plugin state
 
 local M = {}
+local session_module = require("flemma.session")
 
 -- Local state variables
 local config = {}
 local provider = nil
-local session_usage = {
-  input_tokens = 0,
-  output_tokens = 0,
-  thoughts_tokens = 0,
-}
+local session = session_module.Session.new()
 
 -- Configuration management
 function M.set_config(conf)
@@ -30,27 +27,13 @@ function M.get_provider()
   return provider
 end
 
--- Session usage management
-function M.get_session_usage()
-  return session_usage
+-- Session management
+function M.get_session()
+  return session
 end
 
-function M.update_session_usage(usage_data)
-  if not usage_data then
-    return
-  end
-
-  if usage_data.input_tokens then
-    session_usage.input_tokens = session_usage.input_tokens + usage_data.input_tokens
-  end
-
-  if usage_data.output_tokens then
-    session_usage.output_tokens = session_usage.output_tokens + usage_data.output_tokens
-  end
-
-  if usage_data.thoughts_tokens then
-    session_usage.thoughts_tokens = session_usage.thoughts_tokens + usage_data.thoughts_tokens
-  end
+function M.reset_session()
+  session = session_module.Session.new()
 end
 
 return M

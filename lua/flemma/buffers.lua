@@ -12,7 +12,7 @@ function M.init_buffer(bufnr)
     current_request = nil,
     request_cancelled = false,
     spinner_timer = nil,
-    current_usage = {
+    inflight_usage = {
       input_tokens = 0,
       output_tokens = 0,
       thoughts_tokens = 0,

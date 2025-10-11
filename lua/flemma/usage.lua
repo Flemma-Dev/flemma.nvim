@@ -9,7 +9,7 @@ function M.format_notification(current, session)
   local pricing = require("flemma.pricing")
   local usage_lines = {}
 
-  -- Request usage
+  -- Request usage (most recent request)
   if
     current
     and (
@@ -58,31 +58,35 @@ function M.format_notification(current, session)
     end
   end
 
-  -- Session totals
-  if session and (session.input_tokens > 0 or session.output_tokens > 0) then
+  -- Session totals (calculated from all requests in session)
+  if session and session:get_request_count() > 0 then
     local config = state.get_config()
-    local total_session_output_tokens_for_cost = (session.output_tokens or 0) + (session.thoughts_tokens or 0)
-    local session_cost = config.pricing.enabled
-      and pricing.calculate_cost(config.model, session.input_tokens, total_session_output_tokens_for_cost)
+    local total_input_tokens = session:get_total_input_tokens()
+    local total_output_tokens = session:get_total_output_tokens()
+
     if #usage_lines > 0 then
       table.insert(usage_lines, "")
     end
     table.insert(usage_lines, "Session:")
-    if session_cost then
+
+    if config.pricing.enabled then
+      -- Calculate total costs from all requests (each with their own pricing)
+      local total_input_cost = session:get_total_input_cost()
+      local total_output_cost = session:get_total_output_cost()
+      local total_cost = session:get_total_cost()
+
       table.insert(
         usage_lines,
-        string.format("  Input:  %d tokens / $%.2f", session.input_tokens or 0, session_cost.input)
+        string.format("  Input:  %d tokens / $%.2f", total_input_tokens, math.ceil(total_input_cost * 100) / 100)
       )
-      local display_session_output_tokens = (session.output_tokens or 0) + (session.thoughts_tokens or 0)
       table.insert(
         usage_lines,
-        string.format(" Output:  %d tokens / $%.2f", display_session_output_tokens, session_cost.output)
+        string.format(" Output:  %d tokens / $%.2f", total_output_tokens, math.ceil(total_output_cost * 100) / 100)
       )
-      table.insert(usage_lines, string.format("  Total:  $%.2f", session_cost.total))
+      table.insert(usage_lines, string.format("  Total:  $%.2f", math.ceil(total_cost * 100) / 100))
     else
-      table.insert(usage_lines, string.format("  Input:  %d tokens", session.input_tokens or 0))
-      local display_session_output_tokens = (session.output_tokens or 0) + (session.thoughts_tokens or 0)
-      table.insert(usage_lines, string.format(" Output:  %d tokens", display_session_output_tokens))
+      table.insert(usage_lines, string.format("  Input:  %d tokens", total_input_tokens))
+      table.insert(usage_lines, string.format(" Output:  %d tokens", total_output_tokens))
     end
   end
   return table.concat(usage_lines, "\n")

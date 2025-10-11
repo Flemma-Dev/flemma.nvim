@@ -1,6 +1,7 @@
 describe("flemma.usage", function()
   local usage
   local state
+  local session_module
 
   -- Before each test, get a fresh instance of the modules
   before_each(function()
@@ -8,9 +9,11 @@ describe("flemma.usage", function()
     package.loaded["flemma.usage"] = nil
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.pricing"] = nil
+    package.loaded["flemma.session"] = nil
 
     usage = require("flemma.usage")
     state = require("flemma.state")
+    session_module = require("flemma.session")
 
     -- Set up a basic config with pricing enabled
     state.set_config({
@@ -24,13 +27,13 @@ describe("flemma.usage", function()
 
   describe("format_notification", function()
     it("should format request usage without session data", function()
-      local current_usage = {
+      local inflight_usage = {
         input_tokens = 100,
         output_tokens = 50,
         thoughts_tokens = 0,
       }
 
-      local result = usage.format_notification(current_usage, nil)
+      local result = usage.format_notification(inflight_usage, nil)
 
       assert.is_string(result)
       assert.has_match("Request:", result)
@@ -40,13 +43,13 @@ describe("flemma.usage", function()
     end)
 
     it("should format request usage with thoughts tokens", function()
-      local current_usage = {
+      local inflight_usage = {
         input_tokens = 100,
         output_tokens = 50,
         thoughts_tokens = 25,
       }
 
-      local result = usage.format_notification(current_usage, nil)
+      local result = usage.format_notification(inflight_usage, nil)
 
       assert.is_string(result)
       assert.has_match("Request:", result)
@@ -55,19 +58,25 @@ describe("flemma.usage", function()
     end)
 
     it("should format both request and session usage", function()
-      local current_usage = {
+      local inflight_usage = {
         input_tokens = 100,
         output_tokens = 50,
         thoughts_tokens = 0,
       }
 
-      local session_usage = {
+      -- Create a session with requests
+      local session = session_module.Session.new()
+      session:add_request({
+        provider = "openai",
+        model = "gpt-4o",
         input_tokens = 500,
         output_tokens = 300,
         thoughts_tokens = 100,
-      }
+        input_price = 2.50,
+        output_price = 10.00,
+      })
 
-      local result = usage.format_notification(current_usage, session_usage)
+      local result = usage.format_notification(inflight_usage, session)
 
       assert.is_string(result)
       assert.has_match("Request:", result)
@@ -77,32 +86,35 @@ describe("flemma.usage", function()
     end)
 
     it("should handle zero token usage gracefully", function()
-      local current_usage = {
+      local inflight_usage = {
         input_tokens = 0,
         output_tokens = 0,
         thoughts_tokens = 0,
       }
 
-      local session_usage = {
-        input_tokens = 0,
-        output_tokens = 0,
-        thoughts_tokens = 0,
-      }
+      -- Create an empty session
+      local session = session_module.Session.new()
 
-      local result = usage.format_notification(current_usage, session_usage)
+      local result = usage.format_notification(inflight_usage, session)
 
       -- Should return empty string when no meaningful usage
       assert.are.equal("", result)
     end)
 
-    it("should format session usage only when no current usage", function()
-      local session_usage = {
+    it("should format session usage only when no in-flight usage", function()
+      -- Create a session with requests
+      local session = session_module.Session.new()
+      session:add_request({
+        provider = "openai",
+        model = "gpt-4o",
         input_tokens = 200,
         output_tokens = 150,
         thoughts_tokens = 50,
-      }
+        input_price = 2.50,
+        output_price = 10.00,
+      })
 
-      local result = usage.format_notification(nil, session_usage)
+      local result = usage.format_notification(nil, session)
 
       assert.is_string(result)
       assert.has_match("Session:", result)
@@ -111,13 +123,13 @@ describe("flemma.usage", function()
     end)
 
     it("should include cost information when pricing is enabled", function()
-      local current_usage = {
+      local inflight_usage = {
         input_tokens = 1000,
         output_tokens = 500,
         thoughts_tokens = 0,
       }
 
-      local result = usage.format_notification(current_usage, nil)
+      local result = usage.format_notification(inflight_usage, nil)
 
       assert.is_string(result)
       -- Should contain dollar signs indicating cost calculation
@@ -135,13 +147,13 @@ describe("flemma.usage", function()
         },
       })
 
-      local current_usage = {
+      local inflight_usage = {
         input_tokens = 1000,
         output_tokens = 500,
         thoughts_tokens = 0,
       }
 
-      local result = usage.format_notification(current_usage, nil)
+      local result = usage.format_notification(inflight_usage, nil)
 
       assert.is_string(result)
       assert.has_match("1000 tokens", result)
@@ -152,13 +164,19 @@ describe("flemma.usage", function()
     end)
 
     it("should handle session usage with thoughts tokens in cost calculation", function()
-      local session_usage = {
+      -- Create a session with requests
+      local session = session_module.Session.new()
+      session:add_request({
+        provider = "openai",
+        model = "gpt-4o",
         input_tokens = 1000,
         output_tokens = 300,
         thoughts_tokens = 200,
-      }
+        input_price = 2.50,
+        output_price = 10.00,
+      })
 
-      local result = usage.format_notification(nil, session_usage)
+      local result = usage.format_notification(nil, session)
 
       assert.is_string(result)
       assert.has_match("Session:", result)

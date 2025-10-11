@@ -354,8 +354,8 @@ function M.send_to_provider(opts)
   local spinner_timer = ui.start_loading_spinner(bufnr) -- Handles its own modifiable toggles for writes
   local response_started = false
 
-  -- Reset usage tracking for this buffer
-  buffer_state.current_usage = {
+  -- Reset in-flight usage tracking for this buffer
+  buffer_state.inflight_usage = {
     input_tokens = 0,
     output_tokens = 0,
     thoughts_tokens = 0,
@@ -387,38 +387,53 @@ function M.send_to_provider(opts)
 
     on_usage = function(usage_data)
       if usage_data.type == "input" then
-        buffer_state.current_usage.input_tokens = usage_data.tokens
+        buffer_state.inflight_usage.input_tokens = usage_data.tokens
       elseif usage_data.type == "output" then
-        buffer_state.current_usage.output_tokens = usage_data.tokens
+        buffer_state.inflight_usage.output_tokens = usage_data.tokens
       elseif usage_data.type == "thoughts" then
-        buffer_state.current_usage.thoughts_tokens = usage_data.tokens
+        buffer_state.inflight_usage.thoughts_tokens = usage_data.tokens
       end
     end,
 
     on_response_complete = function()
       vim.schedule(function()
         local usage = require("flemma.usage")
+        local pricing = require("flemma.pricing")
+        local config = state.get_config()
 
-        -- Update session totals
-        state.update_session_usage({
-          input_tokens = buffer_state.current_usage.input_tokens or 0,
-          output_tokens = buffer_state.current_usage.output_tokens or 0,
-          thoughts_tokens = buffer_state.current_usage.thoughts_tokens or 0,
-        })
+        -- Get tokens from in-flight usage
+        local input_tokens = buffer_state.inflight_usage.input_tokens or 0
+        local output_tokens = buffer_state.inflight_usage.output_tokens or 0
+        local thoughts_tokens = buffer_state.inflight_usage.thoughts_tokens or 0
+
+        -- Add request to session with pricing snapshot
+        local pricing_info = pricing.models[config.model]
+        if pricing_info then
+          state.get_session():add_request({
+            provider = config.provider,
+            model = config.model,
+            input_tokens = input_tokens,
+            output_tokens = output_tokens,
+            thoughts_tokens = thoughts_tokens,
+            input_price = pricing_info.input,
+            output_price = pricing_info.output,
+            bufnr = bufnr,
+          })
+        end
 
         -- Auto-write when response is complete
         buffers.auto_write_buffer(bufnr)
 
         -- Format and display usage information using our custom notification
-        local usage_str = usage.format_notification(buffer_state.current_usage, state.get_session_usage())
+        local usage_str = usage.format_notification(buffer_state.inflight_usage, state.get_session())
         if usage_str ~= "" then
           local notify_opts = vim.tbl_deep_extend("force", state.get_config().notify, {
             title = "Usage",
           })
           require("flemma.notify").show(usage_str, notify_opts)
         end
-        -- Reset current usage for next request
-        buffer_state.current_usage = {
+        -- Reset in-flight usage for next request
+        buffer_state.inflight_usage = {
           input_tokens = 0,
           output_tokens = 0,
           thoughts_tokens = 0,
