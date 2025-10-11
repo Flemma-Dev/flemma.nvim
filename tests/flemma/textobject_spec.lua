@@ -152,4 +152,103 @@ describe("Flemma Text Objects", function()
     -- Should end at last non-empty line (line 2), excluding trailing empty lines
     assert.are.same({ 2, 11 }, { end_pos[2], end_pos[3] })
   end)
+
+  it("selects inner message with 'im' excluding <thinking> blocks", function()
+    -- Arrange
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@Assistant:",
+      "<thinking>",
+      "Internal thoughts",
+      "More thoughts",
+      "</thinking>",
+      "Actual response starts here",
+      "More content",
+      "",
+      "@You: Next message",
+    })
+    vim.api.nvim_win_set_cursor(0, { 6, 5 })
+    vim.bo[bufnr].filetype = "chat"
+
+    -- Act
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("vim", true, false, true), "x", false)
+    vim.wait(100)
+
+    -- Assert
+    local start_pos = vim.fn.getpos("v")
+    local end_pos = vim.fn.getpos(".")
+
+    -- Should start at first non-thinking content (line 6, column 1)
+    assert.are.same({ 6, 1 }, { start_pos[2], start_pos[3] })
+    -- Should end at last non-empty line before next message (line 7, last char)
+    assert.are.same({ 7, 12 }, { end_pos[2], end_pos[3] })
+  end)
+
+  it("selects around message with 'vam' excluding <thinking> blocks", function()
+    -- Arrange
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@Assistant: Some intro",
+      "<thinking>",
+      "Internal thoughts",
+      "</thinking>",
+      "Main response",
+      "More response",
+      "",
+      "@You: Next message",
+    })
+    vim.api.nvim_win_set_cursor(0, { 5, 5 })
+    vim.bo[bufnr].filetype = "chat"
+
+    -- Act
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("vam", true, false, true), "x", false)
+    vim.wait(100)
+
+    -- Assert
+    local start_pos = vim.fn.getpos("v")
+    local end_pos = vim.fn.getpos(".")
+
+    -- Should start at beginning of message (line 1, column 1)
+    assert.are.same({ 1, 1 }, { start_pos[2], start_pos[3] })
+    -- Should end at last non-empty, non-thinking line (line 6, last char)
+    assert.are.same({ 6, 13 }, { end_pos[2], end_pos[3] })
+  end)
+
+  it("selects inner message with 'im' when cursor is on content after thinking block", function()
+    -- Arrange
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@Assistant:",
+      "<thinking>",
+      "Reasoning here",
+      "</thinking>",
+      "",
+      "Response content",
+      "Second line of response",
+      "<thinking>",
+      "More reasoning",
+      "</thinking>",
+      "Final content",
+      "",
+      "@You: Next",
+    })
+    vim.api.nvim_win_set_cursor(0, { 11, 5 })
+    vim.bo[bufnr].filetype = "chat"
+
+    -- Act
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("vim", true, false, true), "x", false)
+    vim.wait(100)
+
+    -- Assert
+    local start_pos = vim.fn.getpos("v")
+    local end_pos = vim.fn.getpos(".")
+
+    -- Should start at first non-thinking content (line 6, column 1)
+    assert.are.same({ 6, 1 }, { start_pos[2], start_pos[3] })
+    -- Should end at last non-thinking, non-empty line (line 11, last char)
+    assert.are.same({ 11, 13 }, { end_pos[2], end_pos[3] })
+  end)
 end)

@@ -22,12 +22,37 @@ local function get_message_bounds()
     return nil
   end
 
+  -- Collect thinking block positions to exclude them
+  local thinking_blocks = {}
+  if current_msg.segments and type(current_msg.segments) == "table" then
+    for _, segment in ipairs(current_msg.segments) do
+      if segment.kind == "thinking" and segment.position then
+        table.insert(thinking_blocks, {
+          start_line = segment.position.start_line,
+          end_line = segment.position.end_line,
+        })
+      end
+    end
+  end
+
   local start_line = current_msg.position.start_line
   local end_line = current_msg.position.end_line
 
-  -- Trim trailing empty lines for inner selection
+  -- Helper to check if a line is within a thinking block
+  local function is_in_thinking_block(line_num)
+    for _, block in ipairs(thinking_blocks) do
+      if line_num >= block.start_line and line_num <= block.end_line then
+        return true
+      end
+    end
+    return false
+  end
+
+  -- Trim trailing empty lines for inner selection, skipping thinking blocks
   local inner_end = end_line
-  while inner_end > start_line and (not lines[inner_end] or lines[inner_end] == "") do
+  while
+    inner_end > start_line and (not lines[inner_end] or lines[inner_end] == "" or is_in_thinking_block(inner_end))
+  do
     inner_end = inner_end - 1
   end
 
@@ -40,12 +65,17 @@ local function get_message_bounds()
   -- Check if there's content on the same line as the role
   local has_content_on_first_line = role_type_end <= #lines[start_line]
 
-  -- Trim leading empty lines after role type for inner selection
+  -- Trim leading empty lines after role type for inner selection, skipping thinking blocks
   local inner_start_line = start_line
   local inner_start_col = role_type_end
   if not has_content_on_first_line then
     while
-      inner_start_line < inner_end and (not lines[inner_start_line + 1] or lines[inner_start_line + 1]:match("^%s*$"))
+      inner_start_line < inner_end
+      and (
+        not lines[inner_start_line + 1]
+        or lines[inner_start_line + 1]:match("^%s*$")
+        or is_in_thinking_block(inner_start_line + 1)
+      )
     do
       inner_start_line = inner_start_line + 1
     end
