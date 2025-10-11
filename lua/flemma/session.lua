@@ -6,11 +6,16 @@
 --- - Request: Represents a single API request with pricing snapshot and metadata
 --- - inflight_usage: Per-buffer temporary state for accumulating tokens during streaming
 ---
+--- Request Identification:
+--- - filepath: Resolved absolute path (handles symlinks, relative paths, etc.)
+--- - bufnr: Only stored for unnamed/unsaved buffers as fallback identifier
+---
 --- Flow:
 --- 1. During streaming: tokens accumulate in buffer_state.inflight_usage
 --- 2. On completion: inflight_usage is used to create a Request and add to global session
 --- 3. inflight_usage is reset for the next request
 --- 4. Session maintains historical data for all requests across all chat buffers
+--- 5. Requests can be analyzed by filepath (e.g., cost per project)
 
 local M = {}
 
@@ -28,7 +33,8 @@ Request.__index = Request
 ---@param opts.thoughts_tokens number|nil Number of thoughts/reasoning tokens
 ---@param opts.input_price number USD per million input tokens
 ---@param opts.output_price number USD per million output tokens
----@param opts.bufnr number|nil Buffer number where the request originated
+---@param opts.filepath string|nil Resolved absolute filepath (nil for unnamed buffers)
+---@param opts.bufnr number|nil Buffer number (fallback for unnamed buffers)
 ---@param opts.timestamp number|nil Unix timestamp (defaults to current time)
 ---@return table Request instance
 function Request.new(opts)
@@ -41,6 +47,7 @@ function Request.new(opts)
   self.thoughts_tokens = opts.thoughts_tokens or 0
   self.input_price = opts.input_price
   self.output_price = opts.output_price
+  self.filepath = opts.filepath
   self.bufnr = opts.bufnr
   self.timestamp = opts.timestamp or os.time()
 
@@ -86,7 +93,7 @@ function Session.new()
 end
 
 --- Add a request to the session
----@param opts table Request options (provider, model, input_tokens, output_tokens, thoughts_tokens, input_price, output_price, bufnr, timestamp)
+---@param opts table Request options (provider, model, input_tokens, output_tokens, thoughts_tokens, input_price, output_price, filepath, bufnr, timestamp)
 function Session:add_request(opts)
   local request = Request.new(opts)
   table.insert(self.requests, request)

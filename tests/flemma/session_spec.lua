@@ -16,6 +16,7 @@ describe("flemma.session", function()
         thoughts_tokens = 10,
         input_price = 3.00,
         output_price = 15.00,
+        filepath = "/home/user/project/chat.txt",
       })
 
       assert.are.equal("claude", request.provider)
@@ -25,6 +26,8 @@ describe("flemma.session", function()
       assert.are.equal(10, request.thoughts_tokens)
       assert.are.equal(3.00, request.input_price)
       assert.are.equal(15.00, request.output_price)
+      assert.are.equal("/home/user/project/chat.txt", request.filepath)
+      assert.is_nil(request.bufnr)
       assert.is_number(request.timestamp)
     end)
 
@@ -103,6 +106,21 @@ describe("flemma.session", function()
       -- Output cost should only include output_tokens
       local expected_output_cost = (200 / 1000000) * 15.00
       assert.are.equal(expected_output_cost, request:get_output_cost())
+    end)
+
+    it("should store bufnr for unnamed buffers", function()
+      local request = session_module.Request.new({
+        provider = "claude",
+        model = "claude-sonnet-4-0",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 3.00,
+        output_price = 15.00,
+        bufnr = 5, -- Unnamed buffer
+      })
+
+      assert.is_nil(request.filepath)
+      assert.are.equal(5, request.bufnr)
     end)
   end)
 

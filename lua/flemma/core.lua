@@ -406,6 +406,14 @@ function M.send_to_provider(opts)
         local output_tokens = buffer_state.inflight_usage.output_tokens or 0
         local thoughts_tokens = buffer_state.inflight_usage.thoughts_tokens or 0
 
+        -- Get buffer filepath (resolved to handle symlinks, relative paths, etc.)
+        local filepath = nil
+        local bufname = vim.api.nvim_buf_get_name(bufnr)
+        if bufname and bufname ~= "" then
+          -- Resolve to canonical path (handles symlinks, .. etc.)
+          filepath = vim.loop.fs_realpath(bufname) or bufname
+        end
+
         -- Add request to session with pricing snapshot
         local pricing_info = pricing.models[config.model]
         if pricing_info then
@@ -417,7 +425,8 @@ function M.send_to_provider(opts)
             thoughts_tokens = thoughts_tokens,
             input_price = pricing_info.input,
             output_price = pricing_info.output,
-            bufnr = bufnr,
+            filepath = filepath,
+            bufnr = filepath and nil or bufnr, -- Only store bufnr for unnamed buffers
           })
         end
 
