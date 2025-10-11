@@ -27,6 +27,9 @@ pkgs.mkShell {
     pythonWithPackages
     # Neovim plug-ins
     plenary-nvim
+    # Lua tools
+    lua-language-server
+    lua54Packages.luacheck
 
     (pkgs.aider-chat.withOptional {
       withBrowser = true;
@@ -103,7 +106,7 @@ pkgs.mkShell {
         treefmt
 
         find . -name "*.lua" -print0 | xargs -0 \
-        stylua --indent-type spaces --indent-width 2
+        stylua
 
         find . -name "*.md" -print0 | xargs -0 \
         prettier --write
