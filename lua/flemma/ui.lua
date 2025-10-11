@@ -142,6 +142,36 @@ function M.add_rulers(bufnr, doc)
   end
 end
 
+-- Highlight thinking tags using extmarks (higher priority than Treesitter)
+function M.highlight_thinking_tags(bufnr, doc)
+  local thinking_ns = vim.api.nvim_create_namespace("flemma_thinking_tags")
+
+  -- Clear existing thinking tag highlights
+  vim.api.nvim_buf_clear_namespace(bufnr, thinking_ns, 0, -1)
+
+  -- Iterate through messages and their segments to find thinking blocks
+  for _, msg in ipairs(doc.messages) do
+    if msg.segments then
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "thinking" and seg.position then
+          -- Highlight opening tag
+          vim.api.nvim_buf_set_extmark(bufnr, thinking_ns, seg.position.start_line - 1, 0, {
+            end_line = seg.position.start_line,
+            hl_group = "FlemmaThinkingTag",
+            priority = 200, -- Higher than Treesitter (100)
+          })
+          -- Highlight closing tag
+          vim.api.nvim_buf_set_extmark(bufnr, thinking_ns, seg.position.end_line - 1, 0, {
+            end_line = seg.position.end_line,
+            hl_group = "FlemmaThinkingTag",
+            priority = 200,
+          })
+        end
+      end
+    end
+  end
+end
+
 -- Show loading spinner
 function M.start_loading_spinner(bufnr)
   local original_modifiable_initial = vim.bo[bufnr].modifiable
@@ -394,6 +424,7 @@ function M.update_ui(bufnr)
   local doc = parser.get_parsed_document(bufnr)
 
   M.add_rulers(bufnr, doc)
+  M.highlight_thinking_tags(bufnr, doc)
 
   -- Clear and reapply all signs
   vim.fn.sign_unplace("flemma_ns", { buffer = bufnr })

@@ -54,6 +54,10 @@ M.apply_syntax = function()
 
   -- Set ruler highlight group
   set_highlight("FlemmaRuler", syntax_config.ruler.hl)
+
+  -- Set highlight for thinking tags and blocks
+  set_highlight("FlemmaThinkingTag", syntax_config.highlights.thinking_tag)
+  set_highlight("FlemmaThinkingBlock", syntax_config.highlights.thinking_block)
 end
 
 -- Setup signs for different roles
@@ -104,7 +108,7 @@ M.setup = function()
     pattern = { "*.chat", "chat" },
     callback = function(ev)
       M.apply_syntax()
-      -- Add rulers via core module
+      -- Add rulers and thinking tag highlights via core module
       core.update_ui(ev.buf)
     end,
   })
