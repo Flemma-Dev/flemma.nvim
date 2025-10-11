@@ -151,101 +151,44 @@ end
 ---@param line string A single line from the Claude API response stream
 ---@param callbacks ProviderCallbacks Table of callback functions to handle parsed data
 function M.process_response_line(self, line, callbacks)
-  -- Skip empty lines
-  if not line or line == "" then
+  -- Use base SSE parser
+  local parsed = base._parse_sse_line(line)
+  if not parsed then
+    -- Handle non-SSE lines
+    base._handle_non_sse_line(self, line, callbacks)
     return
   end
 
-  -- First try parsing the line directly as JSON for error responses
-  local ok, error_data = pcall(vim.fn.json_decode, line)
-  if ok and error_data.type == "error" then
-    local msg = "Claude API error"
-    if error_data.error and error_data.error.message then
-      msg = error_data.error.message
-    end
-
-    -- Log the error
-    log.error("claude.process_response_line(): Claude API error: " .. log.inspect(msg))
-
-    if callbacks.on_error then
-      callbacks.on_error(msg) -- Keep original message for user notification
-    end
+  -- Handle event lines
+  if parsed.type == "event" then
+    log.debug("claude.process_response_line(): Received event type: " .. parsed.event_type)
     return
   end
 
-  -- Check for expected format: lines should start with "event: " or "data: "
-  if not (line:match("^event: ") or line:match("^data: ")) then
-    -- This is not a standard SSE line or potentially a non-SSE JSON error
-    log.debug("claude.process_response_line(): Received non-SSE line, adding to accumulator: " .. line)
-
-    -- Add to response accumulator for potential multi-line JSON response
-    self:_buffer_response_line(line)
-
-    -- Try parsing as a direct JSON error response
-    local parse_ok, error_json = pcall(vim.fn.json_decode, line)
-    if parse_ok and type(error_json) == "table" and error_json.error then
-      local msg = "Claude API error"
-      if error_json.error.message then
-        msg = error_json.error.message
-      end
-
-      log.error("claude.process_response_line(): ... Claude API error (parsed from non-SSE line): " .. log.inspect(msg))
-
-      if callbacks.on_error then
-        callbacks.on_error(msg) -- Keep original message for user notification
-      end
-      return
-    end
-
-    -- If we can't parse it as an error, it will be handled by base class finalize_response
+  -- Handle [DONE] message (Claude doesn't typically send this)
+  if parsed.type == "done" then
+    log.debug("claude.process_response_line(): Received [DONE] message (unexpected)")
     return
   end
 
-  -- Handle event lines (event: type)
-  if line:match("^event: ") then
-    local event_type = line:gsub("^event: ", "")
-    log.debug("claude.process_response_line(): Received event type: " .. event_type)
+  -- Parse JSON data
+  local ok, data = pcall(vim.fn.json_decode, parsed.content)
+  if not ok then
+    log.error("claude.process_response_line(): Failed to parse JSON: " .. parsed.content)
     return
   end
 
-  -- Extract JSON from data: prefix
-  local json_str = line:gsub("^data: ", "")
-
-  -- Handle [DONE] message (Note: Claude doesn't typically send [DONE])
-  if json_str == "[DONE]" then
-    log.debug("claude.process_response_line(): Received [DONE] message from Claude API (unexpected)")
-    return
-  end
-
-  -- Parse the JSON data
-  local parse_ok, data = pcall(vim.fn.json_decode, json_str)
-  if not parse_ok then
-    log.error("claude.process_response_line(): Failed to parse JSON from Claude API response: " .. json_str)
-    return
-  end
-
-  -- Validate the response structure
   if type(data) ~= "table" then
-    log.error(
-      "claude.process_response_line(): Expected table in Claude API response, got type: "
-        .. type(data)
-        .. ", data: "
-        .. log.inspect(data)
-    )
+    log.error("claude.process_response_line(): Expected table in response, got type: " .. type(data))
     return
   end
 
   -- Handle error responses
   if data.type == "error" then
-    local msg = "Claude API error"
-    if data.error and data.error.message then
-      msg = data.error.message
-    end
-
-    log.error("claude.process_response_line(): Claude API error in response data: " .. log.inspect(msg))
-
+    local msg = self:extract_json_response_error(data)
+    log.error("claude.process_response_line(): Claude API error: " .. log.inspect(msg))
     if callbacks.on_error then
-      callbacks.on_error(msg) -- Keep original message for user notification
+      callbacks.on_error(msg)
     end
     return
   end
@@ -312,37 +255,21 @@ function M.process_response_line(self, line, callbacks)
   -- Handle content_block_delta event
   if data.type == "content_block_delta" then
     if not data.delta then
-      log.error(
-        "claude.process_response_line(): Received content_block_delta without delta field: " .. log.inspect(data)
-      )
+      log.error("claude.process_response_line(): Received content_block_delta without delta: " .. log.inspect(data))
       return
     end
 
     if data.delta.type == "text_delta" and data.delta.text then
-      log.debug("claude.process_response_line(): ... Content text delta: " .. log.inspect(data.delta.text))
-      self:_mark_response_successful() -- Mark that we've received actual content
-
-      if callbacks.on_content then
-        callbacks.on_content(data.delta.text)
-      end
+      log.debug("claude.process_response_line(): Content text delta: " .. log.inspect(data.delta.text))
+      base._signal_content(self, data.delta.text, callbacks)
     elseif data.delta.type == "input_json_delta" and data.delta.partial_json ~= nil then
-      log.debug(
-        "claude.process_response_line(): ... Content input_json_delta: " .. log.inspect(data.delta.partial_json)
-      )
-      -- Tool use JSON deltas are not displayed directly
+      log.debug("claude.process_response_line(): Content input_json_delta: " .. log.inspect(data.delta.partial_json))
     elseif data.delta.type == "thinking_delta" and data.delta.thinking then
-      log.debug("claude.process_response_line(): ... Content thinking delta: " .. log.inspect(data.delta.thinking))
-      -- Thinking deltas are not displayed directly
+      log.debug("claude.process_response_line(): Content thinking delta: " .. log.inspect(data.delta.thinking))
     elseif data.delta.type == "signature_delta" and data.delta.signature then
-      log.debug("claude.process_response_line(): ... Content signature delta received")
-      -- Signature deltas are not displayed
+      log.debug("claude.process_response_line(): Content signature delta received")
     else
-      log.error(
-        "claude.process_response_line(): Received content_block_delta with unknown delta type: "
-          .. log.inspect(data.delta.type)
-          .. ", delta: "
-          .. log.inspect(data.delta)
-      )
+      log.error("claude.process_response_line(): Unknown delta type: " .. log.inspect(data.delta.type))
     end
   elseif
     data.type
@@ -355,12 +282,7 @@ function M.process_response_line(self, line, callbacks)
       or data.type == "ping"
     )
   then
-    log.error(
-      "claude.process_response_line(): Received unknown event type from Claude API: "
-        .. log.inspect(data.type)
-        .. ", data: "
-        .. log.inspect(data)
-    )
+    log.error("claude.process_response_line(): Unknown event type: " .. log.inspect(data.type))
   end
 end
 

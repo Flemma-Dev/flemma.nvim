@@ -262,6 +262,76 @@ function M.extract_json_response_error(self, data)
   return nil
 end
 
+---Parse a single SSE (Server-Sent Events) line (internal)
+---@param line string The raw line from the stream
+---@param opts? table Optional parsing options { allow_done?: boolean }
+---@return table|nil parsed { type: "data"|"event"|"done", content?: string, event_type?: string }
+function M._parse_sse_line(line, opts)
+  opts = opts or {}
+
+  -- Skip empty lines
+  if not line or line == "" or line == "\r" then
+    return nil
+  end
+
+  -- Handle event lines (event: type)
+  if line:match("^event: ") then
+    local event_type = line:gsub("^event: ", "")
+    return { type = "event", event_type = event_type }
+  end
+
+  -- Handle data lines (data: ...)
+  if line:match("^data: ") then
+    local content = line:gsub("^data: ", "")
+
+    -- Handle [DONE] message
+    if content == "[DONE]" and opts.allow_done ~= false then
+      return { type = "done" }
+    end
+
+    return { type = "data", content = content }
+  end
+
+  -- Not an SSE line
+  return nil
+end
+
+---Handle a non-SSE line by buffering it and attempting to parse as JSON error (internal)
+---@param self table The provider instance
+---@param line string The non-SSE line to handle
+---@param callbacks ProviderCallbacks Table of callback functions
+---@return boolean handled True if the line was successfully parsed as an error
+function M._handle_non_sse_line(self, line, callbacks)
+  log.debug("base.handle_non_sse_line(): Received non-SSE line, buffering: " .. line)
+
+  -- Buffer the line for later analysis
+  self:_buffer_response_line(line)
+
+  -- Try parsing as a direct JSON error response (for single-line errors)
+  local ok, error_data = pcall(vim.fn.json_decode, line)
+  if ok and error_data and type(error_data) == "table" then
+    local msg = self:extract_json_response_error(error_data)
+    if msg and callbacks.on_error then
+      log.error("base.handle_non_sse_line(): Parsed JSON error from non-SSE line: " .. log.inspect(msg))
+      callbacks.on_error(msg)
+      return true
+    end
+  end
+
+  return false
+end
+
+---Signal content to the caller and mark response as successful (internal)
+---@param self table The provider instance
+---@param text string The content text to signal
+---@param callbacks ProviderCallbacks Table of callback functions
+function M._signal_content(self, text, callbacks)
+  self:_mark_response_successful()
+  if callbacks.on_content then
+    callbacks.on_content(text)
+  end
+end
+
 -- Reset provider state before a new request
 -- This can be overridden by specific providers to reset their state
 function M.reset(self)

@@ -381,70 +381,37 @@ end
 ---@param line string A single line from the Vertex AI API response stream
 ---@param callbacks ProviderCallbacks Table of callback functions to handle parsed data
 function M.process_response_line(self, line, callbacks)
-  -- Skip empty lines
-  if not line or line == "" or line == "\r" then
+  -- Use base SSE parser
+  local parsed = base._parse_sse_line(line)
+  if not parsed then
+    -- Handle non-SSE lines
+    base._handle_non_sse_line(self, line, callbacks)
     return
   end
 
-  -- Check for expected format: lines should start with "data: "
-  if not line:match("^data: ") then
-    -- This is not a standard SSE data line or potentially a non-SSE JSON error
-    log.debug("vertex.process_response_line(): Received non-SSE line, adding to accumulator: " .. line)
-
-    -- Add to response accumulator for potential multi-line JSON response
-    self:_buffer_response_line(line)
-
-    -- Try parsing as a direct JSON error response (for single-line errors)
-    local ok, error_data = pcall(vim.fn.json_decode, line)
-    if ok and error_data.error then
-      local msg = "Vertex AI API error"
-      if error_data.error and error_data.error.message then
-        msg = error_data.error.message
-      end
-
-      -- Log the error
-      log.error("vertex.process_response_line(): Vertex AI API error (parsed from non-SSE line): " .. log.inspect(msg))
-
-      if callbacks.on_error then
-        callbacks.on_error(msg) -- Keep original message for user notification
-      end
-      return
-    end
-
-    -- If we can't parse it as an error, continue accumulating
+  -- Vertex doesn't send events or [DONE], only data
+  if parsed.type ~= "data" then
     return
   end
 
-  -- Extract JSON from data: prefix
-  local json_str = line:gsub("^data: ", "")
-  local parse_ok, data = pcall(vim.fn.json_decode, json_str)
-  if not parse_ok then
-    log.error("vertex.process_response_line(): Failed to parse JSON from Vertex AI SSE response: " .. json_str)
+  -- Parse JSON data
+  local ok, data = pcall(vim.fn.json_decode, parsed.content)
+  if not ok then
+    log.error("vertex.process_response_line(): Failed to parse JSON: " .. parsed.content)
     return
   end
 
-  -- Validate the response structure
   if type(data) ~= "table" then
-    log.error(
-      "vertex.process_response_line(): Expected table in Vertex AI SSE response, got type: "
-        .. type(data)
-        .. ", data: "
-        .. log.inspect(data)
-    )
+    log.error("vertex.process_response_line(): Expected table in response, got type: " .. type(data))
     return
   end
 
   -- Handle error responses
   if data.error then
-    local msg = "Vertex AI API error"
-    if data.error and data.error.message then
-      msg = data.error.message
-    end
-
-    log.error("vertex.process_response_line(): Vertex AI API error in SSE response data: " .. log.inspect(msg))
-
+    local msg = self:extract_json_response_error(data)
+    log.error("vertex.process_response_line(): Vertex AI API error: " .. log.inspect(msg))
     if callbacks.on_error then
-      callbacks.on_error(msg) -- Keep original message for user notification
+      callbacks.on_error(msg)
     end
     return
   end
@@ -456,12 +423,9 @@ function M.process_response_line(self, line, callbacks)
         log.debug("vertex.process_response_line(): Accumulating thought text: " .. log.inspect(part.text))
         self._response_buffer.extra.accumulated_thoughts = (self._response_buffer.extra.accumulated_thoughts or "")
           .. part.text
-      elseif not part.thought and part.text and #part.text > 0 then -- Not a thought, but has text
-        log.debug("vertex.process_response_line(): ... Content text: " .. log.inspect(part.text))
-        self:_mark_response_successful()
-        if callbacks.on_content then
-          callbacks.on_content(part.text)
-        end
+      elseif not part.thought and part.text and #part.text > 0 then
+        log.debug("vertex.process_response_line(): Content text: " .. log.inspect(part.text))
+        base._signal_content(self, part.text, callbacks)
       end
     end
   end
