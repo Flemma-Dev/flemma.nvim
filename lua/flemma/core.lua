@@ -63,30 +63,15 @@ function M.switch_provider(provider_name, model_name, parameters)
   -- Ensure parameters is a table if nil
   parameters = parameters or {}
 
-  -- Create a new configuration by merging the current config with the provided options
+  -- Merge parameters using centralized logic
   local config = state.get_config()
-  local new_config = vim.tbl_deep_extend("force", {}, config)
-
-  -- Ensure parameters table and provider-specific sub-table exist for parameter merging
-  new_config.parameters = new_config.parameters or {}
-  new_config.parameters[provider_name] = new_config.parameters[provider_name] or {}
-
-  -- Merge the provided parameters into the correct parameter locations
-  for k, v in pairs(parameters) do
-    -- Check if it's a general parameter
-    if config_manager.is_general_parameter(k) then
-      new_config.parameters[k] = v
-    else
-      -- Assume it's a provider-specific parameter
-      new_config.parameters[provider_name][k] = v
-    end
-  end
+  local merged_params = config_manager.merge_parameters(config.parameters, provider_name, parameters)
 
   -- Initialize the new provider using the centralized approach
   -- but do not commit the global config until validation succeeds.
   local prev_provider = state.get_provider()
   state.set_provider(nil) -- Clear the current provider
-  local new_provider = initialize_provider(provider_name, model_name, new_config.parameters)
+  local new_provider = initialize_provider(provider_name, model_name, merged_params)
 
   if not new_provider then
     -- Restore previous provider and keep existing config unchanged.
