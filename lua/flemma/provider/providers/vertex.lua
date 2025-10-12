@@ -12,7 +12,7 @@ local function _validate_config(self)
   local project_id = self.parameters.project_id
   if not project_id or project_id == "" then
     error(
-      "Vertex AI project_id is required. Please configure it in `parameters.vertex.project_id` or via :FlemmaSwitch.",
+      "Vertex AI project_id is required. Please configure it in `parameters.vertex.project_id` or via :Flemma switch.",
       0
     )
   end

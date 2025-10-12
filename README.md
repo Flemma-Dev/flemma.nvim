@@ -222,42 +222,44 @@ You can disable the default keymaps by setting `keymaps.enable = false` and defi
 
 ```lua
 -- Example custom keymaps
-vim.keymap.set('n', '<Leader>cs', '<cmd>FlemmaSend<cr>')
-vim.keymap.set('n', '<Leader>cc', '<cmd>FlemmaCancel<cr>')
-vim.keymap.set('i', '<C-s>', '<cmd>FlemmaSendAndInsert<cr>')
-vim.keymap.set('n', '<Leader>cn', '<cmd>FlemmaNextMessage<cr>')
-vim.keymap.set('n', '<Leader>cp', '<cmd>FlemmaPrevMessage<cr>')
+vim.keymap.set('n', '<Leader>cs', '<cmd>Flemma send<cr>')
+vim.keymap.set('n', '<Leader>cc', '<cmd>Flemma cancel<cr>')
+vim.keymap.set('i', '<C-s>', '<cmd>Flemma send on_request_start=stopinsert on_request_complete=startinsert!<cr>')
+vim.keymap.set('n', '<Leader>cn', '<cmd>Flemma message:next<cr>')
+vim.keymap.set('n', '<Leader>cp', '<cmd>Flemma message:prev<cr>')
 ```
+
+All functionality now routes through a single `:Flemma` command with hierarchical sub-commands. Some highlights:
 
 #### Core Commands
 
-- `FlemmaSend` - Send the current conversation to the configured AI provider
-- `FlemmaCancel` - Cancel an ongoing request
-- `FlemmaSendAndInsert` - Send to AI and return to insert mode
-- `FlemmaSwitch` - Switch between providers _(e.g., `:FlemmaSwitch openai gpt-4o`)_. If called with no arguments, it provides an interactive selection menu.
-- `FlemmaRecallNotification` - Recall the last notification _(useful for reviewing usage statistics)_
+- `Flemma send` – Send the current conversation to the configured AI provider _(accepts options like `on_request_start=stopinsert`, `on_request_complete=startinsert!`)_
+- `Flemma cancel` – Cancel an ongoing request
+- `Flemma switch` – Switch between providers _(e.g., `:Flemma switch openai gpt-4o`)_. With no arguments, you get an interactive picker.
+- `Flemma import` – Convert a Claude Workbench API call into chat format
+- `Flemma notification:recall` – Recall the last notification _(useful for reviewing usage statistics)_
 
 #### Navigation Commands
 
-- `FlemmaNextMessage` - Jump to next message _(<kbd>]m</kbd> by default)_
-- `FlemmaPrevMessage` - Jump to previous message _(<kbd>[m</kbd> by default)_
-
-#### Import Command
-
-- `FlemmaImport` - Convert a Claude Workbench API call into chat format
+- `Flemma message:next` – Jump to next message _(<kbd>]m</kbd> by default)_
+- `Flemma message:previous` (alias `message:prev`) – Jump to previous message _(<kbd>[m</kbd> by default)_
 
 #### Logging Commands
 
-- `FlemmaEnableLogging` - Enable logging of API requests and responses
-- `FlemmaDisableLogging` - Disable logging _(default state)_
-- `FlemmaOpenLog` - Open the log file in a new tab
+- `Flemma logging:enable` – Enable logging of API requests and responses
+- `Flemma logging:disable` – Disable logging _(default state)_
+- `Flemma logging:open` – Open the log file in a new tab
+
+> Legacy commands such as `:FlemmaSend` remain available for now, but they simply forward to the new dispatcher and emit a warning so you can migrate at your own pace.
+
+`on_request_start` and `on_request_complete` run any Ex command you provide (for example `startinsert!`). If you trigger `:Flemma` from Lua you can also pass actual functions for even more control.
 
 Logging is disabled by default to prevent sensitive data from being written to disk. When troubleshooting issues:
 
-1. Enable logging with `:FlemmaEnableLogging`
+1. Enable logging with `:Flemma logging:enable`
 2. Reproduce the problem
-3. Check the log with `:FlemmaOpenLog`
-4. Disable logging with `:FlemmaDisableLogging` when done
+3. Check the log with `:Flemma logging:open`
+4. Disable logging with `:Flemma logging:disable` when done
 
 The log file is stored at `~/.cache/nvim/flemma.log` _(or equivalent on your system)_ and contains:
 
@@ -268,15 +270,15 @@ The log file is stored at `~/.cache/nvim/flemma.log` _(or equivalent on your sys
 
 ### Switching Providers
 
-You can switch between AI providers at any time using the `:FlemmaSwitch` command:
+You can switch between AI providers at any time using the `:Flemma switch` command:
 
 ```yaml
-:FlemmaSwitch # Interactive provider/model selection
-:FlemmaSwitch claude # Switch to Claude with default model
-:FlemmaSwitch openai gpt-4o # Switch to OpenAI with specific model
-:FlemmaSwitch vertex gemini-2.5-pro project_id=my-project # Switch to Vertex AI with project ID
-:FlemmaSwitch claude claude-3-7-sonnet-20250219 temperature=0.2 max_tokens=1000 connect_timeout=5 timeout=60 # Multiple parameters, including general ones
-:FlemmaSwitch vertex gemini-2.5-pro project_id=my-project thinking_budget=1000 # Vertex AI with thinking budget
+:Flemma switch # Interactive provider/model selection
+:Flemma switch claude # Switch to Claude with default model
+:Flemma switch openai gpt-4o # Switch to OpenAI with specific model
+:Flemma switch vertex gemini-2.5-pro project_id=my-project # Switch to Vertex AI with project ID
+:Flemma switch claude claude-3-7-sonnet-20250219 temperature=0.2 max_tokens=1000 connect_timeout=5 timeout=60 # Multiple parameters, including general ones
+:Flemma switch vertex gemini-2.5-pro project_id=my-project thinking_budget=1000 # Vertex AI with thinking budget
 ```
 
 This allows you to compare responses from different AI models without restarting Neovim.
@@ -398,7 +400,7 @@ You can import conversations from the Claude Workbench _(console.anthropic.com)_
 3. Change the language to TypeScript
 4. Use the "Copy Code" button to copy the code snippet
 5. Paste the code into a new buffer in Neovim
-6. Run `:FlemmaImport` to convert it to a .chat file
+6. Run `:Flemma import` to convert it to a .chat file
 
 The command will parse the API call and convert it into Flemma's chat format.
 

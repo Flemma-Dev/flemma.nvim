@@ -146,16 +146,7 @@ describe(":FlemmaSend command", function()
     -- Arrange: Stub vim.notify to prevent UI and capture calls
     local notify_spy = stub(vim, "notify")
 
-    -- Act: Execute the command
-    vim.cmd("FlemmaSend")
-
-    -- Wait for the notification to be called
-    vim.wait(500, function()
-      return #notify_spy.calls > 0
-    end, 10, false)
-
-    -- Assert: Check that vim.notify was called with the correct error message
-    -- Read expected error from fixture
+    -- Read expected error from fixture and execute the command
     local file = io.open("tests/fixtures/openai_invalid_key_error.txt", "r")
     assert.is_not_nil(file, "Fixture file could not be opened")
     local fixture_content = file:read("*a")
@@ -163,9 +154,35 @@ describe(":FlemmaSend command", function()
     local error_data = vim.fn.json_decode(fixture_content)
     local expected_error_message = "Flemma: " .. error_data.error.message
 
-    local last_call = notify_spy.calls[#notify_spy.calls]
-    assert.equals(expected_error_message, last_call.refs[1])
-    assert.equals(vim.log.levels.ERROR, last_call.refs[2])
+    vim.cmd("FlemmaSend")
+
+    -- Wait for the expected error notification instead of the first notify call
+    vim.wait(2000, function()
+      for _, call in ipairs(notify_spy.calls) do
+        if call.refs[1] == expected_error_message then
+          return true
+        end
+      end
+      return false
+    end, 10, false)
+
+    local expected_warning = ":FlemmaSend has moved to :Flemma send"
+    local warning_seen = false
+    local error_seen = false
+    local error_level = nil
+
+    for _, call in ipairs(notify_spy.calls) do
+      if call.refs[1] == expected_warning then
+        warning_seen = true
+      elseif call.refs[1] == expected_error_message then
+        error_seen = true
+        error_level = call.refs[2]
+      end
+    end
+
+    assert.is_true(warning_seen, "Legacy :FlemmaSend warning should be emitted")
+    assert.is_true(error_seen, "Expected error notification was not emitted")
+    assert.equals(vim.log.levels.ERROR, error_level)
 
     -- Assert: Check that the buffer is modifiable and clean
     assert.is_true(vim.bo[bufnr].modifiable, "Buffer should be modifiable after an error")

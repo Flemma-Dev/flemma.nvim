@@ -186,7 +186,7 @@ function M.send_to_provider(opts)
   local current_provider = state.get_provider()
   if not current_provider then
     log.error("send_to_provider(): No provider available")
-    vim.notify("Flemma: No provider configured. Use :FlemmaSwitch to select one.", vim.log.levels.ERROR)
+    vim.notify("Flemma: No provider configured. Use :Flemma switch to select one.", vim.log.levels.ERROR)
     vim.bo[bufnr].modifiable = true -- Restore modifiable state
     return
   end
