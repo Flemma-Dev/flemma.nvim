@@ -6,6 +6,7 @@ local plugin_config = require("flemma.config")
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local core = require("flemma.core")
+local presets = require("flemma.presets")
 local ui = require("flemma.ui")
 local commands = require("flemma.commands")
 local keymaps = require("flemma.keymaps")
@@ -34,6 +35,9 @@ M.setup = function(user_opts)
 
   -- Store config in state module
   state.set_config(config)
+
+  -- Hydrate preset definitions for fast lookup
+  presets.refresh(config.presets)
 
   -- Configure logging based on user settings
   log.configure({

@@ -158,6 +158,7 @@ require("flemma").setup({
     pricing = {
         enabled = true,  -- Whether to show pricing information in notifications
     },
+    presets = {}, -- Named shortcuts for :Flemma switch (see Preset shortcuts below)
     notify = {
         enabled = true,      -- Enable/disable notifications
         timeout = 8000,      -- How long notifications stay visible (ms)
@@ -183,6 +184,32 @@ require("flemma").setup({
 ```
 
 </details>
+
+### Preset shortcuts
+
+Provider presets let you shorten long `:Flemma switch` commands into memorable aliases such as `$o3`. Because Lua only allows bareword keys that match identifier rules, any preset key that includes characters like `$` or `-` must use the table key syntax `["$name"] = { ... }`.
+
+```lua
+require("flemma").setup({
+    presets = {
+        ["$gemini-2.5"] = {
+            provider = "vertex",
+            model = "gemini-2.5-pro",
+            project_id = "your-project-id",
+            thinking_budget = 32768,
+            max_tokens = 65536,
+        },
+        ["$o3"] = {
+            provider = "openai",
+            model = "o3",
+            reasoning = "high",
+            temperature = 1,
+        },
+    },
+})
+```
+
+With those definitions in place you can run `:Flemma switch $o3` or `:Flemma switch $gemini-2.5`; additional arguments still override the preset (`:Flemma switch $o3 temperature=0.25`).
 
 ## Usage
 

@@ -9,6 +9,7 @@ local function setup_commands()
   local provider_config = require("flemma.provider.config")
   local notify_module = require("flemma.notify")
   local modeline = require("flemma.modeline")
+  local presets = require("flemma.presets")
 
   local function toggle_logging(enable)
     if enable == nil then
@@ -67,20 +68,33 @@ local function setup_commands()
 
   local function switch_complete(arglead, ctx)
     if ctx.completing_index == 1 then
-      local providers = {}
+      local suggestions = {}
+      vim.list_extend(suggestions, presets.list())
       for name, _ in pairs(provider_config.models) do
-        table.insert(providers, name)
+        table.insert(suggestions, name)
       end
-      table.sort(providers)
+      table.sort(suggestions)
       return vim.tbl_filter(function(item)
         return vim.startswith(item, arglead)
-      end, providers)
+      end, suggestions)
     elseif ctx.completing_index == 2 then
-      local provider_name = ctx.extra_args[1]
-      if not provider_name then
+      local first_arg = ctx.extra_args[1]
+      if not first_arg then
         return {}
       end
-      local models = provider_config.models[provider_name]
+
+      if vim.startswith(first_arg, "$") then
+        local preset = presets.get(first_arg)
+        if not preset or not preset.model then
+          return {}
+        end
+        local options = { preset.model }
+        return vim.tbl_filter(function(model)
+          return vim.startswith(model, arglead)
+        end, options)
+      end
+
+      local models = provider_config.models[first_arg]
       if type(models) ~= "table" then
         return {}
       end
@@ -188,25 +202,92 @@ local function setup_commands()
         return
       end
 
-      local switch_opts = {
-        provider = args[1],
-      }
+      local first_arg = args[1]
+      if first_arg and vim.startswith(first_arg, "$") then
+        local preset = presets.get(first_arg)
+        if not preset then
+          vim.notify(("Flemma: Unknown preset '%s'"):format(first_arg), vim.log.levels.WARN)
+          return
+        end
 
-      if not switch_opts.provider then
+        local provider = preset.provider
+        local model = preset.model
+        local key_value_args = vim.deepcopy(preset.parameters or {})
+
+        local remaining_args = {}
+        for i = 2, #args do
+          remaining_args[#remaining_args + 1] = args[i]
+        end
+
+        local overrides = modeline.parse_args(remaining_args, 1)
+        local extracted_overrides = provider_config.extract_switch_arguments(overrides)
+
+        if extracted_overrides.has_explicit_provider and extracted_overrides.provider ~= nil then
+          provider = extracted_overrides.provider
+        end
+
+        if extracted_overrides.has_explicit_model and extracted_overrides.model ~= nil then
+          model = extracted_overrides.model
+        elseif extracted_overrides.positionals[1] ~= nil then
+          model = extracted_overrides.positionals[1]
+        end
+
+        local consumed_positionals = 0
+        if not extracted_overrides.has_explicit_model and extracted_overrides.positionals[1] ~= nil then
+          consumed_positionals = 1
+        end
+
+        if #extracted_overrides.positionals > consumed_positionals then
+          local ignored = {}
+          for i = consumed_positionals + 1, #extracted_overrides.positionals do
+            ignored[#ignored + 1] = extracted_overrides.positionals[i]
+          end
+          if #ignored > 0 then
+            vim.notify(
+              ("Flemma: Ignoring extra positional arguments for preset '%s': %s"):format(
+                first_arg,
+                table.concat(ignored, ", ")
+              ),
+              vim.log.levels.WARN
+            )
+          end
+        end
+
+        for k, v in pairs(extracted_overrides.parameters) do
+          key_value_args[k] = v
+        end
+
+        if not provider then
+          vim.notify(("Flemma: Preset '%s' must define a provider"):format(first_arg), vim.log.levels.WARN)
+          return
+        end
+
+        core.switch_provider(provider, model, key_value_args)
+        return
+      end
+
+      local parsed_args = modeline.parse_args(args, 1)
+      local extracted = provider_config.extract_switch_arguments(parsed_args)
+      local provider = extracted.provider
+
+      if not provider then
         vim.notify("Flemma: Provider name required (use :Flemma switch <provider>)", vim.log.levels.WARN)
         return
       end
 
-      if args[2] and not args[2]:match("^[%w_]+=") then
-        switch_opts.model = args[2]
+      if #extracted.extra_positionals > 0 then
+        vim.notify(
+          ("Flemma: Ignoring extra positional arguments: %s"):format(table.concat(extracted.extra_positionals, ", ")),
+          vim.log.levels.WARN
+        )
       end
 
-      local key_value_args = modeline.parse_args(args, switch_opts.model and 3 or 2)
-      for k, v in pairs(key_value_args) do
-        switch_opts[k] = v
+      local parameters = {}
+      for k, v in pairs(extracted.parameters) do
+        parameters[k] = v
       end
 
-      core.switch_provider(switch_opts.provider, switch_opts.model, key_value_args)
+      core.switch_provider(provider, extracted.model, parameters)
     end,
     complete = switch_complete,
   }

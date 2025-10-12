@@ -64,4 +64,61 @@ function M.get_appropriate_model(model_name, provider_name)
   return M.get_model(provider_name)
 end
 
+--- Extract provider/model parameters from parsed modeline tokens
+-- @param parsed table Parsed tokens from modeline.parse/modeline.parse_args
+-- @return table Parsed switch arguments (see provider_config_spec for structure)
+function M.extract_switch_arguments(parsed)
+  local info = {
+    provider = nil,
+    model = nil,
+    parameters = {},
+    positionals = {},
+    extra_positionals = {},
+    has_explicit_provider = false,
+    has_explicit_model = false,
+  }
+
+  if type(parsed) ~= "table" then
+    return info
+  end
+
+  local index = 1
+  while parsed[index] ~= nil do
+    info.positionals[#info.positionals + 1] = parsed[index]
+    index = index + 1
+  end
+
+  if parsed.provider ~= nil then
+    info.provider = parsed.provider
+    info.has_explicit_provider = true
+  end
+
+  if parsed.model ~= nil then
+    info.model = parsed.model
+    info.has_explicit_model = true
+  end
+
+  if not info.provider and info.positionals[1] then
+    info.provider = info.positionals[1]
+  end
+
+  if not info.model and info.positionals[2] then
+    info.model = info.positionals[2]
+  end
+
+  if #info.positionals > 2 then
+    for i = 3, #info.positionals do
+      info.extra_positionals[#info.extra_positionals + 1] = info.positionals[i]
+    end
+  end
+
+  for k, v in pairs(parsed) do
+    if type(k) ~= "number" and k ~= "provider" and k ~= "model" then
+      info.parameters[k] = v
+    end
+  end
+
+  return info
+end
+
 return M

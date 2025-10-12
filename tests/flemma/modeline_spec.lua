@@ -19,10 +19,20 @@ describe("flemma.modeline", function()
       assert.are.equal("value", result.keep)
     end)
 
-    it("returns empty table when input has no assignments", function()
-      local result = modeline.parse("no_equals here")
+    it("extracts provider and model from positional tokens", function()
+      local result = modeline.parse("vertex gemini-2.5-flash-lite")
 
-      assert.are.same({}, result)
+      assert.are.equal("vertex", result[1])
+      assert.are.equal("gemini-2.5-flash-lite", result[2])
+    end)
+
+    it("supports positional tokens followed by assignments", function()
+      local result = modeline.parse("vertex gemini-2.5-flash-lite thinking_budget=24576 max_tokens=65535")
+
+      assert.are.equal("vertex", result[1])
+      assert.are.equal("gemini-2.5-flash-lite", result[2])
+      assert.are.equal(24576, result.thinking_budget)
+      assert.are.equal(65535, result.max_tokens)
     end)
   end)
 

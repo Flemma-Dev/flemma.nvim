@@ -23,11 +23,15 @@ end
 
 local function parse_tokens(tokens)
   local result = {}
+  local positional_index = 0
 
   for _, token in ipairs(tokens) do
     local key, raw = token:match("^([%w_]+)=(.+)$")
     if key and raw then
       result[key] = coerce_value(raw)
+    elseif token ~= "" then
+      positional_index = positional_index + 1
+      result[positional_index] = token
     end
   end
 

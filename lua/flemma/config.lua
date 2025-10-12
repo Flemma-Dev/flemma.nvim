@@ -52,6 +52,7 @@ return {
     -- Add provider-specific parameter sections here if needed in the future
     -- e.g., claude = {}
   },
+  presets = {}, -- Named presets for :Flemma switch (use ["$name"] key syntax)
   text_object = "m", -- Default text object key, set to false to disable
   editing = {
     disable_textwidth = true, -- Whether to disable textwidth in chat buffers
