@@ -1,504 +1,531 @@
 # Flemma 🪶
 
 > [!CAUTION]
-> **Plugin Under Major Refactoring**
+> **Actively Refactoring**
 >
-> Flemma (formerly Claudius) is currently undergoing significant refactoring and rebranding. The plugin will be in a state of flux for the next couple of weeks as I implement major improvements to the codebase architecture and add extensive new functionality.
->
-> **What to expect:**
->
-> - Core functionality will remain stable
-> - Configuration options may change
-> - New features are actively being added
-> - Some temporary breaking changes may occur
->
-> **A short list of features planned:**
->
-> - **MCP servers & tool calling** - Connect to external tools and data sources via Model Context Protocol, plus allow conversations to query other specialized "agents"
-> - **Enhanced thinking support** - Preserve and reuse model reasoning tokens across requests for continued thinking
-> - **Chainable multi-buffer workflows** - Enable chat buffers to call other specialized Flemma buffers as tools for complex multi-step reasoning
-> - **Provider presets** - Quick switching between pre-configured model setups
-> - **YAML frontmatter** - Additional templating options beyond Lua
-> - **Project cost tracking** - Persistent usage and cost monitoring across sessions
-> - **Floating scratchpad** - Quick access popup for temporary conversations
->
-> **Recommendation:** Pin to a specific commit if you need stability, or follow along for the latest improvements. The plugin is evolving into the most comprehensive AI chat interface for Neovim with support for all major providers and many exciting features planned.
+> Flemma (formerly Claudius) is in the middle of a large-scale rename and architecture refresh. Expect new functionality, renamed modules, and occasional breaking changes while the project settles. Pin a commit if you need a steady target.
 
-Transform Neovim into your AI conversation companion with a native interface to multiple AI providers.
+Flemma turns Neovim into a first-class AI workspace. It gives `.chat` buffers streaming conversations, reusable prompt templates, attachment support, cost tracking, and ergonomic commands for the three major providers: Anthropic Claude, OpenAI, and Google Vertex AI.
 
-<img src="assets/screenshoty.png" alt="A screenshot of Flemma in action" />
-<br />
+<img align="center" width="529" height="568" src="assets/frame_generic_dark.png" alt="Flemma chat buffer example" />
 
-| 🚀 Instant Integration                                         | ⚡ Power Features                                                     | 🛠️ Developer Experience          |
-| -------------------------------------------------------------- | --------------------------------------------------------------------- | -------------------------------- |
-| Chat with multiple AI providers directly in your editor        | Dynamic Lua templates in your prompts - embed code evaluation results | Markdown rendering in responses  |
-| Support for Claude, OpenAI, and Google Vertex AI models        | Import/export compatibility with Claude Workbench                     | Code block syntax highlighting   |
-| Native Neovim feel with proper syntax highlighting and folding | Real-time token usage and cost tracking                               | Automatic buffer management      |
-| Automatic API key management via system keyring                | Message-based text objects and navigation                             | Customizable keymaps and styling |
-| `@file` references for embedding images, PDFs, and text        | Lualine component for model display                                   |                                  |
+## What Flemma Delivers
+
+- **Multi-provider chat** – work with Claude, OpenAI, and Vertex models through one command tree while keeping prompts in plain `.chat` buffers.
+- **`.chat` editing tools** – get markdown folding, visual rulers, `<thinking>` highlighting, and message text objects tuned for chat transcripts.
+- **Structured templates** – combine Lua or JSON frontmatter, inline `{{ expressions }}`, and `include()` helpers to assemble prompts without leaving Neovim.
+- **Context attachments** – reference local files with `@./path`; Flemma handles MIME detection and surfaces warnings when a provider can’t ingest the asset.
+- **Reasoning visibility** – stream Vertex thinking blocks into the buffer, expose OpenAI reasoning effort in lualine, and strip thought traces from the history sent back to models.
+- **Usage reporting** – per-request and session notifications show token totals and costs using the bundled pricing tables.
+- **Presets and hooks** – store favourite provider configurations, run `on_request_*` callbacks, auto-write finished chats, and recall the latest usage notification when auditing work.
+- **Contributor tooling** – toggle structured logs, drop into the project’s Nix dev shell, and run the bundled headless tests without extra setup.
+
+---
 
 ## Installation
 
-Using your preferred package manager, for example with lazy.nvim:
+Flemma works with any plugin manager. With [lazy.nvim](https://github.com/folke/lazy.nvim) you only need to declare the plugin – `opts = {}` triggers `require("flemma").setup({})` automatically:
 
 ```lua
 {
-    "Flemma-Dev/flemma.nvim",
-    opts = {},
+  "Flemma-Dev/flemma.nvim",
+  opts = {},
 }
 ```
+
+For managers that do not wire `opts`, call `require("flemma").setup({})` yourself after the plugin is on the runtime path.
+
+---
 
 ## Requirements
 
-Flemma requires:
+| Requirement                                                              | Why it matters                                                                                                  |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| Neovim **0.11** or newer                                                 | Uses Tree-sitter folding APIs introduced in 0.11 and relies on `vim.fs` helpers.                                |
+| [`curl`](https://curl.se/)                                               | Streaming is handled by spawning `curl` with Server-Sent Events enabled.                                        |
+| Markdown Tree-sitter grammar                                             | Flemma registers `.chat` buffers to reuse the markdown parser for syntax highlighting and folding.              |
+| [`file`](https://www.darwinsys.com/file/) CLI (optional but recommended) | Provides reliable MIME detection for `@./path` attachments. When missing, extensions are used as a best effort. |
 
-- Neovim 0.11 or newer with Tree-sitter support _(required for core functionality)_
-- Tree-sitter markdown parser _(required for message formatting and syntax highlighting)_
-- The `file` command-line utility _(for MIME type detection used by `@file` references)_
-- An API key for your chosen provider:
-  - Anthropic API key _(via `ANTHROPIC_API_KEY` environment variable)_
-  - OpenAI API key _(via `OPENAI_API_KEY` environment variable)_
-  - Google Vertex AI access token _(via `VERTEX_AI_ACCESS_TOKEN` environment variable)_ or service account credentials
+### Provider credentials
 
-Optional Features:
-
-For Google Vertex AI, the Google Cloud CLI _(`gcloud`)_ is required if using service account authentication.
+| Provider         | Environment variable                                        | Notes                                                       |
+| ---------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
+| Anthropic Claude | `ANTHROPIC_API_KEY`                                         |                                                             |
+| OpenAI           | `OPENAI_API_KEY`                                            | Supports GPT‑5 family, including reasoning effort settings. |
+| Google Vertex AI | `VERTEX_AI_ACCESS_TOKEN` **or** service-account credentials | Requires additional configuration (see below).              |
 
 <details>
-<summary>Linux systems with libsecret installed…</summary>
+<summary><strong>Linux keyring setup (Secret Service)</strong></summary>
 
-Your API key can be stored and retrieved from the system keyring:
-
-For Anthropic:
+When environment variables are absent Flemma looks for secrets in the Secret Service keyring. Store them once and every Neovim instance can reuse them:
 
 ```bash
-secret-tool store --label="Anthropic API Key" service anthropic key api
-```
-
-For OpenAI:
-
-```bash
+secret-tool store --label="Claude API Key" service anthropic key api
 secret-tool store --label="OpenAI API Key" service openai key api
+secret-tool store --label="Vertex AI Service Account" service vertex key api project_id your-gcp-project
 ```
-
-For Google Vertex AI _(store service account JSON)_:
-
-```bash
-secret-tool store --label="Vertex AI Service Account" service vertex key api project_id your_project_id
-```
-
-This will securely prompt for your API key and store it in the system keyring.
 
 </details>
-
-## Configuration
-
-The plugin works out of the box with sensible defaults, but you can customize various aspects.
 
 <details>
-<summary>Plugin defaults…</summary>
+<summary><strong>Vertex AI service-account flow</strong></summary>
 
-```lua
-require("flemma").setup({
-    provider = "claude",  -- AI provider: "claude", "openai", or "vertex"
-    model = nil,  -- Uses provider defaults if nil (see below)
-    -- Claude default: "claude-3-7-sonnet-20250219"
-    -- OpenAI default: "gpt-4o"
-    -- Vertex default: "gemini-2.5-pro"
-    parameters = {
-        max_tokens = 4000, -- Default max tokens for all providers
-        temperature = 0.7, -- Default temperature for all providers
-        timeout = 120, -- Default response timeout for cURL requests
-        connect_timeout = 10, -- Default connection timeout for cURL requests
-        vertex = {
-            project_id = nil,  -- Google Cloud project ID (required for Vertex AI)
-            location = "global",  -- Google Cloud region
-            thinking_budget = nil, -- Optional. Budget for model thinking, in tokens. nil or 0 disables thinking. Values >= 1 enable thinking with the specified budget.
-        },
-        openai = {
-            reasoning = nil, -- Optional. "low", "medium", "high". Controls reasoning effort.
-        },
-    },
-    highlights = {
-        system = "Special",    -- highlight group or hex color (e.g., "#80a0ff") for system messages
-        user = "Normal",       -- highlight group or hex color for user messages
-        assistant = "Comment",  -- highlight group or hex color for assistant messages
-        user_lua_expression = "PreProc", -- highlight group or hex color for {{expression}} in user messages
-        user_file_reference = "Include"  -- highlight group or hex color for @./file references in user messages
-    },
-    role_style = "bold,underline",  -- style applied to role markers like @You:
-    ruler = {
-        char = "━",           -- character used for the separator line
-        hl = "NonText"        -- highlight group or hex color for the separator
-    },
-    signs = {
-        enabled = false,  -- enable sign column highlighting for roles (disabled by default)
-        char = "▌",       -- default vertical bar character
-        system = {
-            char = nil,   -- use default char
-            hl = true,    -- inherit from highlights.system, set false to disable, or provide specific group/hex color
-        },
-        user = {
-            char = "▏",   -- use default char
-            hl = true,    -- inherit from highlights.user, set false to disable, or provide specific group/hex color
-        },
-        assistant = {
-            char = nil,   -- use default char
-            hl = true,    -- inherit from highlights.assistant, set false to disable, or provide specific group/hex color
-        }
-    },
-    editing = {
-        disable_textwidth = true,  -- Whether to disable textwidth in chat buffers
-        auto_write = false,        -- Whether to automatically write the buffer after changes
-    },
-    logging = {
-        enabled = false, -- Logging disabled by default
-        path = vim.fn.stdpath("cache") .. "/flemma.log", -- Default log path
-    },
-    pricing = {
-        enabled = true,  -- Whether to show pricing information in notifications
-    },
-    presets = {}, -- Named shortcuts for :Flemma switch (see Preset shortcuts below)
-    notify = {
-        enabled = true,      -- Enable/disable notifications
-        timeout = 8000,      -- How long notifications stay visible (ms)
-        max_width = 60,      -- Maximum width of notification windows
-        padding = 1,         -- Padding around notification text
-        border = "rounded",  -- Border style (same as nvim_open_win)
-        title = nil,         -- Default title (nil for none)
-    },
-    text_object = "m",  -- Default text object key, set to false to disable
-    keymaps = {
-        normal = {
-            send = "<C-]>",       -- Key to send message in normal mode
-            cancel = "<C-c>",     -- Key to cancel ongoing request
-            next_message = "]m",  -- Jump to next message
-            prev_message = "[m",  -- Jump to previous message
-        },
-        insert = {
-            send = "<C-]>"  -- Key to send message in insert mode
-        },
-        enabled = true  -- Set to false to disable all keymaps
-    }
-})
-```
+1. Create a service account in Google Cloud and grant it the _Vertex AI user_ role.
+2. Download its JSON credentials and either:
+   - export them via `VERTEX_SERVICE_ACCOUNT='{"type": "..."}'`, **or**
+   - store them in the Secret Service entry above (the JSON is stored verbatim).
+3. Ensure the Google Cloud CLI is on your `$PATH`; Flemma shells out to `gcloud auth application-default print-access-token` whenever it needs to refresh the token.
+4. Set the project/location in configuration or via `:Flemma switch vertex gemini-2.5-pro project_id=my-project location=us-central1`.
+
+> [!NOTE]
+> If you only supply `VERTEX_AI_ACCESS_TOKEN`, Flemma uses that token until it expires and skips `gcloud`.
 
 </details>
 
-### Preset shortcuts
+---
 
-Provider presets let you shorten long `:Flemma switch` commands into memorable aliases such as `$o3`. Because Lua only allows bareword keys that match identifier rules, any preset key that includes characters like `$` or `-` must use the table key syntax `["$name"] = { ... }`.
+## Quick Start
+
+1. Configure the plugin:
+
+   ```lua
+   require("flemma").setup({})
+   ```
+
+2. Create a new file that ends with `.chat`. Flemma only activates on that extension.
+3. Type a message, for example:
+
+   ```markdown
+   @You: Turn the notes below into a short project update.
+   - Added Vertex thinking budget support.
+   - Refactored :Flemma command routing.
+   - Documented presets in the README.
+   ```
+
+4. Press <kbd>Ctrl-]</kbd> (normal or insert mode) or run `:Flemma send`. Flemma freezes the buffer while the request is streaming and shows `@Assistant: Thinking...`.
+5. When the reply finishes, a floating notification lists token counts and cost for the request and the session.
+
+Cancel an in-flight response with <kbd>Ctrl-c</kbd> or `:Flemma cancel`.
+
+> [!TIP]
+> Legacy commands (`:FlemmaSend`, `:FlemmaCancel`, …) still work but forward to the new command tree with a deprecation notice.
+
+---
+
+## Understanding `.chat` Buffers
+
+### Structure
+
+````markdown
+```lua
+release = {
+  version = "v25.10-1",
+  focus = "command presets and UI polish",
+}
+notes = [[
+- Presets appear first in :Flemma switch completion.
+- Thinking tags have dedicated highlights.
+- Logging toggles now live under :Flemma logging:*.
+]]
+```
+
+@System: You turn engineering notes into concise changelog entries.
+
+@You: Summarise {{release.version}} with emphasis on {{release.focus}} using the points below:
+{{notes}}
+
+@Assistant:
+- Changelog bullets...
+- Follow-up actions...
+
+<thinking>
+Model thoughts stream here and auto-fold.
+</thinking>
+````
+
+- **Frontmatter** sits on the first line and must be fenced with triple backticks. Lua and JSON parsers ship with Flemma; you can register more via `flemma.frontmatter.parsers.register("yaml", parser_fn)`.
+- **Messages** begin with `@System:`, `@You:`, or `@Assistant:`. The parser is whitespace-tolerant and handles blank lines between messages.
+- **Thinking blocks** appear only in assistant messages. Vertex AI models stream `<thinking>` sections; Flemma folds them automatically and keeps dedicated highlights for the tags and body.
+
+### Folding and layout
+
+| Fold level | What folds                 | Why                                                             |
+| ---------- | -------------------------- | --------------------------------------------------------------- |
+| Level 3    | The frontmatter block      | Keep templates out of the way while you focus on chat history.  |
+| Level 2    | `<thinking>...</thinking>` | Reasoning traces are useful, but often secondary to the answer. |
+| Level 1    | Each message               | Collapse long exchanges without losing context.                 |
+
+Toggle folds with your usual mappings (`za`, `zc`, etc.). The fold text shows a snippet of the hidden content so you know whether to expand it.
+
+Between messages, Flemma draws a ruler using the configured `ruler.char` and highlight. This keeps multi-step chats legible even with folds open.
+
+### Navigation and text objects
+
+Inside `.chat` buffers Flemma defines:
+
+- `]m` / `[m` – jump to the next/previous message header.
+- `im` / `am` (configurable) – select the inside or entire message as a text object. Thinking blocks are skipped so yanking `im` never includes `<thinking>` sections unintentionally.
+- Buffer-local mappings for send/cancel default to `<C-]>` and `<C-c>` in normal mode. Insert-mode `<C-]>` stops insert, sends, and re-enters insert when the response finishes.
+
+Disable or remap these through the `keymaps` section (see [Configuration reference](#configuration-reference)).
+
+---
+
+## Commands and Provider Management
+
+Use the single entry point `:Flemma {command}`. Autocompletion lists every available sub-command.
+
+| Command                                             | Purpose                                                                   | Example                                                                     |
+| --------------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `:Flemma send [key=value …]`                        | Send the current buffer. Optional callbacks run before/after the request. | `:Flemma send on_request_start=stopinsert on_request_complete=startinsert!` |
+| `:Flemma cancel`                                    | Abort the active request and clean up the spinner.                        |                                                                             |
+| `:Flemma switch …`                                  | Choose or override provider/model parameters.                             | See below.                                                                  |
+| `:Flemma message:next` / `:Flemma message:previous` | Jump through message headers.                                             |                                                                             |
+| `:Flemma logging:enable` / `:…:disable` / `:…:open` | Toggle structured logging and open the log file.                          |                                                                             |
+| `:Flemma notification:recall`                       | Reopen the last usage/cost notification.                                  |                                                                             |
+| `:Flemma import`                                    | Convert Anthropics Claude Workbench code snippets into `.chat` format.    |                                                                             |
+
+### Switching providers and models
+
+- `:Flemma switch` (no arguments) opens two `vim.ui.select` pickers: first provider, then model.
+- `:Flemma switch openai gpt-5 temperature=0.3` changes provider, model, and overrides parameters in one go.
+- `:Flemma switch vertex project_id=my-project location=us-central1 thinking_budget=4096` demonstrates long-form overrides. Anything that looks like `key=value` is accepted; unknown keys are passed to the provider for validation.
+
+### Named presets
+
+Define reusable setups under the `presets` key. Preset names must begin with `$`; completions prioritise them above built-in providers.
 
 ```lua
 require("flemma").setup({
-    presets = {
-        ["$gemini-2.5"] = {
-            provider = "vertex",
-            model = "gemini-2.5-pro",
-            project_id = "your-project-id",
-            thinking_budget = 32768,
-            max_tokens = 65536,
-        },
-        ["$o3"] = {
-            provider = "openai",
-            model = "o3",
-            reasoning = "high",
-            temperature = 1,
-        },
+  presets = {
+    ["$fast"] = "vertex gemini-2.5-flash temperature=0.2",
+    ["$review"] = {
+      provider = "claude",
+      model = "claude-sonnet-4-0",
+      max_tokens = 6000,
     },
+  },
 })
 ```
 
-With those definitions in place you can run `:Flemma switch $o3` or `:Flemma switch $gemini-2.5`; additional arguments still override the preset (`:Flemma switch $o3 temperature=0.25`).
+Switch using `:Flemma switch $fast` or `:Flemma switch $review temperature=0.1` to override individual values.
 
-## Usage
+### Provider-specific capabilities
 
-> [!IMPORTANT]
-> The plugin only works with files having the **.chat** extension. Create or open a **.chat** file and the plugin will automatically set up syntax highlighting and keybindings.
+| Provider  | Defaults            | Extra parameters                                                                                                                                                                                             | Notes                                                                                                  |
+| --------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| Claude    | `claude-sonnet-4-0` | Standard `max_tokens`, `temperature`, `timeout`, `connect_timeout`.                                                                                                                                          | Supports text, image, and PDF attachments.                                                             |
+| OpenAI    | `gpt-5`             | `reasoning=<low\|medium\|high>` toggles reasoning effort. When set, lualine includes the reasoning level and Flemma keeps your configured `max_tokens` aligned with OpenAI’s completion limit automatically. | Cost notifications include reasoning tokens.                                                           |
+| Vertex AI | `gemini-2.5-pro`    | `project_id` (required), `location` (default `global`), `thinking_budget` enables streamed `<thinking>` traces.                                                                                              | `thinking_budget` ≥ 1 activates Google’s experimental thinking output; set to `0` or `nil` to disable. |
 
-### Starting a New Chat
-
-Create a new empty `Conversation.chat` file and add your first message:
-
-```markdown
-@You: Hello Claude!
-```
-
-You may optionally start your conversation with a system prompt _(must be the first message in the file)_:
-
-```markdown
-@System: You are a helpful AI assistant.
-```
-
-Messages can be folded for better overview. Press <kbd>za</kbd> to toggle folds.
-
-### Commands and Keybindings
-
-The plugin provides several commands for interacting with AI providers and managing chat content:
-
-By default, the following keybindings are active in chat files:
-
-- <kbd>Ctrl-]</kbd> - Send conversation _(normal and insert mode)_
-- <kbd>Ctrl-C</kbd> - Cancel ongoing request
-- <kbd>]m</kbd> - Jump to next message
-- <kbd>[m</kbd> - Jump to previous message
-- <kbd>im</kbd> - Text object for inside message content _(customizable key)_
-- <kbd>am</kbd> - Text object for around message _(customizable key)_
-
-You can disable the default keymaps by setting `keymaps.enable = false` and define your own:
+The full model cataloguel (including pricing) is in `lua/flemma/models.lua`. You can access it from Neovim with:
 
 ```lua
--- Example custom keymaps
-vim.keymap.set('n', '<Leader>cs', '<cmd>Flemma send<cr>')
-vim.keymap.set('n', '<Leader>cc', '<cmd>Flemma cancel<cr>')
-vim.keymap.set('i', '<C-s>', '<cmd>Flemma send on_request_start=stopinsert on_request_complete=startinsert!<cr>')
-vim.keymap.set('n', '<Leader>cn', '<cmd>Flemma message:next<cr>')
-vim.keymap.set('n', '<Leader>cp', '<cmd>Flemma message:prev<cr>')
+:lua print(vim.inspect(require("flemma.provider.config").models))
 ```
 
-All functionality now routes through a single `:Flemma` command with hierarchical sub-commands. Some highlights:
+---
 
-#### Core Commands
+## Template System and Automation
 
-- `Flemma send` – Send the current conversation to the configured AI provider _(accepts options like `on_request_start=stopinsert`, `on_request_complete=startinsert!`)_
-- `Flemma cancel` – Cancel an ongoing request
-- `Flemma switch` – Switch between providers _(e.g., `:Flemma switch openai gpt-4o`)_. With no arguments, you get an interactive picker.
-- `Flemma import` – Convert a Claude Workbench API call into chat format
-- `Flemma notification:recall` – Recall the last notification _(useful for reviewing usage statistics)_
+Flemma’s prompt pipeline runs through three stages: parse, evaluate, and send. Errors at any stage surface via diagnostics before the request leaves your editor.
 
-#### Navigation Commands
+### Frontmatter
 
-- `Flemma message:next` – Jump to next message _(<kbd>]m</kbd> by default)_
-- `Flemma message:previous` (alias `message:prev`) – Jump to previous message _(<kbd>[m</kbd> by default)_
+- Place a fenced block on the first line (` ```lua ` or ` ```json `).
+- Return a table of variables to inject into the template environment.
+- Errors (syntax problems, missing parser) block the request and show in a detailed notification with filename and line number.
 
-#### Logging Commands
+``````lua
+```lua
+recipient = "QA team"
+notes = [[
+- Verify presets list before providers.
+- Check spinner no longer triggers spell checking.
+- Confirm logging commands live under :Flemma logging:*.
+]]
+```
+``````
 
-- `Flemma logging:enable` – Enable logging of API requests and responses
-- `Flemma logging:disable` – Disable logging _(default state)_
-- `Flemma logging:open` – Open the log file in a new tab
+### Inline expressions
 
-> Legacy commands such as `:FlemmaSend` remain available for now, but they simply forward to the new dispatcher and emit a warning so you can migrate at your own pace.
+Use `{{ expression }}` inside any non-assistant message. Expressions run in a sandbox that exposes:
 
-`on_request_start` and `on_request_complete` run any Ex command you provide (for example `startinsert!`). If you trigger `:Flemma` from Lua you can also pass actual functions for even more control.
+- Standard Lua libs (`string`, `table`, `math`, `utf8`).
+- `vim.fn` (`fnamemodify`, `getcwd`) and `vim.fs` (`normalize`, `abspath`).
+- Variables returned from frontmatter.
 
-Logging is disabled by default to prevent sensitive data from being written to disk. When troubleshooting issues:
+Outputs are converted to strings. Tables are JSON-encoded automatically.
 
-1. Enable logging with `:Flemma logging:enable`
-2. Reproduce the problem
-3. Check the log with `:Flemma logging:open`
-4. Disable logging with `:Flemma logging:disable` when done
-
-The log file is stored at `~/.cache/nvim/flemma.log` _(or equivalent on your system)_ and contains:
-
-- API request details
-- Response data
-- Error messages
-- Timing information
-
-### Switching Providers
-
-You can switch between AI providers at any time using the `:Flemma switch` command:
-
-```yaml
-:Flemma switch # Interactive provider/model selection
-:Flemma switch claude # Switch to Claude with default model
-:Flemma switch openai gpt-4o # Switch to OpenAI with specific model
-:Flemma switch vertex gemini-2.5-pro project_id=my-project # Switch to Vertex AI with project ID
-:Flemma switch claude claude-3-7-sonnet-20250219 temperature=0.2 max_tokens=1000 connect_timeout=5 timeout=60 # Multiple parameters, including general ones
-:Flemma switch vertex gemini-2.5-pro project_id=my-project thinking_budget=1000 # Vertex AI with thinking budget
+```markdown
+@You: Draft a short update for {{recipient}} covering:
+{{notes}}
 ```
 
-This allows you to compare responses from different AI models without restarting Neovim.
+Errors in expressions are downgraded to warnings. The request still sends, and the literal `{{ expression }}` remains in the prompt so you can see what failed.
 
-### Lualine Integration
+### `include()` helper
 
-Flemma includes a component to display the currently active AI model in your Lualine status bar. To use it, add the component to your Lualine configuration:
+Call `include("relative/or/absolute/path")` inside frontmatter or an expression to inline another template fragment. Includes are evaluated in isolation (they do not inherit your variables) and support their own `{{ }}` and `@./` references.
+
+Guards in place:
+
+- Relative paths resolve against the file that called `include()`.
+- Circular includes raise a descriptive error with the include stack.
+- Missing files or read errors raise warnings that block the request.
+
+### Diagnostics at a glance
+
+Flemma groups diagnostics by type in the notification shown before sending:
+
+- **Frontmatter errors** (blocking) – malformed code, unknown parser, include issues.
+- **Expression warnings** (non-blocking) – runtime errors during `{{ }}` evaluation.
+- **File reference warnings** (non-blocking) – missing files, unsupported MIME types.
+
+If any blocking error occurs the buffer becomes modifiable again and the request is cancelled before hitting the network.
+
+---
+
+## Referencing Local Files
+
+Embed local context with `@./relative/path` (or `@../up-one/path`). Flemma handles:
+
+1. Resolving the path against the `.chat` file (after decoding URL-escaped characters like `%20`).
+2. Detecting the MIME type via `file` or the extension fallback.
+3. Streaming the file in the provider-specific format.
+
+Examples:
+
+```markdown
+@You: Critique @./patches/fix.lua;type=text/x-lua.
+@You: OCR this screenshot @./artifacts/failure.png.
+@You: Compare these specs: @./specs/v1.pdf and @./specs/v2.pdf.
+```
+
+Trailing punctuation such as `.` or `)` is ignored so you can keep natural prose. To coerce a MIME type, append `;type=<mime>` as in the Lua example above.
+
+| Provider  | Text files                   | Images                                     | PDFs                   | Behaviour when unsupported                             |
+| --------- | ---------------------------- | ------------------------------------------ | ---------------------- | ------------------------------------------------------ |
+| Claude    | Embedded as plain text parts | Uploaded as base64 image parts             | Sent as document parts | The literal `@./path` is kept and a warning is shown.  |
+| OpenAI    | Embedded as text parts       | Sent as `image_url` entries with data URLs | Sent as `file` objects | Unsupported types become plain text with a diagnostic. |
+| Vertex AI | Embedded as text parts       | Sent as `inlineData`                       | Sent as `inlineData`   | Falls back to text with a warning.                     |
+
+If a file cannot be read or the provider refuses its MIME type, Flemma warns you (including line number) and continues with the raw reference so you can adjust your prompt.
+
+---
+
+## Usage, Pricing, and Notifications
+
+Each completed request emits a floating report that names the provider/model, lists input/output tokens (reasoning tokens are counted under `⊂ thoughts`), and – when pricing is enabled – shows the per-request and cumulative session cost derived from `lua/flemma/models.lua`. Token accounting persists for the lifetime of the Neovim instance; call `require("flemma.state").reset_session()` if you need to zero the counters without restarting. `pricing.enabled = false` suppresses the dollar amounts while keeping token totals for comparison.
+
+Flemma keeps the most recent notification available via `:Flemma notification:recall`, which helps when you close the floating window before capturing the numbers. Logging lives in the same subsystem: toggle it with `:Flemma logging:enable` / `:Flemma logging:disable` and open the log file (`~/.local/state/nvim/flemma.log` or your `stdpath("cache")`) through `:Flemma logging:open` whenever you need the redacted curl command and streaming trace.
+
+---
+
+## UI Customisation
+
+### Highlights and styles
+
+Configuration keys map to dedicated highlight groups:
+
+| Key                              | Applies to                             |
+| -------------------------------- | -------------------------------------- |
+| `highlights.system`              | System messages (`FlemmaSystem`)       |
+| `highlights.user`                | User messages (`FlemmaUser`)           |
+| `highlights.assistant`           | Assistant messages (`FlemmaAssistant`) |
+| `highlights.user_lua_expression` | `{{ expression }}` fragments           |
+| `highlights.user_file_reference` | `@./path` fragments                    |
+| `highlights.thinking_tag`        | `<thinking>` / `</thinking>` tags      |
+| `highlights.thinking_block`      | Content inside thinking blocks         |
+
+Each value accepts a highlight name, a hex colour string, or a table of highlight attributes (`{ fg = "#ffcc00", bold = true }`).
+
+Role markers inherit `role_style` (comma-separated GUI attributes) so marker styling tracks your message colours.
+
+### Sign column indicators
+
+Set `signs.enabled = true` to place signs for each message line. Each role (`system`, `user`, `assistant`) can override the character and highlight. Signs default to using the message highlight colour.
+
+### Spinner behaviour
+
+While a request runs Flemma appends `@Assistant: Thinking...` with an animated braille spinner. The line is flagged as non-spellable so spell check integrations stay quiet. Once streaming starts, the spinner is removed and replaced with the streamed content.
+
+---
+
+## Lualine Integration
+
+Add the bundled component to show the active model (and reasoning effort when set):
 
 ```lua
--- Example Lualine setup
-require('lualine').setup {
-  options = {
-    -- ... your other options
-  },
+require("lualine").setup({
   sections = {
-    lualine_a = {'mode'},
-    -- ... other sections
-    lualine_x = {{ "flemma", icon = "🧠" }, 'encoding', 'filetype'}, -- Add Flemma model component with icon
-    -- ... other sections
+    lualine_x = {
+      { "flemma", icon = "🧠" },
+      "encoding",
+      "filetype",
+    },
   },
-  -- ...
-}
+})
 ```
 
-The model display is active only for **.chat** buffers.
+The component only renders in `chat` buffers. Switching providers or toggling OpenAI reasoning effort causes Flemma to refresh lualine automatically.
 
-### Templating and Dynamic Content
+---
 
-Chat files support two powerful features for dynamic content:
+## Configuration Reference
 
-- Lua Frontmatter - Define variables and functions at the start of your chat file
-- Expression Templates - Use `{{expressions}}` inside messages to evaluate Lua code
+Flemma works without arguments, but every option can be overridden:
 
-#### Lua Frontmatter
-
-Start your chat file with a Lua code block between ` ```lua ` and ` ``` ` markers:
-
-````markdown
 ```lua
-greeting = "Hello, World!"  -- Must be global (no local keyword)
-count = 42
+require("flemma").setup({
+  provider = "claude",
+  model = nil, -- provider default
+  parameters = {
+    max_tokens = 4000,
+    temperature = 0.7,
+    timeout = 120,
+    connect_timeout = 10,
+    vertex = {
+      project_id = nil,
+      location = "global",
+      thinking_budget = nil,
+    },
+    openai = {
+      reasoning = nil, -- "low" | "medium" | "high"
+    },
+  },
+  presets = {},
+  highlights = {
+    system = "Special",
+    user = "Normal",
+    assistant = "Comment",
+    user_lua_expression = "PreProc",
+    user_file_reference = "Include",
+    thinking_tag = "Comment",
+    thinking_block = "Comment",
+  },
+  role_style = "bold,underline",
+  ruler = { char = "━", hl = "NonText" },
+  signs = {
+    enabled = false,
+    char = "▌",
+    system = { char = nil, hl = true },
+    user = { char = "▏", hl = true },
+    assistant = { char = nil, hl = true },
+  },
+  notify = require("flemma.notify").default_opts,
+  pricing = { enabled = true },
+  text_object = "m",
+  editing = {
+    disable_textwidth = true,
+    auto_write = false,
+  },
+  logging = {
+    enabled = false,
+    path = vim.fn.stdpath("cache") .. "/flemma.log",
+  },
+  keymaps = {
+    enabled = true,
+    normal = {
+      send = "<C-]>",
+      cancel = "<C-c>",
+      next_message = "]m",
+      prev_message = "[m",
+    },
+    insert = {
+      send = "<C-]>",
+    },
+  },
+})
 ```
 
-@You: The greeting is: {{greeting}}
-@Assistant: The greeting mentioned is: "Hello, World!"
+Additional notes:
 
-@You: The count is: {{count}}
-@Assistant: The count is: 42
-````
+- `editing.auto_write = true` writes the buffer after each successful request or cancellation.
+- Set `text_object = false` to disable the message text object entirely.
+- `notify.default_opts` exposes floating-window appearance (timeout, width, border, title).
+- `logging.enabled = true` starts the session with logging already active.
 
-Variables defined in the frontmatter are available to all expression templates in the file. Note that variables must be global _(do not use the `local` keyword)_.
+---
 
-#### Expression Templates
+## Importing from Claude Workbench
 
-Use `{{expression}}` syntax inside any message to evaluate Lua code:
+<details>
+<summary><strong>Quick steps</strong> – Export the TypeScript snippet in Claude, paste it into Neovim, then run <code>:Flemma import</code>.</summary>
 
-```markdown
-@You: Convert this to uppercase: {{string.upper("hello")}}
-@Assistant: The text "HELLO" is already in uppercase.
+Flemma can turn Claude Workbench exports into ready-to-send `.chat` buffers. Follow the short checklist above when you only need a reminder; the full walkthrough below explains each step and the safeguards in place.
 
-@You: Calculate: {{math.floor(3.14159 * 2)}}
-@Assistant: You've provided the number 6
+**Before you start**
+
+- `:Flemma import` delegates to the current provider. Keep Claude active (`:Flemma switch claude`) so the importer knows how to interpret the snippet.
+- Use an empty scratch buffer – `Flemma import` overwrites the entire buffer with the converted chat.
+
+**Export from Claude Workbench**
+
+1. Navigate to <https://console.anthropic.com/workbench> and open the saved prompt you want to migrate.
+2. Click **Get code** in the top-right corner, then switch the language dropdown to **TypeScript**. The importer expects the `anthropic.messages.create({ ... })` call produced by that export.
+3. Press **Copy code**; Claude copies the whole TypeScript example (including the `import Anthropic from "@anthropic-ai/sdk"` header).
+
+**Convert inside Neovim**
+
+1. In Neovim, paste the snippet into a new buffer (or delete any existing text first).
+2. Run `:Flemma import`. The command:
+   - Scans the buffer for `anthropic.messages.create(...)`.
+   - Normalises the JavaScript object syntax and decodes it as JSON.
+   - Emits a system message (if present) and rewrites every Workbench message as `@You:` / `@Assistant:` lines.
+   - Switches the buffer's filetype to `chat` so folds, highlights, and keymaps activate immediately.
+
+**Troubleshooting**
+
+- If the snippet does not contain an `anthropic.messages.create` call, the importer aborts with “No Claude API call found”.
+- JSON decoding errors write both the original snippet and the cleaned JSON to `flemma_import_debug.log` in your temporary directory (e.g. `/tmp/flemma_import_debug.log`). Open that file to spot mismatched brackets or truncated copies.
+- Nothing happens? Confirm Claude is the active provider – other providers currently do not ship an importer.
+
+</details>
+
+---
+
+## Developing and Testing
+
+The repository provides a Nix shell so everyone shares the same toolchain:
+
+```bash
+nix develop
 ```
 
-The expression environment is restricted to safe operations focused on string manipulation, basic math, and table operations. Available functions include:
+Inside the shell you gain convenience wrappers:
 
-- String operations _(upper, lower, sub, gsub, etc)_
-- Table operations _(concat, insert, remove, sort)_
-- Math functions _(abs, ceil, floor, max, min, etc)_
-- UTF-8 support
-- Essential functions _(assert, error, ipairs, pairs, etc)_
+- `flemma-fmt` – run `nixfmt`, `stylua`, and `prettier` across the repo.
+- `flemma-amp` – open the Amp CLI, preconfigured for this project.
+- `flemma-codex` – launch the OpenAI Codex helper.
 
-While you can define functions in the frontmatter, the focus is on simple templating rather than complex programming:
+Run the automated tests with:
 
-````markdown
-```lua
-function greet(name)
-    return string.format("Hello, %s!", name)
-end
+```bash
+make test
 ```
 
-@You: {{greet("Claude")}}
-@Assistant: Hello! It's nice to meet you.
-````
+The suite boots headless Neovim via `tests/minimal_init.lua` and executes Plenary+Busted specs in `tests/flemma/`, printing detailed results for each spec so you can follow along.
 
-### File References with `@file`
-
-You can embed content from local files directly into your messages using the `@./path/to/file` syntax. This feature requires the `file` command-line utility to be installed for MIME type detection.
-
-**Syntax:**
-
-- File paths must start with `./` _(current directory)_ or `../` _(parent directory)_.
-- Example: `@./images/diagram.png` or `@../documents/report.pdf`
-- File paths can be URL-encoded _(e.g., spaces as `%20`)_ and will be automatically decoded.
-- Trailing punctuation in file paths _(e.g., from ending a sentence with `@./file.txt.`)_ is ignored.
-
-If a file is not found, not readable, or its MIME type is unsupported by the provider for direct inclusion, the raw `@./path/to/file` reference will be sent as text, and a notification will be shown.
-
-Example:
-
-```markdown
-@You: OCR this image: @./screenshots/error.png and this document: @./specs/project%20brief.pdf
-```
-
-**Provider Support:**
-
-| **Claude & OpenAI**                                                                | **Vertex AI**                                                                         |
-| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Text: Plain text files <em>(e.g., `.txt`, `.md`, `.lua`)</em> are embedded as text | Text files <em>(MIME type `text/*`)</em> are embedded as text parts                   |
-| Images: JPEG, PNG, GIF, WebP                                                       | Supports generic binary files <em>(sent as `inlineData` with detected MIME type)</em> |
-| Documents: PDF                                                                     |                                                                                       |
-
-### Importing from Claude Workbench
-
-You can import conversations from the Claude Workbench _(console.anthropic.com)_:
-
-1. Open your saved prompt in the Workbench
-2. Click the "Get Code" button
-3. Change the language to TypeScript
-4. Use the "Copy Code" button to copy the code snippet
-5. Paste the code into a new buffer in Neovim
-6. Run `:Flemma import` to convert it to a .chat file
-
-The command will parse the API call and convert it into Flemma's chat format.
-
-## About
-
-Flemma aims to provide a simple, native-feeling interface for having conversations with AI models directly in Neovim. Originally built for Claude _(hence the name)_, it now supports multiple AI providers including OpenAI and Google Vertex AI. The plugin focuses on being lightweight and following Vim/Neovim conventions.
-
-## Contributing
-
-### Development Setup
-
-The project uses Nix for development environment management. This ensures all contributors have access to the same tools and versions.
-
-#### Prerequisites
-
-1. Install [Nix](https://nixos.org/download.html)
-2. Set up your OpenAI API key:
-   ```bash
-   export OPENAI_API_KEY=your_key_here
-   ```
-
-#### Development Workflow
-
-1. Enter the development environment:
-
-   ```bash
-   nix develop
-   ```
-
-2. Available development commands:
-   - `flemma-aider`: Starts an Aider session with the correct files loaded
-   - `flemma-amp`: Starts an Amp CLI session
-   - `flemma-codex`: Starts an OpenAI Codex session
-   - `flemma-fmt`: Reformats the codebase using:
-     - `nixfmt` for .nix files
-     - StyLua for Lua files
-     - Prettier for Markdown
-
-#### Quick Testing
-
-You can test changes without installing the plugin by running:
+To exercise the plugin without installing it globally:
 
 ```bash
 nvim --cmd "set runtimepath+=`pwd`" \
   -c 'lua require("flemma").setup({})' \
-  -c ':edit example.chat'
+  -c ':edit scratch.chat'
 ```
 
-This command:
-
-- Adds the current directory to Neovim's runtime path
-- Loads and configures the plugin
-- Opens a new chat file ready for testing
-
-### Development Guidelines
-
-This project represents a unique experiment in AI-driven development. From its inception to the present day, every single line of code has been written using [Aider](https://aider.chat/) and [Amp](https://ampcode.com/), demonstrating the potential of AI-assisted development in creating quality software.
-
-While I encourage contributors to explore AI-assisted development, particularly with Amp, I welcome all forms of quality contributions. The project's development guidelines are:
-
-- **Consider Using Aider or Amp**: I recommend trying [Aider](https://aider.chat/) or [Amp](https://ampcode.com/) for making changes - it's how this entire project was built
-- **Document AI Interactions**: If using AI tools, keep chat logs of significant conversations
-- **Use Formatting Tools**: Run `flemma-fmt` before committing to maintain consistent style
-- **Test Changes**: Use the quick testing command above to verify functionality
-- **Keep Focus**: Make small, focused changes in each development session
-
 > [!NOTE]
-> This project started as an experiment in pure AI-driven development, and to this day, every line of code has been written exclusively through AI tools like Aider and Amp. I continue to maintain this approach in my own development while welcoming contributions from all developers who share a commitment to quality.
-
-The goal is to demonstrate how far we can push AI-assisted development while maintaining code quality. Whether you choose to work with AI or write code directly, focus on creating clear, maintainable solutions.
+> **Almost every line of code** in Flemma has been authored through AI pair-programming tools (Aider, Amp, and Codex). Traditional contributions are welcome – just keep changes focused, documented, and tested.
 
 ---
 
-_Keywords: claude tui, claude cli, claude terminal, claude vim, claude neovim, anthropic vim, anthropic neovim, ai vim, ai neovim, llm vim, llm neovim, chat vim, chat neovim, openai vim, openai neovim, gpt vim, gpt neovim, vertex ai vim, vertex ai neovim, gemini vim, gemini neovim_
+## Troubleshooting Checklist
+
+- **Nothing happens when I send:** confirm the buffer name ends with `.chat` and the first message starts with `@You:` or `@System:`.
+- **Frontmatter errors:** notifications list the exact line and file. Fix the error and resend; Flemma will not contact the provider until the frontmatter parses cleanly.
+- **Attachments ignored:** ensure the file exists relative to the `.chat` file and that the provider supports its MIME type. Use `;type=` to override when necessary.
+- **Vertex refuses requests:** double-check `parameters.vertex.project_id` and authentication. Run `gcloud auth application-default print-access-token` manually to ensure credentials are valid.
+- **Keymaps clash:** disable built-in mappings via `keymaps.enabled = false` and register your own `:Flemma` commands.
+
+Happy prompting!

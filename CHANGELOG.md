@@ -1,10 +1,60 @@
 # Changelog
 
-## Unreleased
+## Unreleased (v25.10-1 – 2025-10-••)
+
+### Added
+
+- Introduce a single `:Flemma` command tree with sub-commands for sending, cancelling, navigation, logging, notification recall, and importing Claude Workbench snippets.
+- Add provider presets so aliases declared via `setup({ presets = { … } })` surface in `:Flemma switch` and completion menus before built-in providers.
+- Implement a reusable modeline/parser utility so positional arguments and `key=value` overrides behave consistently across commands and configuration files.
+- Add multi-language frontmatter parsers (Lua and JSON) with automatic detection and richer error messaging.
+- Expand the templating sandbox with an `include(path)` helper plus access to `vim.fn` and `vim.fs`, enabling modular prompt composition with circular-include detection.
+- Add highlight hooks for `{{ expressions }}` and `@./file` references, configurable `thinking_tag` and `thinking_block` extmark highlights, and table-based highlight attribute support.
+- Introduce a floating notification system with recall support (`:Flemma notification:recall`) and stacked window positioning to avoid overlap.
+- Add a lualine component at `require("lualine.components.flemma")` that reports the active model and OpenAI reasoning effort while refreshing automatically when providers change.
+- Bundle tooling helpers in the Nix shell, including `flemma-fmt`, `flemma-amp`, and the new `flemma-codex` OpenAI CLI wrapper.
+- Add MIME type override support for attachments via `@./file;type=mime/type` to satisfy provider-specific requirements.
 
 ### Changed
 
-- Dropped support for Neovim versions prior to 0.11; Flemma now requires Neovim 0.11 or newer.
+- Rename the project and runtime modules from `claudius.*` to `flemma.*`, refresh syntax files, and update all highlight group prefixes.
+- Raise the minimum supported Neovim version to 0.11+ to leverage the new Tree-sitter folding APIs and `vim.fs` helpers.
+- Update provider metadata with the latest model lists and pricing (Claude Sonnet/Opus 4.x, GPT‑5 family, Gemini 2.5 series) while surfacing capability flags such as reasoning, thinking budgets, and thought outputs.
+- Rework usage reporting so request notifications include the provider/model, aggregate reasoning/thinking tokens (`⊂ thoughts`), and automatically cost thought tokens.
+- Improve buffer UX by temporarily locking buffers during requests, excluding spinners from spell checking, skipping `<thinking>` sections in message text objects, and guarding fold updates.
+- Overhaul the README with end-to-end setup guidance, provider-specific walkthroughs, and detailed templating/file attachment docs aligned with the refactored plugin.
+- Move Claude Workbench import support into the Claude provider so other providers opt in via `try_import_from_buffer`.
+- Warn on invalid provider or model configuration and fall back to safe defaults instead of silently reverting to Claude.
+- Update Vertex AI binary attachments to include the filename in the `displayName` field for inline data.
+
+### Deprecated
+
+- Deprecate legacy `:Claudius*` and `:Flemma*` shim commands in favor of the consolidated `:Flemma` command tree.
+
+### Removed
+
+- Remove the previously deprecated parser, logging, notify, and provider shims that were kept for compatibility.
+
+### Breaking
+
+- Change `frontmatter.parse` to return `(language, code, content)` and require passing the language into `frontmatter.execute`, reflecting the new multi-language parser registry.
+- Change `buffers.parse_buffer` to return `(messages, frontmatter_code, context)` after introducing immutable context objects for template evaluation.
+- Refactor provider integrations to use the `Prompt` class, shared response accumulator, and provider-specific `try_import_from_buffer`; custom providers must call `base.reset(self)` and adopt the new API.
+- Restructure public modules by moving UI helpers to `flemma.ui`, buffer helpers to `flemma.core.buffers`, and exporting `flemma.config` directly as a table, so external integrations must update their `require` paths.
+- Switch HTTP fixture registration to domain-based patterns via the extracted client module, requiring custom fixtures to target hostnames instead of models.
+
+### Fixed
+
+- Surface diagnostics when attachments reference missing or unsupported files, strip trailing punctuation from MIME overrides, and fall back to extension-based detection when the `file` binary is unavailable.
+- Correct Vertex AI defaults by defaulting `location` to `global`, fixing the global endpoint hostname, and clearing cached credentials on provider switches.
+- Resolve Vertex AI authentication edge cases when service-account JSON comes from environment variables or Secret Service.
+- Ensure OpenAI requests honor `reasoning` settings by sending `reasoning_effort` and `max_completion_tokens`.
+- Prevent spinner cleanup from leaving blank lines, schedule spinner updates to avoid E565 errors, and guard fold operations to eliminate E490 fold-close failures.
+- Fix `:Flemma switch` completion to list user presets before built-in providers for predictable alias selection.
+- Prevent frontmatter from executing during UI refresh events by parsing messages without evaluation.
+- Restore `{{ }}` template expressions in chat messages, clone contexts immutably, and report accurate filenames in template errors.
+- Handle cancellation of completed requests gracefully by ignoring invalid channel errors and issuing friendly warnings.
+- Harden Claude Workbench import by logging failed snippets and prepared JSON to `flemma_import_debug.log`.
 
 ## v25.06-1 – 2025-06-02
 
