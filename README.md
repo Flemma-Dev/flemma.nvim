@@ -429,8 +429,9 @@ The project uses Nix for development environment management. This ensures all co
    ```
 
 2. Available development commands:
-   - `flemma-dev`: Starts an Aider session with the correct files loaded
+   - `flemma-aider`: Starts an Aider session with the correct files loaded
    - `flemma-amp`: Starts an Amp CLI session
+   - `flemma-codex`: Starts an OpenAI Codex session
    - `flemma-fmt`: Reformats the codebase using:
      - `nixfmt` for .nix files
      - StyLua for Lua files

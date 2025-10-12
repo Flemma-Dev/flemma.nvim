@@ -10,14 +10,29 @@ let
   ]);
   plenary-nvim = pkgs.vimPlugins.plenary-nvim;
 in
-pkgs.mkShell {
+pkgs.mkShell rec {
   name = "flemma-dev-shell";
 
   shellHook = ''
     PROJECT_ROOT=$(pwd)
     export PROJECT_ROOT
+
     PLENARY_PATH=${plenary-nvim}
     export PLENARY_PATH
+
+    if [ -z "''${OPENAI_API_KEY-}" ]; then
+      if command -v secret-tool >/dev/null 2>&1; then
+        OPENAI_API_KEY=$(secret-tool lookup service openai key api 2>/dev/null)
+        if [ -n "''${OPENAI_API_KEY-}" ]; then
+          export OPENAI_API_KEY
+          echo -e "\033[0;36m[${name}] Retrieved OpenAI credentials from system keyring.\033[0m"
+        else
+          echo -e "\033[0;33m[${name}] Warning: \$OPENAI_API_KEY was not set and not found in system keyring.\033[0m"
+        fi
+      else
+        echo -e "\033[0;33m[${name}] Warning: \$OPENAI_API_KEY was not set and libsecret tools not available.\033[0m"
+      fi
+    fi
   '';
 
   buildInputs = with pkgs; [
@@ -36,8 +51,8 @@ pkgs.mkShell {
       withPlaywright = true;
     })
 
-    (writeShellApplication {
-      name = "flemma-dev";
+    (writeShellApplication rec {
+      name = "flemma-aider";
       text = ''
         set +e
 
@@ -46,12 +61,12 @@ pkgs.mkShell {
             VERTEXAI_PROJECT=$(grep -oP '(?<=^VERTEXAI_PROJECT=).*' "$PROJECT_ROOT/.env")
             if [ -n "''${VERTEXAI_PROJECT-}" ]; then
               export VERTEXAI_PROJECT
-              echo -e "\033[0;32m[flemma-dev] Loaded Vertex project name from .env file: $VERTEXAI_PROJECT\033[0m"
+              echo -e "\033[0;36m[${name}] Loaded Vertex project name from .env file: $VERTEXAI_PROJECT\033[0m"
             else
-              echo -e "\033[0;33m[flemma-dev] Warning: \$VERTEXAI_PROJECT was not set in .env file.\033[0m"
+              echo -e "\033[0;33m[${name}] Warning: \$VERTEXAI_PROJECT was not set in .env file.\033[0m"
             fi
           else
-            echo -e "\033[0;33m[flemma-dev] Warning: \$VERTEXAI_PROJECT was not set and no .env file found.\033[0m"
+            echo -e "\033[0;33m[${name}] Warning: \$VERTEXAI_PROJECT was not set and no .env file found.\033[0m"
           fi
         fi
 
@@ -65,26 +80,12 @@ pkgs.mkShell {
               echo "$CREDENTIALS" >"$PROJECT_ROOT/.aider-credentials.json"
               GOOGLE_APPLICATION_CREDENTIALS="$PROJECT_ROOT/.aider-credentials.json"
               export GOOGLE_APPLICATION_CREDENTIALS
-              echo -e "\033[0;32m[flemma-dev] Retrieved Google credentials from system keyring.\033[0m"
+              echo -e "\033[0;36m[${name}] Retrieved Google credentials from system keyring.\033[0m"
             else
-              echo -e "\033[0;33m[flemma-dev] Warning: \$GOOGLE_APPLICATION_CREDENTIALS was not set and not found in system keyring.\033[0m"
+              echo -e "\033[0;33m[${name}] Warning: \$GOOGLE_APPLICATION_CREDENTIALS was not set and not found in system keyring.\033[0m"
             fi
           else
-            echo -e "\033[0;33m[flemma-dev] Warning: \$GOOGLE_APPLICATION_CREDENTIALS was not set and libsecret tools not available.\033[0m"
-          fi
-        fi
-
-        if [ -z "''${OPENAI_API_KEY-}" ]; then
-          if command -v secret-tool >/dev/null 2>&1; then
-            OPENAI_API_KEY=$(secret-tool lookup service openai key api 2>/dev/null)
-            if [ -n "''${OPENAI_API_KEY-}" ]; then
-              export OPENAI_API_KEY
-              echo -e "\033[0;32m[flemma-dev] Retrieved OpenAI credentials from system keyring.\033[0m"
-            else
-              echo -e "\033[0;33m[flemma-dev] Warning: \$OPENAI_API_KEY was not set and not found in system keyring.\033[0m"
-            fi
-          else
-            echo -e "\033[0;33m[flemma-dev] Warning: \$OPENAI_API_KEY was not set and libsecret tools not available.\033[0m"
+            echo -e "\033[0;33m[${name}] Warning: \$GOOGLE_APPLICATION_CREDENTIALS was not set and libsecret tools not available.\033[0m"
           fi
         fi
 
@@ -116,6 +117,11 @@ pkgs.mkShell {
     (writeShellApplication {
       name = "flemma-amp";
       text = "exec pnpm --silent --package=@sourcegraph/amp@latest dlx -- amp \"$@\"";
+    })
+
+    (writeShellApplication {
+      name = "flemma-codex";
+      text = "exec pnpm --silent --package=@openai/codex dlx -- codex \"$@\"";
     })
   ];
 }
