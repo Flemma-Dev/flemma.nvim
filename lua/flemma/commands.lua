@@ -8,6 +8,7 @@ local function setup_commands()
   local log = require("flemma.logging")
   local provider_config = require("flemma.provider.config")
   local notify_module = require("flemma.notify")
+  local modeline = require("flemma.modeline")
 
   local function toggle_logging(enable)
     if enable == nil then
@@ -30,31 +31,6 @@ local function setup_commands()
       return
     end
     vim.cmd("tabedit " .. log.get_path())
-  end
-
-  local function parse_key_value_args(args, start_index)
-    local result = {}
-    for i = start_index or 1, #args do
-      local arg = args[i]
-      local key, value = arg:match("^([%w_]+)=(.+)$")
-
-      if key and value then
-        if value == "true" then
-          value = true
-        elseif value == "false" then
-          value = false
-        elseif value == "nil" or value == "null" then
-          value = nil
-        else
-          local number_value = tonumber(value)
-          if number_value then
-            value = number_value
-          end
-        end
-        result[key] = value
-      end
-    end
-    return result
   end
 
   local function build_action_callback(value, label)
@@ -117,7 +93,7 @@ local function setup_commands()
 
   command_tree.children.send = {
     action = function(context)
-      local named_args = parse_key_value_args(context.extra_args, 1)
+      local named_args = modeline.parse_args(context.extra_args, 1)
 
       local on_request_start = build_action_callback(named_args.on_request_start, "on_request_start")
       named_args.on_request_start = nil
@@ -225,7 +201,7 @@ local function setup_commands()
         switch_opts.model = args[2]
       end
 
-      local key_value_args = parse_key_value_args(args, switch_opts.model and 3 or 2)
+      local key_value_args = modeline.parse_args(args, switch_opts.model and 3 or 2)
       for k, v in pairs(key_value_args) do
         switch_opts[k] = v
       end
