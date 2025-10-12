@@ -68,15 +68,30 @@ local function setup_commands()
 
   local function switch_complete(arglead, ctx)
     if ctx.completing_index == 1 then
-      local suggestions = {}
-      vim.list_extend(suggestions, presets.list())
+      local preset_suggestions = presets.list()
+      local provider_suggestions = {}
       for name, _ in pairs(provider_config.models) do
-        table.insert(suggestions, name)
+        table.insert(provider_suggestions, name)
       end
-      table.sort(suggestions)
-      return vim.tbl_filter(function(item)
+      table.sort(provider_suggestions)
+
+      local function matches_prefix(item)
         return vim.startswith(item, arglead)
-      end, suggestions)
+      end
+
+      local ordered = {}
+      for _, item in ipairs(preset_suggestions) do
+        if matches_prefix(item) then
+          table.insert(ordered, item)
+        end
+      end
+      for _, item in ipairs(provider_suggestions) do
+        if matches_prefix(item) then
+          table.insert(ordered, item)
+        end
+      end
+
+      return ordered
     elseif ctx.completing_index == 2 then
       local first_arg = ctx.extra_args[1]
       if not first_arg then

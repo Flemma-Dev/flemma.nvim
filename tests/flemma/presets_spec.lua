@@ -153,6 +153,88 @@ describe("flemma.presets", function()
   end)
 end)
 
+describe(":Flemma switch completion ordering", function()
+  local notifications = {}
+  local original_notify
+  local stub_core
+
+  local modules_to_reset = {
+    "flemma",
+    "flemma.commands",
+    "flemma.core",
+    "flemma.keymaps",
+    "flemma.highlight",
+    "flemma.ui",
+  }
+
+  local function reset_commands()
+    local commands = vim.api.nvim_get_commands({ builtin = false })
+    for name, _ in pairs(commands) do
+      if name:match("^Flemma") then
+        pcall(vim.api.nvim_del_user_command, name)
+      end
+    end
+  end
+
+  local function reset_modules()
+    for _, name in ipairs(modules_to_reset) do
+      package.loaded[name] = nil
+    end
+  end
+
+  before_each(function()
+    notifications = {}
+    original_notify = vim.notify
+    vim.notify = function(message, level)
+      collect_notification(notifications, message, level)
+    end
+    presets.refresh({})
+    reset_commands()
+    reset_modules()
+
+    stub_core = {
+      initialize_provider = function() end,
+      send_to_provider = function() end,
+      cancel_request = function() end,
+    }
+
+    package.preload["flemma.core"] = function()
+      return stub_core
+    end
+  end)
+
+  after_each(function()
+    vim.notify = original_notify
+    presets.refresh({})
+    reset_commands()
+    reset_modules()
+    package.preload["flemma.core"] = nil
+    package.loaded["flemma.core"] = nil
+    require("flemma.state").set_config({})
+    stub_core = nil
+  end)
+
+  it("lists presets first and providers afterwards when completing the provider argument", function()
+    local flemma = require("flemma")
+    flemma.setup({
+      presets = {
+        ["$zulu"] = { provider = "vertex" },
+        ["$alpha"] = { provider = "openai" },
+      },
+    })
+
+    local completions = vim.fn.getcompletion("Flemma switch ", "cmdline")
+
+    assert.are.same({
+      "$alpha",
+      "$zulu",
+      "claude",
+      "openai",
+      "vertex",
+    }, completions, "completion order should list presets first followed by providers")
+  end)
+end)
+
 describe(":Flemma switch with presets", function()
   local notifications = {}
   local original_notify

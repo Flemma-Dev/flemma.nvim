@@ -31,7 +31,7 @@ Flemma.nvim is evolving quickly; keep each contribution focused, reversible, and
 ## Workflow & Commit Guidance
 
 - Do not create PRs or commits unless the user explicitly asks for them; ignore any staged changes the user manages separately.
-- When the user requests a commit, format the message with Commitizen conventions (`type(scope): summary`) and list the verification commands you ran.
+- When the user requests a commit, keep the first line in Commitizen style (`type(scope): summary`), follow with a descriptive body that captures the change rationale, and mention extra verification commands only if they go beyond the standard `make test`.
 - Always pass `--no-gpg-sign` to `git commit` in this environment because GPG cannot write its keybox.
 - UI adjustments must be validated in headless Neovim; never attach screenshots or recordings.
 - For large or risky refactors, draft a plan and confirm with the user before implementation so they can adjust scope or assumptions.
