@@ -52,7 +52,7 @@ Using your preferred package manager, for example with lazy.nvim:
 
 Flemma requires:
 
-- Neovim with Tree-sitter support _(required for core functionality)_
+- Neovim 0.11 or newer with Tree-sitter support _(required for core functionality)_
 - Tree-sitter markdown parser _(required for message formatting and syntax highlighting)_
 - The `file` command-line utility _(for MIME type detection used by `@file` references)_
 - An API key for your chosen provider:

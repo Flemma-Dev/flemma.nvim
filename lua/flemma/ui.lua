@@ -123,6 +123,39 @@ end
 
 -- Define namespace for our extmarks
 local ns_id = vim.api.nvim_create_namespace("flemma")
+local spinner_ns = vim.api.nvim_create_namespace("flemma_spinner")
+
+local function apply_spinner_suppression(bufnr)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+  if line_count == 0 then
+    vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)
+    return
+  end
+
+  local spinner_line_idx0 = line_count - 1
+  local lines = vim.api.nvim_buf_get_lines(bufnr, spinner_line_idx0, line_count, false)
+  local spinner_line = lines[1]
+
+  if not spinner_line or not spinner_line:match("^@Assistant: .*Thinking%.%.%.$") then
+    vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)
+    return
+  end
+
+  vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, spinner_line_idx0, spinner_line_idx0 + 1)
+
+  local extmark_opts = {
+    end_line = spinner_line_idx0 + 1,
+    hl_group = "FlemmaAssistantSpinner",
+    priority = 300, -- Higher than Treesitter spell layer
+    spell = false,
+  }
+
+  vim.api.nvim_buf_set_extmark(bufnr, spinner_ns, spinner_line_idx0, 0, extmark_opts)
+end
 
 -- Add rulers between messages
 function M.add_rulers(bufnr, doc)
@@ -195,6 +228,7 @@ function M.start_loading_spinner(bufnr)
     end
     -- Immediately update UI after adding the thinking message
     M.update_ui(bufnr)
+    apply_spinner_suppression(bufnr)
     vim.bo[bufnr].modifiable = original_modifiable_initial
   end)
 
@@ -213,6 +247,7 @@ function M.start_loading_spinner(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, last_line - 1, last_line, false, { text })
     -- Force UI update during spinner animation
     M.update_ui(bufnr)
+    apply_spinner_suppression(bufnr)
 
     vim.bo[bufnr].modifiable = original_modifiable_timer -- Restore state after spinner update
   end, { ["repeat"] = -1 })
@@ -223,6 +258,10 @@ end
 
 -- Clean up spinner and prepare for response
 function M.cleanup_spinner(bufnr)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
   local original_modifiable = vim.bo[bufnr].modifiable
   vim.bo[bufnr].modifiable = true -- Allow plugin modifications
 
@@ -233,6 +272,7 @@ function M.cleanup_spinner(bufnr)
   end
 
   vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1) -- Clear rulers/virtual text
+  vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1) -- Remove spinner suppression
 
   local line_count = vim.api.nvim_buf_line_count(bufnr)
   if line_count == 0 then
@@ -425,6 +465,7 @@ function M.update_ui(bufnr)
 
   M.add_rulers(bufnr, doc)
   M.highlight_thinking_tags(bufnr, doc)
+  apply_spinner_suppression(bufnr)
 
   -- Clear and reapply all signs
   vim.fn.sign_unplace("flemma_ns", { buffer = bufnr })
@@ -452,6 +493,7 @@ function M.setup()
     pattern = "*",
     callback = function(ev)
       if vim.bo[ev.buf].filetype == "chat" or string.match(vim.api.nvim_buf_get_name(ev.buf), "%.chat$") then
+        M.cleanup_spinner(ev.buf)
         buffers.cleanup_buffer(ev.buf)
       end
     end,

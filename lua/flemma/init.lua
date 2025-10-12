@@ -16,6 +16,18 @@ local config = {}
 
 -- Setup function to initialize the plugin
 M.setup = function(user_opts)
+  if vim.fn.has("nvim-0.11") ~= 1 then
+    local msg = "Flemma requires Neovim 0.11 or newer. Please upgrade Neovim to use this plugin."
+    local notifier = vim.notify or function(message)
+      vim.api.nvim_err_writeln(message)
+    end
+    -- Use a scheduled notification so initialization exits gracefully
+    vim.schedule(function()
+      notifier(msg, vim.log and vim.log.levels and vim.log.levels.ERROR or nil)
+    end)
+    return
+  end
+
   -- Merge user config with defaults from the config module
   user_opts = user_opts or {}
   config = vim.tbl_deep_extend("force", plugin_config, user_opts)

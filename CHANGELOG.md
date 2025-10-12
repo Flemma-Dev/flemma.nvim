@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Dropped support for Neovim versions prior to 0.11; Flemma now requires Neovim 0.11 or newer.
+
 ## v25.06-1 – 2025-06-02
 
 ### Added

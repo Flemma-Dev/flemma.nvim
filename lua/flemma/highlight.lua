@@ -45,6 +45,8 @@ M.apply_syntax = function()
   set_highlight("FlemmaUserLuaExpression", syntax_config.highlights.user_lua_expression) -- Highlight for {{expression}} in user messages
   set_highlight("FlemmaUserFileReference", syntax_config.highlights.user_file_reference) -- Highlight for @./file in user messages
 
+  vim.api.nvim_set_hl(0, "FlemmaAssistantSpinner", { link = "FlemmaAssistant", default = true })
+
   -- Set up role marker highlights (e.g., @You:, @System:)
   -- Use existing highlight groups which are now correctly defined by set_highlight
   vim.cmd(string.format(
