@@ -9,6 +9,53 @@ Flemma turns Neovim into a first-class AI workspace. It gives `.chat` buffers st
 
 <img align="center" width="529" height="568" src="assets/frame_generic_dark.png" alt="Flemma chat buffer example" />
 
+---
+
+<details>
+<summary>
+<strong>Q: What is this and who is it for?</strong><br>
+<strong>A:</strong> Flemma is <strong>𝑛̲𝑜̲𝑡̲</strong> a coding assistant. I [@StanAngeloff] created Flemma as my AI workspace for everything else. <em>[continued]</em>
+</summary>
+
+Flemma is for the technical writers, researchers, creators, and tinkerers, for those who occasionally get in hot water and need advice. It's for everyone who wants to experiment with AI.
+
+</details>
+
+<details>
+<summary>
+<strong>Q: Why Flemma and not X or Y? <em>(where X = Claude Workbench, Y = ChatGPT, etc.)</em></strong><br>
+<strong>A:</strong> The terminal and Neovim are where I spend most of my time. I needed a plug-in that would maximize my productivity and let me experiment with multiple models. I needn't worry about <em>[continued]</em>
+</summary>
+
+…accidentally pressing <kbd>&lt;C-R></kbd> and refreshing the page midway through a prompt (or <kbd>&lt;C-W></kbd> trying to delete a word)… or Chrome sending a tab to sleep whilst I had an unsaved session… or having to worry about whether files I shared with Claude Workbench were stored on some Anthropic server indefinitely. I can be fast! I can be reckless! I can tinker! I can use my Vim keybindings and years of muscle memory!
+
+If I have an idea, it's a buffer away. Should I want to branch off and experiment, I'd duplicate the `.chat` file and go in a different direction. Is the conversation getting too long? I'd summarize a set of instructions and start with them in a new `.chat` file, then share them each time I need a fresh start. Need backups or history? I have Git for that.
+
+</details>
+
+<details>
+<summary>
+<strong>Q: What can I use Flemma for?</strong><br>
+<strong>A:</strong> Flemma is versatile - I'm personally using it mostly professionally and occasionally for personal tasks. Over the last 6+ months since Flemma was created, I've used it to <em>[continued]</em>
+</summary>
+
+- Write countless technical documents, from <abbr title="Product Requirements Document">PRDs (Product Requirements Document)</abbr>, <abbr title="Architecture Knowledge Management">AKM (Architecture Knowledge Management)</abbr>, infrastructure and architecture diagrams with Mermaid, detailed storyboards for <abbr title="Learning Management System">LMS</abbr> content, release notes, <abbr title="Functional Requirements">FR (Functional Requirements)</abbr>, etc.
+- Write detailed software design documents using Figma designs as input and the cheap OCR capabilities of Gemini Flash to annotate them, then the excellent reasoning capabilities of Gemini Pro to generate storyboards and interaction flows.
+- Record video sessions which I later transcribed using Whisper and then turned into training materials using Flemma.
+- Generate client-facing documentation from very technical input, stripping it of technical jargon and making it accessible to a wider audience.
+- Create multiple <abbr title="Statement of Work">SOW (Statement of Work)</abbr> documents for clients.
+- Keep track of evolving requirements and decisions by maintaining a long history of meeting minutes.
+- Collect large swaths of emails, meeting minutes, Slack conversations, Trello cards, and distill them into actionable tasks and project plans.
+- As a tool for other AI agents - generate prompts for Midjourney, Reve, etc. and even prompts that I'd feed to different `.chat` buffers in Flemma.
+
+There really is no limit to what you can do with Flemma - if you can write it down and reason about it, you can use Flemma to help you with it.
+
+On a personal level, I've used Flemma to generate bedtime stories with recurring characters for my kids, made small financial decisions based on collected evidence, asked for advice on how to respond to difficult situations, consulted _(usual disclaimer, blah blah)_ it for legal advice and much more.
+
+Flemma can also be a playground for coding experiments - it can help with the occasional small task. I've personally used it to generate Awk scripts, small Node.js jobs, etc. **Flemma is not a coding assistant or agent.** It's not pretending to be one and it'll never be one. You should keep your Codex, Claude Code, etc. for that purpose - and they'll do a great job at it.
+
+</details>
+
 ## What Flemma Delivers
 
 - **Multi-provider chat** – work with Claude, OpenAI, and Vertex models through one command tree while keeping prompts in plain `.chat` buffers.
