@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased (v25.10-1 – 2025-10-••)
+## Unreleased
+
+_No changes yet._
+
+## v25.10-1 – 2025-10-14
 
 ### Added
 
