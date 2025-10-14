@@ -14,7 +14,7 @@ Flemma turns Neovim into a first-class AI workspace. It gives `.chat` buffers st
 <details>
 <summary>
 <strong>Q: What is this and who is it for?</strong><br>
-<strong>A:</strong> Flemma is <strong>𝑛̲𝑜̲𝑡̲</strong> a coding assistant. I [@StanAngeloff] created Flemma as my AI workspace for everything else. <em>[continued]</em>
+<strong>A:</strong> Flemma is <strong><em>not</em></strong> a coding assistant. I [<a href="https://github.com/StanAngeloff"><img src="https://images.weserv.nl/?url=gravatar.com%2Favatar%2Fea3f8f366bb2aa0855db031884e3a8e8%3Fs%3D400%26d%3Drobohash%26r%3Dg&mask=circle" valign="middle" width="18" height="18" alt="Photo of @StanAngeloff">&thinsp;@StanAngeloff</a>] created Flemma as my AI workspace for everything else. <em>[continued]</em>
 </summary>
 
 Flemma is for the technical writers, researchers, creators, and tinkerers, for those who occasionally get in hot water and need advice. It's for everyone who wants to experiment with AI.
