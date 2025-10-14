@@ -27,7 +27,7 @@ Request.__index = Request
 --- Create a new Request instance
 ---@param opts table Options for the request
 ---@param opts.provider string Provider name (e.g., "claude", "openai")
----@param opts.model string Model name (e.g., "claude-sonnet-4-0")
+---@param opts.model string Model name (e.g., "claude-sonnet-4-5")
 ---@param opts.input_tokens number Number of input tokens
 ---@param opts.output_tokens number Number of output tokens
 ---@param opts.thoughts_tokens number|nil Number of thoughts/reasoning tokens

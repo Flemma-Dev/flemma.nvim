@@ -248,7 +248,7 @@ require("flemma").setup({
     ["$fast"] = "vertex gemini-2.5-flash temperature=0.2",
     ["$review"] = {
       provider = "claude",
-      model = "claude-sonnet-4-0",
+      model = "claude-sonnet-4-5",
       max_tokens = 6000,
     },
   },

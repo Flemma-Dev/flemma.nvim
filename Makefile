@@ -5,6 +5,7 @@ default:
 	@echo "  test - Run the test suite"
 	@echo "  lint - Run luacheck on the Lua files"
 	@echo "  check - Run lua-language-server on the Lua files"
+	@echo "  update-models - Update models and pricing using Amp (AI agent)"
 
 test:
 	nvim --headless --noplugin -u tests/minimal.vim -c "PlenaryBustedDirectory tests/flemma/ {minimal_init = 'tests/minimal_init.lua'}"
@@ -18,3 +19,6 @@ check:
 	@# On NixOS, `nvim` might be symlinked to a store path, so we use `readlink -f` to get the actual path.
 	VIMRUNTIME=$(shell dirname $(shell dirname $(shell readlink -f $(shell which nvim))))/share/nvim/runtime \
 		lua-language-server --check lua/
+
+update-models:
+	cat contrib/amp/prompt-update-models-and-pricing.txt | sed 's@{{date}}@'"$(shell date +%Y-%m-%d)"'@g' | flemma-amp
