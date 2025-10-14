@@ -1,0 +1,283 @@
+--- Safe environment and execution for Lua code in Flemma, where safe is a loose term.
+---
+--- Reserved environment fields:
+---   __filename       - Current file path for error reporting and path resolution
+---   __include_stack  - Stack of included files for circular reference detection
+---
+--- User-defined variables from frontmatter are stored as top-level keys in the environment.
+
+local M = {}
+
+local function include_delegate(relative_path, env_of_caller, eval_expression_func, create_safe_env_func)
+  if not env_of_caller.__filename then
+    error("include() called but __filename is not set in the calling environment.")
+  end
+  if not env_of_caller.__include_stack then
+    error("include() called but __include_stack is not set in the calling environment.")
+  end
+
+  local calling_file_path = env_of_caller.__filename
+  if not calling_file_path or calling_file_path == "" then
+    error("include_delegate: calling environment's __filename is missing or empty.")
+  end
+
+  local base_dir
+  -- Check if the path is absolute by comparing it with its absolute version
+  if vim.fs.abspath(calling_file_path) == calling_file_path then
+    base_dir = vim.fn.fnamemodify(calling_file_path, ":h")
+  else
+    local dir_of_calling_file = vim.fn.fnamemodify(calling_file_path, ":h")
+    if dir_of_calling_file == "" or dir_of_calling_file == "." then
+      base_dir = vim.fn.getcwd()
+    else
+      base_dir = vim.fs.normalize(vim.fn.getcwd() .. "/" .. dir_of_calling_file)
+    end
+  end
+
+  local target_path = vim.fs.normalize(base_dir .. "/" .. relative_path)
+
+  for _, path_in_stack in ipairs(env_of_caller.__include_stack) do
+    if path_in_stack == target_path then
+      error(
+        string.format(
+          "Circular include for '%s' (requested by '%s'). Include stack: %s",
+          target_path,
+          calling_file_path,
+          table.concat(env_of_caller.__include_stack, " -> ")
+        )
+      )
+    end
+  end
+
+  local file, err_msg = io.open(target_path, "r")
+  if not file then
+    error(
+      string.format(
+        "Failed to open include file '%s' (requested by '%s'): %s",
+        target_path,
+        calling_file_path,
+        (err_msg or "unknown error")
+      )
+    )
+  end
+  local content = file:read("*a")
+  file:close()
+
+  -- Create new environment for included file
+  -- Includes are isolated - they do NOT inherit user variables from the caller
+  local new_include_env = create_safe_env_func()
+  new_include_env.__filename = target_path
+  new_include_env.__include_stack = vim.deepcopy(env_of_caller.__include_stack)
+  table.insert(new_include_env.__include_stack, target_path)
+
+  -- Use unified parser to handle both {{ }} expressions and @./ file references in one pass
+  local parser = require("flemma.parser")
+  local segments = parser.parse_inline_content(content)
+
+  -- Build final output by processing each segment type
+  local result_parts = {}
+  for _, seg in ipairs(segments) do
+    if seg.kind == "text" then
+      table.insert(result_parts, seg.value)
+    elseif seg.kind == "expression" then
+      -- Evaluate {{ }} expression
+      local ok, presult = pcall(eval_expression_func, seg.code, new_include_env)
+      if not ok then
+        error(presult)
+      end
+      table.insert(result_parts, presult == nil and "" or tostring(presult))
+    elseif seg.kind == "file_reference" then
+      -- Resolve file reference relative to target_path
+      local filename = seg.path
+      if filename:match("^%.%.?/") then
+        local file_dir = vim.fn.fnamemodify(target_path, ":h")
+        filename = vim.fn.simplify(file_dir .. "/" .. filename)
+      end
+
+      -- Read the file and insert its content
+      if vim.fn.filereadable(filename) == 1 then
+        local ref_file, ref_err = io.open(filename, "r")
+        if ref_file then
+          local ref_content = ref_file:read("*a")
+          ref_file:close()
+          table.insert(result_parts, ref_content)
+        else
+          error(string.format("Failed to read referenced file '%s': %s", filename, ref_err or "unknown"))
+        end
+      else
+        error(string.format("Referenced file not found: '%s' (from %s)", filename, target_path))
+      end
+
+      -- Add trailing punctuation back if present
+      if seg.trailing_punct then
+        table.insert(result_parts, seg.trailing_punct)
+      end
+    end
+  end
+
+  return table.concat(result_parts, "")
+end
+
+local function ensure_env_capabilities(env, eval_expr_fn, create_env_fn)
+  if env.include == nil then
+    -- The 'include' function captures the 'env' it's defined in.
+    -- Errors from include_delegate will propagate up to M.eval_expression.
+    env.include = function(relative_path)
+      return include_delegate(relative_path, env, eval_expr_fn, create_env_fn)
+    end
+  end
+end
+
+-- Create a safe environment for executing Lua code
+--
+-- User-defined variables from frontmatter are merged as top-level keys by context.to_eval_env().
+-- The 'include' function is added by ensure_env_capabilities to capture the correct environment.
+-- Reserved internal fields (__filename, __include_stack) are set by context.to_eval_env().
+function M.create_safe_env()
+  return {
+    -- String manipulation
+    string = {
+      byte = string.byte,
+      char = string.char,
+      find = string.find,
+      format = string.format,
+      gmatch = string.gmatch,
+      gsub = string.gsub,
+      len = string.len,
+      lower = string.lower,
+      match = string.match,
+      rep = string.rep,
+      reverse = string.reverse,
+      sub = string.sub,
+      upper = string.upper,
+    },
+
+    -- Table operations for data structuring
+    table = {
+      concat = table.concat,
+      insert = table.insert,
+      remove = table.remove,
+      sort = table.sort,
+      unpack = table.unpack,
+    },
+
+    -- Math for calculations in templates
+    math = {
+      abs = math.abs,
+      ceil = math.ceil,
+      floor = math.floor,
+      max = math.max,
+      min = math.min,
+      random = math.random,
+      randomseed = math.randomseed,
+      round = math.floor, -- common alias
+      pi = math.pi,
+    },
+
+    -- UTF-8 support for unicode string handling
+    utf8 = utf8,
+
+    -- Neovim API functions required by include()
+    vim = {
+      fn = {
+        fnamemodify = vim.fn.fnamemodify,
+        getcwd = vim.fn.getcwd,
+      },
+      fs = {
+        normalize = vim.fs.normalize,
+        abspath = vim.fs.abspath,
+      },
+    },
+
+    -- Essential functions for template operation
+    assert = assert,
+    error = error,
+    ipairs = ipairs,
+    pairs = pairs,
+    select = select,
+    tonumber = tonumber,
+    tostring = tostring,
+    type = type,
+    print = print,
+
+    -- Useful constants
+    _VERSION = _VERSION,
+  }
+end
+
+-- Execute code in a safe environment
+function M.execute_safe(code, env_param)
+  -- Create environment and store initial keys
+  local env = env_param or M.create_safe_env() -- Use provided env or create a new one
+
+  -- Ensure 'include' is available and correctly contextualized for this environment.
+  -- M.eval_expression and M.create_safe_env are used for recursive calls from 'include'.
+  ensure_env_capabilities(env, M.eval_expression, M.create_safe_env)
+
+  local initial_keys = {}
+  for k in pairs(env) do
+    initial_keys[k] = true
+  end
+
+  local chunk, load_err = load(code, "safe_env", "t", env)
+  if not chunk then
+    error(string.format("Load error in frontmatter of '%s': %s", (env.__filename or "N/A"), load_err))
+  end
+
+  local ok, exec_err = pcall(chunk)
+  if not ok then
+    error(string.format(
+      "Execution error in frontmatter of '%s': %s",
+      (env.__filename or "N/A"),
+      exec_err -- This could be an error from include, already contextualized
+    ))
+  end
+
+  -- Collect only new keys that weren't in initial environment
+  local globals = {}
+  for k, v in pairs(env) do
+    if not initial_keys[k] then
+      globals[k] = v
+    end
+  end
+
+  return globals
+end
+
+-- Evaluate an expression in a given environment
+function M.eval_expression(expr, env)
+  -- Ensure 'env' is not nil, though callers should guarantee this.
+  if not env then
+    error("eval.eval_expression called with a nil environment.")
+  end
+
+  -- Ensure 'include' is available and correctly contextualized for this environment.
+  ensure_env_capabilities(env, M.eval_expression, M.create_safe_env)
+
+  -- Wrap expression in return statement if it's not already a statement
+  if not expr:match("^%s*return%s+") then
+    expr = "return " .. expr
+  end
+
+  local chunk, parse_err = load(expr, "expression", "t", env)
+  if not chunk then
+    error(string.format("Parse error in '%s' for expression '{{%s}}': %s", (env.__filename or "N/A"), expr, parse_err))
+  end
+
+  local ok, eval_result = pcall(chunk)
+  if not ok then
+    -- eval_result here could be a simple Lua error or a contextualized error from include_delegate
+    error(
+      string.format(
+        "Evaluation error in '%s' for expression '{{%s}}': %s",
+        (env.__filename or "N/A"),
+        expr,
+        eval_result
+      )
+    )
+  end
+
+  return eval_result
+end
+
+return M
