@@ -420,6 +420,9 @@ function M.setup_folding()
   vim.wo.foldlevel = 99
 end
 
+-- Store original updatetime per-session (global for all buffers)
+local original_updatetime = nil
+
 -- Set up chat filetype autocmds
 function M.setup_chat_filetype_autocmds()
   -- Handle .chat file detection
@@ -452,6 +455,36 @@ function M.setup_chat_filetype_autocmds()
       end
     end,
   })
+
+  -- Handle updatetime management for chat buffers
+  if config.editing.manage_updatetime then
+    vim.api.nvim_create_autocmd("BufEnter", {
+      pattern = "*.chat",
+      callback = function()
+        if original_updatetime == nil then
+          original_updatetime = vim.o.updatetime
+        end
+        vim.o.updatetime = 100
+      end,
+    })
+
+    vim.api.nvim_create_autocmd("BufLeave", {
+      pattern = "*.chat",
+      callback = function()
+        local next_bufnr = vim.fn.bufnr("#")
+        local is_next_chat = false
+        if next_bufnr ~= -1 and vim.api.nvim_buf_is_valid(next_bufnr) then
+          local next_bufname = vim.api.nvim_buf_get_name(next_bufnr)
+          is_next_chat = vim.bo[next_bufnr].filetype == "chat" or next_bufname:match("%.chat$")
+        end
+
+        if not is_next_chat and original_updatetime ~= nil then
+          vim.o.updatetime = original_updatetime
+          original_updatetime = nil
+        end
+      end,
+    })
+  end
 end
 
 -- Helper function to force UI update (rulers and signs)

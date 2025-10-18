@@ -57,6 +57,7 @@ return {
   editing = {
     disable_textwidth = true, -- Whether to disable textwidth in chat buffers
     auto_write = false, -- Whether to automatically write the buffer after changes
+    manage_updatetime = true, -- Whether to set updatetime to 100 in chat buffers and restore original value when leaving
   },
   logging = {
     enabled = false, -- Logging disabled by default
