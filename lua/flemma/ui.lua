@@ -165,12 +165,15 @@ function M.add_rulers(bufnr, doc)
   for i, msg in ipairs(doc.messages) do
     -- Add a ruler before each message after the first, and before the first if frontmatter exists
     if i > 1 or (i == 1 and doc.frontmatter ~= nil) then
-      -- Create virtual line with ruler using the FlemmaRuler highlight group
-      local ruler_text = string.rep(state.get_config().ruler.char, math.floor(vim.api.nvim_win_get_width(0) * 1))
-      vim.api.nvim_buf_set_extmark(bufnr, ns_id, msg.position.start_line - 1, 0, {
-        virt_lines = { { { ruler_text, "FlemmaRuler" } } }, -- Use defined group
-        virt_lines_above = true,
-      })
+      local line_idx = msg.position.start_line - 1
+      if line_idx >= 0 and line_idx < vim.api.nvim_buf_line_count(bufnr) then
+        -- Create virtual line with ruler using the FlemmaRuler highlight group
+        local ruler_text = string.rep(state.get_config().ruler.char, math.floor(vim.api.nvim_win_get_width(0) * 1))
+        vim.api.nvim_buf_set_extmark(bufnr, ns_id, line_idx, 0, {
+          virt_lines = { { { ruler_text, "FlemmaRuler" } } }, -- Use defined group
+          virt_lines_above = true,
+        })
+      end
     end
   end
 end
