@@ -13,6 +13,167 @@ local MAX_CONTENT_PREVIEW_LENGTH = 72
 local CONTENT_PREVIEW_NEWLINE_CHAR = "⤶"
 local CONTENT_PREVIEW_TRUNCATION_MARKER = "..."
 
+-- ============================================================================
+-- SMART SCROLLING AND CURSOR POSITIONING
+-- ============================================================================
+--
+-- OVERVIEW:
+-- This section implements smart viewport management to show new content without
+-- hijacking the user's navigation. Two main scenarios:
+--
+-- 1. @Assistant: Thinking... (SYNCHRONOUS - user just pressed send)
+--    - ALWAYS reveal the line (direct user action expects immediate feedback)
+--
+-- 2. @You: prompt (ASYNCHRONOUS - HTTP request completed)
+--    - Only reveal IF user was at bottom AND hasn't navigated away
+--    - Exception: If insert mode will be restored, ALWAYS reveal
+--
+-- CORE REQUIREMENTS:
+--
+-- R1: User at bottom when sending → Move cursor to @You and reveal
+-- R2: User not at bottom when sending → Do NOT move (respect their view)
+-- R3: User navigates away during request → Do NOT hijack
+-- R4: User in insert mode → ALWAYS move (they're continuing to type)
+-- R5: @Assistant always reveals (direct user action)
+--
+-- NAVIGATION DETECTION:
+-- - cursor_moved_up: cursor is now higher than when captured (user scrolled up)
+-- - top_line_changed: viewport scrolled but only checked if was_at_bottom
+--   (because top_line can change naturally from window resize or adding lines)
+-- - Exemption: will_restore_insert overrides navigation detection
+--
+-- CURSOR PRESERVATION:
+-- - For @You: We explicitly position cursor after the colon
+-- - For @Assistant: Cursor is NOT preserved (scrolling side-effect is OK)
+-- - Scrolling with normal! G and normal! Nk moves cursor as side-effect
+-- - We only restore cursor position if move_cursor=true (the @You case)
+--
+-- ============================================================================
+
+-- Helper: Calculate column position after "@You: " colon and trailing spaces
+-- Returns 0-based column index suitable for nvim_win_set_cursor
+local function after_colon_col(bufnr, lnum1)
+  local line = (vim.api.nvim_buf_get_lines(bufnr, lnum1 - 1, lnum1, false)[1] or "")
+  local s, e = line:find(":%s*")
+  if not e then
+    return nil
+  end
+  local col = e
+  while line:sub(col + 1, col + 1) == " " do
+    col = col + 1
+  end
+  return col
+end
+
+-- Core function: Reveal a target line with smart viewport and cursor management
+--
+-- opts:
+--   viewport_state: {cursor_line, top_line, was_at_bottom, will_restore_insert}
+--                   If nil, always reveal (no navigation checks)
+--   require_was_viewing_bottom: Only reveal if user was viewing bottom area
+--   move_cursor: Position cursor at target_line (and restore after scroll)
+--   compute_col: Function to calculate column position (e.g., after_colon_col)
+--   schedule: Defer execution with vim.schedule (for async operations)
+local function reveal_line(bufnr, target_line, opts)
+  opts = opts or {}
+  local function do_reveal()
+    local windows = vim.fn.win_findbuf(bufnr)
+    if #windows == 0 then
+      return
+    end
+
+    for _, win in ipairs(windows) do
+      local current_cursor_line = vim.api.nvim_win_get_cursor(win)[1]
+      local current_top_line = vim.fn.line("w0", win)
+
+      -- STEP 1: Check if user navigated away (only if we have viewport_state)
+      if opts.viewport_state then
+        -- User scrolled UP from captured position
+        local cursor_moved_up = current_cursor_line < opts.viewport_state.cursor_line
+
+        -- Viewport scrolled (only checked if user was at bottom when captured,
+        -- because top_line can change from window resize or adding lines)
+        local was_at_bottom = opts.viewport_state.was_at_bottom
+        local top_line_changed = current_top_line ~= opts.viewport_state.top_line
+
+        local navigated = cursor_moved_up or (was_at_bottom and top_line_changed)
+        local will_restore_insert = opts.viewport_state.will_restore_insert
+
+        -- If user navigated away, don't hijack (unless insert mode will restore)
+        if navigated and not will_restore_insert then
+          return
+        end
+      end
+
+      -- STEP 2: Gather viewport information
+      local win_height = vim.api.nvim_win_get_height(win)
+      local scrolloff = vim.api.nvim_get_option_value("scrolloff", { win = win })
+      local top_line = vim.fn.line("w0", win)
+      local bottom_line = vim.fn.line("w$", win)
+
+      -- User is "at bottom" if cursor is near the last visible line (accounting for scrolloff)
+      local was_viewing_bottom = current_cursor_line >= bottom_line - scrolloff - 2
+
+      local will_restore_insert = opts.viewport_state and opts.viewport_state.will_restore_insert
+      local was_at_bottom_when_captured = opts.viewport_state and opts.viewport_state.was_at_bottom
+
+      -- STEP 3: Check if we should reveal based on viewing position
+      -- Only proceed if: viewing bottom OR was at bottom when captured OR insert mode
+      if
+        opts.require_was_viewing_bottom
+        and not was_viewing_bottom
+        and not will_restore_insert
+        and not was_at_bottom_when_captured
+      then
+        return
+      end
+
+      -- STEP 4: Position cursor at target line (for @You case)
+      -- Only move if: was at bottom OR insert mode will restore
+      if opts.move_cursor and (was_at_bottom_when_captured or will_restore_insert) then
+        local col = opts.compute_col and opts.compute_col(bufnr, target_line)
+        if col ~= nil then
+          vim.api.nvim_win_set_cursor(win, { target_line, col })
+        else
+          vim.api.nvim_win_set_cursor(win, { target_line, 0 })
+        end
+      end
+
+      -- STEP 5: Scroll viewport to reveal target line if it's offscreen
+      if target_line < top_line or target_line > bottom_line then
+        -- Save cursor position if we moved it in STEP 4 (to restore after scroll)
+        -- Scrolling with "normal! G" and "normal! Nk" moves cursor as side-effect
+        local cursor_to_restore = nil
+        if opts.move_cursor then
+          cursor_to_restore = vim.api.nvim_win_get_cursor(win)
+        end
+
+        -- Scroll to bottom with appropriate padding
+        vim.api.nvim_win_call(win, function()
+          local lines_from_bottom = math.min(scrolloff + 2, math.floor(win_height / 3))
+          vim.cmd("normal! G") -- Go to end of buffer
+          if lines_from_bottom > 0 then
+            vim.cmd("normal! " .. lines_from_bottom .. "k") -- Move up N lines
+          end
+          vim.cmd("redraw")
+        end)
+
+        -- Restore cursor position after scroll (only for @You case)
+        if cursor_to_restore then
+          vim.api.nvim_win_set_cursor(win, cursor_to_restore)
+        end
+      end
+    end
+  end
+
+  -- Schedule execution for async operations (when viewport_state is provided)
+  if opts.schedule ~= nil and opts.schedule or (opts.schedule == nil and opts.viewport_state) then
+    vim.schedule(do_reveal)
+  else
+    do_reveal()
+  end
+end
+
 -- Helper function to generate content preview for folds
 local function get_fold_content_preview(fold_start_lnum, fold_end_lnum)
   local content_lines = {}
@@ -221,6 +382,9 @@ function M.start_loading_spinner(bufnr)
     -- Clear any existing virtual text
     vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
+    -- Capture viewport state before adding line
+    local viewport_state = M.capture_viewport_state(bufnr, {})
+
     -- Check if we need to add a blank line
     vim.bo[bufnr].modifiable = true
     local buffer_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
@@ -233,6 +397,9 @@ function M.start_loading_spinner(bufnr)
     M.update_ui(bufnr)
     apply_spinner_suppression(bufnr)
     vim.bo[bufnr].modifiable = original_modifiable_initial
+
+    local new_line_count = vim.api.nvim_buf_line_count(bufnr)
+    M.reveal_thinking(bufnr, new_line_count, viewport_state)
   end)
 
   local timer = vim.fn.timer_start(100, function()
@@ -510,6 +677,63 @@ function M.update_ui(bufnr)
   for _, msg in ipairs(doc.messages) do
     M.place_signs(bufnr, msg.position.start_line, msg.position.end_line, msg.role)
   end
+end
+
+-- ============================================================================
+-- PUBLIC API FOR SMART SCROLLING
+-- ============================================================================
+
+-- Capture current viewport state before an async operation
+-- Used to detect if user navigated away during HTTP request
+--
+-- Returns: {cursor_line, top_line, was_at_bottom, will_restore_insert}
+function M.capture_viewport_state(bufnr, opts)
+  opts = opts or {}
+  if vim.api.nvim_get_current_buf() ~= bufnr then
+    return nil
+  end
+
+  local win = vim.api.nvim_get_current_win()
+  local cursor_line = vim.api.nvim_win_get_cursor(win)[1]
+  local scrolloff = vim.api.nvim_get_option_value("scrolloff", { win = win })
+  local bottom_line = vim.fn.line("w$", win)
+  local was_at_bottom = cursor_line >= bottom_line - scrolloff - 2
+
+  return {
+    cursor_line = cursor_line,
+    top_line = vim.fn.line("w0", win),
+    will_restore_insert = opts.will_restore_insert or false,
+    was_at_bottom = was_at_bottom,
+  }
+end
+
+-- Reveal @You prompt after async request completes
+-- Respects user navigation - only reveals if they haven't scrolled away
+-- Positions cursor after the colon for immediate typing
+--
+-- Usage: After HTTP request completes and @You line is added
+function M.scroll_to_reveal_you_prompt(bufnr, target_line, viewport_state)
+  reveal_line(bufnr, target_line, {
+    viewport_state = viewport_state, -- Check if user navigated away
+    require_was_viewing_bottom = true, -- Only reveal if was at bottom
+    move_cursor = true, -- Position cursor at @You
+    compute_col = after_colon_col, -- Place cursor after colon
+    schedule = true, -- Async (defer to next tick)
+  })
+end
+
+-- Reveal @Assistant: Thinking... after user presses send
+-- ALWAYS reveals (direct user action expects immediate feedback)
+-- Does NOT position cursor (scroll side-effect is acceptable)
+--
+-- Usage: Immediately after user presses <C-]> to send
+function M.reveal_thinking(bufnr, target_line, viewport_state)
+  reveal_line(bufnr, target_line, {
+    viewport_state = nil, -- No navigation checks (always reveal)
+    require_was_viewing_bottom = false, -- Reveal regardless of position
+    move_cursor = false, -- Don't position cursor
+    schedule = false, -- Sync (immediate)
+  })
 end
 
 -- Set up UI-related autocmds and initialization
