@@ -232,6 +232,9 @@ function M.start_loading_spinner(bufnr)
     -- Immediately update UI after adding the thinking message
     M.update_ui(bufnr)
     apply_spinner_suppression(bufnr)
+    -- Move to bottom and center the line so user sees the message
+    M.move_to_bottom()
+    M.center_cursor()
     vim.bo[bufnr].modifiable = original_modifiable_initial
   end)
 
@@ -509,6 +512,23 @@ function M.update_ui(bufnr)
   -- Place signs for each message based on AST positions
   for _, msg in ipairs(doc.messages) do
     M.place_signs(bufnr, msg.position.start_line, msg.position.end_line, msg.role)
+  end
+end
+
+-- Move cursor to end of buffer
+function M.move_to_bottom()
+  vim.cmd("normal! G")
+end
+
+-- Center cursor line in window
+function M.center_cursor()
+  vim.cmd("normal! zz")
+end
+
+-- Move cursor to specific position
+function M.set_cursor(line, col)
+  if vim.api.nvim_get_current_buf() then
+    vim.api.nvim_win_set_cursor(0, { line, col })
   end
 end
 

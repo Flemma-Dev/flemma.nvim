@@ -590,9 +590,10 @@ function M.send_to_provider(opts)
               col = col + 1
             end
             if vim.api.nvim_get_current_buf() == bufnr then
-              vim.api.nvim_win_set_cursor(0, { new_prompt_line_num + 1, col - 1 })
+              ui.set_cursor(new_prompt_line_num + 1, col - 1)
             end
           end
+          ui.move_to_bottom()
 
           buffers.auto_write_buffer(bufnr)
           ui.update_ui(bufnr)
