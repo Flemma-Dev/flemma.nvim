@@ -561,11 +561,6 @@ function M.send_to_provider(opts)
             ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
           end
 
-          -- Capture viewport state before adding @You
-          local viewport_state = ui.capture_viewport_state(bufnr, {
-            will_restore_insert = opts.on_request_complete ~= nil,
-          })
-
           -- Add new "@You:" prompt for the next message (buffer is already modifiable)
           local last_line_idx = vim.api.nvim_buf_line_count(bufnr)
           local last_line_content = ""
@@ -586,8 +581,17 @@ function M.send_to_provider(opts)
           vim.api.nvim_buf_set_lines(bufnr, last_line_idx, last_line_idx, false, lines_to_insert)
 
           local new_prompt_line_num = last_line_idx + cursor_line_offset - 1
-          if vim.api.nvim_get_current_buf() == bufnr then
-            ui.scroll_to_reveal_you_prompt(bufnr, new_prompt_line_num + 1, viewport_state)
+          local new_prompt_lines =
+            vim.api.nvim_buf_get_lines(bufnr, new_prompt_line_num, new_prompt_line_num + 1, false)
+          if #new_prompt_lines > 0 then
+            local line_text = new_prompt_lines[1]
+            local col = line_text:find(":%s*") + 1
+            while line_text:sub(col, col) == " " do
+              col = col + 1
+            end
+            if vim.api.nvim_get_current_buf() == bufnr then
+              vim.api.nvim_win_set_cursor(0, { new_prompt_line_num + 1, col - 1 })
+            end
           end
 
           buffers.auto_write_buffer(bufnr)
