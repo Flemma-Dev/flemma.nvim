@@ -230,7 +230,7 @@ describe("UI Folding", function()
 
       local lines = {
         "```lua",
-        "model = 'claude-3-5-sonnet-20241022'",
+        "model = 'claude-sonnet-4-5'",
         "```",
         "@Assistant: response",
         "<thinking>",

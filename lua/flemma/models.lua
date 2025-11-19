@@ -22,6 +22,20 @@ return {
           },
         },
 
+        -- Claude Haiku 4.5
+        ["claude-haiku-4-5"] = {
+          pricing = {
+            input = 1.0,
+            output = 5.0,
+          },
+        },
+        ["claude-haiku-4-5-20251001"] = {
+          pricing = {
+            input = 1.0,
+            output = 5.0,
+          },
+        },
+
         -- Claude Opus 4.1 (as of Aug 2025)
         ["claude-opus-4-1"] = {
           pricing = {
@@ -64,7 +78,7 @@ return {
           },
         },
 
-        -- Claude Sonnet 3.7
+        -- Claude Sonnet 3.7 (deprecated, retiring Feb 2026)
         ["claude-3-7-sonnet-latest"] = {
           pricing = {
             input = 3.0,
@@ -105,6 +119,14 @@ return {
     vertex = {
       default = "gemini-2.5-pro",
       models = {
+        -- Gemini 3 Pro Preview
+        ["gemini-3-pro-preview"] = {
+          pricing = {
+            input = 2.0,
+            output = 12.0,
+          },
+        },
+
         -- Gemini 2.5 Pro models
         ["gemini-2.5-pro"] = {
           pricing = {
@@ -162,6 +184,36 @@ return {
     openai = {
       default = "gpt-5",
       models = {
+        -- GPT-5.1 models
+        ["gpt-5.1"] = {
+          pricing = {
+            input = 1.25,
+            output = 10.0,
+          },
+          supports_reasoning_effort = true,
+        },
+        ["gpt-5.1-chat-latest"] = {
+          pricing = {
+            input = 1.25,
+            output = 10.0,
+          },
+          supports_reasoning_effort = true,
+        },
+        ["gpt-5.1-codex"] = {
+          pricing = {
+            input = 1.25,
+            output = 10.0,
+          },
+          supports_reasoning_effort = true,
+        },
+        ["gpt-5.1-codex-mini"] = {
+          pricing = {
+            input = 0.25,
+            output = 2.0,
+          },
+          supports_reasoning_effort = true,
+        },
+
         -- GPT-5 models
         ["gpt-5"] = {
           pricing = {

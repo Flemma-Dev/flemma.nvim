@@ -9,7 +9,7 @@ describe("Claude Provider", function()
 
   describe("try_import_from_buffer", function()
     it("should import Claude Workbench JavaScript code to chat format", function()
-      local provider = claude.new({ model = "claude-3-5-sonnet" })
+      local provider = claude.new({ model = "claude-sonnet-4-5" })
 
       -- JavaScript code from Claude Workbench
       local input_lines = {
@@ -71,7 +71,7 @@ describe("Claude Provider", function()
     end)
 
     it("should return nil when no Claude API call is found", function()
-      local provider = claude.new({ model = "claude-3-5-sonnet" })
+      local provider = claude.new({ model = "claude-sonnet-4-5" })
 
       local input_lines = {
         'console.log("Hello World");',
@@ -84,11 +84,11 @@ describe("Claude Provider", function()
     end)
 
     it("should handle malformed JSON gracefully", function()
-      local provider = claude.new({ model = "claude-3-5-sonnet" })
+      local provider = claude.new({ model = "claude-sonnet-4-5" })
 
       local input_lines = {
         "const msg = await anthropic.messages.create({",
-        '  model: "claude-3-5-sonnet",',
+        '  model: "claude-sonnet-4-5",',
         "  malformed: json content here",
         "  messages: [",
         "});",
@@ -100,11 +100,11 @@ describe("Claude Provider", function()
     end)
 
     it("should handle messages with string content format", function()
-      local provider = claude.new({ model = "claude-3-5-sonnet" })
+      local provider = claude.new({ model = "claude-sonnet-4-5" })
 
       local input_lines = {
         "const msg = await anthropic.messages.create({",
-        '  model: "claude-3-5-sonnet",',
+        '  model: "claude-sonnet-4-5",',
         '  system: "You are helpful",',
         "  messages: [",
         "    {",
