@@ -36,6 +36,20 @@ return {
           },
         },
 
+        -- Claude Opus 4.5
+        ["claude-opus-4-5"] = {
+          pricing = {
+            input = 5.0,
+            output = 25.0,
+          },
+        },
+        ["claude-opus-4-5-20251101"] = {
+          pricing = {
+            input = 5.0,
+            output = 25.0,
+          },
+        },
+
         -- Claude Opus 4.1 (as of Aug 2025)
         ["claude-opus-4-1"] = {
           pricing = {
@@ -353,7 +367,7 @@ return {
             output = 0.60,
           },
         },
-        ["chatgpt-4o-latest"] = {
+        ["chatgpt-4o-latest"] = { -- (deprecated, retiring Feb 2026)
           pricing = {
             input = 5.0,
             output = 15.0,
@@ -460,7 +474,7 @@ return {
             output = 12.0,
           },
         },
-        ["codex-mini-latest"] = {
+        ["codex-mini-latest"] = { -- (deprecated, retiring Jan 2026)
           pricing = {
             input = 1.50,
             output = 6.0,

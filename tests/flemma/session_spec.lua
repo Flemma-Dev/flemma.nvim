@@ -10,7 +10,7 @@ describe("flemma.session", function()
     it("should create a request with all required fields", function()
       local request = session_module.Request.new({
         provider = "claude",
-        model = "claude-sonnet-4-0",
+        model = "claude-sonnet-4-5",
         input_tokens = 100,
         output_tokens = 50,
         thoughts_tokens = 10,
@@ -20,7 +20,7 @@ describe("flemma.session", function()
       })
 
       assert.are.equal("claude", request.provider)
-      assert.are.equal("claude-sonnet-4-0", request.model)
+      assert.are.equal("claude-sonnet-4-5", request.model)
       assert.are.equal(100, request.input_tokens)
       assert.are.equal(50, request.output_tokens)
       assert.are.equal(10, request.thoughts_tokens)
@@ -80,7 +80,7 @@ describe("flemma.session", function()
     it("should get total output tokens including thoughts", function()
       local request = session_module.Request.new({
         provider = "claude",
-        model = "claude-sonnet-4-0",
+        model = "claude-sonnet-4-5",
         input_tokens = 100,
         output_tokens = 200,
         thoughts_tokens = 50,
@@ -94,7 +94,7 @@ describe("flemma.session", function()
     it("should handle zero thoughts tokens", function()
       local request = session_module.Request.new({
         provider = "claude",
-        model = "claude-sonnet-4-0",
+        model = "claude-sonnet-4-5",
         input_tokens = 100,
         output_tokens = 200,
         thoughts_tokens = 0,
@@ -111,7 +111,7 @@ describe("flemma.session", function()
     it("should store bufnr for unnamed buffers", function()
       local request = session_module.Request.new({
         provider = "claude",
-        model = "claude-sonnet-4-0",
+        model = "claude-sonnet-4-5",
         input_tokens = 100,
         output_tokens = 50,
         input_price = 3.00,
@@ -135,7 +135,7 @@ describe("flemma.session", function()
 
       session:add_request({
         provider = "claude",
-        model = "claude-sonnet-4-0",
+        model = "claude-sonnet-4-5",
         input_tokens = 100,
         output_tokens = 50,
         input_price = 3.00,
@@ -150,7 +150,7 @@ describe("flemma.session", function()
 
       session:add_request({
         provider = "claude",
-        model = "claude-sonnet-4-0",
+        model = "claude-sonnet-4-5",
         input_tokens = 100,
         output_tokens = 50,
         input_price = 3.00,
@@ -159,7 +159,7 @@ describe("flemma.session", function()
 
       session:add_request({
         provider = "claude",
-        model = "claude-sonnet-4-0",
+        model = "claude-sonnet-4-5",
         input_tokens = 200,
         output_tokens = 75,
         input_price = 3.00,
@@ -227,7 +227,7 @@ describe("flemma.session", function()
 
       session:add_request({
         provider = "claude",
-        model = "claude-sonnet-4-0",
+        model = "claude-sonnet-4-5",
         input_tokens = 1000000,
         output_tokens = 500000,
         thoughts_tokens = 0,
@@ -237,7 +237,7 @@ describe("flemma.session", function()
 
       session:add_request({
         provider = "claude",
-        model = "claude-sonnet-4-0",
+        model = "claude-sonnet-4-5",
         input_tokens = 2000000,
         output_tokens = 1000000,
         thoughts_tokens = 0,
@@ -258,7 +258,7 @@ describe("flemma.session", function()
       -- First request with Claude pricing
       session:add_request({
         provider = "claude",
-        model = "claude-sonnet-4-0",
+        model = "claude-sonnet-4-5",
         input_tokens = 1000000,
         output_tokens = 1000000,
         thoughts_tokens = 0,
@@ -289,7 +289,7 @@ describe("flemma.session", function()
 
       session:add_request({
         provider = "claude",
-        model = "claude-sonnet-4-0",
+        model = "claude-sonnet-4-5",
         input_tokens = 100,
         output_tokens = 50,
         input_price = 3.00,
@@ -320,7 +320,7 @@ describe("flemma.session", function()
 
       session:add_request({
         provider = "claude",
-        model = "claude-sonnet-4-0",
+        model = "claude-sonnet-4-5",
         input_tokens = 100,
         output_tokens = 50,
         input_price = 3.00,

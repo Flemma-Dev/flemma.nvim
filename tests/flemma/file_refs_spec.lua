@@ -426,7 +426,7 @@ describe("File References and Path Parsing", function()
       it("formats PNG images correctly", function()
         -- Setup Claude provider
         local claude = require("flemma.provider.providers.claude")
-        local provider = claude.new({ model = "claude-sonnet-4-0", max_tokens = 1000 })
+        local provider = claude.new({ model = "claude-sonnet-4-5", max_tokens = 1000 })
 
         -- Mock file operations
         local filereadable_stub = create_stub(vim.fn, "filereadable")
@@ -491,7 +491,7 @@ describe("File References and Path Parsing", function()
       it("formats PDF documents correctly", function()
         -- Setup Claude provider
         local claude = require("flemma.provider.providers.claude")
-        local provider = claude.new({ model = "claude-sonnet-4-0", max_tokens = 1000 })
+        local provider = claude.new({ model = "claude-sonnet-4-5", max_tokens = 1000 })
 
         -- Mock file operations
         local filereadable_stub = create_stub(vim.fn, "filereadable")
@@ -545,7 +545,7 @@ describe("File References and Path Parsing", function()
       it("formats text files correctly", function()
         -- Setup Claude provider
         local claude = require("flemma.provider.providers.claude")
-        local provider = claude.new({ model = "claude-sonnet-4-0", max_tokens = 1000 })
+        local provider = claude.new({ model = "claude-sonnet-4-5", max_tokens = 1000 })
 
         -- Mock file operations
         local filereadable_stub = create_stub(vim.fn, "filereadable")
