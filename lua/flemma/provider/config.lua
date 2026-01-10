@@ -33,7 +33,7 @@ end
 -- Get the default model for a provider
 function M.get_model(provider_name)
   local provider = models_data.providers[provider_name]
-  return provider and provider.default or models_data.providers.claude.default
+  return provider and provider.default or models_data.providers.anthropic.default
 end
 
 -- Check if a model belongs to a specific provider

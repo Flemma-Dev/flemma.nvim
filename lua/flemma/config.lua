@@ -34,7 +34,7 @@ return {
   pricing = {
     enabled = true, -- Whether to show pricing information in notifications
   },
-  provider = "claude", -- Default provider: "claude", "openai", or "vertex"
+  provider = "anthropic", -- Default provider: "anthropic", "openai", or "vertex"
   model = nil, -- Will use provider-specific default if nil
   parameters = {
     max_tokens = 4000, -- Default max tokens for all providers
@@ -50,7 +50,7 @@ return {
       reasoning = nil, -- Optional. "low", "medium", "high". Controls reasoning effort.
     },
     -- Add provider-specific parameter sections here if needed in the future
-    -- e.g., claude = {}
+    -- e.g., anthropic = {}
   },
   presets = {}, -- Named presets for :Flemma switch (use ["$name"] key syntax)
   text_object = "m", -- Default text object key, set to false to disable

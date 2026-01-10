@@ -30,8 +30,8 @@ describe(":FlemmaSend command", function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("formats the request body correctly for the default Claude provider", function()
-    -- Arrange: The default provider is Claude. We just need to set up the buffer.
+  it("formats the request body correctly for the default Anthropic provider", function()
+    -- Arrange: The default provider is Anthropic. We just need to set up the buffer.
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@System: Be brief.", "@You: Hello" })
@@ -39,18 +39,18 @@ describe(":FlemmaSend command", function()
     -- Arrange: Register a dummy fixture to prevent actual network calls.
     -- The content of the fixture DOES matter, as it's processed by the provider.
     local config = state.get_config()
-    local default_claude_model = provider_config.get_model("claude")
-    client.register_fixture("api%.anthropic%.com", "tests/fixtures/claude_hello_success_stream.txt")
+    local default_anthropic_model = provider_config.get_model("anthropic")
+    client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
 
     -- Act: Execute the FlemmaSend command
     vim.cmd("FlemmaSend")
 
-    -- Assert: Check that the captured request body matches the expected format for Claude
+    -- Assert: Check that the captured request body matches the expected format for Anthropic
     local captured_request_body = core._get_last_request_body()
     assert.is_not_nil(captured_request_body, "request_body was not captured")
 
     local expected_body = {
-      model = default_claude_model,
+      model = default_anthropic_model,
       messages = {
         { role = "user", content = { { type = "text", text = "Hello" } } },
       },
@@ -194,7 +194,7 @@ describe(":FlemmaSend command", function()
   end)
 
   it("errors and does not switch when an unknown provider is requested", function()
-    -- Arrange: Ensure we start from a valid, known provider (default is Claude)
+    -- Arrange: Ensure we start from a valid, known provider (default is Anthropic)
     local original_provider = flemma.get_current_provider_name()
     assert.is_not_nil(original_provider, "Original provider should be set")
 

@@ -422,11 +422,11 @@ describe("File References and Path Parsing", function()
   end)
 
   describe("Provider-specific formatting", function()
-    describe("Claude Provider", function()
+    describe("Anthropic Provider", function()
       it("formats PNG images correctly", function()
-        -- Setup Claude provider
-        local claude = require("flemma.provider.providers.claude")
-        local provider = claude.new({ model = "claude-sonnet-4-5", max_tokens = 1000 })
+        -- Setup Anthropic provider
+        local anthropic = require("flemma.provider.providers.anthropic")
+        local provider = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 1000 })
 
         -- Mock file operations
         local filereadable_stub = create_stub(vim.fn, "filereadable")
@@ -489,9 +489,9 @@ describe("File References and Path Parsing", function()
       end)
 
       it("formats PDF documents correctly", function()
-        -- Setup Claude provider
-        local claude = require("flemma.provider.providers.claude")
-        local provider = claude.new({ model = "claude-sonnet-4-5", max_tokens = 1000 })
+        -- Setup Anthropic provider
+        local anthropic = require("flemma.provider.providers.anthropic")
+        local provider = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 1000 })
 
         -- Mock file operations
         local filereadable_stub = create_stub(vim.fn, "filereadable")
@@ -543,9 +543,9 @@ describe("File References and Path Parsing", function()
       end)
 
       it("formats text files correctly", function()
-        -- Setup Claude provider
-        local claude = require("flemma.provider.providers.claude")
-        local provider = claude.new({ model = "claude-sonnet-4-5", max_tokens = 1000 })
+        -- Setup Anthropic provider
+        local anthropic = require("flemma.provider.providers.anthropic")
+        local provider = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 1000 })
 
         -- Mock file operations
         local filereadable_stub = create_stub(vim.fn, "filereadable")

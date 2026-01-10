@@ -5,7 +5,8 @@
 
 return {
   providers = {
-    claude = {
+    -- Note: "claude" is a deprecated alias for "anthropic" (see provider/providers.lua)
+    anthropic = {
       default = "claude-sonnet-4-5",
       models = {
         -- Claude Sonnet 4.5 (as of Sep 2025)

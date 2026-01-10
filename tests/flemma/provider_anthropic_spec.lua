@@ -1,6 +1,6 @@
---- Test file for Claude provider functionality
-describe("Claude Provider", function()
-  local claude = require("flemma.provider.providers.claude")
+--- Test file for Anthropic provider functionality
+describe("Anthropic Provider", function()
+  local anthropic = require("flemma.provider.providers.anthropic")
 
   after_each(function()
     -- Clean up any buffers created during the test
@@ -9,7 +9,7 @@ describe("Claude Provider", function()
 
   describe("try_import_from_buffer", function()
     it("should import Claude Workbench JavaScript code to chat format", function()
-      local provider = claude.new({ model = "claude-sonnet-4-5" })
+      local provider = anthropic.new({ model = "claude-sonnet-4-5" })
 
       -- JavaScript code from Claude Workbench
       local input_lines = {
@@ -70,8 +70,8 @@ describe("Claude Provider", function()
       assert.are.equal(expected_chat, result, "Chat content should match expected format")
     end)
 
-    it("should return nil when no Claude API call is found", function()
-      local provider = claude.new({ model = "claude-sonnet-4-5" })
+    it("should return nil when no Anthropic API call is found", function()
+      local provider = anthropic.new({ model = "claude-sonnet-4-5" })
 
       local input_lines = {
         'console.log("Hello World");',
@@ -84,7 +84,7 @@ describe("Claude Provider", function()
     end)
 
     it("should handle malformed JSON gracefully", function()
-      local provider = claude.new({ model = "claude-sonnet-4-5" })
+      local provider = anthropic.new({ model = "claude-sonnet-4-5" })
 
       local input_lines = {
         "const msg = await anthropic.messages.create({",
@@ -100,7 +100,7 @@ describe("Claude Provider", function()
     end)
 
     it("should handle messages with string content format", function()
-      local provider = claude.new({ model = "claude-sonnet-4-5" })
+      local provider = anthropic.new({ model = "claude-sonnet-4-5" })
 
       local input_lines = {
         "const msg = await anthropic.messages.create({",

@@ -78,7 +78,7 @@ describe("Lualine component", function()
 
   it("should display only the model name for non-openai providers", function()
     -- Arrange
-    core.switch_provider("claude", "claude-sonnet-4-5", {})
+    core.switch_provider("anthropic", "claude-sonnet-4-5", {})
 
     -- Act
     local status = flemma_component:update_status()

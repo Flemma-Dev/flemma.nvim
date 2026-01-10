@@ -5,7 +5,7 @@
 >
 > Flemma (formerly Claudius) is in the middle of a large-scale rename and architecture refresh. Expect new functionality, renamed modules, and occasional breaking changes while the project settles. Pin a commit if you need a steady target.
 
-Flemma turns Neovim into a first-class AI workspace. It gives `.chat` buffers streaming conversations, reusable prompt templates, attachment support, cost tracking, and ergonomic commands for the three major providers: Anthropic Claude, OpenAI, and Google Vertex AI.
+Flemma turns Neovim into a first-class AI workspace. It gives `.chat` buffers streaming conversations, reusable prompt templates, attachment support, cost tracking, and ergonomic commands for the three major providers: Anthropic, OpenAI, and Google Vertex AI.
 
 <a href="assets/frame_linux_slate.webp" target="_blank"><img align="center" width="541" height="435" src="assets/frame_linux_slate.webp" alt="Flemma chat buffer example" /></a>
 
@@ -58,7 +58,7 @@ Flemma can also be a playground for coding experiments - it can help with the oc
 
 ## What Flemma Delivers
 
-- **Multi-provider chat** – work with Claude, OpenAI, and Vertex models through one command tree while keeping prompts in plain `.chat` buffers.
+- **Multi-provider chat** – work with Anthropic, OpenAI, and Vertex models through one command tree while keeping prompts in plain `.chat` buffers.
 - **`.chat` editing tools** – get markdown folding, visual rulers, `<thinking>` highlighting, and message text objects tuned for chat transcripts.
 - **Structured templates** – combine Lua or JSON frontmatter, inline `{{ expressions }}`, and `include()` helpers to assemble prompts without leaving Neovim.
 - **Context attachments** – reference local files with `@./path`; Flemma handles MIME detection and surfaces warnings when a provider can’t ingest the asset.
@@ -97,7 +97,7 @@ For managers that do not wire `opts`, call `require("flemma").setup({})` yoursel
 
 | Provider         | Environment variable                                        | Notes                                                       |
 | ---------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
-| Anthropic Claude | `ANTHROPIC_API_KEY`                                         |                                                             |
+| Anthropic        | `ANTHROPIC_API_KEY`                                         |                                                             |
 | OpenAI           | `OPENAI_API_KEY`                                            | Supports GPT‑5 family, including reasoning effort settings. |
 | Google Vertex AI | `VERTEX_AI_ACCESS_TOKEN` **or** service-account credentials | Requires additional configuration (see below).              |
 
@@ -107,7 +107,7 @@ For managers that do not wire `opts`, call `require("flemma").setup({})` yoursel
 When environment variables are absent Flemma looks for secrets in the Secret Service keyring. Store them once and every Neovim instance can reuse them:
 
 ```bash
-secret-tool store --label="Claude API Key" service anthropic key api
+secret-tool store --label="Anthropic API Key" service anthropic key api
 secret-tool store --label="OpenAI API Key" service openai key api
 secret-tool store --label="Vertex AI Service Account" service vertex key api project_id your-gcp-project
 ```
@@ -230,7 +230,7 @@ Use the single entry point `:Flemma {command}`. Autocompletion lists every avail
 | `:Flemma message:next` / `:Flemma message:previous` | Jump through message headers.                                             |                                                                             |
 | `:Flemma logging:enable` / `:…:disable` / `:…:open` | Toggle structured logging and open the log file.                          |                                                                             |
 | `:Flemma notification:recall`                       | Reopen the last usage/cost notification.                                  |                                                                             |
-| `:Flemma import`                                    | Convert Anthropics Claude Workbench code snippets into `.chat` format.    |                                                                             |
+| `:Flemma import`                                    | Convert Claude Workbench code snippets into `.chat` format.               |                                                                             |
 
 ### Switching providers and models
 
@@ -247,7 +247,7 @@ require("flemma").setup({
   presets = {
     ["$fast"] = "vertex gemini-2.5-flash temperature=0.2",
     ["$review"] = {
-      provider = "claude",
+      provider = "anthropic",
       model = "claude-sonnet-4-5",
       max_tokens = 6000,
     },
@@ -261,7 +261,7 @@ Switch using `:Flemma switch $fast` or `:Flemma switch $review temperature=0.1` 
 
 | Provider  | Defaults            | Extra parameters                                                                                                                                                                                             | Notes                                                                                                  |
 | --------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| Claude    | `claude-sonnet-4-0` | Standard `max_tokens`, `temperature`, `timeout`, `connect_timeout`.                                                                                                                                          | Supports text, image, and PDF attachments.                                                             |
+| Anthropic | `claude-sonnet-4-5` | Standard `max_tokens`, `temperature`, `timeout`, `connect_timeout`.                                                                                                                                          | Supports text, image, and PDF attachments.                                                             |
 | OpenAI    | `gpt-5`             | `reasoning=<low\|medium\|high>` toggles reasoning effort. When set, lualine includes the reasoning level and Flemma keeps your configured `max_tokens` aligned with OpenAI’s completion limit automatically. | Cost notifications include reasoning tokens.                                                           |
 | Vertex AI | `gemini-2.5-pro`    | `project_id` (required), `location` (default `global`), `thinking_budget` enables streamed `<thinking>` traces.                                                                                              | `thinking_budget` ≥ 1 activates Google’s experimental thinking output; set to `0` or `nil` to disable. |
 
@@ -353,7 +353,7 @@ Trailing punctuation such as `.` or `)` is ignored so you can keep natural prose
 
 | Provider  | Text files                   | Images                                     | PDFs                   | Behaviour when unsupported                             |
 | --------- | ---------------------------- | ------------------------------------------ | ---------------------- | ------------------------------------------------------ |
-| Claude    | Embedded as plain text parts | Uploaded as base64 image parts             | Sent as document parts | The literal `@./path` is kept and a warning is shown.  |
+| Anthropic | Embedded as plain text parts | Uploaded as base64 image parts             | Sent as document parts | The literal `@./path` is kept and a warning is shown.  |
 | OpenAI    | Embedded as text parts       | Sent as `image_url` entries with data URLs | Sent as `file` objects | Unsupported types become plain text with a diagnostic. |
 | Vertex AI | Embedded as text parts       | Sent as `inlineData`                       | Sent as `inlineData`   | Falls back to text with a warning.                     |
 
@@ -425,7 +425,7 @@ Flemma works without arguments, but every option can be overridden:
 
 ```lua
 require("flemma").setup({
-  provider = "claude",
+  provider = "anthropic",
   model = nil, -- provider default
   parameters = {
     max_tokens = 4000,
@@ -498,20 +498,20 @@ Additional notes:
 ## Importing from Claude Workbench
 
 <details>
-<summary><strong>Quick steps</strong> – Export the TypeScript snippet in Claude, paste it into Neovim, then run <code>:Flemma import</code>.</summary>
+<summary><strong>Quick steps</strong> – Export the TypeScript snippet in Claude Workbench, paste it into Neovim, then run <code>:Flemma import</code>.</summary>
 
 Flemma can turn Claude Workbench exports into ready-to-send `.chat` buffers. Follow the short checklist above when you only need a reminder; the full walkthrough below explains each step and the safeguards in place.
 
 **Before you start**
 
-- `:Flemma import` delegates to the current provider. Keep Claude active (`:Flemma switch claude`) so the importer knows how to interpret the snippet.
+- `:Flemma import` delegates to the current provider. Keep Anthropic active (`:Flemma switch anthropic`) so the importer knows how to interpret the snippet.
 - Use an empty scratch buffer – `Flemma import` overwrites the entire buffer with the converted chat.
 
 **Export from Claude Workbench**
 
 1. Navigate to <https://console.anthropic.com/workbench> and open the saved prompt you want to migrate.
 2. Click **Get code** in the top-right corner, then switch the language dropdown to **TypeScript**. The importer expects the `anthropic.messages.create({ ... })` call produced by that export.
-3. Press **Copy code**; Claude copies the whole TypeScript example (including the `import Anthropic from "@anthropic-ai/sdk"` header).
+3. Press **Copy code**; Claude Workbench copies the whole TypeScript example (including the `import Anthropic from "@anthropic-ai/sdk"` header).
 
 **Convert inside Neovim**
 
@@ -524,9 +524,9 @@ Flemma can turn Claude Workbench exports into ready-to-send `.chat` buffers. Fol
 
 **Troubleshooting**
 
-- If the snippet does not contain an `anthropic.messages.create` call, the importer aborts with “No Claude API call found”.
+- If the snippet does not contain an `anthropic.messages.create` call, the importer aborts with "No Anthropic API call found".
 - JSON decoding errors write both the original snippet and the cleaned JSON to `flemma_import_debug.log` in your temporary directory (e.g. `/tmp/flemma_import_debug.log`). Open that file to spot mismatched brackets or truncated copies.
-- Nothing happens? Confirm Claude is the active provider – other providers currently do not ship an importer.
+- Nothing happens? Confirm Anthropic is the active provider – other providers currently do not ship an importer.
 
 </details>
 

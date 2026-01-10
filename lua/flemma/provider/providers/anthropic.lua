@@ -1,5 +1,5 @@
---- Claude provider for Flemma
---- Implements the Claude API integration
+--- Anthropic provider for Flemma
+--- Implements the Anthropic (Claude) API integration
 local base = require("flemma.provider.base")
 local log = require("flemma.logging")
 local M = {}
@@ -7,29 +7,29 @@ local M = {}
 -- Inherit from base provider
 setmetatable(M, { __index = base })
 
--- Create a new Claude provider instance
+-- Create a new Anthropic provider instance
 function M.new(merged_config)
   local provider = base.new(merged_config) -- Pass the already merged config to base
 
-  -- Claude-specific state (endpoint, version)
+  -- Anthropic-specific state (endpoint, version)
   provider.endpoint = "https://api.anthropic.com/v1/messages"
   provider.api_version = "2023-06-01"
 
   provider:reset()
 
-  -- Set metatable to use Claude methods
+  -- Set metatable to use Anthropic methods
   return setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
 end
 
 -- Reset provider state (called by base.new and before new requests)
 function M.reset(self)
   base.reset(self)
-  log.debug("claude.reset(): Reset Claude provider state")
+  log.debug("anthropic.reset(): Reset Anthropic provider state")
 end
 
 -- Get API key from environment, keyring, or prompt
 function M.get_api_key(self)
-  -- Call the base implementation with Claude-specific parameters
+  -- Call the base implementation with Anthropic-specific parameters
   return base.get_api_key(self, {
     env_var_name = "ANTHROPIC_API_KEY",
     keyring_service_name = "anthropic",
@@ -37,7 +37,7 @@ function M.get_api_key(self)
   })
 end
 
----Build request body for Claude API
+---Build request body for Anthropic API
 ---
 ---@param prompt Prompt The prepared prompt with history and system (from pipeline)
 ---@param context Context The shared context object (not used, parts already resolved)
@@ -47,7 +47,7 @@ function M.build_request(self, prompt, context)
 
   for _, msg in ipairs(prompt.history) do
     if msg.role == "user" then
-      -- Map generic parts (already resolved by pipeline) to Claude-specific format
+      -- Map generic parts (already resolved by pipeline) to Anthropic-specific format
       local content_blocks = {}
 
       for _, part in ipairs(msg.parts or {}) do
@@ -63,7 +63,7 @@ function M.build_request(self, prompt, context)
             },
           })
           log.debug(
-            'claude.build_request: Added image part for "'
+            'anthropic.build_request: Added image part for "'
               .. (part.filename or "image")
               .. '" (MIME: '
               .. part.mime_type
@@ -79,7 +79,7 @@ function M.build_request(self, prompt, context)
             },
           })
           log.debug(
-            'claude.build_request: Added document part for "'
+            'anthropic.build_request: Added document part for "'
               .. (part.filename or "document")
               .. '" (MIME: '
               .. part.mime_type
@@ -88,7 +88,7 @@ function M.build_request(self, prompt, context)
         elseif part.kind == "text_file" then
           table.insert(content_blocks, { type = "text", text = part.text })
           log.debug(
-            'claude.build_request: Added text part for "'
+            'anthropic.build_request: Added text part for "'
               .. (part.filename or "text_file")
               .. '" (MIME: '
               .. part.mime_type
@@ -111,7 +111,7 @@ function M.build_request(self, prompt, context)
         if p.kind == "text" then
           table.insert(text_parts, p.text or "")
         elseif p.kind == "thinking" then
-          -- Skip thinking nodes - Claude doesn't need them
+          -- Skip thinking nodes - Anthropic doesn't need them
         end
       end
       table.insert(api_messages, {
@@ -133,7 +133,7 @@ function M.build_request(self, prompt, context)
   return request_body
 end
 
--- Get request headers for Claude API
+-- Get request headers for Anthropic API
 function M.get_request_headers(self)
   local api_key = self:get_api_key()
 
@@ -145,10 +145,10 @@ function M.get_request_headers(self)
 end
 
 -- Get API endpoint
---- Process a single line of Claude API streaming response
---- Parses Claude's server-sent events format and extracts content, usage, and error information
----@param self table The Claude provider instance
----@param line string A single line from the Claude API response stream
+--- Process a single line of Anthropic API streaming response
+--- Parses Anthropic's server-sent events format and extracts content, usage, and error information
+---@param self table The Anthropic provider instance
+---@param line string A single line from the Anthropic API response stream
 ---@param callbacks ProviderCallbacks Table of callback functions to handle parsed data
 function M.process_response_line(self, line, callbacks)
   -- Use base SSE parser
@@ -161,32 +161,32 @@ function M.process_response_line(self, line, callbacks)
 
   -- Handle event lines
   if parsed.type == "event" then
-    log.debug("claude.process_response_line(): Received event type: " .. parsed.event_type)
+    log.debug("anthropic.process_response_line(): Received event type: " .. parsed.event_type)
     return
   end
 
-  -- Handle [DONE] message (Claude doesn't typically send this)
+  -- Handle [DONE] message (Anthropic doesn't typically send this)
   if parsed.type == "done" then
-    log.debug("claude.process_response_line(): Received [DONE] message (unexpected)")
+    log.debug("anthropic.process_response_line(): Received [DONE] message (unexpected)")
     return
   end
 
   -- Parse JSON data
   local ok, data = pcall(vim.fn.json_decode, parsed.content)
   if not ok then
-    log.error("claude.process_response_line(): Failed to parse JSON: " .. parsed.content)
+    log.error("anthropic.process_response_line(): Failed to parse JSON: " .. parsed.content)
     return
   end
 
   if type(data) ~= "table" then
-    log.error("claude.process_response_line(): Expected table in response, got type: " .. type(data))
+    log.error("anthropic.process_response_line(): Expected table in response, got type: " .. type(data))
     return
   end
 
   -- Handle error responses
   if data.type == "error" then
     local msg = self:extract_json_response_error(data)
-    log.error("claude.process_response_line(): Claude API error: " .. log.inspect(msg))
+    log.error("anthropic.process_response_line(): Anthropic API error: " .. log.inspect(msg))
     if callbacks.on_error then
       callbacks.on_error(msg)
     end
@@ -195,16 +195,16 @@ function M.process_response_line(self, line, callbacks)
 
   -- Handle ping events
   if data.type == "ping" then
-    log.debug("claude.process_response_line(): Received ping event")
+    log.debug("anthropic.process_response_line(): Received ping event")
     return
   end
 
   -- Track usage information from message_start event
   if data.type == "message_start" then
-    log.debug("claude.process_response_line(): Received message_start event")
+    log.debug("anthropic.process_response_line(): Received message_start event")
     if data.message and data.message.usage and data.message.usage.input_tokens then
       log.debug(
-        "claude.process_response_line(): ... Input tokens from message_start: " .. data.message.usage.input_tokens
+        "anthropic.process_response_line(): ... Input tokens from message_start: " .. data.message.usage.input_tokens
       )
       if callbacks.on_usage then
         callbacks.on_usage({
@@ -213,13 +213,13 @@ function M.process_response_line(self, line, callbacks)
         })
       end
     else
-      log.debug("claude.process_response_line(): ... No usage information in message_start event")
+      log.debug("anthropic.process_response_line(): ... No usage information in message_start event")
     end
   end
 
   -- Track output tokens from usage field in any event (including message_delta)
   if type(data.usage) == "table" and data.usage.output_tokens then
-    log.debug("claude.process_response_line(): ... Output tokens update: " .. data.usage.output_tokens)
+    log.debug("anthropic.process_response_line(): ... Output tokens update: " .. data.usage.output_tokens)
     if callbacks.on_usage then
       callbacks.on_usage({
         type = "output",
@@ -230,13 +230,13 @@ function M.process_response_line(self, line, callbacks)
 
   -- Handle message_delta event (mostly for logging the event type now)
   if data.type == "message_delta" then
-    log.debug("claude.process_response_line(): Received message_delta event")
+    log.debug("anthropic.process_response_line(): Received message_delta event")
     -- Usage is handled above
   end
 
   -- Handle message_stop event
   if data.type == "message_stop" then
-    log.debug("claude.process_response_line(): Received message_stop event")
+    log.debug("anthropic.process_response_line(): Received message_stop event")
     if callbacks.on_response_complete then
       callbacks.on_response_complete()
     end
@@ -244,32 +244,34 @@ function M.process_response_line(self, line, callbacks)
 
   -- Handle content_block_start event
   if data.type == "content_block_start" then
-    log.debug("claude.process_response_line(): Received content_block_start event for index " .. tostring(data.index))
+    log.debug(
+      "anthropic.process_response_line(): Received content_block_start event for index " .. tostring(data.index)
+    )
   end
 
   -- Handle content_block_stop event
   if data.type == "content_block_stop" then
-    log.debug("claude.process_response_line(): Received content_block_stop event for index " .. tostring(data.index))
+    log.debug("anthropic.process_response_line(): Received content_block_stop event for index " .. tostring(data.index))
   end
 
   -- Handle content_block_delta event
   if data.type == "content_block_delta" then
     if not data.delta then
-      log.error("claude.process_response_line(): Received content_block_delta without delta: " .. log.inspect(data))
+      log.error("anthropic.process_response_line(): Received content_block_delta without delta: " .. log.inspect(data))
       return
     end
 
     if data.delta.type == "text_delta" and data.delta.text then
-      log.debug("claude.process_response_line(): Content text delta: " .. log.inspect(data.delta.text))
+      log.debug("anthropic.process_response_line(): Content text delta: " .. log.inspect(data.delta.text))
       base._signal_content(self, data.delta.text, callbacks)
     elseif data.delta.type == "input_json_delta" and data.delta.partial_json ~= nil then
-      log.debug("claude.process_response_line(): Content input_json_delta: " .. log.inspect(data.delta.partial_json))
+      log.debug("anthropic.process_response_line(): Content input_json_delta: " .. log.inspect(data.delta.partial_json))
     elseif data.delta.type == "thinking_delta" and data.delta.thinking then
-      log.debug("claude.process_response_line(): Content thinking delta: " .. log.inspect(data.delta.thinking))
+      log.debug("anthropic.process_response_line(): Content thinking delta: " .. log.inspect(data.delta.thinking))
     elseif data.delta.type == "signature_delta" and data.delta.signature then
-      log.debug("claude.process_response_line(): Content signature delta received")
+      log.debug("anthropic.process_response_line(): Content signature delta received")
     else
-      log.error("claude.process_response_line(): Unknown delta type: " .. log.inspect(data.delta.type))
+      log.error("anthropic.process_response_line(): Unknown delta type: " .. log.inspect(data.delta.type))
     end
   elseif
     data.type
@@ -282,7 +284,7 @@ function M.process_response_line(self, line, callbacks)
       or data.type == "ping"
     )
   then
-    log.error("claude.process_response_line(): Unknown event type: " .. log.inspect(data.type))
+    log.error("anthropic.process_response_line(): Unknown event type: " .. log.inspect(data.type))
   end
 end
 
@@ -372,7 +374,7 @@ function M.try_import_from_buffer(self, lines)
   -- Extract and prepare content
   local content = import_extract_content(lines)
   if #content == 0 then
-    vim.notify("No Claude API call found in buffer", vim.log.levels.ERROR)
+    vim.notify("No Anthropic API call found in buffer", vim.log.levels.ERROR)
     return nil
   end
 

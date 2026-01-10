@@ -375,9 +375,9 @@ describe("Pipeline Integration", function()
 end)
 
 describe("Provider Integration", function()
-  it("builds Claude request from pipeline output", function()
-    local claude = require("flemma.provider.providers.claude")
-    local provider = claude.new({ model = "claude-3-haiku-20240307", max_tokens = 256, temperature = 0 })
+  it("builds Anthropic request from pipeline output", function()
+    local anthropic = require("flemma.provider.providers.anthropic")
+    local provider = anthropic.new({ model = "claude-3-haiku-20240307", max_tokens = 256, temperature = 0 })
 
     local lines = {
       "@System: You are helpful.",

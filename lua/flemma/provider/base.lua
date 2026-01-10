@@ -235,7 +235,7 @@ function M.extract_json_response_error(self, data)
 
   -- Try common error patterns in order of likelihood
 
-  -- Pattern 1: { error: { message: "..." } } (OpenAI, Claude style)
+  -- Pattern 1: { error: { message: "..." } } (OpenAI, Anthropic style)
   if data.error and type(data.error) == "table" and data.error.message then
     return data.error.message
   end
