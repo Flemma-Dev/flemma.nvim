@@ -6,7 +6,7 @@ local function setup_commands()
   local core = require("flemma.core")
   local navigation = require("flemma.navigation")
   local log = require("flemma.logging")
-  local provider_config = require("flemma.provider.config")
+  local registry = require("flemma.provider.registry")
   local notify_module = require("flemma.notify")
   local modeline = require("flemma.modeline")
   local presets = require("flemma.presets")
@@ -70,7 +70,7 @@ local function setup_commands()
     if ctx.completing_index == 1 then
       local preset_suggestions = presets.list()
       local provider_suggestions = {}
-      for name, _ in pairs(provider_config.models) do
+      for name, _ in pairs(registry.models) do
         table.insert(provider_suggestions, name)
       end
       table.sort(provider_suggestions)
@@ -109,7 +109,7 @@ local function setup_commands()
         end, options)
       end
 
-      local models = provider_config.models[first_arg]
+      local models = registry.models[first_arg]
       if type(models) ~= "table" then
         return {}
       end
@@ -188,7 +188,7 @@ local function setup_commands()
 
       if #args == 0 then
         local providers = {}
-        for name, _ in pairs(provider_config.models) do
+        for name, _ in pairs(registry.models) do
           table.insert(providers, name)
         end
         table.sort(providers)
@@ -199,7 +199,7 @@ local function setup_commands()
             return
           end
 
-          local models = provider_config.models[selected_provider] or {}
+          local models = registry.models[selected_provider] or {}
           if type(models) ~= "table" or #models == 0 then
             vim.notify("Flemma: No models found for provider " .. selected_provider, vim.log.levels.WARN)
             core.switch_provider(selected_provider, nil, {})
@@ -235,7 +235,7 @@ local function setup_commands()
         end
 
         local overrides = modeline.parse_args(remaining_args, 1)
-        local extracted_overrides = provider_config.extract_switch_arguments(overrides)
+        local extracted_overrides = registry.extract_switch_arguments(overrides)
 
         if extracted_overrides.has_explicit_provider and extracted_overrides.provider ~= nil then
           provider = extracted_overrides.provider
@@ -282,7 +282,7 @@ local function setup_commands()
       end
 
       local parsed_args = modeline.parse_args(args, 1)
-      local extracted = provider_config.extract_switch_arguments(parsed_args)
+      local extracted = registry.extract_switch_arguments(parsed_args)
       local provider = extracted.provider
 
       if not provider then

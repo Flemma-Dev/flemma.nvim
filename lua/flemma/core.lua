@@ -7,7 +7,7 @@ local log = require("flemma.logging")
 local state = require("flemma.state")
 local config_manager = require("flemma.core.config.manager")
 local ui = require("flemma.ui")
-local providers_registry = require("flemma.provider.providers")
+local registry = require("flemma.provider.registry")
 
 -- For testing purposes
 local last_request_body_for_testing = nil
@@ -25,7 +25,7 @@ local function initialize_provider(provider_name, model_name, parameters)
   config_manager.apply_config(provider_config)
 
   -- Create a fresh provider instance with the merged parameters
-  local provider_module = providers_registry.get(provider_config.provider)
+  local provider_module = registry.get(provider_config.provider)
   if not provider_module then
     local err_msg = "initialize_provider(): Invalid provider after validation: " .. tostring(provider_config.provider)
     log.error(err_msg)

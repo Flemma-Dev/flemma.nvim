@@ -1,7 +1,7 @@
 --- Lualine component for Flemma model display
 local lualine_component = require("lualine.component")
 local state = require("flemma.state")
-local registry = require("flemma.provider.providers")
+local registry = require("flemma.provider.registry")
 local models = require("flemma.models")
 
 -- Create a new component for displaying the Flemma model

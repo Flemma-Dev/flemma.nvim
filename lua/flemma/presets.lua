@@ -3,7 +3,7 @@ local M = {}
 
 local log = require("flemma.logging")
 local modeline = require("flemma.modeline")
-local provider_config = require("flemma.provider.config")
+local registry = require("flemma.provider.registry")
 
 local normalized_presets = {}
 
@@ -25,7 +25,7 @@ local function normalize_definition(name, definition)
     return nil, ("Preset '%s' must be a table or string, received %s"):format(name, definition_type)
   end
 
-  local extracted = provider_config.extract_switch_arguments(definition)
+  local extracted = registry.extract_switch_arguments(definition)
   local provider = extracted.provider
   local model = extracted.model
 

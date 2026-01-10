@@ -157,6 +157,7 @@ end
 ---@return table request_body The request body for the API
 function M.build_request(self, prompt, context)
   -- To be implemented by specific providers
+  return {}
 end
 
 -- Get request headers (to be implemented by specific providers)

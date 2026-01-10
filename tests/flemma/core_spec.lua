@@ -2,7 +2,7 @@ local stub = require("luassert.stub")
 
 describe(":FlemmaSend command", function()
   local client = require("flemma.client")
-  local flemma, state, core, provider_config
+  local flemma, state, core, registry
 
   before_each(function()
     -- Invalidate the main flemma module cache to ensure a clean setup for each test
@@ -10,13 +10,13 @@ describe(":FlemmaSend command", function()
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.core.config.manager"] = nil
-    package.loaded["flemma.provider.config"] = nil
+    package.loaded["flemma.provider.registry"] = nil
     package.loaded["flemma.models"] = nil
 
     flemma = require("flemma")
     state = require("flemma.state")
     core = require("flemma.core")
-    provider_config = require("flemma.provider.config")
+    registry = require("flemma.provider.registry")
 
     -- Setup with default configuration. Specific tests can override this.
     flemma.setup({})
@@ -39,7 +39,7 @@ describe(":FlemmaSend command", function()
     -- Arrange: Register a dummy fixture to prevent actual network calls.
     -- The content of the fixture DOES matter, as it's processed by the provider.
     local config = state.get_config()
-    local default_anthropic_model = provider_config.get_model("anthropic")
+    local default_anthropic_model = registry.get_model("anthropic")
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
 
     -- Act: Execute the FlemmaSend command
@@ -258,7 +258,7 @@ describe(":FlemmaSend command", function()
     assert.is_true(saw_warn, "Should warn about invalid model fallback")
 
     -- Assert: Model fell back to the provider default
-    local default_openai_model = provider_config.get_model("openai")
+    local default_openai_model = registry.get_model("openai")
     local cfg = state.get_config()
     assert.equals(default_openai_model, cfg.model, "Should fall back to provider default model")
 
