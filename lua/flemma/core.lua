@@ -390,7 +390,6 @@ function M.send_to_provider(opts)
     on_response_complete = function()
       vim.schedule(function()
         local usage = require("flemma.usage")
-        local pricing = require("flemma.pricing")
         local config = state.get_config()
 
         -- Get tokens from in-flight usage
@@ -407,7 +406,7 @@ function M.send_to_provider(opts)
         end
 
         -- Add request to session with pricing snapshot
-        local pricing_info = pricing.models[config.model]
+        local pricing_info = usage.models[config.model]
         if pricing_info then
           state.get_session():add_request({
             provider = config.provider,
