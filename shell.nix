@@ -120,6 +120,11 @@ pkgs.mkShell rec {
     })
 
     (writeShellApplication {
+      name = "flemma-claude";
+      text = "exec pnpm --silent --package=@anthropic-ai/claude-code@latest dlx -- claude \"$@\"";
+    })
+
+    (writeShellApplication {
       name = "flemma-codex";
       text = "exec pnpm --silent --package=@openai/codex dlx -- codex \"$@\"";
     })
