@@ -6,7 +6,7 @@ local M = {}
 M.setup = function()
   local core = require("flemma.core")
   local navigation = require("flemma.navigation")
-  local buffers = require("flemma.buffers")
+  local ui = require("flemma.ui")
   local textobject = require("flemma.textobject")
   local state = require("flemma.state")
 
@@ -58,10 +58,10 @@ M.setup = function()
         if config.keymaps.insert.send then
           vim.keymap.set("i", config.keymaps.insert.send, function()
             local bufnr = vim.api.nvim_get_current_buf()
-            buffers.buffer_cmd(bufnr, "stopinsert")
+            ui.buffer_cmd(bufnr, "stopinsert")
             core.send_to_provider({
               on_request_complete = function()
-                buffers.buffer_cmd(bufnr, "startinsert!")
+                ui.buffer_cmd(bufnr, "startinsert!")
               end,
             })
           end, { buffer = true, desc = "Send to Flemma and continue editing" })

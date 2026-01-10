@@ -4,7 +4,6 @@ local M = {}
 
 local log = require("flemma.logging")
 local state = require("flemma.state")
-local buffers = require("flemma.buffers")
 local config = require("flemma.config")
 
 -- Constants for fold text preview
@@ -125,6 +124,17 @@ end
 local ns_id = vim.api.nvim_create_namespace("flemma")
 local spinner_ns = vim.api.nvim_create_namespace("flemma_spinner")
 
+--- Execute a command in the context of a buffer's window
+---@param bufnr number Buffer number
+---@param cmd string Command to execute
+function M.buffer_cmd(bufnr, cmd)
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid == -1 then
+    return
+  end
+  vim.fn.win_execute(winid, "noautocmd " .. cmd)
+end
+
 local function apply_spinner_suppression(bufnr)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return
@@ -213,7 +223,7 @@ function M.start_loading_spinner(bufnr)
   local original_modifiable_initial = vim.bo[bufnr].modifiable
   vim.bo[bufnr].modifiable = true -- Allow plugin modifications for initial message
 
-  local buffer_state = buffers.get_state(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
   local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
   local frame = 1
 
@@ -249,7 +259,7 @@ function M.start_loading_spinner(bufnr)
     frame = (frame % #spinner_frames) + 1
     local text = "@Assistant: " .. spinner_frames[frame] .. " Thinking..."
     local last_line = vim.api.nvim_buf_line_count(bufnr)
-    buffers.buffer_cmd(bufnr, "undojoin")
+    M.buffer_cmd(bufnr, "undojoin")
     vim.api.nvim_buf_set_lines(bufnr, last_line - 1, last_line, false, { text })
     -- Force UI update during spinner animation
     M.update_ui(bufnr)
@@ -271,7 +281,7 @@ function M.cleanup_spinner(bufnr)
   local original_modifiable = vim.bo[bufnr].modifiable
   vim.bo[bufnr].modifiable = true -- Allow plugin modifications
 
-  local buffer_state = buffers.get_state(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
   if buffer_state.spinner_timer then
     vim.fn.timer_stop(buffer_state.spinner_timer)
     buffer_state.spinner_timer = nil
@@ -291,7 +301,7 @@ function M.cleanup_spinner(bufnr)
 
   -- Only modify lines if the last line is actually the spinner message
   if last_line_content and last_line_content:match("^@Assistant: .*Thinking%.%.%.$") then
-    buffers.buffer_cmd(bufnr, "undojoin") -- Group changes for undo
+    M.buffer_cmd(bufnr, "undojoin") -- Group changes for undo
 
     -- Get the line before the "Thinking..." message (if it exists)
     local prev_line_actual_content = nil
@@ -550,7 +560,7 @@ function M.setup()
     callback = function(ev)
       if vim.bo[ev.buf].filetype == "chat" or string.match(vim.api.nvim_buf_get_name(ev.buf), "%.chat$") then
         M.cleanup_spinner(ev.buf)
-        buffers.cleanup_buffer(ev.buf)
+        state.cleanup_buffer_state(ev.buf)
       end
     end,
   })

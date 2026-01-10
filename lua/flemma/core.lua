@@ -2,7 +2,6 @@
 --- Handles provider initialization, switching, and main request-response lifecycle
 local M = {}
 
-local buffers = require("flemma.buffers")
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local config_manager = require("flemma.core.config.manager")
@@ -11,6 +10,14 @@ local registry = require("flemma.provider.registry")
 
 -- For testing purposes
 local last_request_body_for_testing = nil
+
+-- Auto-write buffer if configured and modified
+local function auto_write_buffer(bufnr)
+  local config = state.get_config()
+  if config.editing and config.editing.auto_write and vim.bo[bufnr].modified then
+    ui.buffer_cmd(bufnr, "silent! write")
+  end
+end
 
 -- Initialize or switch provider based on configuration (local function)
 local function initialize_provider(provider_name, model_name, parameters)
@@ -54,7 +61,7 @@ function M.switch_provider(provider_name, model_name, parameters)
 
   -- Check for ongoing requests
   local bufnr = vim.api.nvim_get_current_buf()
-  local buffer_state = buffers.get_state(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
   if buffer_state.current_request then
     vim.notify("Flemma: Cannot switch providers while a request is in progress.", vim.log.levels.WARN)
     return
@@ -108,7 +115,7 @@ end
 -- Cancel ongoing request if any
 function M.cancel_request()
   local bufnr = vim.api.nvim_get_current_buf()
-  local buffer_state = buffers.get_state(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
 
   if buffer_state.current_request then
     log.info("cancel_request(): job_id = " .. tostring(buffer_state.current_request))
@@ -133,7 +140,7 @@ function M.cancel_request()
 
       -- Auto-write if enabled and we've received some content
       if buffer_state.request_cancelled and not last_line_content:match("^@Assistant:.*Thinking%.%.%.$") then
-        buffers.auto_write_buffer(bufnr)
+        auto_write_buffer(bufnr)
       end
 
       vim.bo[bufnr].modifiable = true -- Restore modifiable state
@@ -159,7 +166,7 @@ end
 function M.send_to_provider(opts)
   opts = opts or {}
   local bufnr = vim.api.nvim_get_current_buf()
-  local buffer_state = buffers.get_state(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
 
   -- Check if there's already a request in progress
   if buffer_state.current_request then
@@ -360,7 +367,7 @@ function M.send_to_provider(opts)
         vim.bo[bufnr].modifiable = true -- Restore modifiable state
 
         -- Auto-write on error if enabled
-        buffers.auto_write_buffer(bufnr)
+        auto_write_buffer(bufnr)
 
         local notify_msg = "Flemma: " .. msg
         if log.is_enabled() then
@@ -416,7 +423,7 @@ function M.send_to_provider(opts)
         end
 
         -- Auto-write when response is complete
-        buffers.auto_write_buffer(bufnr)
+        auto_write_buffer(bufnr)
 
         -- Format and display usage information using our custom notification
         local usage_str = usage.format_notification(buffer_state.inflight_usage, state.get_session())
@@ -462,17 +469,17 @@ function M.send_to_provider(opts)
             -- Check if response starts with a code fence
             if content_lines[1]:match("^```") then
               -- Add a newline before the code fence
-              buffers.buffer_cmd(bufnr, "undojoin")
+              ui.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant:", content_lines[1] })
             else
               -- Start with @Assistant: prefix as normal
-              buffers.buffer_cmd(bufnr, "undojoin")
+              ui.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant: " .. content_lines[1] })
             end
 
             -- Add remaining lines if any
             if #content_lines > 1 then
-              buffers.buffer_cmd(bufnr, "undojoin")
+              ui.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(bufnr, last_line + 1, last_line + 1, false, { unpack(content_lines, 2) })
             end
           else
@@ -481,7 +488,7 @@ function M.send_to_provider(opts)
 
             if #content_lines == 1 then
               -- Just append to the last line
-              buffers.buffer_cmd(bufnr, "undojoin")
+              ui.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(
                 bufnr,
                 last_line - 1,
@@ -491,7 +498,7 @@ function M.send_to_provider(opts)
               )
             else
               -- First chunk goes to the end of the last line
-              buffers.buffer_cmd(bufnr, "undojoin")
+              ui.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(
                 bufnr,
                 last_line - 1,
@@ -501,7 +508,7 @@ function M.send_to_provider(opts)
               )
 
               -- Remaining lines get added as new lines
-              buffers.buffer_cmd(bufnr, "undojoin")
+              ui.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { unpack(content_lines, 2) })
             end
           end
@@ -549,7 +556,7 @@ function M.send_to_provider(opts)
             if not response_started then
               ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
             end
-            buffers.auto_write_buffer(bufnr) -- Still auto-write if configured
+            auto_write_buffer(bufnr) -- Still auto-write if configured
             ui.update_ui(bufnr) -- Update UI
             return -- Do not proceed to add new prompt or call opts.on_request_complete
           end
@@ -577,7 +584,7 @@ function M.send_to_provider(opts)
             cursor_line_offset = 2
           end
 
-          buffers.buffer_cmd(bufnr, "undojoin")
+          ui.buffer_cmd(bufnr, "undojoin")
           vim.api.nvim_buf_set_lines(bufnr, last_line_idx, last_line_idx, false, lines_to_insert)
 
           local new_prompt_line_num = last_line_idx + cursor_line_offset - 1
@@ -595,7 +602,7 @@ function M.send_to_provider(opts)
           end
           ui.move_to_bottom()
 
-          buffers.auto_write_buffer(bufnr)
+          auto_write_buffer(bufnr)
           ui.update_ui(bufnr)
           ui.fold_last_thinking_block(bufnr) -- Attempt to fold the last thinking block
 
@@ -632,7 +639,7 @@ function M.send_to_provider(opts)
           end
           vim.notify(error_msg, vim.log.levels.ERROR)
 
-          buffers.auto_write_buffer(bufnr) -- Auto-write if enabled, even on error
+          auto_write_buffer(bufnr) -- Auto-write if enabled, even on error
           ui.update_ui(bufnr) -- Update UI to remove any artifacts
         end
       end)

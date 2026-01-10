@@ -283,20 +283,20 @@ end
 -- Get parsed document with automatic caching based on buffer changedtick
 -- Returns cached AST if buffer unchanged, otherwise parses and caches
 function M.get_parsed_document(bufnr)
-  local buffers = require("flemma.buffers")
-  local state = buffers.get_state(bufnr)
+  local state = require("flemma.state")
+  local buffer_state = state.get_buffer_state(bufnr)
   local current_tick = vim.api.nvim_buf_get_changedtick(bufnr)
 
   -- Return cached if still valid
-  if state.ast_cache and state.ast_cache.changedtick == current_tick then
-    return state.ast_cache.document
+  if buffer_state.ast_cache and buffer_state.ast_cache.changedtick == current_tick then
+    return buffer_state.ast_cache.document
   end
 
   -- Parse and cache
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local doc = M.parse_lines(lines)
 
-  state.ast_cache = {
+  buffer_state.ast_cache = {
     changedtick = current_tick,
     document = doc,
   }
