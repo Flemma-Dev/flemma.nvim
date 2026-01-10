@@ -1,4 +1,4 @@
-.PHONY: test lint check
+.PHONY: default test lint check
 
 default:
 	@echo "Usage: make [$(shell cat ${MAKEFILE_LIST} | grep -E '^[a-zA-Z_-]+:' | sed 's/:.*//g' | grep -v '^default' | tr '\n' '|' | sed 's/|$$//')]"
@@ -21,5 +21,22 @@ check:
 		lua-language-server --check lua/
 
 # Update models and pricing using Amp (AI agent)
+.PHONY: update-models
 update-models:
 	cat contrib/amp/prompt-update-models-and-pricing.txt | sed 's@{{date}}@'"$(shell date +%Y-%m-%d)"'@g' | flemma-amp
+
+# Launch Flemma.nvim from local directory
+.PHONY: develop
+develop:
+	@-rm ~/.cache/nvim/flemma.log
+	@nvim --cmd "set runtimepath+=`pwd`" \
+		-c "lua require(\"flemma\").setup({ \
+			provider = \"anthropic\", \
+			model = \"claude-haiku-4-5\", \
+			logging = { enabled = true }, \
+			signs = { enabled = true }, \
+			editing = { auto_write = true }, \
+			presets = { [\"\$$gpt\"] = \"openai gpt-5.2 reasoning=low\" } \
+		})" \
+		-c ":edit $$HOME/.cache/nvim/flemma.log" \
+		-c ":tabedit example.chat"
