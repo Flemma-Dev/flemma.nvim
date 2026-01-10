@@ -40,6 +40,38 @@ local function get_current_reasoning_setting()
   return nil
 end
 
+-- Get the current thinking budget setting if the provider supports it
+local function get_current_thinking_budget()
+  local current_config = state.get_config()
+  if not current_config or not current_config.provider then
+    return nil
+  end
+
+  -- Check if provider supports thinking budget via registry
+  local capabilities = registry.get_capabilities(current_config.provider)
+  if not capabilities or not capabilities.supports_thinking_budget then
+    return nil
+  end
+
+  -- Check if thinking_budget is configured and meets minimum requirements
+  if current_config.parameters and current_config.parameters.thinking_budget then
+    local budget = current_config.parameters.thinking_budget
+    if type(budget) ~= "number" then
+      return nil
+    end
+
+    -- Provider-specific minimum budget requirements
+    local provider = current_config.provider
+    if provider == "anthropic" and budget >= 1024 then
+      return budget
+    elseif provider == "vertex" and budget >= 1 then
+      return budget
+    end
+  end
+
+  return nil
+end
+
 --- Updates the status of the component.
 -- This function is called by lualine to get the text to display.
 function flemma_model_component:update_status()
@@ -52,13 +84,27 @@ function flemma_model_component:update_status()
         return "" -- No model, show nothing
       end
 
-      local reasoning_setting = get_current_reasoning_setting()
+      -- Get format strings from config
+      local full_config = state.get_config() or {}
+      local statusline_config = full_config.statusline or {}
+      local reasoning_format = statusline_config.reasoning_format or "{model} ({level})"
+      local thinking_format = statusline_config.thinking_format or "{model}  ✓ thinking"
 
+      -- Check for reasoning setting (OpenAI o-series)
+      local reasoning_setting = get_current_reasoning_setting()
       if reasoning_setting then
-        return string.format("%s (%s)", model_name, reasoning_setting)
-      else
-        return model_name
+        local result = reasoning_format:gsub("{model}", model_name):gsub("{level}", reasoning_setting)
+        return result
       end
+
+      -- Check for thinking budget (Anthropic, Vertex)
+      local thinking_budget = get_current_thinking_budget()
+      if thinking_budget then
+        local result = thinking_format:gsub("{model}", model_name)
+        return result
+      end
+
+      return model_name
     end
     return "" -- Fallback if flemma module is not available
   end

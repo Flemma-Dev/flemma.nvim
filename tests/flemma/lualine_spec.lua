@@ -50,7 +50,7 @@ describe("Lualine component", function()
     -- Act
     local status = flemma_component:update_status()
 
-    -- Assert
+    -- Assert (uses default format "{model} ({level})")
     assert.are.equal("o3 (high)", status)
   end)
 
@@ -76,7 +76,7 @@ describe("Lualine component", function()
     assert.are.equal("gpt-4o", status)
   end)
 
-  it("should display only the model name for non-openai providers", function()
+  it("should display only the model name for non-openai providers without thinking", function()
     -- Arrange
     core.switch_provider("anthropic", "claude-sonnet-4-5", {})
 
@@ -85,6 +85,39 @@ describe("Lualine component", function()
 
     -- Assert
     assert.are.equal("claude-sonnet-4-5", status)
+  end)
+
+  it("should display model with thinking indicator for Anthropic with valid thinking_budget", function()
+    -- Arrange
+    core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking_budget = 2048 })
+
+    -- Act
+    local status = flemma_component:update_status()
+
+    -- Assert
+    assert.are.equal("claude-sonnet-4-5  ✓ thinking", status)
+  end)
+
+  it("should not display thinking indicator for Anthropic with thinking_budget below 1024", function()
+    -- Arrange
+    core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking_budget = 500 })
+
+    -- Act
+    local status = flemma_component:update_status()
+
+    -- Assert
+    assert.are.equal("claude-sonnet-4-5", status)
+  end)
+
+  it("should display model with thinking indicator for Vertex with valid thinking_budget", function()
+    -- Arrange
+    core.switch_provider("vertex", "gemini-2.5-pro", { thinking_budget = 1000, project_id = "test-project" })
+
+    -- Act
+    local status = flemma_component:update_status()
+
+    -- Assert
+    assert.are.equal("gemini-2.5-pro  ✓ thinking", status)
   end)
 
   it("should return an empty string if filetype is not 'chat'", function()

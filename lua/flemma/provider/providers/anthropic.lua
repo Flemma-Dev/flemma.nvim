@@ -24,6 +24,8 @@ end
 -- Reset provider state (called by base.new and before new requests)
 function M.reset(self)
   base.reset(self)
+  self._response_buffer.extra.accumulated_thinking = ""
+  self._response_buffer.extra.current_block_type = nil
   log.debug("anthropic.reset(): Reset Anthropic provider state")
 end
 
@@ -99,11 +101,15 @@ function M.build_request(self, prompt, context)
         end
       end
 
-      local final_user_content = #content_blocks > 0 and content_blocks or ""
-      table.insert(api_messages, {
-        role = msg.role,
-        content = final_user_content,
-      })
+      -- Skip empty user messages (Anthropic requires non-empty content)
+      if #content_blocks > 0 then
+        table.insert(api_messages, {
+          role = msg.role,
+          content = content_blocks,
+        })
+      else
+        log.debug("anthropic.build_request: Skipping empty user message")
+      end
     elseif msg.role == "assistant" then
       -- Extract text from parts, skip thinking nodes
       local text_parts = {}
@@ -114,10 +120,16 @@ function M.build_request(self, prompt, context)
           -- Skip thinking nodes - Anthropic doesn't need them
         end
       end
-      table.insert(api_messages, {
-        role = msg.role,
-        content = { { type = "text", text = table.concat(text_parts, "") } },
-      })
+      -- Trim trailing whitespace (Anthropic rejects trailing whitespace on final assistant message)
+      local combined_text = vim.trim(table.concat(text_parts, ""))
+      if #combined_text > 0 then
+        table.insert(api_messages, {
+          role = msg.role,
+          content = { { type = "text", text = combined_text } },
+        })
+      else
+        log.debug("anthropic.build_request: Skipping empty assistant message")
+      end
     end
   end
 
@@ -129,6 +141,31 @@ function M.build_request(self, prompt, context)
     temperature = self.parameters.temperature,
     stream = true,
   }
+
+  -- Add thinking configuration if enabled
+  local thinking_budget = self.parameters.thinking_budget
+
+  if type(thinking_budget) == "number" and thinking_budget >= 1024 then
+    request_body.thinking = {
+      type = "enabled",
+      budget_tokens = math.floor(thinking_budget),
+    }
+    -- Remove temperature when thinking is enabled (Anthropic API requirement)
+    request_body.temperature = nil
+    log.debug(
+      "anthropic.build_request: Thinking enabled with budget: "
+        .. thinking_budget
+        .. ". Temperature removed from request."
+    )
+  elseif thinking_budget == 0 or thinking_budget == nil then
+    log.debug("anthropic.build_request: Thinking disabled (budget is " .. tostring(thinking_budget) .. ")")
+  else
+    log.warn(
+      "anthropic.build_request: Invalid thinking_budget value: "
+        .. tostring(thinking_budget)
+        .. ". Must be nil, 0, or >= 1024. Thinking disabled."
+    )
+  end
 
   return request_body
 end
@@ -237,6 +274,17 @@ function M.process_response_line(self, line, callbacks)
   -- Handle message_stop event
   if data.type == "message_stop" then
     log.debug("anthropic.process_response_line(): Received message_stop event")
+
+    -- Append accumulated thinking at the end (after text content)
+    local accumulated = self._response_buffer.extra.accumulated_thinking
+    if accumulated and #accumulated > 0 then
+      local stripped = vim.trim(accumulated)
+      local thinking_block = "\n\n<thinking>\n" .. stripped .. "\n</thinking>\n"
+      base._signal_content(self, thinking_block, callbacks)
+      self._response_buffer.extra.accumulated_thinking = ""
+      log.debug("anthropic.process_response_line(): Appended thinking block at end of response")
+    end
+
     if callbacks.on_response_complete then
       callbacks.on_response_complete()
     end
@@ -247,11 +295,17 @@ function M.process_response_line(self, line, callbacks)
     log.debug(
       "anthropic.process_response_line(): Received content_block_start event for index " .. tostring(data.index)
     )
+    if data.content_block and data.content_block.type then
+      self._response_buffer.extra.current_block_type = data.content_block.type
+      log.debug("anthropic.process_response_line(): Started block type: " .. data.content_block.type)
+    end
   end
 
   -- Handle content_block_stop event
   if data.type == "content_block_stop" then
     log.debug("anthropic.process_response_line(): Received content_block_stop event for index " .. tostring(data.index))
+    -- Reset block type tracker; thinking is emitted at message_stop
+    self._response_buffer.extra.current_block_type = nil
   end
 
   -- Handle content_block_delta event
@@ -268,6 +322,8 @@ function M.process_response_line(self, line, callbacks)
       log.debug("anthropic.process_response_line(): Content input_json_delta: " .. log.inspect(data.delta.partial_json))
     elseif data.delta.type == "thinking_delta" and data.delta.thinking then
       log.debug("anthropic.process_response_line(): Content thinking delta: " .. log.inspect(data.delta.thinking))
+      self._response_buffer.extra.accumulated_thinking = (self._response_buffer.extra.accumulated_thinking or "")
+        .. data.delta.thinking
     elseif data.delta.type == "signature_delta" and data.delta.signature then
       log.debug("anthropic.process_response_line(): Content signature delta received")
     else

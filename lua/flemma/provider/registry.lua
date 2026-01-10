@@ -41,8 +41,8 @@ local providers = {
     module = "flemma.provider.providers.anthropic",
     capabilities = {
       supports_reasoning = false,
-      supports_thinking_budget = false,
-      outputs_thinking = false,
+      supports_thinking_budget = true,
+      outputs_thinking = true,
     },
     display_name = "Anthropic",
   },

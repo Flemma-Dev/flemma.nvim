@@ -34,6 +34,10 @@ return {
   pricing = {
     enabled = true, -- Whether to show pricing information in notifications
   },
+  statusline = {
+    thinking_format = "{model}  ✓ thinking", -- Format string when thinking is enabled. {model} is replaced with the model name.
+    reasoning_format = "{model} ({level})", -- Format string when reasoning is enabled. {model} is model name, {level} is reasoning level.
+  },
   provider = "anthropic", -- Default provider: "anthropic", "openai", or "vertex"
   model = nil, -- Will use provider-specific default if nil
   parameters = {
@@ -49,8 +53,9 @@ return {
     openai = {
       reasoning = nil, -- Optional. "low", "medium", "high". Controls reasoning effort.
     },
-    -- Add provider-specific parameter sections here if needed in the future
-    -- e.g., anthropic = {}
+    anthropic = {
+      thinking_budget = nil, -- Optional. Budget for model thinking, in tokens. nil or 0 disables thinking. Values >= 1024 enable thinking with the specified budget.
+    },
   },
   presets = {}, -- Named presets for :Flemma switch (use ["$name"] key syntax)
   text_object = "m", -- Default text object key, set to false to disable
