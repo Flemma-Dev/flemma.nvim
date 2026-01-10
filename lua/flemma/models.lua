@@ -107,7 +107,7 @@ return {
           },
         },
 
-        -- Claude Haiku 3.5
+        -- Claude Haiku 3.5 (deprecated, retiring Feb 2026)
         ["claude-3-5-haiku-latest"] = {
           pricing = {
             input = 0.80,
@@ -134,6 +134,14 @@ return {
     vertex = {
       default = "gemini-2.5-pro",
       models = {
+        -- Gemini 3 Flash Preview
+        ["gemini-3-flash-preview"] = {
+          pricing = {
+            input = 0.50,
+            output = 3.0,
+          },
+        },
+
         -- Gemini 3 Pro Preview
         ["gemini-3-pro-preview"] = {
           pricing = {
@@ -157,6 +165,12 @@ return {
             output = 2.50,
           },
         },
+        ["gemini-2.5-flash-preview-09-2025"] = {
+          pricing = {
+            input = 0.30,
+            output = 2.50,
+          },
+        },
 
         -- Gemini 2.5 Flash Lite models
         ["gemini-2.5-flash-lite"] = {
@@ -165,8 +179,14 @@ return {
             output = 0.40,
           },
         },
+        ["gemini-2.5-flash-lite-preview-09-2025"] = {
+          pricing = {
+            input = 0.10,
+            output = 0.40,
+          },
+        },
 
-        -- Gemini 2.0 Flash models
+        -- Gemini 2.0 Flash models (retiring Mar 2026)
         ["gemini-2.0-flash"] = {
           pricing = {
             input = 0.15,
@@ -180,7 +200,7 @@ return {
           },
         },
 
-        -- Gemini 2.0 Flash Lite models
+        -- Gemini 2.0 Flash Lite models (retiring Mar 2026)
         ["gemini-2.0-flash-lite"] = {
           pricing = {
             input = 0.075,
@@ -199,8 +219,44 @@ return {
     openai = {
       default = "gpt-5",
       models = {
+        -- GPT-5.2 models
+        ["gpt-5.2"] = {
+          pricing = {
+            input = 1.75,
+            output = 14.0,
+          },
+          supports_reasoning_effort = true,
+        },
+        ["gpt-5.2-2025-12-11"] = {
+          pricing = {
+            input = 1.75,
+            output = 14.0,
+          },
+          supports_reasoning_effort = true,
+        },
+        ["gpt-5.2-chat-latest"] = {
+          pricing = {
+            input = 1.75,
+            output = 14.0,
+          },
+          supports_reasoning_effort = true,
+        },
+        ["gpt-5.2-pro"] = {
+          pricing = {
+            input = 21.0,
+            output = 168.0,
+          },
+        },
+
         -- GPT-5.1 models
         ["gpt-5.1"] = {
+          pricing = {
+            input = 1.25,
+            output = 10.0,
+          },
+          supports_reasoning_effort = true,
+        },
+        ["gpt-5.1-2025-11-13"] = {
           pricing = {
             input = 1.25,
             output = 10.0,
@@ -215,6 +271,13 @@ return {
           supports_reasoning_effort = true,
         },
         ["gpt-5.1-codex"] = {
+          pricing = {
+            input = 1.25,
+            output = 10.0,
+          },
+          supports_reasoning_effort = true,
+        },
+        ["gpt-5.1-codex-max"] = {
           pricing = {
             input = 1.25,
             output = 10.0,
@@ -298,6 +361,12 @@ return {
             output = 120.0,
           },
         },
+        ["gpt-5-search-api"] = {
+          pricing = {
+            input = 1.25,
+            output = 10.0,
+          },
+        },
 
         -- GPT-4.1 models
         ["gpt-4.1"] = {
@@ -339,6 +408,12 @@ return {
 
         -- GPT-4o models
         ["gpt-4o"] = {
+          pricing = {
+            input = 2.5,
+            output = 10.0,
+          },
+        },
+        ["gpt-4o-2024-11-20"] = {
           pricing = {
             input = 2.5,
             output = 10.0,
@@ -402,19 +477,14 @@ return {
             output = 600.0,
           },
         },
-        ["o1-mini"] = {
-          pricing = {
-            input = 1.10,
-            output = 4.40,
-          },
-        },
-        ["o1-mini-2024-09-12"] = {
-          pricing = {
-            input = 1.10,
-            output = 4.40,
-          },
-        },
         ["o3"] = {
+          pricing = {
+            input = 2.0,
+            output = 8.0,
+          },
+          supports_reasoning_effort = true,
+        },
+        ["o3-2025-04-16"] = {
           pricing = {
             input = 2.0,
             output = 8.0,
@@ -448,6 +518,13 @@ return {
           },
           supports_reasoning_effort = true,
         },
+        ["o4-mini-2025-04-16"] = {
+          pricing = {
+            input = 1.10,
+            output = 4.40,
+          },
+          supports_reasoning_effort = true,
+        },
         ["o4-mini-deep-research"] = {
           pricing = {
             input = 2.0,
@@ -473,12 +550,6 @@ return {
           pricing = {
             input = 3.0,
             output = 12.0,
-          },
-        },
-        ["codex-mini-latest"] = { -- (deprecated, retiring Jan 2026)
-          pricing = {
-            input = 1.50,
-            output = 6.0,
           },
         },
 

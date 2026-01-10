@@ -56,13 +56,13 @@ describe("Lualine component", function()
 
   it("should display only the model name when reasoning is not set for an o-series model", function()
     -- Arrange
-    core.switch_provider("openai", "o1-mini", {}) -- No reasoning parameter
+    core.switch_provider("openai", "o4-mini", {}) -- No reasoning parameter
 
     -- Act
     local status = flemma_component:update_status()
 
     -- Assert
-    assert.are.equal("o1-mini", status)
+    assert.are.equal("o4-mini", status)
   end)
 
   it("should display only the model name for non-o-series models", function()
