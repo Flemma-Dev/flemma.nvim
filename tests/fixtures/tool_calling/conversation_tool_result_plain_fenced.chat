@@ -1,0 +1,22 @@
+@System: You are a helpful assistant with access to tools.
+
+@You: Run the command
+
+@Assistant: I'll run that for you.
+
+**Tool Use:** `run_command` (`toolu_01PLAIN123`)
+
+```json
+{
+  "command": "ls -la"
+}
+```
+
+@You: **Tool Result:** `toolu_01PLAIN123`
+
+```
+this is a result of a tool
+with multiple lines
+```
+
+@Assistant: The command ran successfully.

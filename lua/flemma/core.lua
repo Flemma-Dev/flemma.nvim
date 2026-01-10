@@ -219,7 +219,7 @@ function M.send_to_provider(opts)
   local diagnostics = evaluated.diagnostics or {}
   if #diagnostics > 0 then
     local has_errors = false
-    local by_type = { frontmatter = {}, expression = {}, file = {} }
+    local by_type = { frontmatter = {}, expression = {}, file = {}, tool_result = {}, tool_use = {} }
 
     for _, diag in ipairs(diagnostics) do
       if diag.severity == "error" then
@@ -286,6 +286,27 @@ function M.send_to_provider(opts)
           table.insert(diagnostic_lines, string.format("  [%s] %s: %s", loc, ref, d.error))
         elseif i == max_per_type + 1 then
           table.insert(diagnostic_lines, string.format("  ... and %d more", #by_type.file - max_per_type))
+          break
+        end
+      end
+    end
+
+    -- Format tool use/result warnings
+    local tool_diags = {}
+    for _, d in ipairs(by_type.tool_use) do
+      table.insert(tool_diags, d)
+    end
+    for _, d in ipairs(by_type.tool_result) do
+      table.insert(tool_diags, d)
+    end
+    if #tool_diags > 0 then
+      table.insert(diagnostic_lines, "Tool calling errors:")
+      for i, d in ipairs(tool_diags) do
+        if i <= max_per_type then
+          local loc = format_position(d.position)
+          table.insert(diagnostic_lines, string.format("  [%s] %s", loc, d.error))
+        elseif i == max_per_type + 1 then
+          table.insert(diagnostic_lines, string.format("  ... and %d more", #tool_diags - max_per_type))
           break
         end
       end

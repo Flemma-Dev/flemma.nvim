@@ -1,7 +1,7 @@
 local ctxutil = require("flemma.context")
 local eval = require("flemma.eval")
 local mime_util = require("flemma.mime")
-local frontmatter_parsers = require("flemma.frontmatter.parsers")
+local codeblock_parsers = require("flemma.codeblock.parsers")
 
 local M = {}
 
@@ -53,7 +53,7 @@ function M.evaluate(doc, base_context)
   -- 1) Frontmatter execution using the parser registry
   if doc.frontmatter then
     local fm = doc.frontmatter
-    local parser = frontmatter_parsers.get(fm.language)
+    local parser = codeblock_parsers.get(fm.language)
 
     if parser then
       local ok, result = pcall(parser, fm.code, context)
@@ -65,7 +65,7 @@ function M.evaluate(doc, base_context)
             type = "frontmatter",
             severity = "warning",
             language = fm.language,
-            error = "Frontmatter parser returned non-table; ignoring",
+            error = string.format("Frontmatter must be an object, got %s", type(result)),
             position = fm.position,
             source_file = context:get_filename() or "N/A",
           })
@@ -177,6 +177,20 @@ function M.evaluate(doc, base_context)
         if seg.trailing_punct and #seg.trailing_punct > 0 then
           table.insert(parts, { kind = "text", text = seg.trailing_punct })
         end
+      elseif seg.kind == "tool_use" then
+        table.insert(parts, {
+          kind = "tool_use",
+          id = seg.id,
+          name = seg.name,
+          input = seg.input,
+        })
+      elseif seg.kind == "tool_result" then
+        table.insert(parts, {
+          kind = "tool_result",
+          tool_use_id = seg.tool_use_id,
+          content = seg.content,
+          is_error = seg.is_error,
+        })
       end
     end
 

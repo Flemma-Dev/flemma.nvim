@@ -108,15 +108,23 @@ function M.for_include(base, child_filename)
 end
 
 ---Prepare a safe eval environment from a Context
----@param ctx Context
+---@param ctx Context|table
 ---@return table env
 function M.to_eval_env(ctx)
   local eval = require("flemma.eval")
   local env = eval.create_safe_env()
-  env.__filename = ctx:get_filename()
-  env.__include_stack = ctx:get_include_stack()
+
+  -- Handle both Context objects and plain tables
+  if ctx and type(ctx.get_filename) == "function" then
+    env.__filename = ctx:get_filename()
+    env.__include_stack = ctx:get_include_stack()
+  else
+    env.__filename = nil
+    env.__include_stack = {}
+  end
+
   -- Merge user vars
-  for k, v in pairs((ctx.__variables or {})) do
+  for k, v in pairs((ctx and ctx.__variables) or {}) do
     env[k] = v
   end
   return env

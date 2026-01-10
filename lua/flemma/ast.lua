@@ -42,6 +42,26 @@ function M.thinking(content, pos)
   return { kind = "thinking", content = content, position = pos }
 end
 
+function M.tool_use(id, name, input, pos)
+  return {
+    kind = "tool_use",
+    id = id,
+    name = name,
+    input = input,
+    position = pos,
+  }
+end
+
+function M.tool_result(tool_use_id, content, is_error, pos)
+  return {
+    kind = "tool_result",
+    tool_use_id = tool_use_id,
+    content = content,
+    is_error = is_error or false,
+    position = pos,
+  }
+end
+
 -- Evaluated message parts -> GenericPart[], diagnostics[]
 -- Returns both the generic parts and any diagnostics generated during conversion
 function M.to_generic_parts(evaluated_parts, source_file)
@@ -105,6 +125,20 @@ function M.to_generic_parts(evaluated_parts, source_file)
         source_file = source_file or "N/A",
       })
       table.insert(parts, { kind = "unsupported_file", raw_filename = p.raw })
+    elseif p.kind == "tool_use" then
+      table.insert(parts, {
+        kind = "tool_use",
+        id = p.id,
+        name = p.name,
+        input = p.input,
+      })
+    elseif p.kind == "tool_result" then
+      table.insert(parts, {
+        kind = "tool_result",
+        tool_use_id = p.tool_use_id,
+        content = p.content,
+        is_error = p.is_error,
+      })
     end
   end
   return parts, diagnostics

@@ -1,6 +1,11 @@
 local ast = require("flemma.ast")
+local codeblock = require("flemma.codeblock")
 
 local M = {}
+
+local TOOL_USE_PATTERN = "^%*%*Tool Use:%*%*%s*`([^`]+)`%s*%(`([^)]+)`%)"
+local TOOL_RESULT_PATTERN = "^%*%*Tool Result:%*%*%s*`([^`]+)`"
+local TOOL_RESULT_ERROR_PATTERN = "%s*%(error%)%s*$"
 
 -- Utilities
 local function url_decode(str)
@@ -108,13 +113,131 @@ local function parse_segments(text, base_line)
   return segments
 end
 
--- Parse assistant messages - only extract <thinking> tags, treat rest as text
+-- Parse user messages - handle **Tool Result:** blocks and regular content
+-- lines: array of content lines (without the @You: prefix)
+-- base_line_num: the line number where the message content starts (1-indexed)
+-- diagnostics: optional table to collect parsing diagnostics
+local function parse_user_segments(lines, base_line_num, diagnostics)
+  local segments = {}
+  diagnostics = diagnostics or {}
+  if not lines or #lines == 0 then
+    return { ast.text("") }, diagnostics
+  end
+
+  local function emit_text_with_parsing(text, line_num)
+    if text and #text > 0 then
+      local parsed = parse_segments(text, line_num)
+      for _, seg in ipairs(parsed) do
+        table.insert(segments, seg)
+      end
+    end
+  end
+
+  local i = 1
+  while i <= #lines do
+    local line = lines[i]
+    local current_line_num = base_line_num + i - 1
+
+    -- Check for **Tool Result:** marker
+    local tool_use_id = line:match(TOOL_RESULT_PATTERN)
+    if tool_use_id then
+      local is_error = line:match(TOOL_RESULT_ERROR_PATTERN) ~= nil
+      local result_start_line = current_line_num
+
+      -- Skip blank lines to find content
+      local content_start = codeblock.skip_blank_lines(lines, i + 1)
+
+      -- Check if line starts with backticks (fence opener)
+      local content_line = lines[content_start]
+      local has_fence_opener = content_line and content_line:match("^`+")
+
+      -- Try to parse a fenced code block
+      local block, block_end = codeblock.parse_fenced_block(lines, content_start)
+
+      if block then
+        local result_content
+
+        if block.language then
+          -- Parse the content based on language
+          local content, parse_err = codeblock.parse(block.language, block.content)
+
+          if parse_err then
+            table.insert(diagnostics, {
+              type = "tool_result",
+              severity = "warning",
+              error = "Failed to parse tool result: " .. parse_err,
+              position = { start_line = result_start_line },
+            })
+            -- Treat as plain text result
+            result_content = block.content
+          else
+            -- If parsed to a simple value, convert to string for API
+            if type(content) == "table" then
+              result_content = vim.fn.json_encode(content)
+            else
+              result_content = tostring(content)
+            end
+          end
+        else
+          -- No language specified - treat as plain text
+          result_content = block.content
+        end
+
+        table.insert(
+          segments,
+          ast.tool_result(tool_use_id, result_content, is_error, {
+            start_line = result_start_line,
+            end_line = base_line_num + block_end - 1,
+          })
+        )
+        i = block_end + 1
+      elseif has_fence_opener then
+        -- Started a fence but didn't close it properly - this is an error
+        table.insert(diagnostics, {
+          type = "tool_result",
+          severity = "warning",
+          error = "Unclosed fenced code block in tool result (missing closing fence)",
+          position = { start_line = result_start_line },
+        })
+        -- Skip to end of message (next @Role: marker) to avoid parsing garbage
+        local j = content_start + 1
+        while j <= #lines and not lines[j]:match("^@[%w]+:") do
+          j = j + 1
+        end
+        i = j
+      else
+        -- No fence at all - tool results require a fenced code block
+        table.insert(diagnostics, {
+          type = "tool_result",
+          severity = "warning",
+          error = "Tool result requires a fenced code block",
+          position = { start_line = result_start_line },
+        })
+        -- Skip to next line and continue
+        i = content_start
+      end
+    else
+      -- Regular content line - parse for expressions and file references
+      emit_text_with_parsing(line, current_line_num)
+      if i < #lines then
+        table.insert(segments, ast.text("\n"))
+      end
+      i = i + 1
+    end
+  end
+
+  return segments, diagnostics
+end
+
+-- Parse assistant messages - extract <thinking> tags and **Tool Use:** blocks, treat rest as text
 -- lines: array of content lines (without the @Assistant: prefix)
 -- base_line_num: the line number where the message content starts (1-indexed)
-local function parse_assistant_segments(lines, base_line_num)
+-- diagnostics: optional table to collect parsing diagnostics
+local function parse_assistant_segments(lines, base_line_num, diagnostics)
   local segments = {}
+  diagnostics = diagnostics or {}
   if not lines or #lines == 0 then
-    return { ast.text("") }
+    return { ast.text("") }, diagnostics
   end
 
   local function emit_text(str)
@@ -153,6 +276,70 @@ local function parse_assistant_segments(lines, base_line_num)
           i = i + 1
         end
       end
+    elseif line:match(TOOL_USE_PATTERN) then
+      local tool_name, tool_id = line:match(TOOL_USE_PATTERN)
+      local tool_start_line = current_line_num
+
+      -- Skip blank lines to find the code block
+      local block_start = codeblock.skip_blank_lines(lines, i + 1)
+
+      -- Check if line starts with backticks (fence opener)
+      local content_line = lines[block_start]
+      local has_fence_opener = content_line and content_line:match("^`+")
+
+      local block, block_end = codeblock.parse_fenced_block(lines, block_start)
+
+      if block then
+        -- Parse the JSON content
+        local input, parse_err = codeblock.parse(block.language or "json", block.content)
+
+        if parse_err then
+          table.insert(diagnostics, {
+            type = "tool_use",
+            severity = "warning",
+            error = "Failed to parse tool input: " .. parse_err,
+            position = { start_line = tool_start_line },
+          })
+          -- Skip to end of malformed block
+          local j = block_start + 1
+          while j <= #lines and not lines[j]:match("^@[%w]+:") do
+            j = j + 1
+          end
+          i = j
+        else
+          table.insert(
+            segments,
+            ast.tool_use(tool_id, tool_name, input, {
+              start_line = tool_start_line,
+              end_line = base_line_num + block_end - 1,
+            })
+          )
+          i = block_end + 1
+        end
+      elseif has_fence_opener then
+        -- Started a fence but didn't close it properly
+        table.insert(diagnostics, {
+          type = "tool_use",
+          severity = "warning",
+          error = "Unclosed fenced code block in tool use (missing closing fence)",
+          position = { start_line = tool_start_line },
+        })
+        -- Skip to end of message
+        local j = block_start + 1
+        while j <= #lines and not lines[j]:match("^@[%w]+:") do
+          j = j + 1
+        end
+        i = j
+      else
+        -- No fence at all
+        table.insert(diagnostics, {
+          type = "tool_use",
+          severity = "warning",
+          error = "Tool use requires a fenced code block with JSON input",
+          position = { start_line = tool_start_line },
+        })
+        i = block_start
+      end
     else
       -- Regular text line
       emit_text(line)
@@ -163,7 +350,7 @@ local function parse_assistant_segments(lines, base_line_num)
     end
   end
 
-  return segments
+  return segments, diagnostics
 end
 
 -- Split into frontmatter and body lines. Frontmatter fence: ```language ... ```
@@ -200,15 +387,17 @@ end
 
 -- Parse message role line: @Role:
 -- line_offset: offset to add to line numbers (for frontmatter adjustment)
-local function parse_message(lines, start_idx, line_offset)
+-- diagnostics: optional table to collect parsing diagnostics
+local function parse_message(lines, start_idx, line_offset, diagnostics)
   line_offset = line_offset or 0
+  diagnostics = diagnostics or {}
   local line = lines[start_idx]
   if not line then
-    return nil, start_idx
+    return nil, start_idx, diagnostics
   end
   local role = line:match("^@([%w]+):")
   if not role then
-    return nil, start_idx
+    return nil, start_idx, diagnostics
   end
 
   local content_first = line:sub(#role + 3)
@@ -228,18 +417,27 @@ local function parse_message(lines, start_idx, line_offset)
     i = i + 1
   end
 
-  -- For @Assistant messages, only parse thinking tags (no expressions or file refs)
   local segments
+  local content_start_line = (content_first and content_first:match("%S")) and start_idx + line_offset
+    or (start_idx + 1 + line_offset)
+
   if role == "Assistant" then
-    -- Pass content_lines and the line number where content starts (after the @Assistant: line)
-    local content_start_line = (content_first and content_first:match("%S")) and start_idx + line_offset
-      or (start_idx + 1 + line_offset)
-    segments = parse_assistant_segments(content_lines, content_start_line)
+    -- Parse thinking tags and tool_use blocks
+    local msg_diagnostics
+    segments, msg_diagnostics = parse_assistant_segments(content_lines, content_start_line, {})
+    for _, diag in ipairs(msg_diagnostics) do
+      table.insert(diagnostics, diag)
+    end
+  elseif role == "You" then
+    -- Parse tool_result blocks and regular content
+    local msg_diagnostics
+    segments, msg_diagnostics = parse_user_segments(content_lines, content_start_line, {})
+    for _, diag in ipairs(msg_diagnostics) do
+      table.insert(diagnostics, diag)
+    end
   else
+    -- Other roles (System, etc.) - parse expressions and file references
     local content = table.concat(content_lines, "\n")
-    -- Calculate base line for non-Assistant messages
-    local content_start_line = (content_first and content_first:match("%S")) and start_idx + line_offset
-      or (start_idx + 1 + line_offset)
     segments = parse_segments(content, content_start_line)
   end
 
@@ -247,7 +445,7 @@ local function parse_message(lines, start_idx, line_offset)
     start_line = start_idx + line_offset,
     end_line = (i - 1) + line_offset,
   })
-  return msg, (i - 1)
+  return msg, (i - 1), diagnostics
 end
 
 function M.parse_lines(lines)
@@ -261,9 +459,12 @@ function M.parse_lines(lines)
   local line_offset = body and (body_start - 1) or 0
 
   while i <= #content_lines do
-    local msg, last = parse_message(content_lines, i, line_offset)
+    local msg, last, diagnostics = parse_message(content_lines, i, line_offset, {})
     if msg then
       table.insert(messages, msg)
+      for _, diag in ipairs(diagnostics) do
+        table.insert(errors, diag)
+      end
       i = last + 1
     else
       i = i + 1

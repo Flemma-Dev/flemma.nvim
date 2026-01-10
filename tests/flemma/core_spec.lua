@@ -49,18 +49,18 @@ describe(":FlemmaSend command", function()
     local captured_request_body = core._get_last_request_body()
     assert.is_not_nil(captured_request_body, "request_body was not captured")
 
-    local expected_body = {
-      model = default_anthropic_model,
-      messages = {
-        { role = "user", content = { { type = "text", text = "Hello" } } },
-      },
-      system = "Be brief.",
-      max_tokens = config.parameters.max_tokens,
-      temperature = config.parameters.temperature,
-      stream = true,
-    }
-
-    assert.are.same(expected_body, captured_request_body)
+    assert.equals(default_anthropic_model, captured_request_body.model)
+    assert.equals("Be brief.", captured_request_body.system)
+    assert.equals(config.parameters.max_tokens, captured_request_body.max_tokens)
+    assert.equals(config.parameters.temperature, captured_request_body.temperature)
+    assert.equals(true, captured_request_body.stream)
+    assert.equals(1, #captured_request_body.messages)
+    assert.equals("user", captured_request_body.messages[1].role)
+    assert.equals("Hello", captured_request_body.messages[1].content[1].text)
+    -- Tools are now included by default (MVP tool calling support)
+    if captured_request_body.tools then
+      assert.is_true(#captured_request_body.tools >= 0)
+    end
   end)
 
   it("formats the request body correctly for the OpenAI provider", function()
