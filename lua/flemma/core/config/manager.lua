@@ -4,6 +4,7 @@ local M = {}
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local validation = require("flemma.core.validation")
+local providers_registry = require("flemma.provider.providers")
 
 --- Check if a parameter key is a general parameter applicable to all providers
 -- @param key string The parameter key to check
@@ -51,23 +52,27 @@ function M.prepare_config(provider_name, model_name, parameters)
     return nil, err
   end
 
+  -- Resolve provider alias (e.g., 'claude' -> 'anthropic')
+  -- This must happen after validation but before any other use of provider_name
+  local resolved_provider = providers_registry.resolve(provider_name)
+
   -- Validate and get appropriate model
-  local validated_model, model_err = validation.validate_and_get_model(model_name, provider_name)
+  local validated_model, model_err = validation.validate_and_get_model(model_name, resolved_provider)
   if not validated_model then
     return nil, model_err
   end
 
   -- Merge parameters
-  local merged_params = M.merge_parameters(parameters, provider_name)
+  local merged_params = M.merge_parameters(parameters, resolved_provider)
   merged_params.model = validated_model
 
   -- Validate parameters (shows warnings but doesn't fail)
-  validation.validate_parameters(provider_name, validated_model, merged_params)
+  validation.validate_parameters(resolved_provider, validated_model, merged_params)
 
   -- Log the final configuration
   log.debug(
     "prepare_config(): Prepared config for provider "
-      .. log.inspect(provider_name)
+      .. log.inspect(resolved_provider)
       .. " with model "
       .. log.inspect(validated_model)
       .. " and parameters: "
@@ -75,7 +80,7 @@ function M.prepare_config(provider_name, model_name, parameters)
   )
 
   return {
-    provider = provider_name,
+    provider = resolved_provider,
     model = validated_model,
     parameters = merged_params,
   }, nil

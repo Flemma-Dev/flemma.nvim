@@ -52,12 +52,11 @@ function M.resolve(provider_name)
       deprecated_warning_shown[provider_name] = true
       vim.notify(
         string.format(
-          "The '%s' provider has been renamed to '%s'. Please update your configuration.",
+          "Flemma: The '%s' provider has been renamed to '%s'. Update your configuration.",
           provider_name,
           alias_target
         ),
-        vim.log.levels.WARN,
-        { title = "Flemma: Deprecated Provider" }
+        vim.log.levels.WARN
       )
     end
     return alias_target
