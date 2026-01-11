@@ -264,6 +264,25 @@ function M.extract_json_response_error(self, data)
   return nil
 end
 
+--- Normalize tool call ID for provider compatibility
+--- Converts URN-style Flemma IDs (urn:flemma:tool:name:unique) to provider-compatible format
+--- by replacing colons with underscores. Non-Flemma IDs are passed through unchanged.
+---@param id string The tool call ID to normalize
+---@return string normalized_id The normalized ID safe for Anthropic/OpenAI APIs
+function M.normalize_tool_id(id)
+  if not id then
+    return id
+  end
+  -- Check if this is a Flemma URN-style ID (urn:flemma:tool:...)
+  if id:match("^urn:flemma:tool:") then
+    -- Replace colons with underscores to satisfy ^[a-zA-Z0-9_-]+$ pattern
+    local normalized = id:gsub(":", "_")
+    return normalized
+  end
+  -- Pass through other IDs unchanged (e.g., native Anthropic/OpenAI IDs)
+  return id
+end
+
 ---Parse a single SSE (Server-Sent Events) line (internal)
 ---@param line string The raw line from the stream
 ---@param opts? table Optional parsing options { allow_done?: boolean }

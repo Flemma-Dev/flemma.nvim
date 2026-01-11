@@ -1459,3 +1459,179 @@ describe("Vertex AI Request Body Validation with Tools", function()
     assert.is_true(user_has_fr, "User message should have functionResponse")
   end)
 end)
+
+-- ============================================================================
+-- Cross-Provider Tool ID Normalization Tests
+-- ============================================================================
+
+describe("Base Provider Tool ID Normalization", function()
+  local base = require("flemma.provider.base")
+
+  it("normalizes URN-style Flemma IDs by replacing colons with underscores", function()
+    local id = "urn:flemma:tool:calculator:6963a326cb51"
+    local normalized = base.normalize_tool_id(id)
+    assert.equals("urn_flemma_tool_calculator_6963a326cb51", normalized)
+  end)
+
+  it("passes through native Anthropic IDs unchanged", function()
+    local id = "toolu_01A09q90qw90lq917835lgs0"
+    local normalized = base.normalize_tool_id(id)
+    assert.equals("toolu_01A09q90qw90lq917835lgs0", normalized)
+  end)
+
+  it("passes through native OpenAI IDs unchanged", function()
+    local id = "call_zKVQISSUvL3HNmgE80n28JcM"
+    local normalized = base.normalize_tool_id(id)
+    assert.equals("call_zKVQISSUvL3HNmgE80n28JcM", normalized)
+  end)
+
+  it("handles nil input gracefully", function()
+    local normalized = base.normalize_tool_id(nil)
+    assert.is_nil(normalized)
+  end)
+
+  it("handles empty string input", function()
+    local normalized = base.normalize_tool_id("")
+    assert.equals("", normalized)
+  end)
+
+  it("does not modify IDs that only partially match URN pattern", function()
+    -- Just starts with 'urn:' but not 'urn:flemma:tool:'
+    local id = "urn:other:something:123"
+    local normalized = base.normalize_tool_id(id)
+    assert.equals("urn:other:something:123", normalized)
+  end)
+end)
+
+describe("Anthropic Provider with Vertex URN IDs", function()
+  local anthropic = require("flemma.provider.providers.anthropic")
+
+  before_each(function()
+    tools.clear()
+    tools.setup()
+  end)
+
+  it("normalizes Vertex URN tool_use IDs in request", function()
+    local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"))
+    local req = provider:build_request(prompt, {})
+
+    -- Find assistant message with tool_use
+    local assistant_msg = nil
+    for _, msg in ipairs(req.messages) do
+      if msg.role == "assistant" then
+        assistant_msg = msg
+        break
+      end
+    end
+
+    assert.is_not_nil(assistant_msg)
+    local tool_use = nil
+    for _, block in ipairs(assistant_msg.content) do
+      if block.type == "tool_use" then
+        tool_use = block
+      end
+    end
+
+    assert.is_not_nil(tool_use)
+    -- Should be normalized (colons replaced with underscores)
+    assert.is_true(
+      tool_use.id:match("^urn_flemma_tool_calculator_") ~= nil,
+      "Tool use ID should be normalized from URN format"
+    )
+    assert.is_true(tool_use.id:match(":") == nil, "Normalized ID should not contain colons")
+  end)
+
+  it("normalizes Vertex URN tool_result IDs in request", function()
+    local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"))
+    local req = provider:build_request(prompt, {})
+
+    -- Find user message with tool_result
+    local user_msgs = vim.tbl_filter(function(m)
+      return m.role == "user"
+    end, req.messages)
+
+    local tool_result = nil
+    for _, msg in ipairs(user_msgs) do
+      for _, block in ipairs(msg.content or {}) do
+        if block.type == "tool_result" then
+          tool_result = block
+        end
+      end
+    end
+
+    assert.is_not_nil(tool_result)
+    -- Should be normalized (colons replaced with underscores)
+    assert.is_true(
+      tool_result.tool_use_id:match("^urn_flemma_tool_calculator_") ~= nil,
+      "Tool result ID should be normalized from URN format"
+    )
+    assert.is_true(tool_result.tool_use_id:match(":") == nil, "Normalized ID should not contain colons")
+  end)
+end)
+
+describe("OpenAI Provider with Vertex URN IDs", function()
+  local openai = require("flemma.provider.providers.openai")
+
+  before_each(function()
+    tools.clear()
+    tools.setup()
+  end)
+
+  it("normalizes Vertex URN tool_calls IDs in request", function()
+    local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"))
+    local req = provider:build_request(prompt, {})
+
+    -- Find assistant message with tool_calls
+    local assistant_msg = nil
+    for _, msg in ipairs(req.messages) do
+      if msg.role == "assistant" and msg.tool_calls then
+        assistant_msg = msg
+        break
+      end
+    end
+
+    assert.is_not_nil(assistant_msg)
+    assert.is_not_nil(assistant_msg.tool_calls)
+    assert.equals(1, #assistant_msg.tool_calls)
+
+    local tool_call = assistant_msg.tool_calls[1]
+    -- Should be normalized (colons replaced with underscores)
+    assert.is_true(
+      tool_call.id:match("^urn_flemma_tool_calculator_") ~= nil,
+      "Tool call ID should be normalized from URN format"
+    )
+    assert.is_true(tool_call.id:match(":") == nil, "Normalized ID should not contain colons")
+  end)
+
+  it("normalizes Vertex URN tool_call_id in tool messages", function()
+    local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"))
+    local req = provider:build_request(prompt, {})
+
+    -- Find tool message
+    local tool_msgs = vim.tbl_filter(function(m)
+      return m.role == "tool"
+    end, req.messages)
+
+    assert.equals(1, #tool_msgs)
+    local tool_msg = tool_msgs[1]
+
+    -- Should be normalized (colons replaced with underscores)
+    assert.is_true(
+      tool_msg.tool_call_id:match("^urn_flemma_tool_calculator_") ~= nil,
+      "Tool message ID should be normalized from URN format"
+    )
+    assert.is_true(tool_msg.tool_call_id:match(":") == nil, "Normalized ID should not contain colons")
+  end)
+end)

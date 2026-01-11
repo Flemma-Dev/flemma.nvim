@@ -57,13 +57,15 @@ function M.build_request(self, prompt, context)
       -- Tool results must come first in user messages (Anthropic requirement)
       for _, part in ipairs(msg.parts or {}) do
         if part.kind == "tool_result" then
+          -- Normalize tool ID for Anthropic compatibility (handles Vertex URN-style IDs)
+          local normalized_id = base.normalize_tool_id(part.tool_use_id)
           table.insert(content_blocks, {
             type = "tool_result",
-            tool_use_id = part.tool_use_id,
+            tool_use_id = normalized_id,
             content = part.content,
             is_error = part.is_error or nil,
           })
-          log.debug("anthropic.build_request: Added tool_result for " .. part.tool_use_id)
+          log.debug("anthropic.build_request: Added tool_result for " .. normalized_id)
         end
       end
 
@@ -139,13 +141,15 @@ function M.build_request(self, prompt, context)
         elseif p.kind == "thinking" then
           -- Skip thinking nodes - Anthropic doesn't need them
         elseif p.kind == "tool_use" then
+          -- Normalize tool ID for Anthropic compatibility (handles Vertex URN-style IDs)
+          local normalized_id = base.normalize_tool_id(p.id)
           table.insert(content_blocks, {
             type = "tool_use",
-            id = p.id,
+            id = normalized_id,
             name = p.name,
             input = p.input,
           })
-          log.debug("anthropic.build_request: Added tool_use for " .. p.name .. " (" .. p.id .. ")")
+          log.debug("anthropic.build_request: Added tool_use for " .. p.name .. " (" .. normalized_id .. ")")
         end
       end
 

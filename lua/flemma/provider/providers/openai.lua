@@ -109,12 +109,14 @@ function M.build_request(self, prompt, context)
         elseif part.kind == "unsupported_file" then
           table.insert(content_parts_for_api, { type = "text", text = "@" .. (part.raw_filename or "") })
         elseif part.kind == "tool_result" then
+          -- Normalize tool ID for OpenAI compatibility (handles Vertex URN-style IDs)
+          local normalized_id = base.normalize_tool_id(part.tool_use_id)
           table.insert(tool_results, {
-            tool_call_id = part.tool_use_id,
+            tool_call_id = normalized_id,
             content = part.content,
             is_error = part.is_error,
           })
-          log.debug("openai.build_request: Added tool_result for " .. part.tool_use_id)
+          log.debug("openai.build_request: Added tool_result for " .. normalized_id)
         end
       end
 
@@ -168,15 +170,17 @@ function M.build_request(self, prompt, context)
         elseif p.kind == "thinking" then
           -- Skip thinking nodes - OpenAI doesn't need them
         elseif p.kind == "tool_use" then
+          -- Normalize tool ID for OpenAI compatibility (handles Vertex URN-style IDs)
+          local normalized_id = base.normalize_tool_id(p.id)
           table.insert(tool_calls, {
-            id = p.id,
+            id = normalized_id,
             type = "function",
             ["function"] = {
               name = p.name,
               arguments = vim.fn.json_encode(p.input),
             },
           })
-          log.debug("openai.build_request: Added tool_use for " .. p.name .. " (" .. p.id .. ")")
+          log.debug("openai.build_request: Added tool_use for " .. p.name .. " (" .. normalized_id .. ")")
         end
       end
 
