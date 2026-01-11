@@ -11,6 +11,7 @@ return {
   },
   role_style = "bold,underline", -- style applied to role markers like @You:
   ruler = {
+    enabled = true, -- Set to false to disable rulers between messages
     char = "━", -- The character to use for the ruler
     hl = "NonText", -- Highlight group or hex color for the ruler
   },
@@ -29,6 +30,13 @@ return {
       char = nil, -- Use default char
       hl = true, -- Inherit from highlights.assistant, set false to disable, or provide specific group/hex color
     },
+  },
+  line_highlights = {
+    enabled = false, -- Enable full-line background highlighting to distinguish roles
+    frontmatter = { bg = "#2e2a1a" }, -- Background color for frontmatter lines
+    system = { bg = "#2e1a1a" }, -- Background color for system message lines
+    user = { bg = "#1a1a2e" }, -- Background color for user message lines
+    assistant = { bg = "#1a2e1a" }, -- Background color for assistant message lines
   },
   notify = require("flemma.notify").default_opts,
   pricing = {
@@ -63,6 +71,7 @@ return {
     disable_textwidth = true, -- Whether to disable textwidth in chat buffers
     auto_write = false, -- Whether to automatically write the buffer after changes
     manage_updatetime = true, -- Whether to set updatetime to 100 in chat buffers and restore original value when leaving
+    foldlevel = 1, -- Default fold level: 0=all closed, 1=thinking collapsed, 99=all open
   },
   logging = {
     enabled = false, -- Logging disabled by default

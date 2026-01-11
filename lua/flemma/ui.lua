@@ -126,6 +126,7 @@ end
 -- Define namespace for our extmarks
 local ns_id = vim.api.nvim_create_namespace("flemma")
 local spinner_ns = vim.api.nvim_create_namespace("flemma_spinner")
+local line_hl_ns = vim.api.nvim_create_namespace("flemma_line_highlights")
 
 --- Execute a command in the context of a buffer's window
 ---@param bufnr number Buffer number
@@ -175,13 +176,18 @@ function M.add_rulers(bufnr, doc)
   -- Clear existing extmarks
   vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
+  local ruler_config = state.get_config().ruler
+  if ruler_config.enabled == false then
+    return
+  end
+
   for i, msg in ipairs(doc.messages) do
     -- Add a ruler before each message after the first, and before the first if frontmatter exists
     if i > 1 or (i == 1 and doc.frontmatter ~= nil) then
       local line_idx = msg.position.start_line - 1
       if line_idx >= 0 and line_idx < vim.api.nvim_buf_line_count(bufnr) then
         -- Create virtual line with ruler using the FlemmaRuler highlight group
-        local ruler_text = string.rep(state.get_config().ruler.char, math.floor(vim.api.nvim_win_get_width(0) * 1))
+        local ruler_text = string.rep(ruler_config.char, math.floor(vim.api.nvim_win_get_width(0) * 1))
         vim.api.nvim_buf_set_extmark(bufnr, ns_id, line_idx, 0, {
           virt_lines = { { { ruler_text, "FlemmaRuler" } } }, -- Use defined group
           virt_lines_above = true,
@@ -427,17 +433,80 @@ function M.place_signs(bufnr, start_line, end_line, role)
   end
 end
 
+-- Apply full-line background highlighting for messages and frontmatter
+function M.apply_line_highlights(bufnr, doc)
+  local current_config = state.get_config()
+  if not current_config.line_highlights or not current_config.line_highlights.enabled then
+    return
+  end
+
+  -- Clear existing line highlights
+  vim.api.nvim_buf_clear_namespace(bufnr, line_hl_ns, 0, -1)
+
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+
+  -- Highlight frontmatter if present
+  if doc.frontmatter and doc.frontmatter.position then
+    for lnum = doc.frontmatter.position.start_line, doc.frontmatter.position.end_line do
+      local line_idx = lnum - 1
+      if line_idx >= 0 and line_idx < line_count then
+        vim.api.nvim_buf_set_extmark(bufnr, line_hl_ns, line_idx, 0, {
+          line_hl_group = "FlemmaLineFrontmatter",
+          priority = 50,
+        })
+      end
+    end
+  end
+
+  -- Highlight messages
+  for _, msg in ipairs(doc.messages) do
+    -- Map the display role to internal config key
+    local internal_role_key = string.lower(msg.role)
+    if msg.role == "You" then
+      internal_role_key = "user"
+    end
+
+    -- Construct highlight group name (e.g., "FlemmaLineUser")
+    local hl_group = "FlemmaLine" .. internal_role_key:sub(1, 1):upper() .. internal_role_key:sub(2)
+
+    -- Apply line highlight to each line in the message
+    for lnum = msg.position.start_line, msg.position.end_line do
+      local line_idx = lnum - 1 -- Convert to 0-indexed
+      if line_idx >= 0 and line_idx < line_count then
+        vim.api.nvim_buf_set_extmark(bufnr, line_hl_ns, line_idx, 0, {
+          line_hl_group = hl_group,
+          priority = 50, -- Lower than text highlights but visible
+        })
+      end
+    end
+  end
+end
+
 -- Set up folding expression
 function M.setup_folding()
   vim.wo.foldmethod = "expr"
   vim.wo.foldexpr = 'v:lua.require("flemma.ui").get_fold_level(v:lnum)'
   vim.wo.foldtext = 'v:lua.require("flemma.ui").get_fold_text()'
-  -- Start with all folds open
-  vim.wo.foldlevel = 99
+  -- Set fold level from config (default 1 = thinking blocks collapsed)
+  vim.wo.foldlevel = config.editing.foldlevel
 end
 
 -- Store original updatetime per-session (global for all buffers)
 local original_updatetime = nil
+
+-- Apply buffer-local settings for chat files
+local function apply_chat_buffer_settings()
+  M.setup_folding()
+
+  if config.editing.disable_textwidth then
+    vim.bo.textwidth = 0
+  end
+
+  if config.editing.auto_write then
+    vim.opt_local.autowrite = true
+  end
+
+end
 
 -- Set up chat filetype autocmds
 function M.setup_chat_filetype_autocmds()
@@ -446,15 +515,7 @@ function M.setup_chat_filetype_autocmds()
     pattern = "*.chat",
     callback = function()
       vim.bo.filetype = "chat"
-      M.setup_folding()
-
-      if config.editing.disable_textwidth then
-        vim.bo.textwidth = 0
-      end
-
-      if config.editing.auto_write then
-        vim.opt_local.autowrite = true
-      end
+      apply_chat_buffer_settings()
     end,
   })
 
@@ -462,13 +523,7 @@ function M.setup_chat_filetype_autocmds()
   vim.api.nvim_create_autocmd("FileType", {
     pattern = "chat",
     callback = function()
-      M.setup_folding()
-      if config.editing.disable_textwidth then
-        vim.bo.textwidth = 0
-      end
-      if config.editing.auto_write then
-        vim.opt_local.autowrite = true
-      end
+      apply_chat_buffer_settings()
     end,
   })
 
@@ -503,7 +558,7 @@ function M.setup_chat_filetype_autocmds()
   end
 end
 
--- Helper function to force UI update (rulers and signs)
+-- Helper function to force UI update (rulers, signs, and line highlights)
 function M.update_ui(bufnr)
   -- Ensure buffer is valid before proceeding
   if not vim.api.nvim_buf_is_valid(bufnr) then
@@ -517,6 +572,7 @@ function M.update_ui(bufnr)
 
   M.add_rulers(bufnr, doc)
   M.highlight_thinking_tags(bufnr, doc)
+  M.apply_line_highlights(bufnr, doc)
   apply_spinner_suppression(bufnr)
 
   -- Clear and reapply all signs

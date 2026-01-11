@@ -182,6 +182,7 @@ describe("UI Folding", function()
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
       vim.wo.foldexpr = "v:lua.require('flemma.ui').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
       ui.fold_last_thinking_block(bufnr)
@@ -214,6 +215,7 @@ describe("UI Folding", function()
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
       vim.wo.foldexpr = "v:lua.require('flemma.ui').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
       ui.fold_last_thinking_block(bufnr)
@@ -281,6 +283,7 @@ describe("UI Folding", function()
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
       vim.wo.foldexpr = "v:lua.require('flemma.ui').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
       ui.fold_last_thinking_block(bufnr)
@@ -319,6 +322,7 @@ describe("UI Folding", function()
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
       vim.wo.foldexpr = "v:lua.require('flemma.ui').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
       ui.fold_last_thinking_block(bufnr)
@@ -351,6 +355,7 @@ describe("UI Folding", function()
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
       vim.wo.foldexpr = "v:lua.require('flemma.ui').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
       ui.fold_last_thinking_block(bufnr)

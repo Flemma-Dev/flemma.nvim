@@ -26,6 +26,9 @@ syntax match FlemmaThinkingTag "^<thinking\(\s.*[^/>]\)\?>$" contained
 syntax match FlemmaThinkingTag "^<thinking\s.*/>$" contained
 syntax match FlemmaThinkingTag "^</thinking>$" contained
 
+" Note: Signature concealment is now handled via extmarks in ui.lua highlight_thinking_tags()
+" This avoids needing conceallevel which affects the whole buffer (including frontmatter)
+
 " Define Frontmatter Tags (for highlighting the delimiters themselves)
 " Only match supported languages: lua, json
 syntax match FlemmaFrontmatterTag "^```\(lua\|json\)$" contained

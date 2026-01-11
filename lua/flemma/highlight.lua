@@ -68,6 +68,33 @@ M.apply_syntax = function()
   set_highlight("FlemmaThinkingBlock", syntax_config.highlights.thinking_block)
 end
 
+-- Setup line highlight groups for full-line background highlighting
+local function setup_line_highlights()
+  local current_config = state.get_config()
+  if not current_config.line_highlights or not current_config.line_highlights.enabled then
+    return
+  end
+
+  local roles = { "frontmatter", "user", "system", "assistant" }
+  for _, role in ipairs(roles) do
+    local role_config = current_config.line_highlights[role]
+    if role_config then
+      local group_name = "FlemmaLine" .. role:sub(1, 1):upper() .. role:sub(2)
+      -- role_config can be a table like { bg = "#1a1a2e" } or a string (hex color or link)
+      if type(role_config) == "table" then
+        role_config.default = true
+        vim.api.nvim_set_hl(0, group_name, role_config)
+      elseif type(role_config) == "string" then
+        if role_config:sub(1, 1) == "#" then
+          vim.api.nvim_set_hl(0, group_name, { bg = role_config, default = true })
+        else
+          vim.api.nvim_set_hl(0, group_name, { link = role_config, default = true })
+        end
+      end
+    end
+  end
+end
+
 -- Setup signs for different roles
 local function setup_signs()
   local current_config = state.get_config()
@@ -108,6 +135,9 @@ end
 
 -- Setup function to initialize highlighting functionality
 M.setup = function()
+  -- Set up line highlights for full-line background colors
+  setup_line_highlights()
+
   -- Set up signs
   setup_signs()
 
