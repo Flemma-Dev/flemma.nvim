@@ -414,8 +414,15 @@ function M.process_response_line(self, line, callbacks)
         if self:_has_content() then
           prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
         end
-        local formatted =
-          string.format("%s**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n", prefix, tc.name, tc.id, fence, json_str, fence)
+        local formatted = string.format(
+          "%s**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n",
+          prefix,
+          tc.name,
+          tc.id,
+          fence,
+          json_str,
+          fence
+        )
 
         base._signal_content(self, formatted, callbacks)
         log.debug("openai.process_response_line(): Emitted tool_use block for " .. tc.name)

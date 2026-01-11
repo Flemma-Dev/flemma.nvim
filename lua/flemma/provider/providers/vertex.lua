@@ -125,6 +125,8 @@ function M.reset(self)
   base.reset(self)
   -- Add Vertex-specific extension
   self._response_buffer.extra.accumulated_thoughts = ""
+  -- Track thought signature for state preservation (used with thinking mode + function calls)
+  self._response_buffer.extra.thought_signature = nil
   log.debug("vertex.reset(): Reset Vertex AI provider state")
 end
 
@@ -289,26 +291,50 @@ function M.build_request(self, prompt, context)
       -- For model/assistant messages, extract text from parts, handle tool_use, skip thinking
       local text_parts = {}
       local function_calls = {}
+      local thought_signature = nil
+
+      -- First pass: extract signature from thinking parts
+      for _, p in ipairs(msg.parts or {}) do
+        if p.kind == "thinking" and p.signature then
+          thought_signature = p.signature
+          log.debug("vertex.build_request: Found thought signature in thinking part")
+        end
+      end
+
+      -- Second pass: build content
       for _, p in ipairs(msg.parts or {}) do
         if p.kind == "text" then
           table.insert(text_parts, p.text or "")
         elseif p.kind == "tool_use" then
           -- Convert tool_use to Vertex functionCall format
-          table.insert(function_calls, {
+          local fc_part = {
             functionCall = {
               name = p.name,
               args = p.input,
             },
-          })
+          }
+          -- Attach thought signature to first function call (per Vertex API requirements)
+          if thought_signature and #function_calls == 0 then
+            fc_part.thoughtSignature = thought_signature
+            log.debug("vertex.build_request: Attached thoughtSignature to functionCall for " .. p.name)
+          end
+          table.insert(function_calls, fc_part)
           log.debug("vertex.build_request: Added functionCall for " .. p.name)
         elseif p.kind == "thinking" then
           -- Skip thinking nodes - Vertex handles extended thinking internally
+          -- Signature already extracted above
         end
       end
       -- Add text if any
       local combined_text = table.concat(text_parts, "")
       if #combined_text > 0 then
-        table.insert(parts, { text = combined_text })
+        local text_part = { text = combined_text }
+        -- If we have a signature but no function calls, attach signature to the text part
+        if thought_signature and #function_calls == 0 then
+          text_part.thoughtSignature = thought_signature
+          log.debug("vertex.build_request: Attached thoughtSignature to text part (no function calls)")
+        end
+        table.insert(parts, text_part)
       end
       -- Add function calls
       for _, fc in ipairs(function_calls) do
@@ -316,7 +342,13 @@ function M.build_request(self, prompt, context)
       end
       -- Ensure parts is not empty for model messages
       if #parts == 0 then
-        table.insert(parts, { text = "" })
+        local empty_part = { text = "" }
+        -- Even for empty parts, attach signature if present and no function calls
+        if thought_signature and #function_calls == 0 then
+          empty_part.thoughtSignature = thought_signature
+          log.debug("vertex.build_request: Attached thoughtSignature to empty text part (no function calls)")
+        end
+        table.insert(parts, empty_part)
       end
     end
 
@@ -513,6 +545,13 @@ function M.process_response_line(self, line, callbacks)
   -- Process content parts (thoughts, text, or functionCall)
   if data.candidates and data.candidates[1] and data.candidates[1].content and data.candidates[1].content.parts then
     for _, part in ipairs(data.candidates[1].content.parts) do
+      -- Capture thoughtSignature if present on ANY part (for state preservation with thinking mode)
+      -- This is a generic solution - Vertex can return thoughtSignature on any part type
+      if part.thoughtSignature then
+        self._response_buffer.extra.thought_signature = part.thoughtSignature
+        log.debug("vertex.process_response_line(): Captured thoughtSignature from part")
+      end
+
       if part.thought and part.text and #part.text > 0 then
         log.debug("vertex.process_response_line(): Accumulating thought text: " .. log.inspect(part.text))
         self._response_buffer.extra.accumulated_thoughts = (self._response_buffer.extra.accumulated_thoughts or "")
@@ -550,13 +589,19 @@ function M.process_response_line(self, line, callbacks)
           )
 
           base._signal_content(self, formatted, callbacks)
-          log.debug("vertex.process_response_line(): Emitted function call for " .. fc.name .. " (" .. generated_id .. ")")
+          log.debug(
+            "vertex.process_response_line(): Emitted function call for " .. fc.name .. " (" .. generated_id .. ")"
+          )
         else
           log.warn("vertex.process_response_line(): Received functionCall without name")
         end
-      elseif not part.thought and part.text and #part.text > 0 then
-        log.debug("vertex.process_response_line(): Content text: " .. log.inspect(part.text))
-        base._signal_content(self, part.text, callbacks)
+      elseif not part.thought and part.text then
+        -- Only emit text that contains non-whitespace (skip whitespace-only chunks
+        -- that would cause prefix issues with subsequent tool use blocks)
+        if part.text:match("%S") then
+          log.debug("vertex.process_response_line(): Content text: " .. log.inspect(part.text))
+          base._signal_content(self, part.text, callbacks)
+        end
       end
     end
   end
@@ -584,16 +629,43 @@ function M.process_response_line(self, line, callbacks)
       "vertex.process_response_line(): Received finish reason: " .. log.inspect(data.candidates[1].finishReason)
     )
 
-    -- Append aggregated thoughts if any
-    if self._response_buffer.extra.accumulated_thoughts and #self._response_buffer.extra.accumulated_thoughts > 0 then
-      -- Strip leading/trailing whitespace (including newlines) from thoughts
-      local stripped_thoughts = vim.trim(self._response_buffer.extra.accumulated_thoughts)
+    -- Append aggregated thoughts if any (or emit empty thinking tag if we have a signature)
+    local has_thoughts = self._response_buffer.extra.accumulated_thoughts
+      and #self._response_buffer.extra.accumulated_thoughts > 0
+    local has_signature = self._response_buffer.extra.thought_signature ~= nil
+
+    if has_thoughts or has_signature then
       -- Use single newline prefix if content already ends with newline, else double
       local prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
-      local thoughts_block = prefix .. "<thinking>\n" .. stripped_thoughts .. "\n</thinking>\n"
-      log.debug("vertex.process_response_line(): Appending aggregated thoughts: " .. log.inspect(thoughts_block))
+
+      local thoughts_block
+      if has_thoughts then
+        -- Strip leading/trailing whitespace (including newlines) from thoughts
+        local stripped_thoughts = vim.trim(self._response_buffer.extra.accumulated_thoughts)
+
+        if has_signature then
+          -- Include signature attribute on opening tag
+          thoughts_block = prefix
+            .. '<thinking signature="'
+            .. self._response_buffer.extra.thought_signature
+            .. '">\n'
+            .. stripped_thoughts
+            .. "\n</thinking>\n"
+        else
+          -- No signature, simple tag
+          thoughts_block = prefix .. "<thinking>\n" .. stripped_thoughts .. "\n</thinking>\n"
+        end
+      else
+        -- No thinking content but have signature - emit self-closing tag
+        thoughts_block = prefix .. '<thinking signature="' .. self._response_buffer.extra.thought_signature .. '"/>\n'
+      end
+
+      log.debug("vertex.process_response_line(): Appending thinking block: " .. log.inspect(thoughts_block))
       base._signal_content(self, thoughts_block, callbacks)
-      self._response_buffer.extra.accumulated_thoughts = "" -- Reset for next potential full message
+
+      -- Reset for next potential full message
+      self._response_buffer.extra.accumulated_thoughts = ""
+      self._response_buffer.extra.thought_signature = nil
     end
 
     -- Signal response completion (after all content, including thoughts, has been sent)

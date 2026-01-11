@@ -1131,6 +1131,264 @@ describe("Vertex AI Streaming Tool Use Response", function()
   end)
 end)
 
+describe("Vertex AI Thought Signature Support", function()
+  local vertex = require("flemma.provider.providers.vertex")
+
+  before_each(function()
+    tools.clear()
+    tools.setup()
+  end)
+
+  it("captures thoughtSignature from streaming response and includes in thinking block", function()
+    local provider = vertex.new({
+      model = "gemini-3-flash",
+      max_tokens = 1024,
+      temperature = 0.7,
+      project_id = "test-project",
+      location = "global",
+    })
+
+    local lines =
+      vim.fn.readfile("tests/fixtures/tool_calling/vertex_function_call_with_thought_signature_streaming.txt")
+    local accumulated_content = ""
+
+    local callbacks = {
+      on_content = function(content)
+        accumulated_content = accumulated_content .. content
+      end,
+      on_response_complete = function() end,
+    }
+
+    for _, line in ipairs(lines) do
+      provider:process_response_line(line, callbacks)
+    end
+
+    -- Should emit thinking block with signature attribute
+    assert.is_true(
+      accumulated_content:match('<thinking signature="test%-thought%-signature%-abc123">') ~= nil,
+      "Should include thinking tag with signature attribute"
+    )
+    assert.is_true(accumulated_content:match("</thinking>") ~= nil, "Should close thinking tag")
+    assert.is_true(accumulated_content:match("calculator") ~= nil, "Should include tool call")
+  end)
+
+  it("parses thinking tag with signature attribute", function()
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_thought_signature_vertex.chat")
+    local doc = parser.parse_lines(lines)
+
+    -- Find assistant message with thinking
+    local assistant_msg = nil
+    for _, msg in ipairs(doc.messages) do
+      if msg.role == "Assistant" then
+        for _, seg in ipairs(msg.segments) do
+          if seg.kind == "thinking" then
+            assistant_msg = msg
+            break
+          end
+        end
+      end
+    end
+
+    assert.is_not_nil(assistant_msg, "Should find assistant message with thinking")
+
+    local thinking_seg = nil
+    for _, seg in ipairs(assistant_msg.segments) do
+      if seg.kind == "thinking" then
+        thinking_seg = seg
+        break
+      end
+    end
+
+    assert.is_not_nil(thinking_seg, "Should find thinking segment")
+    assert.equals("test-thought-signature-abc123", thinking_seg.signature, "Should extract signature attribute")
+    assert.is_true(thinking_seg.content:match("calculator tool") ~= nil, "Should preserve thinking content")
+  end)
+
+  it("includes thoughtSignature in request functionCall when building request", function()
+    local provider = vertex.new({
+      model = "gemini-3-flash",
+      max_tokens = 1024,
+      temperature = 0.7,
+      project_id = "test-project",
+      location = "global",
+    })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_thought_signature_vertex.chat")
+    local prompt =
+      pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_thought_signature_vertex.chat"))
+    local req = provider:build_request(prompt, {})
+
+    -- Find the model message with functionCall
+    local model_msg = nil
+    for _, msg in ipairs(req.contents) do
+      if msg.role == "model" then
+        for _, part in ipairs(msg.parts) do
+          if part.functionCall then
+            model_msg = msg
+            break
+          end
+        end
+      end
+    end
+
+    assert.is_not_nil(model_msg, "Should find model message with functionCall")
+
+    -- Find the functionCall part and verify it has thoughtSignature
+    local fc_part = nil
+    for _, part in ipairs(model_msg.parts) do
+      if part.functionCall then
+        fc_part = part
+        break
+      end
+    end
+
+    assert.is_not_nil(fc_part, "Should find functionCall part")
+    assert.equals(
+      "test-thought-signature-abc123",
+      fc_part.thoughtSignature,
+      "Should include thoughtSignature with functionCall"
+    )
+  end)
+
+  it("parses self-closing thinking tag with signature", function()
+    local lines = {
+      "@Assistant: Here's the result.",
+      "",
+      '<thinking signature="sig-self-closing-123"/>',
+    }
+    local doc = parser.parse_lines(lines)
+
+    local assistant_msg = doc.messages[1]
+    assert.is_not_nil(assistant_msg)
+
+    local thinking_seg = nil
+    for _, seg in ipairs(assistant_msg.segments) do
+      if seg.kind == "thinking" then
+        thinking_seg = seg
+        break
+      end
+    end
+
+    assert.is_not_nil(thinking_seg, "Should parse self-closing thinking tag")
+    assert.equals("sig-self-closing-123", thinking_seg.signature, "Should extract signature from self-closing tag")
+    assert.equals("", thinking_seg.content, "Self-closing tag should have empty content")
+  end)
+
+  it("emits self-closing thinking tag when signature exists but no thinking content", function()
+    local provider = vertex.new({
+      model = "gemini-3-flash",
+      max_tokens = 1024,
+      temperature = 0.7,
+      project_id = "test-project",
+      location = "global",
+    })
+
+    -- Simulate streaming response with functionCall + signature but no thinking parts
+    local streaming_line =
+      'data: {"candidates": [{"content": {"role": "model","parts": [{"functionCall": {"name": "calculator","args": {"expression": "5+5"}},"thoughtSignature": "sig-no-thinking"}]},"finishReason": "STOP"}]}'
+
+    local accumulated_content = ""
+    local callbacks = {
+      on_content = function(content)
+        accumulated_content = accumulated_content .. content
+      end,
+      on_response_complete = function() end,
+    }
+
+    provider:process_response_line(streaming_line, callbacks)
+
+    -- Should emit self-closing thinking tag with signature
+    assert.is_true(
+      accumulated_content:match('<thinking signature="sig%-no%-thinking"/>') ~= nil,
+      "Should emit self-closing thinking tag with signature when no thinking content"
+    )
+  end)
+
+  it("captures thoughtSignature from text part (not just functionCall)", function()
+    local provider = vertex.new({
+      model = "gemini-3-flash",
+      max_tokens = 1024,
+      temperature = 0.7,
+      project_id = "test-project",
+      location = "global",
+    })
+
+    -- Simulate streaming response with text part that has thoughtSignature (no functionCall)
+    local thought_line =
+      'data: {"candidates": [{"content": {"role": "model","parts": [{"text": "Thinking about this...","thought": true}]}}]}'
+    local text_line =
+      'data: {"candidates": [{"content": {"role": "model","parts": [{"text": "The answer is 42.","thoughtSignature": "sig-from-text-part"}]},"finishReason": "STOP"}]}'
+
+    local accumulated_content = ""
+    local callbacks = {
+      on_content = function(content)
+        accumulated_content = accumulated_content .. content
+      end,
+      on_response_complete = function() end,
+    }
+
+    provider:process_response_line(thought_line, callbacks)
+    provider:process_response_line(text_line, callbacks)
+
+    -- Should capture signature from text part and emit thinking block with it
+    assert.is_true(
+      accumulated_content:match('<thinking signature="sig%-from%-text%-part">') ~= nil,
+      "Should capture thoughtSignature from text part and include in thinking block"
+    )
+    assert.is_true(accumulated_content:match("Thinking about this") ~= nil, "Should include thinking content")
+  end)
+
+  it("includes thoughtSignature in request text part when no functionCall present", function()
+    local provider = vertex.new({
+      model = "gemini-3-flash",
+      max_tokens = 1024,
+      temperature = 0.7,
+      project_id = "test-project",
+      location = "global",
+    })
+
+    -- Conversation with thinking+signature but no tool use
+    local lines = {
+      "@You: What is 2+2?",
+      "",
+      "@Assistant: The answer is 4.",
+      "",
+      '<thinking signature="sig-no-tool-use">',
+      "Simple arithmetic.",
+      "</thinking>",
+    }
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local req = provider:build_request(prompt, {})
+
+    -- Find the model message
+    local model_msg = nil
+    for _, msg in ipairs(req.contents) do
+      if msg.role == "model" then
+        model_msg = msg
+        break
+      end
+    end
+
+    assert.is_not_nil(model_msg, "Should find model message")
+
+    -- Should have text part with thoughtSignature (no functionCall)
+    local text_part = nil
+    for _, part in ipairs(model_msg.parts) do
+      if part.text then
+        text_part = part
+        break
+      end
+    end
+
+    assert.is_not_nil(text_part, "Should find text part")
+    assert.equals(
+      "sig-no-tool-use",
+      text_part.thoughtSignature,
+      "Should attach thoughtSignature to text part when no functionCall"
+    )
+  end)
+end)
+
 describe("Vertex AI Request Body Validation with Tools", function()
   local vertex = require("flemma.provider.providers.vertex")
 

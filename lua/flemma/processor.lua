@@ -106,7 +106,8 @@ function M.evaluate(doc, base_context)
         end
       elseif seg.kind == "thinking" then
         -- Preserve thinking nodes - providers can choose to filter them
-        table.insert(parts, { kind = "thinking", content = seg.content })
+        -- Include signature if present (for provider state preservation, e.g., Vertex AI)
+        table.insert(parts, { kind = "thinking", content = seg.content, signature = seg.signature })
       elseif seg.kind == "expression" then
         local ok, result = pcall(eval.eval_expression, seg.code, env)
         if not ok then

@@ -1,0 +1,6 @@
+data: {"candidates": [{"content": {"role": "model","parts": [{"thought": true, "text": "The user wants me to calculate 15 * 7. I'll use the calculator tool."}]}}]}
+
+data: {"candidates": [{"content": {"role": "model","parts": [{"text": "I'll calculate that for you."}]}}]}
+
+data: {"candidates": [{"content": {"role": "model","parts": [{"functionCall": {"name": "calculator","args": {"expression": "15 * 7"}},"thoughtSignature": "test-thought-signature-abc123"}]},"finishReason": "STOP"}],"usageMetadata": {"promptTokenCount": 84,"candidatesTokenCount": 15,"thoughtsTokenCount": 25,"totalTokenCount": 124}}
+
