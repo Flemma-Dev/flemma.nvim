@@ -644,9 +644,9 @@ function M.process_response_line(self, line, callbacks)
         local stripped_thoughts = vim.trim(self._response_buffer.extra.accumulated_thoughts)
 
         if has_signature then
-          -- Include signature attribute on opening tag
+          -- Include signature attribute on opening tag (namespaced for Vertex)
           thoughts_block = prefix
-            .. '<thinking signature="'
+            .. '<thinking vertex:signature="'
             .. self._response_buffer.extra.thought_signature
             .. '">\n'
             .. stripped_thoughts
@@ -656,8 +656,11 @@ function M.process_response_line(self, line, callbacks)
           thoughts_block = prefix .. "<thinking>\n" .. stripped_thoughts .. "\n</thinking>\n"
         end
       else
-        -- No thinking content but have signature - emit self-closing tag
-        thoughts_block = prefix .. '<thinking signature="' .. self._response_buffer.extra.thought_signature .. '"/>\n'
+        -- No thinking content but have signature - emit self-closing tag (namespaced for Vertex)
+        thoughts_block = prefix
+          .. '<thinking vertex:signature="'
+          .. self._response_buffer.extra.thought_signature
+          .. '"/>\n'
       end
 
       log.debug("vertex.process_response_line(): Appending thinking block: " .. log.inspect(thoughts_block))

@@ -253,10 +253,12 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
 
     -- Check for thinking tags on their own lines
     -- Patterns:
-    --   <thinking> or <thinking signature="..."> (opening tag)
-    --   <thinking signature="..."/> (self-closing tag)
-    local self_closing_sig = line:match('^<thinking%s+signature="([^"]*)"%s*/>$')
-    local open_tag_sig = line:match('^<thinking%s+signature="([^"]*)"%s*>$')
+    --   <thinking> or <thinking provider:signature="..."> (opening tag)
+    --   <thinking provider:signature="..."/> (self-closing tag)
+    -- Currently supports: vertex:signature (Vertex AI)
+    -- Future: anthropic:signature, openai:signature
+    local self_closing_sig = line:match('^<thinking%s+vertex:signature="([^"]*)"%s*/>$')
+    local open_tag_sig = line:match('^<thinking%s+vertex:signature="([^"]*)"%s*>$')
     local simple_open_tag = line:match("^<thinking>$")
 
     if self_closing_sig then

@@ -1163,10 +1163,10 @@ describe("Vertex AI Thought Signature Support", function()
       provider:process_response_line(line, callbacks)
     end
 
-    -- Should emit thinking block with signature attribute
+    -- Should emit thinking block with vertex:signature attribute
     assert.is_true(
-      accumulated_content:match('<thinking signature="test%-thought%-signature%-abc123">') ~= nil,
-      "Should include thinking tag with signature attribute"
+      accumulated_content:match('<thinking vertex:signature="test%-thought%-signature%-abc123">') ~= nil,
+      "Should include thinking tag with vertex:signature attribute"
     )
     assert.is_true(accumulated_content:match("</thinking>") ~= nil, "Should close thinking tag")
     assert.is_true(accumulated_content:match("calculator") ~= nil, "Should include tool call")
@@ -1250,11 +1250,11 @@ describe("Vertex AI Thought Signature Support", function()
     )
   end)
 
-  it("parses self-closing thinking tag with signature", function()
+  it("parses self-closing thinking tag with vertex:signature", function()
     local lines = {
       "@Assistant: Here's the result.",
       "",
-      '<thinking signature="sig-self-closing-123"/>',
+      '<thinking vertex:signature="sig-self-closing-123"/>',
     }
     local doc = parser.parse_lines(lines)
 
@@ -1297,10 +1297,10 @@ describe("Vertex AI Thought Signature Support", function()
 
     provider:process_response_line(streaming_line, callbacks)
 
-    -- Should emit self-closing thinking tag with signature
+    -- Should emit self-closing thinking tag with vertex:signature
     assert.is_true(
-      accumulated_content:match('<thinking signature="sig%-no%-thinking"/>') ~= nil,
-      "Should emit self-closing thinking tag with signature when no thinking content"
+      accumulated_content:match('<thinking vertex:signature="sig%-no%-thinking"/>') ~= nil,
+      "Should emit self-closing thinking tag with vertex:signature when no thinking content"
     )
   end)
 
@@ -1332,7 +1332,7 @@ describe("Vertex AI Thought Signature Support", function()
 
     -- Should capture signature from text part and emit thinking block with it
     assert.is_true(
-      accumulated_content:match('<thinking signature="sig%-from%-text%-part">') ~= nil,
+      accumulated_content:match('<thinking vertex:signature="sig%-from%-text%-part">') ~= nil,
       "Should capture thoughtSignature from text part and include in thinking block"
     )
     assert.is_true(accumulated_content:match("Thinking about this") ~= nil, "Should include thinking content")
@@ -1347,13 +1347,13 @@ describe("Vertex AI Thought Signature Support", function()
       location = "global",
     })
 
-    -- Conversation with thinking+signature but no tool use
+    -- Conversation with thinking+vertex:signature but no tool use
     local lines = {
       "@You: What is 2+2?",
       "",
       "@Assistant: The answer is 4.",
       "",
-      '<thinking signature="sig-no-tool-use">',
+      '<thinking vertex:signature="sig-no-tool-use">',
       "Simple arithmetic.",
       "</thinking>",
     }

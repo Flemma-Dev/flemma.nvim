@@ -44,20 +44,20 @@ describe("UI Folding", function()
       assert.are.equal(">2", fold_level)
     end)
 
-    it("should return >2 for <thinking> tag with signature attribute", function()
+    it("should return >2 for <thinking> tag with vertex:signature attribute", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
         "@Assistant: response",
-        '<thinking signature="abc123/def+ghi==">',
+        '<thinking vertex:signature="abc123/def+ghi==">',
         "thinking content",
         "</thinking>",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      -- Line 2 is <thinking signature="...">
+      -- Line 2 is <thinking vertex:signature="...">
       local fold_level = ui.get_fold_level(2)
       assert.are.equal(">2", fold_level)
     end)
@@ -69,7 +69,7 @@ describe("UI Folding", function()
 
       local lines = {
         "@Assistant: response",
-        '<thinking signature="abc123"/>',
+        '<thinking vertex:signature="abc123"/>',
         "more content",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
@@ -332,13 +332,13 @@ describe("UI Folding", function()
       assert.are.equal(-1, foldclosed_first, "First thinking block should remain open")
     end)
 
-    it("should fold thinking block with signature attribute", function()
+    it("should fold thinking block with vertex:signature attribute", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
         "@Assistant: response",
-        '<thinking signature="abc123/def+ghi==">',
+        '<thinking vertex:signature="abc123/def+ghi==">',
         "thought process here",
         "</thinking>",
         "actual response",

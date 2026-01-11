@@ -59,7 +59,7 @@ function M.get_fold_level(lnum)
   end
 
   -- Level 2 folds: <thinking>...</thinking>
-  -- Match opening tags: <thinking> or <thinking signature="..."> (but not self-closing />)
+  -- Match opening tags: <thinking> or <thinking provider:signature="..."> (but not self-closing />)
   -- Pattern [^/>] excludes both / and > so the final > can match
   if line:match("^<thinking>$") or line:match("^<thinking%s.+[^/>]>$") then
     return ">2"
@@ -103,7 +103,7 @@ function M.get_fold_text()
   end
 
   -- Check if this is a thinking fold (level 2)
-  -- Match opening tags: <thinking> or <thinking signature="...">
+  -- Match opening tags: <thinking> or <thinking provider:signature="...">
   if first_line_content:match("^<thinking>$") or first_line_content:match("^<thinking%s.+[^/>]>$") then
     local preview = get_fold_content_preview(foldstart_lnum, foldend_lnum)
     if preview ~= "" then

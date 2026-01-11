@@ -10,7 +10,7 @@
 {"expression":"15 * 7"}
 ```
 
-<thinking signature="test-thought-signature-abc123">
+<thinking vertex:signature="test-thought-signature-abc123">
 The user wants me to calculate 15 * 7. I'll use the calculator tool.
 </thinking>
 

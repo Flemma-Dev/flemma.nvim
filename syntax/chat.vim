@@ -20,7 +20,7 @@ syntax match FlemmaUserLuaExpression "{{.\{-}}}" contained
 syntax match FlemmaUserFileReference "@\v(\.\.?\/)\S*[^[:punct:]\s]" contained
 
 " Define Thinking Tags (for highlighting the tags themselves)
-" Matches: <thinking>, <thinking signature="...">, <thinking signature="..."/>
+" Matches: <thinking>, <thinking provider:signature="...">, <thinking provider:signature="..."/>
 " Pattern [^/>] excludes both / and > so the final > can match
 syntax match FlemmaThinkingTag "^<thinking\(\s.*[^/>]\)\?>$" contained
 syntax match FlemmaThinkingTag "^<thinking\s.*/>$" contained
@@ -44,8 +44,8 @@ syntax region FlemmaSystem start='^@System:' end='\(^@\(You\|Assistant\):\)\@=\|
 syntax region FlemmaUser start='^@You:' end='\(^@\(System\|Assistant\):\)\@=\|\%$' contains=FlemmaRoleUser,FlemmaUserLuaExpression,FlemmaUserFileReference,@Markdown
 
 " Thinking Block Region (nested inside Assistant)
-" This region starts with <thinking> or <thinking signature="..."> and ends with </thinking>.
-" Self-closing tags like <thinking signature="..."/> are handled by match, not region.
+" This region starts with <thinking> or <thinking provider:signature="..."> and ends with </thinking>.
+" Self-closing tags like <thinking provider:signature="..."/> are handled by match, not region.
 " It contains the tags themselves (FlemmaThinkingTag) and markdown for the content.
 syntax region FlemmaThinkingBlock start="^<thinking\(\s.*[^/>]\)\?>$" end="^</thinking>$" keepend contains=FlemmaThinkingTag,@Markdown
 
