@@ -1093,7 +1093,7 @@ describe("Vertex AI Streaming Tool Use Response", function()
     end
 
     assert.is_true(accumulated_content:match("I will") ~= nil, "Should have text before tool call")
-    assert.is_true(accumulated_content:match("calculate the sum") ~= nil, "Should have full text content")
+    assert.is_true(accumulated_content:match("calculate 23") ~= nil, "Should have full text content")
     assert.is_true(accumulated_content:match("%*%*Tool Use:%*%*") ~= nil, "Should emit tool_use header")
     assert.is_true(accumulated_content:match("calculator") ~= nil, "Should include tool name")
     assert.is_true(accumulated_content:match("23 %+ 45") ~= nil, "Should include expression")
