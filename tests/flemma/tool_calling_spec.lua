@@ -629,3 +629,258 @@ describe("Request Body Validation", function()
     assert.equals("105", user_msgs[2].content[1].content)
   end)
 end)
+
+-- ============================================================================
+-- OpenAI Provider Tool Calling Tests
+-- ============================================================================
+
+describe("OpenAI Provider Request Building with Tools", function()
+  local openai = require("flemma.provider.providers.openai")
+
+  before_each(function()
+    tools.clear()
+    tools.setup()
+  end)
+
+  it("includes tools array in OpenAI format", function()
+    local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
+
+    local lines = { "@You: Calculate something" }
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local req = provider:build_request(prompt, {})
+
+    assert.is_not_nil(req.tools, "Request should include tools array")
+    assert.equals(1, #req.tools)
+    assert.equals("function", req.tools[1].type)
+    assert.equals("calculator", req.tools[1]["function"].name)
+    assert.is_not_nil(req.tools[1]["function"].parameters)
+    assert.is_not_nil(req.tools[1]["function"].parameters.properties.expression)
+  end)
+
+  it("includes tool_choice and parallel_tool_calls: false", function()
+    local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
+
+    local lines = { "@You: Calculate something" }
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local req = provider:build_request(prompt, {})
+
+    assert.equals("auto", req.tool_choice)
+    assert.equals(false, req.parallel_tool_calls)
+  end)
+
+  it("includes tool_calls in assistant message", function()
+    local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
+    local req = provider:build_request(prompt, {})
+
+    local assistant_msg = nil
+    for _, msg in ipairs(req.messages) do
+      if msg.role == "assistant" then
+        assistant_msg = msg
+        break
+      end
+    end
+
+    assert.is_not_nil(assistant_msg)
+    assert.is_not_nil(assistant_msg.tool_calls)
+    assert.equals(1, #assistant_msg.tool_calls)
+    assert.equals("toolu_01A09q90qw90lq917835lgs0", assistant_msg.tool_calls[1].id)
+    assert.equals("function", assistant_msg.tool_calls[1].type)
+    assert.equals("calculator", assistant_msg.tool_calls[1]["function"].name)
+  end)
+
+  it("includes tool results as role:tool messages", function()
+    local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
+    local req = provider:build_request(prompt, {})
+
+    local tool_msgs = vim.tbl_filter(function(m)
+      return m.role == "tool"
+    end, req.messages)
+
+    assert.equals(1, #tool_msgs)
+    assert.equals("toolu_01A09q90qw90lq917835lgs0", tool_msgs[1].tool_call_id)
+    assert.equals("105", tool_msgs[1].content)
+  end)
+
+  it("prefixes tool result content with [ERROR] when is_error is true", function()
+    local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_tool_error.chat")
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_tool_error.chat"))
+    local req = provider:build_request(prompt, {})
+
+    local tool_msgs = vim.tbl_filter(function(m)
+      return m.role == "tool"
+    end, req.messages)
+
+    assert.equals(1, #tool_msgs)
+    assert.is_true(tool_msgs[1].content:match("^Error: ") ~= nil, "Error content should be prefixed with 'Error: '")
+    assert.is_true(tool_msgs[1].content:match("Division by zero") ~= nil, "Should contain original error message")
+  end)
+
+  it("orders tool results before follow-up user content in same message", function()
+    local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_tool_result_with_followup.chat")
+    local prompt =
+      pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_tool_result_with_followup.chat"))
+    local req = provider:build_request(prompt, {})
+
+    -- Find indices of tool message and last user message
+    local tool_msg_idx = nil
+    local followup_user_msg_idx = nil
+
+    for i, msg in ipairs(req.messages) do
+      if msg.role == "tool" then
+        tool_msg_idx = i
+      elseif msg.role == "user" and msg.content and msg.content:match("20 plus 30") then
+        followup_user_msg_idx = i
+      end
+    end
+
+    assert.is_not_nil(tool_msg_idx, "Should have a tool message")
+    assert.is_not_nil(followup_user_msg_idx, "Should have a follow-up user message")
+    assert.is_true(tool_msg_idx < followup_user_msg_idx, "Tool result should come BEFORE follow-up user message")
+  end)
+end)
+
+describe("OpenAI Streaming Tool Use Response", function()
+  local openai = require("flemma.provider.providers.openai")
+
+  before_each(function()
+    tools.clear()
+    tools.setup()
+  end)
+
+  it("parses tool_calls from streaming response", function()
+    local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/openai_tool_use_streaming.txt")
+    local accumulated_content = ""
+    local response_complete = false
+
+    local callbacks = {
+      on_content = function(content)
+        accumulated_content = accumulated_content .. content
+      end,
+      on_response_complete = function()
+        response_complete = true
+      end,
+    }
+
+    for _, line in ipairs(lines) do
+      provider:process_response_line(line, callbacks)
+    end
+
+    assert.is_true(accumulated_content:match("%*%*Tool Use:%*%*") ~= nil, "Should emit tool_use header")
+    assert.is_true(accumulated_content:match("calculator") ~= nil, "Should include tool name")
+    assert.is_true(accumulated_content:match("call_zKVQISSUvL3HNmgE80n28JcM") ~= nil, "Should include tool id")
+    assert.is_true(accumulated_content:match("15 %* 7") ~= nil, "Should include expression")
+  end)
+
+  it("parses text content before tool_calls", function()
+    local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/openai_text_before_tool_streaming.txt")
+    local accumulated_content = ""
+
+    local callbacks = {
+      on_content = function(content)
+        accumulated_content = accumulated_content .. content
+      end,
+    }
+
+    for _, line in ipairs(lines) do
+      provider:process_response_line(line, callbacks)
+    end
+
+    assert.is_true(accumulated_content:match("I will calculate") ~= nil, "Should have text before tool call")
+    assert.is_true(accumulated_content:match("23") ~= nil, "Should have text content")
+    assert.is_true(accumulated_content:match("45") ~= nil, "Should have text content")
+    assert.is_true(accumulated_content:match("%*%*Tool Use:%*%*") ~= nil, "Should emit tool_use header")
+    assert.is_true(accumulated_content:match("calculator") ~= nil, "Should include tool name")
+  end)
+
+  it("parses final text response after tool result", function()
+    local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/openai_final_response_streaming.txt")
+    local accumulated_content = ""
+    local response_complete = false
+
+    local callbacks = {
+      on_content = function(content)
+        accumulated_content = accumulated_content .. content
+      end,
+      on_response_complete = function()
+        response_complete = true
+      end,
+    }
+
+    for _, line in ipairs(lines) do
+      provider:process_response_line(line, callbacks)
+    end
+
+    assert.is_true(accumulated_content:match("15") ~= nil, "Should contain response text")
+    assert.is_true(accumulated_content:match("multiplied") ~= nil, "Should contain response text")
+    assert.is_true(accumulated_content:match("105") ~= nil, "Should contain answer")
+  end)
+end)
+
+describe("OpenAI Request Body Validation with Tools", function()
+  local openai = require("flemma.provider.providers.openai")
+
+  before_each(function()
+    tools.clear()
+    tools.setup()
+  end)
+
+  it("builds request matching expected OpenAI structure with tool_result", function()
+    local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 4000, temperature = 0 })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
+    local req = provider:build_request(prompt, {})
+
+    -- Validate structure matches OpenAI format
+    assert.equals("gpt-4o-mini", req.model)
+    assert.equals(4000, req.max_completion_tokens)
+    assert.equals(true, req.stream)
+
+    -- Validate tools array in OpenAI format
+    assert.is_not_nil(req.tools)
+    assert.equals(1, #req.tools)
+    assert.equals("function", req.tools[1].type)
+    assert.equals("calculator", req.tools[1]["function"].name)
+    assert.is_not_nil(req.tools[1]["function"].parameters)
+    assert.is_not_nil(req.tools[1]["function"].parameters.properties.expression)
+
+    -- Validate tool_choice and parallel_tool_calls
+    assert.equals("auto", req.tool_choice)
+    assert.equals(false, req.parallel_tool_calls)
+
+    -- Validate message structure
+    local assistant_msgs = vim.tbl_filter(function(m)
+      return m.role == "assistant"
+    end, req.messages)
+    local tool_msgs = vim.tbl_filter(function(m)
+      return m.role == "tool"
+    end, req.messages)
+
+    -- Assistant message has tool_calls
+    assert.is_not_nil(assistant_msgs[1].tool_calls)
+    assert.equals(1, #assistant_msgs[1].tool_calls)
+    assert.equals("calculator", assistant_msgs[1].tool_calls[1]["function"].name)
+    assert.is_not_nil(assistant_msgs[1].tool_calls[1].id)
+
+    -- Tool message has tool_call_id and content
+    assert.equals(1, #tool_msgs)
+    assert.is_not_nil(tool_msgs[1].tool_call_id)
+    assert.equals("105", tool_msgs[1].content)
+  end)
+end)

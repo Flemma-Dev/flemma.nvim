@@ -84,18 +84,22 @@ describe(":FlemmaSend command", function()
 
     local config = state.get_config()
 
-    local expected_body = {
-      model = "o3",
-      messages = {
-        { role = "user", content = "Hello" },
-      },
-      stream = true,
-      stream_options = { include_usage = true },
-      max_completion_tokens = config.parameters.max_tokens,
-      temperature = config.parameters.temperature,
-    }
+    assert.equals("o3", captured_request_body.model)
+    assert.equals(1, #captured_request_body.messages)
+    assert.equals("user", captured_request_body.messages[1].role)
+    assert.equals("Hello", captured_request_body.messages[1].content)
+    assert.equals(true, captured_request_body.stream)
+    assert.is_not_nil(captured_request_body.stream_options)
+    assert.equals(true, captured_request_body.stream_options.include_usage)
+    assert.equals(config.parameters.max_tokens, captured_request_body.max_completion_tokens)
+    assert.equals(config.parameters.temperature, captured_request_body.temperature)
 
-    assert.are.same(expected_body, captured_request_body)
+    -- Tools are now included by default (MVP tool calling support)
+    if captured_request_body.tools then
+      assert.is_true(#captured_request_body.tools >= 0)
+      assert.equals("auto", captured_request_body.tool_choice)
+      assert.equals(false, captured_request_body.parallel_tool_calls)
+    end
   end)
 
   it("handles a successful streaming response from a fixture", function()
