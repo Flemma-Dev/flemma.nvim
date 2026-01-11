@@ -188,6 +188,7 @@ function M._new_response_buffer(self)
     lines = {},
     successful = false,
     extra = {},
+    content = "", -- Accumulated content for spacing decisions
   }
 end
 
@@ -328,9 +329,25 @@ end
 ---@param callbacks ProviderCallbacks Table of callback functions
 function M._signal_content(self, text, callbacks)
   self:_mark_response_successful()
+  self._response_buffer.content = self._response_buffer.content .. text
   if callbacks.on_content then
     callbacks.on_content(text)
   end
+end
+
+---Check if any content has been accumulated in the response buffer
+---@param self table The provider instance
+---@return boolean has_content True if content has been accumulated
+function M._has_content(self)
+  return self._response_buffer.content and #self._response_buffer.content > 0
+end
+
+---Check if the last character of accumulated content is a newline
+---@param self table The provider instance
+---@return boolean ends_with_newline True if content ends with newline
+function M._content_ends_with_newline(self)
+  local content = self._response_buffer.content or ""
+  return content:sub(-1) == "\n"
 end
 
 -- Reset provider state before a new request

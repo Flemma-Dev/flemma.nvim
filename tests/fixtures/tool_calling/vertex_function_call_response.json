@@ -1,0 +1,42 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "role": "model",
+        "parts": [
+          {
+            "functionCall": {
+              "name": "calculator",
+              "args": {
+                "expression": "15 * 7"
+              }
+            }
+          }
+        ]
+      },
+      "finishReason": "STOP",
+      "avgLogprobs": 0.0000033139450741665703
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 84,
+    "candidatesTokenCount": 7,
+    "totalTokenCount": 91,
+    "trafficType": "ON_DEMAND",
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 84
+      }
+    ],
+    "candidatesTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 7
+      }
+    ]
+  },
+  "modelVersion": "gemini-2.0-flash",
+  "createTime": "2026-01-11T10:44:31.777524Z",
+  "responseId": "D39jabS6L-nlgLUPzZG1IA"
+}

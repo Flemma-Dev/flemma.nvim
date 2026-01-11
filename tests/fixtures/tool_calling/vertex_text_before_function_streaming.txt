@@ -1,0 +1,6 @@
+data: {"candidates": [{"content": {"role": "model","parts": [{"text": "I will"}]}}],"usageMetadata": {"trafficType": "ON_DEMAND"},"modelVersion": "gemini-2.0-flash","createTime": "2026-01-11T10:44:34.379540Z","responseId": "En9jaZSVF-CF1dkP8fWQGQ"}
+
+data: {"candidates": [{"content": {"role": "model","parts": [{"text": " calculate the sum of 23 and 45.\n"}]}}],"usageMetadata": {"trafficType": "ON_DEMAND"},"modelVersion": "gemini-2.0-flash","createTime": "2026-01-11T10:44:34.379540Z","responseId": "En9jaZSVF-CF1dkP8fWQGQ"}
+
+data: {"candidates": [{"content": {"role": "model","parts": [{"functionCall": {"name": "calculator","args": {"expression": "23 + 45"}}}]},"finishReason": "STOP"}],"usageMetadata": {"promptTokenCount": 95,"candidatesTokenCount": 23,"totalTokenCount": 118,"trafficType": "ON_DEMAND","promptTokensDetails": [{"modality": "TEXT","tokenCount": 95}],"candidatesTokensDetails": [{"modality": "TEXT","tokenCount": 23}]},"modelVersion": "gemini-2.0-flash","createTime": "2026-01-11T10:44:34.379540Z","responseId": "En9jaZSVF-CF1dkP8fWQGQ"}
+

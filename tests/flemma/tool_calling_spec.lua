@@ -884,3 +884,320 @@ describe("OpenAI Request Body Validation with Tools", function()
     assert.equals("105", tool_msgs[1].content)
   end)
 end)
+
+describe("Vertex AI Provider Request Building with Tools", function()
+  local vertex = require("flemma.provider.providers.vertex")
+
+  before_each(function()
+    tools.clear()
+    tools.setup()
+  end)
+
+  it("includes tools array with functionDeclarations", function()
+    local provider = vertex.new({
+      model = "gemini-2.0-flash",
+      max_tokens = 1024,
+      temperature = 0.7,
+      project_id = "test-project",
+      location = "global",
+    })
+
+    local lines = { "@You: Calculate something" }
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local req = provider:build_request(prompt, {})
+
+    assert.is_not_nil(req.tools, "Request should include tools array")
+    assert.equals(1, #req.tools)
+    assert.is_not_nil(req.tools[1].functionDeclarations)
+    assert.equals(1, #req.tools[1].functionDeclarations)
+    assert.equals("calculator", req.tools[1].functionDeclarations[1].name)
+    assert.is_not_nil(req.tools[1].functionDeclarations[1].parameters)
+    assert.is_not_nil(req.tools[1].functionDeclarations[1].parameters.properties.expression)
+  end)
+
+  it("includes toolConfig with AUTO mode", function()
+    local provider = vertex.new({
+      model = "gemini-2.0-flash",
+      max_tokens = 1024,
+      temperature = 0.7,
+      project_id = "test-project",
+      location = "global",
+    })
+
+    local lines = { "@You: Calculate something" }
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local req = provider:build_request(prompt, {})
+
+    assert.is_not_nil(req.toolConfig)
+    assert.is_not_nil(req.toolConfig.functionCallingConfig)
+    assert.equals("AUTO", req.toolConfig.functionCallingConfig.mode)
+  end)
+
+  it("includes functionCall in model message", function()
+    local provider = vertex.new({
+      model = "gemini-2.0-flash",
+      max_tokens = 1024,
+      temperature = 0.7,
+      project_id = "test-project",
+      location = "global",
+    })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"))
+    local req = provider:build_request(prompt, {})
+
+    local model_msg = nil
+    for _, msg in ipairs(req.contents) do
+      if msg.role == "model" then
+        model_msg = msg
+        break
+      end
+    end
+
+    assert.is_not_nil(model_msg)
+    local has_function_call = false
+    for _, part in ipairs(model_msg.parts) do
+      if part.functionCall then
+        has_function_call = true
+        assert.equals("calculator", part.functionCall.name)
+        assert.is_not_nil(part.functionCall.args)
+        assert.equals("15 * 7", part.functionCall.args.expression)
+      end
+    end
+    assert.is_true(has_function_call, "Model message should contain functionCall")
+  end)
+
+  it("includes functionResponse in user message", function()
+    local provider = vertex.new({
+      model = "gemini-2.0-flash",
+      max_tokens = 1024,
+      temperature = 0.7,
+      project_id = "test-project",
+      location = "global",
+    })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"))
+    local req = provider:build_request(prompt, {})
+
+    -- Find user message with functionResponse (should be the one after model's functionCall)
+    local has_function_response = false
+    for _, msg in ipairs(req.contents) do
+      if msg.role == "user" then
+        for _, part in ipairs(msg.parts) do
+          if part.functionResponse then
+            has_function_response = true
+            assert.equals("calculator", part.functionResponse.name)
+            assert.is_not_nil(part.functionResponse.response)
+            assert.equals("105", part.functionResponse.response.result)
+          end
+        end
+      end
+    end
+    assert.is_true(has_function_response, "User message should contain functionResponse")
+  end)
+
+  it("handles tool_result with error marker", function()
+    local provider = vertex.new({
+      model = "gemini-2.0-flash",
+      max_tokens = 1024,
+      temperature = 0.7,
+      project_id = "test-project",
+      location = "global",
+    })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_tool_error_vertex.chat")
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_tool_error_vertex.chat"))
+    local req = provider:build_request(prompt, {})
+
+    local has_error_response = false
+    for _, msg in ipairs(req.contents) do
+      if msg.role == "user" then
+        for _, part in ipairs(msg.parts) do
+          if part.functionResponse and part.functionResponse.response and part.functionResponse.response.error then
+            has_error_response = true
+            -- Verify function name is correctly extracted from urn:flemma:tool:calculator:error001
+            assert.equals("calculator", part.functionResponse.name)
+            -- Verify error content
+            assert.is_true(part.functionResponse.response.error:match("Division by zero") ~= nil)
+            -- Verify success = false is included
+            assert.equals(false, part.functionResponse.response.success)
+          end
+        end
+      end
+    end
+    assert.is_true(has_error_response, "Should have a functionResponse with error field")
+  end)
+end)
+
+describe("Vertex AI Streaming Tool Use Response", function()
+  local vertex = require("flemma.provider.providers.vertex")
+
+  before_each(function()
+    tools.clear()
+    tools.setup()
+  end)
+
+  it("parses functionCall from streaming response", function()
+    local provider = vertex.new({
+      model = "gemini-2.0-flash",
+      max_tokens = 1024,
+      temperature = 0.7,
+      project_id = "test-project",
+      location = "global",
+    })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/vertex_function_call_streaming.txt")
+    local accumulated_content = ""
+    local response_complete = false
+
+    local callbacks = {
+      on_content = function(content)
+        accumulated_content = accumulated_content .. content
+      end,
+      on_response_complete = function()
+        response_complete = true
+      end,
+    }
+
+    for _, line in ipairs(lines) do
+      provider:process_response_line(line, callbacks)
+    end
+
+    assert.is_true(accumulated_content:match("%*%*Tool Use:%*%*") ~= nil, "Should emit tool_use header")
+    assert.is_true(accumulated_content:match("calculator") ~= nil, "Should include tool name")
+    assert.is_true(accumulated_content:match("urn:flemma:tool:calculator:") ~= nil, "Should include synthetic ID")
+    assert.is_true(accumulated_content:match("15 %* 7") ~= nil, "Should include expression")
+  end)
+
+  it("parses text content before functionCall", function()
+    local provider = vertex.new({
+      model = "gemini-2.0-flash",
+      max_tokens = 1024,
+      temperature = 0.7,
+      project_id = "test-project",
+      location = "global",
+    })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/vertex_text_before_function_streaming.txt")
+    local accumulated_content = ""
+
+    local callbacks = {
+      on_content = function(content)
+        accumulated_content = accumulated_content .. content
+      end,
+    }
+
+    for _, line in ipairs(lines) do
+      provider:process_response_line(line, callbacks)
+    end
+
+    assert.is_true(accumulated_content:match("I will") ~= nil, "Should have text before tool call")
+    assert.is_true(accumulated_content:match("calculate the sum") ~= nil, "Should have full text content")
+    assert.is_true(accumulated_content:match("%*%*Tool Use:%*%*") ~= nil, "Should emit tool_use header")
+    assert.is_true(accumulated_content:match("calculator") ~= nil, "Should include tool name")
+    assert.is_true(accumulated_content:match("23 %+ 45") ~= nil, "Should include expression")
+  end)
+
+  it("parses final text response after tool result", function()
+    local provider = vertex.new({
+      model = "gemini-2.0-flash",
+      max_tokens = 1024,
+      temperature = 0.7,
+      project_id = "test-project",
+      location = "global",
+    })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/vertex_final_response_streaming.txt")
+    local accumulated_content = ""
+    local response_complete = false
+
+    local callbacks = {
+      on_content = function(content)
+        accumulated_content = accumulated_content .. content
+      end,
+      on_response_complete = function()
+        response_complete = true
+      end,
+    }
+
+    for _, line in ipairs(lines) do
+      provider:process_response_line(line, callbacks)
+    end
+
+    assert.is_true(accumulated_content:match("15") ~= nil, "Should contain response text")
+    assert.is_true(accumulated_content:match("multiplied") ~= nil, "Should contain response text")
+    assert.is_true(accumulated_content:match("105") ~= nil, "Should contain answer")
+  end)
+end)
+
+describe("Vertex AI Request Body Validation with Tools", function()
+  local vertex = require("flemma.provider.providers.vertex")
+
+  before_each(function()
+    tools.clear()
+    tools.setup()
+  end)
+
+  it("builds request matching expected Vertex AI structure with functionResponse", function()
+    local provider = vertex.new({
+      model = "gemini-2.0-flash",
+      max_tokens = 1024,
+      temperature = 0.7,
+      project_id = "test-project",
+      location = "global",
+    })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"))
+    local req = provider:build_request(prompt, {})
+
+    -- Validate basic structure
+    assert.is_not_nil(req.contents)
+    assert.is_not_nil(req.generationConfig)
+    assert.equals(1024, req.generationConfig.maxOutputTokens)
+
+    -- Validate tools array in Vertex format
+    assert.is_not_nil(req.tools)
+    assert.equals(1, #req.tools)
+    assert.is_not_nil(req.tools[1].functionDeclarations)
+    assert.equals("calculator", req.tools[1].functionDeclarations[1].name)
+
+    -- Validate toolConfig
+    assert.is_not_nil(req.toolConfig)
+    assert.equals("AUTO", req.toolConfig.functionCallingConfig.mode)
+
+    -- Validate message structure
+    local model_msgs = vim.tbl_filter(function(m)
+      return m.role == "model"
+    end, req.contents)
+    local user_msgs = vim.tbl_filter(function(m)
+      return m.role == "user"
+    end, req.contents)
+
+    -- Model message has functionCall
+    local model_has_fc = false
+    for _, msg in ipairs(model_msgs) do
+      for _, part in ipairs(msg.parts) do
+        if part.functionCall then
+          model_has_fc = true
+          assert.equals("calculator", part.functionCall.name)
+        end
+      end
+    end
+    assert.is_true(model_has_fc, "Model message should have functionCall")
+
+    -- User message has functionResponse
+    local user_has_fr = false
+    for _, msg in ipairs(user_msgs) do
+      for _, part in ipairs(msg.parts) do
+        if part.functionResponse then
+          user_has_fr = true
+          assert.equals("calculator", part.functionResponse.name)
+          assert.equals("105", part.functionResponse.response.result)
+        end
+      end
+    end
+    assert.is_true(user_has_fr, "User message should have functionResponse")
+  end)
+end)

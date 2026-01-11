@@ -188,6 +188,19 @@ function M.get_api_key(self)
   return nil
 end
 
+--- Extract function name from Flemma synthetic ID
+--- Format: urn:flemma:tool:<name>:<unique>
+---@param tool_use_id string The synthetic tool use ID
+---@return string function_name The extracted function name, or "unknown" if extraction fails
+local function extract_function_name_from_id(tool_use_id)
+  local function_name = tool_use_id:match("^urn:flemma:tool:([^:]+):")
+  if not function_name then
+    log.warn("vertex.extract_function_name_from_id: Could not extract function name from ID: " .. tool_use_id)
+    return "unknown"
+  end
+  return function_name
+end
+
 ---Build request body for Vertex AI API
 ---
 ---@param prompt Prompt The prepared prompt with history and system
@@ -203,7 +216,37 @@ function M.build_request(self, prompt, context)
 
     local parts = {}
     if msg.role == "user" then
-      -- Map generic parts (already resolved by pipeline) to Vertex-specific format
+      -- Tool results must come first in user messages (similar to Anthropic)
+      for _, part in ipairs(msg.parts or {}) do
+        if part.kind == "tool_result" then
+          -- Extract function name from the synthetic ID
+          local function_name = extract_function_name_from_id(part.tool_use_id)
+
+          -- Build response object: wrap string in {result: ...}, pass JSON through
+          local response_obj
+          if part.is_error then
+            response_obj = { error = part.content, success = false }
+          else
+            -- Try to parse as JSON first
+            local ok, parsed = pcall(vim.fn.json_decode, part.content)
+            if ok and type(parsed) == "table" then
+              response_obj = parsed
+            else
+              response_obj = { result = part.content }
+            end
+          end
+
+          table.insert(parts, {
+            functionResponse = {
+              name = function_name,
+              response = response_obj,
+            },
+          })
+          log.debug("vertex.build_request: Added functionResponse for " .. function_name)
+        end
+      end
+
+      -- Then other content
       for _, part in ipairs(msg.parts or {}) do
         if part.kind == "text" then
           table.insert(parts, { text = part.text })
@@ -234,6 +277,7 @@ function M.build_request(self, prompt, context)
         elseif part.kind == "unsupported_file" then
           table.insert(parts, { text = "@" .. (part.raw_filename or "") })
         end
+        -- tool_result already handled above
       end
 
       -- Ensure parts is not empty
@@ -242,16 +286,38 @@ function M.build_request(self, prompt, context)
         table.insert(parts, { text = "" })
       end
     else
-      -- For model/assistant messages, extract text from parts and skip thinking nodes
+      -- For model/assistant messages, extract text from parts, handle tool_use, skip thinking
       local text_parts = {}
+      local function_calls = {}
       for _, p in ipairs(msg.parts or {}) do
         if p.kind == "text" then
           table.insert(text_parts, p.text or "")
+        elseif p.kind == "tool_use" then
+          -- Convert tool_use to Vertex functionCall format
+          table.insert(function_calls, {
+            functionCall = {
+              name = p.name,
+              args = p.input,
+            },
+          })
+          log.debug("vertex.build_request: Added functionCall for " .. p.name)
         elseif p.kind == "thinking" then
           -- Skip thinking nodes - Vertex handles extended thinking internally
         end
       end
-      table.insert(parts, { text = table.concat(text_parts, "") })
+      -- Add text if any
+      local combined_text = table.concat(text_parts, "")
+      if #combined_text > 0 then
+        table.insert(parts, { text = combined_text })
+      end
+      -- Add function calls
+      for _, fc in ipairs(function_calls) do
+        table.insert(parts, fc)
+      end
+      -- Ensure parts is not empty for model messages
+      if #parts == 0 then
+        table.insert(parts, { text = "" })
+      end
     end
 
     -- Add the message with its Vertex-specific role and parts to the contents list
@@ -326,6 +392,34 @@ function M.build_request(self, prompt, context)
         { text = prompt.system },
       },
     }
+  end
+
+  -- Build tools array from registry (Vertex AI format with functionDeclarations)
+  local tools_module = require("flemma.tools")
+  local all_tools = tools_module.get_all()
+  local function_declarations = {}
+
+  for _, def in pairs(all_tools) do
+    table.insert(function_declarations, {
+      name = def.name,
+      description = def.description,
+      parameters = def.input_schema,
+    })
+  end
+
+  -- Add tools if any are registered
+  if #function_declarations > 0 then
+    request_body.tools = {
+      {
+        functionDeclarations = function_declarations,
+      },
+    }
+    request_body.toolConfig = {
+      functionCallingConfig = {
+        mode = "AUTO",
+      },
+    }
+    log.debug("vertex.build_request: Added " .. #function_declarations .. " function declarations to request")
   end
 
   return request_body
@@ -416,13 +510,50 @@ function M.process_response_line(self, line, callbacks)
     return
   end
 
-  -- Process content parts (thoughts or text)
+  -- Process content parts (thoughts, text, or functionCall)
   if data.candidates and data.candidates[1] and data.candidates[1].content and data.candidates[1].content.parts then
     for _, part in ipairs(data.candidates[1].content.parts) do
       if part.thought and part.text and #part.text > 0 then
         log.debug("vertex.process_response_line(): Accumulating thought text: " .. log.inspect(part.text))
         self._response_buffer.extra.accumulated_thoughts = (self._response_buffer.extra.accumulated_thoughts or "")
           .. part.text
+      elseif part.functionCall then
+        -- Handle function call
+        local fc = part.functionCall
+        if fc.name then
+          -- Generate synthetic ID: urn:flemma:tool:<name>:<unique>
+          local unique_suffix = string.format("%x", os.time()) .. string.format("%04x", math.random(0, 65535))
+          local generated_id = string.format("urn:flemma:tool:%s:%s", fc.name, unique_suffix)
+
+          -- Determine fence length for JSON content
+          local json_str = vim.fn.json_encode(fc.args or {})
+          local max_ticks = 0
+          for ticks in json_str:gmatch("`+") do
+            max_ticks = math.max(max_ticks, #ticks)
+          end
+          local fence = string.rep("`", math.max(3, max_ticks + 1))
+
+          -- Format for buffer display (matches Anthropic format)
+          -- Use appropriate prefix based on what's already accumulated
+          local prefix = ""
+          if self:_has_content() then
+            prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
+          end
+          local formatted = string.format(
+            "%s**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n",
+            prefix,
+            fc.name,
+            generated_id,
+            fence,
+            json_str,
+            fence
+          )
+
+          base._signal_content(self, formatted, callbacks)
+          log.debug("vertex.process_response_line(): Emitted function call for " .. fc.name .. " (" .. generated_id .. ")")
+        else
+          log.warn("vertex.process_response_line(): Received functionCall without name")
+        end
       elseif not part.thought and part.text and #part.text > 0 then
         log.debug("vertex.process_response_line(): Content text: " .. log.inspect(part.text))
         base._signal_content(self, part.text, callbacks)
@@ -457,17 +588,11 @@ function M.process_response_line(self, line, callbacks)
     if self._response_buffer.extra.accumulated_thoughts and #self._response_buffer.extra.accumulated_thoughts > 0 then
       -- Strip leading/trailing whitespace (including newlines) from thoughts
       local stripped_thoughts = vim.trim(self._response_buffer.extra.accumulated_thoughts)
-      -- Construct the thoughts block according to specified formatting:
-      -- - Two newlines for separation (ensuring at least one blank line) from previous content.
-      -- - <thinking> tag followed by a newline.
-      -- - The stripped thoughts content.
-      -- - A newline after the thoughts content.
-      -- - </thinking> tag followed by a newline.
-      local thoughts_block = "\n\n<thinking>\n" .. stripped_thoughts .. "\n</thinking>\n"
+      -- Use single newline prefix if content already ends with newline, else double
+      local prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
+      local thoughts_block = prefix .. "<thinking>\n" .. stripped_thoughts .. "\n</thinking>\n"
       log.debug("vertex.process_response_line(): Appending aggregated thoughts: " .. log.inspect(thoughts_block))
-      if callbacks.on_content then
-        callbacks.on_content(thoughts_block)
-      end
+      base._signal_content(self, thoughts_block, callbacks)
       self._response_buffer.extra.accumulated_thoughts = "" -- Reset for next potential full message
     end
 

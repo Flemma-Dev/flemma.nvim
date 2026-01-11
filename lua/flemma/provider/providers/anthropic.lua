@@ -330,7 +330,9 @@ function M.process_response_line(self, line, callbacks)
     local accumulated = self._response_buffer.extra.accumulated_thinking
     if accumulated and #accumulated > 0 then
       local stripped = vim.trim(accumulated)
-      local thinking_block = "\n\n<thinking>\n" .. stripped .. "\n</thinking>\n"
+      -- Use single newline prefix if content already ends with newline, else double
+      local prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
+      local thinking_block = prefix .. "<thinking>\n" .. stripped .. "\n</thinking>\n"
       base._signal_content(self, thinking_block, callbacks)
       self._response_buffer.extra.accumulated_thinking = ""
       log.debug("anthropic.process_response_line(): Appended thinking block at end of response")
@@ -393,8 +395,14 @@ function M.process_response_line(self, line, callbacks)
       local fence = string.rep("`", math.max(3, max_ticks + 1))
 
       -- Format for buffer display
+      -- Use appropriate prefix based on what's already accumulated
+      local prefix = ""
+      if self:_has_content() then
+        prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
+      end
       local formatted = string.format(
-        "\n\n**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n",
+        "%s**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n",
+        prefix,
         current_tool.name,
         current_tool.id,
         fence,

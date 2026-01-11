@@ -1,0 +1,2 @@
+data: {"candidates": [{"content": {"role": "model","parts": [{"functionCall": {"name": "calculator","args": {"expression": "15 * 7"}}}]},"finishReason": "STOP"}],"usageMetadata": {"promptTokenCount": 84,"candidatesTokenCount": 7,"totalTokenCount": 91,"trafficType": "ON_DEMAND","promptTokensDetails": [{"modality": "TEXT","tokenCount": 84}],"candidatesTokensDetails": [{"modality": "TEXT","tokenCount": 7}]},"modelVersion": "gemini-2.0-flash","createTime": "2026-01-11T10:44:30.450043Z","responseId": "Dn9jafu7G7iE1dkPz5ORsA8"}
+
