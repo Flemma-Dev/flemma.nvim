@@ -29,14 +29,29 @@ update-models:
 .PHONY: develop
 develop:
 	@-rm ~/.cache/nvim/flemma.log
-	@nvim --cmd "set runtimepath+=`pwd`" \
-		-c "lua require(\"flemma\").setup({ \
-			provider = \"anthropic\", \
-			model = \"claude-haiku-4-5\", \
-			logging = { enabled = true }, \
-			signs = { enabled = true }, \
-			editing = { auto_write = true }, \
-			presets = { [\"\$$gpt\"] = \"openai gpt-5.2 reasoning=low\" } \
-		})" \
-		-c ":edit $$HOME/.cache/nvim/flemma.log" \
+	@nvim --cmd "set runtimepath+=`pwd`"												\
+		-c "lua require(\"flemma\").setup({												\
+			provider = \"anthropic\",													\
+			model = \"claude-haiku-4-5\",												\
+			presets = { [\"\$$gpt\"] = \"openai gpt-5.2 reasoning=low\" },				\
+			logging = { enabled = true },												\
+			editing = { auto_write = true },											\
+			pricing = { enabled = true },												\
+			signs = {																	\
+				enabled = true,															\
+				assistant = { hl = \"#8f9fdf\" },										\
+				user = { hl = \"#6f6f6f\" }												\
+			},																			\
+			highlights = {																\
+				assistant = \"#8f9faf\",												\
+				user_lua_expression = \"#ff00ff\",										\
+				user_file_reference = \"#ff00ff\",										\
+				thinking_tag = { fg = \"#6f7f8f\", bold = true, underline = true },		\
+				thinking_block = { fg = \"#6f7f8f\" }									\
+			},																			\
+		})"																				\
+		-c ":edit $$HOME/.cache/nvim/flemma.log"										\
 		-c ":tabedit example.chat"
+
+
+# vim: set ts=4 sts=4 sw=4 et:
