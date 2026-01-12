@@ -208,6 +208,17 @@ local function set_highlight(group_name, value, type_)
       local hl_opts = {}
       hl_opts[type_ or "fg"] = value
       set_highlight(group_name, hl_opts, type_)
+    elseif type_ then
+      -- Highlight group name with specific attribute requested (e.g., for line highlights)
+      -- Extract only the specified attribute to avoid overriding other highlights
+      local color = get_hl_color(value, type_)
+      if not color then
+        -- Group doesn't have the attribute - use default color (tries Normal first, then config defaults)
+        color = get_default_color(type_)
+      end
+      local hl_opts = {}
+      hl_opts[type_] = color
+      set_highlight(group_name, hl_opts, type_)
     else
       -- Assume it's a highlight group name to link
       set_highlight(group_name, { link = value }, type_)

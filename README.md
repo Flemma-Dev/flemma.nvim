@@ -522,7 +522,7 @@ require("flemma").setup({
     enabled = true,
     frontmatter = { dark = "Normal+bg:#201020", light = "Normal-bg:#201020" },
     system = { dark = "Normal+bg:#201000", light = "Normal-bg:#201000" },
-    user = { dark = "Normal+bg:#101010", light = "Normal-bg:#101010" },
+    user = { dark = "Normal", light = "Normal" },
     assistant = { dark = "Normal+bg:#102020", light = "Normal-bg:#102020" },
   },
   notify = require("flemma.notify").default_opts,

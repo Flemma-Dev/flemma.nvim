@@ -40,7 +40,7 @@ return {
     enabled = true, -- Enable full-line background highlighting to distinguish roles
     frontmatter = { dark = "Normal+bg:#201020", light = "Normal-bg:#201020" }, -- Background color for frontmatter lines
     system = { dark = "Normal+bg:#201000", light = "Normal-bg:#201000" }, -- Background color for system message lines
-    user = { dark = "Normal+bg:#101010", light = "Normal-bg:#101010" }, -- Background color for user message lines
+    user = { dark = "Normal", light = "Normal" }, -- Background color for user message lines
     assistant = { dark = "Normal+bg:#102020", light = "Normal-bg:#102020" }, -- Background color for assistant message lines
   },
   notify = require("flemma.notify").default_opts,
