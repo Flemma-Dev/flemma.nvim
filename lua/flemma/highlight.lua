@@ -75,9 +75,18 @@ local function get_hl_color(group_name, attr)
 end
 
 -- Get the default fallback color for an attribute
+-- First tries the Normal highlight group (which is what Neovim uses),
+-- then falls back to config defaults if Normal doesn't define the attribute.
 -- @param attr string - "fg" or "bg"
 -- @return string - Hex color
 local function get_default_color(attr)
+  -- First try Normal group (what Neovim actually uses as default)
+  local normal_color = get_hl_color("Normal", attr)
+  if normal_color then
+    return normal_color
+  end
+
+  -- Fall back to config defaults
   local config = state.get_config()
   local is_dark = vim.o.background == "dark"
   local defaults = config.defaults

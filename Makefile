@@ -37,18 +37,6 @@ develop:
 			logging = { enabled = true },												\
 			editing = { auto_write = true },											\
 			pricing = { enabled = true },												\
-			signs = {																	\
-				enabled = true,															\
-				assistant = { hl = \"#8f9fdf\" },										\
-				user = { hl = \"#6f6f6f\" }												\
-			},																			\
-			highlights = {																\
-				assistant = \"#8f9faf\",												\
-				user_lua_expression = \"#ff00ff\",										\
-				user_file_reference = \"#ff00ff\",										\
-				thinking_tag = { fg = \"#6f7f8f\", bold = true, underline = true },		\
-				thinking_block = { fg = \"#6f7f8f\" }									\
-			},																			\
 		})"																				\
 		-c ":edit $$HOME/.cache/nvim/flemma.log"										\
 		-c ":tabedit example.chat"
