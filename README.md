@@ -387,6 +387,56 @@ Configuration keys map to dedicated highlight groups:
 
 Each value accepts a highlight name, a hex colour string, or a table of highlight attributes (`{ fg = "#ffcc00", bold = true }`).
 
+<details><summary><h3>Theme-aware values</h3></summary>
+
+Any highlight value can be theme-aware using `{ dark = ..., light = ... }`:
+
+```lua
+ruler = { hl = { dark = "Comment-fg:#303030", light = "Comment+fg:#303030" } }
+```
+
+### Highlight expressions
+
+Derive colours from existing highlight groups with blend operations:
+
+```lua
+-- Lighten Normal's bg by #101010
+line_highlights = { user = { dark = "Normal+bg:#101010" } }
+
+-- Darken with -
+ruler = { hl = { light = "Normal-fg:#303030" } }
+
+-- Multiple operations on same group
+"Normal+bg:#101010-fg:#202020"
+
+-- Fallback chain: try FooBar first, then Normal (only last uses defaults)
+"FooBar+bg:#201020,Normal+bg:#101010"
+```
+
+When the last highlight group lacks the requested attribute, Flemma falls back to `defaults`:
+
+```lua
+defaults = {
+  dark = { bg = "#000000", fg = "#ffffff" },
+  light = { bg = "#ffffff", fg = "#000000" },
+}
+```
+
+### Line highlights
+
+Full-line background colours distinguish message roles. Disable with `line_highlights.enabled = false` (default: `true`):
+
+```lua
+line_highlights = {
+  enabled = true,
+  user = { dark = "Normal+bg:#101010", light = "Normal-bg:#101010" },
+  assistant = { dark = "Normal+bg:#102020", light = "Normal-bg:#102020" },
+  -- ...
+}
+```
+
+</details>
+
 Role markers inherit `role_style` (comma-separated GUI attributes) so marker styling tracks your message colours.
 
 ### Sign column indicators
@@ -442,23 +492,38 @@ require("flemma").setup({
     },
   },
   presets = {},
+  defaults = {
+    dark = { bg = "#000000", fg = "#ffffff" },
+    light = { bg = "#ffffff", fg = "#000000" },
+  },
   highlights = {
     system = "Special",
     user = "Normal",
-    assistant = "Comment",
+    assistant = "Normal",
     user_lua_expression = "PreProc",
     user_file_reference = "Include",
     thinking_tag = "Comment",
     thinking_block = "Comment",
   },
   role_style = "bold,underline",
-  ruler = { char = "━", hl = "NonText" },
+  ruler = {
+    enabled = true,
+    char = "─",
+    hl = { dark = "Comment-fg:#303030", light = "Comment+fg:#303030" },
+  },
   signs = {
     enabled = false,
     char = "▌",
     system = { char = nil, hl = true },
     user = { char = "▏", hl = true },
     assistant = { char = nil, hl = true },
+  },
+  line_highlights = {
+    enabled = true,
+    frontmatter = { dark = "Normal+bg:#201020", light = "Normal-bg:#201020" },
+    system = { dark = "Normal+bg:#201000", light = "Normal-bg:#201000" },
+    user = { dark = "Normal+bg:#101010", light = "Normal-bg:#101010" },
+    assistant = { dark = "Normal+bg:#102020", light = "Normal-bg:#102020" },
   },
   notify = require("flemma.notify").default_opts,
   pricing = { enabled = true },

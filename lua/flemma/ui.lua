@@ -505,7 +505,6 @@ local function apply_chat_buffer_settings()
   if config.editing.auto_write then
     vim.opt_local.autowrite = true
   end
-
 end
 
 -- Set up chat filetype autocmds

@@ -1,9 +1,14 @@
 --- Flemma default configuration
 return {
+  -- Fallback colors used when highlight groups don't define fg/bg
+  defaults = {
+    dark = { bg = "#000000", fg = "#ffffff" },
+    light = { bg = "#ffffff", fg = "#000000" },
+  },
   highlights = {
     system = "Special", -- Highlight group or hex color (e.g., "#ffccaa") for system messages
     user = "Normal", -- Highlight group or hex color for user messages
-    assistant = "Comment", -- Highlight group or hex color for assistant messages
+    assistant = "Normal", -- Highlight group or hex color for assistant messages
     user_lua_expression = "PreProc", -- Highlight group or hex color for {{expression}} in user messages
     user_file_reference = "Include", -- Highlight group or hex color for @./file references in user messages
     thinking_tag = "Comment", -- Highlight group or hex color for <thinking> and </thinking> tags
@@ -12,8 +17,8 @@ return {
   role_style = "bold,underline", -- style applied to role markers like @You:
   ruler = {
     enabled = true, -- Set to false to disable rulers between messages
-    char = "━", -- The character to use for the ruler
-    hl = "NonText", -- Highlight group or hex color for the ruler
+    char = "─", -- The character to use for the ruler
+    hl = { dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }, -- Highlight group or hex color for the ruler
   },
   signs = {
     enabled = false, -- Enable sign column highlighting (disabled by default)
@@ -32,11 +37,11 @@ return {
     },
   },
   line_highlights = {
-    enabled = false, -- Enable full-line background highlighting to distinguish roles
-    frontmatter = { bg = "#2e2a1a" }, -- Background color for frontmatter lines
-    system = { bg = "#2e1a1a" }, -- Background color for system message lines
-    user = { bg = "#1a1a2e" }, -- Background color for user message lines
-    assistant = { bg = "#1a2e1a" }, -- Background color for assistant message lines
+    enabled = true, -- Enable full-line background highlighting to distinguish roles
+    frontmatter = { dark = "Normal+bg:#201020", light = "Normal-bg:#201020" }, -- Background color for frontmatter lines
+    system = { dark = "Normal+bg:#201000", light = "Normal-bg:#201000" }, -- Background color for system message lines
+    user = { dark = "Normal+bg:#101010", light = "Normal-bg:#101010" }, -- Background color for user message lines
+    assistant = { dark = "Normal+bg:#102020", light = "Normal-bg:#102020" }, -- Background color for assistant message lines
   },
   notify = require("flemma.notify").default_opts,
   pricing = {
