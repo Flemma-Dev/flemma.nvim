@@ -12,6 +12,20 @@ local MAX_CONTENT_PREVIEW_LENGTH = 72
 local CONTENT_PREVIEW_NEWLINE_CHAR = "⤶"
 local CONTENT_PREVIEW_TRUNCATION_MARKER = "..."
 
+-- Extmark priority constants
+-- Higher values take precedence when multiple extmarks overlap on the same line.
+-- The hierarchy from lowest to highest:
+--   1. LINE_HIGHLIGHT (50)      - Base backgrounds for messages and frontmatter
+--   2. THINKING_BLOCK (100)     - Thinking block backgrounds, overrides message line highlights
+--   3. THINKING_TAG (200)       - Text styling for <thinking> and </thinking> tags
+--   4. SPINNER (300)            - Spinner line, highest priority to suppress spell checking
+local PRIORITY = {
+  LINE_HIGHLIGHT = 50,
+  THINKING_BLOCK = 100,
+  THINKING_TAG = 200,
+  SPINNER = 300,
+}
+
 -- Helper function to generate content preview for folds
 local function get_fold_content_preview(fold_start_lnum, fold_end_lnum)
   local content_lines = {}
@@ -164,7 +178,7 @@ local function apply_spinner_suppression(bufnr)
   local extmark_opts = {
     end_line = spinner_line_idx0 + 1,
     hl_group = "FlemmaAssistantSpinner",
-    priority = 300, -- Higher than Treesitter spell layer
+    priority = PRIORITY.SPINNER,
     spell = false,
   }
 
@@ -197,29 +211,42 @@ function M.add_rulers(bufnr, doc)
   end
 end
 
--- Highlight thinking tags using extmarks (higher priority than Treesitter)
+-- Highlight thinking tags and blocks using extmarks (higher priority than Treesitter)
 function M.highlight_thinking_tags(bufnr, doc)
   local thinking_ns = vim.api.nvim_create_namespace("flemma_thinking_tags")
 
   -- Clear existing thinking tag highlights
   vim.api.nvim_buf_clear_namespace(bufnr, thinking_ns, 0, -1)
 
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+
   -- Iterate through messages and their segments to find thinking blocks
   for _, msg in ipairs(doc.messages) do
     if msg.segments then
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "thinking" and seg.position then
-          -- Highlight opening tag
+          -- Apply line background highlight to the entire thinking block
+          for lnum = seg.position.start_line, seg.position.end_line do
+            local line_idx = lnum - 1
+            if line_idx >= 0 and line_idx < line_count then
+              vim.api.nvim_buf_set_extmark(bufnr, thinking_ns, line_idx, 0, {
+                line_hl_group = "FlemmaThinkingBlock",
+                priority = PRIORITY.THINKING_BLOCK,
+              })
+            end
+          end
+
+          -- Highlight opening tag text
           vim.api.nvim_buf_set_extmark(bufnr, thinking_ns, seg.position.start_line - 1, 0, {
             end_line = seg.position.start_line,
             hl_group = "FlemmaThinkingTag",
-            priority = 200, -- Higher than Treesitter (100)
+            priority = PRIORITY.THINKING_TAG,
           })
-          -- Highlight closing tag
+          -- Highlight closing tag text
           vim.api.nvim_buf_set_extmark(bufnr, thinking_ns, seg.position.end_line - 1, 0, {
             end_line = seg.position.end_line,
             hl_group = "FlemmaThinkingTag",
-            priority = 200,
+            priority = PRIORITY.THINKING_TAG,
           })
         end
       end
@@ -452,7 +479,7 @@ function M.apply_line_highlights(bufnr, doc)
       if line_idx >= 0 and line_idx < line_count then
         vim.api.nvim_buf_set_extmark(bufnr, line_hl_ns, line_idx, 0, {
           line_hl_group = "FlemmaLineFrontmatter",
-          priority = 50,
+          priority = PRIORITY.LINE_HIGHLIGHT,
         })
       end
     end
@@ -475,7 +502,7 @@ function M.apply_line_highlights(bufnr, doc)
       if line_idx >= 0 and line_idx < line_count then
         vim.api.nvim_buf_set_extmark(bufnr, line_hl_ns, line_idx, 0, {
           line_hl_group = hl_group,
-          priority = 50, -- Lower than text highlights but visible
+          priority = PRIORITY.LINE_HIGHLIGHT,
         })
       end
     end
