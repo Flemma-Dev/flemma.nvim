@@ -451,7 +451,7 @@ function M.send_to_provider(opts)
           local notify_opts = vim.tbl_deep_extend("force", state.get_config().notify, {
             title = "Usage",
           })
-          require("flemma.notify").show(usage_str, notify_opts)
+          require("flemma.notify").show(usage_str, notify_opts, bufnr)
         end
         -- Reset in-flight usage for next request
         buffer_state.inflight_usage = {

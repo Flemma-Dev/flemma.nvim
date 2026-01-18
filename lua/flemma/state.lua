@@ -95,6 +95,8 @@ function M.cleanup_buffer_state(bufnr)
     end
     buffer_states[bufnr] = nil
   end
+  -- Clean up any notifications associated with this buffer
+  require("flemma.notify").cleanup_buffer(bufnr)
 end
 
 return M

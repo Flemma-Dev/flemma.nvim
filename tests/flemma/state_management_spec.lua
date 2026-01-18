@@ -373,4 +373,199 @@ describe("State Management", function()
       assert.equals(456, state1.current_request)
     end)
   end)
+
+  describe("notification per-buffer isolation", function()
+    local notify
+
+    before_each(function()
+      package.loaded["flemma.notify"] = nil
+      notify = require("flemma.notify")
+    end)
+
+    it("should display notification in the buffer's window", function()
+      -- Create two windows side by side
+      vim.cmd("vnew")
+      local win1 = vim.api.nvim_get_current_win()
+      vim.cmd("vertical resize 40")
+
+      vim.cmd("wincmd l")
+      local win2 = vim.api.nvim_get_current_win()
+
+      -- Create buffers for each window
+      local buf1 = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_buf_set_name(buf1, "/tmp/chat1.chat")
+      vim.bo[buf1].filetype = "chat"
+      vim.api.nvim_win_set_buf(win1, buf1)
+
+      local buf2 = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_buf_set_name(buf2, "/tmp/chat2.chat")
+      vim.bo[buf2].filetype = "chat"
+      vim.api.nvim_win_set_buf(win2, buf2)
+
+      -- Show notification for buf1 while we're in win2
+      vim.api.nvim_set_current_win(win2)
+      notify.show("Test notification for buf1", { timeout = 100 }, buf1)
+
+      -- Wait for vim.schedule to execute
+      vim.wait(20, function() return false end)
+
+      -- Find the notification window
+      local notify_win = nil
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        local buf = vim.api.nvim_win_get_buf(win)
+        if vim.bo[buf].filetype == "flemma_notify" then
+          notify_win = win
+          break
+        end
+      end
+
+      assert.is_not_nil(notify_win, "Notification window should exist")
+
+      -- Check that the notification is relative to win1 (the buffer's window)
+      local config = vim.api.nvim_win_get_config(notify_win)
+      assert.equals("win", config.relative)
+      assert.equals(win1, config.win)
+
+      -- Clean up notification
+      notify.cleanup_buffer(buf1)
+    end)
+
+    it("should maintain separate notification stacks per buffer", function()
+      -- Create two windows
+      vim.cmd("vnew")
+      local win1 = vim.api.nvim_get_current_win()
+      vim.cmd("vertical resize 40")
+
+      vim.cmd("wincmd l")
+      local win2 = vim.api.nvim_get_current_win()
+
+      -- Create buffers
+      local buf1 = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_win_set_buf(win1, buf1)
+
+      local buf2 = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_win_set_buf(win2, buf2)
+
+      -- Show multiple notifications for buf1
+      notify.show("Notif 1 for buf1", { timeout = 500 }, buf1)
+      notify.show("Notif 2 for buf1", { timeout = 500 }, buf1)
+
+      -- Show notification for buf2
+      notify.show("Notif 1 for buf2", { timeout = 500 }, buf2)
+
+      -- Wait for vim.schedule
+      vim.wait(20, function() return false end)
+
+      -- Count notifications per window
+      local notif_count_win1 = 0
+      local notif_count_win2 = 0
+
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        local buf = vim.api.nvim_win_get_buf(win)
+        if vim.bo[buf].filetype == "flemma_notify" then
+          local config = vim.api.nvim_win_get_config(win)
+          if config.win == win1 then
+            notif_count_win1 = notif_count_win1 + 1
+          elseif config.win == win2 then
+            notif_count_win2 = notif_count_win2 + 1
+          end
+        end
+      end
+
+      -- buf1's window should have 2 notifications
+      assert.equals(2, notif_count_win1)
+      -- buf2's window should have 1 notification
+      assert.equals(1, notif_count_win2)
+
+      -- Clean up
+      notify.cleanup_buffer(buf1)
+      notify.cleanup_buffer(buf2)
+    end)
+
+    it("should cleanup notifications when buffer is deleted", function()
+      -- Create window and buffer
+      local buf = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(buf)
+
+      -- Show notification
+      notify.show("Test notification", { timeout = 5000 }, buf)
+
+      -- Wait for vim.schedule
+      vim.wait(20, function() return false end)
+
+      -- Count notification windows
+      local initial_notif_count = 0
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        local win_buf = vim.api.nvim_win_get_buf(win)
+        if vim.bo[win_buf].filetype == "flemma_notify" then
+          initial_notif_count = initial_notif_count + 1
+        end
+      end
+      assert.equals(1, initial_notif_count)
+
+      -- Cleanup the buffer's notifications
+      notify.cleanup_buffer(buf)
+
+      -- Wait for cleanup
+      vim.wait(20, function() return false end)
+
+      -- Count notification windows after cleanup
+      local final_notif_count = 0
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        if vim.api.nvim_win_is_valid(win) then
+          local win_buf = vim.api.nvim_win_get_buf(win)
+          if vim.api.nvim_buf_is_valid(win_buf) and vim.bo[win_buf].filetype == "flemma_notify" then
+            final_notif_count = final_notif_count + 1
+          end
+        end
+      end
+      assert.equals(0, final_notif_count)
+    end)
+
+    it("should defer notification until buffer becomes visible", function()
+      -- Set up notify autocmds
+      notify.setup()
+
+      -- Create a buffer but don't display it in any window
+      local hidden_buf = vim.api.nvim_create_buf(false, false)
+
+      -- Show notification for hidden buffer
+      notify.show("Pending notification", { timeout = 5000 }, hidden_buf)
+
+      -- Wait for vim.schedule
+      vim.wait(20, function() return false end)
+
+      -- Count notification windows - should be 0 since buffer is hidden
+      local notif_count = 0
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        local win_buf = vim.api.nvim_win_get_buf(win)
+        if vim.bo[win_buf].filetype == "flemma_notify" then
+          notif_count = notif_count + 1
+        end
+      end
+      assert.equals(0, notif_count, "No notification should be shown for hidden buffer")
+
+      -- Now make the buffer visible by switching to it
+      vim.api.nvim_set_current_buf(hidden_buf)
+
+      -- Trigger WinEnter autocmd (simulates tab/window switch)
+      vim.cmd("doautocmd WinEnter")
+
+      -- Wait for notification to appear
+      vim.wait(20, function() return false end)
+
+      -- Count notification windows - should now be 1
+      notif_count = 0
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        local win_buf = vim.api.nvim_win_get_buf(win)
+        if vim.bo[win_buf].filetype == "flemma_notify" then
+          notif_count = notif_count + 1
+        end
+      end
+      assert.equals(1, notif_count, "Notification should appear when buffer becomes visible")
+
+      -- Clean up
+      notify.cleanup_buffer(hidden_buf)
+    end)
+  end)
 end)
