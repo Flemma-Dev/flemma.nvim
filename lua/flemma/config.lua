@@ -12,7 +12,7 @@ return {
     user_lua_expression = "PreProc", -- Highlight group or hex color for {{expression}} in user messages
     user_file_reference = "Include", -- Highlight group or hex color for @./file references in user messages
     thinking_tag = "Comment", -- Highlight group or hex color for <thinking> and </thinking> tags
-    thinking_block = { dark = "Comment+bg:#102020", light = "Comment-bg:#102020" }, -- Highlight group or hex color for content inside <thinking> blocks
+    thinking_block = { dark = "Comment+bg:#102020-fg:#111111", light = "Comment-bg:#102020+fg:#111111" }, -- Highlight group or hex color for content inside <thinking> blocks
   },
   role_style = "bold,underline", -- style applied to role markers like @You:
   ruler = {
