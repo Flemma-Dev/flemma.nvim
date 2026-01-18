@@ -387,7 +387,7 @@ describe("Anthropic Provider Tool Support", function()
     assert.equals("calculator", req.tools[1].name)
   end)
 
-  it("includes tool_choice with disable_parallel_tool_use", function()
+  it("includes tool_choice with auto mode (parallel tool use enabled)", function()
     local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
 
     local lines = { "@You: Calculate something" }
@@ -396,7 +396,8 @@ describe("Anthropic Provider Tool Support", function()
 
     assert.is_not_nil(req.tool_choice)
     assert.equals("auto", req.tool_choice.type)
-    assert.equals(true, req.tool_choice.disable_parallel_tool_use)
+    -- Parallel tool use is now enabled (no disable_parallel_tool_use flag)
+    assert.is_nil(req.tool_choice.disable_parallel_tool_use)
   end)
 
   it("includes tool_use in assistant message content", function()
@@ -589,10 +590,10 @@ describe("Request Body Validation", function()
     assert.is_not_nil(req.tools[1].input_schema)
     assert.is_not_nil(req.tools[1].input_schema.properties.expression)
 
-    -- Validate tool_choice
+    -- Validate tool_choice (parallel tool use is enabled, no disable flag)
     assert.is_not_nil(req.tool_choice)
     assert.equals("auto", req.tool_choice.type)
-    assert.equals(true, req.tool_choice.disable_parallel_tool_use)
+    assert.is_nil(req.tool_choice.disable_parallel_tool_use)
 
     -- Validate message structure
     local user_msgs = vim.tbl_filter(function(m)
@@ -657,7 +658,7 @@ describe("OpenAI Provider Request Building with Tools", function()
     assert.is_not_nil(req.tools[1]["function"].parameters.properties.expression)
   end)
 
-  it("includes tool_choice and parallel_tool_calls: false", function()
+  it("includes tool_choice auto (parallel tool use enabled)", function()
     local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
 
     local lines = { "@You: Calculate something" }
@@ -665,7 +666,8 @@ describe("OpenAI Provider Request Building with Tools", function()
     local req = provider:build_request(prompt, {})
 
     assert.equals("auto", req.tool_choice)
-    assert.equals(false, req.parallel_tool_calls)
+    -- Parallel tool use is now enabled (no parallel_tool_calls: false flag)
+    assert.is_nil(req.parallel_tool_calls)
   end)
 
   it("includes tool_calls in assistant message", function()
@@ -860,9 +862,9 @@ describe("OpenAI Request Body Validation with Tools", function()
     assert.is_not_nil(req.tools[1]["function"].parameters)
     assert.is_not_nil(req.tools[1]["function"].parameters.properties.expression)
 
-    -- Validate tool_choice and parallel_tool_calls
+    -- Validate tool_choice (parallel tool use is enabled, no disable flag)
     assert.equals("auto", req.tool_choice)
-    assert.equals(false, req.parallel_tool_calls)
+    assert.is_nil(req.parallel_tool_calls)
 
     -- Validate message structure
     local assistant_msgs = vim.tbl_filter(function(m)
@@ -1633,5 +1635,93 @@ describe("OpenAI Provider with Vertex URN IDs", function()
       "Tool message ID should be normalized from URN format"
     )
     assert.is_true(tool_msg.tool_call_id:match(":") == nil, "Normalized ID should not contain colons")
+  end)
+end)
+
+describe("Parallel Tool Use Validation", function()
+  before_each(function()
+    tools.clear()
+    tools.setup()
+  end)
+
+  it("returns empty pending_tool_calls when all tool_uses have results", function()
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
+
+    assert.is_not_nil(prompt.pending_tool_calls)
+    assert.equals(0, #prompt.pending_tool_calls)
+  end)
+
+  it("returns pending_tool_calls when tool_uses are missing results", function()
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat")
+    local prompt, evaluated =
+      pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat"))
+
+    -- Should have one pending tool call (toolu_01BBB)
+    assert.is_not_nil(prompt.pending_tool_calls)
+    assert.equals(1, #prompt.pending_tool_calls)
+    assert.equals("toolu_01BBB", prompt.pending_tool_calls[1].id)
+    assert.equals("calculator", prompt.pending_tool_calls[1].name)
+
+    -- Should have a diagnostic warning
+    local tool_warnings = vim.tbl_filter(function(d)
+      return d.type == "tool_use" and d.severity == "warning"
+    end, evaluated.diagnostics)
+    assert.is_true(#tool_warnings >= 1, "Should have at least one tool_use warning")
+  end)
+
+  it("parses multiple tool_uses from single assistant message", function()
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_parallel_tools.chat")
+    local doc = parser.parse_lines(lines)
+
+    -- Find the first assistant message with multiple tool_uses
+    local first_assistant_msg = nil
+    for _, msg in ipairs(doc.messages) do
+      if msg.role == "Assistant" then
+        first_assistant_msg = msg
+        break
+      end
+    end
+
+    assert.is_not_nil(first_assistant_msg)
+    local tool_uses = vim.tbl_filter(function(seg)
+      return seg.kind == "tool_use"
+    end, first_assistant_msg.segments)
+
+    assert.equals(2, #tool_uses, "First assistant message should have 2 tool_use blocks")
+    assert.equals("toolu_01AAA", tool_uses[1].id)
+    assert.equals("toolu_01BBB", tool_uses[2].id)
+  end)
+
+  it("parses multiple tool_results from single user message", function()
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_parallel_tools.chat")
+    local doc = parser.parse_lines(lines)
+
+    -- Find the first user message with multiple tool_results
+    local tool_result_user_msg = nil
+    for _, msg in ipairs(doc.messages) do
+      if msg.role == "You" then
+        local has_tool_result = false
+        for _, seg in ipairs(msg.segments) do
+          if seg.kind == "tool_result" then
+            has_tool_result = true
+            break
+          end
+        end
+        if has_tool_result then
+          tool_result_user_msg = msg
+          break
+        end
+      end
+    end
+
+    assert.is_not_nil(tool_result_user_msg)
+    local tool_results = vim.tbl_filter(function(seg)
+      return seg.kind == "tool_result"
+    end, tool_result_user_msg.segments)
+
+    assert.equals(2, #tool_results, "User message should have 2 tool_result blocks")
+    assert.equals("toolu_01AAA", tool_results[1].tool_use_id)
+    assert.equals("toolu_01BBB", tool_results[2].tool_use_id)
   end)
 end)

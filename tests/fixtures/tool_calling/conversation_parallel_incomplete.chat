@@ -1,0 +1,27 @@
+@System: You are a helpful assistant with access to a calculator tool.
+
+@You: Calculate both 15*7 and 23*3 for me.
+
+@Assistant: I'll calculate both for you.
+
+**Tool Use:** `calculator` (`toolu_01AAA`)
+
+```json
+{
+  "expression": "15 * 7"
+}
+```
+
+**Tool Use:** `calculator` (`toolu_01BBB`)
+
+```json
+{
+  "expression": "23 * 3"
+}
+```
+
+@You: **Tool Result:** `toolu_01AAA`
+
+```
+105
+```

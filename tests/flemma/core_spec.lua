@@ -94,11 +94,12 @@ describe(":FlemmaSend command", function()
     assert.equals(config.parameters.max_tokens, captured_request_body.max_completion_tokens)
     assert.equals(config.parameters.temperature, captured_request_body.temperature)
 
-    -- Tools are now included by default (MVP tool calling support)
+    -- Tools are now included by default (parallel tool use enabled)
     if captured_request_body.tools then
       assert.is_true(#captured_request_body.tools >= 0)
       assert.equals("auto", captured_request_body.tool_choice)
-      assert.equals(false, captured_request_body.parallel_tool_calls)
+      -- Parallel tool use is enabled (no parallel_tool_calls: false flag)
+      assert.is_nil(captured_request_body.parallel_tool_calls)
     end
   end)
 

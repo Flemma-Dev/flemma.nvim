@@ -229,8 +229,6 @@ function M.build_request(self, prompt, context)
   if #tools_array > 0 then
     request_body.tools = tools_array
     request_body.tool_choice = "auto"
-    -- MVP: Disable parallel tool use to ensure at most one tool per response
-    request_body.parallel_tool_calls = false
     log.debug("openai.build_request: Added " .. #tools_array .. " tools to request")
   end
 

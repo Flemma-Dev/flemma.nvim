@@ -189,11 +189,7 @@ function M.build_request(self, prompt, context)
   -- Add tools if any are registered
   if #tools_array > 0 then
     request_body.tools = tools_array
-    -- MVP: Disable parallel tool use to ensure at most one tool per response
-    request_body.tool_choice = {
-      type = "auto",
-      disable_parallel_tool_use = true,
-    }
+    request_body.tool_choice = { type = "auto" }
     log.debug("anthropic.build_request: Added " .. #tools_array .. " tools to request")
   end
 
