@@ -263,6 +263,12 @@ M.apply_syntax = function()
   -- Set highlight for thinking tags and blocks
   set_highlight("FlemmaThinkingTag", syntax_config.highlights.thinking_tag)
   set_highlight("FlemmaThinkingBlock", syntax_config.highlights.thinking_block)
+
+  -- Set highlight for tool use and tool result syntax
+  -- Note: Tool names and IDs in backticks are handled by treesitter markdown_inline
+  set_highlight("FlemmaToolUseTitle", syntax_config.highlights.tool_use)
+  set_highlight("FlemmaToolResultTitle", syntax_config.highlights.tool_result)
+  set_highlight("FlemmaToolResultError", syntax_config.highlights.tool_result_error)
 end
 
 -- Setup line highlight groups for full-line background highlighting

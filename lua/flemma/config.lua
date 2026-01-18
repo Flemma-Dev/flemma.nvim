@@ -13,6 +13,9 @@ return {
     user_file_reference = "Include", -- Highlight group or hex color for @./file references in user messages
     thinking_tag = "Comment", -- Highlight group or hex color for <thinking> and </thinking> tags
     thinking_block = { dark = "Comment+bg:#102020-fg:#111111", light = "Comment-bg:#102020+fg:#111111" }, -- Highlight group or hex color for content inside <thinking> blocks
+    tool_use = "Function", -- Highlight group or hex color for **Tool Use:** title
+    tool_result = "Function", -- Highlight group or hex color for **Tool Result:** title
+    tool_result_error = "DiagnosticError", -- Highlight group or hex color for (error) marker in tool results
   },
   role_style = "bold,underline", -- style applied to role markers like @You:
   ruler = {

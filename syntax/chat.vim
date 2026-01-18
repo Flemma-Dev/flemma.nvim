@@ -26,6 +26,20 @@ syntax match FlemmaThinkingTag "^<thinking\(\s.*[^/>]\)\?>$" contained
 syntax match FlemmaThinkingTag "^<thinking\s.*/>$" contained
 syntax match FlemmaThinkingTag "^</thinking>$" contained
 
+" Define Tool Use/Result syntax (for tool calling)
+" Tool Use title: **Tool Use:**
+syntax match FlemmaToolUseTitle "\*\*Tool Use:\*\*" contained
+" Tool Result title: **Tool Result:**
+syntax match FlemmaToolResultTitle "\*\*Tool Result:\*\*" contained
+" Error marker: (error)
+syntax match FlemmaToolResultError "(error)" contained
+
+" Tool Use region (in assistant messages): **Tool Use:** `name` (`id`)
+" Note: Tool names and IDs in backticks are handled by treesitter markdown_inline as inline code
+syntax region FlemmaToolUse start="\*\*Tool Use:\*\*" end="$" oneline contained contains=FlemmaToolUseTitle
+" Tool Result region (in user messages): **Tool Result:** `id` (optional: (error))
+syntax region FlemmaToolResult start="\*\*Tool Result:\*\*" end="$" oneline contained contains=FlemmaToolResultTitle,FlemmaToolResultError
+
 " Note: Signature concealment is now handled via extmarks in ui.lua highlight_thinking_tags()
 " This avoids needing conceallevel which affects the whole buffer (including frontmatter)
 
@@ -43,8 +57,8 @@ syntax region FlemmaFrontmatterBlockJson start="\%1l^```json$" end="^```$" keepe
 
 " System region
 syntax region FlemmaSystem start='^@System:' end='\(^@\(You\|Assistant\):\)\@=\|\%$' contains=FlemmaRoleSystem,@Markdown
-" User region
-syntax region FlemmaUser start='^@You:' end='\(^@\(System\|Assistant\):\)\@=\|\%$' contains=FlemmaRoleUser,FlemmaUserLuaExpression,FlemmaUserFileReference,@Markdown
+" User region (contains tool results)
+syntax region FlemmaUser start='^@You:' end='\(^@\(System\|Assistant\):\)\@=\|\%$' contains=FlemmaRoleUser,FlemmaUserLuaExpression,FlemmaUserFileReference,FlemmaToolResult,@Markdown
 
 " Thinking Block Region (nested inside Assistant)
 " This region starts with <thinking> or <thinking provider:signature="..."> and ends with </thinking>.
@@ -52,7 +66,7 @@ syntax region FlemmaUser start='^@You:' end='\(^@\(System\|Assistant\):\)\@=\|\%
 " It contains the tags themselves (FlemmaThinkingTag) and markdown for the content.
 syntax region FlemmaThinkingBlock start="^<thinking\(\s.*[^/>]\)\?>$" end="^</thinking>$" keepend contains=FlemmaThinkingTag,@Markdown
 
-" Assistant region contains role markers, markdown, and thinking blocks
-syntax region FlemmaAssistant start='^@Assistant:' end='\(^@\(System\|You\):\)\@=\|\%$' contains=FlemmaRoleAssistant,FlemmaThinkingBlock,@Markdown
+" Assistant region contains role markers, markdown, thinking blocks, and tool use
+syntax region FlemmaAssistant start='^@Assistant:' end='\(^@\(System\|You\):\)\@=\|\%$' contains=FlemmaRoleAssistant,FlemmaThinkingBlock,FlemmaToolUse,@Markdown
 
 let b:current_syntax = "chat"
