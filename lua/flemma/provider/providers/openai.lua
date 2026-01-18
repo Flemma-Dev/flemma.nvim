@@ -8,6 +8,10 @@ local M = {}
 -- Inherit from base provider
 setmetatable(M, { __index = base })
 
+-- OpenAI's completion_tokens already includes reasoning_tokens,
+-- so we should NOT add thoughts_tokens separately for cost calculation.
+M.output_has_thoughts = true
+
 -- Create a new OpenAI provider instance
 function M.new(merged_config)
   local provider = base.new(merged_config) -- Pass the already merged config to base

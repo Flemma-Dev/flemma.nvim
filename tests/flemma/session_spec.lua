@@ -44,19 +44,36 @@ describe("flemma.session", function()
       assert.are.equal(2.50, request:get_input_cost())
     end)
 
-    it("should calculate output cost including thoughts tokens", function()
+    it("should calculate output cost for Vertex (thoughts separate from output)", function()
+      local request = session_module.Request.new({
+        provider = "vertex",
+        model = "gemini-2.5-pro",
+        input_tokens = 100,
+        output_tokens = 500000,
+        thoughts_tokens = 500000,
+        input_price = 1.25,
+        output_price = 10.00,
+        output_has_thoughts = false, -- Vertex: thoughts are separate
+      })
+
+      -- Vertex: (500000 + 500000) / 1000000 * 10.00 = 10.00
+      assert.are.equal(10.00, request:get_output_cost())
+    end)
+
+    it("should calculate output cost for OpenAI (thoughts included in output)", function()
       local request = session_module.Request.new({
         provider = "openai",
         model = "o1",
         input_tokens = 100,
-        output_tokens = 500000,
-        thoughts_tokens = 500000,
+        output_tokens = 500000, -- completion_tokens already includes reasoning_tokens
+        thoughts_tokens = 300000, -- reasoning_tokens is a subset, tracked separately for display
         input_price = 15.00,
         output_price = 60.00,
+        output_has_thoughts = true, -- OpenAI: thoughts already counted in output
       })
 
-      -- (500000 + 500000) / 1000000 * 60.00 = 60.00
-      assert.are.equal(60.00, request:get_output_cost())
+      -- OpenAI: 500000 / 1000000 * 60.00 = 30.00 (NOT adding thoughts_tokens again)
+      assert.are.equal(30.00, request:get_output_cost())
     end)
 
     it("should calculate total cost correctly", function()
@@ -77,18 +94,36 @@ describe("flemma.session", function()
       assert.is_true(math.abs(total_cost - 0.60) < 0.0001, "Expected ~0.60, got " .. total_cost)
     end)
 
-    it("should get total output tokens including thoughts", function()
+    it("should get total output tokens for Vertex (thoughts separate)", function()
+      local request = session_module.Request.new({
+        provider = "vertex",
+        model = "gemini-2.5-pro",
+        input_tokens = 100,
+        output_tokens = 200,
+        thoughts_tokens = 50,
+        input_price = 1.25,
+        output_price = 10.00,
+        output_has_thoughts = false, -- Vertex: thoughts are separate
+      })
+
+      -- Vertex: 200 + 50 = 250
+      assert.are.equal(250, request:get_total_output_tokens())
+    end)
+
+    it("should get total output tokens for Anthropic (thoughts included)", function()
       local request = session_module.Request.new({
         provider = "anthropic",
         model = "claude-sonnet-4-5",
         input_tokens = 100,
-        output_tokens = 200,
-        thoughts_tokens = 50,
+        output_tokens = 200, -- already includes thinking tokens
+        thoughts_tokens = 0, -- Anthropic doesn't report separate thinking token count
         input_price = 3.00,
         output_price = 15.00,
+        output_has_thoughts = true, -- Anthropic: thoughts already counted in output
       })
 
-      assert.are.equal(250, request:get_total_output_tokens())
+      -- Anthropic: just output_tokens (200), not adding thoughts again
+      assert.are.equal(200, request:get_total_output_tokens())
     end)
 
     it("should handle zero thoughts tokens", function()
@@ -169,31 +204,62 @@ describe("flemma.session", function()
       assert.are.equal(300, session:get_total_input_tokens())
     end)
 
-    it("should calculate total output tokens including thoughts", function()
+    it("should calculate total output tokens for Vertex (thoughts separate)", function()
+      local session = session_module.Session.new()
+
+      session:add_request({
+        provider = "vertex",
+        model = "gemini-2.5-pro",
+        input_tokens = 100,
+        output_tokens = 50,
+        thoughts_tokens = 25,
+        input_price = 1.25,
+        output_price = 10.00,
+        output_has_thoughts = false, -- Vertex: thoughts are separate
+      })
+
+      session:add_request({
+        provider = "vertex",
+        model = "gemini-2.5-pro",
+        input_tokens = 200,
+        output_tokens = 75,
+        thoughts_tokens = 30,
+        input_price = 1.25,
+        output_price = 10.00,
+        output_has_thoughts = false, -- Vertex: thoughts are separate
+      })
+
+      -- Vertex: (50 + 25) + (75 + 30) = 180
+      assert.are.equal(180, session:get_total_output_tokens())
+    end)
+
+    it("should calculate total output tokens for OpenAI (thoughts included)", function()
       local session = session_module.Session.new()
 
       session:add_request({
         provider = "openai",
         model = "o1",
         input_tokens = 100,
-        output_tokens = 50,
-        thoughts_tokens = 25,
+        output_tokens = 500, -- completion_tokens already includes reasoning
+        thoughts_tokens = 200, -- reasoning_tokens is a subset, for display only
         input_price = 15.00,
         output_price = 60.00,
+        output_has_thoughts = true, -- OpenAI: thoughts already counted in output
       })
 
       session:add_request({
         provider = "openai",
         model = "o1",
         input_tokens = 200,
-        output_tokens = 75,
-        thoughts_tokens = 30,
+        output_tokens = 750, -- completion_tokens already includes reasoning
+        thoughts_tokens = 300, -- reasoning_tokens is a subset, for display only
         input_price = 15.00,
         output_price = 60.00,
+        output_has_thoughts = true, -- OpenAI: thoughts already counted in output
       })
 
-      -- (50 + 25) + (75 + 30) = 180
-      assert.are.equal(180, session:get_total_output_tokens())
+      -- OpenAI: 500 + 750 = 1250 (NOT adding thoughts_tokens again)
+      assert.are.equal(1250, session:get_total_output_tokens())
     end)
 
     it("should calculate total thoughts tokens", function()
@@ -335,22 +401,49 @@ describe("flemma.session", function()
       assert.are.equal(0, session:get_total_output_tokens())
     end)
 
-    it("should handle sessions with only thoughts tokens", function()
+    it("should handle Vertex sessions with only thoughts tokens", function()
       local session = session_module.Session.new()
 
+      -- For Vertex, thoughts_tokens is separate from output_tokens
+      session:add_request({
+        provider = "vertex",
+        model = "gemini-2.5-pro",
+        input_tokens = 1000000,
+        output_tokens = 0,
+        thoughts_tokens = 1000000,
+        input_price = 1.25,
+        output_price = 10.00,
+        output_has_thoughts = false, -- Vertex: thoughts are separate
+      })
+
+      -- Vertex: 0 + 1000000 = 1000000 total output tokens
+      assert.are.equal(1000000, session:get_total_output_tokens())
+      assert.are.equal(1000000, session:get_total_thoughts_tokens())
+      -- Output cost: 1000000 / 1000000 * 10.00 = 10.00
+      assert.are.equal(10.00, session:get_total_output_cost())
+    end)
+
+    it("should handle OpenAI sessions where output_tokens is completion_tokens", function()
+      local session = session_module.Session.new()
+
+      -- For OpenAI, completion_tokens already includes reasoning_tokens
+      -- So if output_tokens = 1000000 and thoughts_tokens = 800000,
+      -- that means 200000 visible tokens + 800000 reasoning tokens = 1000000 total
       session:add_request({
         provider = "openai",
         model = "o1",
         input_tokens = 1000000,
-        output_tokens = 0,
-        thoughts_tokens = 1000000,
+        output_tokens = 1000000, -- completion_tokens (includes reasoning)
+        thoughts_tokens = 800000, -- reasoning_tokens (subset of completion_tokens, for display)
         input_price = 15.00,
         output_price = 60.00,
+        output_has_thoughts = true, -- OpenAI: thoughts already counted in output
       })
 
+      -- OpenAI: just output_tokens, not adding thoughts again
       assert.are.equal(1000000, session:get_total_output_tokens())
-      assert.are.equal(1000000, session:get_total_thoughts_tokens())
-      -- Output cost should be based on thoughts tokens
+      assert.are.equal(800000, session:get_total_thoughts_tokens())
+      -- Output cost: 1000000 / 1000000 * 60.00 = 60.00 (NOT 108.00!)
       assert.are.equal(60.00, session:get_total_output_cost())
     end)
   end)

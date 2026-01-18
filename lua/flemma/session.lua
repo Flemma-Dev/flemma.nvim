@@ -36,6 +36,7 @@ Request.__index = Request
 ---@param opts.filepath string|nil Resolved absolute filepath (nil for unnamed buffers)
 ---@param opts.bufnr number|nil Buffer number (fallback for unnamed buffers)
 ---@param opts.timestamp number|nil Unix timestamp (defaults to current time)
+---@param opts.output_has_thoughts boolean|nil Whether output_tokens already includes thoughts (true for OpenAI/Anthropic, false for Vertex)
 ---@return table Request instance
 function Request.new(opts)
   local self = setmetatable({}, Request)
@@ -50,6 +51,8 @@ function Request.new(opts)
   self.filepath = opts.filepath
   self.bufnr = opts.bufnr
   self.timestamp = opts.timestamp or os.time()
+  -- Whether output_tokens already includes thoughts (true for OpenAI/Anthropic, false for Vertex)
+  self.output_has_thoughts = opts.output_has_thoughts or false
 
   return self
 end
@@ -60,10 +63,19 @@ function Request:get_input_cost()
   return (self.input_tokens / 1000000) * self.input_price
 end
 
---- Calculate output cost for this request (includes thoughts tokens)
+--- Calculate output cost for this request
+--- For Vertex: adds thoughts_tokens since they're separate from output_tokens
+--- For OpenAI/Anthropic: uses output_tokens alone since thoughts are already included
 ---@return number Cost in USD
 function Request:get_output_cost()
-  local total_output = self.output_tokens + self.thoughts_tokens
+  local total_output
+  if self.output_has_thoughts then
+    -- OpenAI/Anthropic: thoughts already counted in output_tokens
+    total_output = self.output_tokens
+  else
+    -- Vertex: thoughts are separate from output tokens
+    total_output = self.output_tokens + self.thoughts_tokens
+  end
   return (total_output / 1000000) * self.output_price
 end
 
@@ -73,10 +85,16 @@ function Request:get_total_cost()
   return self:get_input_cost() + self:get_output_cost()
 end
 
---- Get total output tokens (output + thoughts)
+--- Get total output tokens for display/billing
+--- For Vertex: adds thoughts_tokens since they're separate
+--- For OpenAI/Anthropic: uses output_tokens alone since thoughts are already included
 ---@return number Total output tokens
 function Request:get_total_output_tokens()
-  return self.output_tokens + self.thoughts_tokens
+  if self.output_has_thoughts then
+    return self.output_tokens
+  else
+    return self.output_tokens + self.thoughts_tokens
+  end
 end
 
 --- Session class

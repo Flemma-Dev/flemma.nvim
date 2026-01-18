@@ -368,10 +368,12 @@ function M.send_to_provider(opts)
   local response_started = false
 
   -- Reset in-flight usage tracking for this buffer
+  -- Include the provider's output_has_thoughts flag so usage.lua can display correctly
   buffer_state.inflight_usage = {
     input_tokens = 0,
     output_tokens = 0,
     thoughts_tokens = 0,
+    output_has_thoughts = current_provider.output_has_thoughts,
   }
 
   -- Set up callbacks for the provider
@@ -439,6 +441,8 @@ function M.send_to_provider(opts)
             output_price = pricing_info.output,
             filepath = filepath,
             bufnr = filepath and nil or bufnr, -- Only store bufnr for unnamed buffers
+            -- Get flag from provider (set in inflight_usage, available via closure)
+            output_has_thoughts = current_provider.output_has_thoughts,
           })
         end
 
@@ -454,10 +458,12 @@ function M.send_to_provider(opts)
           require("flemma.notify").show(usage_str, notify_opts, bufnr)
         end
         -- Reset in-flight usage for next request
+        -- Note: output_has_thoughts will be set again when the next request starts
         buffer_state.inflight_usage = {
           input_tokens = 0,
           output_tokens = 0,
           thoughts_tokens = 0,
+          output_has_thoughts = false, -- Default, will be overwritten on next request
         }
       end)
     end,

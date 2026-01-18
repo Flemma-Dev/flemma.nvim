@@ -7,6 +7,10 @@ local M = {}
 -- Inherit from base provider
 setmetatable(M, { __index = base })
 
+-- Anthropic's output_tokens already includes thinking tokens in the usage response,
+-- so we should NOT add thoughts_tokens separately for cost calculation.
+M.output_has_thoughts = true
+
 -- Create a new Anthropic provider instance
 function M.new(merged_config)
   local provider = base.new(merged_config) -- Pass the already merged config to base

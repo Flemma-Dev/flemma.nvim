@@ -15,6 +15,11 @@ local log = require("flemma.logging")
 
 local M = {}
 
+--- Whether output_tokens already includes thoughts_tokens for this provider.
+--- - true: thoughts already counted in output (OpenAI, Anthropic) - don't add for cost
+--- - false: thoughts are separate (Vertex) - add to output for cost
+M.output_has_thoughts = false
+
 -- Provider constructor
 function M.new(opts)
   local provider = setmetatable({
