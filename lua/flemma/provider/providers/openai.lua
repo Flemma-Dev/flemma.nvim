@@ -208,7 +208,7 @@ function M.build_request(self, prompt, context)
       type = "function",
       ["function"] = {
         name = def.name,
-        description = def.description,
+        description = tools_module.build_description(def),
         parameters = def.input_schema,
       },
     })

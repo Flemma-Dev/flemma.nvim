@@ -172,7 +172,7 @@ function M.build_request(self, prompt, context)
   for _, def in pairs(all_tools) do
     table.insert(tools_array, {
       name = def.name,
-      description = def.description,
+      description = tools_module.build_description(def),
       input_schema = def.input_schema,
     })
   end

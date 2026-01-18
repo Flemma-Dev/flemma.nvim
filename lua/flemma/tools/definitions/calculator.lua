@@ -17,6 +17,16 @@ M.definition = {
     },
     required = { "expression" },
   },
+  output_schema = {
+    type = "object",
+    properties = {
+      result = {
+        type = "number",
+        description = "The numeric result of the calculation",
+      },
+    },
+    required = { "result" },
+  },
 }
 
 return M

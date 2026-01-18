@@ -16,6 +16,25 @@ function M.setup()
   end
 end
 
+--- Build a tool description with output_schema information merged in
+--- This creates a description that helps the model understand what the tool returns
+---@param tool table The tool definition with name, description, input_schema, and optional output_schema
+---@return string The full description with output information
+function M.build_description(tool)
+  local desc = tool.description or ""
+
+  if tool.output_schema then
+    -- Add $schema hint and JSON-encode the output schema
+    local schema_with_hint = vim.tbl_extend("keep", {
+      ["$schema"] = "https://json-schema.org/draft/2020-12/schema",
+    }, tool.output_schema)
+    local json = vim.fn.json_encode(schema_with_hint)
+    desc = desc .. "\n\nReturns (JSON Schema): " .. json
+  end
+
+  return desc
+end
+
 M.register = registry.register
 M.get = registry.get
 M.get_all = registry.get_all
