@@ -195,13 +195,22 @@ function M.add_rulers(bufnr, doc)
     return
   end
 
+  -- Get the window displaying this buffer to calculate correct ruler width
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid == -1 then
+    -- Buffer not displayed in any window, skip rulers
+    return
+  end
+
+  local win_width = vim.api.nvim_win_get_width(winid)
+
   for i, msg in ipairs(doc.messages) do
     -- Add a ruler before each message after the first, and before the first if frontmatter exists
     if i > 1 or (i == 1 and doc.frontmatter ~= nil) then
       local line_idx = msg.position.start_line - 1
       if line_idx >= 0 and line_idx < vim.api.nvim_buf_line_count(bufnr) then
         -- Create virtual line with ruler using the FlemmaRuler highlight group
-        local ruler_text = string.rep(ruler_config.char, math.floor(vim.api.nvim_win_get_width(0) * 1))
+        local ruler_text = string.rep(ruler_config.char, win_width)
         vim.api.nvim_buf_set_extmark(bufnr, ns_id, line_idx, 0, {
           virt_lines = { { { ruler_text, "FlemmaRuler" } } }, -- Use defined group
           virt_lines_above = true,
@@ -279,8 +288,8 @@ function M.start_loading_spinner(bufnr)
     M.update_ui(bufnr)
     apply_spinner_suppression(bufnr)
     -- Move to bottom and center the line so user sees the message
-    M.move_to_bottom()
-    M.center_cursor()
+    M.move_to_bottom(bufnr)
+    M.center_cursor(bufnr)
     vim.bo[bufnr].modifiable = original_modifiable_initial
   end)
 
@@ -509,76 +518,154 @@ function M.apply_line_highlights(bufnr, doc)
   end
 end
 
--- Set up folding expression
-function M.setup_folding()
-  vim.wo.foldmethod = "expr"
-  vim.wo.foldexpr = 'v:lua.require("flemma.ui").get_fold_level(v:lnum)'
-  vim.wo.foldtext = 'v:lua.require("flemma.ui").get_fold_text()'
+-- Set up folding expression for a buffer
+-- If bufnr is provided, sets folding on the window displaying that buffer
+-- Otherwise, sets folding on the current window
+function M.setup_folding(bufnr)
+  local winid = nil
+
+  if bufnr then
+    winid = vim.fn.bufwinid(bufnr)
+    if winid == -1 then
+      -- Buffer not displayed in any window, skip
+      return
+    end
+  else
+    winid = vim.api.nvim_get_current_win()
+  end
+
+  -- Set window-local options on the correct window
+  vim.wo[winid].foldmethod = "expr"
+  vim.wo[winid].foldexpr = 'v:lua.require("flemma.ui").get_fold_level(v:lnum)'
+  vim.wo[winid].foldtext = 'v:lua.require("flemma.ui").get_fold_text()'
   -- Set fold level from config (default 1 = thinking blocks collapsed)
-  vim.wo.foldlevel = config.editing.foldlevel
+  vim.wo[winid].foldlevel = config.editing.foldlevel
 end
 
--- Store original updatetime per-session (global for all buffers)
-local original_updatetime = nil
+-- Updatetime management state
+-- We use reference counting to track how many chat buffers are "active"
+-- (i.e., currently being displayed in a window). Only restore updatetime
+-- when the last active chat buffer is left.
+local updatetime_state = {
+  original = nil, -- The original updatetime before any chat buffer was entered
+  active_chat_buffers = {}, -- Set of bufnr that are currently active (in a window)
+}
+
+-- Helper to count active chat buffers
+local function count_active_chat_buffers()
+  local count = 0
+  for _ in pairs(updatetime_state.active_chat_buffers) do
+    count = count + 1
+  end
+  return count
+end
 
 -- Apply buffer-local settings for chat files
-local function apply_chat_buffer_settings()
-  M.setup_folding()
+-- bufnr: optional buffer number, defaults to current buffer
+local function apply_chat_buffer_settings(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+
+  M.setup_folding(bufnr)
 
   if config.editing.disable_textwidth then
-    vim.bo.textwidth = 0
+    vim.bo[bufnr].textwidth = 0
   end
 
   if config.editing.auto_write then
-    vim.opt_local.autowrite = true
+    -- autowrite is buffer-local, use vim.bo
+    vim.bo[bufnr].autowrite = true
   end
 end
 
 -- Set up chat filetype autocmds
 function M.setup_chat_filetype_autocmds()
+  -- Create or clear the augroup for all chat-related autocmds
+  local augroup = vim.api.nvim_create_augroup("FlemmaChat", { clear = true })
+
+  -- Reset updatetime state when re-initializing
+  updatetime_state = {
+    original = nil,
+    active_chat_buffers = {},
+  }
+
   -- Handle .chat file detection
   vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
+    group = augroup,
     pattern = "*.chat",
-    callback = function()
-      vim.bo.filetype = "chat"
-      apply_chat_buffer_settings()
+    callback = function(ev)
+      vim.bo[ev.buf].filetype = "chat"
+      apply_chat_buffer_settings(ev.buf)
     end,
   })
 
   -- Handle manual filetype changes to 'chat'
   vim.api.nvim_create_autocmd("FileType", {
+    group = augroup,
     pattern = "chat",
-    callback = function()
-      apply_chat_buffer_settings()
+    callback = function(ev)
+      apply_chat_buffer_settings(ev.buf)
     end,
   })
 
   -- Handle updatetime management for chat buffers
   if config.editing.manage_updatetime then
     vim.api.nvim_create_autocmd("BufEnter", {
+      group = augroup,
       pattern = "*.chat",
-      callback = function()
-        if original_updatetime == nil then
-          original_updatetime = vim.o.updatetime
+      callback = function(ev)
+        local bufnr = ev.buf
+
+        -- Save original updatetime on first chat buffer activation
+        if updatetime_state.original == nil then
+          updatetime_state.original = vim.o.updatetime
         end
+
+        -- Mark this buffer as active
+        updatetime_state.active_chat_buffers[bufnr] = true
+
+        -- Set fast updatetime for chat buffers
         vim.o.updatetime = 100
       end,
     })
 
     vim.api.nvim_create_autocmd("BufLeave", {
+      group = augroup,
       pattern = "*.chat",
-      callback = function()
-        local next_bufnr = vim.fn.bufnr("#")
-        local is_next_chat = false
-        if next_bufnr ~= -1 and vim.api.nvim_buf_is_valid(next_bufnr) then
-          local next_bufname = vim.api.nvim_buf_get_name(next_bufnr)
-          is_next_chat = vim.bo[next_bufnr].filetype == "chat" or next_bufname:match("%.chat$")
-        end
+      callback = function(ev)
+        local bufnr = ev.buf
 
-        if not is_next_chat and original_updatetime ~= nil then
-          vim.o.updatetime = original_updatetime
-          original_updatetime = nil
-        end
+        -- Remove this buffer from active set
+        updatetime_state.active_chat_buffers[bufnr] = nil
+
+        -- Use vim.schedule to defer the check - this allows BufEnter on the
+        -- next buffer to fire first, so we can see if we're switching to another
+        -- chat buffer (in which case we shouldn't restore updatetime)
+        vim.schedule(function()
+          -- Only restore updatetime if no more active chat buffers
+          if count_active_chat_buffers() == 0 and updatetime_state.original ~= nil then
+            vim.o.updatetime = updatetime_state.original
+            updatetime_state.original = nil
+          end
+        end)
+      end,
+    })
+
+    -- Also clean up when buffers are deleted
+    vim.api.nvim_create_autocmd({ "BufWipeout", "BufUnload", "BufDelete" }, {
+      group = augroup,
+      pattern = "*.chat",
+      callback = function(ev)
+        local bufnr = ev.buf
+        updatetime_state.active_chat_buffers[bufnr] = nil
+
+        -- Use vim.schedule here too for consistency
+        vim.schedule(function()
+          -- Restore if this was the last active chat buffer
+          if count_active_chat_buffers() == 0 and updatetime_state.original ~= nil then
+            vim.o.updatetime = updatetime_state.original
+            updatetime_state.original = nil
+          end
+        end)
       end,
     })
   end
@@ -611,26 +698,58 @@ function M.update_ui(bufnr)
 end
 
 -- Move cursor to end of buffer
-function M.move_to_bottom()
+-- If bufnr is provided and the buffer is displayed in a window, moves cursor in that window
+-- Otherwise operates on current window (for backwards compatibility)
+function M.move_to_bottom(bufnr)
+  if bufnr then
+    local winid = vim.fn.bufwinid(bufnr)
+    if winid ~= -1 then
+      vim.fn.win_execute(winid, "normal! G")
+      return
+    end
+  end
+  -- Fallback to current window
   vim.cmd("normal! G")
 end
 
 -- Center cursor line in window
-function M.center_cursor()
+-- If bufnr is provided and the buffer is displayed in a window, centers cursor in that window
+-- Otherwise operates on current window (for backwards compatibility)
+function M.center_cursor(bufnr)
+  if bufnr then
+    local winid = vim.fn.bufwinid(bufnr)
+    if winid ~= -1 then
+      vim.fn.win_execute(winid, "normal! zz")
+      return
+    end
+  end
+  -- Fallback to current window
   vim.cmd("normal! zz")
 end
 
 -- Move cursor to specific position
-function M.set_cursor(line, col)
-  if vim.api.nvim_get_current_buf() then
-    vim.api.nvim_win_set_cursor(0, { line, col })
+-- If bufnr is provided, sets cursor in the window displaying that buffer
+-- Otherwise operates on current window (for backwards compatibility)
+function M.set_cursor(line, col, bufnr)
+  if bufnr then
+    local winid = vim.fn.bufwinid(bufnr)
+    if winid ~= -1 then
+      vim.api.nvim_win_set_cursor(winid, { line, col })
+      return
+    end
   end
+  -- Fallback to current window
+  vim.api.nvim_win_set_cursor(0, { line, col })
 end
 
 -- Set up UI-related autocmds and initialization
 function M.setup()
+  -- Create or clear the augroup for UI-related autocmds
+  local augroup = vim.api.nvim_create_augroup("FlemmaUI", { clear = true })
+
   -- Add autocmd for updating rulers and signs (debounced via CursorHold)
   vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter", "VimResized", "CursorHold", "CursorHoldI" }, {
+    group = augroup,
     pattern = "*.chat",
     callback = function(ev)
       -- Use the new function for debounced updates
@@ -641,6 +760,7 @@ function M.setup()
   -- Ensure buffer-local state gets cleaned up when chat buffers are removed.
   -- This prevents leaking timers or jobs if a buffer is deleted while a request/spinner is active.
   vim.api.nvim_create_autocmd({ "BufWipeout", "BufUnload", "BufDelete" }, {
+    group = augroup,
     pattern = "*",
     callback = function(ev)
       if vim.bo[ev.buf].filetype == "chat" or string.match(vim.api.nvim_buf_get_name(ev.buf), "%.chat$") then

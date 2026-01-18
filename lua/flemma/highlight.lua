@@ -322,6 +322,9 @@ end
 
 -- Setup function to initialize highlighting functionality
 M.setup = function()
+  -- Create or clear the augroup for highlight-related autocmds
+  local augroup = vim.api.nvim_create_augroup("FlemmaHighlight", { clear = true })
+
   -- Set up line highlights for full-line background colors
   setup_line_highlights()
 
@@ -330,6 +333,7 @@ M.setup = function()
 
   -- Set up autocmd for the chat filetype
   vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter", "FileType" }, {
+    group = augroup,
     pattern = { "*.chat", "chat" },
     callback = function(ev)
       M.apply_syntax()

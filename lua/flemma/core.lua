@@ -616,11 +616,12 @@ function M.send_to_provider(opts)
             while line_text:sub(col, col) == " " do
               col = col + 1
             end
+            -- Only set cursor if we're in the buffer's window, passing bufnr for safety
             if vim.api.nvim_get_current_buf() == bufnr then
-              ui.set_cursor(new_prompt_line_num + 1, col - 1)
+              ui.set_cursor(new_prompt_line_num + 1, col - 1, bufnr)
             end
           end
-          ui.move_to_bottom()
+          ui.move_to_bottom(bufnr)
 
           auto_write_buffer(bufnr)
           ui.update_ui(bufnr)
@@ -688,12 +689,11 @@ function M.send_to_provider(opts)
 
   if not buffer_state.current_request or buffer_state.current_request == 0 or buffer_state.current_request == -1 then
     log.error("send_to_provider(): Failed to start provider job.")
-    if spinner_timer then -- Ensure spinner_timer is valid before trying to stop
+    -- Stop the spinner timer if it was started
+    -- Note: spinner_timer is the local variable, buffer_state.spinner_timer is where it's stored
+    if spinner_timer then
       vim.fn.timer_stop(spinner_timer)
-      -- state.spinner_timer might have been set by start_loading_spinner, clear it if so
-      if state.spinner_timer == spinner_timer then
-        state.spinner_timer = nil
-      end
+      buffer_state.spinner_timer = nil
     end
     ui.cleanup_spinner(bufnr) -- Clean up any "Thinking..." message, handles its own modifiable toggles
     vim.bo[bufnr].modifiable = true -- Restore modifiable state
