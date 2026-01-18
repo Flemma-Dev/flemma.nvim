@@ -8,6 +8,10 @@ local M = {}
 -- Inherit from base provider
 setmetatable(M, { __index = base })
 
+-- OpenAI's completion_tokens already includes reasoning_tokens,
+-- so we should NOT add thoughts_tokens separately for cost calculation.
+M.output_has_thoughts = true
+
 -- Create a new OpenAI provider instance
 function M.new(merged_config)
   local provider = base.new(merged_config) -- Pass the already merged config to base
@@ -25,6 +29,7 @@ end
 -- Reset provider state (called by base.new and before new requests)
 function M.reset(self)
   base.reset(self)
+  self._response_buffer.extra.tool_calls = {}
   log.debug("openai.reset(): Reset OpenAI provider state")
 end
 
@@ -59,6 +64,7 @@ function M.build_request(self, prompt, context)
       -- Map generic parts (already resolved by pipeline) to OpenAI-specific format
       local content_parts_for_api = {}
       local has_multimedia_part = false
+      local tool_results = {}
 
       for _, part in ipairs(msg.parts or {}) do
         if part.kind == "text" then
@@ -106,6 +112,15 @@ function M.build_request(self, prompt, context)
           )
         elseif part.kind == "unsupported_file" then
           table.insert(content_parts_for_api, { type = "text", text = "@" .. (part.raw_filename or "") })
+        elseif part.kind == "tool_result" then
+          -- Normalize tool ID for OpenAI compatibility (handles Vertex URN-style IDs)
+          local normalized_id = base.normalize_tool_id(part.tool_use_id)
+          table.insert(tool_results, {
+            tool_call_id = normalized_id,
+            content = part.content,
+            is_error = part.is_error,
+          })
+          log.debug("openai.build_request: Added tool_result for " .. normalized_id)
         end
       end
 
@@ -125,25 +140,82 @@ function M.build_request(self, prompt, context)
         final_api_content = table.concat(text_only_accumulator)
       end
 
-      table.insert(api_messages, {
-        role = msg.role,
-        content = final_api_content,
-      })
+      -- Add tool results FIRST as separate role:tool messages (OpenAI format)
+      -- Tool results must come before any new user content in the same turn
+      for _, tr in ipairs(tool_results) do
+        -- OpenAI doesn't have is_error field; prefix content with "Error: " to signal error semantics
+        local result_content = tr.content
+        if tr.is_error then
+          result_content = "Error: " .. (tr.content or "Tool execution failed")
+          log.debug("openai.build_request: Tool result marked as error for " .. tr.tool_call_id)
+        end
+        table.insert(api_messages, {
+          role = "tool",
+          tool_call_id = tr.tool_call_id,
+          content = result_content,
+        })
+      end
+
+      -- Add user message AFTER tool results, only if it has non-tool-result content
+      if #content_parts_for_api > 0 or (final_api_content ~= "" and #tool_results == 0) then
+        table.insert(api_messages, {
+          role = msg.role,
+          content = final_api_content,
+        })
+      end
     elseif msg.role == "assistant" then
-      -- Extract text from parts, skip thinking nodes
+      -- Extract text and tool_use from parts, skip thinking nodes
       local text_parts = {}
+      local tool_calls = {}
+
       for _, p in ipairs(msg.parts or {}) do
         if p.kind == "text" then
           table.insert(text_parts, p.text or "")
         elseif p.kind == "thinking" then
           -- Skip thinking nodes - OpenAI doesn't need them
+        elseif p.kind == "tool_use" then
+          -- Normalize tool ID for OpenAI compatibility (handles Vertex URN-style IDs)
+          local normalized_id = base.normalize_tool_id(p.id)
+          table.insert(tool_calls, {
+            id = normalized_id,
+            type = "function",
+            ["function"] = {
+              name = p.name,
+              arguments = vim.fn.json_encode(p.input),
+            },
+          })
+          log.debug("openai.build_request: Added tool_use for " .. p.name .. " (" .. normalized_id .. ")")
         end
       end
-      table.insert(api_messages, {
+
+      local content = table.concat(text_parts, "")
+      local api_msg = {
         role = msg.role,
-        content = table.concat(text_parts, ""),
-      })
+        content = #content > 0 and content or nil,
+      }
+
+      if #tool_calls > 0 then
+        api_msg.tool_calls = tool_calls
+      end
+
+      table.insert(api_messages, api_msg)
     end
+  end
+
+  -- Build tools array from registry (OpenAI format)
+  local tools_module = require("flemma.tools")
+  local all_tools = tools_module.get_all()
+  local tools_array = {}
+
+  for _, def in pairs(all_tools) do
+    table.insert(tools_array, {
+      type = "function",
+      ["function"] = {
+        name = def.name,
+        description = tools_module.build_description(def),
+        parameters = def.input_schema,
+      },
+    })
   end
 
   local request_body = {
@@ -156,6 +228,13 @@ function M.build_request(self, prompt, context)
       include_usage = true, -- Request usage information in the final chunk
     },
   }
+
+  -- Add tools if any are registered
+  if #tools_array > 0 then
+    request_body.tools = tools_array
+    request_body.tool_choice = "auto"
+    log.debug("openai.build_request: Added " .. #tools_array .. " tools to request")
+  end
 
   -- Use max_completion_tokens for all OpenAI models (recommended by OpenAI)
   request_body.max_completion_tokens = self.parameters.max_tokens
@@ -272,21 +351,91 @@ function M.process_response_line(self, line, callbacks)
 
   local delta = data.choices[1].delta
 
-  -- Skip role marker without content
-  if delta.role == "assistant" and not delta.content then
+  -- Skip role marker without content and without tool_calls
+  if delta.role == "assistant" and not delta.content and not delta.tool_calls then
     log.debug("openai.process_response_line(): Received assistant role marker, skipping")
     return
   end
 
-  -- Handle actual content
-  if delta.content then
+  -- Handle actual content (check for vim.NIL as well)
+  if delta.content and delta.content ~= vim.NIL then
     log.debug("openai.process_response_line(): Content delta: " .. log.inspect(delta.content))
     base._signal_content(self, delta.content, callbacks)
   end
 
-  -- Log finish_reason if present
-  if data.choices[1].finish_reason and data.choices[1].finish_reason ~= vim.NIL then
-    log.debug("openai.process_response_line(): Received finish_reason: " .. log.inspect(data.choices[1].finish_reason))
+  -- Handle tool_calls streaming
+  if delta.tool_calls then
+    for _, tc in ipairs(delta.tool_calls) do
+      local idx = tc.index or 0
+      local tool_calls = self._response_buffer.extra.tool_calls or {}
+
+      if tc.id then
+        tool_calls[idx] = {
+          id = tc.id,
+          name = tc["function"] and tc["function"].name or "",
+          arguments = tc["function"] and tc["function"].arguments or "",
+        }
+        log.debug(
+          "openai.process_response_line(): Started tool_call: "
+            .. (tool_calls[idx].name or "")
+            .. " ("
+            .. (tool_calls[idx].id or "")
+            .. ")"
+        )
+      elseif tool_calls[idx] then
+        if tc["function"] and tc["function"].arguments then
+          tool_calls[idx].arguments = tool_calls[idx].arguments .. tc["function"].arguments
+          log.debug("openai.process_response_line(): Appending arguments for tool_call index " .. tostring(idx))
+        end
+      end
+
+      self._response_buffer.extra.tool_calls = tool_calls
+    end
+  end
+
+  -- Handle finish_reason
+  local finish_reason = data.choices[1].finish_reason
+  if finish_reason and finish_reason ~= vim.NIL then
+    log.debug("openai.process_response_line(): Received finish_reason: " .. log.inspect(finish_reason))
+
+    if finish_reason == "tool_calls" then
+      local tool_calls = self._response_buffer.extra.tool_calls or {}
+      for _, tc in pairs(tool_calls) do
+        local ok, input = pcall(vim.fn.json_decode, tc.arguments)
+        if not ok then
+          input = {}
+          log.warn("openai.process_response_line(): Failed to parse tool arguments JSON: " .. tc.arguments)
+        end
+
+        local json_str = vim.fn.json_encode(input)
+
+        local max_ticks = 0
+        for ticks in json_str:gmatch("`+") do
+          max_ticks = math.max(max_ticks, #ticks)
+        end
+        local fence = string.rep("`", math.max(3, max_ticks + 1))
+
+        -- Use appropriate prefix based on what's already accumulated
+        local prefix = ""
+        if self:_has_content() then
+          prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
+        end
+        local formatted = string.format(
+          "%s**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n",
+          prefix,
+          tc.name,
+          tc.id,
+          fence,
+          json_str,
+          fence
+        )
+
+        base._signal_content(self, formatted, callbacks)
+        log.debug("openai.process_response_line(): Emitted tool_use block for " .. tc.name)
+      end
+
+      self._response_buffer.extra.tool_calls = {}
+    end
   end
 end
 

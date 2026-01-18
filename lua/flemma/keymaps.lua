@@ -10,10 +10,14 @@ M.setup = function()
   local textobject = require("flemma.textobject")
   local state = require("flemma.state")
 
+  -- Create or clear the augroup for keymap-related autocmds
+  local augroup = vim.api.nvim_create_augroup("FlemmaKeymaps", { clear = true })
+
   -- Set up the mappings for Flemma interaction if enabled
   local config = state.get_config()
   if config.keymaps.enabled then
     vim.api.nvim_create_autocmd("FileType", {
+      group = augroup,
       pattern = "chat",
       callback = function()
         -- Normal mode mappings

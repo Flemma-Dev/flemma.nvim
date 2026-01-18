@@ -1,4 +1,4 @@
-describe("flemma.frontmatter", function()
+describe("flemma.codeblock", function()
   local parser = require("flemma.parser")
   local processor = require("flemma.processor")
   local pipeline = require("flemma.pipeline")
@@ -201,16 +201,16 @@ describe("flemma.frontmatter", function()
       local context = ctx.from_file("test.chat")
       local evaluated = processor.evaluate(doc, context)
 
-      -- Should have error diagnostic
+      -- Should have warning diagnostic (parse succeeded but result is not an object)
       assert.is_true(#evaluated.diagnostics > 0)
-      local has_object_error = false
+      local has_object_warning = false
       for _, diag in ipairs(evaluated.diagnostics) do
-        if diag.type == "frontmatter" and diag.severity == "error" then
-          has_object_error = true
+        if diag.type == "frontmatter" and diag.severity == "warning" then
+          has_object_warning = true
           assert.is_truthy(diag.error:match("object"))
         end
       end
-      assert.is_true(has_object_error)
+      assert.is_true(has_object_warning)
     end)
   end)
 

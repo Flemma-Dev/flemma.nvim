@@ -15,6 +15,11 @@ local log = require("flemma.logging")
 
 local M = {}
 
+--- Whether output_tokens already includes thoughts_tokens for this provider.
+--- - true: thoughts already counted in output (OpenAI, Anthropic) - don't add for cost
+--- - false: thoughts are separate (Vertex) - add to output for cost
+M.output_has_thoughts = false
+
 -- Provider constructor
 function M.new(opts)
   local provider = setmetatable({
@@ -188,6 +193,7 @@ function M._new_response_buffer(self)
     lines = {},
     successful = false,
     extra = {},
+    content = "", -- Accumulated content for spacing decisions
   }
 end
 
@@ -263,6 +269,25 @@ function M.extract_json_response_error(self, data)
   return nil
 end
 
+--- Normalize tool call ID for provider compatibility
+--- Converts URN-style Flemma IDs (urn:flemma:tool:name:unique) to provider-compatible format
+--- by replacing colons with underscores. Non-Flemma IDs are passed through unchanged.
+---@param id string The tool call ID to normalize
+---@return string normalized_id The normalized ID safe for Anthropic/OpenAI APIs
+function M.normalize_tool_id(id)
+  if not id then
+    return id
+  end
+  -- Check if this is a Flemma URN-style ID (urn:flemma:tool:...)
+  if id:match("^urn:flemma:tool:") then
+    -- Replace colons with underscores to satisfy ^[a-zA-Z0-9_-]+$ pattern
+    local normalized = id:gsub(":", "_")
+    return normalized
+  end
+  -- Pass through other IDs unchanged (e.g., native Anthropic/OpenAI IDs)
+  return id
+end
+
 ---Parse a single SSE (Server-Sent Events) line (internal)
 ---@param line string The raw line from the stream
 ---@param opts? table Optional parsing options { allow_done?: boolean }
@@ -328,9 +353,25 @@ end
 ---@param callbacks ProviderCallbacks Table of callback functions
 function M._signal_content(self, text, callbacks)
   self:_mark_response_successful()
+  self._response_buffer.content = self._response_buffer.content .. text
   if callbacks.on_content then
     callbacks.on_content(text)
   end
+end
+
+---Check if any content has been accumulated in the response buffer
+---@param self table The provider instance
+---@return boolean has_content True if content has been accumulated
+function M._has_content(self)
+  return self._response_buffer.content and #self._response_buffer.content > 0
+end
+
+---Check if the last character of accumulated content is a newline
+---@param self table The provider instance
+---@return boolean ends_with_newline True if content ends with newline
+function M._content_ends_with_newline(self)
+  local content = self._response_buffer.content or ""
+  return content:sub(-1) == "\n"
 end
 
 -- Reset provider state before a new request

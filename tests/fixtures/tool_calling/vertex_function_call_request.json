@@ -1,0 +1,50 @@
+{
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "What is 15 multiplied by 7?"
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "functionDeclarations": [
+        {
+          "name": "calculator",
+          "description": "Evaluates a mathematical expression and returns the result. Use this for any arithmetic calculations.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "expression": {
+                "type": "string",
+                "description": "The mathematical expression to evaluate (e.g., '2 + 2', '15 * 3', 'sqrt(16)')"
+              }
+            },
+            "required": [
+              "expression"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "toolConfig": {
+    "functionCallingConfig": {
+      "mode": "AUTO"
+    }
+  },
+  "systemInstruction": {
+    "parts": [
+      {
+        "text": "You are a helpful assistant with access to a calculator tool. When asked to perform calculations, use the calculator tool."
+      }
+    ]
+  },
+  "generationConfig": {
+    "temperature": 0.7,
+    "maxOutputTokens": 1024
+  }
+}

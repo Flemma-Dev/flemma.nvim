@@ -1,0 +1,33 @@
+{
+  "model": "claude-sonnet-4-20250514",
+  "id": "msg_01GZhABwGxCXXXz4reZF84vP",
+  "type": "message",
+  "role": "assistant",
+  "content": [
+    {
+      "type": "text",
+      "text": "I'll calculate 15 multiplied by 7 using the calculator tool."
+    },
+    {
+      "type": "tool_use",
+      "id": "toolu_01JCoMMz8owxhThF2KuWCQLi",
+      "name": "calculator",
+      "input": {
+        "expression": "15 * 7"
+      }
+    }
+  ],
+  "stop_reason": "tool_use",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 403,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_5m_input_tokens": 0,
+      "ephemeral_1h_input_tokens": 0
+    },
+    "output_tokens": 64,
+    "service_tier": "standard"
+  }
+}

@@ -38,8 +38,28 @@ function M.expression(code, pos)
   return { kind = "expression", code = code, position = pos }
 end
 
-function M.thinking(content, pos)
-  return { kind = "thinking", content = content, position = pos }
+function M.thinking(content, pos, signature)
+  return { kind = "thinking", content = content, position = pos, signature = signature }
+end
+
+function M.tool_use(id, name, input, pos)
+  return {
+    kind = "tool_use",
+    id = id,
+    name = name,
+    input = input,
+    position = pos,
+  }
+end
+
+function M.tool_result(tool_use_id, content, is_error, pos)
+  return {
+    kind = "tool_result",
+    tool_use_id = tool_use_id,
+    content = content,
+    is_error = is_error or false,
+    position = pos,
+  }
 end
 
 -- Evaluated message parts -> GenericPart[], diagnostics[]
@@ -105,6 +125,27 @@ function M.to_generic_parts(evaluated_parts, source_file)
         source_file = source_file or "N/A",
       })
       table.insert(parts, { kind = "unsupported_file", raw_filename = p.raw })
+    elseif p.kind == "thinking" then
+      -- Preserve thinking nodes with signature for provider state preservation
+      table.insert(parts, {
+        kind = "thinking",
+        content = p.content,
+        signature = p.signature,
+      })
+    elseif p.kind == "tool_use" then
+      table.insert(parts, {
+        kind = "tool_use",
+        id = p.id,
+        name = p.name,
+        input = p.input,
+      })
+    elseif p.kind == "tool_result" then
+      table.insert(parts, {
+        kind = "tool_result",
+        tool_use_id = p.tool_use_id,
+        content = p.content,
+        is_error = p.is_error,
+      })
     end
   end
   return parts, diagnostics

@@ -1,0 +1,21 @@
+@System: You are a helpful assistant with access to a calculator tool.
+
+@You: What is 15 multiplied by 7?
+
+@Assistant: I'll calculate that for you.
+
+**Tool Use:** `calculator` (`call_abc123`)
+
+```json
+{
+  "expression": "15 * 7"
+}
+```
+
+@You: **Tool Result:** `call_abc123`
+
+```
+105
+```
+
+Thanks! Now what is 20 plus 30?

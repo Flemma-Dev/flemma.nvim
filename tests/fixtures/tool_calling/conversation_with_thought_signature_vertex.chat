@@ -1,0 +1,22 @@
+@System: You are a helpful assistant with access to a calculator tool.
+
+@You: What is 15 multiplied by 7?
+
+@Assistant: I'll calculate that for you.
+
+**Tool Use:** `calculator` (`urn:flemma:tool:calculator:678a1b2c0001`)
+
+```json
+{"expression":"15 * 7"}
+```
+
+<thinking vertex:signature="test-thought-signature-abc123">
+The user wants me to calculate 15 * 7. I'll use the calculator tool.
+</thinking>
+
+@You: **Tool Result:** `urn:flemma:tool:calculator:678a1b2c0001`
+
+```
+105
+```
+

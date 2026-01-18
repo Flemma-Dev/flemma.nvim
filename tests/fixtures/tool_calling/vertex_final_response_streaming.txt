@@ -1,0 +1,4 @@
+data: {"candidates": [{"content": {"role": "model","parts": [{"text": "15 multiplied by"}]}}],"usageMetadata": {"trafficType": "ON_DEMAND"},"modelVersion": "gemini-3-flash-preview","createTime": "2026-01-11T13:00:44.113390Z","responseId": "_J5jae71BoeQmNAP8YXCqQU"}
+
+data: {"candidates": [{"content": {"role": "model","parts": [{"text": " 7 is 105."}]},"finishReason": "STOP"}],"usageMetadata": {"promptTokenCount": 96,"candidatesTokenCount": 12,"totalTokenCount": 108,"trafficType": "ON_DEMAND","promptTokensDetails": [{"modality": "TEXT","tokenCount": 96}],"candidatesTokensDetails": [{"modality": "TEXT","tokenCount": 12}]},"modelVersion": "gemini-3-flash-preview","createTime": "2026-01-11T13:00:44.113390Z","responseId": "_J5jae71BoeQmNAP8YXCqQU"}
+

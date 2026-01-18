@@ -4,6 +4,33 @@ local ast = require("flemma.ast")
 
 local M = {}
 
+--- Validate that all tool_uses have matching tool_results
+--- Returns a list of unresolved tool_use IDs
+---@param history table[] Array of messages with parts
+---@return string[] unresolved_ids List of tool_use IDs without matching tool_results
+local function validate_tool_results(history)
+  local pending_tool_uses = {}
+
+  for _, msg in ipairs(history) do
+    for _, part in ipairs(msg.parts or {}) do
+      if part.kind == "tool_use" then
+        pending_tool_uses[part.id] = {
+          id = part.id,
+          name = part.name,
+        }
+      elseif part.kind == "tool_result" then
+        pending_tool_uses[part.tool_use_id] = nil
+      end
+    end
+  end
+
+  local unresolved = {}
+  for _, tool in pairs(pending_tool_uses) do
+    table.insert(unresolved, tool)
+  end
+  return unresolved
+end
+
 --- Run full pipeline for given buffer lines and context
 --- Returns:
 ---  - prompt: { history=[{role, parts, content}], system=string|nil } canonical roles
@@ -52,10 +79,24 @@ function M.run(lines, context)
     end
   end
 
+  -- Validate tool_use/tool_result matching
+  local unresolved_tools = validate_tool_results(history)
+  for _, tool in ipairs(unresolved_tools) do
+    table.insert(all_diagnostics, {
+      type = "tool_use",
+      severity = "warning",
+      error = string.format(
+        "Tool call '%s' (%s) has no matching tool result. Add a **Tool Result:** block with the tool's output.",
+        tool.name,
+        tool.id
+      ),
+    })
+  end
+
   -- Update evaluated with merged diagnostics
   evaluated.diagnostics = all_diagnostics
 
-  return { history = history, system = system }, evaluated
+  return { history = history, system = system, pending_tool_calls = unresolved_tools }, evaluated
 end
 
 return M

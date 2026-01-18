@@ -1,0 +1,54 @@
+@System: You are a helpful assistant with access to a calculator tool.
+
+@You: I'm planning a party for 23 people. If each pizza has 8 slices and each person eats about 3 slices, how many pizzas should I order? Also, what's the cost if each pizza is $12?
+
+@Assistant: Let me calculate both the number of slices needed and the total cost.
+
+**Tool Use:** `calculator` (`toolu_01AAA`)
+
+```json
+{
+  "expression": "23 * 3"
+}
+```
+
+**Tool Use:** `calculator` (`toolu_01BBB`)
+
+```json
+{
+  "expression": "ceil(69 / 8)"
+}
+```
+
+@You: **Tool Result:** `toolu_01AAA`
+
+```
+69
+```
+
+**Tool Result:** `toolu_01BBB`
+
+```
+9
+```
+
+@Assistant: So you need 69 slices total (23 people x 3 slices each). Since each pizza has 8 slices, you'll need 9 pizzas. Now let me calculate the cost:
+
+**Tool Use:** `calculator` (`toolu_01CCC`)
+
+```json
+{
+  "expression": "9 * 12"
+}
+```
+
+@You: **Tool Result:** `toolu_01CCC`
+
+```
+108
+```
+
+@Assistant: Here's the breakdown:
+- Total slices needed: 69
+- Pizzas required: 9 (72 slices total, 3 spare)
+- Total cost: **$108**

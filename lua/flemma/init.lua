@@ -76,8 +76,14 @@ M.setup = function(user_opts)
   -- Set up highlighting
   highlight.setup()
 
+  -- Set up notifications
+  require("flemma.notify").setup()
+
   -- Set up chat filetype handling
   ui.setup_chat_filetype_autocmds()
+
+  -- Initialize tool registry with built-in tools
+  require("flemma.tools").setup()
 end
 
 -- Get the current model name

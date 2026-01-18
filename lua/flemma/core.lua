@@ -219,7 +219,7 @@ function M.send_to_provider(opts)
   local diagnostics = evaluated.diagnostics or {}
   if #diagnostics > 0 then
     local has_errors = false
-    local by_type = { frontmatter = {}, expression = {}, file = {} }
+    local by_type = { frontmatter = {}, expression = {}, file = {}, tool_result = {}, tool_use = {} }
 
     for _, diag in ipairs(diagnostics) do
       if diag.severity == "error" then
@@ -291,6 +291,27 @@ function M.send_to_provider(opts)
       end
     end
 
+    -- Format tool use/result warnings
+    local tool_diags = {}
+    for _, d in ipairs(by_type.tool_use) do
+      table.insert(tool_diags, d)
+    end
+    for _, d in ipairs(by_type.tool_result) do
+      table.insert(tool_diags, d)
+    end
+    if #tool_diags > 0 then
+      table.insert(diagnostic_lines, "Tool calling errors:")
+      for i, d in ipairs(tool_diags) do
+        if i <= max_per_type then
+          local loc = format_position(d.position)
+          table.insert(diagnostic_lines, string.format("  [%s] %s", loc, d.error))
+        elseif i == max_per_type + 1 then
+          table.insert(diagnostic_lines, string.format("  ... and %d more", #tool_diags - max_per_type))
+          break
+        end
+      end
+    end
+
     local level = has_errors and vim.log.levels.ERROR or vim.log.levels.WARN
     vim.notify("Flemma diagnostics:\n" .. table.concat(diagnostic_lines, "\n"), level)
     log.warn("send_to_provider(): Diagnostics occurred: " .. #diagnostics .. " total")
@@ -347,10 +368,12 @@ function M.send_to_provider(opts)
   local response_started = false
 
   -- Reset in-flight usage tracking for this buffer
+  -- Include the provider's output_has_thoughts flag so usage.lua can display correctly
   buffer_state.inflight_usage = {
     input_tokens = 0,
     output_tokens = 0,
     thoughts_tokens = 0,
+    output_has_thoughts = current_provider.output_has_thoughts,
   }
 
   -- Set up callbacks for the provider
@@ -418,6 +441,8 @@ function M.send_to_provider(opts)
             output_price = pricing_info.output,
             filepath = filepath,
             bufnr = filepath and nil or bufnr, -- Only store bufnr for unnamed buffers
+            -- Get flag from provider (set in inflight_usage, available via closure)
+            output_has_thoughts = current_provider.output_has_thoughts,
           })
         end
 
@@ -430,13 +455,15 @@ function M.send_to_provider(opts)
           local notify_opts = vim.tbl_deep_extend("force", state.get_config().notify, {
             title = "Usage",
           })
-          require("flemma.notify").show(usage_str, notify_opts)
+          require("flemma.notify").show(usage_str, notify_opts, bufnr)
         end
         -- Reset in-flight usage for next request
+        -- Note: output_has_thoughts will be set again when the next request starts
         buffer_state.inflight_usage = {
           input_tokens = 0,
           output_tokens = 0,
           thoughts_tokens = 0,
+          output_has_thoughts = false, -- Default, will be overwritten on next request
         }
       end)
     end,
@@ -595,11 +622,12 @@ function M.send_to_provider(opts)
             while line_text:sub(col, col) == " " do
               col = col + 1
             end
+            -- Only set cursor if we're in the buffer's window, passing bufnr for safety
             if vim.api.nvim_get_current_buf() == bufnr then
-              ui.set_cursor(new_prompt_line_num + 1, col - 1)
+              ui.set_cursor(new_prompt_line_num + 1, col - 1, bufnr)
             end
           end
-          ui.move_to_bottom()
+          ui.move_to_bottom(bufnr)
 
           auto_write_buffer(bufnr)
           ui.update_ui(bufnr)
@@ -667,12 +695,11 @@ function M.send_to_provider(opts)
 
   if not buffer_state.current_request or buffer_state.current_request == 0 or buffer_state.current_request == -1 then
     log.error("send_to_provider(): Failed to start provider job.")
-    if spinner_timer then -- Ensure spinner_timer is valid before trying to stop
+    -- Stop the spinner timer if it was started
+    -- Note: spinner_timer is the local variable, buffer_state.spinner_timer is where it's stored
+    if spinner_timer then
       vim.fn.timer_stop(spinner_timer)
-      -- state.spinner_timer might have been set by start_loading_spinner, clear it if so
-      if state.spinner_timer == spinner_timer then
-        state.spinner_timer = nil
-      end
+      buffer_state.spinner_timer = nil
     end
     ui.cleanup_spinner(bufnr) -- Clean up any "Thinking..." message, handles its own modifiable toggles
     vim.bo[bufnr].modifiable = true -- Restore modifiable state

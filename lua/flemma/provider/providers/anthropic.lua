@@ -7,6 +7,10 @@ local M = {}
 -- Inherit from base provider
 setmetatable(M, { __index = base })
 
+-- Anthropic's output_tokens already includes thinking tokens in the usage response,
+-- so we should NOT add thoughts_tokens separately for cost calculation.
+M.output_has_thoughts = true
+
 -- Create a new Anthropic provider instance
 function M.new(merged_config)
   local provider = base.new(merged_config) -- Pass the already merged config to base
@@ -26,6 +30,8 @@ function M.reset(self)
   base.reset(self)
   self._response_buffer.extra.accumulated_thinking = ""
   self._response_buffer.extra.current_block_type = nil
+  self._response_buffer.extra.current_tool_use = nil
+  self._response_buffer.extra.accumulated_tool_input = ""
   log.debug("anthropic.reset(): Reset Anthropic provider state")
 end
 
@@ -52,6 +58,22 @@ function M.build_request(self, prompt, context)
       -- Map generic parts (already resolved by pipeline) to Anthropic-specific format
       local content_blocks = {}
 
+      -- Tool results must come first in user messages (Anthropic requirement)
+      for _, part in ipairs(msg.parts or {}) do
+        if part.kind == "tool_result" then
+          -- Normalize tool ID for Anthropic compatibility (handles Vertex URN-style IDs)
+          local normalized_id = base.normalize_tool_id(part.tool_use_id)
+          table.insert(content_blocks, {
+            type = "tool_result",
+            tool_use_id = normalized_id,
+            content = part.content,
+            is_error = part.is_error or nil,
+          })
+          log.debug("anthropic.build_request: Added tool_result for " .. normalized_id)
+        end
+      end
+
+      -- Then other content
       for _, part in ipairs(msg.parts or {}) do
         if part.kind == "text" then
           table.insert(content_blocks, { type = "text", text = part.text })
@@ -111,26 +133,52 @@ function M.build_request(self, prompt, context)
         log.debug("anthropic.build_request: Skipping empty user message")
       end
     elseif msg.role == "assistant" then
-      -- Extract text from parts, skip thinking nodes
-      local text_parts = {}
+      -- Build content blocks for assistant message
+      local content_blocks = {}
+
       for _, p in ipairs(msg.parts or {}) do
         if p.kind == "text" then
-          table.insert(text_parts, p.text or "")
+          local text = vim.trim(p.text or "")
+          if #text > 0 then
+            table.insert(content_blocks, { type = "text", text = text })
+          end
         elseif p.kind == "thinking" then
           -- Skip thinking nodes - Anthropic doesn't need them
+        elseif p.kind == "tool_use" then
+          -- Normalize tool ID for Anthropic compatibility (handles Vertex URN-style IDs)
+          local normalized_id = base.normalize_tool_id(p.id)
+          table.insert(content_blocks, {
+            type = "tool_use",
+            id = normalized_id,
+            name = p.name,
+            input = p.input,
+          })
+          log.debug("anthropic.build_request: Added tool_use for " .. p.name .. " (" .. normalized_id .. ")")
         end
       end
-      -- Trim trailing whitespace (Anthropic rejects trailing whitespace on final assistant message)
-      local combined_text = vim.trim(table.concat(text_parts, ""))
-      if #combined_text > 0 then
+
+      if #content_blocks > 0 then
         table.insert(api_messages, {
           role = msg.role,
-          content = { { type = "text", text = combined_text } },
+          content = content_blocks,
         })
       else
         log.debug("anthropic.build_request: Skipping empty assistant message")
       end
     end
+  end
+
+  -- Build tools array from registry
+  local tools_module = require("flemma.tools")
+  local all_tools = tools_module.get_all()
+  local tools_array = {}
+
+  for _, def in pairs(all_tools) do
+    table.insert(tools_array, {
+      name = def.name,
+      description = tools_module.build_description(def),
+      input_schema = def.input_schema,
+    })
   end
 
   local request_body = {
@@ -141,6 +189,13 @@ function M.build_request(self, prompt, context)
     temperature = self.parameters.temperature,
     stream = true,
   }
+
+  -- Add tools if any are registered
+  if #tools_array > 0 then
+    request_body.tools = tools_array
+    request_body.tool_choice = { type = "auto" }
+    log.debug("anthropic.build_request: Added " .. #tools_array .. " tools to request")
+  end
 
   -- Add thinking configuration if enabled
   local thinking_budget = self.parameters.thinking_budget
@@ -279,7 +334,9 @@ function M.process_response_line(self, line, callbacks)
     local accumulated = self._response_buffer.extra.accumulated_thinking
     if accumulated and #accumulated > 0 then
       local stripped = vim.trim(accumulated)
-      local thinking_block = "\n\n<thinking>\n" .. stripped .. "\n</thinking>\n"
+      -- Use single newline prefix if content already ends with newline, else double
+      local prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
+      local thinking_block = prefix .. "<thinking>\n" .. stripped .. "\n</thinking>\n"
       base._signal_content(self, thinking_block, callbacks)
       self._response_buffer.extra.accumulated_thinking = ""
       log.debug("anthropic.process_response_line(): Appended thinking block at end of response")
@@ -298,12 +355,73 @@ function M.process_response_line(self, line, callbacks)
     if data.content_block and data.content_block.type then
       self._response_buffer.extra.current_block_type = data.content_block.type
       log.debug("anthropic.process_response_line(): Started block type: " .. data.content_block.type)
+
+      -- Track tool_use block
+      if data.content_block.type == "tool_use" then
+        self._response_buffer.extra.current_tool_use = {
+          id = data.content_block.id,
+          name = data.content_block.name,
+        }
+        self._response_buffer.extra.accumulated_tool_input = ""
+        log.debug(
+          "anthropic.process_response_line(): Started tool_use block: "
+            .. data.content_block.name
+            .. " ("
+            .. data.content_block.id
+            .. ")"
+        )
+      end
     end
   end
 
   -- Handle content_block_stop event
   if data.type == "content_block_stop" then
     log.debug("anthropic.process_response_line(): Received content_block_stop event for index " .. tostring(data.index))
+
+    -- Emit formatted tool_use block
+    local current_tool = self._response_buffer.extra.current_tool_use
+    if current_tool then
+      local input_json = self._response_buffer.extra.accumulated_tool_input or ""
+      local ok, input = pcall(vim.fn.json_decode, input_json)
+      if not ok then
+        input = {}
+        log.warn("anthropic.process_response_line(): Failed to parse tool input JSON: " .. input_json)
+      end
+
+      -- Pretty-print JSON for display
+      local json_str = vim.fn.json_encode(input)
+
+      -- Determine fence length based on content (dynamic fence sizing)
+      local max_ticks = 0
+      for ticks in json_str:gmatch("`+") do
+        max_ticks = math.max(max_ticks, #ticks)
+      end
+      local fence = string.rep("`", math.max(3, max_ticks + 1))
+
+      -- Format for buffer display
+      -- Use appropriate prefix based on what's already accumulated
+      local prefix = ""
+      if self:_has_content() then
+        prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
+      end
+      local formatted = string.format(
+        "%s**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n",
+        prefix,
+        current_tool.name,
+        current_tool.id,
+        fence,
+        json_str,
+        fence
+      )
+
+      base._signal_content(self, formatted, callbacks)
+      log.debug("anthropic.process_response_line(): Emitted tool_use block for " .. current_tool.name)
+
+      -- Reset tool state
+      self._response_buffer.extra.current_tool_use = nil
+      self._response_buffer.extra.accumulated_tool_input = ""
+    end
+
     -- Reset block type tracker; thinking is emitted at message_stop
     self._response_buffer.extra.current_block_type = nil
   end
@@ -320,6 +438,9 @@ function M.process_response_line(self, line, callbacks)
       base._signal_content(self, data.delta.text, callbacks)
     elseif data.delta.type == "input_json_delta" and data.delta.partial_json ~= nil then
       log.debug("anthropic.process_response_line(): Content input_json_delta: " .. log.inspect(data.delta.partial_json))
+      -- Accumulate tool input JSON
+      self._response_buffer.extra.accumulated_tool_input = (self._response_buffer.extra.accumulated_tool_input or "")
+        .. data.delta.partial_json
     elseif data.delta.type == "thinking_delta" and data.delta.thinking then
       log.debug("anthropic.process_response_line(): Content thinking delta: " .. log.inspect(data.delta.thinking))
       self._response_buffer.extra.accumulated_thinking = (self._response_buffer.extra.accumulated_thinking or "")

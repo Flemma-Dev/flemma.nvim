@@ -1,0 +1,19 @@
+@System: You are a helpful assistant with access to a calculator tool. When asked to perform calculations, use the calculator tool.
+
+@You: What is 15 multiplied by 7?
+
+@Assistant: I will calculate that for you.
+
+**Tool Use:** `calculator` (`urn:flemma:tool:calculator:678a1b2c0001`)
+
+```json
+{"expression":"15 * 7"}
+```
+
+@You: **Tool Result:** `urn:flemma:tool:calculator:678a1b2c0001`
+
+```
+105
+```
+
+@Assistant: 15 multiplied by 7 is 105.

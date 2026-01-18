@@ -15,6 +15,10 @@ Flemma.nvim is evolving quickly; keep each contribution focused, reversible, and
 - **Never** invoke `make lint`, `make check`, `luacheck`, or `lua-language-server --check`; they currently emit only false diagnostics.
 - Use the `flemma-fmt` alias to reformat the entire codebase near the end of your session or immediately before a user-requested commit.
 
+## Architecture Principles
+
+- **Flemma is stateless; the buffer is the state.** All conversation data, tool calls, and results must be fully represented in the buffer text. Never rely on in-memory state that would be lost when Neovim restarts or when a `.chat` file is shared. If you need to persist information (e.g., synthetic IDs for providers that don't supply them), embed it in the buffer format itself so it can be parsed back later.
+
 ## Implementation Notes
 
 - Name modules according to their file path (`lua/flemma/provider/openai.lua` → `flemma.provider.openai`) and keep public exports rooted in `lua/flemma/init.lua`.

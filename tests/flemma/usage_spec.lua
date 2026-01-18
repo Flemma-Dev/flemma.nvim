@@ -42,11 +42,14 @@ describe("flemma.usage", function()
       assert.has_match("Output:.*50 tokens", result)
     end)
 
-    it("should format request usage with thoughts tokens", function()
+    it("should format request usage with thoughts tokens (OpenAI - thoughts included in output)", function()
+      -- OpenAI: completion_tokens already includes reasoning_tokens
+      -- So output_tokens = 50 is the total, and thoughts_tokens = 25 is a breakdown
       local inflight_usage = {
         input_tokens = 100,
-        output_tokens = 50,
-        thoughts_tokens = 25,
+        output_tokens = 50, -- completion_tokens (includes reasoning)
+        thoughts_tokens = 25, -- reasoning_tokens (subset, for display)
+        output_has_thoughts = true, -- OpenAI behavior
       }
 
       local result = usage.format_notification(inflight_usage, nil)
@@ -54,6 +57,26 @@ describe("flemma.usage", function()
       assert.is_string(result)
       assert.has_match("Request:", result)
       assert.has_match("Input:.*100 tokens", result)
+      -- Should show 50 tokens (not 75), since thoughts are already included
+      assert.has_match("Output:.*50 tokens.*⊂ 25 thoughts", result)
+    end)
+
+    it("should format request usage with thoughts tokens (Vertex - thoughts separate)", function()
+      -- Vertex: candidatesTokenCount and thoughtsTokenCount are separate
+      -- So total output = output_tokens + thoughts_tokens
+      local inflight_usage = {
+        input_tokens = 100,
+        output_tokens = 50, -- candidatesTokenCount
+        thoughts_tokens = 25, -- thoughtsTokenCount
+        output_has_thoughts = false, -- Vertex behavior
+      }
+
+      local result = usage.format_notification(inflight_usage, nil)
+
+      assert.is_string(result)
+      assert.has_match("Request:", result)
+      assert.has_match("Input:.*100 tokens", result)
+      -- Should show 75 tokens (50 + 25), since thoughts are separate
       assert.has_match("Output:.*75 tokens.*⊂ 25 thoughts", result)
     end)
 
