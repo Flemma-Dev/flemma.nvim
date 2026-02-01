@@ -33,6 +33,7 @@ develop:
 		-c "lua require(\"flemma\").setup({												\
 			provider = \"anthropic\",													\
 			model = \"claude-haiku-4-5\",												\
+			parameters = { max_tokens = 8000, thinking_budget = 4000 },					\
 			presets = { [\"\$$gpt\"] = \"openai gpt-5.2 reasoning=low\" },				\
 			logging = { enabled = true },												\
 			editing = { auto_write = true },											\
