@@ -68,7 +68,9 @@ describe("State Management", function()
       vim.api.nvim_set_current_buf(other_buf)
 
       -- Wait for vim.schedule callbacks to run
-      vim.wait(10, function() return false end)
+      vim.wait(10, function()
+        return false
+      end)
 
       -- updatetime should be restored
       assert.equals(4000, vim.o.updatetime)
@@ -103,7 +105,9 @@ describe("State Management", function()
       vim.api.nvim_set_current_buf(buf2)
       vim.cmd("doautocmd BufEnter *.chat")
       -- Wait for scheduled callbacks
-      vim.wait(10, function() return false end)
+      vim.wait(10, function()
+        return false
+      end)
       -- Should still be 100 (switched to another chat buffer)
       assert.equals(100, vim.o.updatetime)
 
@@ -111,7 +115,9 @@ describe("State Management", function()
       vim.cmd("doautocmd BufLeave *.chat")
       vim.api.nvim_set_current_buf(other_buf)
       -- Wait for scheduled callbacks
-      vim.wait(10, function() return false end)
+      vim.wait(10, function()
+        return false
+      end)
 
       -- updatetime should be restored to original
       assert.equals(original, vim.o.updatetime)
@@ -125,7 +131,9 @@ describe("State Management", function()
       vim.cmd("doautocmd BufLeave *.chat")
       vim.api.nvim_set_current_buf(other_buf)
       -- Wait for scheduled callbacks
-      vim.wait(10, function() return false end)
+      vim.wait(10, function()
+        return false
+      end)
 
       -- Should still restore correctly
       assert.equals(original, vim.o.updatetime)
@@ -407,7 +415,9 @@ describe("State Management", function()
       notify.show("Test notification for buf1", { timeout = 100 }, buf1)
 
       -- Wait for vim.schedule to execute
-      vim.wait(20, function() return false end)
+      vim.wait(20, function()
+        return false
+      end)
 
       -- Find the notification window
       local notify_win = nil
@@ -454,7 +464,9 @@ describe("State Management", function()
       notify.show("Notif 1 for buf2", { timeout = 500 }, buf2)
 
       -- Wait for vim.schedule
-      vim.wait(20, function() return false end)
+      vim.wait(20, function()
+        return false
+      end)
 
       -- Count notifications per window
       local notif_count_win1 = 0
@@ -491,7 +503,9 @@ describe("State Management", function()
       notify.show("Test notification", { timeout = 5000 }, buf)
 
       -- Wait for vim.schedule
-      vim.wait(20, function() return false end)
+      vim.wait(20, function()
+        return false
+      end)
 
       -- Count notification windows
       local initial_notif_count = 0
@@ -507,7 +521,9 @@ describe("State Management", function()
       notify.cleanup_buffer(buf)
 
       -- Wait for cleanup
-      vim.wait(20, function() return false end)
+      vim.wait(20, function()
+        return false
+      end)
 
       -- Count notification windows after cleanup
       local final_notif_count = 0
@@ -533,7 +549,9 @@ describe("State Management", function()
       notify.show("Pending notification", { timeout = 5000 }, hidden_buf)
 
       -- Wait for vim.schedule
-      vim.wait(20, function() return false end)
+      vim.wait(20, function()
+        return false
+      end)
 
       -- Count notification windows - should be 0 since buffer is hidden
       local notif_count = 0
@@ -552,7 +570,9 @@ describe("State Management", function()
       vim.cmd("doautocmd WinEnter")
 
       -- Wait for notification to appear
-      vim.wait(20, function() return false end)
+      vim.wait(20, function()
+        return false
+      end)
 
       -- Count notification windows - should now be 1
       notif_count = 0

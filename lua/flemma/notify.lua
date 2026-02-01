@@ -1,7 +1,6 @@
 --- Flemma notification functionality
 local M = {}
 
-
 -- Per-buffer notifications: { [bufnr] = { notifications = {...}, ... } }
 local buffer_notifications = {}
 
