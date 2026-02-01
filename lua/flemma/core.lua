@@ -133,13 +133,13 @@ function M.cancel_request()
       local last_line_content = vim.api.nvim_buf_get_lines(bufnr, last_line - 1, last_line, false)[1]
 
       -- If we're still showing the thinking message, remove it
-      if last_line_content:match("^@Assistant:.*Thinking%.%.%.$") then
+      if last_line_content == "@Assistant: Thinking..." then
         log.debug("cancel_request(): ... Cleaning up 'Thinking...' message")
         ui.cleanup_spinner(bufnr)
       end
 
       -- Auto-write if enabled and we've received some content
-      if buffer_state.request_cancelled and not last_line_content:match("^@Assistant:.*Thinking%.%.%.$") then
+      if buffer_state.request_cancelled and last_line_content ~= "@Assistant: Thinking..." then
         auto_write_buffer(bufnr)
       end
 

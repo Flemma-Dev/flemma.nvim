@@ -153,38 +153,6 @@ function M.buffer_cmd(bufnr, cmd)
   vim.fn.win_execute(winid, "noautocmd " .. cmd)
 end
 
-local function apply_spinner_suppression(bufnr)
-  if not vim.api.nvim_buf_is_valid(bufnr) then
-    return
-  end
-
-  local line_count = vim.api.nvim_buf_line_count(bufnr)
-  if line_count == 0 then
-    vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)
-    return
-  end
-
-  local spinner_line_idx0 = line_count - 1
-  local lines = vim.api.nvim_buf_get_lines(bufnr, spinner_line_idx0, line_count, false)
-  local spinner_line = lines[1]
-
-  if not spinner_line or not spinner_line:match("^@Assistant: .*Thinking%.%.%.$") then
-    vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)
-    return
-  end
-
-  vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, spinner_line_idx0, spinner_line_idx0 + 1)
-
-  local extmark_opts = {
-    end_line = spinner_line_idx0 + 1,
-    hl_group = "FlemmaAssistantSpinner",
-    priority = PRIORITY.SPINNER,
-    spell = false,
-  }
-
-  vim.api.nvim_buf_set_extmark(bufnr, spinner_ns, spinner_line_idx0, 0, extmark_opts)
-end
-
 -- Add rulers between messages
 function M.add_rulers(bufnr, doc)
   -- Clear existing extmarks
@@ -271,10 +239,13 @@ function M.start_loading_spinner(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
   local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
   local frame = 1
+  local spinner_line_idx0 = nil
+  local spinner_extmark_id = nil
 
   vim.schedule(function()
     -- Clear any existing virtual text
     vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
+    vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)
 
     -- Check if we need to add a blank line
     vim.bo[bufnr].modifiable = true
@@ -284,9 +255,20 @@ function M.start_loading_spinner(bufnr)
     else
       vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "@Assistant: Thinking..." })
     end
+
+    -- Track the spinner line position and create the animated extmark
+    -- hl_mode="combine" lets the spinner inherit line highlights (from apply_line_highlights, cursorline, etc.)
+    spinner_line_idx0 = vim.api.nvim_buf_line_count(bufnr) - 1
+    spinner_extmark_id = vim.api.nvim_buf_set_extmark(bufnr, spinner_ns, spinner_line_idx0, 0, {
+      virt_text = { { " " .. spinner_frames[frame], "FlemmaAssistantSpinner" } },
+      virt_text_pos = "eol",
+      hl_mode = "combine",
+      priority = PRIORITY.SPINNER,
+      spell = false,
+    })
+
     -- Immediately update UI after adding the thinking message
     M.update_ui(bufnr)
-    apply_spinner_suppression(bufnr)
     -- Move to bottom and center the line so user sees the message
     M.move_to_bottom(bufnr)
     M.center_cursor(bufnr)
@@ -298,19 +280,18 @@ function M.start_loading_spinner(bufnr)
       return
     end
 
-    local original_modifiable_timer = vim.bo[bufnr].modifiable
-    vim.bo[bufnr].modifiable = true -- Allow plugin modifications for spinner update
-
-    frame = (frame % #spinner_frames) + 1
-    local text = "@Assistant: " .. spinner_frames[frame] .. " Thinking..."
-    local last_line = vim.api.nvim_buf_line_count(bufnr)
-    M.buffer_cmd(bufnr, "undojoin")
-    vim.api.nvim_buf_set_lines(bufnr, last_line - 1, last_line, false, { text })
-    -- Force UI update during spinner animation
-    M.update_ui(bufnr)
-    apply_spinner_suppression(bufnr)
-
-    vim.bo[bufnr].modifiable = original_modifiable_timer -- Restore state after spinner update
+    -- Only update the extmark - no buffer modification needed
+    if spinner_line_idx0 ~= nil and spinner_extmark_id ~= nil then
+      frame = (frame % #spinner_frames) + 1
+      vim.api.nvim_buf_set_extmark(bufnr, spinner_ns, spinner_line_idx0, 0, {
+        id = spinner_extmark_id,
+        virt_text = { { " " .. spinner_frames[frame], "FlemmaAssistantSpinner" } },
+        virt_text_pos = "eol",
+        hl_mode = "combine",
+        priority = PRIORITY.SPINNER,
+        spell = false,
+      })
+    end
   end, { ["repeat"] = -1 })
 
   buffer_state.spinner_timer = timer
@@ -344,8 +325,8 @@ function M.cleanup_spinner(bufnr)
 
   local last_line_content = vim.api.nvim_buf_get_lines(bufnr, line_count - 1, line_count, false)[1]
 
-  -- Only modify lines if the last line is actually the spinner message
-  if last_line_content and last_line_content:match("^@Assistant: .*Thinking%.%.%.$") then
+  -- Only modify lines if the last line is exactly the thinking message (spinner is now virtual text)
+  if last_line_content and last_line_content == "@Assistant: Thinking..." then
     M.buffer_cmd(bufnr, "undojoin") -- Group changes for undo
 
     -- Get the line before the "Thinking..." message (if it exists)
@@ -686,7 +667,7 @@ function M.update_ui(bufnr)
   M.add_rulers(bufnr, doc)
   M.highlight_thinking_tags(bufnr, doc)
   M.apply_line_highlights(bufnr, doc)
-  apply_spinner_suppression(bufnr)
+  -- Note: spinner extmark (with suppression) is managed by start_loading_spinner and its timer
 
   -- Clear and reapply all signs
   vim.fn.sign_unplace("flemma_ns", { buffer = bufnr })
