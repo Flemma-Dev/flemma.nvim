@@ -113,10 +113,8 @@ function M.message_textobj(type)
     -- Move to last non-empty line
     vim.cmd(string.format("normal! %dGg_", bounds.inner_end))
   else -- around message
-    -- Start at beginning of first line
-    vim.cmd(string.format("normal! %dG0v", bounds.start_line))
-    -- Move to end of last line
-    vim.cmd(string.format("normal! %dGg_", bounds.inner_end))
+    -- Select entire message linewise (including thinking blocks and trailing empty lines)
+    vim.cmd(string.format("normal! %dGV%dG", bounds.start_line, bounds.end_line))
   end
 end
 
