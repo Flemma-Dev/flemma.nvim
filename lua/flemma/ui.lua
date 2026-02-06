@@ -876,8 +876,10 @@ function M.clear_tool_indicator(bufnr, tool_id)
     vim.fn.timer_stop(ind.timer)
   end
 
-  if vim.api.nvim_buf_is_valid(bufnr) then
-    pcall(vim.api.nvim_buf_del_extmark, bufnr, tool_exec_ns, ind.extmark_id)
+  -- Always delete from the buffer where the extmark actually lives (ind.bufnr),
+  -- not the passed bufnr, to avoid leaking extmarks on cross-buffer tool_id collisions.
+  if vim.api.nvim_buf_is_valid(ind.bufnr) then
+    pcall(vim.api.nvim_buf_del_extmark, ind.bufnr, tool_exec_ns, ind.extmark_id)
   end
 
   tool_indicators[tool_id] = nil
