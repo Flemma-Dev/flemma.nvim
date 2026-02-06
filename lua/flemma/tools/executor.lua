@@ -80,14 +80,19 @@ end
 --- @param bufnr integer
 --- @param tool_id string
 --- @param result table ExecutionResult {success, output, error}
-local function do_completion(bufnr, tool_id, result)
+--- @param is_async boolean whether completion was scheduled via vim.schedule
+local function do_completion(bufnr, tool_id, result, is_async)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     cleanup_pending(bufnr, tool_id)
     return
   end
 
-  -- Join with placeholder injection as a single undo step
-  pcall(vim.cmd, "undojoin")
+  -- For async tools, join with placeholder injection as a single undo step.
+  -- For sync tools, all changes are already in one undo block (same handler),
+  -- and calling undojoin would incorrectly merge with the PREVIOUS handler's block.
+  if is_async then
+    pcall(vim.cmd, "undojoin")
+  end
 
   -- Inject result into buffer
   local ui = require("flemma.ui")
@@ -104,6 +109,9 @@ local function do_completion(bufnr, tool_id, result)
       move_cursor_after_result(bufnr, tool_id, cursor_mode)
     end
   end
+
+  -- Result injection may have displaced other tools' extmarks
+  ui.relocate_tool_indicators(bufnr)
 
   -- Update indicator
   ui.update_tool_indicator(bufnr, tool_id, result.success)
@@ -135,10 +143,10 @@ local function handle_completion(bufnr, tool_id, result, opts)
 
   if opts.async then
     vim.schedule(function()
-      do_completion(bufnr, tool_id, result)
+      do_completion(bufnr, tool_id, result, true)
     end)
   else
-    do_completion(bufnr, tool_id, result)
+    do_completion(bufnr, tool_id, result, false)
   end
 end
 
@@ -202,6 +210,10 @@ function M.execute(bufnr, context)
   if not config.tools or config.tools.show_spinner ~= false then
     ui.show_tool_indicator(bufnr, tool_id, header_line)
   end
+
+  -- Placeholder injection may have displaced other tools' extmarks
+  -- (e.g., when inserting before an existing placeholder via set_lines replacement)
+  ui.relocate_tool_indicators(bufnr)
 
   -- Update UI to reflect changes
   ui.update_ui(bufnr)
