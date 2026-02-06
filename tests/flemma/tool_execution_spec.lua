@@ -310,12 +310,12 @@ describe("Tool Context Resolver", function()
   describe("basic resolution", function()
     it("resolves context when cursor is on tool header line", function()
       local bufnr = create_buffer({
-        '@Assistant: Here is the result:',
-        '',
-        '**Tool Use:** `bash` (`toolu_abc123`)',
-        '```json',
+        "@Assistant: Here is the result:",
+        "",
+        "**Tool Use:** `bash` (`toolu_abc123`)",
+        "```json",
         '{ "command": "echo hello" }',
-        '```',
+        "```",
       })
 
       local ctx, err = context.resolve(bufnr, { row = 3 })
@@ -327,12 +327,12 @@ describe("Tool Context Resolver", function()
 
     it("resolves context when cursor is inside fenced block", function()
       local bufnr = create_buffer({
-        '@Assistant: Here is the result:',
-        '',
-        '**Tool Use:** `bash` (`toolu_abc123`)',
-        '```json',
+        "@Assistant: Here is the result:",
+        "",
+        "**Tool Use:** `bash` (`toolu_abc123`)",
+        "```json",
         '{ "command": "echo hello" }',
-        '```',
+        "```",
       })
 
       local ctx, err = context.resolve(bufnr, { row = 5 })
@@ -343,12 +343,12 @@ describe("Tool Context Resolver", function()
 
     it("resolves context when cursor is on closing fence", function()
       local bufnr = create_buffer({
-        '@Assistant: Here is the result:',
-        '',
-        '**Tool Use:** `bash` (`toolu_abc123`)',
-        '```json',
+        "@Assistant: Here is the result:",
+        "",
+        "**Tool Use:** `bash` (`toolu_abc123`)",
+        "```json",
         '{ "command": "echo hello" }',
-        '```',
+        "```",
       })
 
       local ctx, err = context.resolve(bufnr, { row = 6 })
@@ -359,14 +359,14 @@ describe("Tool Context Resolver", function()
 
     it("resolves context when cursor is after tool block", function()
       local bufnr = create_buffer({
-        '@Assistant: Here is the result:',
-        '',
-        '**Tool Use:** `bash` (`toolu_abc123`)',
-        '```json',
+        "@Assistant: Here is the result:",
+        "",
+        "**Tool Use:** `bash` (`toolu_abc123`)",
+        "```json",
         '{ "command": "echo hello" }',
-        '```',
-        '',
-        'Some text after tool.',
+        "```",
+        "",
+        "Some text after tool.",
       })
 
       local ctx, err = context.resolve(bufnr, { row = 8 })
@@ -377,12 +377,12 @@ describe("Tool Context Resolver", function()
 
     it("returns parsed input table", function()
       local bufnr = create_buffer({
-        '@Assistant: Running command:',
-        '',
-        '**Tool Use:** `bash` (`toolu_input_test`)',
-        '```json',
+        "@Assistant: Running command:",
+        "",
+        "**Tool Use:** `bash` (`toolu_input_test`)",
+        "```json",
         '{ "command": "ls -la", "timeout": 10 }',
-        '```',
+        "```",
       })
 
       local ctx, err = context.resolve(bufnr, { row = 3 })
@@ -397,17 +397,17 @@ describe("Tool Context Resolver", function()
   describe("multiple tools in message", function()
     it("resolves first tool when cursor is on first tool", function()
       local bufnr = create_buffer({
-        '@Assistant: Running tools:',
-        '',
-        '**Tool Use:** `bash` (`toolu_first`)',
-        '```json',
+        "@Assistant: Running tools:",
+        "",
+        "**Tool Use:** `bash` (`toolu_first`)",
+        "```json",
         '{ "command": "echo first" }',
-        '```',
-        '',
-        '**Tool Use:** `calculator` (`toolu_second`)',
-        '```json',
+        "```",
+        "",
+        "**Tool Use:** `calculator` (`toolu_second`)",
+        "```json",
         '{ "expression": "1+1" }',
-        '```',
+        "```",
       })
 
       local ctx, err = context.resolve(bufnr, { row = 3 })
@@ -418,17 +418,17 @@ describe("Tool Context Resolver", function()
 
     it("resolves second tool when cursor is on second tool", function()
       local bufnr = create_buffer({
-        '@Assistant: Running tools:',
-        '',
-        '**Tool Use:** `bash` (`toolu_first`)',
-        '```json',
+        "@Assistant: Running tools:",
+        "",
+        "**Tool Use:** `bash` (`toolu_first`)",
+        "```json",
         '{ "command": "echo first" }',
-        '```',
-        '',
-        '**Tool Use:** `calculator` (`toolu_second`)',
-        '```json',
+        "```",
+        "",
+        "**Tool Use:** `calculator` (`toolu_second`)",
+        "```json",
         '{ "expression": "1+1" }',
-        '```',
+        "```",
       })
 
       local ctx, err = context.resolve(bufnr, { row = 8 })
@@ -439,17 +439,17 @@ describe("Tool Context Resolver", function()
 
     it("resolves nearest tool when cursor is between tools", function()
       local bufnr = create_buffer({
-        '@Assistant: Running tools:',
-        '',
-        '**Tool Use:** `bash` (`toolu_first`)',
-        '```json',
+        "@Assistant: Running tools:",
+        "",
+        "**Tool Use:** `bash` (`toolu_first`)",
+        "```json",
         '{ "command": "echo first" }',
-        '```',
-        '',
-        '**Tool Use:** `calculator` (`toolu_second`)',
-        '```json',
+        "```",
+        "",
+        "**Tool Use:** `calculator` (`toolu_second`)",
+        "```json",
         '{ "expression": "1+1" }',
-        '```',
+        "```",
       })
 
       -- Line 7 is the empty line between the two tools
@@ -465,14 +465,14 @@ describe("Tool Context Resolver", function()
   describe("cursor in user message", function()
     it("falls back to previous assistant message tools", function()
       local bufnr = create_buffer({
-        '@Assistant: Running tool:',
-        '',
-        '**Tool Use:** `bash` (`toolu_fallback`)',
-        '```json',
+        "@Assistant: Running tool:",
+        "",
+        "**Tool Use:** `bash` (`toolu_fallback`)",
+        "```json",
         '{ "command": "echo hello" }',
-        '```',
-        '',
-        '@You: Here is the result:',
+        "```",
+        "",
+        "@You: Here is the result:",
       })
 
       local ctx, err = context.resolve(bufnr, { row = 8 })
@@ -485,29 +485,29 @@ describe("Tool Context Resolver", function()
   describe("multi-tool cursor in user message", function()
     it("resolves correct tool when cursor is on specific tool_result", function()
       local bufnr = create_buffer({
-        '@Assistant: Running tools:',
-        '',
-        '**Tool Use:** `bash` (`toolu_multi_first`)',
-        '```json',
+        "@Assistant: Running tools:",
+        "",
+        "**Tool Use:** `bash` (`toolu_multi_first`)",
+        "```json",
         '{ "command": "echo first" }',
-        '```',
-        '',
-        '**Tool Use:** `calculator` (`toolu_multi_second`)',
-        '```json',
+        "```",
+        "",
+        "**Tool Use:** `calculator` (`toolu_multi_second`)",
+        "```json",
         '{ "expression": "1+1" }',
-        '```',
-        '',
-        '@You: **Tool Result:** `toolu_multi_first`',
-        '',
-        '```',
-        'first result',
-        '```',
-        '',
-        '**Tool Result:** `toolu_multi_second`',
-        '',
-        '```',
-        '2',
-        '```',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_multi_first`",
+        "",
+        "```",
+        "first result",
+        "```",
+        "",
+        "**Tool Result:** `toolu_multi_second`",
+        "",
+        "```",
+        "2",
+        "```",
       })
 
       -- Cursor on first tool_result header (line 14)
@@ -527,29 +527,29 @@ describe("Tool Context Resolver", function()
 
     it("resolves correct tool when cursor is inside tool_result content", function()
       local bufnr = create_buffer({
-        '@Assistant: Running tools:',
-        '',
-        '**Tool Use:** `bash` (`toolu_content_first`)',
-        '```json',
+        "@Assistant: Running tools:",
+        "",
+        "**Tool Use:** `bash` (`toolu_content_first`)",
+        "```json",
         '{ "command": "echo first" }',
-        '```',
-        '',
-        '**Tool Use:** `calculator` (`toolu_content_second`)',
-        '```json',
+        "```",
+        "",
+        "**Tool Use:** `calculator` (`toolu_content_second`)",
+        "```json",
         '{ "expression": "2+2" }',
-        '```',
-        '',
-        '@You: **Tool Result:** `toolu_content_first`',
-        '',
-        '```',
-        'first output',
-        '```',
-        '',
-        '**Tool Result:** `toolu_content_second`',
-        '',
-        '```',
-        '4',
-        '```',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_content_first`",
+        "",
+        "```",
+        "first output",
+        "```",
+        "",
+        "**Tool Result:** `toolu_content_second`",
+        "",
+        "```",
+        "4",
+        "```",
       })
 
       -- Cursor inside first tool_result content (line 16)
@@ -567,29 +567,29 @@ describe("Tool Context Resolver", function()
 
     it("falls back to nearest tool_result when cursor is between results", function()
       local bufnr = create_buffer({
-        '@Assistant: Running tools:',
-        '',
-        '**Tool Use:** `bash` (`toolu_between_first`)',
-        '```json',
+        "@Assistant: Running tools:",
+        "",
+        "**Tool Use:** `bash` (`toolu_between_first`)",
+        "```json",
         '{ "command": "echo first" }',
-        '```',
-        '',
-        '**Tool Use:** `calculator` (`toolu_between_second`)',
-        '```json',
+        "```",
+        "",
+        "**Tool Use:** `calculator` (`toolu_between_second`)",
+        "```json",
         '{ "expression": "3+3" }',
-        '```',
-        '',
-        '@You: **Tool Result:** `toolu_between_first`',
-        '',
-        '```',
-        'first',
-        '```',
-        '',
-        '**Tool Result:** `toolu_between_second`',
-        '',
-        '```',
-        '6',
-        '```',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_between_first`",
+        "",
+        "```",
+        "first",
+        "```",
+        "",
+        "**Tool Result:** `toolu_between_second`",
+        "",
+        "```",
+        "6",
+        "```",
       })
 
       -- Cursor on empty line between the two results (line 18)
@@ -607,7 +607,7 @@ describe("Tool Context Resolver", function()
   describe("edge cases and errors", function()
     it("returns error when no tools in assistant message", function()
       local bufnr = create_buffer({
-        '@Assistant: Just some text, no tools here.',
+        "@Assistant: Just some text, no tools here.",
       })
 
       local ctx, err = context.resolve(bufnr, { row = 1 })
@@ -618,11 +618,11 @@ describe("Tool Context Resolver", function()
 
     it("returns error when cursor is in frontmatter", function()
       local bufnr = create_buffer({
-        '---',
-        'model: claude-sonnet-4-20250514',
-        '---',
-        '',
-        '@You: Hello',
+        "---",
+        "model: claude-sonnet-4-20250514",
+        "---",
+        "",
+        "@You: Hello",
       })
 
       local ctx, err = context.resolve(bufnr, { row = 2 })
@@ -633,9 +633,9 @@ describe("Tool Context Resolver", function()
 
     it("returns error when cursor is in system message", function()
       local bufnr = create_buffer({
-        '@System: You are helpful.',
-        '',
-        '@You: Hello',
+        "@System: You are helpful.",
+        "",
+        "@You: Hello",
       })
 
       local ctx, err = context.resolve(bufnr, { row = 1 })
@@ -645,7 +645,7 @@ describe("Tool Context Resolver", function()
 
     it("returns error for user message without preceding assistant tools", function()
       local bufnr = create_buffer({
-        '@You: Hello',
+        "@You: Hello",
       })
 
       local ctx, err = context.resolve(bufnr, { row = 1 })
@@ -655,18 +655,18 @@ describe("Tool Context Resolver", function()
 
     it("falls back to assistant tools when cursor is on tool_result in @You:", function()
       local bufnr = create_buffer({
-        '@Assistant: Running tool:',
-        '',
-        '**Tool Use:** `bash` (`toolu_result_cursor`)',
-        '```json',
+        "@Assistant: Running tool:",
+        "",
+        "**Tool Use:** `bash` (`toolu_result_cursor`)",
+        "```json",
         '{ "command": "echo hello" }',
-        '```',
-        '',
-        '@You: **Tool Result:** `toolu_result_cursor`',
-        '',
-        '```',
-        'old result',
-        '```',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_result_cursor`",
+        "",
+        "```",
+        "old result",
+        "```",
       })
 
       -- Cursor on the tool_result header line (which is in @You: message)
@@ -691,12 +691,12 @@ describe("Result Injector", function()
   describe("inject_placeholder", function()
     it("creates @You: message when none exists after assistant", function()
       local bufnr = create_buffer({
-        '@Assistant: Here is the tool:',
-        '',
-        '**Tool Use:** `bash` (`toolu_ph_test`)',
-        '```json',
+        "@Assistant: Here is the tool:",
+        "",
+        "**Tool Use:** `bash` (`toolu_ph_test`)",
+        "```json",
         '{ "command": "echo hello" }',
-        '```',
+        "```",
       })
 
       local header_line, err = injector.inject_placeholder(bufnr, "toolu_ph_test")
@@ -717,18 +717,18 @@ describe("Result Injector", function()
 
     it("reuses existing tool_result position on re-execution", function()
       local bufnr = create_buffer({
-        '@Assistant: Here is the tool:',
-        '',
-        '**Tool Use:** `bash` (`toolu_reexec`)',
-        '```json',
+        "@Assistant: Here is the tool:",
+        "",
+        "**Tool Use:** `bash` (`toolu_reexec`)",
+        "```json",
         '{ "command": "echo hello" }',
-        '```',
-        '',
-        '@You: **Tool Result:** `toolu_reexec`',
-        '',
-        '```',
-        'old result',
-        '```',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_reexec`",
+        "",
+        "```",
+        "old result",
+        "```",
       })
 
       local header_line, err = injector.inject_placeholder(bufnr, "toolu_reexec")
@@ -742,7 +742,7 @@ describe("Result Injector", function()
       local bufnr = create_buffer({
         "@Assistant: Here is the tool:",
         "",
-        '**Tool Use:** `bash` (`toolu_before_text`)',
+        "**Tool Use:** `bash` (`toolu_before_text`)",
         "```json",
         '{ "command": "echo hello" }',
         "```",
@@ -772,14 +772,14 @@ describe("Result Injector", function()
   describe("inject_result", function()
     it("injects success result with fenced content", function()
       local bufnr = create_buffer({
-        '@Assistant: Running tool:',
-        '',
-        '**Tool Use:** `bash` (`toolu_success`)',
-        '```json',
+        "@Assistant: Running tool:",
+        "",
+        "**Tool Use:** `bash` (`toolu_success`)",
+        "```json",
         '{ "command": "echo hello" }',
-        '```',
-        '',
-        '@You: **Tool Result:** `toolu_success`',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_success`",
       })
 
       local ok, err = injector.inject_result(bufnr, "toolu_success", {
@@ -793,19 +793,18 @@ describe("Result Injector", function()
       local content = table.concat(lines, "\n")
       assert.is_truthy(content:match("hello world"), "Should contain the result output")
       assert.is_truthy(content:match("```"), "Should have fenced code block")
-
     end)
 
     it("injects error result with (error) marker", function()
       local bufnr = create_buffer({
-        '@Assistant: Running tool:',
-        '',
-        '**Tool Use:** `bash` (`toolu_err`)',
-        '```json',
+        "@Assistant: Running tool:",
+        "",
+        "**Tool Use:** `bash` (`toolu_err`)",
+        "```json",
         '{ "command": "false" }',
-        '```',
-        '',
-        '@You: **Tool Result:** `toolu_err`',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_err`",
       })
 
       local ok, err = injector.inject_result(bufnr, "toolu_err", {
@@ -819,19 +818,18 @@ describe("Result Injector", function()
       local content = table.concat(lines, "\n")
       assert.is_truthy(content:match("%(error%)"), "Should have (error) marker in header")
       assert.is_truthy(content:match("exit code 1"), "Should contain error message")
-
     end)
 
     it("injects table result as JSON", function()
       local bufnr = create_buffer({
-        '@Assistant: Computing:',
-        '',
-        '**Tool Use:** `calculator` (`toolu_json`)',
-        '```json',
+        "@Assistant: Computing:",
+        "",
+        "**Tool Use:** `calculator` (`toolu_json`)",
+        "```json",
         '{ "expression": "1+1" }',
-        '```',
-        '',
-        '@You: **Tool Result:** `toolu_json`',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_json`",
       })
 
       local ok, err = injector.inject_result(bufnr, "toolu_json", {
@@ -848,14 +846,14 @@ describe("Result Injector", function()
 
     it("handles error with partial output", function()
       local bufnr = create_buffer({
-        '@Assistant: Running:',
-        '',
-        '**Tool Use:** `bash` (`toolu_partial`)',
-        '```json',
+        "@Assistant: Running:",
+        "",
+        "**Tool Use:** `bash` (`toolu_partial`)",
+        "```json",
         '{ "command": "test" }',
-        '```',
-        '',
-        '@You: **Tool Result:** `toolu_partial`',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_partial`",
       })
 
       local ok, err = injector.inject_result(bufnr, "toolu_partial", {
@@ -874,12 +872,12 @@ describe("Result Injector", function()
 
     it("injects when no placeholder exists (creates one)", function()
       local bufnr = create_buffer({
-        '@Assistant: Running tool:',
-        '',
-        '**Tool Use:** `bash` (`toolu_noph`)',
-        '```json',
+        "@Assistant: Running tool:",
+        "",
+        "**Tool Use:** `bash` (`toolu_noph`)",
+        "```json",
         '{ "command": "echo hello" }',
-        '```',
+        "```",
       })
 
       local ok, err = injector.inject_result(bufnr, "toolu_noph", {
@@ -893,21 +891,20 @@ describe("Result Injector", function()
       local content = table.concat(lines, "\n")
       assert.is_truthy(content:match("Tool Result.*toolu_noph"), "Should have created result header")
       assert.is_truthy(content:match("hello"), "Should contain result")
-
     end)
   end)
 
   describe("format and fence sizing", function()
     it("uses triple backticks for simple content", function()
       local bufnr = create_buffer({
-        '@Assistant: Run:',
-        '',
-        '**Tool Use:** `bash` (`toolu_fence3`)',
-        '```json',
+        "@Assistant: Run:",
+        "",
+        "**Tool Use:** `bash` (`toolu_fence3`)",
+        "```json",
         '{ "command": "echo hi" }',
-        '```',
-        '',
-        '@You: **Tool Result:** `toolu_fence3`',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_fence3`",
       })
 
       injector.inject_result(bufnr, "toolu_fence3", {
@@ -924,14 +921,14 @@ describe("Result Injector", function()
 
     it("uses extra backticks when content contains triple backticks", function()
       local bufnr = create_buffer({
-        '@Assistant: Run:',
-        '',
-        '**Tool Use:** `bash` (`toolu_fence4`)',
-        '```json',
+        "@Assistant: Run:",
+        "",
+        "**Tool Use:** `bash` (`toolu_fence4`)",
+        "```json",
         '{ "command": "echo test" }',
-        '```',
-        '',
-        '@You: **Tool Result:** `toolu_fence4`',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_fence4`",
       })
 
       injector.inject_result(bufnr, "toolu_fence4", {
@@ -947,14 +944,14 @@ describe("Result Injector", function()
 
     it("uses 5-tick fence when content contains 4 backticks", function()
       local bufnr = create_buffer({
-        '@Assistant: Run:',
-        '',
-        '**Tool Use:** `bash` (`toolu_fence5`)',
-        '```json',
+        "@Assistant: Run:",
+        "",
+        "**Tool Use:** `bash` (`toolu_fence5`)",
+        "```json",
         '{ "command": "echo test" }',
-        '```',
-        '',
-        '@You: **Tool Result:** `toolu_fence5`',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_fence5`",
       })
 
       injector.inject_result(bufnr, "toolu_fence5", {
@@ -969,14 +966,14 @@ describe("Result Injector", function()
 
     it("uses 5-tick fence when content has mixed 3 and 4 backtick sequences", function()
       local bufnr = create_buffer({
-        '@Assistant: Run:',
-        '',
-        '**Tool Use:** `bash` (`toolu_fence_mixed`)',
-        '```json',
+        "@Assistant: Run:",
+        "",
+        "**Tool Use:** `bash` (`toolu_fence_mixed`)",
+        "```json",
         '{ "command": "echo test" }',
-        '```',
-        '',
-        '@You: **Tool Result:** `toolu_fence_mixed`',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_fence_mixed`",
       })
 
       injector.inject_result(bufnr, "toolu_fence_mixed", {
@@ -991,14 +988,14 @@ describe("Result Injector", function()
 
     it("uses triple backticks when content has only single/double backticks", function()
       local bufnr = create_buffer({
-        '@Assistant: Run:',
-        '',
-        '**Tool Use:** `bash` (`toolu_fence_low`)',
-        '```json',
+        "@Assistant: Run:",
+        "",
+        "**Tool Use:** `bash` (`toolu_fence_low`)",
+        "```json",
         '{ "command": "echo test" }',
-        '```',
-        '',
-        '@You: **Tool Result:** `toolu_fence_low`',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_fence_low`",
       })
 
       injector.inject_result(bufnr, "toolu_fence_low", {
@@ -1016,18 +1013,18 @@ describe("Result Injector", function()
   describe("re-execution", function()
     it("replaces existing result on re-execution", function()
       local bufnr = create_buffer({
-        '@Assistant: Run:',
-        '',
-        '**Tool Use:** `bash` (`toolu_rerun`)',
-        '```json',
+        "@Assistant: Run:",
+        "",
+        "**Tool Use:** `bash` (`toolu_rerun`)",
+        "```json",
         '{ "command": "echo hello" }',
-        '```',
-        '',
-        '@You: **Tool Result:** `toolu_rerun`',
-        '',
-        '```',
-        'old result',
-        '```',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_rerun`",
+        "",
+        "```",
+        "old result",
+        "```",
       })
 
       local ok, err = injector.inject_result(bufnr, "toolu_rerun", {
@@ -1298,7 +1295,6 @@ describe("Result Injector", function()
       assert.is_true(pos_j < pos_k, "result_j should come before result_k")
     end)
   end)
-
 end)
 
 -- ============================================================================
@@ -1326,7 +1322,7 @@ describe("Cancel Priority Logic", function()
     local bufnr = create_buffer({
       "@Assistant: Running tool:",
       "",
-      '**Tool Use:** `calculator` (`toolu_cancel_api`)',
+      "**Tool Use:** `calculator` (`toolu_cancel_api`)",
       "```json",
       '{ "expression": "1+1" }',
       "```",
@@ -1354,12 +1350,12 @@ describe("Cancel Priority Logic", function()
     local bufnr = create_buffer({
       "@Assistant: Running tools:",
       "",
-      '**Tool Use:** `calculator` (`toolu_cancel_first`)',
+      "**Tool Use:** `calculator` (`toolu_cancel_first`)",
       "```json",
       '{ "expression": "1+1" }',
       "```",
       "",
-      '**Tool Use:** `calculator` (`toolu_cancel_second`)',
+      "**Tool Use:** `calculator` (`toolu_cancel_second`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
@@ -1452,12 +1448,12 @@ describe("Tool Executor", function()
   describe("execute validation", function()
     it("rejects execution of unknown tool", function()
       local bufnr = create_buffer({
-        '@Assistant: Tool:',
-        '',
-        '**Tool Use:** `nonexistent` (`toolu_unknown`)',
-        '```json',
+        "@Assistant: Tool:",
+        "",
+        "**Tool Use:** `nonexistent` (`toolu_unknown`)",
+        "```json",
         '{ "command": "test" }',
-        '```',
+        "```",
       })
 
       local ok, err = executor.execute(bufnr, {
@@ -1475,12 +1471,12 @@ describe("Tool Executor", function()
     it("rejects execution while API request is in flight", function()
       local state = require("flemma.state")
       local bufnr = create_buffer({
-        '@Assistant: Tool:',
-        '',
-        '**Tool Use:** `calculator` (`toolu_blocked`)',
-        '```json',
+        "@Assistant: Tool:",
+        "",
+        "**Tool Use:** `calculator` (`toolu_blocked`)",
+        "```json",
         '{ "expression": "1+1" }',
-        '```',
+        "```",
       })
 
       -- Simulate active API request
@@ -1514,12 +1510,12 @@ describe("Tool Executor", function()
       })
 
       local bufnr = create_buffer({
-        '@Assistant: Tool:',
-        '',
-        '**Tool Use:** `slow_async_dup` (`toolu_dup`)',
-        '```json',
-        '{}',
-        '```',
+        "@Assistant: Tool:",
+        "",
+        "**Tool Use:** `slow_async_dup` (`toolu_dup`)",
+        "```json",
+        "{}",
+        "```",
       })
 
       -- First execution should succeed
@@ -1555,12 +1551,12 @@ describe("Tool Executor", function()
       })
 
       local bufnr = create_buffer({
-        '@Assistant: Tool:',
-        '',
-        '**Tool Use:** `schema_only` (`toolu_noexec`)',
-        '```json',
-        '{}',
-        '```',
+        "@Assistant: Tool:",
+        "",
+        "**Tool Use:** `schema_only` (`toolu_noexec`)",
+        "```json",
+        "{}",
+        "```",
       })
 
       local ok, err = executor.execute(bufnr, {
@@ -1579,12 +1575,12 @@ describe("Tool Executor", function()
   describe("sync execution", function()
     it("creates pending entry during execution", function()
       local bufnr = create_buffer({
-        '@Assistant: Computing:',
-        '',
-        '**Tool Use:** `calculator` (`toolu_pending_test`)',
-        '```json',
+        "@Assistant: Computing:",
+        "",
+        "**Tool Use:** `calculator` (`toolu_pending_test`)",
+        "```json",
         '{ "expression": "2+2" }',
-        '```',
+        "```",
       })
 
       local ok, err = executor.execute(bufnr, {
@@ -1614,12 +1610,12 @@ describe("Tool Executor", function()
   describe("cleanup_buffer", function()
     it("cleans up all state for buffer", function()
       local bufnr = create_buffer({
-        '@Assistant: Tool:',
-        '',
-        '**Tool Use:** `calculator` (`toolu_cleanup`)',
-        '```json',
+        "@Assistant: Tool:",
+        "",
+        "**Tool Use:** `calculator` (`toolu_cleanup`)",
+        "```json",
         '{ "expression": "1+1" }',
-        '```',
+        "```",
       })
 
       executor.execute(bufnr, {
@@ -1656,7 +1652,7 @@ describe("Tool Executor", function()
       local bufnr = create_buffer({
         "@Assistant: Tool:",
         "",
-        '**Tool Use:** `slow_async` (`toolu_cancel_fn`)',
+        "**Tool Use:** `slow_async` (`toolu_cancel_fn`)",
         "```json",
         "{}",
         "```",

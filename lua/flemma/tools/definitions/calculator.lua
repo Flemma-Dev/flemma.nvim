@@ -2,106 +2,109 @@
 --- Provides basic arithmetic calculation capability
 local M = {}
 
-M.definitions = { {
-  name = "calculator",
-  description = "Evaluates a mathematical expression and returns the numeric result. "
-    .. "Use this for any arithmetic calculations including addition, subtraction, "
-    .. "multiplication, division, exponents, and common math functions.",
-  input_schema = {
-    type = "object",
-    properties = {
-      expression = {
-        type = "string",
-        description = "The mathematical expression to evaluate (e.g., '2 + 2', '15 * 7', 'sqrt(16)', '2^10')",
+M.definitions = {
+  {
+    name = "calculator",
+    description = "Evaluates a mathematical expression and returns the numeric result. "
+      .. "Use this for any arithmetic calculations including addition, subtraction, "
+      .. "multiplication, division, exponents, and common math functions.",
+    input_schema = {
+      type = "object",
+      properties = {
+        expression = {
+          type = "string",
+          description = "The mathematical expression to evaluate (e.g., '2 + 2', '15 * 7', 'sqrt(16)', '2^10')",
+        },
       },
+      required = { "expression" },
     },
-    required = { "expression" },
-  },
-  output_schema = {
-    type = "object",
-    properties = {
-      result = {
-        type = "number",
-        description = "The numeric result of the calculation",
+    output_schema = {
+      type = "object",
+      properties = {
+        result = {
+          type = "number",
+          description = "The numeric result of the calculation",
+        },
       },
+      required = { "result" },
     },
-    required = { "result" },
+    async = false,
+    execute = function(input)
+      local expr = input.expression
+      if not expr or expr == "" then
+        return { success = false, error = "No expression provided" }
+      end
+      local fn, err = load("return " .. expr, "calc", "t", { math = math })
+      if not fn then
+        return { success = false, error = "Invalid expression: " .. err }
+      end
+      local ok, result = pcall(fn)
+      if not ok then
+        return { success = false, error = "Evaluation failed: " .. result }
+      end
+      return { success = true, output = tostring(result) }
+    end,
   },
-  async = false,
-  execute = function(input)
-    local expr = input.expression
-    if not expr or expr == "" then
-      return { success = false, error = "No expression provided" }
-    end
-    local fn, err = load("return " .. expr, "calc", "t", { math = math })
-    if not fn then
-      return { success = false, error = "Invalid expression: " .. err }
-    end
-    local ok, result = pcall(fn)
-    if not ok then
-      return { success = false, error = "Evaluation failed: " .. result }
-    end
-    return { success = true, output = tostring(result) }
-  end,
-}, {
-  name = "calculator_async",
-  hidden = true,
-  description = "Evaluates a mathematical expression asynchronously and returns the numeric result. "
-    .. "Use this for any arithmetic calculations including addition, subtraction, "
-    .. "multiplication, division, exponents, and common math functions.",
-  input_schema = {
-    type = "object",
-    properties = {
-      expression = {
-        type = "string",
-        description = "The mathematical expression to evaluate (e.g., '2 + 2', '15 * 7', 'sqrt(16)', '2^10')",
+  {
+    name = "calculator_async",
+    hidden = true,
+    description = "Evaluates a mathematical expression asynchronously and returns the numeric result. "
+      .. "Use this for any arithmetic calculations including addition, subtraction, "
+      .. "multiplication, division, exponents, and common math functions.",
+    input_schema = {
+      type = "object",
+      properties = {
+        expression = {
+          type = "string",
+          description = "The mathematical expression to evaluate (e.g., '2 + 2', '15 * 7', 'sqrt(16)', '2^10')",
+        },
+        delay = {
+          type = "number",
+          description = "Delay in milliseconds before returning the result (default: 1000)",
+        },
       },
-      delay = {
-        type = "number",
-        description = "Delay in milliseconds before returning the result (default: 1000)",
-      },
+      required = { "expression" },
     },
-    required = { "expression" },
-  },
-  output_schema = {
-    type = "object",
-    properties = {
-      result = {
-        type = "number",
-        description = "The numeric result of the calculation",
+    output_schema = {
+      type = "object",
+      properties = {
+        result = {
+          type = "number",
+          description = "The numeric result of the calculation",
+        },
       },
+      required = { "result" },
     },
-    required = { "result" },
+    async = true,
+    execute = function(input, callback)
+      local expr = input.expression
+      if not expr or expr == "" then
+        callback({ success = false, error = "No expression provided" })
+        return
+      end
+      local fn, err = load("return " .. expr, "calc", "t", { math = math })
+      if not fn then
+        callback({ success = false, error = "Invalid expression: " .. err })
+        return
+      end
+      local ok, result = pcall(fn)
+      if not ok then
+        callback({ success = false, error = "Evaluation failed: " .. result })
+        return
+      end
+      local delay = input.delay or 1000
+      local timer = vim.uv.new_timer()
+      timer:start(delay, 0, function()
+        timer:stop()
+        timer:close()
+        callback({ success = true, output = tostring(result) })
+      end)
+      return function()
+        timer:stop()
+        timer:close()
+      end
+    end,
   },
-  async = true,
-  execute = function(input, callback)
-    local expr = input.expression
-    if not expr or expr == "" then
-      callback({ success = false, error = "No expression provided" })
-      return
-    end
-    local fn, err = load("return " .. expr, "calc", "t", { math = math })
-    if not fn then
-      callback({ success = false, error = "Invalid expression: " .. err })
-      return
-    end
-    local ok, result = pcall(fn)
-    if not ok then
-      callback({ success = false, error = "Evaluation failed: " .. result })
-      return
-    end
-    local delay = input.delay or 1000
-    local timer = vim.uv.new_timer()
-    timer:start(delay, 0, function()
-      timer:stop()
-      timer:close()
-      callback({ success = true, output = tostring(result) })
-    end)
-    return function()
-      timer:stop()
-      timer:close()
-    end
-  end,
-} }
+}
 
 return M

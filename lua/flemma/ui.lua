@@ -917,13 +917,8 @@ function M.reposition_tool_indicators(bufnr)
         local current_line = get_extmark_line(bufnr, ind.extmark_id)
         if current_line and current_line ~= target_line then
           -- Read current virtual text to preserve it during repositioning
-          local ok, pos = pcall(
-            vim.api.nvim_buf_get_extmark_by_id,
-            bufnr,
-            tool_exec_ns,
-            ind.extmark_id,
-            { details = true }
-          )
+          local ok, pos =
+            pcall(vim.api.nvim_buf_get_extmark_by_id, bufnr, tool_exec_ns, ind.extmark_id, { details = true })
           if ok and pos and #pos >= 3 then
             pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, target_line, 0, {
               id = ind.extmark_id,

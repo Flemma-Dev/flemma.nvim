@@ -381,7 +381,9 @@ function M.cancel_for_buffer(bufnr)
   end
   local pending = M.get_pending(bufnr)
   if #pending > 0 then
-    table.sort(pending, function(a, b) return a.started_at < b.started_at end)
+    table.sort(pending, function(a, b)
+      return a.started_at < b.started_at
+    end)
     M.cancel(pending[1].tool_id)
     return true
   end
@@ -400,7 +402,9 @@ function M.cancel_at_cursor(bufnr)
   end
   local pending = M.get_pending(bufnr)
   if #pending > 0 then
-    table.sort(pending, function(a, b) return a.started_at < b.started_at end)
+    table.sort(pending, function(a, b)
+      return a.started_at < b.started_at
+    end)
     return M.cancel(pending[1].tool_id)
   end
   return false

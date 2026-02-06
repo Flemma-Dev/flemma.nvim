@@ -108,9 +108,11 @@ function M.resolve(bufnr, cursor_pos)
         if #tool_uses > 0 then
           -- Try to match cursor to a specific tool_result in the @You: message
           for _, seg in ipairs(msg.segments) do
-            if seg.kind == "tool_result"
+            if
+              seg.kind == "tool_result"
               and cursor_line >= seg.position.start_line
-              and cursor_line <= seg.position.end_line then
+              and cursor_line <= seg.position.end_line
+            then
               -- Find corresponding tool_use by ID
               for _, tu in ipairs(tool_uses) do
                 if tu.id == seg.tool_use_id then
@@ -121,7 +123,8 @@ function M.resolve(bufnr, cursor_pos)
                     node = tu,
                     start_line = tu.position.start_line,
                     end_line = tu.position.end_line,
-                  }, nil
+                  },
+                    nil
                 end
               end
             end
@@ -153,7 +156,8 @@ function M.resolve(bufnr, cursor_pos)
                   node = tu,
                   start_line = tu.position.start_line,
                   end_line = tu.position.end_line,
-                }, nil
+                },
+                  nil
               end
             end
           end
@@ -166,7 +170,8 @@ function M.resolve(bufnr, cursor_pos)
             node = seg,
             start_line = seg.position.start_line,
             end_line = seg.position.end_line,
-          }, nil
+          },
+            nil
         end
       end
     end
@@ -192,7 +197,8 @@ function M.resolve(bufnr, cursor_pos)
     node = seg,
     start_line = seg.position.start_line,
     end_line = seg.position.end_line,
-  }, nil
+  },
+    nil
 end
 
 return M
