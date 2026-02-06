@@ -174,6 +174,16 @@ function M.send_to_provider(opts)
     return
   end
 
+  -- Check if tool executions are in progress (mutually exclusive with API requests)
+  local ok_executor, executor = pcall(require, "flemma.tools.executor")
+  if ok_executor then
+    local pending = executor.get_pending(bufnr)
+    if #pending > 0 then
+      vim.notify("Flemma: Cannot send while tool execution is in progress.", vim.log.levels.WARN)
+      return
+    end
+  end
+
   log.info("send_to_provider(): Starting new request for buffer " .. bufnr)
   buffer_state.request_cancelled = false
   buffer_state.api_error_occurred = false -- Initialize flag for API errors

@@ -28,12 +28,29 @@ M.setup = function()
         end
 
         if config.keymaps.normal.cancel then
-          vim.keymap.set(
-            "n",
-            config.keymaps.normal.cancel,
-            core.cancel_request,
-            { buffer = true, desc = "Cancel Flemma Request" }
-          )
+          vim.keymap.set("n", config.keymaps.normal.cancel, function()
+            local bufnr = vim.api.nvim_get_current_buf()
+            local buffer_state = state.get_buffer_state(bufnr)
+            local executor = require("flemma.tools.executor")
+
+            -- Priority 1: Cancel API request if active
+            if buffer_state.current_request then
+              core.cancel_request()
+              return
+            end
+
+            -- Priority 2: Cancel first pending tool (by start time)
+            local pending = executor.get_pending(bufnr)
+            if #pending > 0 then
+              table.sort(pending, function(a, b)
+                return a.started_at < b.started_at
+              end)
+              executor.cancel(pending[1].tool_id)
+              return
+            end
+
+            vim.notify("Flemma: Nothing to cancel", vim.log.levels.INFO)
+          end, { buffer = true, desc = "Cancel Flemma Request or Tool" })
         end
 
         -- Message navigation keymaps

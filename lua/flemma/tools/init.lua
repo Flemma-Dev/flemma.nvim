@@ -6,6 +6,7 @@ local registry = require("flemma.tools.registry")
 
 local builtin_tools = {
   "flemma.tools.definitions.calculator",
+  "flemma.tools.definitions.bash",
 }
 
 ---Setup tool registry with built-in tools
@@ -40,5 +41,7 @@ M.get = registry.get
 M.get_all = registry.get_all
 M.clear = registry.clear
 M.count = registry.count
+M.is_executable = registry.is_executable
+M.get_executor = registry.get_executor
 
 return M

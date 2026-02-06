@@ -269,6 +269,11 @@ M.apply_syntax = function()
   set_highlight("FlemmaToolUseTitle", syntax_config.highlights.tool_use)
   set_highlight("FlemmaToolResultTitle", syntax_config.highlights.tool_result)
   set_highlight("FlemmaToolResultError", syntax_config.highlights.tool_result_error)
+
+  -- Tool execution indicator highlights
+  set_highlight("FlemmaToolPending", { link = "DiagnosticInfo", default = true })
+  set_highlight("FlemmaToolSuccess", { link = "DiagnosticOk", default = true })
+  set_highlight("FlemmaToolError", { link = "DiagnosticError", default = true })
 end
 
 -- Setup line highlight groups for full-line background highlighting

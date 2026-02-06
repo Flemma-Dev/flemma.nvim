@@ -10,6 +10,33 @@ local pipeline = require("flemma.pipeline")
 local tools = require("flemma.tools")
 local codeblock = require("flemma.codeblock")
 
+--- Find a tool by name in an Anthropic-format tools array ({name=...})
+local function find_anthropic_tool(tools_array, name)
+  for _, t in ipairs(tools_array) do
+    if t.name == name then
+      return t
+    end
+  end
+end
+
+--- Find a tool by name in an OpenAI-format tools array ({function={name=...}})
+local function find_openai_tool(tools_array, name)
+  for _, t in ipairs(tools_array) do
+    if t["function"] and t["function"].name == name then
+      return t
+    end
+  end
+end
+
+--- Find a function declaration by name in Vertex-format functionDeclarations array
+local function find_vertex_decl(declarations, name)
+  for _, d in ipairs(declarations) do
+    if d.name == name then
+      return d
+    end
+  end
+end
+
 describe("Tool Registry", function()
   before_each(function()
     tools.clear()
@@ -383,8 +410,9 @@ describe("Anthropic Provider Tool Support", function()
     local req = provider:build_request(prompt, {})
 
     assert.is_not_nil(req.tools, "Request should include tools array")
-    assert.equals(1, #req.tools)
-    assert.equals("calculator", req.tools[1].name)
+    assert.equals(2, #req.tools)
+    local calc = find_anthropic_tool(req.tools, "calculator")
+    assert.is_not_nil(calc, "calculator tool should be in tools array")
   end)
 
   it("includes tool_choice with auto mode (parallel tool use enabled)", function()
@@ -585,10 +613,11 @@ describe("Request Body Validation", function()
 
     -- Validate tools array
     assert.is_not_nil(req.tools)
-    assert.equals(1, #req.tools)
-    assert.equals("calculator", req.tools[1].name)
-    assert.is_not_nil(req.tools[1].input_schema)
-    assert.is_not_nil(req.tools[1].input_schema.properties.expression)
+    assert.equals(2, #req.tools)
+    local calc = find_anthropic_tool(req.tools, "calculator")
+    assert.is_not_nil(calc, "calculator tool should be in tools array")
+    assert.is_not_nil(calc.input_schema)
+    assert.is_not_nil(calc.input_schema.properties.expression)
 
     -- Validate tool_choice (parallel tool use is enabled, no disable flag)
     assert.is_not_nil(req.tool_choice)
@@ -651,11 +680,12 @@ describe("OpenAI Provider Request Building with Tools", function()
     local req = provider:build_request(prompt, {})
 
     assert.is_not_nil(req.tools, "Request should include tools array")
-    assert.equals(1, #req.tools)
-    assert.equals("function", req.tools[1].type)
-    assert.equals("calculator", req.tools[1]["function"].name)
-    assert.is_not_nil(req.tools[1]["function"].parameters)
-    assert.is_not_nil(req.tools[1]["function"].parameters.properties.expression)
+    assert.equals(2, #req.tools)
+    local calc = find_openai_tool(req.tools, "calculator")
+    assert.is_not_nil(calc, "calculator tool should be in tools array")
+    assert.equals("function", calc.type)
+    assert.is_not_nil(calc["function"].parameters)
+    assert.is_not_nil(calc["function"].parameters.properties.expression)
   end)
 
   it("includes tool_choice auto (parallel tool use enabled)", function()
@@ -856,11 +886,12 @@ describe("OpenAI Request Body Validation with Tools", function()
 
     -- Validate tools array in OpenAI format
     assert.is_not_nil(req.tools)
-    assert.equals(1, #req.tools)
-    assert.equals("function", req.tools[1].type)
-    assert.equals("calculator", req.tools[1]["function"].name)
-    assert.is_not_nil(req.tools[1]["function"].parameters)
-    assert.is_not_nil(req.tools[1]["function"].parameters.properties.expression)
+    assert.equals(2, #req.tools)
+    local calc = find_openai_tool(req.tools, "calculator")
+    assert.is_not_nil(calc, "calculator tool should be in tools array")
+    assert.equals("function", calc.type)
+    assert.is_not_nil(calc["function"].parameters)
+    assert.is_not_nil(calc["function"].parameters.properties.expression)
 
     -- Validate tool_choice (parallel tool use is enabled, no disable flag)
     assert.equals("auto", req.tool_choice)
@@ -911,10 +942,11 @@ describe("Vertex AI Provider Request Building with Tools", function()
     assert.is_not_nil(req.tools, "Request should include tools array")
     assert.equals(1, #req.tools)
     assert.is_not_nil(req.tools[1].functionDeclarations)
-    assert.equals(1, #req.tools[1].functionDeclarations)
-    assert.equals("calculator", req.tools[1].functionDeclarations[1].name)
-    assert.is_not_nil(req.tools[1].functionDeclarations[1].parameters)
-    assert.is_not_nil(req.tools[1].functionDeclarations[1].parameters.properties.expression)
+    assert.equals(2, #req.tools[1].functionDeclarations)
+    local calc = find_vertex_decl(req.tools[1].functionDeclarations, "calculator")
+    assert.is_not_nil(calc, "calculator functionDeclaration should be present")
+    assert.is_not_nil(calc.parameters)
+    assert.is_not_nil(calc.parameters.properties.expression)
   end)
 
   it("includes toolConfig with AUTO mode", function()
@@ -1421,7 +1453,9 @@ describe("Vertex AI Request Body Validation with Tools", function()
     assert.is_not_nil(req.tools)
     assert.equals(1, #req.tools)
     assert.is_not_nil(req.tools[1].functionDeclarations)
-    assert.equals("calculator", req.tools[1].functionDeclarations[1].name)
+    assert.equals(2, #req.tools[1].functionDeclarations)
+    local calc = find_vertex_decl(req.tools[1].functionDeclarations, "calculator")
+    assert.is_not_nil(calc, "calculator functionDeclaration should be present")
 
     -- Validate toolConfig
     assert.is_not_nil(req.toolConfig)

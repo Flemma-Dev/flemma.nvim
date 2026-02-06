@@ -23,6 +23,7 @@ local PRIORITY = {
   LINE_HIGHLIGHT = 50,
   THINKING_BLOCK = 100,
   THINKING_TAG = 200,
+  TOOL_EXECUTION = 250,
   SPINNER = 300,
 }
 
@@ -141,6 +142,10 @@ end
 local ns_id = vim.api.nvim_create_namespace("flemma")
 local spinner_ns = vim.api.nvim_create_namespace("flemma_spinner")
 local line_hl_ns = vim.api.nvim_create_namespace("flemma_line_highlights")
+local tool_exec_ns = vim.api.nvim_create_namespace("flemma_tool_execution")
+
+-- Per-tool indicator state: tool_id -> { extmark_id, timer, line_idx }
+local tool_indicators = {}
 
 --- Execute a command in the context of a buffer's window
 ---@param bufnr number Buffer number
@@ -723,6 +728,151 @@ function M.set_cursor(line, col, bufnr)
   vim.api.nvim_win_set_cursor(0, { line, col })
 end
 
+-- ============================================================================
+-- Tool Execution Indicators
+-- ============================================================================
+
+local TOOL_SPINNER_FRAMES = { "◐", "◓", "◑", "◒" }
+
+--- Show execution indicator for a tool
+--- Creates extmark with animated spinner at the tool result header line
+--- @param bufnr integer
+--- @param tool_id string
+--- @param header_line integer 1-based line number of the tool result header
+function M.show_tool_indicator(bufnr, tool_id, header_line)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  -- Clean up any existing indicator for this tool
+  M.clear_tool_indicator(bufnr, tool_id)
+
+  local line_idx = header_line - 1
+  local frame = 1
+
+  local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
+    virt_text = { { " " .. TOOL_SPINNER_FRAMES[frame] .. " Executing...", "FlemmaToolPending" } },
+    virt_text_pos = "eol",
+    hl_mode = "combine",
+    priority = PRIORITY.TOOL_EXECUTION,
+    spell = false,
+  })
+
+  local timer = vim.fn.timer_start(100, function()
+    if not vim.api.nvim_buf_is_valid(bufnr) then
+      local ind = tool_indicators[tool_id]
+      if ind and ind.timer then
+        vim.fn.timer_stop(ind.timer)
+      end
+      tool_indicators[tool_id] = nil
+      return
+    end
+
+    local ind = tool_indicators[tool_id]
+    if not ind then
+      return
+    end
+
+    frame = (frame % #TOOL_SPINNER_FRAMES) + 1
+    pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, ind.line_idx, 0, {
+      id = ind.extmark_id,
+      virt_text = { { " " .. TOOL_SPINNER_FRAMES[frame] .. " Executing...", "FlemmaToolPending" } },
+      virt_text_pos = "eol",
+      hl_mode = "combine",
+      priority = PRIORITY.TOOL_EXECUTION,
+      spell = false,
+    })
+  end, { ["repeat"] = -1 })
+
+  tool_indicators[tool_id] = {
+    extmark_id = extmark_id,
+    timer = timer,
+    line_idx = line_idx,
+  }
+end
+
+--- Update indicator to show completion/error state
+--- Stops animation, shows final state
+--- @param bufnr integer
+--- @param tool_id string
+--- @param success boolean
+function M.update_tool_indicator(bufnr, tool_id, success)
+  local ind = tool_indicators[tool_id]
+  if not ind then
+    return
+  end
+
+  -- Stop animation timer
+  if ind.timer then
+    vim.fn.timer_stop(ind.timer)
+    ind.timer = nil
+  end
+
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    tool_indicators[tool_id] = nil
+    return
+  end
+
+  -- Show final state
+  local text, hl
+  if success then
+    text = " ✓ Complete"
+    hl = "FlemmaToolSuccess"
+  else
+    text = " ✗ Failed"
+    hl = "FlemmaToolError"
+  end
+
+  pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, ind.line_idx, 0, {
+    id = ind.extmark_id,
+    virt_text = { { text, hl } },
+    virt_text_pos = "eol",
+    hl_mode = "combine",
+    priority = PRIORITY.TOOL_EXECUTION,
+    spell = false,
+  })
+end
+
+--- Clear indicator for a tool (removes extmark and stops timer)
+--- @param bufnr integer
+--- @param tool_id string
+function M.clear_tool_indicator(bufnr, tool_id)
+  local ind = tool_indicators[tool_id]
+  if not ind then
+    return
+  end
+
+  if ind.timer then
+    vim.fn.timer_stop(ind.timer)
+  end
+
+  if vim.api.nvim_buf_is_valid(bufnr) then
+    pcall(vim.api.nvim_buf_del_extmark, bufnr, tool_exec_ns, ind.extmark_id)
+  end
+
+  tool_indicators[tool_id] = nil
+end
+
+--- Clear all tool indicators for a buffer (used on buffer cleanup)
+--- @param bufnr integer
+function M.clear_all_tool_indicators(bufnr)
+  local to_clear = {}
+  for tool_id, ind in pairs(tool_indicators) do
+    -- We don't track bufnr in the indicator, so clear all if buffer matches
+    -- by trying to clean up the extmark
+    table.insert(to_clear, tool_id)
+  end
+
+  for _, tool_id in ipairs(to_clear) do
+    M.clear_tool_indicator(bufnr, tool_id)
+  end
+
+  -- Also clear the namespace for this buffer
+  if vim.api.nvim_buf_is_valid(bufnr) then
+    pcall(vim.api.nvim_buf_clear_namespace, bufnr, tool_exec_ns, 0, -1)
+  end
+end
+
 -- Set up UI-related autocmds and initialization
 function M.setup()
   -- Create or clear the augroup for UI-related autocmds
@@ -746,6 +896,12 @@ function M.setup()
     callback = function(ev)
       if vim.bo[ev.buf].filetype == "chat" or string.match(vim.api.nvim_buf_get_name(ev.buf), "%.chat$") then
         M.cleanup_spinner(ev.buf)
+        M.clear_all_tool_indicators(ev.buf)
+        -- Clean up tool executor state
+        local ok, executor = pcall(require, "flemma.tools.executor")
+        if ok then
+          executor.cleanup_buffer(ev.buf)
+        end
         state.cleanup_buffer_state(ev.buf)
       end
     end,

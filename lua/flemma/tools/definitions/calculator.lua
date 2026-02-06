@@ -27,6 +27,22 @@ M.definition = {
     },
     required = { "result" },
   },
+  async = false,
+  execute = function(input)
+    local expr = input.expression
+    if not expr or expr == "" then
+      return { success = false, error = "No expression provided" }
+    end
+    local fn, err = load("return " .. expr, "calc", "t", { math = math })
+    if not fn then
+      return { success = false, error = "Invalid expression: " .. err }
+    end
+    local ok, result = pcall(fn)
+    if not ok then
+      return { success = false, error = "Evaluation failed: " .. result }
+    end
+    return { success = true, output = tostring(result) }
+  end,
 }
 
 return M

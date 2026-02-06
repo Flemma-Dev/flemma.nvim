@@ -157,7 +157,27 @@ local function setup_commands()
 
   command_tree.children.cancel = {
     action = function()
-      core.cancel_request()
+      local bufnr = vim.api.nvim_get_current_buf()
+      local buffer_state = require("flemma.state").get_buffer_state(bufnr)
+      local executor = require("flemma.tools.executor")
+
+      -- Priority 1: Cancel API request if active
+      if buffer_state.current_request then
+        core.cancel_request()
+        return
+      end
+
+      -- Priority 2: Cancel first pending tool (by start time)
+      local pending = executor.get_pending(bufnr)
+      if #pending > 0 then
+        table.sort(pending, function(a, b)
+          return a.started_at < b.started_at
+        end)
+        executor.cancel(pending[1].tool_id)
+        return
+      end
+
+      vim.notify("Flemma: Nothing to cancel", vim.log.levels.INFO)
     end,
   }
 
@@ -348,6 +368,87 @@ local function setup_commands()
       recall = {
         action = function()
           notify_module.recall_last()
+        end,
+      },
+    },
+  }
+
+  command_tree.children.tool = {
+    children = {
+      execute = {
+        action = function()
+          local bufnr = vim.api.nvim_get_current_buf()
+          local cursor = vim.api.nvim_win_get_cursor(0)
+          local tool_context = require("flemma.tools.context")
+          local executor = require("flemma.tools.executor")
+
+          local context, err = tool_context.resolve(bufnr, { row = cursor[1], col = cursor[2] })
+          if not context then
+            vim.notify("Flemma: " .. (err or "No tool call found"), vim.log.levels.ERROR)
+            return
+          end
+
+          local ok, exec_err = executor.execute(bufnr, context)
+          if not ok then
+            vim.notify("Flemma: " .. (exec_err or "Execution failed"), vim.log.levels.ERROR)
+          end
+        end,
+      },
+      cancel = {
+        action = function()
+          local bufnr = vim.api.nvim_get_current_buf()
+          local cursor = vim.api.nvim_win_get_cursor(0)
+          local tool_context = require("flemma.tools.context")
+          local executor = require("flemma.tools.executor")
+
+          local context, _ = tool_context.resolve(bufnr, { row = cursor[1], col = cursor[2] })
+          if context then
+            local cancelled = executor.cancel(context.tool_id)
+            if cancelled then
+              vim.notify("Flemma: Tool execution cancelled", vim.log.levels.INFO)
+            else
+              vim.notify("Flemma: No pending execution for this tool", vim.log.levels.INFO)
+            end
+          else
+            -- Try cancelling the first pending tool
+            local pending = executor.get_pending(bufnr)
+            if #pending > 0 then
+              table.sort(pending, function(a, b)
+                return a.started_at < b.started_at
+              end)
+              executor.cancel(pending[1].tool_id)
+              vim.notify("Flemma: Tool execution cancelled", vim.log.levels.INFO)
+            else
+              vim.notify("Flemma: No pending tool executions", vim.log.levels.INFO)
+            end
+          end
+        end,
+      },
+      ["cancel-all"] = {
+        action = function()
+          local bufnr = vim.api.nvim_get_current_buf()
+          local executor = require("flemma.tools.executor")
+          executor.cancel_all(bufnr)
+          vim.notify("Flemma: All tool executions cancelled", vim.log.levels.INFO)
+        end,
+      },
+      list = {
+        action = function()
+          local bufnr = vim.api.nvim_get_current_buf()
+          local executor = require("flemma.tools.executor")
+          local pending = executor.get_pending(bufnr)
+          if #pending == 0 then
+            vim.notify("Flemma: No pending tool executions", vim.log.levels.INFO)
+          else
+            local lines = { "Flemma: Pending tool executions:" }
+            for _, p in ipairs(pending) do
+              table.insert(
+                lines,
+                string.format("  %s (%s) - started %ds ago", p.tool_name, p.tool_id, os.time() - p.started_at)
+              )
+            end
+            vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO)
+          end
         end,
       },
     },

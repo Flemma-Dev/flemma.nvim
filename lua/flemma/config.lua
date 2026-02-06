@@ -73,6 +73,15 @@ return {
       thinking_budget = nil, -- Optional. Budget for model thinking, in tokens. nil or 0 disables thinking. Values >= 1024 enable thinking with the specified budget.
     },
   },
+  tools = {
+    default_timeout = 30, -- Default timeout for async tools (seconds)
+    show_spinner = true, -- Show spinner animation during execution
+    bash = {
+      shell = nil, -- Shell to use (default: bash)
+      cwd = nil, -- Working directory (nil = buffer's directory or cwd)
+      env = nil, -- Environment variables to add
+    },
+  },
   presets = {}, -- Named presets for :Flemma switch (use ["$name"] key syntax)
   text_object = "m", -- Default text object key, set to false to disable
   editing = {

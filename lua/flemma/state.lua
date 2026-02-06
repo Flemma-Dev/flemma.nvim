@@ -95,6 +95,11 @@ function M.cleanup_buffer_state(bufnr)
     end
     buffer_states[bufnr] = nil
   end
+  -- Clean up tool executor state
+  local ok, executor = pcall(require, "flemma.tools.executor")
+  if ok then
+    executor.cleanup_buffer(bufnr)
+  end
   -- Clean up any notifications associated with this buffer
   require("flemma.notify").cleanup_buffer(bufnr)
 end
