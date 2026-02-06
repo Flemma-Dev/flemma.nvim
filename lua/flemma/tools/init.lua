@@ -13,7 +13,9 @@ local builtin_tools = {
 function M.setup()
   for _, module_name in ipairs(builtin_tools) do
     local tool_module = require(module_name)
-    registry.register(tool_module.definition.name, tool_module.definition)
+    for _, def in ipairs(tool_module.definitions) do
+      registry.register(def.name, def)
+    end
   end
 end
 

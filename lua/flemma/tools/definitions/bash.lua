@@ -2,7 +2,7 @@
 --- Execute bash commands and return stdout/stderr
 local M = {}
 
-M.definition = {
+M.definitions = { {
   name = "bash",
   description = "Execute a bash command and return stdout/stderr. "
     .. "The command runs in the user's shell environment with their permissions.",
@@ -125,6 +125,6 @@ M.definition = {
       end
     end
   end,
-}
+} }
 
 return M
