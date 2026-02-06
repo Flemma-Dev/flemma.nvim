@@ -45,6 +45,7 @@ M.definitions = { {
   end,
 }, {
   name = "calculator_async",
+  hidden = true,
   description = "Evaluates a mathematical expression asynchronously and returns the numeric result. "
     .. "Use this for any arithmetic calculations including addition, subtraction, "
     .. "multiplication, division, exponents, and common math functions.",

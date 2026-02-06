@@ -883,34 +883,38 @@ function M.clear_tool_indicator(bufnr, tool_id)
   tool_indicators[tool_id] = nil
 end
 
---- Relocate all tool indicators to their correct header lines after buffer modification.
+--- Reposition all tool indicators to their correct header lines after buffer modification.
 --- When inject_placeholder or inject_result replaces lines containing an extmark,
 --- Neovim pushes that extmark to the start of the replacement range, which may be
---- a different tool's header. This function finds each tool's actual header line
---- and moves the extmark there.
+--- a different tool's header. This function uses the AST to find each tool_result's
+--- actual position and moves the extmark there.
 --- @param bufnr integer
-function M.relocate_tool_indicators(bufnr)
+function M.reposition_tool_indicators(bufnr)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return
   end
 
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  -- Build tool_use_id → start_line map from AST
+  local parser = require("flemma.parser")
+  local doc = parser.get_parsed_document(bufnr)
+  local result_positions = {}
+  for _, msg in ipairs(doc.messages) do
+    if msg.role == "You" then
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "tool_result" then
+          result_positions[seg.tool_use_id] = seg.position.start_line - 1 -- 0-based
+        end
+      end
+    end
+  end
 
   for tool_id, ind in pairs(tool_indicators) do
     if ind.bufnr == bufnr then
-      -- Find the actual header line for this tool_id
-      local target_line = nil
-      for i, line in ipairs(lines) do
-        if line:find("Tool Result", 1, true) and line:find(tool_id, 1, true) then
-          target_line = i - 1 -- 0-based
-          break
-        end
-      end
-
+      local target_line = result_positions[tool_id]
       if target_line then
         local current_line = get_extmark_line(bufnr, ind.extmark_id)
         if current_line and current_line ~= target_line then
-          -- Read current virtual text to preserve it during relocation
+          -- Read current virtual text to preserve it during repositioning
           local ok, pos = pcall(
             vim.api.nvim_buf_get_extmark_by_id,
             bufnr,

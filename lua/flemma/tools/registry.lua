@@ -18,10 +18,21 @@ function M.get(name)
   return tools[name]
 end
 
----Get all registered tools
----@return table tools A copy of all tool definitions
-function M.get_all()
-  return vim.deepcopy(tools)
+---Get all registered tools (excludes hidden tools by default)
+---@param opts? { include_hidden: boolean }
+---@return table tools A copy of matching tool definitions
+function M.get_all(opts)
+  opts = opts or {}
+  if opts.include_hidden then
+    return vim.deepcopy(tools)
+  end
+  local result = {}
+  for name, def in pairs(tools) do
+    if not def.hidden then
+      result[name] = vim.deepcopy(def)
+    end
+  end
+  return result
 end
 
 ---Clear all registered tools

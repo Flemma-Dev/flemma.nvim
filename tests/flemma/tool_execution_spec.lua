@@ -121,6 +121,41 @@ describe("Tool Registry Extensions", function()
       assert.is_false(is_async)
     end)
   end)
+
+  describe("hidden flag", function()
+    it("excludes hidden tools from get_all()", function()
+      registry.register("visible", { name = "visible", execute = function() end })
+      registry.register("secret", { name = "secret", hidden = true, execute = function() end })
+
+      local all = registry.get_all()
+      assert.is_not_nil(all.visible)
+      assert.is_nil(all.secret, "Hidden tool should not appear in get_all()")
+    end)
+
+    it("includes hidden tools when include_hidden is true", function()
+      registry.register("visible", { name = "visible", execute = function() end })
+      registry.register("secret", { name = "secret", hidden = true, execute = function() end })
+
+      local all = registry.get_all({ include_hidden = true })
+      assert.is_not_nil(all.visible)
+      assert.is_not_nil(all.secret, "Hidden tool should appear when include_hidden is true")
+    end)
+
+    it("allows hidden tools to be executed", function()
+      registry.register("secret", { name = "secret", hidden = true, execute = function() end })
+
+      assert.is_true(registry.is_executable("secret"))
+      local exec, is_async = registry.get_executor("secret")
+      assert.is_not_nil(exec)
+      assert.is_false(is_async)
+    end)
+
+    it("allows hidden tools to be looked up by name", function()
+      registry.register("secret", { name = "secret", hidden = true, execute = function() end })
+
+      assert.is_not_nil(registry.get("secret"))
+    end)
+  end)
 end)
 
 -- ============================================================================

@@ -144,7 +144,7 @@ local function do_completion(bufnr, tool_id, result, is_async)
   end
 
   -- Result injection may have displaced other tools' extmarks
-  ui.relocate_tool_indicators(bufnr)
+  ui.reposition_tool_indicators(bufnr)
 
   -- Update indicator
   ui.update_tool_indicator(bufnr, tool_id, result.success)
@@ -255,7 +255,7 @@ function M.execute(bufnr, context)
 
   -- Placeholder injection may have displaced other tools' extmarks
   -- (e.g., when inserting before an existing placeholder via set_lines replacement)
-  ui.relocate_tool_indicators(bufnr)
+  ui.reposition_tool_indicators(bufnr)
 
   -- Update UI to reflect changes
   ui.update_ui(bufnr)

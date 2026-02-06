@@ -190,7 +190,7 @@ describe("Tool Indicator Extmark Placement", function()
     end)
   end)
 
-  describe("relocate_tool_indicators", function()
+  describe("reposition_tool_indicators", function()
     it("corrects displaced extmark after line replacement", function()
       local bufnr = create_buffer({
         "@Assistant: Running tools:",
@@ -220,7 +220,7 @@ describe("Tool Indicator Extmark Placement", function()
       -- the set_lines replacement). The header is at line 17 but extmark is at 18.
 
       -- relocate should fix tool 2's extmark
-      ui.relocate_tool_indicators(bufnr)
+      ui.reposition_tool_indicators(bufnr)
 
       -- Find actual header positions
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
@@ -262,15 +262,15 @@ describe("Tool Indicator Extmark Placement", function()
       -- Inject both placeholders in order
       local h1 = injector.inject_placeholder(bufnr, "toolu_01")
       ui.show_tool_indicator(bufnr, "toolu_01", h1)
-      ui.relocate_tool_indicators(bufnr)
+      ui.reposition_tool_indicators(bufnr)
 
       local h2 = injector.inject_placeholder(bufnr, "toolu_02")
       ui.show_tool_indicator(bufnr, "toolu_02", h2)
-      ui.relocate_tool_indicators(bufnr)
+      ui.reposition_tool_indicators(bufnr)
 
       -- Inject result for tool 1 (replaces placeholder, may shift tool 2)
       injector.inject_result(bufnr, "toolu_01", { success = true, output = "10000" })
-      ui.relocate_tool_indicators(bufnr)
+      ui.reposition_tool_indicators(bufnr)
 
       -- Find actual header positions
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
