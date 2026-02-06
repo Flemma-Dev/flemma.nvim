@@ -30,6 +30,39 @@ local function get_buffer_pending(bufnr)
   return pending_by_buffer[bufnr]
 end
 
+--- Count pending (non-completed) executions for a buffer
+--- @param bufnr integer
+--- @return integer
+local function count_pending(bufnr)
+  local pending = pending_by_buffer[bufnr]
+  if not pending then
+    return 0
+  end
+  local n = 0
+  for _, entry in pairs(pending) do
+    if not entry.completed then
+      n = n + 1
+    end
+  end
+  return n
+end
+
+--- Lock the buffer to prevent user edits during tool execution
+--- @param bufnr integer
+local function lock_buffer(bufnr)
+  if vim.api.nvim_buf_is_valid(bufnr) then
+    vim.bo[bufnr].modifiable = false
+  end
+end
+
+--- Unlock the buffer if no more tools are actively executing
+--- @param bufnr integer
+local function maybe_unlock_buffer(bufnr)
+  if vim.api.nvim_buf_is_valid(bufnr) and count_pending(bufnr) == 0 then
+    vim.bo[bufnr].modifiable = true
+  end
+end
+
 --- Clean up a pending execution entry
 --- @param bufnr integer
 --- @param tool_id string
@@ -119,6 +152,11 @@ local function do_completion(bufnr, tool_id, result, is_async)
   -- Free pending slot immediately so tool can be re-executed
   cleanup_pending(bufnr, tool_id)
 
+  -- Unlock buffer if no more tools are actively executing.
+  -- This must happen BEFORE scheduling indicator clear, so the buffer
+  -- is editable and the on_lines listener can detect user edits.
+  maybe_unlock_buffer(bufnr)
+
   -- Auto-dismiss indicator after delay (or immediately on buffer edit)
   ui.schedule_tool_indicator_clear(bufnr, tool_id, 1500)
 
@@ -197,10 +235,14 @@ function M.execute(bufnr, context)
     completed = false,
   }
 
+  -- Lock buffer to prevent user edits during execution
+  lock_buffer(bufnr)
+
   -- Phase 1: Inject placeholder
   local header_line, inject_err = injector.inject_placeholder(bufnr, tool_id)
   if not header_line then
     cleanup_pending(bufnr, tool_id)
+    maybe_unlock_buffer(bufnr)
     return false, "Failed to inject placeholder: " .. (inject_err or "unknown")
   end
 
