@@ -52,17 +52,17 @@ local function find_you_message_after(doc, after_msg_idx)
   return nil, nil
 end
 
---- Find the last tool_result segment in a message
+--- Get all tool_result segments in a message, in buffer position order
 --- @param msg table Message AST node
---- @return table|nil last_tool_result segment
-local function find_last_tool_result_in_message(msg)
-  local last = nil
+--- @return table[] tool_result segments sorted by start_line
+local function get_tool_results_in_message(msg)
+  local results = {}
   for _, seg in ipairs(msg.segments) do
     if seg.kind == "tool_result" then
-      last = seg
+      table.insert(results, seg)
     end
   end
-  return last
+  return results
 end
 
 --- Format result content into lines for buffer insertion
@@ -115,8 +115,10 @@ local function set_lines(bufnr, start_idx, end_idx, lines)
   vim.bo[bufnr].modifiable = was_modifiable
 end
 
---- Phase 1: Insert placeholder header for a tool result
---- Called when execution starts. Creates the **Tool Result:** line.
+--- Phase 1: Insert placeholder for a tool result
+--- Called when execution starts. Creates the **Tool Result:** header + empty code block.
+--- The empty code block ensures the parser recognizes it as a tool_result segment,
+--- which is required for correct multi-tool ordering on subsequent injections.
 --- @param bufnr integer
 --- @param tool_id string
 --- @return integer|nil header_line 1-based line number where header was inserted, or nil on error
@@ -170,13 +172,56 @@ function M.inject_placeholder(bufnr, tool_id)
 
   if you_msg then
     -- @You: message exists - find where to insert our placeholder
-    local last_result = find_last_tool_result_in_message(you_msg)
+    local existing_results = get_tool_results_in_message(you_msg)
 
-    if last_result then
-      -- Append after the last tool_result's end line
-      local insert_after = last_result.position.end_line
-      set_lines(bufnr, insert_after, insert_after, { "", header_text })
-      return insert_after + 2, nil -- +1 for blank line, +1 for 1-based
+    if #existing_results > 0 then
+      -- Build tool_use index map for ordering
+      local tool_use_index = {}
+      for i, tu in ipairs(tool_uses) do
+        tool_use_index[tu.id] = i
+      end
+
+      -- Find the last existing result whose tool_use comes before ours in order
+      local predecessor = nil
+      local predecessor_idx = -1
+      for _, tr in ipairs(existing_results) do
+        local tr_idx = tool_use_index[tr.tool_use_id] or 0
+        if tr_idx < our_tool_idx and tr_idx > predecessor_idx then
+          predecessor = tr
+          predecessor_idx = tr_idx
+        end
+      end
+
+      if predecessor then
+        -- Insert after the predecessor result's block
+        local insert_after = predecessor.position.end_line
+        set_lines(bufnr, insert_after, insert_after, { "", header_text, "", "```", "```" })
+        return insert_after + 2, nil -- +1 for blank line, +1 for 1-based
+      else
+        -- Our tool comes before all existing results - insert before the first one
+        local first_result = existing_results[1]
+        local first_start = first_result.position.start_line
+        local you_start = you_msg.position.start_line
+
+        if first_start == you_start then
+          -- First result header is inline with @You: line - split it
+          local old_line = vim.api.nvim_buf_get_lines(bufnr, you_start - 1, you_start, false)[1]
+          local old_header = old_line:match("^@You:%s*(.+)$")
+          set_lines(bufnr, you_start - 1, you_start, {
+            "@You: " .. header_text,
+            "",
+            "```",
+            "```",
+            "",
+            old_header or "",
+          })
+          return you_start, nil
+        else
+          -- First result is on a separate line - insert before it
+          set_lines(bufnr, first_start - 1, first_start - 1, { header_text, "", "```", "```", "" })
+          return first_start, nil
+        end
+      end
     else
       -- @You: exists but has no tool results - insert at start of content
       -- The @You: role line is at you_msg.position.start_line
@@ -193,19 +238,22 @@ function M.inject_placeholder(bufnr, tool_id)
         set_lines(bufnr, you_start - 1, you_start, {
           "@You: " .. header_text,
           "",
+          "```",
+          "```",
+          "",
           remaining_content,
         })
         return you_start, nil
       else
         -- @You: line is empty or whitespace-only - replace it with header
-        set_lines(bufnr, you_start - 1, you_start, { "@You: " .. header_text })
+        set_lines(bufnr, you_start - 1, you_start, { "@You: " .. header_text, "", "```", "```" })
         return you_start, nil
       end
     end
   else
     -- No @You: message exists - create one after the assistant message
     local insert_after = assistant_msg.position.end_line
-    set_lines(bufnr, insert_after, insert_after, { "", "@You: " .. header_text })
+    set_lines(bufnr, insert_after, insert_after, { "", "@You: " .. header_text, "", "```", "```" })
     return insert_after + 2, nil -- +1 for blank, +1 for 1-based
   end
 end
@@ -263,28 +311,8 @@ function M.inject_result(bufnr, tool_id, result)
       return false, err
     end
 
-    -- Re-parse after placeholder injection
-    doc = parser.get_parsed_document(bufnr)
-    existing_seg = find_existing_tool_result(doc, tool_id)
-
-    if not existing_seg then
-      -- Placeholder was just a header line with no content block.
-      -- The parser won't find a tool_result without a fenced code block.
-      -- Insert content directly after the header line.
-      if is_error then
-        -- Update header to include (error)
-        local current_line = vim.api.nvim_buf_get_lines(bufnr, header_line - 1, header_line, false)[1]
-        if not current_line:match("%(error%)") then
-          local updated = current_line .. " (error)"
-          set_lines(bufnr, header_line - 1, header_line, { updated })
-        end
-      end
-
-      set_lines(bufnr, header_line, header_line, content_lines)
-      return true, nil
-    end
-
-    -- Recursive call now that placeholder exists
+    -- Placeholder now includes an empty code block, so the parser will find it.
+    -- Recursive call to replace placeholder content with actual result.
     return M.inject_result(bufnr, tool_id, result)
   end
 end

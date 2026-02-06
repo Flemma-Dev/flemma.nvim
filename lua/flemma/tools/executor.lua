@@ -30,7 +30,7 @@ local function get_buffer_pending(bufnr)
   return pending_by_buffer[bufnr]
 end
 
---- Count pending executions for a buffer
+--- Count pending (non-completed) executions for a buffer
 --- @param bufnr integer
 --- @return integer
 local function count_pending(bufnr)
@@ -39,8 +39,10 @@ local function count_pending(bufnr)
     return 0
   end
   local n = 0
-  for _ in pairs(pending) do
-    n = n + 1
+  for _, entry in pairs(pending) do
+    if not entry.completed then
+      n = n + 1
+    end
   end
   return n
 end
@@ -71,6 +73,42 @@ local function cleanup_pending(bufnr, tool_id)
   end
 end
 
+--- Move cursor after result injection based on config
+--- @param bufnr integer
+--- @param tool_id string
+--- @param mode string "result" or "next"
+local function move_cursor_after_result(bufnr, tool_id, mode)
+  local parser = require("flemma.parser")
+  local doc = parser.get_parsed_document(bufnr)
+
+  local target_line = nil
+  for _, msg in ipairs(doc.messages) do
+    if msg.role == "You" then
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "tool_result" and seg.tool_use_id == tool_id then
+          if mode == "result" then
+            target_line = seg.position.start_line
+          elseif mode == "next" then
+            target_line = msg.position.end_line + 1
+          end
+          break
+        end
+      end
+    end
+    if target_line then
+      break
+    end
+  end
+
+  if target_line then
+    target_line = math.min(target_line, vim.api.nvim_buf_line_count(bufnr))
+    local winid = vim.fn.bufwinid(bufnr)
+    if winid ~= -1 then
+      vim.api.nvim_win_set_cursor(winid, { target_line, 0 })
+    end
+  end
+end
+
 --- Handle completion of a tool execution (success or error)
 --- @param bufnr integer
 --- @param tool_id string
@@ -92,11 +130,23 @@ local function handle_completion(bufnr, tool_id, result)
       return
     end
 
+    -- Join with placeholder injection as a single undo step
+    pcall(vim.cmd, "undojoin")
+
     -- Inject result into buffer
     local ui = require("flemma.ui")
     local ok, err = injector.inject_result(bufnr, tool_id, result)
     if not ok then
       log.warn("executor: Failed to inject result for " .. tool_id .. ": " .. (err or "unknown"))
+    end
+
+    -- Move cursor based on config
+    if ok then
+      local config = state.get_config()
+      local cursor_mode = config.tools and config.tools.cursor_after_result or "result"
+      if cursor_mode ~= "stay" then
+        move_cursor_after_result(bufnr, tool_id, cursor_mode)
+      end
     end
 
     -- Update indicator

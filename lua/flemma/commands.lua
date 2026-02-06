@@ -440,6 +440,9 @@ local function setup_commands()
           if #pending == 0 then
             vim.notify("Flemma: No pending tool executions", vim.log.levels.INFO)
           else
+            table.sort(pending, function(a, b)
+              return a.started_at < b.started_at
+            end)
             local lines = { "Flemma: Pending tool executions:" }
             for _, p in ipairs(pending) do
               table.insert(

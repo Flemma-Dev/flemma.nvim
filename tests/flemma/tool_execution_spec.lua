@@ -582,6 +582,7 @@ describe("Result Injector", function()
       local content = table.concat(lines, "\n")
       assert.is_truthy(content:match("hello world"), "Should contain the result output")
       assert.is_truthy(content:match("```"), "Should have fenced code block")
+
     end)
 
     it("injects error result with (error) marker", function()
@@ -607,6 +608,7 @@ describe("Result Injector", function()
       local content = table.concat(lines, "\n")
       assert.is_truthy(content:match("%(error%)"), "Should have (error) marker in header")
       assert.is_truthy(content:match("exit code 1"), "Should contain error message")
+
     end)
 
     it("injects table result as JSON", function()
@@ -680,6 +682,7 @@ describe("Result Injector", function()
       local content = table.concat(lines, "\n")
       assert.is_truthy(content:match("Tool Result.*toolu_noph"), "Should have created result header")
       assert.is_truthy(content:match("hello"), "Should contain result")
+
     end)
   end)
 
@@ -762,6 +765,262 @@ describe("Result Injector", function()
       assert.is_falsy(content:match("old result"), "Should not contain old result")
     end)
   end)
+
+  describe("multi-tool ordering", function()
+    -- Tests for Bug 1 fix: placeholders must be inserted in tool_use order,
+    -- not always appended after the last existing tool_result.
+
+    it("inserts placeholders in tool_use order (sequential in-order)", function()
+      -- Three tool_uses in assistant message, inject placeholders in order
+      local bufnr = create_buffer({
+        "@Assistant: Running multiple tools:",
+        "",
+        "**Tool Use:** `calculator` (`toolu_a`)",
+        "```json",
+        '{ "expression": "1+1" }',
+        "```",
+        "",
+        "**Tool Use:** `calculator` (`toolu_b`)",
+        "```json",
+        '{ "expression": "2+2" }',
+        "```",
+        "",
+        "**Tool Use:** `calculator` (`toolu_c`)",
+        "```json",
+        '{ "expression": "3+3" }',
+        "```",
+      })
+
+      -- Inject in order: a, b, c
+      local line_a, err_a = injector.inject_placeholder(bufnr, "toolu_a")
+      assert.is_nil(err_a)
+      assert.is_not_nil(line_a)
+
+      local line_b, err_b = injector.inject_placeholder(bufnr, "toolu_b")
+      assert.is_nil(err_b)
+      assert.is_not_nil(line_b)
+
+      local line_c, err_c = injector.inject_placeholder(bufnr, "toolu_c")
+      assert.is_nil(err_c)
+      assert.is_not_nil(line_c)
+
+      -- All three should appear in order in the buffer
+      local lines = get_lines(bufnr)
+      local pos_a, pos_b, pos_c
+      for i, line in ipairs(lines) do
+        if line:match("Tool Result.*toolu_a") then
+          pos_a = i
+        end
+        if line:match("Tool Result.*toolu_b") then
+          pos_b = i
+        end
+        if line:match("Tool Result.*toolu_c") then
+          pos_c = i
+        end
+      end
+
+      assert.is_not_nil(pos_a, "toolu_a result should exist")
+      assert.is_not_nil(pos_b, "toolu_b result should exist")
+      assert.is_not_nil(pos_c, "toolu_c result should exist")
+      assert.is_true(pos_a < pos_b, "toolu_a should come before toolu_b")
+      assert.is_true(pos_b < pos_c, "toolu_b should come before toolu_c")
+    end)
+
+    it("inserts placeholders in tool_use order (out-of-order injection)", function()
+      -- Three tool_uses, but inject c first, then a, then b
+      local bufnr = create_buffer({
+        "@Assistant: Running multiple tools:",
+        "",
+        "**Tool Use:** `calculator` (`toolu_d`)",
+        "```json",
+        '{ "expression": "1+1" }',
+        "```",
+        "",
+        "**Tool Use:** `calculator` (`toolu_e`)",
+        "```json",
+        '{ "expression": "2+2" }',
+        "```",
+        "",
+        "**Tool Use:** `calculator` (`toolu_f`)",
+        "```json",
+        '{ "expression": "3+3" }',
+        "```",
+      })
+
+      -- Inject out of order: f (3rd), d (1st), e (2nd)
+      local _, err_f = injector.inject_placeholder(bufnr, "toolu_f")
+      assert.is_nil(err_f)
+
+      local _, err_d = injector.inject_placeholder(bufnr, "toolu_d")
+      assert.is_nil(err_d)
+
+      local _, err_e = injector.inject_placeholder(bufnr, "toolu_e")
+      assert.is_nil(err_e)
+
+      -- Despite out-of-order injection, results should be in tool_use order
+      local lines = get_lines(bufnr)
+      local pos_d, pos_e, pos_f
+      for i, line in ipairs(lines) do
+        if line:match("Tool Result.*toolu_d") then
+          pos_d = i
+        end
+        if line:match("Tool Result.*toolu_e") then
+          pos_e = i
+        end
+        if line:match("Tool Result.*toolu_f") then
+          pos_f = i
+        end
+      end
+
+      assert.is_not_nil(pos_d, "toolu_d result should exist")
+      assert.is_not_nil(pos_e, "toolu_e result should exist")
+      assert.is_not_nil(pos_f, "toolu_f result should exist")
+      assert.is_true(pos_d < pos_e, "toolu_d should come before toolu_e")
+      assert.is_true(pos_e < pos_f, "toolu_e should come before toolu_f")
+    end)
+
+    it("inserts before first result when our tool comes first", function()
+      -- Two tool_uses, inject second one first, then first
+      local bufnr = create_buffer({
+        "@Assistant: Running tools:",
+        "",
+        "**Tool Use:** `calculator` (`toolu_first`)",
+        "```json",
+        '{ "expression": "1+1" }',
+        "```",
+        "",
+        "**Tool Use:** `calculator` (`toolu_second`)",
+        "```json",
+        '{ "expression": "2+2" }',
+        "```",
+      })
+
+      -- Inject second tool first - creates @You: message
+      local _, err2 = injector.inject_placeholder(bufnr, "toolu_second")
+      assert.is_nil(err2)
+
+      -- Now inject first tool - must be placed before second
+      local _, err1 = injector.inject_placeholder(bufnr, "toolu_first")
+      assert.is_nil(err1)
+
+      local lines = get_lines(bufnr)
+      local pos_first, pos_second
+      for i, line in ipairs(lines) do
+        if line:match("Tool Result.*toolu_first") then
+          pos_first = i
+        end
+        if line:match("Tool Result.*toolu_second") then
+          pos_second = i
+        end
+      end
+
+      assert.is_not_nil(pos_first, "toolu_first result should exist")
+      assert.is_not_nil(pos_second, "toolu_second result should exist")
+      assert.is_true(pos_first < pos_second, "First tool result should come before second")
+    end)
+
+    it("inserts between existing results in correct position", function()
+      -- Three tool_uses, inject first and third, then middle
+      local bufnr = create_buffer({
+        "@Assistant: Running tools:",
+        "",
+        "**Tool Use:** `calculator` (`toolu_g`)",
+        "```json",
+        '{ "expression": "1+1" }',
+        "```",
+        "",
+        "**Tool Use:** `calculator` (`toolu_h`)",
+        "```json",
+        '{ "expression": "2+2" }',
+        "```",
+        "",
+        "**Tool Use:** `calculator` (`toolu_i`)",
+        "```json",
+        '{ "expression": "3+3" }',
+        "```",
+      })
+
+      -- Inject first and third
+      local _, err_g = injector.inject_placeholder(bufnr, "toolu_g")
+      assert.is_nil(err_g)
+      local _, err_i = injector.inject_placeholder(bufnr, "toolu_i")
+      assert.is_nil(err_i)
+
+      -- Now inject middle - should go between g and i
+      local _, err_h = injector.inject_placeholder(bufnr, "toolu_h")
+      assert.is_nil(err_h)
+
+      local lines = get_lines(bufnr)
+      local pos_g, pos_h, pos_i
+      for i, line in ipairs(lines) do
+        if line:match("Tool Result.*toolu_g") then
+          pos_g = i
+        end
+        if line:match("Tool Result.*toolu_h") then
+          pos_h = i
+        end
+        if line:match("Tool Result.*toolu_i") then
+          pos_i = i
+        end
+      end
+
+      assert.is_not_nil(pos_g, "toolu_g result should exist")
+      assert.is_not_nil(pos_h, "toolu_h result should exist")
+      assert.is_not_nil(pos_i, "toolu_i result should exist")
+      assert.is_true(pos_g < pos_h, "toolu_g should come before toolu_h")
+      assert.is_true(pos_h < pos_i, "toolu_h should come before toolu_i")
+    end)
+
+    it("maintains order with full result injection (not just placeholders)", function()
+      -- Two tool_uses, inject full results out of order
+      local bufnr = create_buffer({
+        "@Assistant: Running tools:",
+        "",
+        "**Tool Use:** `calculator` (`toolu_j`)",
+        "```json",
+        '{ "expression": "1+1" }',
+        "```",
+        "",
+        "**Tool Use:** `calculator` (`toolu_k`)",
+        "```json",
+        '{ "expression": "2+2" }',
+        "```",
+      })
+
+      -- Inject result for second tool first
+      local ok_k, err_k = injector.inject_result(bufnr, "toolu_k", {
+        success = true,
+        output = "result_k",
+      })
+      assert.is_true(ok_k)
+      assert.is_nil(err_k)
+
+      -- Inject result for first tool second
+      local ok_j, err_j = injector.inject_result(bufnr, "toolu_j", {
+        success = true,
+        output = "result_j",
+      })
+      assert.is_true(ok_j)
+      assert.is_nil(err_j)
+
+      -- result_j should appear before result_k in the buffer
+      local lines = get_lines(bufnr)
+      local pos_j, pos_k
+      for i, line in ipairs(lines) do
+        if line:match("result_j") then
+          pos_j = i
+        end
+        if line:match("result_k") then
+          pos_k = i
+        end
+      end
+
+      assert.is_not_nil(pos_j, "result_j should exist")
+      assert.is_not_nil(pos_k, "result_k should exist")
+      assert.is_true(pos_j < pos_k, "result_j should come before result_k")
+    end)
+  end)
+
 end)
 
 -- ============================================================================

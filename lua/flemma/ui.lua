@@ -665,6 +665,12 @@ function M.update_ui(bufnr)
     return
   end
 
+  -- Bail if config is not fully initialized (e.g. in test environments)
+  local current_config = state.get_config()
+  if not current_config.ruler or not current_config.signs then
+    return
+  end
+
   -- Parse messages using AST
   local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
@@ -788,6 +794,7 @@ function M.show_tool_indicator(bufnr, tool_id, header_line)
     extmark_id = extmark_id,
     timer = timer,
     line_idx = line_idx,
+    bufnr = bufnr,
   }
 end
 
@@ -858,9 +865,9 @@ end
 function M.clear_all_tool_indicators(bufnr)
   local to_clear = {}
   for tool_id, ind in pairs(tool_indicators) do
-    -- We don't track bufnr in the indicator, so clear all if buffer matches
-    -- by trying to clean up the extmark
-    table.insert(to_clear, tool_id)
+    if ind.bufnr == bufnr then
+      table.insert(to_clear, tool_id)
+    end
   end
 
   for _, tool_id in ipairs(to_clear) do
@@ -897,11 +904,7 @@ function M.setup()
       if vim.bo[ev.buf].filetype == "chat" or string.match(vim.api.nvim_buf_get_name(ev.buf), "%.chat$") then
         M.cleanup_spinner(ev.buf)
         M.clear_all_tool_indicators(ev.buf)
-        -- Clean up tool executor state
-        local ok, executor = pcall(require, "flemma.tools.executor")
-        if ok then
-          executor.cleanup_buffer(ev.buf)
-        end
+        -- state.cleanup_buffer_state handles executor.cleanup_buffer internally
         state.cleanup_buffer_state(ev.buf)
       end
     end,

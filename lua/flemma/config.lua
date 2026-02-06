@@ -76,6 +76,7 @@ return {
   tools = {
     default_timeout = 30, -- Default timeout for async tools (seconds)
     show_spinner = true, -- Show spinner animation during execution
+    cursor_after_result = "result", -- Cursor behavior after result injection: "result", "stay", or "next"
     bash = {
       shell = nil, -- Shell to use (default: bash)
       cwd = nil, -- Working directory (nil = buffer's directory or cwd)
