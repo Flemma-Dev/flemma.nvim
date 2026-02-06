@@ -76,11 +76,54 @@ local function move_cursor_after_result(bufnr, tool_id, mode)
   end
 end
 
---- Handle completion of a tool execution (success or error)
+--- Perform the actual completion work: inject result, move cursor, update UI
 --- @param bufnr integer
 --- @param tool_id string
 --- @param result table ExecutionResult {success, output, error}
-local function handle_completion(bufnr, tool_id, result)
+local function do_completion(bufnr, tool_id, result)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    cleanup_pending(bufnr, tool_id)
+    return
+  end
+
+  -- Join with placeholder injection as a single undo step
+  pcall(vim.cmd, "undojoin")
+
+  -- Inject result into buffer
+  local ui = require("flemma.ui")
+  local ok, err = injector.inject_result(bufnr, tool_id, result)
+  if not ok then
+    log.warn("executor: Failed to inject result for " .. tool_id .. ": " .. (err or "unknown"))
+  end
+
+  -- Move cursor based on config
+  if ok then
+    local config = state.get_config()
+    local cursor_mode = config.tools and config.tools.cursor_after_result or "result"
+    if cursor_mode ~= "stay" then
+      move_cursor_after_result(bufnr, tool_id, cursor_mode)
+    end
+  end
+
+  -- Update indicator
+  ui.update_tool_indicator(bufnr, tool_id, result.success)
+
+  -- Free pending slot immediately so tool can be re-executed
+  cleanup_pending(bufnr, tool_id)
+
+  -- Auto-dismiss indicator after delay (or immediately on buffer edit)
+  ui.schedule_tool_indicator_clear(bufnr, tool_id, 1500)
+
+  ui.update_ui(bufnr)
+end
+
+--- Handle completion of a tool execution (success or error)
+--- For sync tools, completes inline. For async tools, schedules to main thread.
+--- @param bufnr integer
+--- @param tool_id string
+--- @param result table ExecutionResult {success, output, error}
+--- @param opts {async: boolean}
+local function handle_completion(bufnr, tool_id, result, opts)
   local pending = get_buffer_pending(bufnr)
   local entry = pending[tool_id]
 
@@ -90,43 +133,13 @@ local function handle_completion(bufnr, tool_id, result)
   end
   entry.completed = true
 
-  -- Schedule buffer operations to main thread
-  vim.schedule(function()
-    if not vim.api.nvim_buf_is_valid(bufnr) then
-      cleanup_pending(bufnr, tool_id)
-      return
-    end
-
-    -- Join with placeholder injection as a single undo step
-    pcall(vim.cmd, "undojoin")
-
-    -- Inject result into buffer
-    local ui = require("flemma.ui")
-    local ok, err = injector.inject_result(bufnr, tool_id, result)
-    if not ok then
-      log.warn("executor: Failed to inject result for " .. tool_id .. ": " .. (err or "unknown"))
-    end
-
-    -- Move cursor based on config
-    if ok then
-      local config = state.get_config()
-      local cursor_mode = config.tools and config.tools.cursor_after_result or "result"
-      if cursor_mode ~= "stay" then
-        move_cursor_after_result(bufnr, tool_id, cursor_mode)
-      end
-    end
-
-    -- Update indicator
-    ui.update_tool_indicator(bufnr, tool_id, result.success)
-
-    -- Free pending slot immediately so tool can be re-executed
-    cleanup_pending(bufnr, tool_id)
-
-    -- Auto-dismiss indicator after delay (or immediately on buffer edit)
-    ui.schedule_tool_indicator_clear(bufnr, tool_id, 1500)
-
-    ui.update_ui(bufnr)
-  end)
+  if opts.async then
+    vim.schedule(function()
+      do_completion(bufnr, tool_id, result)
+    end)
+  else
+    do_completion(bufnr, tool_id, result)
+  end
 end
 
 --- Execute a tool call
@@ -203,7 +216,7 @@ function M.execute(bufnr, context)
       end
       callback_called = true
       result = result or { success = false, error = "Tool returned no result" }
-      handle_completion(bufnr, tool_id, result)
+      handle_completion(bufnr, tool_id, result, { async = true })
     end
 
     local ok, cancel_or_err = pcall(executor_fn, context.input, callback)
@@ -212,7 +225,7 @@ function M.execute(bufnr, context)
       handle_completion(bufnr, tool_id, {
         success = false,
         error = tostring(cancel_or_err),
-      })
+      }, { async = false })
       return true, nil -- We handled the error
     end
 
@@ -221,20 +234,20 @@ function M.execute(bufnr, context)
       pending[tool_id].cancel_fn = cancel_or_err
     end
   else
-    -- Sync execution
+    -- Sync execution — complete inline for reliable undojoin
     local ok, result = pcall(executor_fn, context.input)
     if not ok then
       handle_completion(bufnr, tool_id, {
         success = false,
         error = tostring(result),
-      })
+      }, { async = false })
     elseif not result then
       handle_completion(bufnr, tool_id, {
         success = false,
         error = "Tool returned no result",
-      })
+      }, { async = false })
     else
-      handle_completion(bufnr, tool_id, result)
+      handle_completion(bufnr, tool_id, result, { async = false })
     end
   end
 
@@ -253,11 +266,11 @@ function M.cancel(tool_id)
         pcall(entry.cancel_fn)
       end
 
-      -- Record cancellation as error result
+      -- Record cancellation as error result (cancel is always called from main thread)
       handle_completion(bufnr, tool_id, {
         success = false,
         error = "User aborted tool execution.",
-      })
+      }, { async = false })
       return true
     end
   end
@@ -301,6 +314,56 @@ function M.get_pending(bufnr)
     end
   end
   return result
+end
+
+--- Cancel the active operation for a buffer (API request or first pending tool)
+--- @param bufnr integer
+--- @return boolean cancelled
+function M.cancel_for_buffer(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  if buffer_state.current_request then
+    require("flemma.core").cancel_request()
+    return true
+  end
+  local pending = M.get_pending(bufnr)
+  if #pending > 0 then
+    table.sort(pending, function(a, b) return a.started_at < b.started_at end)
+    M.cancel(pending[1].tool_id)
+    return true
+  end
+  return false
+end
+
+--- Cancel the tool at cursor position, or the first pending tool if no cursor match
+--- @param bufnr integer
+--- @return boolean cancelled
+function M.cancel_at_cursor(bufnr)
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local tool_context = require("flemma.tools.context")
+  local ctx, _ = tool_context.resolve(bufnr, { row = cursor[1], col = cursor[2] })
+  if ctx then
+    return M.cancel(ctx.tool_id)
+  end
+  local pending = M.get_pending(bufnr)
+  if #pending > 0 then
+    table.sort(pending, function(a, b) return a.started_at < b.started_at end)
+    return M.cancel(pending[1].tool_id)
+  end
+  return false
+end
+
+--- Resolve and execute the tool at cursor position
+--- @param bufnr integer
+--- @return boolean success
+--- @return string|nil error
+function M.execute_at_cursor(bufnr)
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local tool_context = require("flemma.tools.context")
+  local ctx, err = tool_context.resolve(bufnr, { row = cursor[1], col = cursor[2] })
+  if not ctx then
+    return false, err or "No tool call found"
+  end
+  return M.execute(bufnr, ctx)
 end
 
 --- Clean up all state for a buffer (called on buffer close)

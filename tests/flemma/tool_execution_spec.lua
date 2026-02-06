@@ -447,6 +447,128 @@ describe("Tool Context Resolver", function()
     end)
   end)
 
+  describe("multi-tool cursor in user message", function()
+    it("resolves correct tool when cursor is on specific tool_result", function()
+      local bufnr = create_buffer({
+        '@Assistant: Running tools:',
+        '',
+        '**Tool Use:** `bash` (`toolu_multi_first`)',
+        '```json',
+        '{ "command": "echo first" }',
+        '```',
+        '',
+        '**Tool Use:** `calculator` (`toolu_multi_second`)',
+        '```json',
+        '{ "expression": "1+1" }',
+        '```',
+        '',
+        '@You: **Tool Result:** `toolu_multi_first`',
+        '',
+        '```',
+        'first result',
+        '```',
+        '',
+        '**Tool Result:** `toolu_multi_second`',
+        '',
+        '```',
+        '2',
+        '```',
+      })
+
+      -- Cursor on first tool_result header (line 14)
+      local ctx1, err1 = context.resolve(bufnr, { row = 14 })
+      assert.is_nil(err1)
+      assert.is_not_nil(ctx1)
+      assert.equals("toolu_multi_first", ctx1.tool_id)
+      assert.equals("bash", ctx1.tool_name)
+
+      -- Cursor on second tool_result header (line 20)
+      local ctx2, err2 = context.resolve(bufnr, { row = 20 })
+      assert.is_nil(err2)
+      assert.is_not_nil(ctx2)
+      assert.equals("toolu_multi_second", ctx2.tool_id)
+      assert.equals("calculator", ctx2.tool_name)
+    end)
+
+    it("resolves correct tool when cursor is inside tool_result content", function()
+      local bufnr = create_buffer({
+        '@Assistant: Running tools:',
+        '',
+        '**Tool Use:** `bash` (`toolu_content_first`)',
+        '```json',
+        '{ "command": "echo first" }',
+        '```',
+        '',
+        '**Tool Use:** `calculator` (`toolu_content_second`)',
+        '```json',
+        '{ "expression": "2+2" }',
+        '```',
+        '',
+        '@You: **Tool Result:** `toolu_content_first`',
+        '',
+        '```',
+        'first output',
+        '```',
+        '',
+        '**Tool Result:** `toolu_content_second`',
+        '',
+        '```',
+        '4',
+        '```',
+      })
+
+      -- Cursor inside first tool_result content (line 16)
+      local ctx1, err1 = context.resolve(bufnr, { row = 16 })
+      assert.is_nil(err1)
+      assert.is_not_nil(ctx1)
+      assert.equals("toolu_content_first", ctx1.tool_id)
+
+      -- Cursor inside second tool_result content (line 22)
+      local ctx2, err2 = context.resolve(bufnr, { row = 22 })
+      assert.is_nil(err2)
+      assert.is_not_nil(ctx2)
+      assert.equals("toolu_content_second", ctx2.tool_id)
+    end)
+
+    it("falls back to nearest tool_result when cursor is between results", function()
+      local bufnr = create_buffer({
+        '@Assistant: Running tools:',
+        '',
+        '**Tool Use:** `bash` (`toolu_between_first`)',
+        '```json',
+        '{ "command": "echo first" }',
+        '```',
+        '',
+        '**Tool Use:** `calculator` (`toolu_between_second`)',
+        '```json',
+        '{ "expression": "3+3" }',
+        '```',
+        '',
+        '@You: **Tool Result:** `toolu_between_first`',
+        '',
+        '```',
+        'first',
+        '```',
+        '',
+        '**Tool Result:** `toolu_between_second`',
+        '',
+        '```',
+        '6',
+        '```',
+      })
+
+      -- Cursor on empty line between the two results (line 18)
+      local ctx, err = context.resolve(bufnr, { row = 18 })
+      assert.is_nil(err)
+      assert.is_not_nil(ctx)
+      -- Should resolve to nearest tool_result (either is acceptable since equidistant)
+      assert.is_truthy(
+        ctx.tool_id == "toolu_between_first" or ctx.tool_id == "toolu_between_second",
+        "Should resolve to one of the two tools"
+      )
+    end)
+  end)
+
   describe("edge cases and errors", function()
     it("returns error when no tools in assistant message", function()
       local bufnr = create_buffer({
@@ -1345,20 +1467,31 @@ describe("Tool Executor", function()
     end)
 
     it("rejects duplicate execution of same tool_id", function()
+      -- Use an async tool that never completes, so the pending slot stays occupied
+      registry.register("slow_async_dup", {
+        name = "slow_async_dup",
+        description = "Async tool that never completes",
+        async = true,
+        execute = function(_, _)
+          -- Never call the callback — stays pending
+          return function() end
+        end,
+      })
+
       local bufnr = create_buffer({
         '@Assistant: Tool:',
         '',
-        '**Tool Use:** `calculator` (`toolu_dup`)',
+        '**Tool Use:** `slow_async_dup` (`toolu_dup`)',
         '```json',
-        '{ "expression": "1+1" }',
+        '{}',
         '```',
       })
 
       -- First execution should succeed
       local ok1, err1 = executor.execute(bufnr, {
         tool_id = "toolu_dup",
-        tool_name = "calculator",
-        input = { expression = "1+1" },
+        tool_name = "slow_async_dup",
+        input = {},
         start_line = 3,
         end_line = 6,
       })
@@ -1368,8 +1501,8 @@ describe("Tool Executor", function()
       -- Second execution of same tool_id should be rejected
       local ok2, err2 = executor.execute(bufnr, {
         tool_id = "toolu_dup",
-        tool_name = "calculator",
-        input = { expression = "1+1" },
+        tool_name = "slow_async_dup",
+        input = {},
         start_line = 3,
         end_line = 6,
       })

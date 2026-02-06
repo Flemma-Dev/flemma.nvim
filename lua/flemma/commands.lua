@@ -158,26 +158,10 @@ local function setup_commands()
   command_tree.children.cancel = {
     action = function()
       local bufnr = vim.api.nvim_get_current_buf()
-      local buffer_state = require("flemma.state").get_buffer_state(bufnr)
       local executor = require("flemma.tools.executor")
-
-      -- Priority 1: Cancel API request if active
-      if buffer_state.current_request then
-        core.cancel_request()
-        return
+      if not executor.cancel_for_buffer(bufnr) then
+        vim.notify("Flemma: Nothing to cancel", vim.log.levels.INFO)
       end
-
-      -- Priority 2: Cancel first pending tool (by start time)
-      local pending = executor.get_pending(bufnr)
-      if #pending > 0 then
-        table.sort(pending, function(a, b)
-          return a.started_at < b.started_at
-        end)
-        executor.cancel(pending[1].tool_id)
-        return
-      end
-
-      vim.notify("Flemma: Nothing to cancel", vim.log.levels.INFO)
     end,
   }
 
@@ -378,49 +362,22 @@ local function setup_commands()
       execute = {
         action = function()
           local bufnr = vim.api.nvim_get_current_buf()
-          local cursor = vim.api.nvim_win_get_cursor(0)
-          local tool_context = require("flemma.tools.context")
           local executor = require("flemma.tools.executor")
-
-          local context, err = tool_context.resolve(bufnr, { row = cursor[1], col = cursor[2] })
-          if not context then
-            vim.notify("Flemma: " .. (err or "No tool call found"), vim.log.levels.ERROR)
-            return
-          end
-
-          local ok, exec_err = executor.execute(bufnr, context)
+          local ok, err = executor.execute_at_cursor(bufnr)
           if not ok then
-            vim.notify("Flemma: " .. (exec_err or "Execution failed"), vim.log.levels.ERROR)
+            vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
           end
         end,
       },
       cancel = {
         action = function()
           local bufnr = vim.api.nvim_get_current_buf()
-          local cursor = vim.api.nvim_win_get_cursor(0)
-          local tool_context = require("flemma.tools.context")
           local executor = require("flemma.tools.executor")
-
-          local context, _ = tool_context.resolve(bufnr, { row = cursor[1], col = cursor[2] })
-          if context then
-            local cancelled = executor.cancel(context.tool_id)
-            if cancelled then
-              vim.notify("Flemma: Tool execution cancelled", vim.log.levels.INFO)
-            else
-              vim.notify("Flemma: No pending execution for this tool", vim.log.levels.INFO)
-            end
+          local cancelled = executor.cancel_at_cursor(bufnr)
+          if cancelled then
+            vim.notify("Flemma: Tool execution cancelled", vim.log.levels.INFO)
           else
-            -- Try cancelling the first pending tool
-            local pending = executor.get_pending(bufnr)
-            if #pending > 0 then
-              table.sort(pending, function(a, b)
-                return a.started_at < b.started_at
-              end)
-              executor.cancel(pending[1].tool_id)
-              vim.notify("Flemma: Tool execution cancelled", vim.log.levels.INFO)
-            else
-              vim.notify("Flemma: No pending tool executions", vim.log.levels.INFO)
-            end
+            vim.notify("Flemma: No pending tool executions", vim.log.levels.INFO)
           end
         end,
       },

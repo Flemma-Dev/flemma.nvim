@@ -106,7 +106,58 @@ function M.resolve(bufnr, cursor_pos)
       if prev_msg.role == "Assistant" then
         local tool_uses = get_tool_use_segments(prev_msg)
         if #tool_uses > 0 then
-          -- Use the last tool_use from the assistant message
+          -- Try to match cursor to a specific tool_result in the @You: message
+          for _, seg in ipairs(msg.segments) do
+            if seg.kind == "tool_result"
+              and cursor_line >= seg.position.start_line
+              and cursor_line <= seg.position.end_line then
+              -- Find corresponding tool_use by ID
+              for _, tu in ipairs(tool_uses) do
+                if tu.id == seg.tool_use_id then
+                  return {
+                    tool_id = tu.id,
+                    tool_name = tu.name,
+                    input = tu.input or {},
+                    node = tu,
+                    start_line = tu.position.start_line,
+                    end_line = tu.position.end_line,
+                  }, nil
+                end
+              end
+            end
+          end
+          -- Fallback: find nearest tool_result, then last tool_use
+          local nearest_result = nil
+          local nearest_distance = math.huge
+          for _, seg in ipairs(msg.segments) do
+            if seg.kind == "tool_result" then
+              local distance
+              if seg.position.end_line <= cursor_line then
+                distance = cursor_line - seg.position.end_line
+              else
+                distance = seg.position.start_line - cursor_line
+              end
+              if distance < nearest_distance then
+                nearest_distance = distance
+                nearest_result = seg
+              end
+            end
+          end
+          if nearest_result then
+            for _, tu in ipairs(tool_uses) do
+              if tu.id == nearest_result.tool_use_id then
+                return {
+                  tool_id = tu.id,
+                  tool_name = tu.name,
+                  input = tu.input or {},
+                  node = tu,
+                  start_line = tu.position.start_line,
+                  end_line = tu.position.end_line,
+                }, nil
+              end
+            end
+          end
+          -- Final fallback: last tool_use
           local seg = tool_uses[#tool_uses]
           return {
             tool_id = seg.id,
