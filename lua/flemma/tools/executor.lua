@@ -30,39 +30,6 @@ local function get_buffer_pending(bufnr)
   return pending_by_buffer[bufnr]
 end
 
---- Count pending (non-completed) executions for a buffer
---- @param bufnr integer
---- @return integer
-local function count_pending(bufnr)
-  local pending = pending_by_buffer[bufnr]
-  if not pending then
-    return 0
-  end
-  local n = 0
-  for _, entry in pairs(pending) do
-    if not entry.completed then
-      n = n + 1
-    end
-  end
-  return n
-end
-
---- Lock the buffer if not already locked
---- @param bufnr integer
-local function lock_buffer(bufnr)
-  if vim.api.nvim_buf_is_valid(bufnr) then
-    vim.bo[bufnr].modifiable = false
-  end
-end
-
---- Unlock the buffer if no more pending executions
---- @param bufnr integer
-local function maybe_unlock_buffer(bufnr)
-  if vim.api.nvim_buf_is_valid(bufnr) and count_pending(bufnr) == 0 then
-    vim.bo[bufnr].modifiable = true
-  end
-end
-
 --- Clean up a pending execution entry
 --- @param bufnr integer
 --- @param tool_id string
@@ -152,13 +119,13 @@ local function handle_completion(bufnr, tool_id, result)
     -- Update indicator
     ui.update_tool_indicator(bufnr, tool_id, result.success)
 
-    -- Brief delay then clear indicator
-    vim.defer_fn(function()
-      ui.clear_tool_indicator(bufnr, tool_id)
-      cleanup_pending(bufnr, tool_id)
-      maybe_unlock_buffer(bufnr)
-      ui.update_ui(bufnr)
-    end, 1500)
+    -- Free pending slot immediately so tool can be re-executed
+    cleanup_pending(bufnr, tool_id)
+
+    -- Auto-dismiss indicator after delay (or immediately on buffer edit)
+    ui.schedule_tool_indicator_clear(bufnr, tool_id, 1500)
+
+    ui.update_ui(bufnr)
   end)
 end
 
@@ -209,14 +176,10 @@ function M.execute(bufnr, context)
     completed = false,
   }
 
-  -- Lock buffer
-  lock_buffer(bufnr)
-
   -- Phase 1: Inject placeholder
   local header_line, inject_err = injector.inject_placeholder(bufnr, tool_id)
   if not header_line then
     cleanup_pending(bufnr, tool_id)
-    maybe_unlock_buffer(bufnr)
     return false, "Failed to inject placeholder: " .. (inject_err or "unknown")
   end
 

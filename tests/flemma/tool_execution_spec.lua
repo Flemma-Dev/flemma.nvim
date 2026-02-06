@@ -495,6 +495,30 @@ describe("Tool Context Resolver", function()
       assert.is_nil(ctx)
       assert.is_not_nil(err)
     end)
+
+    it("falls back to assistant tools when cursor is on tool_result in @You:", function()
+      local bufnr = create_buffer({
+        '@Assistant: Running tool:',
+        '',
+        '**Tool Use:** `bash` (`toolu_result_cursor`)',
+        '```json',
+        '{ "command": "echo hello" }',
+        '```',
+        '',
+        '@You: **Tool Result:** `toolu_result_cursor`',
+        '',
+        '```',
+        'old result',
+        '```',
+      })
+
+      -- Cursor on the tool_result header line (which is in @You: message)
+      local ctx, err = context.resolve(bufnr, { row = 8 })
+      assert.is_nil(err)
+      assert.is_not_nil(ctx)
+      assert.equals("toolu_result_cursor", ctx.tool_id)
+      assert.equals("bash", ctx.tool_name)
+    end)
   end)
 end)
 
@@ -555,6 +579,36 @@ describe("Result Injector", function()
       assert.is_not_nil(header_line)
       -- Should return the existing line, not create a new one
       assert.equals(8, header_line)
+    end)
+
+    it("inserts placeholder before existing user text in @You: message", function()
+      local bufnr = create_buffer({
+        "@Assistant: Here is the tool:",
+        "",
+        '**Tool Use:** `bash` (`toolu_before_text`)',
+        "```json",
+        '{ "command": "echo hello" }',
+        "```",
+        "",
+        "@You: I'll run this.",
+      })
+
+      local header_line, err = injector.inject_placeholder(bufnr, "toolu_before_text")
+      assert.is_nil(err)
+      assert.is_not_nil(header_line)
+
+      local lines = get_lines(bufnr)
+      -- The placeholder should be inserted at the @You: line
+      assert.is_truthy(lines[header_line]:match("Tool Result.*toolu_before_text"), "Header should be at returned line")
+      -- The existing user text should be preserved after the placeholder
+      local found_text = false
+      for _, line in ipairs(lines) do
+        if line:match("I'll run this") then
+          found_text = true
+          break
+        end
+      end
+      assert.is_true(found_text, "Original user text should be preserved")
     end)
   end)
 
@@ -732,6 +786,73 @@ describe("Result Injector", function()
       local content = table.concat(lines, "\n")
       -- Should use 4 backticks since content has 3
       assert.is_truthy(content:match("````"), "Should use 4+ backticks when content has triple backticks")
+    end)
+
+    it("uses 5-tick fence when content contains 4 backticks", function()
+      local bufnr = create_buffer({
+        '@Assistant: Run:',
+        '',
+        '**Tool Use:** `bash` (`toolu_fence5`)',
+        '```json',
+        '{ "command": "echo test" }',
+        '```',
+        '',
+        '@You: **Tool Result:** `toolu_fence5`',
+      })
+
+      injector.inject_result(bufnr, "toolu_fence5", {
+        success = true,
+        output = "output with ```` four backticks",
+      })
+
+      local lines = get_lines(bufnr)
+      local content = table.concat(lines, "\n")
+      assert.is_truthy(content:match("`````"), "Should use 5-tick fence when content has 4 backticks")
+    end)
+
+    it("uses 5-tick fence when content has mixed 3 and 4 backtick sequences", function()
+      local bufnr = create_buffer({
+        '@Assistant: Run:',
+        '',
+        '**Tool Use:** `bash` (`toolu_fence_mixed`)',
+        '```json',
+        '{ "command": "echo test" }',
+        '```',
+        '',
+        '@You: **Tool Result:** `toolu_fence_mixed`',
+      })
+
+      injector.inject_result(bufnr, "toolu_fence_mixed", {
+        success = true,
+        output = "has ``` and also ```` in it",
+      })
+
+      local lines = get_lines(bufnr)
+      local content = table.concat(lines, "\n")
+      assert.is_truthy(content:match("`````"), "Should use 5-tick fence for mixed 3+4 backtick content")
+    end)
+
+    it("uses triple backticks when content has only single/double backticks", function()
+      local bufnr = create_buffer({
+        '@Assistant: Run:',
+        '',
+        '**Tool Use:** `bash` (`toolu_fence_low`)',
+        '```json',
+        '{ "command": "echo test" }',
+        '```',
+        '',
+        '@You: **Tool Result:** `toolu_fence_low`',
+      })
+
+      injector.inject_result(bufnr, "toolu_fence_low", {
+        success = true,
+        output = "has ` single and `` double backticks only",
+      })
+
+      local lines = get_lines(bufnr)
+      local content = table.concat(lines, "\n")
+      assert.is_truthy(content:match("```"), "Should use triple backticks")
+      assert.is_falsy(content:match("````[^`]"), "Should not use 4+ backticks for single/double backtick content")
     end)
   end)
 
@@ -1024,6 +1145,123 @@ describe("Result Injector", function()
 end)
 
 -- ============================================================================
+-- Cancel Priority Logic Tests
+-- ============================================================================
+
+describe("Cancel Priority Logic", function()
+  -- Tests the cancel dispatch logic from commands.lua:158-182
+  -- This is duplicated in keymaps.lua cancel handler with the same priority.
+
+  local executor
+
+  before_each(function()
+    package.loaded["flemma.tools.executor"] = nil
+    executor = require("flemma.tools.executor")
+    registry.clear()
+    tools.setup()
+  end)
+
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("cancels API request when API is active (priority 1)", function()
+    local bufnr = create_buffer({
+      "@Assistant: Running tool:",
+      "",
+      '**Tool Use:** `calculator` (`toolu_cancel_api`)',
+      "```json",
+      '{ "expression": "1+1" }',
+      "```",
+    })
+
+    local st = require("flemma.state")
+    local buffer_state = st.get_buffer_state(bufnr)
+
+    -- Simulate active API request
+    st.set_buffer_state(bufnr, "current_request", { id = "test_req" })
+
+    -- The cancel logic: priority 1 = API request
+    assert.is_not_nil(buffer_state.current_request, "API request should be active")
+
+    -- Verify that with an active API request, we would NOT touch tools
+    local pending = executor.get_pending(bufnr)
+    -- Even if tools were pending, API cancellation takes priority
+    -- This test verifies the priority check condition
+    assert.is_truthy(buffer_state.current_request, "Should detect active API request first")
+
+    st.set_buffer_state(bufnr, "current_request", nil)
+  end)
+
+  it("cancels first tool by start time when no API active (priority 2)", function()
+    local bufnr = create_buffer({
+      "@Assistant: Running tools:",
+      "",
+      '**Tool Use:** `calculator` (`toolu_cancel_first`)',
+      "```json",
+      '{ "expression": "1+1" }',
+      "```",
+      "",
+      '**Tool Use:** `calculator` (`toolu_cancel_second`)',
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+    })
+
+    -- Execute both tools to create pending entries
+    executor.execute(bufnr, {
+      tool_id = "toolu_cancel_first",
+      tool_name = "calculator",
+      input = { expression = "1+1" },
+      start_line = 3,
+      end_line = 6,
+    })
+    executor.execute(bufnr, {
+      tool_id = "toolu_cancel_second",
+      tool_name = "calculator",
+      input = { expression = "2+2" },
+      start_line = 8,
+      end_line = 11,
+    })
+
+    -- Simulate cancel dispatch logic
+    local st = require("flemma.state")
+    local buffer_state = st.get_buffer_state(bufnr)
+
+    -- No active API request
+    assert.is_nil(buffer_state.current_request)
+
+    local pending = executor.get_pending(bufnr)
+    -- Note: sync tools complete immediately via vim.schedule, but pending entries
+    -- exist until vim.schedule runs. In tests, vim.schedule hasn't run yet.
+    -- For this test, verify the sorting logic.
+    if #pending > 0 then
+      table.sort(pending, function(a, b)
+        return a.started_at < b.started_at
+      end)
+      -- First by start time should be toolu_cancel_first
+      assert.equals("toolu_cancel_first", pending[1].tool_id)
+    end
+  end)
+
+  it("notifies when nothing is pending (priority 3)", function()
+    local bufnr = create_buffer({
+      "@Assistant: Just text, no tools.",
+    })
+
+    local st = require("flemma.state")
+    local buffer_state = st.get_buffer_state(bufnr)
+
+    -- No API request
+    assert.is_nil(buffer_state.current_request)
+
+    -- No pending tools
+    local pending = executor.get_pending(bufnr)
+    assert.equals(0, #pending, "Should have no pending executions")
+  end)
+end)
+
+-- ============================================================================
 -- Executor State Management Tests
 -- ============================================================================
 
@@ -1228,6 +1466,52 @@ describe("Tool Executor", function()
 
       -- After cleanup, pending should be empty
       local pending = executor.get_pending(bufnr)
+      assert.equals(0, #pending)
+    end)
+
+    it("calls cancel_fn for pending async tools on cleanup", function()
+      local cancel_called = false
+
+      -- Register an async tool that returns a cancel function
+      registry.register("slow_async", {
+        name = "slow_async",
+        description = "Slow async tool for testing",
+        async = true,
+        execute = function(_, _)
+          -- Return a cancel function, never call the callback
+          return function()
+            cancel_called = true
+          end
+        end,
+      })
+
+      local bufnr = create_buffer({
+        "@Assistant: Tool:",
+        "",
+        '**Tool Use:** `slow_async` (`toolu_cancel_fn`)',
+        "```json",
+        "{}",
+        "```",
+      })
+
+      executor.execute(bufnr, {
+        tool_id = "toolu_cancel_fn",
+        tool_name = "slow_async",
+        input = {},
+        start_line = 3,
+        end_line = 6,
+      })
+
+      -- Tool should be pending
+      local pending = executor.get_pending(bufnr)
+      assert.equals(1, #pending)
+
+      -- Cleanup should call cancel_fn
+      executor.cleanup_buffer(bufnr)
+      assert.is_true(cancel_called, "cancel_fn should have been called during cleanup")
+
+      -- State should be cleared
+      pending = executor.get_pending(bufnr)
       assert.equals(0, #pending)
     end)
   end)

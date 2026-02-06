@@ -99,6 +99,7 @@ return {
     normal = {
       send = "<C-]>",
       cancel = "<C-c>",
+      tool_execute = "<M-CR>", -- Execute tool at cursor
       next_message = "]m", -- Jump to next message
       prev_message = "[m", -- Jump to previous message
     },

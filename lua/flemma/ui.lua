@@ -860,6 +860,48 @@ function M.clear_tool_indicator(bufnr, tool_id)
   tool_indicators[tool_id] = nil
 end
 
+--- Schedule indicator clear after a delay, or immediately on buffer edit
+--- Uses extmark_id guard to avoid clearing a newer indicator if tool is re-executed
+--- @param bufnr integer
+--- @param tool_id string
+--- @param delay_ms integer Milliseconds to wait before clearing
+function M.schedule_tool_indicator_clear(bufnr, tool_id, delay_ms)
+  local ind = tool_indicators[tool_id]
+  if not ind then
+    return
+  end
+  local expected_extmark = ind.extmark_id
+  local cleared = false
+
+  local function do_clear()
+    if cleared then
+      return
+    end
+    local current = tool_indicators[tool_id]
+    if not current or current.extmark_id ~= expected_extmark then
+      cleared = true
+      return -- indicator was replaced by re-execution
+    end
+    cleared = true
+    M.clear_tool_indicator(bufnr, tool_id)
+  end
+
+  vim.defer_fn(function()
+    do_clear()
+  end, delay_ms)
+
+  if vim.api.nvim_buf_is_valid(bufnr) then
+    vim.api.nvim_buf_attach(bufnr, false, {
+      on_lines = function()
+        vim.schedule(function()
+          do_clear()
+        end)
+        return true -- detach after first trigger
+      end,
+    })
+  end
+end
+
 --- Clear all tool indicators for a buffer (used on buffer cleanup)
 --- @param bufnr integer
 function M.clear_all_tool_indicators(bufnr)
