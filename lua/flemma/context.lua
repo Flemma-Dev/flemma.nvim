@@ -5,23 +5,24 @@
 local M = {}
 
 ---@class flemma.Context
----@field __include_stack string[]|nil Stack of included files for circular reference detection (private)
+---@field __filename string|nil The current file path (private)
 ---@field __variables table<string, any>|nil User-defined variables for execution contexts (private)
 local Context = {}
 Context.__index = Context
 
----Get the current filename (top of include stack)
+---Get the current filename
 ---@return string|nil filename The current file path
 function Context:get_filename()
-  local stack = self.__include_stack
-  return stack and stack[#stack] or nil
+  return self.__filename
 end
 
----Get a copy of the include stack
----@return string[] stack Copy of the include stack
-function Context:get_include_stack()
-  local stack = self.__include_stack or {}
-  return vim.list_extend({}, stack)
+---Get the directory containing the current file
+---@return string|nil dirname The directory path
+function Context:get_dirname()
+  if self.__filename then
+    return vim.fn.fnamemodify(self.__filename, ":h")
+  end
+  return nil
 end
 
 ---Get a copy of the variables
@@ -42,7 +43,7 @@ function M.from_buffer(bufnr)
   local buffer_name = vim.api.nvim_buf_get_name(bufnr)
 
   if buffer_name ~= "" then
-    context.__include_stack = { buffer_name }
+    context.__filename = buffer_name
   end
 
   return context
@@ -58,7 +59,7 @@ function M.from_file(file_path)
   local context = setmetatable({}, Context)
 
   if file_path and file_path ~= "" then
-    context.__include_stack = { file_path }
+    context.__filename = file_path
   end
 
   return context
@@ -95,17 +96,6 @@ function M.extend(base, vars)
   return c
 end
 
----Create a new context for an included file (push to include stack)
----@param base flemma.Context
----@param child_filename string
----@return flemma.Context
-function M.for_include(base, child_filename)
-  local c = M.clone(base)
-  c.__include_stack = vim.deepcopy(base.__include_stack or {})
-  table.insert(c.__include_stack, child_filename)
-  return c
-end
-
 ---Prepare a safe eval environment from a Context
 ---@param ctx flemma.Context|table
 ---@return flemma.eval.Environment env
@@ -116,10 +106,10 @@ function M.to_eval_env(ctx)
   -- Handle both Context objects and plain tables
   if ctx and type(ctx.get_filename) == "function" then
     env.__filename = ctx:get_filename()
-    env.__include_stack = ctx:get_include_stack()
+    env.__dirname = ctx:get_dirname()
   else
     env.__filename = nil
-    env.__include_stack = {}
+    env.__dirname = nil
   end
 
   -- Merge user vars

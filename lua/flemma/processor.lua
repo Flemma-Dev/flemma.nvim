@@ -1,40 +1,10 @@
 local ctxutil = require("flemma.context")
 local eval = require("flemma.eval")
-local mime_util = require("flemma.mime")
+local emittable_mod = require("flemma.emittable")
 local codeblock_parsers = require("flemma.codeblock.parsers")
 
 ---@class flemma.Processor
 local M = {}
-
----@param path string
----@return string|nil data
----@return string|nil error
-local function safe_read_binary(path)
-  local f, err = io.open(path, "rb")
-  if not f then
-    return nil, ("Failed to open file: " .. (err or "unknown"))
-  end
-  local data = f:read("*a")
-  f:close()
-  if not data then
-    return nil, "Failed to read content"
-  end
-  return data, nil
-end
-
----@param path string
----@param override string|nil
----@return string|nil
-local function detect_mime(path, override)
-  if override and #override > 0 then
-    return override
-  end
-  local ok, mt, _ = pcall(mime_util.get_mime_type, path)
-  if ok and mt then
-    return mt
-  end
-  return mime_util.get_mime_by_extension(path)
-end
 
 ---@param v any
 ---@return string
@@ -153,73 +123,60 @@ function M.evaluate(doc, base_context)
       elseif seg.kind == "expression" then
         local ok, result = pcall(eval.eval_expression, seg.code, env)
         if not ok then
-          -- Collect the error for reporting
-          table.insert(diagnostics, {
-            type = "expression",
-            severity = "warning",
-            expression = seg.code,
-            error = tostring(result),
-            position = seg.position,
-            message_role = msg.role,
-            source_file = context:get_filename() or "N/A",
-          })
+          -- Check if the error is a structured table (e.g. from include())
+          if type(result) == "table" and result.type then
+            table.insert(diagnostics, {
+              type = result.type,
+              severity = "warning",
+              filename = result.filename,
+              raw = result.raw,
+              error = result.error or tostring(result),
+              position = seg.position,
+              message_role = msg.role,
+              source_file = context:get_filename() or "N/A",
+            })
+          else
+            table.insert(diagnostics, {
+              type = "expression",
+              severity = "warning",
+              expression = seg.code,
+              error = tostring(result),
+              position = seg.position,
+              message_role = msg.role,
+              source_file = context:get_filename() or "N/A",
+            })
+          end
           -- Keep original expression text in output
           table.insert(parts, { kind = "text", text = "{{" .. (seg.code or "") .. "}}" })
+        elseif emittable_mod.is_emittable(result) then
+          -- Emittable result: create EmitContext and collect parts
+          local emit_ctx = emittable_mod.EmitContext.new({
+            position = seg.position,
+            diagnostics = diagnostics,
+            source_file = context:get_filename() or "N/A",
+          })
+          local emit_ok, emit_err = pcall(result.emit, result, emit_ctx)
+          if emit_ok then
+            for _, ep in ipairs(emit_ctx.parts) do
+              table.insert(parts, ep)
+            end
+          else
+            table.insert(diagnostics, {
+              type = "expression",
+              severity = "warning",
+              expression = seg.code,
+              error = "Error during emit: " .. tostring(emit_err),
+              position = seg.position,
+              message_role = msg.role,
+              source_file = context:get_filename() or "N/A",
+            })
+            table.insert(parts, { kind = "text", text = "{{" .. (seg.code or "") .. "}}" })
+          end
         else
           local str_result = to_text(result)
           if str_result and #str_result > 0 then
             table.insert(parts, { kind = "text", text = str_result })
           end
-        end
-      elseif seg.kind == "file_reference" then
-        local filename = seg.path
-        -- Resolve relative to context filename
-        if context then
-          local ctx_filename = context:get_filename()
-          if ctx_filename and filename:match("^%.%.?/") then
-            local buffer_dir = vim.fn.fnamemodify(ctx_filename, ":h")
-            filename = vim.fn.simplify(buffer_dir .. "/" .. filename)
-          end
-        end
-        local mime = detect_mime(filename, seg.mime_override)
-        if vim.fn.filereadable(filename) == 1 and mime then
-          local data, err = safe_read_binary(filename)
-          if data then
-            table.insert(parts, {
-              kind = "file",
-              filename = filename,
-              raw = seg.raw,
-              mime_type = mime,
-              data = data,
-            })
-          else
-            table.insert(diagnostics, {
-              type = "file",
-              severity = "warning",
-              filename = filename,
-              raw = seg.raw,
-              error = err or "read error",
-              position = seg.position,
-              source_file = context:get_filename() or "N/A",
-            })
-            table.insert(parts, { kind = "unsupported_file", raw = seg.raw })
-          end
-        else
-          local err = vim.fn.filereadable(filename) == 0 and "File not found: " .. filename
-            or "Could not determine MIME type for: " .. filename
-          table.insert(diagnostics, {
-            type = "file",
-            severity = "warning",
-            filename = filename,
-            raw = seg.raw,
-            error = err,
-            position = seg.position,
-            source_file = context:get_filename() or "N/A",
-          })
-          table.insert(parts, { kind = "unsupported_file", raw = seg.raw, error = err })
-        end
-        if seg.trailing_punct and #seg.trailing_punct > 0 then
-          table.insert(parts, { kind = "text", text = seg.trailing_punct })
         end
       elseif seg.kind == "tool_use" then
         table.insert(parts, {

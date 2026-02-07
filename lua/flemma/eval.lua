@@ -1,8 +1,8 @@
 --- Safe environment and execution for Lua code in Flemma, where safe is a loose term.
 ---
 --- Reserved environment fields:
----   __filename       - Current file path for error reporting and path resolution
----   __include_stack  - Stack of included files for circular reference detection
+---   __filename  - Current file path for error reporting and path resolution
+---   __dirname   - Directory containing the current file
 ---
 --- User-defined variables from frontmatter are stored as top-level keys in the environment.
 
@@ -11,119 +11,169 @@ local M = {}
 
 ---@alias flemma.eval.Environment table<string, any>
 
----@param relative_path string
----@param env_of_caller flemma.eval.Environment
----@param eval_expression_func fun(expr: string, env: flemma.eval.Environment): any
----@param create_safe_env_func fun(): flemma.eval.Environment
----@return string
-local function include_delegate(relative_path, env_of_caller, eval_expression_func, create_safe_env_func)
-  if not env_of_caller.__filename then
-    error("include() called but __filename is not set in the calling environment.")
+--- MIME detection: override or auto-detect via `file` command + extension fallback.
+---@param path string
+---@param override string|nil
+---@return string|nil
+local function detect_mime(path, override)
+  if override and #override > 0 then
+    return override
   end
-  if not env_of_caller.__include_stack then
-    error("include() called but __include_stack is not set in the calling environment.")
+  local mime_util = require("flemma.mime")
+  local ok, mt, _ = pcall(mime_util.get_mime_type, path)
+  if ok and mt then
+    return mt
   end
+  return mime_util.get_mime_by_extension(path)
+end
 
-  local calling_file_path = env_of_caller.__filename
-  if not calling_file_path or calling_file_path == "" then
-    error("include_delegate: calling environment's __filename is missing or empty.")
+--- Read file content (binary or text mode).
+---@param path string
+---@param binary boolean
+---@return string data
+---@return nil
+---@overload fun(path: string, binary: boolean): nil, string
+local function read_file(path, binary)
+  local mode = binary and "rb" or "r"
+  local f, err = io.open(path, mode)
+  if not f then
+    return nil, ("Failed to open file: " .. (err or "unknown"))
   end
+  local data = f:read("*a")
+  f:close()
+  if not data then
+    return nil, "Failed to read content"
+  end
+  return data, nil
+end
 
-  local base_dir
-  -- Check if the path is absolute by comparing it with its absolute version
-  if vim.fs.abspath(calling_file_path) == calling_file_path then
-    base_dir = vim.fn.fnamemodify(calling_file_path, ":h")
-  else
-    local dir_of_calling_file = vim.fn.fnamemodify(calling_file_path, ":h")
-    if dir_of_calling_file == "" or dir_of_calling_file == "." then
-      base_dir = vim.fn.getcwd()
+--- Build the include() closure for a given environment.
+--- The include_stack is threaded through closures — not stored on the env.
+---@param env flemma.eval.Environment The environment where include() will be installed
+---@param include_stack string[] Captured include stack (immutable from this scope)
+---@param eval_expr_fn fun(expr: string, env: flemma.eval.Environment): any
+---@param create_env_fn fun(): flemma.eval.Environment
+local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
+  local emittable = require("flemma.emittable")
+
+  ---@param relative_path string
+  ---@param opts? { binary?: boolean, mime?: string }
+  ---@return table emittable An IncludePart with an emit() method
+  env.include = function(relative_path, opts)
+    opts = opts or {}
+    local dirname = env.__dirname
+
+    -- Resolve path: use __dirname if set, otherwise use relative path as-is
+    local target_path
+    if dirname then
+      target_path = vim.fs.normalize(dirname .. "/" .. relative_path)
     else
-      base_dir = vim.fs.normalize(vim.fn.getcwd() .. "/" .. dir_of_calling_file)
+      target_path = relative_path
     end
-  end
 
-  local target_path = vim.fs.normalize(base_dir .. "/" .. relative_path)
+    -- Check file exists
+    if vim.fn.filereadable(target_path) ~= 1 then
+      error({
+        type = "file",
+        filename = target_path,
+        raw = relative_path,
+        error = "File not found: " .. target_path,
+      })
+    end
 
-  for _, path_in_stack in ipairs(env_of_caller.__include_stack) do
-    if path_in_stack == target_path then
+    -- Binary mode: read raw bytes, detect MIME, return binary IncludePart
+    -- No circular detection needed — binary reads don't recurse into content
+    if opts.binary then
+      local mime = detect_mime(target_path, opts.mime)
+      if not mime then
+        error({
+          type = "file",
+          filename = target_path,
+          raw = relative_path,
+          error = "Could not determine MIME type for: " .. target_path,
+        })
+      end
+
+      local data, read_err = read_file(target_path, true)
+      if not data then
+        error({
+          type = "file",
+          filename = target_path,
+          raw = relative_path,
+          error = read_err or "read error",
+        })
+      end
+
+      return emittable.binary_include_part(target_path, mime, data)
+    end
+
+    -- Text mode: circular detection applies (text includes recurse)
+    for _, path_in_stack in ipairs(include_stack) do
+      if path_in_stack == target_path then
+        error(
+          string.format(
+            "Circular include for '%s' (requested by '%s'). Include stack: %s",
+            target_path,
+            env.__filename or "N/A",
+            table.concat(include_stack, " -> ")
+          )
+        )
+      end
+    end
+
+    -- Text mode: read, parse, evaluate, return composite IncludePart
+    local content, read_err = read_file(target_path, false)
+    if not content then
       error(
         string.format(
-          "Circular include for '%s' (requested by '%s'). Include stack: %s",
+          "Failed to open include file '%s' (requested by '%s'): %s",
           target_path,
-          calling_file_path,
-          table.concat(env_of_caller.__include_stack, " -> ")
+          env.__filename or "N/A",
+          read_err or "unknown error"
         )
       )
     end
-  end
 
-  local file, err_msg = io.open(target_path, "r")
-  if not file then
-    error(
-      string.format(
-        "Failed to open include file '%s' (requested by '%s'): %s",
-        target_path,
-        calling_file_path,
-        (err_msg or "unknown error")
-      )
-    )
-  end
-  local content = file:read("*a")
-  file:close()
+    -- Parse content for {{ }} expressions and @./ file references
+    local parser = require("flemma.parser")
+    local segments = parser.parse_inline_content(content)
 
-  -- Create new environment for included file
-  -- Includes are isolated - they do NOT inherit user variables from the caller
-  local new_include_env = create_safe_env_func()
-  new_include_env.__filename = target_path
-  new_include_env.__include_stack = vim.deepcopy(env_of_caller.__include_stack)
-  table.insert(new_include_env.__include_stack, target_path)
+    -- Create isolated child environment (does NOT inherit user variables)
+    local child_env = create_env_fn()
+    child_env.__filename = target_path
+    child_env.__dirname = vim.fn.fnamemodify(target_path, ":h")
 
-  -- Use unified parser to handle both {{ }} expressions and @./ file references in one pass
-  local parser = require("flemma.parser")
-  local segments = parser.parse_inline_content(content)
+    -- Create extended include stack for the child
+    local child_stack = {}
+    for _, p in ipairs(include_stack) do
+      child_stack[#child_stack + 1] = p
+    end
+    child_stack[#child_stack + 1] = target_path
 
-  -- Build final output by processing each segment type
-  local result_parts = {}
-  for _, seg in ipairs(segments) do
-    if seg.kind == "text" then
-      table.insert(result_parts, seg.value)
-    elseif seg.kind == "expression" then
-      -- Evaluate {{ }} expression
-      local ok, presult = pcall(eval_expression_func, seg.code, new_include_env)
-      if not ok then
-        error(presult)
-      end
-      table.insert(result_parts, presult == nil and "" or tostring(presult))
-    elseif seg.kind == "file_reference" then
-      -- Resolve file reference relative to target_path
-      local filename = seg.path
-      if filename:match("^%.%.?/") then
-        local file_dir = vim.fn.fnamemodify(target_path, ":h")
-        filename = vim.fn.simplify(file_dir .. "/" .. filename)
-      end
+    -- Install include() on child env with extended stack
+    install_include(child_env, child_stack, eval_expr_fn, create_env_fn)
 
-      -- Read the file and insert its content
-      if vim.fn.filereadable(filename) == 1 then
-        local ref_file, ref_err = io.open(filename, "r")
-        if ref_file then
-          local ref_content = ref_file:read("*a")
-          ref_file:close()
-          table.insert(result_parts, ref_content)
-        else
-          error(string.format("Failed to read referenced file '%s': %s", filename, ref_err or "unknown"))
+    -- Process segments into children for the composite part
+    local children = {}
+    for _, seg in ipairs(segments) do
+      if seg.kind == "text" then
+        children[#children + 1] = seg.value
+      elseif seg.kind == "expression" then
+        local ok, result = pcall(eval_expr_fn, seg.code, child_env)
+        if not ok then
+          error(result)
         end
-      else
-        error(string.format("Referenced file not found: '%s' (from %s)", filename, target_path))
-      end
-
-      -- Add trailing punctuation back if present
-      if seg.trailing_punct then
-        table.insert(result_parts, seg.trailing_punct)
+        -- If result is emittable, keep it as a child; otherwise stringify
+        if emittable.is_emittable(result) then
+          children[#children + 1] = result
+        else
+          children[#children + 1] = result == nil and "" or tostring(result)
+        end
       end
     end
-  end
 
-  return table.concat(result_parts, "")
+    return emittable.composite_include_part(children)
+  end
 end
 
 ---@param env flemma.eval.Environment
@@ -131,11 +181,12 @@ end
 ---@param create_env_fn fun(): flemma.eval.Environment
 local function ensure_env_capabilities(env, eval_expr_fn, create_env_fn)
   if env.include == nil then
-    -- The 'include' function captures the 'env' it's defined in.
-    -- Errors from include_delegate will propagate up to M.eval_expression.
-    env.include = function(relative_path)
-      return include_delegate(relative_path, env, eval_expr_fn, create_env_fn)
+    -- Build the initial include stack from __filename
+    local initial_stack = {}
+    if env.__filename then
+      initial_stack[1] = env.__filename
     end
+    install_include(env, initial_stack, eval_expr_fn, create_env_fn)
   end
 end
 
@@ -143,7 +194,7 @@ end
 ---
 --- User-defined variables from frontmatter are merged as top-level keys by context.to_eval_env().
 --- The 'include' function is added by ensure_env_capabilities to capture the correct environment.
---- Reserved internal fields (__filename, __include_stack) are set by context.to_eval_env().
+--- Reserved internal fields (__filename, __dirname) are set by context.to_eval_env().
 ---@return flemma.eval.Environment
 function M.create_safe_env()
   return {
@@ -194,6 +245,8 @@ function M.create_safe_env()
       fn = {
         fnamemodify = vim.fn.fnamemodify,
         getcwd = vim.fn.getcwd,
+        filereadable = vim.fn.filereadable,
+        simplify = vim.fn.simplify,
       },
       fs = {
         normalize = vim.fs.normalize,
@@ -284,7 +337,11 @@ function M.eval_expression(expr, env)
 
   local ok, eval_result = pcall(chunk)
   if not ok then
-    -- eval_result here could be a simple Lua error or a contextualized error from include_delegate
+    -- Preserve structured error tables (e.g. from include()) so the processor
+    -- can produce properly typed diagnostics (type="file" vs type="expression").
+    if type(eval_result) == "table" and eval_result.type then
+      error(eval_result)
+    end
     error(
       string.format(
         "Evaluation error in '%s' for expression '{{%s}}': %s",

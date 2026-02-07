@@ -21,8 +21,18 @@ local function url_decode(str)
   return str
 end
 
+--- Escape a string for use inside a Lua single-quoted string literal.
+---@param str string
+---@return string
+local function lua_string_escape(str)
+  str = str:gsub("\\", "\\\\")
+  str = str:gsub("'", "\\'")
+  str = str:gsub("\n", "\\n")
+  return str
+end
+
 --- Unified segment parser: parse text for {{ }} expressions and @./ file references
---- Returns array of AST segments (text, expression, file_reference)
+--- Returns array of AST segments (text, expression)
 --- Note: <thinking> tags are NOT parsed here - only in @Assistant messages
 ---@param text string|nil
 ---@param base_line integer|nil 1-indexed line number for accurate position tracking
@@ -98,20 +108,25 @@ local function parse_segments(text, base_line)
         mime_override = mime_no_punct
       end
 
+      -- URL-decode and escape the path for use in a Lua string literal
       local cleaned_path = url_decode(raw_file_match)
       ---@cast cleaned_path string
+      local escaped_path = lua_string_escape(cleaned_path)
       local line, col = char_to_line_col(next_start)
 
-      table.insert(
-        segments,
-        ast.file_reference(
-          mime_override and (raw_file_match .. ";type=" .. mime_override) or raw_file_match,
-          cleaned_path,
-          mime_override,
-          #trailing_punct > 0 and trailing_punct or nil,
-          { start_line = line, start_col = col }
-        )
-      )
+      -- Build the include() expression code
+      local opts_parts = { "binary = true" }
+      if mime_override then
+        opts_parts[#opts_parts + 1] = "mime = '" .. lua_string_escape(mime_override) .. "'"
+      end
+      local code = "include('" .. escaped_path .. "', { " .. table.concat(opts_parts, ", ") .. " })"
+
+      table.insert(segments, ast.expression(code, { start_line = line, start_col = col }))
+
+      -- Emit trailing punctuation as a separate text segment
+      if #trailing_punct > 0 then
+        emit_text(trailing_punct)
+      end
     end
     idx = next_end + 1
   end

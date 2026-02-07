@@ -29,14 +29,6 @@ local M = {}
 ---@field kind "text"
 ---@field value string
 
----@class flemma.ast.FileReferenceSegment
----@field kind "file_reference"
----@field raw string
----@field path string
----@field mime_override string|nil
----@field trailing_punct string|nil
----@field position flemma.ast.Position|nil
-
 ---@class flemma.ast.ExpressionSegment
 ---@field kind "expression"
 ---@field code string
@@ -51,7 +43,7 @@ local M = {}
 ---@class flemma.ast.ToolResultSegment : flemma.ast.GenericToolResultPart
 ---@field position flemma.ast.Position
 
----@alias flemma.ast.Segment flemma.ast.TextSegment|flemma.ast.FileReferenceSegment|flemma.ast.ExpressionSegment|flemma.ast.ThinkingSegment|flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment
+---@alias flemma.ast.Segment flemma.ast.TextSegment|flemma.ast.ExpressionSegment|flemma.ast.ThinkingSegment|flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment
 
 ---@class flemma.ast.Diagnostic
 ---@field type "frontmatter"|"expression"|"file"|"tool_use"|"parse"
@@ -148,23 +140,6 @@ end
 ---@return flemma.ast.TextSegment
 function M.text(value)
   return { kind = "text", value = value }
-end
-
----@param raw string
----@param path string
----@param mime_override string|nil
----@param trailing_punct string|nil
----@param pos flemma.ast.Position|nil
----@return flemma.ast.FileReferenceSegment
-function M.file_reference(raw, path, mime_override, trailing_punct, pos)
-  return {
-    kind = "file_reference",
-    raw = raw,
-    path = path,
-    mime_override = mime_override,
-    trailing_punct = trailing_punct,
-    position = pos,
-  }
 end
 
 ---@param code string
