@@ -274,7 +274,7 @@ function M.to_generic_parts(evaluated_parts, source_file)
         severity = "warning",
         filename = p.raw or "unknown",
         raw = p.raw,
-        error = "Unsupported file type",
+        error = p.error or "Unsupported file type",
         position = p.position,
         source_file = source_file or "N/A",
       })

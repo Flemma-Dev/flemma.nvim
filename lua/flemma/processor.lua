@@ -69,6 +69,7 @@ end
 ---@class flemma.processor.UnsupportedFilePart
 ---@field kind "unsupported_file"
 ---@field raw? string
+---@field error? string
 ---@field position? flemma.ast.Position
 
 ---@alias flemma.processor.EvaluatedPart flemma.processor.TextPart|flemma.processor.ThinkingPart|flemma.processor.FilePart|flemma.processor.UnsupportedFilePart|flemma.processor.ToolUsePart|flemma.processor.ToolResultPart
@@ -204,7 +205,8 @@ function M.evaluate(doc, base_context)
             table.insert(parts, { kind = "unsupported_file", raw = seg.raw })
           end
         else
-          local err = "File not found or MIME undetermined"
+          local err = vim.fn.filereadable(filename) == 0 and "File not found: " .. filename
+            or "Could not determine MIME type for: " .. filename
           table.insert(diagnostics, {
             type = "file",
             severity = "warning",
@@ -214,7 +216,7 @@ function M.evaluate(doc, base_context)
             position = seg.position,
             source_file = context:get_filename() or "N/A",
           })
-          table.insert(parts, { kind = "unsupported_file", raw = seg.raw })
+          table.insert(parts, { kind = "unsupported_file", raw = seg.raw, error = err })
         end
         if seg.trailing_punct and #seg.trailing_punct > 0 then
           table.insert(parts, { kind = "text", text = seg.trailing_punct })
