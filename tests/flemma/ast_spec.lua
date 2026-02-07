@@ -360,14 +360,12 @@ describe("AST to Parts Mapper", function()
       { kind = "file", filename = "x.png", mime_type = "image/png", data = "abcd" },
       { kind = "file", filename = "x.pdf", mime_type = "application/pdf", data = "pdf" },
       { kind = "file", filename = "x.txt", mime_type = "text/plain", data = "hello" },
-      { kind = "unsupported_file", raw = "./unknown.bin" },
     })
     assert.equals("text", parts[1].kind)
     assert.equals("image", parts[2].kind)
     assert.equals("pdf", parts[3].kind)
     assert.equals("text_file", parts[4].kind)
     assert.equals("hello", parts[4].text)
-    assert.equals("unsupported_file", parts[5].kind)
   end)
 end)
 

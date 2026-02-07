@@ -1,6 +1,6 @@
 local ctxutil = require("flemma.context")
 local eval = require("flemma.eval")
-local emittable_mod = require("flemma.emittable")
+local emittable = require("flemma.emittable")
 local codeblock_parsers = require("flemma.codeblock.parsers")
 
 ---@class flemma.Processor
@@ -31,18 +31,11 @@ end
 ---@class flemma.processor.FilePart
 ---@field kind "file"
 ---@field filename string
----@field raw string
 ---@field mime_type string
 ---@field data string
 ---@field position? flemma.ast.Position
 
----@class flemma.processor.UnsupportedFilePart
----@field kind "unsupported_file"
----@field raw? string
----@field error? string
----@field position? flemma.ast.Position
-
----@alias flemma.processor.EvaluatedPart flemma.processor.TextPart|flemma.processor.ThinkingPart|flemma.processor.FilePart|flemma.processor.UnsupportedFilePart|flemma.processor.ToolUsePart|flemma.processor.ToolResultPart
+---@alias flemma.processor.EvaluatedPart flemma.processor.TextPart|flemma.processor.ThinkingPart|flemma.processor.FilePart|flemma.processor.ToolUsePart|flemma.processor.ToolResultPart
 
 ---@class flemma.processor.EvaluatedMessage
 ---@field role "You"|"Assistant"|"System"
@@ -148,9 +141,9 @@ function M.evaluate(doc, base_context)
           end
           -- Keep original expression text in output
           table.insert(parts, { kind = "text", text = "{{" .. (seg.code or "") .. "}}" })
-        elseif emittable_mod.is_emittable(result) then
+        elseif emittable.is_emittable(result) then
           -- Emittable result: create EmitContext and collect parts
-          local emit_ctx = emittable_mod.EmitContext.new({
+          local emit_ctx = emittable.EmitContext.new({
             position = seg.position,
             diagnostics = diagnostics,
             source_file = context:get_filename() or "N/A",

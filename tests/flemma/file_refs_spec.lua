@@ -84,7 +84,6 @@ describe("File References and Path Parsing", function()
       -- Assertions
       assert.equals("file", file_part.kind)
       assert.equals("./my report.txt", file_part.filename) -- URL-decoded
-      assert.equals("./my report.txt", file_part.raw) -- Decoded, same as filename (include() desugaring)
       assert.equals("text/plain", file_part.mime_type)
       assert.equals("test file content", file_part.data)
 
@@ -122,7 +121,6 @@ describe("File References and Path Parsing", function()
       local file_part = file_parts[1]
 
       assert.equals("./data file+with&symbols.json", file_part.filename) -- All characters decoded
-      assert.equals("./data file+with&symbols.json", file_part.raw)
     end)
 
     it("handles plus signs as spaces in URL decoding", function()
@@ -155,7 +153,6 @@ describe("File References and Path Parsing", function()
       local file_part = file_parts[1]
 
       assert.equals("./file with plus signs.txt", file_part.filename) -- Plus signs converted to spaces
-      assert.equals("./file with plus signs.txt", file_part.raw)
     end)
   end)
 
@@ -204,7 +201,6 @@ describe("File References and Path Parsing", function()
       assert.equals("file", file_part.kind)
       -- The filename should be resolved relative to buffer_dir
       assert.equals(temp_dir .. "/subdir/data.txt", file_part.filename)
-      assert.equals(file_part.filename, file_part.raw)
 
       -- Verify that vim.fn.filereadable was called with the resolved path
       assert.stub(filereadable_stub).was_called_with(temp_dir .. "/subdir/data.txt")
@@ -256,7 +252,6 @@ describe("File References and Path Parsing", function()
 
       -- The filename should be resolved relative to buffer_dir
       assert.equals(temp_dir .. "/parent.txt", file_part.filename)
-      assert.equals(file_part.filename, file_part.raw)
 
       -- Clean up
       vim.fn.delete(temp_dir, "rf")
@@ -380,7 +375,6 @@ describe("File References and Path Parsing", function()
       local file_part = file_parts[1]
 
       assert.equals("../config/.env.local", file_part.filename) -- Periods preserved in path/filename
-      assert.equals("../config/.env.local", file_part.raw)
     end)
   end)
 
@@ -416,7 +410,6 @@ describe("File References and Path Parsing", function()
 
       -- Filename decoded, punctuation stripped
       assert.equals("./my report.pdf", file_part.filename)
-      assert.equals("./my report.pdf", file_part.raw)
       assert.equals("application/pdf", file_part.mime_type)
     end)
   end)

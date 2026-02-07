@@ -55,7 +55,6 @@ describe("flemma.emittable", function()
       local part = ctx.parts[1]
       assert.equals("file", part.kind)
       assert.equals("photo.png", part.filename)
-      assert.equals("photo.png", part.raw)
       assert.equals("image/png", part.mime_type)
       assert.equals("binary_data", part.data)
       assert.equals(5, part.position.start_line)

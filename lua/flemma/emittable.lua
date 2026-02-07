@@ -52,7 +52,6 @@ function EmitContext:file(filename, mime_type, data)
   table.insert(self.parts, {
     kind = "file",
     filename = filename,
-    raw = filename,
     mime_type = mime_type,
     data = data,
     position = self.position,

@@ -82,7 +82,6 @@ local M = {}
 ---@class flemma.ast.GenericUnsupportedFilePart
 ---@field kind "unsupported_file"
 ---@field raw_filename? string
----@field raw? string
 
 ---@class flemma.ast.GenericThinkingPart
 ---@field kind "thinking"
@@ -234,26 +233,13 @@ function M.to_generic_parts(evaluated_parts, source_file)
         table.insert(diagnostics, {
           type = "file",
           severity = "warning",
-          filename = p.filename or p.raw,
-          raw = p.raw or p.filename,
+          filename = p.filename,
           error = err,
           position = p.position,
           source_file = source_file or "N/A",
         })
-        table.insert(parts, { kind = "unsupported_file", raw_filename = p.raw or p.filename })
+        table.insert(parts, { kind = "unsupported_file", raw_filename = p.filename })
       end
-    elseif p.kind == "unsupported_file" then
-      -- Already unsupported - emit diagnostic
-      table.insert(diagnostics, {
-        type = "file",
-        severity = "warning",
-        filename = p.raw or "unknown",
-        raw = p.raw,
-        error = p.error or "Unsupported file type",
-        position = p.position,
-        source_file = source_file or "N/A",
-      })
-      table.insert(parts, { kind = "unsupported_file", raw_filename = p.raw })
     elseif p.kind == "thinking" then
       -- Preserve thinking nodes with signature for provider state preservation
       table.insert(parts, {
