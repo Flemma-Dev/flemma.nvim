@@ -12,13 +12,12 @@ test:
 lint:
 	luacheck lua/ tests/
 
-# Run lua-language-server on the Lua files
+# Run lua-language-server type checker on production code
 check:
-	@# Set the VIMRUNTIME environment variable to point to the Neovim runtime directory
-	@# We do this by resolving the path to the `nvim` binary and navigating up from "[..]/bin" to the runtime directory "[..]/share/nvim/runtime".
-	@# On NixOS, `nvim` might be symlinked to a store path, so we use `readlink -f` to get the actual path.
+	@# VIMRUNTIME must be set so .luarc-check.lua can locate the Neovim runtime Lua stubs.
+	@# On NixOS, `nvim` might be symlinked to a store path, so we resolve it with `readlink -f`.
 	VIMRUNTIME=$(shell dirname $(shell dirname $(shell readlink -f $(shell which nvim))))/share/nvim/runtime \
-		lua-language-server --check lua/
+		lua-language-server --check lua/ --configpath ../.luarc-check.lua
 
 # Update models and pricing using Amp (AI agent)
 .PHONY: update-models
