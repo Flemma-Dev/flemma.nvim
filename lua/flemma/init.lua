@@ -1,5 +1,6 @@
 --- Flemma plugin core functionality
 --- Provides chat interface and API integration
+---@class flemma.Plugin
 local M = {}
 
 local plugin_config = require("flemma.config")
@@ -15,7 +16,8 @@ local highlight = require("flemma.highlight")
 -- Module configuration (will hold merged user opts and defaults)
 local config = {}
 
--- Setup function to initialize the plugin
+---Setup function to initialize the plugin
+---@param user_opts? flemma.Config User configuration overrides (merged with defaults)
 M.setup = function(user_opts)
   if vim.fn.has("nvim-0.11") ~= 1 then
     local msg = "Flemma requires Neovim 0.11 or newer. Please upgrade Neovim to use this plugin."
@@ -86,7 +88,8 @@ M.setup = function(user_opts)
   require("flemma.tools").setup()
 end
 
--- Get the current model name
+---Get the current model name
+---@return string|nil
 function M.get_current_model_name()
   local current_config = state.get_config()
   if current_config and current_config.model then
@@ -95,7 +98,8 @@ function M.get_current_model_name()
   return nil -- Or an empty string, depending on desired behavior for uninitialized model
 end
 
--- Get the current provider name
+---Get the current provider name
+---@return string|nil
 function M.get_current_provider_name()
   local current_config = state.get_config()
   if current_config and current_config.provider then

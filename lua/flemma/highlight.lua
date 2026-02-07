@@ -1,14 +1,20 @@
 --- Flemma syntax highlighting and theming functionality
 --- Handles all highlight group definitions and syntax rules
+---@class flemma.Highlight
 local M = {}
 
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local core = require("flemma.core")
 
--- Convert hex color string to RGB table
--- @param hex string - Hex color (e.g., "#ff0000" or "ff0000")
--- @return table|nil - { r = 0-255, g = 0-255, b = 0-255 } or nil if invalid
+---@class flemma.highlight.RGB
+---@field r integer 0-255
+---@field g integer 0-255
+---@field b integer 0-255
+
+---Convert hex color string to RGB table
+---@param hex? string Hex color (e.g., "#ff0000" or "ff0000")
+---@return flemma.highlight.RGB|nil
 local function hex_to_rgb(hex)
   if not hex then
     return nil
@@ -26,18 +32,18 @@ local function hex_to_rgb(hex)
   return { r = r, g = g, b = b }
 end
 
--- Convert RGB table to hex color string
--- @param rgb table - { r = 0-255, g = 0-255, b = 0-255 }
--- @return string - Hex color (e.g., "#ff0000")
+---Convert RGB table to hex color string
+---@param rgb flemma.highlight.RGB
+---@return string hex Hex color (e.g., "#ff0000")
 local function rgb_to_hex(rgb)
   return string.format("#%02x%02x%02x", math.floor(rgb.r), math.floor(rgb.g), math.floor(rgb.b))
 end
 
--- Blend two colors by adding their RGB values (clamped to 0-255)
--- @param base_rgb table - Base color RGB
--- @param mod_rgb table - Modifier color RGB
--- @param direction string - "+" for lighten (add), "-" for darken (subtract)
--- @return table - Resulting RGB
+---Blend two colors by adding their RGB values (clamped to 0-255)
+---@param base_rgb flemma.highlight.RGB
+---@param mod_rgb flemma.highlight.RGB
+---@param direction "+" | "-"
+---@return flemma.highlight.RGB
 local function blend_colors(base_rgb, mod_rgb, direction)
   local clamp = function(v)
     return math.max(0, math.min(255, v))
@@ -57,10 +63,10 @@ local function blend_colors(base_rgb, mod_rgb, direction)
   end
 end
 
--- Get color from a highlight group attribute
--- @param group_name string - Highlight group name (e.g., "Normal")
--- @param attr string - Attribute to get ("fg" or "bg")
--- @return string|nil - Hex color or nil if not defined
+---Get color from a highlight group attribute
+---@param group_name string Highlight group name (e.g., "Normal")
+---@param attr string Attribute to get ("fg" or "bg")
+---@return string|nil hex Hex color or nil if not defined
 local function get_hl_color(group_name, attr)
   local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = group_name, link = false })
   if not ok or not hl then
@@ -74,11 +80,10 @@ local function get_hl_color(group_name, attr)
   return nil
 end
 
--- Get the default fallback color for an attribute
--- First tries the Normal highlight group (which is what Neovim uses),
--- then falls back to config defaults if Normal doesn't define the attribute.
--- @param attr string - "fg" or "bg"
--- @return string - Hex color
+---Get the default fallback color for an attribute.
+---First tries the Normal highlight group, then falls back to config defaults.
+---@param attr string "fg" or "bg"
+---@return string hex Hex color
 local function get_default_color(attr)
   -- First try Normal group (what Neovim actually uses as default)
   local normal_color = get_hl_color("Normal", attr)
@@ -111,10 +116,15 @@ local valid_attrs = {
   sp = true,
 }
 
--- Try to resolve a single highlight expression like "Normal+bg:#101010"
--- @param expr string - Single expression (no commas)
--- @param use_defaults boolean - Whether to use defaults when group lacks attribute
--- @return table|nil - Resolved { fg = "#...", bg = "#..." } or nil if unresolved
+---@class flemma.highlight.ResolvedAttrs
+---@field fg? string Hex color
+---@field bg? string Hex color
+---@field sp? string Hex color
+
+---Try to resolve a single highlight expression like "Normal+bg:#101010"
+---@param expr string Single expression (no commas)
+---@param use_defaults boolean Whether to use defaults when group lacks attribute
+---@return flemma.highlight.ResolvedAttrs|nil
 local function try_expression(expr, use_defaults)
   local base_group = expr:match("^(.-)[%+%-][fbs][gp]:")
   if not base_group or base_group == "" then
@@ -141,16 +151,11 @@ local function try_expression(expr, use_defaults)
   return next(result) and result or nil
 end
 
--- Parse a highlight expression string and return resolved highlight options
--- Format: "Group+attr:#color,FallbackGroup+attr:#color,..."
--- Comma-separated expressions are tried in order; only last uses defaults
--- Examples:
---   "Normal+fg:#101010" - lighten Normal's fg by #101010
---   "Normal-bg:#303030" - darken Normal's bg by #303030
---   "Normal+fg:#101010-bg:#303030" - multiple operations on same group
---   "FooBar+bg:#201020,Normal+bg:#101010" - try FooBar first, fall back to Normal
--- @param value string - The highlight expression(s)
--- @return table|nil - Resolved highlight options like { fg = "#...", bg = "#..." }
+---Parse a highlight expression string and return resolved highlight options.
+---Format: "Group+attr:#color,FallbackGroup+attr:#color,...".
+---Comma-separated expressions are tried in order; only last uses defaults.
+---@param value string The highlight expression(s)
+---@return flemma.highlight.ResolvedAttrs|nil
 local function parse_highlight_expression(value)
   if not value:match("[%+%-][fbs][gp]:") then
     return nil
@@ -170,13 +175,12 @@ local function parse_highlight_expression(value)
   return nil
 end
 
--- Helper function to set highlight groups
--- Accepts either:
---   - a highlight group name to link to (string)
---   - a hex color string (e.g., "#ff0000") - applied as fg (or type_ if specified)
---   - a highlight expression (e.g., "Normal+fg:#101010-bg:#303030")
---   - a table with highlight attributes (e.g., { fg = "#ff0000", bold = true })
--- @param type_ string|nil - For bare hex colors, which attribute to use ("fg" or "bg"). Defaults to "fg".
+---Set highlight groups.
+---Accepts a highlight group name to link to, a hex color string,
+---a highlight expression, or a table with highlight attributes.
+---@param group_name string
+---@param value string|table
+---@param type_? string For bare hex colors, which attribute to use ("fg" or "bg")
 local function set_highlight(group_name, value, type_)
   if type(value) == "table" then
     if value.light ~= nil or value.dark ~= nil then
@@ -228,7 +232,7 @@ local function set_highlight(group_name, value, type_)
   end
 end
 
--- Apply syntax highlighting and Tree-sitter configuration
+---Apply syntax highlighting and Tree-sitter configuration
 M.apply_syntax = function()
   local syntax_config = state.get_config()
 
@@ -276,7 +280,7 @@ M.apply_syntax = function()
   set_highlight("FlemmaToolError", { link = "DiagnosticError", default = true })
 end
 
--- Setup line highlight groups for full-line background highlighting
+---Setup line highlight groups for full-line background highlighting
 local function setup_line_highlights()
   local current_config = state.get_config()
   if not current_config.line_highlights or not current_config.line_highlights.enabled then
@@ -293,7 +297,7 @@ local function setup_line_highlights()
   end
 end
 
--- Setup signs for different roles
+---Setup signs for different roles
 local function setup_signs()
   local current_config = state.get_config()
   if current_config.signs.enabled then
@@ -331,7 +335,7 @@ local function setup_signs()
   end
 end
 
--- Setup function to initialize highlighting functionality
+---Setup function to initialize highlighting functionality
 M.setup = function()
   -- Create or clear the augroup for highlight-related autocmds
   local augroup = vim.api.nvim_create_augroup("FlemmaHighlight", { clear = true })

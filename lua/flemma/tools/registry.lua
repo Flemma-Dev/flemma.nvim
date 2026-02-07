@@ -1,26 +1,49 @@
 --- Tool definition storage
 --- Manages registered tools for API requests and execution
+---@class flemma.tools.Registry
 local M = {}
 
+---@class flemma.tools.JSONSchema
+---@field type string JSON Schema type ("object", "string", "number", etc.)
+---@field description? string Human-readable description of this schema element
+---@field properties? table<string, flemma.tools.JSONSchema> Property schemas keyed by name
+---@field required? string[] Required property names
+
+---@class flemma.tools.ToolDefinition
+---@field name string Tool name (must match registry key)
+---@field description string Human-readable description
+---@field input_schema flemma.tools.JSONSchema JSON Schema for the tool input
+---@field output_schema? flemma.tools.JSONSchema JSON Schema for the tool output (used in description)
+---@field async? boolean True if execute takes a callback (default false)
+---@field hidden? boolean True to exclude from API requests (still executable)
+---@field executable? boolean Set to false to disable execution
+---@field execute? fun(input: table<string, any>, callback?: fun(result: flemma.tools.ExecutionResult)): any Executor function (sync returns ExecutionResult, async returns cancel fn or nil)
+
+---@class flemma.tools.ExecutionResult
+---@field success boolean Whether execution succeeded
+---@field output? string|table Result output (string or JSON-encodable table)
+---@field error? string Error message (when success=false)
+
+---@type table<string, flemma.tools.ToolDefinition>
 local tools = {}
 
 ---Register a tool definition
 ---@param name string The tool name
----@param definition table The tool definition with name, description, input_schema, and optional execute/async fields
+---@param definition flemma.tools.ToolDefinition The tool definition
 function M.register(name, definition)
   tools[name] = definition
 end
 
 ---Get a tool definition by name
 ---@param name string The tool name
----@return table|nil definition The tool definition, or nil if not found
+---@return flemma.tools.ToolDefinition|nil definition The tool definition, or nil if not found
 function M.get(name)
   return tools[name]
 end
 
 ---Get all registered tools (excludes hidden tools by default)
 ---@param opts? { include_hidden: boolean }
----@return table tools A copy of matching tool definitions
+---@return table<string, flemma.tools.ToolDefinition> tools A copy of matching tool definitions
 function M.get_all(opts)
   opts = opts or {}
   if opts.include_hidden then

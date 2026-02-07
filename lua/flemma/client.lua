@@ -2,12 +2,15 @@
 --- Handles all HTTP requests and transport mechanisms
 local log = require("flemma.logging")
 
+---@class flemma.Client
 local M = {}
 
 -- Registered fixtures by domain pattern (for testing)
 local registered_fixtures = {}
 
--- Register a fixture for a specific domain pattern
+---Register a fixture for a specific domain pattern (for testing)
+---@param domain_pattern string
+---@param fixture_path string
 function M.register_fixture(domain_pattern, fixture_path)
   log.debug(
     "client.register_fixture(): Registering fixture for domain pattern '" .. domain_pattern .. "': " .. fixture_path
@@ -15,13 +18,15 @@ function M.register_fixture(domain_pattern, fixture_path)
   registered_fixtures[domain_pattern] = fixture_path
 end
 
--- Clear all registered fixtures
+---Clear all registered fixtures
 function M.clear_fixtures()
   log.debug("client.clear_fixtures(): Clearing all registered fixtures.")
   registered_fixtures = {}
 end
 
--- Find fixture for a given endpoint
+---Find fixture for a given endpoint
+---@param endpoint string
+---@return string|nil fixture_path
 function M.find_fixture_for_endpoint(endpoint)
   for pattern, fixture_path in pairs(registered_fixtures) do
     if endpoint:match(pattern) then
@@ -39,7 +44,9 @@ function M.find_fixture_for_endpoint(endpoint)
   return nil
 end
 
--- Create temporary file for request body (local helper function)
+---Create temporary file for request body
+---@param request_body table<string, any>
+---@return string|nil tmp_file, string|nil err
 local function create_temp_file(request_body)
   -- Create temporary file for request body
   local tmp_file = os.tmpname()
@@ -61,7 +68,9 @@ local function create_temp_file(request_body)
   return tmp_file
 end
 
--- Redact sensitive information from headers
+---Redact sensitive information from headers
+---@param header string
+---@return string
 local function redact_sensitive_header(header)
   -- Check if header contains sensitive information (API keys, tokens)
   if header:match("^Authorization:") or header:lower():match("%-key:") or header:lower():match("key:") then
@@ -74,7 +83,9 @@ local function redact_sensitive_header(header)
   return header
 end
 
--- Escape shell arguments properly
+---Escape shell arguments properly
+---@param arg string
+---@return string
 local function escape_shell_arg(arg)
   -- Basic shell escaping for arguments
   if arg:match("[%s'\"]") then
@@ -84,7 +95,9 @@ local function escape_shell_arg(arg)
   return arg
 end
 
--- Format curl command for logging
+---Format curl command for logging
+---@param cmd string[]
+---@return string
 local function format_curl_command_for_log(cmd)
   local result = {}
   for i, arg in ipairs(cmd) do
@@ -99,7 +112,12 @@ local function format_curl_command_for_log(cmd)
   return table.concat(result, " ")
 end
 
--- Prepare curl command with common options
+---Prepare curl command with common options
+---@param tmp_file string Path to temporary file containing request body
+---@param headers string[] HTTP headers
+---@param endpoint string API endpoint URL
+---@param parameters? table<string, any> Provider parameters (for timeouts)
+---@return string[] cmd
 function M.prepare_curl_command(tmp_file, headers, endpoint, parameters)
   -- Retrieve timeout values from parameters, with defaults
   local connect_timeout = parameters and parameters.connect_timeout or 10
@@ -136,19 +154,22 @@ function M.prepare_curl_command(tmp_file, headers, endpoint, parameters)
   return cmd
 end
 
+---@class flemma.client.RequestCallbacks : flemma.provider.Callbacks
+---@field on_request_complete? fun(code: number) Called when the HTTP request process exits
+
 --- Request options for send_request
----@class ClientRequestOptions
----@field request_body table The JSON request body to send
+---@class flemma.client.RequestOptions
+---@field request_body table<string, any> The JSON request body to send
 ---@field headers string[] Array of HTTP headers
 ---@field endpoint string The API endpoint URL
----@field parameters table Provider parameters (for timeouts, model name, etc.)
----@field callbacks table Callback functions for handling responses
----@field process_response_line_fn? function Function to process each response line
----@field finalize_response_fn? function Function to finalize provider response processing
----@field reset_fn? function Optional function to reset provider state
+---@field parameters flemma.provider.Parameters Provider parameters (for timeouts, model name, etc.)
+---@field callbacks flemma.client.RequestCallbacks Callback functions for handling responses
+---@field process_response_line_fn? fun(line: string, callbacks: flemma.client.RequestCallbacks) Function to process each response line
+---@field finalize_response_fn? fun(code: number, callbacks: flemma.client.RequestCallbacks) Function to finalize provider response processing
+---@field reset_fn? fun() Optional function to reset provider state
 
 -- Send request to API using curl or a test fixture
----@param opts ClientRequestOptions Request configuration
+---@param opts flemma.client.RequestOptions Request configuration
 ---@return number|nil job_id Job ID of the started request or nil on failure
 function M.send_request(opts)
   -- Reset provider state before sending a new request
@@ -240,7 +261,9 @@ function M.send_request(opts)
   return job_id
 end
 
--- Cancel ongoing request
+---Cancel ongoing request
+---@param job_id integer|nil
+---@return boolean cancelled
 function M.cancel_request(job_id)
   if not job_id then
     return false
@@ -269,7 +292,10 @@ function M.cancel_request(job_id)
   return true
 end
 
--- Delayed process termination
+---Delayed process termination
+---@param pid integer
+---@param job_id integer
+---@param delay? integer Milliseconds (default 500)
 function M.delayed_terminate(pid, job_id, delay)
   delay = delay or 500
 

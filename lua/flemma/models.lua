@@ -3,6 +3,22 @@
 --- Contains model lists, defaults, and pricing information
 --- This file is data-only and contains no functions
 
+---@class flemma.models.Pricing
+---@field input number USD per million input tokens
+---@field output number USD per million output tokens
+
+---@class flemma.models.ModelInfo
+---@field pricing flemma.models.Pricing
+---@field supports_reasoning_effort? boolean Whether the model supports reasoning_effort parameter
+
+---@class flemma.models.ProviderModels
+---@field default string Default model name for this provider
+---@field models table<string, flemma.models.ModelInfo>
+
+---@class flemma.models.Data
+---@field providers table<string, flemma.models.ProviderModels>
+
+---@type flemma.models.Data
 return {
   providers = {
     -- Note: "claude" is a deprecated alias for "anthropic" (see provider/providers.lua)

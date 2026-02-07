@@ -1,5 +1,6 @@
 --- Tool calling support for Flemma
 --- Manages tool registry and built-in tool definitions
+---@class flemma.Tools
 local M = {}
 
 local registry = require("flemma.tools.registry")
@@ -21,7 +22,7 @@ end
 
 --- Build a tool description with output_schema information merged in
 --- This creates a description that helps the model understand what the tool returns
----@param tool table The tool definition with name, description, input_schema, and optional output_schema
+---@param tool flemma.tools.ToolDefinition The tool definition
 ---@return string The full description with output information
 function M.build_description(tool)
   local desc = tool.description or ""

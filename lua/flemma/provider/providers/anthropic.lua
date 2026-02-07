@@ -2,6 +2,8 @@
 --- Implements the Anthropic (Claude) API integration
 local base = require("flemma.provider.base")
 local log = require("flemma.logging")
+
+---@class flemma.provider.Anthropic : flemma.provider.Base
 local M = {}
 
 -- Inherit from base provider
@@ -11,7 +13,8 @@ setmetatable(M, { __index = base })
 -- so we should NOT add thoughts_tokens separately for cost calculation.
 M.output_has_thoughts = true
 
--- Create a new Anthropic provider instance
+---@param merged_config flemma.provider.Parameters
+---@return flemma.provider.Anthropic
 function M.new(merged_config)
   local provider = base.new(merged_config) -- Pass the already merged config to base
 
@@ -22,10 +25,11 @@ function M.new(merged_config)
   provider:reset()
 
   -- Set metatable to use Anthropic methods
+  ---@diagnostic disable-next-line: return-type-mismatch
   return setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
 end
 
--- Reset provider state (called by base.new and before new requests)
+---@param self flemma.provider.Anthropic
 function M.reset(self)
   base.reset(self)
   self._response_buffer.extra.accumulated_thinking = ""
@@ -35,7 +39,8 @@ function M.reset(self)
   log.debug("anthropic.reset(): Reset Anthropic provider state")
 end
 
--- Get API key from environment, keyring, or prompt
+---@param self flemma.provider.Anthropic
+---@return string|nil
 function M.get_api_key(self)
   -- Call the base implementation with Anthropic-specific parameters
   return base.get_api_key(self, {
@@ -47,10 +52,10 @@ end
 
 ---Build request body for Anthropic API
 ---
----@param prompt Prompt The prepared prompt with history and system (from pipeline)
----@param context Context The shared context object (not used, parts already resolved)
----@return table request_body The request body for the API
-function M.build_request(self, prompt, context)
+---@param prompt flemma.provider.Prompt The prepared prompt with history and system (from pipeline)
+---@param context? flemma.Context The shared context object (not used, parts already resolved)
+---@return table<string, any> request_body The request body for the API
+function M.build_request(self, prompt, context) ---@diagnostic disable-line: unused-local
   local api_messages = {}
 
   for _, msg in ipairs(prompt.history) do
@@ -225,7 +230,8 @@ function M.build_request(self, prompt, context)
   return request_body
 end
 
--- Get request headers for Anthropic API
+---@param self flemma.provider.Anthropic
+---@return string[]
 function M.get_request_headers(self)
   local api_key = self:get_api_key()
 
@@ -239,9 +245,9 @@ end
 -- Get API endpoint
 --- Process a single line of Anthropic API streaming response
 --- Parses Anthropic's server-sent events format and extracts content, usage, and error information
----@param self table The Anthropic provider instance
+---@param self flemma.provider.Anthropic
 ---@param line string A single line from the Anthropic API response stream
----@param callbacks ProviderCallbacks Table of callback functions to handle parsed data
+---@param callbacks flemma.provider.Callbacks Table of callback functions to handle parsed data
 function M.process_response_line(self, line, callbacks)
   -- Use base SSE parser
   local parsed = base._parse_sse_line(line)
@@ -382,8 +388,8 @@ function M.process_response_line(self, line, callbacks)
     local current_tool = self._response_buffer.extra.current_tool_use
     if current_tool then
       local input_json = self._response_buffer.extra.accumulated_tool_input or ""
-      local ok, input = pcall(vim.fn.json_decode, input_json)
-      if not ok then
+      local parse_ok, input = pcall(vim.fn.json_decode, input_json)
+      if not parse_ok then
         input = {}
         log.warn("anthropic.process_response_line(): Failed to parse tool input JSON: " .. input_json)
       end
@@ -465,7 +471,8 @@ function M.process_response_line(self, line, callbacks)
   end
 end
 
--- Import helper: Convert JS object notation to valid JSON
+---@param content string
+---@return string
 local function import_prepare_json(content)
   local lines = {}
   -- Process each line individually
@@ -481,7 +488,8 @@ local function import_prepare_json(content)
   return table.concat(lines, " ")
 end
 
--- Import helper: Extract content between anthropic.messages.create() call
+---@param lines string[]
+---@return string
 local function import_extract_content(lines)
   local content = {}
   local capturing = false
@@ -508,7 +516,8 @@ local function import_extract_content(lines)
   return table.concat(content, "\n")
 end
 
--- Import helper: Convert message content to text
+---@param content string|table
+---@return string
 local function import_get_message_text(content)
   if type(content) == "string" then
     return content
@@ -520,7 +529,8 @@ local function import_get_message_text(content)
   return ""
 end
 
--- Import helper: Generate chat file content from parsed API data
+---@param data table<string, any>
+---@return string
 local function import_generate_chat(data)
   local output = {}
 
@@ -547,7 +557,7 @@ local function import_generate_chat(data)
 end
 
 -- Try to import from buffer lines (Claude Workbench format)
-function M.try_import_from_buffer(self, lines)
+function M.try_import_from_buffer(self, lines) ---@diagnostic disable-line: unused-local
   -- Extract and prepare content
   local content = import_extract_content(lines)
   if #content == 0 then

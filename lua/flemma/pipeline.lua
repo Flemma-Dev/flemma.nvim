@@ -2,12 +2,16 @@ local parser = require("flemma.parser")
 local processor = require("flemma.processor")
 local ast = require("flemma.ast")
 
+---@class flemma.Pipeline
 local M = {}
 
+---@class flemma.pipeline.UnresolvedTool
+---@field id string
+---@field name string
+
 --- Validate that all tool_uses have matching tool_results
---- Returns a list of unresolved tool_use IDs
----@param history table[] Array of messages with parts
----@return string[] unresolved_ids List of tool_use IDs without matching tool_results
+---@param history flemma.provider.HistoryMessage[] Array of messages with parts
+---@return flemma.pipeline.UnresolvedTool[]
 local function validate_tool_results(history)
   local pending_tool_uses = {}
 
@@ -31,13 +35,17 @@ local function validate_tool_results(history)
   return unresolved
 end
 
+---@class flemma.pipeline.Prompt : flemma.provider.Prompt
+---@field pending_tool_calls flemma.pipeline.UnresolvedTool[]
+
 --- Run full pipeline for given buffer lines and context
---- Returns:
----  - prompt: { history=[{role, parts, content}], system=string|nil } canonical roles
----  - evaluated: processor output with diagnostics array (including diagnostics from to_generic_parts)
+---@param lines string[]
+---@param context flemma.Context|nil
+---@return flemma.pipeline.Prompt prompt
+---@return flemma.processor.EvaluatedResult evaluated
 function M.run(lines, context)
   local doc = parser.parse_lines(lines)
-  local evaluated = processor.evaluate(doc, context or {})
+  local evaluated = processor.evaluate(doc, context)
 
   local history = {}
   local system = nil
@@ -74,7 +82,6 @@ function M.run(lines, context)
       table.insert(history, {
         role = role,
         parts = parts,
-        content = nil,
       })
     end
   end

@@ -2,12 +2,14 @@
 --- Implements the Google Vertex AI API integration
 local base = require("flemma.provider.base")
 local log = require("flemma.logging")
+
+---@class flemma.provider.Vertex : flemma.provider.Base
 local M = {}
 
 -- Inherit from base provider
 setmetatable(M, { __index = base })
 
--- Private helper to validate required configuration
+---@param self flemma.provider.Vertex
 local function _validate_config(self)
   local project_id = self.parameters.project_id
   if not project_id or project_id == "" then
@@ -19,7 +21,9 @@ local function _validate_config(self)
   -- NOTE: Location has a default, and model is handled by provider_config, so only project_id is strictly required here.
 end
 
--- Utility function to generate access token from service account JSON
+---@param service_account_json string
+---@return string|nil token
+---@return string|nil error
 local function generate_access_token(service_account_json)
   -- Create a temporary file with the service account JSON
   local tmp_file = os.tmpname()
@@ -102,7 +106,8 @@ local function generate_access_token(service_account_json)
   return nil, err
 end
 
--- Create a new Google Vertex AI provider instance
+---@param provider_config flemma.provider.Parameters
+---@return flemma.provider.Vertex
 function M.new(provider_config)
   local provider = base.new(provider_config) -- Pass the flattened config to base
 
@@ -117,10 +122,11 @@ function M.new(provider_config)
   provider:reset()
 
   -- Set metatable to use Vertex AI methods
+  ---@diagnostic disable-next-line: return-type-mismatch
   return setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
 end
 
--- Reset provider state before a new request
+---@param self flemma.provider.Vertex
 function M.reset(self)
   base.reset(self)
   -- Add Vertex-specific extension
@@ -130,7 +136,8 @@ function M.reset(self)
   log.debug("vertex.reset(): Reset Vertex AI provider state")
 end
 
--- Get access token from environment, keyring, or prompt
+---@param self flemma.provider.Vertex
+---@return string|nil
 function M.get_api_key(self)
   -- Validate required configuration first
   _validate_config(self)
@@ -205,10 +212,10 @@ end
 
 ---Build request body for Vertex AI API
 ---
----@param prompt Prompt The prepared prompt with history and system
----@param context Context The shared context object for resolving file paths
----@return table request_body The request body for the API
-function M.build_request(self, prompt, context)
+---@param prompt flemma.provider.Prompt The prepared prompt with history and system
+---@param context? flemma.Context The shared context object for resolving file paths
+---@return table<string, any> request_body The request body for the API
+function M.build_request(self, prompt, context) ---@diagnostic disable-line: unused-local
   -- Convert prompt.history to Vertex AI format
   local contents = {}
 
@@ -457,7 +464,8 @@ function M.build_request(self, prompt, context)
   return request_body
 end
 
--- Get request headers for Vertex AI API
+---@param self flemma.provider.Vertex
+---@return string[]
 function M.get_request_headers(self)
   local access_token = self:get_api_key()
   if not access_token then
@@ -470,7 +478,8 @@ function M.get_request_headers(self)
   }
 end
 
--- Get API endpoint for Vertex AI
+---@param self flemma.provider.Vertex
+---@return string
 function M.get_endpoint(self)
   -- Access project_id and location directly from self.parameters
   -- Validate required configuration first
@@ -503,9 +512,9 @@ end
 
 --- Process a single line of Vertex AI API streaming response
 --- Parses Vertex AI's JSON response format and extracts content, reasoning, usage, and completion information
----@param self table The Vertex AI provider instance
+---@param self flemma.provider.Vertex
 ---@param line string A single line from the Vertex AI API response stream
----@param callbacks ProviderCallbacks Table of callback functions to handle parsed data
+---@param callbacks flemma.provider.Callbacks Table of callback functions to handle parsed data
 function M.process_response_line(self, line, callbacks)
   -- Use base SSE parser
   local parsed = base._parse_sse_line(line)
@@ -680,7 +689,9 @@ function M.process_response_line(self, line, callbacks)
   end
 end
 
--- Override base class error extraction to handle Vertex AI specific error formats
+---@param self flemma.provider.Vertex
+---@param data table<string, any>
+---@return string|nil
 function M.extract_json_response_error(self, data)
   -- First try Vertex AI specific patterns
 

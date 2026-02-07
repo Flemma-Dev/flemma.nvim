@@ -1,11 +1,35 @@
 --- Flemma notification functionality
+---@class flemma.Notify
 local M = {}
 
--- Per-buffer notifications: { [bufnr] = { notifications = {...}, ... } }
+---@class flemma.notify.Notification
+---@field win_id integer
+---@field bufnr integer
+---@field target_bufnr integer|nil
+---@field height integer
+---@field width integer
+---@field dismissed boolean
+---@field valid boolean
+---@field timer integer|nil
+
+---@class flemma.notify.BufferNotifications
+---@field notifications flemma.notify.Notification[]
+---@field last? { message: string, options: flemma.notify.Options, ref: flemma.notify.Notification|nil }
+
+---@class flemma.notify.Options
+---@field enabled boolean
+---@field timeout integer
+---@field max_width integer
+---@field padding integer
+---@field border string
+---@field title? string
+
+---Per-buffer notifications
+---@type table<integer, flemma.notify.BufferNotifications>
 local buffer_notifications = {}
 
--- Pending notifications for buffers not currently visible (e.g., in another tab)
--- { [bufnr] = { { msg = ..., opts = ... }, ... } }
+---Pending notifications for buffers not currently visible
+---@type table<integer, { msg: string, opts: flemma.notify.Options }[]>
 local pending_notifications = {}
 
 -- Default notification options
@@ -18,7 +42,9 @@ M.default_opts = {
   title = nil,
 }
 
--- Get the window ID for a buffer, or nil if buffer is not displayed
+---Get the window ID for a buffer, or nil if buffer is not displayed
+---@param bufnr? integer
+---@return integer|nil winid
 local function get_window_for_buffer(bufnr)
   if not bufnr then
     return nil
@@ -30,7 +56,8 @@ local function get_window_for_buffer(bufnr)
   return winid
 end
 
--- Reposition all active notifications for a specific buffer
+---Reposition all active notifications for a specific buffer
+---@param bufnr integer
 local function reposition_notifications(bufnr)
   local buf_notifs = buffer_notifications[bufnr]
   if not buf_notifs then
@@ -58,7 +85,11 @@ local function reposition_notifications(bufnr)
   end
 end
 
--- Create a notification window for a specific buffer
+---Create a notification window for a specific buffer
+---@param msg string
+---@param opts flemma.notify.Options
+---@param target_bufnr integer|nil
+---@return flemma.notify.Notification
 local function create_notification(msg, opts, target_bufnr)
   -- Get the window for the target buffer
   local winid = get_window_for_buffer(target_bufnr)
@@ -209,7 +240,8 @@ local function create_notification(msg, opts, target_bufnr)
   return notification
 end
 
--- Show pending notifications for a buffer (called when buffer becomes visible)
+---Show pending notifications for a buffer (called when buffer becomes visible)
+---@param bufnr integer
 local function show_pending_for_buffer(bufnr)
   local pending = pending_notifications[bufnr]
   if not pending or #pending == 0 then
@@ -225,10 +257,10 @@ local function show_pending_for_buffer(bufnr)
   end
 end
 
--- Show a notification if enabled
--- @param msg string - The message to display
--- @param opts table - Options (merged with default_opts)
--- @param bufnr number|nil - Buffer number to anchor notification to (nil = editor-relative)
+---Show a notification if enabled
+---@param msg string The message to display
+---@param opts? flemma.notify.Options Options (merged with default_opts)
+---@param bufnr? integer Buffer number to anchor notification to (nil = editor-relative)
 function M.show(msg, opts, bufnr)
   -- Merge with default options
   local final_opts = vim.tbl_deep_extend("force", M.default_opts, opts or {})
@@ -265,7 +297,9 @@ function M.show(msg, opts, bufnr)
   end)
 end
 
--- Check if a notification is still visible on screen
+---Check if a notification is still visible on screen
+---@param notif flemma.notify.Notification|nil
+---@return boolean
 local function is_notification_visible(notif)
   if not notif then
     return false
@@ -273,7 +307,7 @@ local function is_notification_visible(notif)
   return notif.valid and not notif.dismissed and notif.win_id and vim.api.nvim_win_is_valid(notif.win_id)
 end
 
--- Function to recall last notification for the current buffer
+---Recall last notification for the current buffer
 function M.recall_last()
   local current_bufnr = vim.api.nvim_get_current_buf()
   local buf_state = buffer_notifications[current_bufnr]
@@ -283,7 +317,7 @@ function M.recall_last()
     return
   end
 
-  local last = buf_state.last
+  local last = buf_state.last ---@cast last -nil
 
   -- Don't show again if already visible
   if is_notification_visible(last.ref) then
@@ -293,8 +327,8 @@ function M.recall_last()
   M.show(last.message, last.options, current_bufnr)
 end
 
--- Cleanup notifications for a specific buffer
--- Called when a buffer is deleted to close any pending notifications
+---Cleanup notifications for a specific buffer
+---@param bufnr integer
 function M.cleanup_buffer(bufnr)
   -- Clear any pending notifications
   pending_notifications[bufnr] = nil
@@ -320,7 +354,7 @@ function M.cleanup_buffer(bufnr)
   buffer_notifications[bufnr] = nil
 end
 
--- Setup autocmds to show pending notifications when buffer becomes visible
+---Setup autocmds to show pending notifications when buffer becomes visible
 function M.setup()
   local augroup = vim.api.nvim_create_augroup("FlemmaNotify", { clear = true })
 

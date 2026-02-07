@@ -1,12 +1,15 @@
 --- Usage and pricing functionality for Flemma plugin
 --- Centralizes cost calculation and notification display
 
+---@class flemma.Usage
+---@field models table<string, flemma.models.Pricing>
 local M = {}
 
 -- Load models from centralized models.lua
 local models_data = require("flemma.models")
 
--- Get all models with pricing (extract from data-only models.lua)
+---Get all models with pricing (extract from data-only models.lua)
+---@return table<string, flemma.models.Pricing>
 local function get_all_models_with_pricing()
   local all_models = {}
 
@@ -24,7 +27,9 @@ end
 -- Pricing information for models (USD per million tokens) - cached for performance
 M.models = get_all_models_with_pricing()
 
--- Find the closest matching model name
+---Find the closest matching model name
+---@param model_name string
+---@return string|nil
 local function find_matching_model(model_name)
   -- Try exact match first
   if M.models[model_name] then
@@ -49,7 +54,11 @@ local function find_matching_model(model_name)
   return nil
 end
 
--- Calculate cost for tokens
+---Calculate cost for tokens
+---@param model string
+---@param input_tokens number
+---@param output_tokens number
+---@return { input: number, output: number, total: number }|nil
 function M.calculate_cost(model, input_tokens, output_tokens)
   local matching_model = find_matching_model(model)
   if not matching_model then
@@ -70,7 +79,10 @@ function M.calculate_cost(model, input_tokens, output_tokens)
   }
 end
 
--- Format usage information for notification display
+---Format usage information for notification display
+---@param current? flemma.state.InflightUsage In-flight usage data
+---@param session? flemma.session.Session Session instance
+---@return string
 function M.format_notification(current, session)
   local state = require("flemma.state")
   local usage_lines = {}

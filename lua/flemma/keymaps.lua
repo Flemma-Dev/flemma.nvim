@@ -1,8 +1,9 @@
 --- Keymap configuration for Flemma
 --- Centralizes all buffer-local keymap setup
+---@class flemma.Keymaps
 local M = {}
 
--- Setup function to initialize all keymaps
+---Setup function to initialize all keymaps
 M.setup = function()
   local core = require("flemma.core")
   local navigation = require("flemma.navigation")

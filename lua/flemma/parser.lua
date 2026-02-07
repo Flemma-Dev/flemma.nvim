@@ -1,13 +1,15 @@
 local ast = require("flemma.ast")
 local codeblock = require("flemma.codeblock")
 
+---@class flemma.Parser
 local M = {}
 
 local TOOL_USE_PATTERN = "^%*%*Tool Use:%*%*%s*`([^`]+)`%s*%(`([^)]+)`%)"
 local TOOL_RESULT_PATTERN = "^%*%*Tool Result:%*%*%s*`([^`]+)`"
 local TOOL_RESULT_ERROR_PATTERN = "%s*%(error%)%s*$"
 
--- Utilities
+---@param str string|nil
+---@return string|nil
 local function url_decode(str)
   if not str then
     return nil
@@ -19,10 +21,12 @@ local function url_decode(str)
   return str
 end
 
--- Unified segment parser: parse text for {{ }} expressions and @./ file references
--- Returns array of AST segments (text, expression, file_reference)
--- Note: <thinking> tags are NOT parsed here - only in @Assistant messages
--- base_line: optional 1-indexed line number for accurate position tracking
+--- Unified segment parser: parse text for {{ }} expressions and @./ file references
+--- Returns array of AST segments (text, expression, file_reference)
+--- Note: <thinking> tags are NOT parsed here - only in @Assistant messages
+---@param text string|nil
+---@param base_line integer|nil 1-indexed line number for accurate position tracking
+---@return flemma.ast.Segment[]
 local function parse_segments(text, base_line)
   local segments = {}
   if text == "" or text == nil then
@@ -76,8 +80,9 @@ local function parse_segments(text, base_line)
 
     if next_kind == "expr" then
       local line, col = char_to_line_col(next_start)
-      table.insert(segments, ast.expression(payload, { start_line = line, start_col = col }))
+      table.insert(segments, ast.expression(payload --[[@as string]], { start_line = line, start_col = col }))
     elseif next_kind == "file" then
+      ---@cast payload string
       local raw_file_match, mime_with_punct = payload:match("^([^;]+);type=(.+)$")
       local mime_override = nil
       local trailing_punct = nil
@@ -94,6 +99,7 @@ local function parse_segments(text, base_line)
       end
 
       local cleaned_path = url_decode(raw_file_match)
+      ---@cast cleaned_path string
       local line, col = char_to_line_col(next_start)
 
       table.insert(
@@ -113,10 +119,12 @@ local function parse_segments(text, base_line)
   return segments
 end
 
--- Parse user messages - handle **Tool Result:** blocks and regular content
--- lines: array of content lines (without the @You: prefix)
--- base_line_num: the line number where the message content starts (1-indexed)
--- diagnostics: optional table to collect parsing diagnostics
+--- Parse user messages - handle **Tool Result:** blocks and regular content
+---@param lines string[]|nil Content lines (without the @You: prefix)
+---@param base_line_num integer Line number where the message content starts (1-indexed)
+---@param diagnostics flemma.ast.Diagnostic[]|nil Optional table to collect parsing diagnostics
+---@return flemma.ast.Segment[] segments
+---@return flemma.ast.Diagnostic[] diagnostics
 local function parse_user_segments(lines, base_line_num, diagnostics)
   local segments = {}
   diagnostics = diagnostics or {}
@@ -229,10 +237,12 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
   return segments, diagnostics
 end
 
--- Parse assistant messages - extract <thinking> tags and **Tool Use:** blocks, treat rest as text
--- lines: array of content lines (without the @Assistant: prefix)
--- base_line_num: the line number where the message content starts (1-indexed)
--- diagnostics: optional table to collect parsing diagnostics
+--- Parse assistant messages - extract <thinking> tags and **Tool Use:** blocks, treat rest as text
+---@param lines string[]|nil Content lines (without the @Assistant: prefix)
+---@param base_line_num integer Line number where the message content starts (1-indexed)
+---@param diagnostics flemma.ast.Diagnostic[]|nil Optional table to collect parsing diagnostics
+---@return flemma.ast.Segment[] segments
+---@return flemma.ast.Diagnostic[] diagnostics
 local function parse_assistant_segments(lines, base_line_num, diagnostics)
   local segments = {}
   diagnostics = diagnostics or {}
@@ -374,7 +384,12 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
   return segments, diagnostics
 end
 
--- Split into frontmatter and body lines. Frontmatter fence: ```language ... ```
+--- Split into frontmatter and body lines. Frontmatter fence: ```language ... ```
+---@param lines string[]
+---@return flemma.ast.FrontmatterNode|nil frontmatter
+---@return string[]|nil fm_lines
+---@return string[] body
+---@return integer body_start
 local function parse_frontmatter(lines)
   if not lines[1] then
     return nil, nil, lines, 1
@@ -406,9 +421,14 @@ local function parse_frontmatter(lines)
   return fm, fm_lines, body, body_start
 end
 
--- Parse message role line: @Role:
--- line_offset: offset to add to line numbers (for frontmatter adjustment)
--- diagnostics: optional table to collect parsing diagnostics
+--- Parse message role line: @Role:
+---@param lines string[]
+---@param start_idx integer
+---@param line_offset integer|nil Offset to add to line numbers (for frontmatter adjustment)
+---@param diagnostics flemma.ast.Diagnostic[]|nil Optional table to collect parsing diagnostics
+---@return flemma.ast.MessageNode|nil message
+---@return integer last_line_idx
+---@return flemma.ast.Diagnostic[] diagnostics
 local function parse_message(lines, start_idx, line_offset, diagnostics)
   line_offset = line_offset or 0
   diagnostics = diagnostics or {}
@@ -469,6 +489,8 @@ local function parse_message(lines, start_idx, line_offset, diagnostics)
   return msg, (i - 1), diagnostics
 end
 
+---@param lines string[]|nil
+---@return flemma.ast.DocumentNode
 function M.parse_lines(lines)
   lines = lines or {}
   local errors = {}
@@ -496,14 +518,18 @@ function M.parse_lines(lines)
   return doc
 end
 
--- Parse inline content (for include() results) - no frontmatter, no message roles
--- Just scan for @./ file references and {{ }} expressions
+--- Parse inline content (for include() results) - no frontmatter, no message roles
+--- Just scan for @./ file references and {{ }} expressions
+---@param text string|nil
+---@return flemma.ast.Segment[]
 function M.parse_inline_content(text)
   return parse_segments(text or "")
 end
 
--- Get parsed document with automatic caching based on buffer changedtick
--- Returns cached AST if buffer unchanged, otherwise parses and caches
+--- Get parsed document with automatic caching based on buffer changedtick
+--- Returns cached AST if buffer unchanged, otherwise parses and caches
+---@param bufnr integer
+---@return flemma.ast.DocumentNode
 function M.get_parsed_document(bufnr)
   local state = require("flemma.state")
   local buffer_state = state.get_buffer_state(bufnr)

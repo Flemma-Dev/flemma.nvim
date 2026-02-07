@@ -1,5 +1,6 @@
 --- Tool result injector
 --- Handles inserting tool execution results into the buffer in the correct format
+---@class flemma.tools.Injector
 local M = {}
 
 local codeblock = require("flemma.codeblock")
@@ -140,7 +141,7 @@ function M.inject_placeholder(bufnr, tool_id)
 
   -- Find the assistant message containing this tool_use
   local assistant_msg, assistant_idx = find_assistant_message_for_tool(doc, tool_id)
-  if not assistant_msg then
+  if not assistant_msg or not assistant_idx then
     return nil, "Tool use block not found in buffer"
   end
 

@@ -1,4 +1,122 @@
 --- Flemma default configuration
+
+---@alias flemma.config.HighlightValue string|{ dark: string, light: string }
+
+---@class flemma.config.Highlights
+---@field system flemma.config.HighlightValue
+---@field user flemma.config.HighlightValue
+---@field assistant flemma.config.HighlightValue
+---@field user_lua_expression flemma.config.HighlightValue
+---@field user_file_reference flemma.config.HighlightValue
+---@field thinking_tag flemma.config.HighlightValue
+---@field thinking_block flemma.config.HighlightValue
+---@field tool_use flemma.config.HighlightValue
+---@field tool_result flemma.config.HighlightValue
+---@field tool_result_error flemma.config.HighlightValue
+
+---@class flemma.config.Ruler
+---@field enabled boolean
+---@field char string
+---@field hl flemma.config.HighlightValue
+
+---@class flemma.config.SignRole
+---@field char? string
+---@field hl boolean|flemma.config.HighlightValue
+
+---@class flemma.config.Signs
+---@field enabled boolean
+---@field char string
+---@field system flemma.config.SignRole
+---@field user flemma.config.SignRole
+---@field assistant flemma.config.SignRole
+
+---@class flemma.config.LineHighlights
+---@field enabled boolean
+---@field frontmatter flemma.config.HighlightValue
+---@field system flemma.config.HighlightValue
+---@field user flemma.config.HighlightValue
+---@field assistant flemma.config.HighlightValue
+
+---@class flemma.config.Pricing
+---@field enabled boolean
+
+---@class flemma.config.Statusline
+---@field thinking_format string
+---@field reasoning_format string
+
+---@class flemma.config.VertexParams
+---@field project_id? string
+---@field location? string
+---@field thinking_budget? integer
+
+---@class flemma.config.OpenAIParams
+---@field reasoning? string
+
+---@class flemma.config.AnthropicParams
+---@field thinking_budget? integer
+
+---@class flemma.config.Parameters
+---@field max_tokens? integer
+---@field temperature? number
+---@field timeout? integer
+---@field connect_timeout? integer
+---@field vertex? flemma.config.VertexParams
+---@field openai? flemma.config.OpenAIParams
+---@field anthropic? flemma.config.AnthropicParams
+
+---@class flemma.config.BashToolConfig
+---@field shell? string
+---@field cwd? string
+---@field env? table<string, string>
+
+---@class flemma.config.ToolsConfig
+---@field default_timeout integer
+---@field show_spinner boolean
+---@field cursor_after_result "result"|"stay"|"next"
+---@field bash flemma.config.BashToolConfig
+
+---@class flemma.config.Editing
+---@field disable_textwidth boolean
+---@field auto_write boolean
+---@field manage_updatetime boolean
+---@field foldlevel integer
+
+---@class flemma.config.NormalKeymaps
+---@field send string
+---@field cancel string
+---@field tool_execute string
+---@field next_message string
+---@field prev_message string
+
+---@class flemma.config.InsertKeymaps
+---@field send string
+
+---@class flemma.config.Keymaps
+---@field normal flemma.config.NormalKeymaps
+---@field insert flemma.config.InsertKeymaps
+---@field enabled boolean
+
+---@class flemma.Config
+---@field defaults { dark: { bg: string, fg: string }, light: { bg: string, fg: string } }
+---@field highlights flemma.config.Highlights
+---@field role_style string
+---@field ruler flemma.config.Ruler
+---@field signs flemma.config.Signs
+---@field line_highlights flemma.config.LineHighlights
+---@field notify flemma.notify.Options
+---@field pricing flemma.config.Pricing
+---@field statusline flemma.config.Statusline
+---@field provider string
+---@field model? string
+---@field parameters flemma.config.Parameters
+---@field tools flemma.config.ToolsConfig
+---@field presets table<string, any>
+---@field text_object string|false
+---@field editing flemma.config.Editing
+---@field logging flemma.logging.Config
+---@field keymaps flemma.config.Keymaps
+
+---@type flemma.Config
 return {
   -- Fallback colors used when highlight groups don't define fg/bg
   defaults = {

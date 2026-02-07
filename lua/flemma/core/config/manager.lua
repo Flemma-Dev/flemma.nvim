@@ -1,14 +1,15 @@
 --- Centralized configuration management for Flemma
 --- Includes validation logic (merged from core/validation.lua)
+---@class flemma.core.ConfigManager
 local M = {}
 
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local registry = require("flemma.provider.registry")
 
---- Check if a parameter key is a general parameter applicable to all providers
--- @param key string The parameter key to check
--- @return boolean True if the key is a general parameter
+---Check if a parameter key is a general parameter applicable to all providers
+---@param key string
+---@return boolean
 local function is_general_parameter(key)
   return key == "max_tokens" or key == "temperature" or key == "timeout" or key == "connect_timeout"
 end
@@ -17,9 +18,9 @@ end
 -- Validation functions (merged from core/validation.lua)
 --------------------------------------------------------------------------------
 
---- Validates that a provider name is supported
--- @param provider_name string The provider name to validate
--- @return boolean, string|nil true if valid, or false with error message
+---Validates that a provider name is supported
+---@param provider_name string
+---@return boolean valid, string|nil err
 function M.validate_provider(provider_name)
   if not registry.has(provider_name) then
     local err = string.format(
@@ -32,10 +33,10 @@ function M.validate_provider(provider_name)
   return true, nil
 end
 
---- Validates and returns the appropriate model for a provider
--- @param model_name string|nil The model name (can be nil for default)
--- @param provider_name string The provider name
--- @return string|nil, string|nil The validated model name, or nil with error message
+---Validates and returns the appropriate model for a provider
+---@param model_name string|nil
+---@param provider_name string
+---@return string|nil validated_model, string|nil err
 function M.validate_and_get_model(model_name, provider_name)
   local original_model = model_name
   local validated_model = registry.get_appropriate_model(original_model, provider_name)
@@ -48,7 +49,7 @@ function M.validate_and_get_model(model_name, provider_name)
       tostring(provider_name),
       tostring(validated_model)
     )
-    vim.notify(warn_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
+    vim.notify(warn_msg, vim.log.levels.WARN, { title = "Flemma Configuration" }) ---@diagnostic disable-line: redundant-parameter
     log.warn(warn_msg)
 
     log.info(
@@ -71,11 +72,11 @@ function M.validate_and_get_model(model_name, provider_name)
   return validated_model, nil
 end
 
---- Validates provider-specific parameters and shows warnings for known issues
--- @param provider_name string The provider name
--- @param model_name string The model name
--- @param parameters table The parameters to validate
--- @return boolean true if validation passes (warnings don't fail validation)
+---Validates provider-specific parameters and shows warnings for known issues
+---@param provider_name string
+---@param model_name string
+---@param parameters table<string, any>
+---@return boolean success
 function M.validate_parameters(provider_name, model_name, parameters)
   -- Get the provider module path
   local provider_module_path = registry.get(provider_name)
@@ -99,11 +100,11 @@ end
 -- Configuration management
 --------------------------------------------------------------------------------
 
---- Merges parameters for a provider, handling general and provider-specific parameters
--- @param base_params table Base parameters (may contain provider-specific sub-tables)
--- @param provider_name string The provider name
--- @param provider_overrides table|nil Provider-specific parameter overrides
--- @return table Merged parameters
+---Merges parameters for a provider, handling general and provider-specific parameters
+---@param base_params table<string, any>
+---@param provider_name string
+---@param provider_overrides? table<string, any>
+---@return table<string, any> merged
 function M.merge_parameters(base_params, provider_name, provider_overrides)
   local merged_params = {}
   base_params = base_params or {}
@@ -125,11 +126,11 @@ function M.merge_parameters(base_params, provider_name, provider_overrides)
   return merged_params
 end
 
---- Prepares a complete configuration for a provider
--- @param provider_name string The provider name
--- @param model_name string|nil The model name (can be nil for default)
--- @param parameters table|nil The parameters
--- @return table|nil, string|nil The prepared config, or nil with error message
+---Prepares a complete configuration for a provider
+---@param provider_name string
+---@param model_name? string
+---@param parameters? table<string, any>
+---@return { provider: string, model: string, parameters: table<string, any> }|nil config, string|nil err
 function M.prepare_config(provider_name, model_name, parameters)
   -- Validate provider
   local valid, err = M.validate_provider(provider_name)
@@ -149,7 +150,7 @@ function M.prepare_config(provider_name, model_name, parameters)
   end
 
   -- Merge parameters
-  local merged_params = M.merge_parameters(parameters, resolved_provider)
+  local merged_params = M.merge_parameters(parameters or {}, resolved_provider)
   merged_params.model = validated_model
 
   -- Validate parameters (shows warnings but doesn't fail)
@@ -172,8 +173,8 @@ function M.prepare_config(provider_name, model_name, parameters)
   }, nil
 end
 
---- Applies a configuration to the global state
--- @param config table The configuration to apply (should have provider, model, parameters)
+---Applies a configuration to the global state
+---@param config { provider: string, model: string, parameters: table<string, any> }
 function M.apply_config(config)
   local updated_config = state.get_config()
   updated_config.provider = config.provider
@@ -189,9 +190,9 @@ function M.apply_config(config)
   )
 end
 
---- Check if a parameter key is a general parameter applicable to all providers
--- @param key string The parameter key to check
--- @return boolean True if the key is a general parameter
+---Check if a parameter key is a general parameter applicable to all providers
+---@param key string
+---@return boolean
 function M.is_general_parameter(key)
   return is_general_parameter(key)
 end

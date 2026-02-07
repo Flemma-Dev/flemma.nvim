@@ -1,5 +1,6 @@
 --- Tool executor
 --- Orchestrates tool execution with state management, concurrency control, and result handling
+---@class flemma.tools.Executor
 local M = {}
 
 local registry = require("flemma.tools.registry")
@@ -7,22 +8,22 @@ local injector = require("flemma.tools.injector")
 local state = require("flemma.state")
 local log = require("flemma.logging")
 
---- @class PendingExecution
---- @field tool_id string
---- @field tool_name string
---- @field bufnr integer
---- @field start_line integer
---- @field end_line integer
---- @field cancel_fn function|nil
---- @field started_at integer timestamp
---- @field completed boolean
+---@class flemma.tools.PendingExecution
+---@field tool_id string
+---@field tool_name string
+---@field bufnr integer
+---@field start_line integer
+---@field end_line integer
+---@field cancel_fn function|nil
+---@field started_at integer timestamp
+---@field completed boolean
 
--- Per-buffer pending executions: bufnr -> { tool_id -> PendingExecution }
+-- Per-buffer pending executions: bufnr -> { tool_id -> flemma.tools.PendingExecution }
 local pending_by_buffer = {}
 
---- Get or initialize the pending map for a buffer
---- @param bufnr integer
---- @return table
+---Get or initialize the pending map for a buffer
+---@param bufnr integer
+---@return table<string, flemma.tools.PendingExecution>
 local function get_buffer_pending(bufnr)
   if not pending_by_buffer[bufnr] then
     pending_by_buffer[bufnr] = {}
@@ -30,9 +31,9 @@ local function get_buffer_pending(bufnr)
   return pending_by_buffer[bufnr]
 end
 
---- Count pending (non-completed) executions for a buffer
---- @param bufnr integer
---- @return integer
+---Count pending (non-completed) executions for a buffer
+---@param bufnr integer
+---@return integer
 local function count_pending(bufnr)
   local pending = pending_by_buffer[bufnr]
   if not pending then
@@ -47,25 +48,25 @@ local function count_pending(bufnr)
   return n
 end
 
---- Lock the buffer to prevent user edits during tool execution
---- @param bufnr integer
+---Lock the buffer to prevent user edits during tool execution
+---@param bufnr integer
 local function lock_buffer(bufnr)
   if vim.api.nvim_buf_is_valid(bufnr) then
     vim.bo[bufnr].modifiable = false
   end
 end
 
---- Unlock the buffer if no more tools are actively executing
---- @param bufnr integer
+---Unlock the buffer if no more tools are actively executing
+---@param bufnr integer
 local function maybe_unlock_buffer(bufnr)
   if vim.api.nvim_buf_is_valid(bufnr) and count_pending(bufnr) == 0 then
     vim.bo[bufnr].modifiable = true
   end
 end
 
---- Clean up a pending execution entry
---- @param bufnr integer
---- @param tool_id string
+---Clean up a pending execution entry
+---@param bufnr integer
+---@param tool_id string
 local function cleanup_pending(bufnr, tool_id)
   local pending = pending_by_buffer[bufnr]
   if pending then
@@ -73,10 +74,10 @@ local function cleanup_pending(bufnr, tool_id)
   end
 end
 
---- Move cursor after result injection based on config
---- @param bufnr integer
---- @param tool_id string
---- @param mode string "result" or "next"
+---Move cursor after result injection based on config
+---@param bufnr integer
+---@param tool_id string
+---@param mode string "result" or "next"
 local function move_cursor_after_result(bufnr, tool_id, mode)
   local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
@@ -109,11 +110,11 @@ local function move_cursor_after_result(bufnr, tool_id, mode)
   end
 end
 
---- Perform the actual completion work: inject result, move cursor, update UI
---- @param bufnr integer
---- @param tool_id string
---- @param result table ExecutionResult {success, output, error}
---- @param is_async boolean whether completion was scheduled via vim.schedule
+---Perform the actual completion work: inject result, move cursor, update UI
+---@param bufnr integer
+---@param tool_id string
+---@param result flemma.tools.ExecutionResult
+---@param is_async boolean whether completion was scheduled via vim.schedule
 local function do_completion(bufnr, tool_id, result, is_async)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     cleanup_pending(bufnr, tool_id)
@@ -163,12 +164,12 @@ local function do_completion(bufnr, tool_id, result, is_async)
   ui.update_ui(bufnr)
 end
 
---- Handle completion of a tool execution (success or error)
---- For sync tools, completes inline. For async tools, schedules to main thread.
---- @param bufnr integer
---- @param tool_id string
---- @param result table ExecutionResult {success, output, error}
---- @param opts {async: boolean}
+---Handle completion of a tool execution (success or error)
+---For sync tools, completes inline. For async tools, schedules to main thread.
+---@param bufnr integer
+---@param tool_id string
+---@param result flemma.tools.ExecutionResult
+---@param opts {async: boolean}
 local function handle_completion(bufnr, tool_id, result, opts)
   local pending = get_buffer_pending(bufnr)
   local entry = pending[tool_id]
@@ -188,11 +189,11 @@ local function handle_completion(bufnr, tool_id, result, opts)
   end
 end
 
---- Execute a tool call
---- @param bufnr integer
---- @param context table ToolContext from context resolver
---- @return boolean success
---- @return string|nil error message
+---Execute a tool call
+---@param bufnr integer
+---@param context flemma.tools.ToolContext
+---@return boolean success
+---@return string|nil error
 function M.execute(bufnr, context)
   local tool_id = context.tool_id
   local tool_name = context.tool_name
@@ -308,9 +309,9 @@ function M.execute(bufnr, context)
   return true, nil
 end
 
---- Cancel a pending execution
---- @param tool_id string
---- @return boolean cancelled true if cancelled, false if not found
+---Cancel a pending execution
+---@param tool_id string
+---@return boolean cancelled true if cancelled, false if not found
 function M.cancel(tool_id)
   for bufnr, pending in pairs(pending_by_buffer) do
     local entry = pending[tool_id]
@@ -331,8 +332,8 @@ function M.cancel(tool_id)
   return false
 end
 
---- Cancel all pending executions for a buffer
---- @param bufnr integer
+---Cancel all pending executions for a buffer
+---@param bufnr integer
 function M.cancel_all(bufnr)
   local pending = pending_by_buffer[bufnr]
   if not pending then
@@ -352,9 +353,9 @@ function M.cancel_all(bufnr)
   end
 end
 
---- Get pending executions for a buffer
---- @param bufnr integer
---- @return PendingExecution[]
+---Get pending executions for a buffer
+---@param bufnr integer
+---@return flemma.tools.PendingExecution[]
 function M.get_pending(bufnr)
   local pending = pending_by_buffer[bufnr]
   if not pending then
@@ -370,9 +371,9 @@ function M.get_pending(bufnr)
   return result
 end
 
---- Cancel the active operation for a buffer (API request or first pending tool)
---- @param bufnr integer
---- @return boolean cancelled
+---Cancel the active operation for a buffer (API request or first pending tool)
+---@param bufnr integer
+---@return boolean cancelled
 function M.cancel_for_buffer(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
   if buffer_state.current_request then
@@ -390,9 +391,9 @@ function M.cancel_for_buffer(bufnr)
   return false
 end
 
---- Cancel the tool at cursor position, or the first pending tool if no cursor match
---- @param bufnr integer
---- @return boolean cancelled
+---Cancel the tool at cursor position, or the first pending tool if no cursor match
+---@param bufnr integer
+---@return boolean cancelled
 function M.cancel_at_cursor(bufnr)
   local cursor = vim.api.nvim_win_get_cursor(0)
   local tool_context = require("flemma.tools.context")
@@ -410,10 +411,10 @@ function M.cancel_at_cursor(bufnr)
   return false
 end
 
---- Resolve and execute the tool at cursor position
---- @param bufnr integer
---- @return boolean success
---- @return string|nil error
+---Resolve and execute the tool at cursor position
+---@param bufnr integer
+---@return boolean success
+---@return string|nil error
 function M.execute_at_cursor(bufnr)
   local cursor = vim.api.nvim_win_get_cursor(0)
   local tool_context = require("flemma.tools.context")
@@ -424,8 +425,8 @@ function M.execute_at_cursor(bufnr)
   return M.execute(bufnr, ctx)
 end
 
---- Clean up all state for a buffer (called on buffer close)
---- @param bufnr integer
+---Clean up all state for a buffer (called on buffer close)
+---@param bufnr integer
 function M.cleanup_buffer(bufnr)
   local pending = pending_by_buffer[bufnr]
   if pending then

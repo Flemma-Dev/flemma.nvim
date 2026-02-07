@@ -1,19 +1,20 @@
 --- Tool context resolver
 --- Given a cursor position, finds the tool_use block and extracts execution context
+---@class flemma.tools.Context
 local M = {}
 
---- @class ToolContext
---- @field tool_id string The unique ID of the tool call
---- @field tool_name string The name of the tool to execute
---- @field input table The parsed input arguments
---- @field node table The AST segment reference (from parser)
---- @field start_line integer 1-based start line of the tool_use block
---- @field end_line integer 1-based end line of the tool_use block
+---@class flemma.tools.ToolContext
+---@field tool_id string The unique ID of the tool call
+---@field tool_name string The name of the tool to execute
+---@field input table<string, any> The parsed input arguments
+---@field node flemma.ast.ToolUseSegment The AST segment reference (from parser)
+---@field start_line integer 1-based start line of the tool_use block
+---@field end_line integer 1-based end line of the tool_use block
 
---- Find the message containing a given line number
---- @param doc table Parsed document AST
---- @param line integer 1-based line number
---- @return table|nil message, integer|nil message_index
+---Find the message containing a given line number
+---@param doc flemma.ast.DocumentNode Parsed document AST
+---@param line integer 1-based line number
+---@return flemma.ast.MessageNode|nil message, integer|nil message_index
 local function find_message_at_line(doc, line)
   for i, msg in ipairs(doc.messages) do
     if line >= msg.position.start_line and line <= msg.position.end_line then
@@ -23,9 +24,9 @@ local function find_message_at_line(doc, line)
   return nil, nil
 end
 
---- Find all tool_use segments in a message
---- @param msg table Message AST node
---- @return table[] tool_use segments
+---Find all tool_use segments in a message
+---@param msg flemma.ast.MessageNode Message AST node
+---@return flemma.ast.ToolUseSegment[]
 local function get_tool_use_segments(msg)
   local tool_uses = {}
   for _, seg in ipairs(msg.segments) do
@@ -36,10 +37,10 @@ local function get_tool_use_segments(msg)
   return tool_uses
 end
 
---- Find the tool_use segment containing or nearest to the cursor line
---- @param tool_uses table[] Array of tool_use segments
---- @param cursor_line integer 1-based cursor line
---- @return table|nil tool_use segment
+---Find the tool_use segment containing or nearest to the cursor line
+---@param tool_uses flemma.ast.ToolUseSegment[] Array of tool_use segments
+---@param cursor_line integer 1-based cursor line
+---@return flemma.ast.ToolUseSegment|nil
 local function find_nearest_tool_use(tool_uses, cursor_line)
   if #tool_uses == 0 then
     return nil
@@ -75,10 +76,10 @@ local function find_nearest_tool_use(tool_uses, cursor_line)
   return best
 end
 
---- Resolve tool context from cursor position
---- @param bufnr integer Buffer number
---- @param cursor_pos {row: integer, col: integer} 1-based cursor position
---- @return ToolContext|nil context, string|nil error_message
+---Resolve tool context from cursor position
+---@param bufnr integer Buffer number
+---@param cursor_pos {row: integer, col: integer} 1-based cursor position
+---@return flemma.tools.ToolContext|nil context, string|nil error_message
 function M.resolve(bufnr, cursor_pos)
   local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)

@@ -1,5 +1,7 @@
 --- Bash tool definition
 --- Execute bash commands and return stdout/stderr
+---@class flemma.tools.definitions.Bash
+---@field definitions flemma.tools.ToolDefinition[]
 local M = {}
 
 M.definitions = {

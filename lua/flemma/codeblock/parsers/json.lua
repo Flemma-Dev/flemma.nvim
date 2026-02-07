@@ -1,12 +1,13 @@
 --- JSON parser for code blocks
 --- Decodes JSON and returns a table
+---@class flemma.codeblock.parsers.Json
 local M = {}
 
 ---Parse JSON code and return decoded table
 ---@param code string The JSON code to parse
----@param context table Optional context (not used for JSON but kept for interface consistency)
----@return table variables Table of variables from JSON
-function M.parse(code, context)
+---@param context? table<string, any> Optional context (not used for JSON but kept for interface consistency)
+---@return table<string, any> variables Table of variables from JSON
+function M.parse(code, context) ---@diagnostic disable-line: unused-local
   local ok, result = pcall(vim.fn.json_decode, code)
 
   if not ok then

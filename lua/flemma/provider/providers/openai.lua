@@ -3,6 +3,8 @@
 local base = require("flemma.provider.base")
 local log = require("flemma.logging")
 local models = require("flemma.models")
+
+---@class flemma.provider.OpenAI : flemma.provider.Base
 local M = {}
 
 -- Inherit from base provider
@@ -12,7 +14,8 @@ setmetatable(M, { __index = base })
 -- so we should NOT add thoughts_tokens separately for cost calculation.
 M.output_has_thoughts = true
 
--- Create a new OpenAI provider instance
+---@param merged_config flemma.provider.Parameters
+---@return flemma.provider.OpenAI
 function M.new(merged_config)
   local provider = base.new(merged_config) -- Pass the already merged config to base
 
@@ -23,17 +26,19 @@ function M.new(merged_config)
   provider:reset()
 
   -- Set metatable to use OpenAI methods
+  ---@diagnostic disable-next-line: return-type-mismatch
   return setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
 end
 
--- Reset provider state (called by base.new and before new requests)
+---@param self flemma.provider.OpenAI
 function M.reset(self)
   base.reset(self)
   self._response_buffer.extra.tool_calls = {}
   log.debug("openai.reset(): Reset OpenAI provider state")
 end
 
--- Get API key from environment, keyring, or prompt
+---@param self flemma.provider.OpenAI
+---@return string|nil
 function M.get_api_key(self)
   -- Call the base implementation with OpenAI-specific parameters
   return base.get_api_key(self, {
@@ -45,10 +50,10 @@ end
 
 ---Build request body for OpenAI API
 ---
----@param prompt Prompt The prepared prompt with history and system (from pipeline)
----@param context Context The shared context object (not used, parts already resolved)
----@return table request_body The request body for the API
-function M.build_request(self, prompt, context)
+---@param prompt flemma.provider.Prompt The prepared prompt with history and system (from pipeline)
+---@param context? flemma.Context The shared context object (not used, parts already resolved)
+---@return table<string, any> request_body The request body for the API
+function M.build_request(self, prompt, context) ---@diagnostic disable-line: unused-local
   local api_messages = {}
 
   -- Add system message first if present
@@ -260,7 +265,8 @@ function M.build_request(self, prompt, context)
   return request_body
 end
 
--- Get request headers for OpenAI API
+---@param self flemma.provider.OpenAI
+---@return string[]
 function M.get_request_headers(self)
   local api_key = self:get_api_key()
 
@@ -273,9 +279,9 @@ end
 -- Get API endpoint
 --- Process a single line of OpenAI API streaming response
 --- Parses OpenAI's server-sent events format and extracts content, usage, and completion information
----@param self table The OpenAI provider instance
+---@param self flemma.provider.OpenAI
 ---@param line string A single line from the OpenAI API response stream
----@param callbacks ProviderCallbacks Table of callback functions to handle parsed data
+---@param callbacks flemma.provider.Callbacks Table of callback functions to handle parsed data
 function M.process_response_line(self, line, callbacks)
   -- Use base SSE parser
   local parsed = base._parse_sse_line(line)
@@ -401,8 +407,8 @@ function M.process_response_line(self, line, callbacks)
     if finish_reason == "tool_calls" then
       local tool_calls = self._response_buffer.extra.tool_calls or {}
       for _, tc in pairs(tool_calls) do
-        local ok, input = pcall(vim.fn.json_decode, tc.arguments)
-        if not ok then
+        local parse_ok, input = pcall(vim.fn.json_decode, tc.arguments)
+        if not parse_ok then
           input = {}
           log.warn("openai.process_response_line(): Failed to parse tool arguments JSON: " .. tc.arguments)
         end
@@ -441,7 +447,7 @@ end
 
 ---Validate provider-specific parameters
 ---@param model_name string The model name
----@param parameters table The parameters to validate
+---@param parameters table<string, any> The parameters to validate
 ---@return boolean success True if validation passes (warnings don't fail)
 function M.validate_parameters(model_name, parameters)
   -- Check for reasoning parameter support
@@ -457,7 +463,7 @@ function M.validate_parameters(model_name, parameters)
         "Flemma: The 'reasoning' parameter is not supported by the selected OpenAI model '%s'. It may be ignored or cause an API error.",
         model_name
       )
-      vim.notify(warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
+      vim.notify(warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" }) ---@diagnostic disable-line: redundant-parameter
       log.warn(warning_msg)
     end
   end
@@ -482,7 +488,7 @@ function M.validate_parameters(model_name, parameters)
       "Flemma: For OpenAI o-series models with 'reasoning' active, 'temperature' must be 1 or omitted. Current value is '%s'. The API will likely reject this.",
       tostring(temp_value)
     )
-    vim.notify(temp_warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
+    vim.notify(temp_warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" }) ---@diagnostic disable-line: redundant-parameter
     log.warn(temp_warning_msg)
   end
 

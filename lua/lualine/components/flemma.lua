@@ -7,7 +7,8 @@ local models = require("flemma.models")
 -- Create a new component for displaying the Flemma model
 local flemma_model_component = lualine_component:extend()
 
--- Get the current reasoning setting if the provider and model support it
+---Get the current reasoning setting if the provider and model support it
+---@return string|nil reasoning "low"|"medium"|"high" or nil
 local function get_current_reasoning_setting()
   local current_config = state.get_config()
   if not current_config or not current_config.provider or not current_config.model then
@@ -40,7 +41,8 @@ local function get_current_reasoning_setting()
   return nil
 end
 
--- Get the current thinking budget setting if the provider supports it
+---Get the current thinking budget setting if the provider supports it
+---@return number|nil budget
 local function get_current_thinking_budget()
   local current_config = state.get_config()
   if not current_config or not current_config.provider then
@@ -72,8 +74,9 @@ local function get_current_thinking_budget()
   return nil
 end
 
---- Updates the status of the component.
--- This function is called by lualine to get the text to display.
+---Updates the status of the component.
+---Called by lualine to get the text to display.
+---@return string
 function flemma_model_component:update_status()
   -- Only show the model if the filetype is 'chat'
   if vim.bo.filetype == "chat" then

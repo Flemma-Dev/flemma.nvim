@@ -6,8 +6,16 @@
 ---
 --- User-defined variables from frontmatter are stored as top-level keys in the environment.
 
+---@class flemma.Eval
 local M = {}
 
+---@alias flemma.eval.Environment table<string, any>
+
+---@param relative_path string
+---@param env_of_caller flemma.eval.Environment
+---@param eval_expression_func fun(expr: string, env: flemma.eval.Environment): any
+---@param create_safe_env_func fun(): flemma.eval.Environment
+---@return string
 local function include_delegate(relative_path, env_of_caller, eval_expression_func, create_safe_env_func)
   if not env_of_caller.__filename then
     error("include() called but __filename is not set in the calling environment.")
@@ -118,6 +126,9 @@ local function include_delegate(relative_path, env_of_caller, eval_expression_fu
   return table.concat(result_parts, "")
 end
 
+---@param env flemma.eval.Environment
+---@param eval_expr_fn fun(expr: string, env: flemma.eval.Environment): any
+---@param create_env_fn fun(): flemma.eval.Environment
 local function ensure_env_capabilities(env, eval_expr_fn, create_env_fn)
   if env.include == nil then
     -- The 'include' function captures the 'env' it's defined in.
@@ -128,11 +139,12 @@ local function ensure_env_capabilities(env, eval_expr_fn, create_env_fn)
   end
 end
 
--- Create a safe environment for executing Lua code
---
--- User-defined variables from frontmatter are merged as top-level keys by context.to_eval_env().
--- The 'include' function is added by ensure_env_capabilities to capture the correct environment.
--- Reserved internal fields (__filename, __include_stack) are set by context.to_eval_env().
+--- Create a safe environment for executing Lua code
+---
+--- User-defined variables from frontmatter are merged as top-level keys by context.to_eval_env().
+--- The 'include' function is added by ensure_env_capabilities to capture the correct environment.
+--- Reserved internal fields (__filename, __include_stack) are set by context.to_eval_env().
+---@return flemma.eval.Environment
 function M.create_safe_env()
   return {
     -- String manipulation
@@ -174,8 +186,8 @@ function M.create_safe_env()
       pi = math.pi,
     },
 
-    -- UTF-8 support for unicode string handling
-    utf8 = utf8,
+    -- UTF-8 support for unicode string handling (available in Lua 5.3+, nil in LuaJIT)
+    utf8 = utf8, ---@diagnostic disable-line: undefined-global
 
     -- Neovim API functions required by include()
     vim = {
@@ -205,7 +217,10 @@ function M.create_safe_env()
   }
 end
 
--- Execute code in a safe environment
+--- Execute code in a safe environment
+---@param code string
+---@param env_param flemma.eval.Environment|nil
+---@return table<string, any> globals New variables defined during execution
 function M.execute_safe(code, env_param)
   -- Create environment and store initial keys
   local env = env_param or M.create_safe_env() -- Use provided env or create a new one
@@ -244,7 +259,10 @@ function M.execute_safe(code, env_param)
   return globals
 end
 
--- Evaluate an expression in a given environment
+--- Evaluate an expression in a given environment
+---@param expr string
+---@param env flemma.eval.Environment
+---@return any result
 function M.eval_expression(expr, env)
   -- Ensure 'env' is not nil, though callers should guarantee this.
   if not env then
