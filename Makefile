@@ -47,27 +47,22 @@ screenshot:
 	@ghostty																			\
 		--gtk-titlebar=true																\
 		--window-decoration=auto														\
-		--window-width=140																\
+		--window-width=80																\
 		--window-height=48																\
 		--maximize=false																\
 		--font-family="Adwaita Mono"													\
 		--font-family-bold="Adwaita Mono, Bold"											\
 		--font-family-italic="Adwaita Mono, Regular Italic"								\
 		--font-family-bold-italic="Adwaita Mono, Bold Italic"							\
-		--font-size=14																	\
+		--font-size=12																	\
 		--gtk-custom-css="`pwd`/contrib/ghostty/gtk-overlay.css"						\
 		-e sh -c "cd `pwd` && make ghostty-screenshot-cmd"
 
 ghostty-screenshot-cmd:
 	@-rm ~/.cache/nvim/flemma.log
 	@nvim --cmd "set runtimepath^=`pwd`"												\
-		-c ":colorscheme default"														\
+		-c ":colorscheme industry"														\
 		-c "lua require(\"flemma\").setup({												\
-			highlights = {																\
-				system = \"Normal\",													\
-				user_lua_expression = \"Special\",										\
-				user_file_reference = \"Special\",										\
-			},																			\
 		})"																				\
 		-c ":tabedit example.chat"														\
 		-c ':set nornu nospell nocursorline' -c ':set showtabline=0' -c ':set cmdheight=0' -c ':set guicursor=n-v-c-sm:ver25' -c ':normal! ggzaza'
