@@ -970,7 +970,14 @@ describe("File References and Path Parsing", function()
       -- Check the diagnostic contains appropriate information
       local found_unsupported = false
       for _, diag in ipairs(file_diags) do
-        if diag.error and (diag.error:match("Unsupported") or diag.error:match("read error") or diag.error:match("Failed to open file")) then
+        if
+          diag.error
+          and (
+            diag.error:match("Unsupported")
+            or diag.error:match("read error")
+            or diag.error:match("Failed to open file")
+          )
+        then
           found_unsupported = true
           assert.equals("warning", diag.severity)
           break
