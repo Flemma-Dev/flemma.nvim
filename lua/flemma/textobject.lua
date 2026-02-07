@@ -1,8 +1,17 @@
+---@class flemma.Textobject
 local M = {}
 
 local parser = require("flemma.parser")
 
--- Get the bounds of the current message
+---@class flemma.textobject.MessageBounds
+---@field start_line integer
+---@field end_line integer
+---@field inner_start_line integer
+---@field inner_start_col integer
+---@field inner_end integer
+
+---Get the bounds of the current message
+---@return flemma.textobject.MessageBounds|nil
 local function get_message_bounds()
   local cur_line = vim.api.nvim_win_get_cursor(0)[1]
   local bufnr = vim.api.nvim_get_current_buf()
@@ -92,7 +101,8 @@ local function get_message_bounds()
   }
 end
 
--- Text object implementations
+---Text object implementation for messages
+---@param type "i"|"a" Inner or around
 function M.message_textobj(type)
   local bounds = get_message_bounds()
   if not bounds then
@@ -118,7 +128,8 @@ function M.message_textobj(type)
   end
 end
 
--- Setup function to create the text objects
+---Setup function to create the text objects
+---@param opts? { text_object?: string|false }
 function M.setup(opts)
   opts = opts or {}
   -- Return early if text objects are disabled

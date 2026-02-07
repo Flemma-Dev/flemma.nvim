@@ -1,48 +1,72 @@
 --- State management for Flemma plugin
 --- Centralizes all shared plugin state (global and per-buffer)
-
+---@class flemma.State
 local M = {}
+
 local session_module = require("flemma.session")
 
--- Local state variables
-local config = {}
+---@class flemma.state.InflightUsage
+---@field input_tokens number
+---@field output_tokens number
+---@field thoughts_tokens number
+---@field output_has_thoughts boolean
+
+---@class flemma.state.BufferState
+---@field current_request integer|nil Job ID of the active cURL request
+---@field request_cancelled boolean Whether the current request has been cancelled
+---@field spinner_timer integer|nil Timer ID for the spinner animation
+---@field api_error_occurred boolean Whether an API error occurred during the last request
+---@field inflight_usage flemma.state.InflightUsage Token counters accumulated during streaming
+---@field ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached parsed AST
+
+---@diagnostic disable-next-line: missing-fields
+local config = {} ---@type flemma.Config
+---@type flemma.provider.Base|nil
 local provider = nil
 local session = session_module.Session.new()
 
--- Buffer-local state storage
+---@type table<integer, flemma.state.BufferState>
 local buffer_states = {}
 
--- Configuration management
+---Set the global plugin configuration
+---@param conf flemma.Config
 function M.set_config(conf)
-  config = conf or {}
+  config = conf
 end
 
+---Get the global plugin configuration
+---@return flemma.Config
 function M.get_config()
   return config
 end
 
--- Provider management
+---Set the active provider instance
+---@param p flemma.provider.Base|nil
 function M.set_provider(p)
   provider = p
 end
 
+---Get the active provider instance
+---@return flemma.provider.Base|nil
 function M.get_provider()
   return provider
 end
 
--- Session management
+---Get the global session (tracks all requests across buffers)
+---@return flemma.session.Session
 function M.get_session()
   return session
 end
 
+---Reset the global session (clears all request history)
 function M.reset_session()
   session = session_module.Session.new()
 end
 
 -- Buffer state management
 
---- Initialize buffer state with default values
----@param bufnr number Buffer number
+---Initialize buffer state with default values
+---@param bufnr integer Buffer number
 local function init_buffer(bufnr)
   buffer_states[bufnr] = {
     current_request = nil,
@@ -53,13 +77,14 @@ local function init_buffer(bufnr)
       input_tokens = 0,
       output_tokens = 0,
       thoughts_tokens = 0,
+      output_has_thoughts = false,
     },
   }
 end
 
---- Get buffer-local state, initializing if needed
----@param bufnr number Buffer number
----@return table buffer_state
+---Get buffer-local state, initializing if needed
+---@param bufnr integer Buffer number
+---@return flemma.state.BufferState buffer_state
 function M.get_buffer_state(bufnr)
   if not buffer_states[bufnr] then
     init_buffer(bufnr)
@@ -67,8 +92,8 @@ function M.get_buffer_state(bufnr)
   return buffer_states[bufnr]
 end
 
---- Set a specific key in buffer state
----@param bufnr number Buffer number
+---Set a specific key in buffer state
+---@param bufnr integer Buffer number
 ---@param key string State key
 ---@param value any State value
 function M.set_buffer_state(bufnr, key, value)
@@ -78,9 +103,9 @@ function M.set_buffer_state(bufnr, key, value)
   buffer_states[bufnr][key] = value
 end
 
---- Cleanup buffer state and any active jobs/timers
---- Called on buffer lifecycle events (BufWipeout/BufUnload/BufDelete)
----@param bufnr number Buffer number
+---Cleanup buffer state and any active jobs/timers
+---Called on buffer lifecycle events (BufWipeout/BufUnload/BufDelete)
+---@param bufnr integer Buffer number
 function M.cleanup_buffer_state(bufnr)
   local st = buffer_states[bufnr]
   if st then
@@ -94,6 +119,11 @@ function M.cleanup_buffer_state(bufnr)
       vim.fn.timer_stop(st.spinner_timer)
     end
     buffer_states[bufnr] = nil
+  end
+  -- Clean up tool executor state
+  local ok, executor = pcall(require, "flemma.tools.executor")
+  if ok then
+    executor.cleanup_buffer(bufnr)
   end
   -- Clean up any notifications associated with this buffer
   require("flemma.notify").cleanup_buffer(bufnr)

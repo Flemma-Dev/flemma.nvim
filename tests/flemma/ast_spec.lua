@@ -219,7 +219,7 @@ describe("Processor", function()
     }
     local b = ctx.from_file("tests/fixtures/loop1.txt")
     local doc = parser.parse_lines(lines)
-    local ok, res = pcall(processor.evaluate, doc, b)
+    local ok = pcall(processor.evaluate, doc, b)
     assert.is_true(ok, "Processor should not crash; include() error handled in expression eval as text")
   end)
 
@@ -338,7 +338,7 @@ describe("Pipeline Integration", function()
       "@You: Hello",
       "@Assistant: Hi there!",
     }
-    local prompt, evaluated = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
     assert.equals("You are helpful.", prompt.system)
     assert.equals(2, #prompt.history)
   end)
@@ -352,7 +352,7 @@ describe("Pipeline Integration", function()
       "@Assistant: Got it",
     }
 
-    local prompt, evaluated = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
 
     assert.is_nil(prompt.system)
     assert.equals(2, #prompt.history)
@@ -384,7 +384,7 @@ describe("Provider Integration", function()
       "@You: Hello",
       "@Assistant: Hi there!",
     }
-    local prompt, evaluated = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
     local req = provider:build_request(prompt, {})
     assert.is_not_nil(req.model)
     assert.equals("table", type(req.messages))
@@ -403,7 +403,7 @@ describe("Provider Integration", function()
       "@Assistant: Got it",
     }
 
-    local prompt, evaluated = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
     local req = provider:build_request(prompt, {})
     assert.equals("user", req.messages[1].role)
   end)

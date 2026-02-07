@@ -1,5 +1,6 @@
 --- UI module for Flemma plugin
 --- Handles visual presentation: rulers, spinners, folding, and signs
+---@class flemma.UI
 local M = {}
 
 local log = require("flemma.logging")
@@ -23,10 +24,14 @@ local PRIORITY = {
   LINE_HIGHLIGHT = 50,
   THINKING_BLOCK = 100,
   THINKING_TAG = 200,
+  TOOL_EXECUTION = 250,
   SPINNER = 300,
 }
 
--- Helper function to generate content preview for folds
+---Generate content preview for folds
+---@param fold_start_lnum integer
+---@param fold_end_lnum integer
+---@return string
 local function get_fold_content_preview(fold_start_lnum, fold_end_lnum)
   local content_lines = {}
   local num_content_lines_in_fold = fold_end_lnum - fold_start_lnum - 1
@@ -59,7 +64,9 @@ local function get_fold_content_preview(fold_start_lnum, fold_end_lnum)
   return preview_str
 end
 
--- Folding functions
+---Get fold level for a line number
+---@param lnum integer
+---@return string
 function M.get_fold_level(lnum)
   local line = vim.fn.getline(lnum)
   local next_line_num = lnum + 1
@@ -99,6 +106,8 @@ function M.get_fold_level(lnum)
   return "="
 end
 
+---Get fold text for display
+---@return string
 function M.get_fold_text()
   local foldstart_lnum = vim.v.foldstart
   local foldend_lnum = vim.v.foldend
@@ -141,6 +150,14 @@ end
 local ns_id = vim.api.nvim_create_namespace("flemma")
 local spinner_ns = vim.api.nvim_create_namespace("flemma_spinner")
 local line_hl_ns = vim.api.nvim_create_namespace("flemma_line_highlights")
+local tool_exec_ns = vim.api.nvim_create_namespace("flemma_tool_execution")
+
+--- Per-tool indicator state: key(bufnr, tool_id) -> { extmark_id, timer, bufnr, tool_id }
+local tool_indicators = {}
+
+local function indicator_key(bufnr, tool_id)
+  return tostring(bufnr) .. ":" .. tool_id
+end
 
 --- Execute a command in the context of a buffer's window
 ---@param bufnr number Buffer number
@@ -153,7 +170,9 @@ function M.buffer_cmd(bufnr, cmd)
   vim.fn.win_execute(winid, "noautocmd " .. cmd)
 end
 
--- Add rulers between messages
+---Add rulers between messages
+---@param bufnr integer
+---@param doc flemma.ast.DocumentNode
 function M.add_rulers(bufnr, doc)
   -- Clear existing extmarks
   vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
@@ -188,7 +207,9 @@ function M.add_rulers(bufnr, doc)
   end
 end
 
--- Highlight thinking tags and blocks using extmarks (higher priority than Treesitter)
+---Highlight thinking tags and blocks using extmarks (higher priority than Treesitter)
+---@param bufnr integer
+---@param doc flemma.ast.DocumentNode
 function M.highlight_thinking_tags(bufnr, doc)
   local thinking_ns = vim.api.nvim_create_namespace("flemma_thinking_tags")
 
@@ -231,7 +252,9 @@ function M.highlight_thinking_tags(bufnr, doc)
   end
 end
 
--- Show loading spinner
+---Show loading spinner
+---@param bufnr integer
+---@return integer timer_id
 function M.start_loading_spinner(bufnr)
   local original_modifiable_initial = vim.bo[bufnr].modifiable
   vim.bo[bufnr].modifiable = true -- Allow plugin modifications for initial message
@@ -298,7 +321,8 @@ function M.start_loading_spinner(bufnr)
   return timer
 end
 
--- Clean up spinner and prepare for response
+---Clean up spinner and prepare for response
+---@param bufnr integer
 function M.cleanup_spinner(bufnr)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return
@@ -351,7 +375,8 @@ function M.cleanup_spinner(bufnr)
   vim.bo[bufnr].modifiable = original_modifiable -- Restore previous modifiable state
 end
 
--- Helper function to fold the last thinking block in a buffer
+---Fold the last thinking block in a buffer
+---@param bufnr integer
 function M.fold_last_thinking_block(bufnr)
   log.debug("fold_last_thinking_block(): Attempting to fold last thinking block in buffer " .. bufnr)
 
@@ -421,7 +446,11 @@ function M.fold_last_thinking_block(bufnr)
   end
 end
 
--- Place signs for a message
+---Place signs for a message
+---@param bufnr integer
+---@param start_line integer
+---@param end_line integer
+---@param role string
 function M.place_signs(bufnr, start_line, end_line, role)
   local current_config = state.get_config()
   if not current_config.signs.enabled then
@@ -450,7 +479,9 @@ function M.place_signs(bufnr, start_line, end_line, role)
   end
 end
 
--- Apply full-line background highlighting for messages and frontmatter
+---Apply full-line background highlighting for messages and frontmatter
+---@param bufnr integer
+---@param doc flemma.ast.DocumentNode
 function M.apply_line_highlights(bufnr, doc)
   local current_config = state.get_config()
   if not current_config.line_highlights or not current_config.line_highlights.enabled then
@@ -499,11 +530,12 @@ function M.apply_line_highlights(bufnr, doc)
   end
 end
 
--- Set up folding expression for a buffer
--- If bufnr is provided, sets folding on the window displaying that buffer
--- Otherwise, sets folding on the current window
+---Set up folding expression for a buffer.
+---If bufnr is provided, sets folding on the window displaying that buffer,
+---otherwise sets folding on the current window.
+---@param bufnr? integer
 function M.setup_folding(bufnr)
-  local winid = nil
+  local winid
 
   if bufnr then
     winid = vim.fn.bufwinid(bufnr)
@@ -532,7 +564,8 @@ local updatetime_state = {
   active_chat_buffers = {}, -- Set of bufnr that are currently active (in a window)
 }
 
--- Helper to count active chat buffers
+---Count active chat buffers
+---@return integer
 local function count_active_chat_buffers()
   local count = 0
   for _ in pairs(updatetime_state.active_chat_buffers) do
@@ -541,8 +574,8 @@ local function count_active_chat_buffers()
   return count
 end
 
--- Apply buffer-local settings for chat files
--- bufnr: optional buffer number, defaults to current buffer
+---Apply buffer-local settings for chat files
+---@param bufnr? integer Buffer number, defaults to current buffer
 local function apply_chat_buffer_settings(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
 
@@ -551,14 +584,9 @@ local function apply_chat_buffer_settings(bufnr)
   if config.editing.disable_textwidth then
     vim.bo[bufnr].textwidth = 0
   end
-
-  if config.editing.auto_write then
-    -- autowrite is buffer-local, use vim.bo
-    vim.bo[bufnr].autowrite = true
-  end
 end
 
--- Set up chat filetype autocmds
+---Set up chat filetype autocmds
 function M.setup_chat_filetype_autocmds()
   -- Create or clear the augroup for all chat-related autocmds
   local augroup = vim.api.nvim_create_augroup("FlemmaChat", { clear = true })
@@ -652,11 +680,18 @@ function M.setup_chat_filetype_autocmds()
   end
 end
 
--- Helper function to force UI update (rulers, signs, and line highlights)
+---Force UI update (rulers, signs, and line highlights)
+---@param bufnr integer
 function M.update_ui(bufnr)
   -- Ensure buffer is valid before proceeding
   if not vim.api.nvim_buf_is_valid(bufnr) then
     log.debug("update_ui(): Invalid buffer: " .. bufnr)
+    return
+  end
+
+  -- Bail if config is not fully initialized (e.g. in test environments)
+  local current_config = state.get_config()
+  if not current_config.ruler or not current_config.signs then
     return
   end
 
@@ -678,9 +713,8 @@ function M.update_ui(bufnr)
   end
 end
 
--- Move cursor to end of buffer
--- If bufnr is provided and the buffer is displayed in a window, moves cursor in that window
--- Otherwise operates on current window (for backwards compatibility)
+---Move cursor to end of buffer
+---@param bufnr? integer If provided, moves cursor in the window displaying that buffer
 function M.move_to_bottom(bufnr)
   if bufnr then
     local winid = vim.fn.bufwinid(bufnr)
@@ -693,9 +727,8 @@ function M.move_to_bottom(bufnr)
   vim.cmd("normal! G")
 end
 
--- Center cursor line in window
--- If bufnr is provided and the buffer is displayed in a window, centers cursor in that window
--- Otherwise operates on current window (for backwards compatibility)
+---Center cursor line in window
+---@param bufnr? integer If provided, centers cursor in the window displaying that buffer
 function M.center_cursor(bufnr)
   if bufnr then
     local winid = vim.fn.bufwinid(bufnr)
@@ -708,9 +741,10 @@ function M.center_cursor(bufnr)
   vim.cmd("normal! zz")
 end
 
--- Move cursor to specific position
--- If bufnr is provided, sets cursor in the window displaying that buffer
--- Otherwise operates on current window (for backwards compatibility)
+---Move cursor to specific position
+---@param line integer
+---@param col integer
+---@param bufnr? integer
 function M.set_cursor(line, col, bufnr)
   if bufnr then
     local winid = vim.fn.bufwinid(bufnr)
@@ -723,7 +757,275 @@ function M.set_cursor(line, col, bufnr)
   vim.api.nvim_win_set_cursor(0, { line, col })
 end
 
--- Set up UI-related autocmds and initialization
+-- ============================================================================
+-- Tool Execution Indicators
+-- ============================================================================
+
+local TOOL_SPINNER_FRAMES = { "◐", "◓", "◑", "◒" }
+
+--- Get the current line of a tool execution extmark (auto-adjusted by Neovim)
+---@param bufnr integer
+---@param extmark_id integer
+---@return integer|nil 0-based line index, or nil if extmark not found
+local function get_extmark_line(bufnr, extmark_id)
+  local ok, pos = pcall(vim.api.nvim_buf_get_extmark_by_id, bufnr, tool_exec_ns, extmark_id, {})
+  if ok and pos and #pos >= 1 then
+    return pos[1]
+  end
+  return nil
+end
+
+--- Show execution indicator for a tool
+--- Creates extmark with animated spinner at the tool result header line
+---@param bufnr integer
+---@param tool_id string
+---@param header_line integer 1-based line number of the tool result header
+function M.show_tool_indicator(bufnr, tool_id, header_line)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  -- Clean up any existing indicator for this tool
+  M.clear_tool_indicator(bufnr, tool_id)
+
+  local key = indicator_key(bufnr, tool_id)
+  local line_idx = header_line - 1
+  local frame = 1
+
+  local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
+    virt_text = { { " " .. TOOL_SPINNER_FRAMES[frame] .. " Executing...", "FlemmaToolPending" } },
+    virt_text_pos = "eol",
+    hl_mode = "combine",
+    priority = PRIORITY.TOOL_EXECUTION,
+    spell = false,
+  })
+
+  local timer = vim.fn.timer_start(100, function()
+    if not vim.api.nvim_buf_is_valid(bufnr) then
+      local ind = tool_indicators[key]
+      if ind and ind.timer then
+        vim.fn.timer_stop(ind.timer)
+      end
+      tool_indicators[key] = nil
+      return
+    end
+
+    local ind = tool_indicators[key]
+    if not ind then
+      return
+    end
+
+    local current_line = get_extmark_line(bufnr, ind.extmark_id)
+    if not current_line then
+      return
+    end
+
+    frame = (frame % #TOOL_SPINNER_FRAMES) + 1
+    pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, current_line, 0, {
+      id = ind.extmark_id,
+      virt_text = { { " " .. TOOL_SPINNER_FRAMES[frame] .. " Executing...", "FlemmaToolPending" } },
+      virt_text_pos = "eol",
+      hl_mode = "combine",
+      priority = PRIORITY.TOOL_EXECUTION,
+      spell = false,
+    })
+  end, { ["repeat"] = -1 })
+
+  tool_indicators[key] = {
+    extmark_id = extmark_id,
+    timer = timer,
+    bufnr = bufnr,
+    tool_id = tool_id,
+  }
+end
+
+--- Update indicator to show completion/error state
+--- Stops animation, shows final state
+---@param bufnr integer
+---@param tool_id string
+---@param success boolean
+function M.update_tool_indicator(bufnr, tool_id, success)
+  local key = indicator_key(bufnr, tool_id)
+  local ind = tool_indicators[key]
+  if not ind then
+    return
+  end
+
+  -- Stop animation timer
+  if ind.timer then
+    vim.fn.timer_stop(ind.timer)
+    ind.timer = nil
+  end
+
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    tool_indicators[key] = nil
+    return
+  end
+
+  -- Query extmark's current position (may have shifted due to buffer edits)
+  local current_line = get_extmark_line(bufnr, ind.extmark_id)
+  if not current_line then
+    tool_indicators[key] = nil
+    return
+  end
+
+  -- Show final state
+  local text, hl
+  if success then
+    text = " ✓ Complete"
+    hl = "FlemmaToolSuccess"
+  else
+    text = " ✗ Failed"
+    hl = "FlemmaToolError"
+  end
+
+  pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, current_line, 0, {
+    id = ind.extmark_id,
+    virt_text = { { text, hl } },
+    virt_text_pos = "eol",
+    hl_mode = "combine",
+    priority = PRIORITY.TOOL_EXECUTION,
+    spell = false,
+  })
+end
+
+--- Clear indicator for a tool (removes extmark and stops timer)
+---@param bufnr integer
+---@param tool_id string
+function M.clear_tool_indicator(bufnr, tool_id)
+  local key = indicator_key(bufnr, tool_id)
+  local ind = tool_indicators[key]
+  if not ind then
+    return
+  end
+
+  if ind.timer then
+    vim.fn.timer_stop(ind.timer)
+  end
+
+  -- Always delete from the buffer where the extmark actually lives (ind.bufnr),
+  -- not the passed bufnr, to avoid leaking extmarks on cross-buffer tool_id collisions.
+  if vim.api.nvim_buf_is_valid(ind.bufnr) then
+    pcall(vim.api.nvim_buf_del_extmark, ind.bufnr, tool_exec_ns, ind.extmark_id)
+  end
+
+  tool_indicators[key] = nil
+end
+
+--- Reposition all tool indicators to their correct header lines after buffer modification.
+--- When inject_placeholder or inject_result replaces lines containing an extmark,
+--- Neovim pushes that extmark to the start of the replacement range, which may be
+--- a different tool's header. This function uses the AST to find each tool_result's
+--- actual position and moves the extmark there.
+---@param bufnr integer
+function M.reposition_tool_indicators(bufnr)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  -- Build tool_use_id → start_line map from AST
+  local parser = require("flemma.parser")
+  local doc = parser.get_parsed_document(bufnr)
+  local result_positions = {}
+  for _, msg in ipairs(doc.messages) do
+    if msg.role == "You" then
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "tool_result" then
+          result_positions[seg.tool_use_id] = seg.position.start_line - 1 -- 0-based
+        end
+      end
+    end
+  end
+
+  for _, ind in pairs(tool_indicators) do
+    if ind.bufnr == bufnr then
+      local target_line = result_positions[ind.tool_id]
+      if target_line then
+        local current_line = get_extmark_line(bufnr, ind.extmark_id)
+        if current_line and current_line ~= target_line then
+          -- Read current virtual text to preserve it during repositioning
+          local ok, pos =
+            pcall(vim.api.nvim_buf_get_extmark_by_id, bufnr, tool_exec_ns, ind.extmark_id, { details = true })
+          if ok and pos and #pos >= 3 then
+            pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, target_line, 0, {
+              id = ind.extmark_id,
+              virt_text = pos[3].virt_text,
+              virt_text_pos = "eol",
+              hl_mode = "combine",
+              priority = PRIORITY.TOOL_EXECUTION,
+              spell = false,
+            })
+          end
+        end
+      end
+    end
+  end
+end
+
+--- Schedule indicator clear after a delay, or immediately on buffer edit
+--- Uses extmark_id guard to avoid clearing a newer indicator if tool is re-executed
+---@param bufnr integer
+---@param tool_id string
+---@param delay_ms integer Milliseconds to wait before clearing
+function M.schedule_tool_indicator_clear(bufnr, tool_id, delay_ms)
+  local key = indicator_key(bufnr, tool_id)
+  local ind = tool_indicators[key]
+  if not ind then
+    return
+  end
+  local expected_extmark = ind.extmark_id
+  local cleared = false
+
+  local function do_clear()
+    if cleared then
+      return
+    end
+    local current = tool_indicators[key]
+    if not current or current.extmark_id ~= expected_extmark then
+      cleared = true
+      return -- indicator was replaced by re-execution
+    end
+    cleared = true
+    M.clear_tool_indicator(bufnr, tool_id)
+  end
+
+  vim.defer_fn(function()
+    do_clear()
+  end, delay_ms)
+
+  if vim.api.nvim_buf_is_valid(bufnr) then
+    vim.api.nvim_buf_attach(bufnr, false, {
+      on_lines = function()
+        vim.schedule(function()
+          do_clear()
+        end)
+        return true -- detach after first trigger
+      end,
+    })
+  end
+end
+
+--- Clear all tool indicators for a buffer (used on buffer cleanup)
+---@param bufnr integer
+function M.clear_all_tool_indicators(bufnr)
+  local to_clear = {}
+  for _, ind in pairs(tool_indicators) do
+    if ind.bufnr == bufnr then
+      table.insert(to_clear, ind.tool_id)
+    end
+  end
+
+  for _, tool_id in ipairs(to_clear) do
+    M.clear_tool_indicator(bufnr, tool_id)
+  end
+
+  -- Also clear the namespace for this buffer
+  if vim.api.nvim_buf_is_valid(bufnr) then
+    pcall(vim.api.nvim_buf_clear_namespace, bufnr, tool_exec_ns, 0, -1)
+  end
+end
+
+---Set up UI-related autocmds and initialization
 function M.setup()
   -- Create or clear the augroup for UI-related autocmds
   local augroup = vim.api.nvim_create_augroup("FlemmaUI", { clear = true })
@@ -746,6 +1048,8 @@ function M.setup()
     callback = function(ev)
       if vim.bo[ev.buf].filetype == "chat" or string.match(vim.api.nvim_buf_get_name(ev.buf), "%.chat$") then
         M.cleanup_spinner(ev.buf)
+        M.clear_all_tool_indicators(ev.buf)
+        -- state.cleanup_buffer_state handles executor.cleanup_buffer internally
         state.cleanup_buffer_state(ev.buf)
       end
     end,

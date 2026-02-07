@@ -1,24 +1,28 @@
 --- Tool calling support for Flemma
 --- Manages tool registry and built-in tool definitions
+---@class flemma.Tools
 local M = {}
 
 local registry = require("flemma.tools.registry")
 
 local builtin_tools = {
   "flemma.tools.definitions.calculator",
+  "flemma.tools.definitions.bash",
 }
 
 ---Setup tool registry with built-in tools
 function M.setup()
   for _, module_name in ipairs(builtin_tools) do
     local tool_module = require(module_name)
-    registry.register(tool_module.definition.name, tool_module.definition)
+    for _, def in ipairs(tool_module.definitions) do
+      registry.register(def.name, def)
+    end
   end
 end
 
 --- Build a tool description with output_schema information merged in
 --- This creates a description that helps the model understand what the tool returns
----@param tool table The tool definition with name, description, input_schema, and optional output_schema
+---@param tool flemma.tools.ToolDefinition The tool definition
 ---@return string The full description with output information
 function M.build_description(tool)
   local desc = tool.description or ""
@@ -40,5 +44,7 @@ M.get = registry.get
 M.get_all = registry.get_all
 M.clear = registry.clear
 M.count = registry.count
+M.is_executable = registry.is_executable
+M.get_executor = registry.get_executor
 
 return M

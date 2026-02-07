@@ -1,5 +1,6 @@
 --- Core runtime functionality for Flemma plugin
 --- Handles provider initialization, switching, and main request-response lifecycle
+---@class flemma.Core
 local M = {}
 
 local log = require("flemma.logging")
@@ -11,7 +12,8 @@ local registry = require("flemma.provider.registry")
 -- For testing purposes
 local last_request_body_for_testing = nil
 
--- Auto-write buffer if configured and modified
+---Auto-write buffer if configured and modified
+---@param bufnr integer
 local function auto_write_buffer(bufnr)
   local config = state.get_config()
   if config.editing and config.editing.auto_write and vim.bo[bufnr].modified then
@@ -19,12 +21,16 @@ local function auto_write_buffer(bufnr)
   end
 end
 
--- Initialize or switch provider based on configuration (local function)
+---Initialize or switch provider based on configuration
+---@param provider_name string
+---@param model_name? string
+---@param parameters? table<string, any>
+---@return flemma.provider.Base|nil
 local function initialize_provider(provider_name, model_name, parameters)
   -- Prepare configuration using the centralized config manager
   local provider_config, err = config_manager.prepare_config(provider_name, model_name, parameters)
   if not provider_config then
-    vim.notify(err, vim.log.levels.ERROR)
+    vim.notify(err --[[@as string]], vim.log.levels.ERROR)
     return nil
   end
 
@@ -47,12 +53,20 @@ local function initialize_provider(provider_name, model_name, parameters)
   return new_provider
 end
 
--- Initialize provider for initial setup (exposed version)
+---Initialize provider for initial setup (exposed version)
+---@param provider_name string
+---@param model_name? string
+---@param parameters? table<string, any>
+---@return flemma.provider.Base|nil
 function M.initialize_provider(provider_name, model_name, parameters)
   return initialize_provider(provider_name, model_name, parameters)
 end
 
--- Switch to a different provider or model
+---Switch to a different provider or model
+---@param provider_name string
+---@param model_name? string
+---@param parameters? table<string, any>
+---@return flemma.provider.Base|nil
 function M.switch_provider(provider_name, model_name, parameters)
   if not provider_name then
     vim.notify("Flemma: Provider name is required", vim.log.levels.ERROR)
@@ -112,7 +126,7 @@ function M.switch_provider(provider_name, model_name, parameters)
   return new_provider
 end
 
--- Cancel ongoing request if any
+---Cancel ongoing request if any
 function M.cancel_request()
   local bufnr = vim.api.nvim_get_current_buf()
   local buffer_state = state.get_buffer_state(bufnr)
@@ -162,7 +176,8 @@ function M.cancel_request()
   end
 end
 
--- Handle the AI provider interaction
+---Handle the AI provider interaction
+---@param opts? { on_request_complete?: fun() }
 function M.send_to_provider(opts)
   opts = opts or {}
   local bufnr = vim.api.nvim_get_current_buf()
@@ -172,6 +187,16 @@ function M.send_to_provider(opts)
   if buffer_state.current_request then
     vim.notify("Flemma: A request is already in progress. Use <C-c> to cancel it first.", vim.log.levels.WARN)
     return
+  end
+
+  -- Check if tool executions are in progress (mutually exclusive with API requests)
+  local ok_executor, executor = pcall(require, "flemma.tools.executor")
+  if ok_executor then
+    local pending = executor.get_pending(bufnr)
+    if #pending > 0 then
+      vim.notify("Flemma: Cannot send while tool execution is in progress.", vim.log.levels.WARN)
+      return
+    end
   end
 
   log.info("send_to_provider(): Starting new request for buffer " .. bufnr)
@@ -329,6 +354,10 @@ function M.send_to_provider(opts)
 
   -- Get endpoint first to check for fixtures
   local endpoint = current_provider:get_endpoint()
+  if not endpoint then
+    vim.notify("Flemma: Provider did not return an endpoint.", vim.log.levels.ERROR)
+    return nil
+  end
 
   -- Check if there's a fixture for this endpoint (for testing)
   local client = require("flemma.client")
@@ -347,6 +376,10 @@ function M.send_to_provider(opts)
       return nil
     end
     headers = current_provider:get_request_headers()
+    if not headers then
+      vim.notify("Flemma: Provider did not return request headers.", vim.log.levels.ERROR)
+      return nil
+    end
   else
     -- For fixtures, provide dummy headers since they won't be used
     headers = { "content-type: application/json" }
@@ -364,6 +397,7 @@ function M.send_to_provider(opts)
       .. log.inspect(current_provider.parameters.model)
   )
 
+  ---@type integer|nil
   local spinner_timer = ui.start_loading_spinner(bufnr) -- Handles its own modifiable toggles for writes
   local response_started = false
 
@@ -601,10 +635,11 @@ function M.send_to_provider(opts)
             last_line_content = vim.api.nvim_buf_get_lines(bufnr, last_line_idx - 1, last_line_idx, false)[1] or ""
           end
 
-          local lines_to_insert = {}
-          local cursor_line_offset = 1
+          local lines_to_insert
+          local cursor_line_offset
           if last_line_content == "" then
             lines_to_insert = { "@You: " }
+            cursor_line_offset = 1
           else
             lines_to_insert = { "", "@You: " }
             cursor_line_offset = 2
@@ -708,12 +743,14 @@ function M.send_to_provider(opts)
   -- If job started successfully, modifiable remains false (as set at the start of this function).
 end
 
--- Get the last request body for testing
+---Get the last request body (for testing)
+---@return table<string, any>|nil
 function M._get_last_request_body()
   return last_request_body_for_testing
 end
 
--- Expose UI update function
+---Expose UI update function
+---@param bufnr integer
 function M.update_ui(bufnr)
   return ui.update_ui(bufnr)
 end

@@ -1,7 +1,20 @@
 --- User command definitions for Flemma
 --- Centralizes all vim.api.nvim_create_user_command calls
+---@class flemma.Commands
 local M = {}
 
+---@class flemma.commands.ActionContext
+---@field extra_args string[]
+---@field fargs string[]
+---@field opts table<string, any>
+
+---@class flemma.commands.CommandNode
+---@field children? table<string, flemma.commands.CommandNode>
+---@field action? fun(context: flemma.commands.ActionContext)
+---@field complete? fun(arglead: string, ctx: { completing_index: integer, extra_args: string[] }): string[]
+---@field aliases? string[]
+
+---@private
 local function setup_commands()
   local core = require("flemma.core")
   local navigation = require("flemma.navigation")
@@ -11,6 +24,7 @@ local function setup_commands()
   local modeline = require("flemma.modeline")
   local presets = require("flemma.presets")
 
+  ---@param enable? boolean
   local function toggle_logging(enable)
     if enable == nil then
       enable = not log.is_enabled()
@@ -34,6 +48,9 @@ local function setup_commands()
     vim.cmd("tabedit " .. log.get_path())
   end
 
+  ---@param value string|function|nil
+  ---@param label string
+  ---@return function|nil
   local function build_action_callback(value, label)
     if value == nil or value == "" then
       return nil
@@ -57,15 +74,19 @@ local function setup_commands()
     end
 
     return function()
-      local ok, err = pcall(vim.cmd, value)
+      local ok, err = pcall(vim.cmd --[[@as function]], value)
       if not ok then
         vim.notify(("Flemma: %s command failed: %s"):format(label, err), vim.log.levels.ERROR)
       end
     end
   end
 
+  ---@type flemma.commands.CommandNode
   local command_tree = { children = {} }
 
+  ---@param arglead string
+  ---@param ctx { completing_index: integer, extra_args: string[] }
+  ---@return string[]
   local function switch_complete(arglead, ctx)
     if ctx.completing_index == 1 then
       local preset_suggestions = presets.list()
@@ -157,7 +178,11 @@ local function setup_commands()
 
   command_tree.children.cancel = {
     action = function()
-      core.cancel_request()
+      local bufnr = vim.api.nvim_get_current_buf()
+      local executor = require("flemma.tools.executor")
+      if not executor.cancel_for_buffer(bufnr) then
+        vim.notify("Flemma: Nothing to cancel", vim.log.levels.INFO)
+      end
     end,
   }
 
@@ -353,6 +378,67 @@ local function setup_commands()
     },
   }
 
+  command_tree.children.tool = {
+    children = {
+      execute = {
+        action = function()
+          local bufnr = vim.api.nvim_get_current_buf()
+          local executor = require("flemma.tools.executor")
+          local ok, err = executor.execute_at_cursor(bufnr)
+          if not ok then
+            vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+          end
+        end,
+      },
+      cancel = {
+        action = function()
+          local bufnr = vim.api.nvim_get_current_buf()
+          local executor = require("flemma.tools.executor")
+          local cancelled = executor.cancel_at_cursor(bufnr)
+          if cancelled then
+            vim.notify("Flemma: Tool execution cancelled", vim.log.levels.INFO)
+          else
+            vim.notify("Flemma: No pending tool executions", vim.log.levels.INFO)
+          end
+        end,
+      },
+      ["cancel-all"] = {
+        action = function()
+          local bufnr = vim.api.nvim_get_current_buf()
+          local executor = require("flemma.tools.executor")
+          executor.cancel_all(bufnr)
+          vim.notify("Flemma: All tool executions cancelled", vim.log.levels.INFO)
+        end,
+      },
+      list = {
+        action = function()
+          local bufnr = vim.api.nvim_get_current_buf()
+          local executor = require("flemma.tools.executor")
+          local pending = executor.get_pending(bufnr)
+          if #pending == 0 then
+            vim.notify("Flemma: No pending tool executions", vim.log.levels.INFO)
+          else
+            table.sort(pending, function(a, b)
+              return a.started_at < b.started_at
+            end)
+            local lines = { "Flemma: Pending tool executions:" }
+            for _, p in ipairs(pending) do
+              table.insert(
+                lines,
+                string.format("  %s (%s) - started %ds ago", p.tool_name, p.tool_id, os.time() - p.started_at)
+              )
+            end
+            vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO)
+          end
+        end,
+      },
+    },
+  }
+
+  ---@param node flemma.commands.CommandNode
+  ---@param prefix string|nil
+  ---@param acc string[]
+  ---@param seen table<string, boolean>
   local function collect_commands(node, prefix, acc, seen)
     if not node.children then
       return
@@ -388,6 +474,9 @@ local function setup_commands()
   collect_commands(command_tree, nil, available_commands, {})
   table.sort(available_commands)
 
+  ---@param node flemma.commands.CommandNode
+  ---@param segment string
+  ---@return flemma.commands.CommandNode|nil
   local function find_child(node, segment)
     if not node.children then
       return nil
@@ -410,6 +499,8 @@ local function setup_commands()
     return nil
   end
 
+  ---@param token string|nil
+  ---@return flemma.commands.CommandNode|nil
   local function resolve_command(token)
     if not token or token == "" then
       return nil
@@ -419,7 +510,7 @@ local function setup_commands()
     local current = command_tree
 
     for _, segment in ipairs(segments) do
-      current = find_child(current, segment)
+      current = find_child(current, segment) ---@diagnostic disable-line: cast-local-type
       if not current then
         return nil
       end
@@ -428,6 +519,9 @@ local function setup_commands()
     return current
   end
 
+  ---@param node flemma.commands.CommandNode
+  ---@param prefix string|nil
+  ---@return string[]
   local function list_child_names(node, prefix)
     local names = {}
     if not node.children then
@@ -447,6 +541,8 @@ local function setup_commands()
     return names
   end
 
+  ---@param fargs string[]
+  ---@param opts table
   local function run_command(fargs, opts)
     if #fargs == 0 then
       vim.notify("Flemma: Available commands → " .. table.concat(available_commands, ", "), vim.log.levels.INFO)
@@ -485,6 +581,9 @@ local function setup_commands()
     })
   end
 
+  ---@param arglead string
+  ---@param cmdline string
+  ---@return string[]
   local function completion(arglead, cmdline, _)
     local args = vim.split(cmdline, "%s+", { trimempty = true })
     local trailing_space = cmdline:match("%s$")
@@ -525,6 +624,9 @@ local function setup_commands()
     complete = completion,
   })
 
+  ---@param arglead string
+  ---@param cmdline string
+  ---@return string[]
   local function switch_legacy_completion(arglead, cmdline, _)
     local args = vim.split(cmdline, "%s+", { trimempty = true })
     local trailing_space = cmdline:match("%s$")
@@ -581,6 +683,7 @@ local function setup_commands()
   end
 end
 
+---Setup function to register all user commands
 M.setup = function()
   setup_commands()
 end

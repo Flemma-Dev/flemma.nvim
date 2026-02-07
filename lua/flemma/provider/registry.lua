@@ -1,6 +1,10 @@
 --- Provider registry for Flemma
 --- Manages provider modules, capabilities, and model configuration
 --- (Merged from providers.lua and config.lua)
+
+---@class flemma.provider.Registry
+---@field defaults table<string, string>
+---@field models table<string, string[]>
 local M = {}
 
 -- Load models from centralized models.lua
@@ -10,7 +14,17 @@ local models_data = require("flemma.models")
 -- Provider registry (from providers.lua)
 --------------------------------------------------------------------------------
 
--- Track deprecation warnings to show only once per session
+---@class flemma.provider.Capabilities
+---@field supports_reasoning boolean
+---@field supports_thinking_budget boolean
+---@field outputs_thinking boolean
+
+---@class flemma.provider.ProviderEntry
+---@field module string
+---@field capabilities flemma.provider.Capabilities
+---@field display_name string
+
+---@type table<string, boolean>
 local deprecated_warning_shown = {}
 
 -- Deprecated provider aliases (old_name -> new_name)
@@ -18,6 +32,7 @@ local provider_aliases = {
   claude = "anthropic",
 }
 
+---@type table<string, flemma.provider.ProviderEntry>
 local providers = {
   openai = {
     module = "flemma.provider.providers.openai",
@@ -102,7 +117,7 @@ end
 
 ---Get provider capabilities
 ---@param provider_name string The provider identifier
----@return table|nil capabilities Provider capabilities table, or nil if not found
+---@return flemma.provider.Capabilities|nil capabilities Provider capabilities table, or nil if not found
 function M.get_capabilities(provider_name)
   local resolved = M.resolve(provider_name)
   local provider = providers[resolved]
@@ -122,7 +137,8 @@ end
 -- Model configuration (from config.lua)
 --------------------------------------------------------------------------------
 
--- Helper function to get all available models for a provider as a list
+---@param provider_name string
+---@return string[]
 local function get_provider_models(provider_name)
   local provider = models_data.providers[provider_name]
   if not provider then
@@ -147,13 +163,16 @@ for provider_name, provider_data in pairs(models_data.providers) do
   M.models[provider_name] = get_provider_models(provider_name)
 end
 
--- Get the default model for a provider
+---@param provider_name string
+---@return string
 function M.get_model(provider_name)
   local provider = models_data.providers[provider_name]
   return provider and provider.default or models_data.providers.anthropic.default
 end
 
--- Check if a model belongs to a specific provider
+---@param model_name string|nil
+---@param provider_name string
+---@return boolean
 function M.is_provider_model(model_name, provider_name)
   -- If model_name is nil, it can't belong to any provider
   if model_name == nil then
@@ -170,20 +189,31 @@ function M.is_provider_model(model_name, provider_name)
   return provider.models[model_name] ~= nil
 end
 
--- Get the appropriate model for a provider
+---@param model_name string|nil
+---@param provider_name string
+---@return string
 function M.get_appropriate_model(model_name, provider_name)
   -- If the model is appropriate for the provider, use it
   if M.is_provider_model(model_name, provider_name) then
-    return model_name
+    return model_name --[[@as string]]
   end
 
   -- Otherwise, return the default model for the provider
   return M.get_model(provider_name)
 end
 
+---@class flemma.provider.SwitchArgs
+---@field provider string|nil
+---@field model string|nil
+---@field parameters table<string, any>
+---@field positionals string[]
+---@field extra_positionals string[]
+---@field has_explicit_provider boolean
+---@field has_explicit_model boolean
+
 --- Extract provider/model parameters from parsed modeline tokens
--- @param parsed table Parsed tokens from modeline.parse/modeline.parse_args
--- @return table Parsed switch arguments (see provider_config_spec for structure)
+---@param parsed flemma.modeline.ParsedTokens Parsed tokens from modeline.parse/modeline.parse_args
+---@return flemma.provider.SwitchArgs
 function M.extract_switch_arguments(parsed)
   local info = {
     provider = nil,

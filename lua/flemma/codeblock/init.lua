@@ -1,5 +1,6 @@
 --- Generic fenced code block utilities
 --- Provides parsing and formatting for fenced blocks
+---@class flemma.Codeblock
 local M = {}
 
 local parsers = require("flemma.codeblock.parsers")
@@ -21,10 +22,15 @@ function M.get_fence(content)
   return string.rep("`", math.max(3, max_ticks + 1))
 end
 
+---@class flemma.codeblock.FencedBlock
+---@field language? string Language identifier (nil if omitted)
+---@field content string Fenced block content lines joined by newline
+---@field fence_length integer Backtick count of the opening fence
+
 ---Parse a fenced code block from lines
 ---@param lines string[] Array of lines
 ---@param start_idx number 1-based index to start parsing
----@return table|nil block Parsed block with language, content, fence_length
+---@return flemma.codeblock.FencedBlock|nil block
 ---@return number end_idx Index of the closing fence (or start_idx if no block)
 function M.parse_fenced_block(lines, start_idx)
   local line = lines[start_idx]

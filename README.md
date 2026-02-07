@@ -7,7 +7,7 @@
 
 Flemma turns Neovim into a first-class AI workspace. It gives `.chat` buffers streaming conversations, reusable prompt templates, attachment support, cost tracking, and ergonomic commands for the three major providers: Anthropic, OpenAI, and Google Vertex AI.
 
-<a href="assets/frame_linux_slate.webp" target="_blank"><img align="center" width="541" height="435" src="assets/frame_linux_slate.webp" alt="Flemma chat buffer example" /></a>
+<a href="assets/frame_linux_slate.webp" target="_blank"><img align="center" width="730" height="882" src="assets/frame_linux_slate.webp" alt="Flemma chat buffer example" /></a>
 
 ---
 

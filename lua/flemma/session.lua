@@ -17,27 +17,40 @@
 --- 4. Session maintains historical data for all requests across all chat buffers
 --- 5. Requests can be analyzed by filepath (e.g., cost per project)
 
+---@class flemma.SessionModule
 local M = {}
 
---- Request class
---- Represents a single API request with its associated metadata and token usage
+---@class flemma.session.Request
+---@field provider string
+---@field model string
+---@field input_tokens number
+---@field output_tokens number
+---@field thoughts_tokens number
+---@field input_price number
+---@field output_price number
+---@field filepath? string
+---@field bufnr? integer
+---@field timestamp number
+---@field output_has_thoughts boolean
 local Request = {}
 Request.__index = Request
 
+---@class flemma.session.RequestOpts
+---@field provider string Provider name (e.g., "anthropic", "openai")
+---@field model string Model name (e.g., "claude-sonnet-4-5")
+---@field input_tokens number Number of input tokens
+---@field output_tokens number Number of output tokens
+---@field thoughts_tokens? number Number of thoughts/reasoning tokens
+---@field input_price number USD per million input tokens
+---@field output_price number USD per million output tokens
+---@field filepath? string Resolved absolute filepath (nil for unnamed buffers)
+---@field bufnr? integer Buffer number (fallback for unnamed buffers)
+---@field timestamp? number Unix timestamp (defaults to current time)
+---@field output_has_thoughts? boolean Whether output_tokens already includes thoughts (true for OpenAI/Anthropic, false for Vertex)
+
 --- Create a new Request instance
----@param opts table Options for the request
----@param opts.provider string Provider name (e.g., "anthropic", "openai")
----@param opts.model string Model name (e.g., "claude-sonnet-4-5")
----@param opts.input_tokens number Number of input tokens
----@param opts.output_tokens number Number of output tokens
----@param opts.thoughts_tokens number|nil Number of thoughts/reasoning tokens
----@param opts.input_price number USD per million input tokens
----@param opts.output_price number USD per million output tokens
----@param opts.filepath string|nil Resolved absolute filepath (nil for unnamed buffers)
----@param opts.bufnr number|nil Buffer number (fallback for unnamed buffers)
----@param opts.timestamp number|nil Unix timestamp (defaults to current time)
----@param opts.output_has_thoughts boolean|nil Whether output_tokens already includes thoughts (true for OpenAI/Anthropic, false for Vertex)
----@return table Request instance
+---@param opts flemma.session.RequestOpts Options for the request
+---@return flemma.session.Request
 function Request.new(opts)
   local self = setmetatable({}, Request)
 
@@ -97,13 +110,13 @@ function Request:get_total_output_tokens()
   end
 end
 
---- Session class
---- Represents a collection of requests in the current editing session
+---@class flemma.session.Session
+---@field requests flemma.session.Request[]
 local Session = {}
 Session.__index = Session
 
 --- Create a new Session instance
----@return table Session instance
+---@return flemma.session.Session
 function Session.new()
   local self = setmetatable({}, Session)
   self.requests = {}
@@ -111,7 +124,7 @@ function Session.new()
 end
 
 --- Add a request to the session
----@param opts table Request options (provider, model, input_tokens, output_tokens, thoughts_tokens, input_price, output_price, filepath, bufnr, timestamp)
+---@param opts flemma.session.RequestOpts Request options
 function Session:add_request(opts)
   local request = Request.new(opts)
   table.insert(self.requests, request)
@@ -180,7 +193,7 @@ function Session:get_request_count()
 end
 
 --- Get the most recent request
----@return table|nil Most recent request or nil if no requests
+---@return flemma.session.Request|nil Most recent request or nil if no requests
 function Session:get_latest_request()
   if #self.requests > 0 then
     return self.requests[#self.requests]

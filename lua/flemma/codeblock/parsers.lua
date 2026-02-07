@@ -1,12 +1,15 @@
 --- Generic language parsers for fenced code blocks
 --- Shared by frontmatter, tool use input, and tool results
+---@class flemma.codeblock.Parsers
 local M = {}
 
+---@type table<string, string>
 local parser_modules = {
   lua = "flemma.codeblock.parsers.lua",
   json = "flemma.codeblock.parsers.json",
 }
 
+---@type table<string, fun(code: string, context?: table<string, any>): any>
 local parsers = {}
 
 ---Register a parser for a specific language
@@ -48,7 +51,7 @@ end
 ---Parse content with the appropriate parser
 ---@param language string|nil The language identifier (defaults to json)
 ---@param content string The content to parse
----@param context table|nil Optional context for evaluation
+---@param context table<string, any>|nil Optional context for evaluation
 ---@return any value The parsed value
 ---@return string|nil error Error message if parsing failed
 function M.parse(language, content, context)

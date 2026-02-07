@@ -10,7 +10,7 @@ local warning_shown = false
 local function show_deprecation_warning()
   if not warning_shown then
     warning_shown = true
-    vim.notify(
+    vim.notify( ---@diagnostic disable-line: redundant-parameter
       "Claudius has been renamed to Flemma! Update your config to use require('flemma') instead of require('claudius').",
       vim.log.levels.WARN,
       {

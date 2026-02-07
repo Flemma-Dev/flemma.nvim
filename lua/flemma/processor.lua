@@ -3,8 +3,12 @@ local eval = require("flemma.eval")
 local mime_util = require("flemma.mime")
 local codeblock_parsers = require("flemma.codeblock.parsers")
 
+---@class flemma.Processor
 local M = {}
 
+---@param path string
+---@return string|nil data
+---@return string|nil error
 local function safe_read_binary(path)
   local f, err = io.open(path, "rb")
   if not f then
@@ -18,6 +22,9 @@ local function safe_read_binary(path)
   return data, nil
 end
 
+---@param path string
+---@param override string|nil
+---@return string|nil
 local function detect_mime(path, override)
   if override and #override > 0 then
     return override
@@ -29,6 +36,8 @@ local function detect_mime(path, override)
   return mime_util.get_mime_by_extension(path)
 end
 
+---@param v any
+---@return string
 local function to_text(v)
   if v == nil then
     return ""
@@ -42,17 +51,49 @@ local function to_text(v)
   return tostring(v)
 end
 
+-- Part types shared with ast.lua (canonical definitions live there)
+---@alias flemma.processor.TextPart flemma.ast.GenericTextPart
+---@alias flemma.processor.ThinkingPart flemma.ast.GenericThinkingPart
+---@alias flemma.processor.ToolUsePart flemma.ast.GenericToolUsePart
+---@alias flemma.processor.ToolResultPart flemma.ast.GenericToolResultPart
+
+-- Part types unique to the processor stage (pre-conversion)
+---@class flemma.processor.FilePart
+---@field kind "file"
+---@field filename string
+---@field raw string
+---@field mime_type string
+---@field data string
+---@field position? flemma.ast.Position
+
+---@class flemma.processor.UnsupportedFilePart
+---@field kind "unsupported_file"
+---@field raw? string
+---@field position? flemma.ast.Position
+
+---@alias flemma.processor.EvaluatedPart flemma.processor.TextPart|flemma.processor.ThinkingPart|flemma.processor.FilePart|flemma.processor.UnsupportedFilePart|flemma.processor.ToolUsePart|flemma.processor.ToolResultPart
+
+---@class flemma.processor.EvaluatedMessage
+---@field role "You"|"Assistant"|"System"
+---@field parts flemma.processor.EvaluatedPart[]
+---@field position flemma.ast.Position
+
+---@class flemma.processor.EvaluatedResult
+---@field messages flemma.processor.EvaluatedMessage[]
+---@field diagnostics flemma.ast.Diagnostic[]
+
 --- Evaluate a document AST.
---- Returns:
---- - evaluated: { messages = { role, parts=[{kind,text|mime|data|...}] }, diagnostics }
+---@param doc flemma.ast.DocumentNode
+---@param base_context flemma.Context|nil
+---@return flemma.processor.EvaluatedResult
 function M.evaluate(doc, base_context)
   -- Use doc.errors as the unified diagnostics array (parser may have populated it)
   local diagnostics = doc.errors or {}
-  local context = ctxutil.clone(base_context or {})
+  local context = ctxutil.clone(base_context)
 
   -- 1) Frontmatter execution using the parser registry
   if doc.frontmatter then
-    local fm = doc.frontmatter
+    local fm = doc.frontmatter ---@cast fm -nil
     local parser = codeblock_parsers.get(fm.language)
 
     if parser then

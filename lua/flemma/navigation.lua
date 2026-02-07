@@ -1,10 +1,12 @@
 --- Navigation functions for Flemma chat interface
 --- Provides cursor movement within chat buffers
+---@class flemma.Navigation
 local M = {}
 
 local parser = require("flemma.parser")
 
--- Find the next message marker in the buffer and move cursor
+---Find the next message marker in the buffer and move cursor there
+---@return boolean found True if a next message was found and cursor moved
 function M.find_next_message()
   local cur_line = vim.api.nvim_win_get_cursor(0)[1]
   local bufnr = vim.api.nvim_get_current_buf()
@@ -26,7 +28,8 @@ function M.find_next_message()
   return false
 end
 
--- Find the previous message marker in the buffer and move cursor
+---Find the previous message marker in the buffer and move cursor there
+---@return boolean found True if a previous message was found and cursor moved
 function M.find_prev_message()
   local cur_line = vim.api.nvim_win_get_cursor(0)[1]
   local bufnr = vim.api.nvim_get_current_buf()

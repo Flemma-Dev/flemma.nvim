@@ -1,8 +1,9 @@
 --- Keymap configuration for Flemma
 --- Centralizes all buffer-local keymap setup
+---@class flemma.Keymaps
 local M = {}
 
--- Setup function to initialize all keymaps
+---Setup function to initialize all keymaps
 M.setup = function()
   local core = require("flemma.core")
   local navigation = require("flemma.navigation")
@@ -27,13 +28,25 @@ M.setup = function()
           end, { buffer = true, desc = "Send to Flemma" })
         end
 
+        if config.keymaps.normal.tool_execute then
+          vim.keymap.set("n", config.keymaps.normal.tool_execute, function()
+            local bufnr = vim.api.nvim_get_current_buf()
+            local executor = require("flemma.tools.executor")
+            local ok, err = executor.execute_at_cursor(bufnr)
+            if not ok then
+              vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+            end
+          end, { buffer = true, desc = "Execute Flemma tool at cursor" })
+        end
+
         if config.keymaps.normal.cancel then
-          vim.keymap.set(
-            "n",
-            config.keymaps.normal.cancel,
-            core.cancel_request,
-            { buffer = true, desc = "Cancel Flemma Request" }
-          )
+          vim.keymap.set("n", config.keymaps.normal.cancel, function()
+            local bufnr = vim.api.nvim_get_current_buf()
+            local executor = require("flemma.tools.executor")
+            if not executor.cancel_for_buffer(bufnr) then
+              vim.notify("Flemma: Nothing to cancel", vim.log.levels.INFO)
+            end
+          end, { buffer = true, desc = "Cancel Flemma Request or Tool" })
         end
 
         -- Message navigation keymaps
