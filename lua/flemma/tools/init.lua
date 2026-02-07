@@ -8,6 +8,9 @@ local registry = require("flemma.tools.registry")
 local builtin_tools = {
   "flemma.tools.definitions.calculator",
   "flemma.tools.definitions.bash",
+  "flemma.tools.definitions.read",
+  "flemma.tools.definitions.edit",
+  "flemma.tools.definitions.write",
 }
 
 ---Setup tool registry with built-in tools

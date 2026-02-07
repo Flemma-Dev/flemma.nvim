@@ -1,17 +1,31 @@
 --- Bash tool definition
 --- Execute bash commands and return stdout/stderr
+--- Truncation logic ported from pi by Mario Zechner (https://github.com/badlogic/pi-mono)
+--- Original: MIT License, Copyright (c) 2025 Mario Zechner
 ---@class flemma.tools.definitions.Bash
 ---@field definitions flemma.tools.ToolDefinition[]
 local M = {}
 
+local truncate = require("flemma.tools.truncate")
+
 M.definitions = {
   {
     name = "bash",
-    description = "Execute a bash command and return stdout/stderr. "
-      .. "The command runs in the user's shell environment with their permissions.",
+    description = "Execute a bash command in the current working directory. "
+      .. "Returns stdout and stderr. Output is truncated to last "
+      .. truncate.MAX_LINES
+      .. " lines or "
+      .. math.floor(truncate.MAX_BYTES / 1024)
+      .. "KB (whichever is hit first). "
+      .. "If truncated, full output is saved to a temp file. "
+      .. "Optionally provide a timeout in seconds.",
     input_schema = {
       type = "object",
       properties = {
+        label = {
+          type = "string",
+          description = "A short human-readable label for this operation (e.g., 'running tests')",
+        },
         command = {
           type = "string",
           description = "The bash command to execute",
@@ -21,7 +35,7 @@ M.definitions = {
           description = "Timeout in seconds (default: 30)",
         },
       },
-      required = { "command" },
+      required = { "label", "command" },
     },
     async = true,
     execute = function(input, callback)
@@ -36,8 +50,8 @@ M.definitions = {
       local default_timeout = (config.tools and config.tools.default_timeout) or 30
       local timeout = input.timeout or default_timeout
 
-      local stdout = {}
-      local stderr = {}
+      local output_lines = {}
+      local partial_line = "" -- buffer for incomplete line across chunks
       local job_exited = false
       local finished = false
       local timer = nil
@@ -51,12 +65,11 @@ M.definitions = {
       local job_opts = {
         on_stdout = function(_, data)
           if data then
-            vim.list_extend(stdout, data)
-          end
-        end,
-        on_stderr = function(_, data)
-          if data then
-            vim.list_extend(stderr, data)
+            -- Per :h channel-callback, the last element is a partial line
+            -- that must be joined with the first element of the next chunk
+            data[1] = partial_line .. data[1]
+            partial_line = table.remove(data)
+            vim.list_extend(output_lines, data)
           end
         end,
         on_exit = function(_, code)
@@ -68,31 +81,72 @@ M.definitions = {
           job_exited = true
           close_timer()
           vim.schedule(function()
-            -- Trim trailing empty string from vim.fn.jobstart output
-            if #stdout > 0 and stdout[#stdout] == "" then
-              table.remove(stdout)
-            end
-            if #stderr > 0 and stderr[#stderr] == "" then
-              table.remove(stderr)
+            -- Flush remaining partial line
+            if partial_line ~= "" then
+              table.insert(output_lines, partial_line)
             end
 
-            local output = table.concat(stdout, "\n")
-            local err_output = table.concat(stderr, "\n")
+            local full_output = table.concat(output_lines, "\n"):gsub("%s+$", "")
+
+            -- Apply tail truncation
+            local result = truncate.truncate_tail(full_output)
+            local output_text = result.content ~= "" and result.content or "(no output)"
+
+            if result.truncated then
+              -- Save full output to temp file
+              local temp_path = vim.fn.tempname()
+              local f = io.open(temp_path, "w")
+              if f then
+                f:write(full_output)
+                f:close()
+              end
+
+              -- Build actionable notice
+              local start_line = result.total_lines - result.output_lines + 1
+              local end_line = result.total_lines
+
+              if result.last_line_partial then
+                local last_line_size = truncate.format_size(#output_lines[#output_lines])
+                output_text = output_text
+                  .. string.format(
+                    "\n\n[Showing last %s of line %d (line is %s). Full output: %s]",
+                    truncate.format_size(result.output_bytes),
+                    end_line,
+                    last_line_size,
+                    temp_path
+                  )
+              elseif result.truncated_by == "lines" then
+                output_text = output_text
+                  .. string.format(
+                    "\n\n[Showing lines %d-%d of %d. Full output: %s]",
+                    start_line,
+                    end_line,
+                    result.total_lines,
+                    temp_path
+                  )
+              else
+                output_text = output_text
+                  .. string.format(
+                    "\n\n[Showing lines %d-%d of %d (%s limit). Full output: %s]",
+                    start_line,
+                    end_line,
+                    result.total_lines,
+                    truncate.format_size(truncate.MAX_BYTES),
+                    temp_path
+                  )
+              end
+            end
 
             if code ~= 0 then
-              local error_msg = string.format("Command failed with exit code %d", code)
-              if err_output ~= "" then
-                error_msg = error_msg .. ": " .. err_output
-              end
+              output_text = output_text .. string.format("\n\nCommand exited with code %d", code)
               callback({
                 success = false,
-                error = error_msg,
-                output = output,
+                error = output_text,
               })
             else
               callback({
                 success = true,
-                output = output ~= "" and output or err_output,
+                output = output_text,
               })
             end
           end)
@@ -110,7 +164,8 @@ M.definitions = {
       end
 
       local shell = (config.tools and config.tools.bash and config.tools.bash.shell) or "bash"
-      local job_id = vim.fn.jobstart({ shell, "-c", cmd }, job_opts)
+      -- Wrap in group command so stderr redirect covers all pipeline stages
+      local job_id = vim.fn.jobstart({ shell, "-c", "{ " .. cmd .. "; } 2>&1" }, job_opts)
 
       if job_id <= 0 then
         callback({ success = false, error = "Failed to start job" })
@@ -134,9 +189,20 @@ M.definitions = {
           finished = true
           if not job_exited then
             vim.fn.jobstop(job_id)
+
+            -- Include any partial output collected before the timeout
+            if partial_line ~= "" then
+              table.insert(output_lines, partial_line)
+            end
+            local partial = table.concat(output_lines, "\n"):gsub("%s+$", "")
+            local error_msg = string.format("Command timed out after %d seconds.", timeout)
+            if partial ~= "" then
+              error_msg = partial .. "\n\n" .. error_msg
+            end
+
             callback({
               success = false,
-              error = string.format("Command timed out after %d seconds.", timeout),
+              error = error_msg,
             })
           end
           close_timer()

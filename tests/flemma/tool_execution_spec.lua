@@ -9,6 +9,10 @@ package.loaded["flemma.tools.injector"] = nil
 package.loaded["flemma.tools.context"] = nil
 package.loaded["flemma.tools.definitions.calculator"] = nil
 package.loaded["flemma.tools.definitions.bash"] = nil
+package.loaded["flemma.tools.definitions.read"] = nil
+package.loaded["flemma.tools.definitions.edit"] = nil
+package.loaded["flemma.tools.definitions.write"] = nil
+package.loaded["flemma.tools.truncate"] = nil
 
 local tools = require("flemma.tools")
 local registry = require("flemma.tools.registry")
