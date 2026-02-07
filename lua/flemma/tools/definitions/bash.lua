@@ -39,6 +39,14 @@ M.definitions = {
       local stdout = {}
       local stderr = {}
       local job_exited = false
+      local finished = false
+      local timer = nil
+
+      local function close_timer()
+        if timer and not timer:is_closing() then
+          timer:close()
+        end
+      end
 
       local job_opts = {
         on_stdout = function(_, data)
@@ -52,7 +60,13 @@ M.definitions = {
           end
         end,
         on_exit = function(_, code)
+          if finished then
+            close_timer()
+            return
+          end
+          finished = true
           job_exited = true
+          close_timer()
           vim.schedule(function()
             -- Trim trailing empty string from vim.fn.jobstart output
             if #stdout > 0 and stdout[#stdout] == "" then
@@ -104,11 +118,16 @@ M.definitions = {
       end
 
       -- Setup timeout
-      local timer = vim.uv.new_timer()
+      timer = vim.uv.new_timer()
       timer:start(
         timeout * 1000,
         0,
         vim.schedule_wrap(function()
+          if finished then
+            close_timer()
+            return
+          end
+          finished = true
           if not job_exited then
             vim.fn.jobstop(job_id)
             callback({
@@ -116,17 +135,14 @@ M.definitions = {
               error = string.format("Command timed out after %d seconds.", timeout),
             })
           end
-          if not timer:is_closing() then
-            timer:close()
-          end
+          close_timer()
         end)
       )
 
       -- Return cancel function
       return function()
-        if not timer:is_closing() then
-          timer:close()
-        end
+        finished = true
+        close_timer()
         if not job_exited then
           pcall(vim.fn.jobstop, job_id)
         end

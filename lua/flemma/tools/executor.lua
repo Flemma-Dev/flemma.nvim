@@ -17,6 +17,7 @@ local log = require("flemma.logging")
 ---@field cancel_fn function|nil
 ---@field started_at integer timestamp
 ---@field completed boolean
+---@field placeholder_modified boolean
 
 -- Per-buffer pending executions: bufnr -> { tool_id -> flemma.tools.PendingExecution }
 local pending_by_buffer = {}
@@ -121,10 +122,14 @@ local function do_completion(bufnr, tool_id, result, is_async)
     return
   end
 
-  -- For async tools, join with placeholder injection as a single undo step.
+  local pending = get_buffer_pending(bufnr)
+  local entry = pending[tool_id]
+
+  -- For async tools, join with placeholder injection as a single undo step
+  -- only when the placeholder actually modified the buffer.
   -- For sync tools, all changes are already in one undo block (same handler),
   -- and calling undojoin would incorrectly merge with the PREVIOUS handler's block.
-  if is_async then
+  if is_async and entry and entry.placeholder_modified then
     pcall(vim.cmd, "undojoin")
   end
 
@@ -234,18 +239,20 @@ function M.execute(bufnr, context)
     cancel_fn = nil,
     started_at = os.time(),
     completed = false,
+    placeholder_modified = false,
   }
 
   -- Lock buffer to prevent user edits during execution
   lock_buffer(bufnr)
 
   -- Phase 1: Inject placeholder
-  local header_line, inject_err = injector.inject_placeholder(bufnr, tool_id)
+  local header_line, inject_err, placeholder_opts = injector.inject_placeholder(bufnr, tool_id)
   if not header_line then
     cleanup_pending(bufnr, tool_id)
     maybe_unlock_buffer(bufnr)
     return false, "Failed to inject placeholder: " .. (inject_err or "unknown")
   end
+  pending[tool_id].placeholder_modified = (placeholder_opts and placeholder_opts.modified) or false
 
   -- Show execution indicator
   local ui = require("flemma.ui")
