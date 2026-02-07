@@ -1,11 +1,11 @@
 # Flemma 🪶
 
 > [!CAUTION]
-> **Actively Refactoring**
+> **Actively Evolving**
 >
-> Flemma (formerly Claudius) is in the middle of a large-scale rename and architecture refresh. Expect new functionality, renamed modules, and occasional breaking changes while the project settles. Pin a commit if you need a steady target.
+> Flemma is growing fast – new tools, providers, and UI features land regularly. Expect occasional breaking changes while the project matures. Pin a commit if you need a steady target.
 
-Flemma turns Neovim into a first-class AI workspace. It gives `.chat` buffers streaming conversations, reusable prompt templates, attachment support, cost tracking, and ergonomic commands for the three major providers: Anthropic, OpenAI, and Google Vertex AI.
+Flemma turns Neovim into a first-class AI workspace. It gives `.chat` buffers streaming conversations, tool calling, reusable prompt templates, attachment support, cost tracking, and ergonomic commands for the three major providers: Anthropic, OpenAI, and Google Vertex AI.
 
 <a href="assets/frame_linux_slate.webp" target="_blank"><img align="center" width="730" height="882" src="assets/frame_linux_slate.webp" alt="Flemma chat buffer example" /></a>
 
@@ -14,10 +14,12 @@ Flemma turns Neovim into a first-class AI workspace. It gives `.chat` buffers st
 <details>
 <summary>
 <strong>Q: What is this and who is it for?</strong><br>
-<strong>A:</strong> Flemma is <strong><em>not</em></strong> a coding assistant. I [<a href="https://github.com/StanAngeloff"><img src="https://images.weserv.nl/?url=gravatar.com%2Favatar%2Fea3f8f366bb2aa0855db031884e3a8e8%3Fs%3D400%26d%3Drobohash%26r%3Dg&mask=circle" valign="middle" width="18" height="18" alt="Photo of @StanAngeloff">&thinsp;@StanAngeloff</a>] created Flemma as my AI workspace for everything else. <em>[continued]</em>
+<strong>A:</strong> Flemma is a Neovim-native AI workspace. I [<a href="https://github.com/StanAngeloff"><img src="https://images.weserv.nl/?url=gravatar.com%2Favatar%2Fea3f8f366bb2aa0855db031884e3a8e8%3Fs%3D400%26d%3Drobohash%26r%3Dg&mask=circle" valign="middle" width="18" height="18" alt="Photo of @StanAngeloff">&thinsp;@StanAngeloff</a>] created Flemma as the place where I think, write, and experiment with AI. <em>[continued]</em>
 </summary>
 
 Flemma is for the technical writers, researchers, creators, and tinkerers, for those who occasionally get in hot water and need advice. It's for everyone who wants to experiment with AI.
+
+With built-in tool calling, Flemma is also becoming a capable environment for coding experiments – it can run shell commands, read and edit files, and evaluate expressions, all from within a chat buffer. Flemma is not trying to replace dedicated coding agents like Claude Code or Codex, but it gives you a conversational workspace where code tasks sit naturally alongside everything else.
 
 </details>
 
@@ -39,33 +41,33 @@ If I have an idea, it's a buffer away. Should I want to branch off and experimen
 <strong>A:</strong> Flemma is versatile - I'm personally using it mostly professionally and occasionally for personal tasks. Over the last 6+ months since Flemma was created, I've used it to <em>[continued]</em>
 </summary>
 
-- Write countless technical documents, from <abbr title="Product Requirements Document">PRDs (Product Requirements Document)</abbr>, <abbr title="Architecture Knowledge Management">AKM (Architecture Knowledge Management)</abbr>, infrastructure and architecture diagrams with Mermaid, detailed storyboards for <abbr title="Learning Management System">LMS</abbr> content, release notes, <abbr title="Functional Requirements">FR (Functional Requirements)</abbr>, etc.
+- Write countless technical documents, from <abbr title="Product Requirements Document">PRDs (Product Requirements Document)</abbr>, <abbr title="Architecture Knowledge Management">AKM (Architecture Knowledge Management)</abbr>, infrastructure and architecture diagrams with Mermaid, detailed storyboards for <abbr title="Learning Management System">LMS (Learning Management System)</abbr> content, release notes, <abbr title="Functional Requirements">FR (Functional Requirements)</abbr>, etc.
 - Write detailed software design documents using Figma designs as input and the cheap OCR capabilities of Gemini Flash to annotate them, then the excellent reasoning capabilities of Gemini Pro to generate storyboards and interaction flows.
 - Record video sessions which I later transcribed using Whisper and then turned into training materials using Flemma.
 - Generate client-facing documentation from very technical input, stripping it of technical jargon and making it accessible to a wider audience.
 - Create multiple <abbr title="Statement of Work">SOW (Statement of Work)</abbr> documents for clients.
 - Keep track of evolving requirements and decisions by maintaining a long history of meeting minutes.
 - Collect large swaths of emails, meeting minutes, Slack conversations, Trello cards, and distill them into actionable tasks and project plans.
-- As a tool for other AI agents - generate prompts for Midjourney, Reve, etc. and even prompts that I'd feed to different `.chat` buffers in Flemma.
+- As a tool for other AI agents – generate prompts for Midjourney, Reve, etc. and even prompts that I'd feed to different `.chat` buffers in Flemma.
 
-There really is no limit to what you can do with Flemma - if you can write it down and reason about it, you can use Flemma to help you with it.
+There really is no limit to what you can do with Flemma – if you can write it down and reason about it, you can use Flemma to help you with it.
 
 On a personal level, I've used Flemma to generate bedtime stories with recurring characters for my kids, made small financial decisions based on collected evidence, asked for advice on how to respond to difficult situations, consulted _(usual disclaimer, blah blah)_ it for legal advice and much more.
-
-Flemma can also be a playground for coding experiments - it can help with the occasional small task. I've personally used it to generate Awk scripts, small Node.js jobs, etc. **Flemma is not a coding assistant or agent.** It's not pretending to be one and it'll never be one. You should keep your Codex, Claude Code, etc. for that purpose - and they'll do a great job at it.
 
 </details>
 
 ## What Flemma Delivers
 
-- **Multi-provider chat** – work with Anthropic, OpenAI, and Vertex models through one command tree while keeping prompts in plain `.chat` buffers.
-- **`.chat` editing tools** – get markdown folding, visual rulers, `<thinking>` highlighting, and message text objects tuned for chat transcripts.
+- **Multi-provider chat** – work with Anthropic, OpenAI, and Vertex AI models through one command tree while keeping prompts in plain `.chat` buffers.
+- **Tool calling** – models can request calculator evaluations, bash commands, file reads, edits, and writes. Flemma executes them (with your approval) and injects results back into the buffer. Works across all three providers with parallel tool support.
+- **Extended thinking and reasoning** – stream Anthropic thinking traces, tune OpenAI reasoning effort, and control Vertex thinking budgets. Thinking blocks auto-fold and get dedicated highlighting.
+- **`.chat` editing tools** – get Markdown folding, visual rulers, `<thinking>` highlighting, tool call syntax highlighting, and message text objects tuned for chat transcripts.
 - **Structured templates** – combine Lua or JSON frontmatter, inline `{{ expressions }}`, and `include()` helpers to assemble prompts without leaving Neovim.
-- **Context attachments** – reference local files with `@./path`; Flemma handles MIME detection and surfaces warnings when a provider can’t ingest the asset.
-- **Reasoning visibility** – stream Vertex thinking blocks into the buffer, expose OpenAI reasoning effort in lualine, and strip thought traces from the history sent back to models.
+- **Context attachments** – reference local files with `@./path`; Flemma handles MIME detection and surfaces warnings when a provider can't ingest the asset.
+- **Theme-aware UI** – line highlights, rulers, and signs adapt to your colour scheme via blend expressions. Dark and light modes are first-class.
 - **Usage reporting** – per-request and session notifications show token totals and costs using the bundled pricing tables.
 - **Presets and hooks** – store favourite provider configurations, run `on_request_*` callbacks, auto-write finished chats, and recall the latest usage notification when auditing work.
-- **Contributor tooling** – toggle structured logs, drop into the project’s Nix dev shell, and run the bundled headless tests without extra setup.
+- **Contributor tooling** – toggle structured logs, drop into the project's Nix dev shell, and run the bundled headless tests without extra setup.
 
 ---
 
@@ -90,7 +92,7 @@ For managers that do not wire `opts`, call `require("flemma").setup({})` yoursel
 | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
 | Neovim **0.11** or newer                                                 | Uses Tree-sitter folding APIs introduced in 0.11 and relies on `vim.fs` helpers.                                |
 | [`curl`](https://curl.se/)                                               | Streaming is handled by spawning `curl` with Server-Sent Events enabled.                                        |
-| Markdown Tree-sitter grammar                                             | Flemma registers `.chat` buffers to reuse the markdown parser for syntax highlighting and folding.              |
+| Markdown Tree-sitter grammar                                             | Flemma registers `.chat` buffers to reuse the Markdown parser for syntax highlighting and folding.              |
 | [`file`](https://www.darwinsys.com/file/) CLI (optional but recommended) | Provides reliable MIME detection for `@./path` attachments. When missing, extensions are used as a best effort. |
 
 ### Provider credentials
@@ -98,7 +100,7 @@ For managers that do not wire `opts`, call `require("flemma").setup({})` yoursel
 | Provider         | Environment variable                                        | Notes                                                       |
 | ---------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
 | Anthropic        | `ANTHROPIC_API_KEY`                                         |                                                             |
-| OpenAI           | `OPENAI_API_KEY`                                            | Supports GPT‑5 family, including reasoning effort settings. |
+| OpenAI           | `OPENAI_API_KEY`                                            | Supports GPT-5 family, including reasoning effort settings. |
 | Google Vertex AI | `VERTEX_AI_ACCESS_TOKEN` **or** service-account credentials | Requires additional configuration (see below).              |
 
 <details>
@@ -192,7 +194,7 @@ Model thoughts stream here and auto-fold.
 
 - **Frontmatter** sits on the first line and must be fenced with triple backticks. Lua and JSON parsers ship with Flemma; you can register more via `flemma.frontmatter.parsers.register("yaml", parser_fn)`.
 - **Messages** begin with `@System:`, `@You:`, or `@Assistant:`. The parser is whitespace-tolerant and handles blank lines between messages.
-- **Thinking blocks** appear only in assistant messages. Vertex AI models stream `<thinking>` sections; Flemma folds them automatically and keeps dedicated highlights for the tags and body.
+- **Thinking blocks** appear only in assistant messages. Anthropic and Vertex AI models stream `<thinking>` sections; Flemma folds them automatically and keeps dedicated highlights for the tags and body.
 
 ### Folding and layout
 
@@ -202,7 +204,7 @@ Model thoughts stream here and auto-fold.
 | Level 2    | `<thinking>...</thinking>` | Reasoning traces are useful, but often secondary to the answer. |
 | Level 1    | Each message               | Collapse long exchanges without losing context.                 |
 
-Toggle folds with your usual mappings (`za`, `zc`, etc.). The fold text shows a snippet of the hidden content so you know whether to expand it.
+Toggle folds with your usual mappings (`za`, `zc`, etc.). The fold text shows a snippet of the hidden content so you know whether to expand it. The initial fold level is configurable via `editing.foldlevel` (default `1`, which collapses thinking blocks).
 
 Between messages, Flemma draws a ruler using the configured `ruler.char` and highlight. This keeps multi-step chats legible even with folds open.
 
@@ -211,7 +213,7 @@ Between messages, Flemma draws a ruler using the configured `ruler.char` and hig
 Inside `.chat` buffers Flemma defines:
 
 - `]m` / `[m` – jump to the next/previous message header.
-- `im` / `am` (configurable) – select the inside or entire message as a text object. Thinking blocks are skipped so yanking `im` never includes `<thinking>` sections unintentionally.
+- `im` / `am` (configurable) – select the inside or entire message as a text object. `am` selects linewise and includes thinking blocks and trailing blank lines, making `dam` delete entire conversation turns. `im` skips `<thinking>` sections so yanking `im` never includes reasoning traces.
 - Buffer-local mappings for send/cancel default to `<C-]>` and `<C-c>` in normal mode. Insert-mode `<C-]>` stops insert, sends, and re-enters insert when the response finishes.
 
 Disable or remap these through the `keymaps` section (see [Configuration reference](#configuration-reference)).
@@ -259,13 +261,13 @@ Switch using `:Flemma switch $fast` or `:Flemma switch $review temperature=0.1` 
 
 ### Provider-specific capabilities
 
-| Provider  | Defaults            | Extra parameters                                                                                                                                                                                             | Notes                                                                                                  |
-| --------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| Anthropic | `claude-sonnet-4-5` | Standard `max_tokens`, `temperature`, `timeout`, `connect_timeout`.                                                                                                                                          | Supports text, image, and PDF attachments.                                                             |
-| OpenAI    | `gpt-5`             | `reasoning=<low\|medium\|high>` toggles reasoning effort. When set, lualine includes the reasoning level and Flemma keeps your configured `max_tokens` aligned with OpenAI’s completion limit automatically. | Cost notifications include reasoning tokens.                                                           |
-| Vertex AI | `gemini-2.5-pro`    | `project_id` (required), `location` (default `global`), `thinking_budget` enables streamed `<thinking>` traces.                                                                                              | `thinking_budget` ≥ 1 activates Google’s experimental thinking output; set to `0` or `nil` to disable. |
+| Provider  | Defaults            | Extra parameters                                                                              | Notes                                                                                                  |
+| --------- | ------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Anthropic | `claude-sonnet-4-5` | `thinking_budget` enables extended thinking (≥ 1024). Disables `temperature` when active.     | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer.                     |
+| OpenAI    | `gpt-5`             | `reasoning=<low\|medium\|high>` toggles reasoning effort.                                     | Cost notifications include reasoning tokens. Lualine shows the reasoning level.                        |
+| Vertex AI | `gemini-2.5-pro`    | `project_id` (required), `location` (default `global`), `thinking_budget` (≥ 1 to activate). | `thinking_budget` activates Google's thinking output; set to `0` or `nil` to disable.                  |
 
-The full model cataloguel (including pricing) is in `lua/flemma/models.lua`. You can access it from Neovim with:
+The full model catalogue (including pricing) is in `lua/flemma/models.lua`. You can access it from Neovim with:
 
 ```lua
 :lua print(vim.inspect(require("flemma.provider.config").models))
@@ -273,9 +275,106 @@ The full model cataloguel (including pricing) is in `lua/flemma/models.lua`. You
 
 ---
 
+## Tool Calling
+
+Flemma includes a tool system that lets models request actions – run a calculation, execute a shell command, read or modify files – and receive structured results, all within the `.chat` buffer.
+
+### How it works
+
+1. When you send a message, Flemma includes definitions for available tools in the API request.
+2. If the model decides to use a tool, it emits a `**Tool Use:**` block in its response:
+
+   ````markdown
+   @Assistant: Let me calculate that for you.
+
+   **Tool Use:** `calculator` (`toolu_abc123`)
+
+   ```json
+   {"expression": "20 + 30 + 50"}
+   ```
+   ````
+
+3. You can execute the tool by pressing <kbd>Alt-Enter</kbd> with the cursor on or near the tool use block. Flemma runs the tool, locks the buffer during execution, and injects a `**Tool Result:**` block:
+
+   ````markdown
+   @You: **Tool Result:** `toolu_abc123`
+
+   ```
+   100
+   ```
+   ````
+
+4. Send the buffer again to continue the conversation. The model sees the tool result and can respond accordingly.
+
+### Built-in tools
+
+| Tool           | Type  | Description                                                                                                       |
+| -------------- | ----- | ----------------------------------------------------------------------------------------------------------------- |
+| `calculator`   | sync  | Evaluates mathematical expressions using Lua's `math` library. Sandboxed – only `math.*` functions are available. |
+| `bash`         | async | Executes shell commands. Configurable shell, working directory, and environment. Supports timeout and cancellation. |
+| `read`         | sync  | Reads file contents with optional offset and line limit. Relative paths resolve against the `.chat` file.          |
+| `write`        | sync  | Writes or creates files. Creates parent directories automatically.                                                 |
+| `edit`         | sync  | Find-and-replace with exact text matching. The old text must appear exactly once in the target file.               |
+
+### Tool execution
+
+- **<kbd>Alt-Enter</kbd>** – execute the tool at the cursor position (normal mode).
+- **Async tools** (like `bash`) show an animated spinner while running and can be cancelled.
+- **Buffer locking** – the buffer is made non-modifiable during tool execution to prevent race conditions.
+- **Output truncation** – large outputs (> 4000 lines or 8 MB) are automatically truncated with a summary. The full output is saved to a temporary file and the path is included in the truncated result.
+- **Cursor positioning** – after injection, the cursor can move to the result (`"result"`), stay put (`"stay"`), or jump to the next `@You:` prompt (`"next"`). Controlled by `tools.cursor_after_result`.
+
+### Parallel tool use
+
+All three providers support parallel tool calls – the model can request multiple tools in a single response. Execute them individually with <kbd>Alt-Enter</kbd> on each block.
+
+Flemma validates that every `**Tool Use:**` block has a matching `**Tool Result:**` before sending. Missing results produce a diagnostic warning.
+
+### Registering custom tools
+
+Tools are registered through a simple API:
+
+```lua
+local tools = require("flemma.tools")
+tools.register("my_tool", {
+  name = "my_tool",
+  description = "Does something useful",
+  input_schema = {
+    type = "object",
+    properties = {
+      query = { type = "string", description = "The input query" },
+    },
+    required = { "query" },
+  },
+  execute = function(input, callback)
+    -- Sync: return result directly
+    callback({ result = "done" })
+  end,
+})
+```
+
+### Tool configuration
+
+```lua
+require("flemma").setup({
+  tools = {
+    default_timeout = 30,              -- Timeout for async tools (seconds)
+    show_spinner = true,               -- Animated spinner during execution
+    cursor_after_result = "result",    -- "result" | "stay" | "next"
+    bash = {
+      shell = nil,                     -- Shell binary (default: bash)
+      cwd = nil,                       -- Working directory (nil = buffer dir)
+      env = nil,                       -- Extra environment variables
+    },
+  },
+})
+```
+
+---
+
 ## Template System and Automation
 
-Flemma’s prompt pipeline runs through three stages: parse, evaluate, and send. Errors at any stage surface via diagnostics before the request leaves your editor.
+Flemma's prompt pipeline runs through three stages: parse, evaluate, and send. Errors at any stage surface via diagnostics before the request leaves your editor.
 
 ### Frontmatter
 
@@ -301,6 +400,8 @@ Use `{{ expression }}` inside any non-assistant message. Expressions run in a sa
 - Standard Lua libs (`string`, `table`, `math`, `utf8`).
 - `vim.fn` (`fnamemodify`, `getcwd`) and `vim.fs` (`normalize`, `abspath`).
 - Variables returned from frontmatter.
+- `__filename` – the absolute path to the current `.chat` file.
+- `__dirname` – the directory containing the current file.
 
 Outputs are converted to strings. Tables are JSON-encoded automatically.
 
@@ -313,13 +414,37 @@ Errors in expressions are downgraded to warnings. The request still sends, and t
 
 ### `include()` helper
 
-Call `include("relative/or/absolute/path")` inside frontmatter or an expression to inline another template fragment. Includes are evaluated in isolation (they do not inherit your variables) and support their own `{{ }}` and `@./` references.
+Call `include("relative/or/absolute/path")` inside frontmatter or an expression to inline another template fragment. Includes support two modes:
+
+**Text mode** (default) – the included file is parsed for `{{ }}` expressions and `@./` file references, which are evaluated recursively. The result is inlined as text:
+
+```markdown
+@System: {{ include("system-prompt.md") }}
+```
+
+**Binary mode** – the file is read as raw bytes and attached as a structured content part (image, PDF, etc.), just like `@./path`:
+
+```lua
+-- In frontmatter:
+screenshot = include('./latest.png', { binary = true })
+```
+
+```markdown
+@You: What do you see? {{ screenshot }}
+```
+
+The `binary` flag and an optional `mime` override are passed as a second argument:
+
+```lua
+include('./data.bin', { binary = true, mime = 'text/csv' })
+```
 
 Guards in place:
 
 - Relative paths resolve against the file that called `include()`.
 - Circular includes raise a descriptive error with the include stack.
 - Missing files or read errors raise warnings that block the request.
+- Included files get their own `__filename` and `__dirname`, isolated from the parent's variables.
 
 ### Diagnostics at a glance
 
@@ -351,6 +476,9 @@ Examples:
 
 Trailing punctuation such as `.` or `)` is ignored so you can keep natural prose. To coerce a MIME type, append `;type=<mime>` as in the Lua example above.
 
+> [!TIP]
+> Under the hood, `@./path` desugars to an `include()` call in binary mode. This means `@./file.png` and `{{ include('./file.png', { binary = true }) }}` are equivalent – you can use whichever reads better in context.
+
 | Provider  | Text files                   | Images                                     | PDFs                   | Behaviour when unsupported                             |
 | --------- | ---------------------------- | ------------------------------------------ | ---------------------- | ------------------------------------------------------ |
 | Anthropic | Embedded as plain text parts | Uploaded as base64 image parts             | Sent as document parts | The literal `@./path` is kept and a warning is shown.  |
@@ -364,6 +492,8 @@ If a file cannot be read or the provider refuses its MIME type, Flemma warns you
 ## Usage, Pricing, and Notifications
 
 Each completed request emits a floating report that names the provider/model, lists input/output tokens (reasoning tokens are counted under `⊂ thoughts`), and – when pricing is enabled – shows the per-request and cumulative session cost derived from `lua/flemma/models.lua`. Token accounting persists for the lifetime of the Neovim instance; call `require("flemma.state").reset_session()` if you need to zero the counters without restarting. `pricing.enabled = false` suppresses the dollar amounts while keeping token totals for comparison.
+
+Notifications are buffer-local – each `.chat` buffer gets its own notification stack, positioned relative to its window. Notifications for hidden buffers (e.g., in another tab) are queued and shown when the buffer becomes visible.
 
 Flemma keeps the most recent notification available via `:Flemma notification:recall`, which helps when you close the floating window before capturing the numbers. Logging lives in the same subsystem: toggle it with `:Flemma logging:enable` / `:Flemma logging:disable` and open the log file (`~/.local/state/nvim/flemma.log` or your `stdpath("cache")`) through `:Flemma logging:open` whenever you need the redacted curl command and streaming trace.
 
@@ -384,6 +514,9 @@ Configuration keys map to dedicated highlight groups:
 | `highlights.user_file_reference` | `@./path` fragments                    |
 | `highlights.thinking_tag`        | `<thinking>` / `</thinking>` tags      |
 | `highlights.thinking_block`      | Content inside thinking blocks         |
+| `highlights.tool_use`            | `**Tool Use:**` title line             |
+| `highlights.tool_result`         | `**Tool Result:**` title line          |
+| `highlights.tool_result_error`   | `(error)` marker in tool results       |
 
 Each value accepts a highlight name, a hex colour string, or a table of highlight attributes (`{ fg = "#ffcc00", bold = true }`).
 
@@ -422,6 +555,8 @@ defaults = {
 }
 ```
 
+</details>
+
 ### Line highlights
 
 Full-line background colours distinguish message roles. Disable with `line_highlights.enabled = false` (default: `true`):
@@ -429,13 +564,12 @@ Full-line background colours distinguish message roles. Disable with `line_highl
 ```lua
 line_highlights = {
   enabled = true,
-  user = { dark = "Normal+bg:#101010", light = "Normal-bg:#101010" },
+  frontmatter = { dark = "Normal+bg:#201020", light = "Normal-bg:#201020" },
+  system = { dark = "Normal+bg:#201000", light = "Normal-bg:#201000" },
+  user = { dark = "Normal", light = "Normal" },
   assistant = { dark = "Normal+bg:#102020", light = "Normal-bg:#102020" },
-  -- ...
 }
 ```
-
-</details>
 
 Role markers inherit `role_style` (comma-separated GUI attributes) so marker styling tracks your message colours.
 
@@ -445,13 +579,15 @@ Set `signs.enabled = true` to place signs for each message line. Each role (`sys
 
 ### Spinner behaviour
 
-While a request runs Flemma appends `@Assistant: Thinking...` with an animated braille spinner. The line is flagged as non-spellable so spell check integrations stay quiet. Once streaming starts, the spinner is removed and replaced with the streamed content.
+While a request runs Flemma appends `@Assistant: Thinking...` with an animated braille spinner using virtual text extmarks. The line is flagged as non-spellable so spell check integrations stay quiet. Once streaming starts, the spinner is removed and replaced with the streamed content.
+
+Tool execution also shows a spinner next to the tool result block while the tool is running.
 
 ---
 
 ## Lualine Integration
 
-Add the bundled component to show the active model (and reasoning effort when set):
+Add the bundled component to show the active model (and reasoning effort or thinking status when set):
 
 ```lua
 require("lualine").setup({
@@ -465,7 +601,18 @@ require("lualine").setup({
 })
 ```
 
-The component only renders in `chat` buffers. Switching providers or toggling OpenAI reasoning effort causes Flemma to refresh lualine automatically.
+The component only renders in `chat` buffers. Switching providers or toggling reasoning/thinking causes Flemma to refresh lualine automatically.
+
+The display format is configurable:
+
+```lua
+require("flemma").setup({
+  statusline = {
+    thinking_format = "{model}  ✓ thinking",   -- When thinking_budget is set
+    reasoning_format = "{model} ({level})",     -- When OpenAI reasoning is set
+  },
+})
+```
 
 ---
 
@@ -475,23 +622,36 @@ Flemma works without arguments, but every option can be overridden:
 
 ```lua
 require("flemma").setup({
-  provider = "anthropic",
-  model = nil, -- provider default
+  provider = "anthropic",                    -- "anthropic" | "openai" | "vertex"
+  model = nil,                               -- nil = provider default
   parameters = {
     max_tokens = 4000,
     temperature = 0.7,
-    timeout = 120,
-    connect_timeout = 10,
+    timeout = 120,                           -- Response timeout (seconds)
+    connect_timeout = 10,                    -- Connection timeout (seconds)
+    anthropic = {
+      thinking_budget = nil,                 -- Extended thinking (≥ 1024, or nil to disable)
+    },
     vertex = {
-      project_id = nil,
-      location = "global",
-      thinking_budget = nil,
+      project_id = nil,                      -- Google Cloud project ID (required for Vertex)
+      location = "global",                   -- Google Cloud region
+      thinking_budget = nil,                 -- Thinking output (≥ 1 to enable, nil/0 to disable)
     },
     openai = {
-      reasoning = nil, -- "low" | "medium" | "high"
+      reasoning = nil,                       -- "low" | "medium" | "high" (nil to disable)
     },
   },
-  presets = {},
+  presets = {},                              -- Named presets: ["$name"] = "provider model key=val"
+  tools = {
+    default_timeout = 30,                    -- Async tool timeout (seconds)
+    show_spinner = true,                     -- Animated spinner during execution
+    cursor_after_result = "result",          -- "result" | "stay" | "next"
+    bash = {
+      shell = nil,                           -- Shell binary (default: bash)
+      cwd = nil,                             -- Working directory (nil = buffer dir)
+      env = nil,                             -- Extra environment variables
+    },
+  },
   defaults = {
     dark = { bg = "#000000", fg = "#ffffff" },
     light = { bg = "#ffffff", fg = "#000000" },
@@ -503,7 +663,11 @@ require("flemma").setup({
     user_lua_expression = "PreProc",
     user_file_reference = "Include",
     thinking_tag = "Comment",
-    thinking_block = "Comment",
+    thinking_block = { dark = "Comment+bg:#102020-fg:#111111",
+                       light = "Comment-bg:#102020+fg:#111111" },
+    tool_use = "Function",
+    tool_result = "Function",
+    tool_result_error = "DiagnosticError",
   },
   role_style = "bold,underline",
   ruler = {
@@ -527,10 +691,16 @@ require("flemma").setup({
   },
   notify = require("flemma.notify").default_opts,
   pricing = { enabled = true },
-  text_object = "m",
+  statusline = {
+    thinking_format = "{model}  ✓ thinking",
+    reasoning_format = "{model} ({level})",
+  },
+  text_object = "m",                         -- "m" or false to disable
   editing = {
     disable_textwidth = true,
-    auto_write = false,
+    auto_write = false,                      -- Write buffer after each request
+    manage_updatetime = true,                -- Lower updatetime in chat buffers
+    foldlevel = 1,                           -- 0=all closed, 1=thinking collapsed, 99=all open
   },
   logging = {
     enabled = false,
@@ -541,6 +711,7 @@ require("flemma").setup({
     normal = {
       send = "<C-]>",
       cancel = "<C-c>",
+      tool_execute = "<M-CR>",               -- Execute tool at cursor
       next_message = "]m",
       prev_message = "[m",
     },
@@ -554,9 +725,11 @@ require("flemma").setup({
 Additional notes:
 
 - `editing.auto_write = true` writes the buffer after each successful request or cancellation.
+- `editing.foldlevel` controls the initial fold state: `0` folds everything, `1` keeps messages open but collapses thinking blocks, `99` opens everything.
 - Set `text_object = false` to disable the message text object entirely.
 - `notify.default_opts` exposes floating-window appearance (timeout, width, border, title).
 - `logging.enabled = true` starts the session with logging already active.
+- `keymaps.enabled = false` disables all built-in mappings so you can register your own `:Flemma` commands.
 
 ---
 
@@ -610,6 +783,7 @@ Inside the shell you gain convenience wrappers:
 - `flemma-fmt` – run `nixfmt`, `stylua`, and `prettier` across the repo.
 - `flemma-amp` – open the Amp CLI, preconfigured for this project.
 - `flemma-codex` – launch the OpenAI Codex helper.
+- `flemma-claude` – launch Claude Code for this project.
 
 Run the automated tests with:
 
@@ -618,6 +792,15 @@ make test
 ```
 
 The suite boots headless Neovim via `tests/minimal_init.lua` and executes Plenary+Busted specs in `tests/flemma/`, printing detailed results for each spec so you can follow along.
+
+Other useful Makefile targets:
+
+```bash
+make lint          # Run luacheck on all Lua files
+make check         # Run lua-language-server type checking
+make develop       # Launch Neovim with Flemma loaded for local testing
+make screenshot    # Generate screenshots
+```
 
 To exercise the plugin without installing it globally:
 
@@ -628,7 +811,7 @@ nvim --cmd "set runtimepath+=`pwd`" \
 ```
 
 > [!NOTE]
-> **Almost every line of code** in Flemma has been authored through AI pair-programming tools (Aider, Amp, and Codex). Traditional contributions are welcome – just keep changes focused, documented, and tested.
+> **Almost every line of code** in Flemma has been authored through AI pair-programming tools (Aider, Amp, Claude Code, and Codex). Traditional contributions are welcome – just keep changes focused, documented, and tested.
 
 ---
 
@@ -638,6 +821,8 @@ nvim --cmd "set runtimepath+=`pwd`" \
 - **Frontmatter errors:** notifications list the exact line and file. Fix the error and resend; Flemma will not contact the provider until the frontmatter parses cleanly.
 - **Attachments ignored:** ensure the file exists relative to the `.chat` file and that the provider supports its MIME type. Use `;type=` to override when necessary.
 - **Vertex refuses requests:** double-check `parameters.vertex.project_id` and authentication. Run `gcloud auth application-default print-access-token` manually to ensure credentials are valid.
+- **Tool execution doesn't respond:** make sure the cursor is on or near the `**Tool Use:**` block. Only tools with registered executors can be run – check `:lua print(vim.inspect(require("flemma.tools").get_all()))`.
 - **Keymaps clash:** disable built-in mappings via `keymaps.enabled = false` and register your own `:Flemma` commands.
+- **Cross-buffer issues:** Flemma manages state per-buffer. If something feels off after switching between multiple `.chat` buffers, ensure each buffer has been saved (unsaved buffers lack `__dirname` for path resolution).
 
 Happy prompting!
