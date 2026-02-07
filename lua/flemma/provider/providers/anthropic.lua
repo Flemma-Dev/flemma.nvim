@@ -124,7 +124,7 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
               .. ")"
           )
         elseif part.kind == "unsupported_file" then
-          table.insert(content_blocks, { type = "text", text = "@" .. (part.raw_filename or "") })
+          table.insert(content_blocks, { type = "text", text = "@" .. (part.filename or "") })
         end
       end
 
