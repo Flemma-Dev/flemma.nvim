@@ -124,14 +124,12 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
     -- Text mode: read, parse, evaluate, return composite IncludePart
     local content, read_err = read_file(target_path, false)
     if not content then
-      error(
-        string.format(
-          "Failed to open include file '%s' (requested by '%s'): %s",
-          target_path,
-          env.__filename or "N/A",
-          read_err or "unknown error"
-        )
-      )
+      error({
+        type = "file",
+        filename = target_path,
+        raw = relative_path,
+        error = read_err or "Failed to read file",
+      })
     end
 
     -- Parse content for {{ }} expressions and @./ file references
