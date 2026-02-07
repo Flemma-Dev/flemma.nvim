@@ -25,6 +25,14 @@ return {
     anthropic = {
       default = "claude-sonnet-4-5",
       models = {
+        -- Claude Opus 4.6
+        ["claude-opus-4-6"] = {
+          pricing = {
+            input = 5.0,
+            output = 25.0,
+          },
+        },
+
         -- Claude Sonnet 4.5 (as of Sep 2025)
         ["claude-sonnet-4-5"] = {
           pricing = {
@@ -257,11 +265,26 @@ return {
           },
           supports_reasoning_effort = true,
         },
+        ["gpt-5.2-codex"] = {
+          pricing = {
+            input = 1.75,
+            output = 14.0,
+          },
+          supports_reasoning_effort = true,
+        },
         ["gpt-5.2-pro"] = {
           pricing = {
             input = 21.0,
             output = 168.0,
           },
+          supports_reasoning_effort = true,
+        },
+        ["gpt-5.2-pro-2025-12-11"] = {
+          pricing = {
+            input = 21.0,
+            output = 168.0,
+          },
+          supports_reasoning_effort = true,
         },
 
         -- GPT-5.1 models
@@ -527,6 +550,13 @@ return {
           },
           supports_reasoning_effort = true,
         },
+        ["o3-mini-2025-01-31"] = {
+          pricing = {
+            input = 1.10,
+            output = 4.40,
+          },
+          supports_reasoning_effort = true,
+        },
         ["o4-mini"] = {
           pricing = {
             input = 1.10,
@@ -569,7 +599,7 @@ return {
           },
         },
 
-        -- GPT-4 Turbo models (legacy)
+        -- GPT-4 Turbo models (deprecated, retiring Mar 2026)
         ["gpt-4-turbo"] = {
           pricing = {
             input = 10.0,
@@ -582,13 +612,13 @@ return {
             output = 30.0,
           },
         },
-        ["gpt-4-0125-preview"] = {
+        ["gpt-4-0125-preview"] = { -- (deprecated, retiring Mar 2026)
           pricing = {
             input = 10.0,
             output = 30.0,
           },
         },
-        ["gpt-4-1106-preview"] = {
+        ["gpt-4-1106-preview"] = { -- (deprecated, retiring Mar 2026)
           pricing = {
             input = 10.0,
             output = 30.0,
@@ -608,7 +638,7 @@ return {
             output = 60.0,
           },
         },
-        ["gpt-4-0314"] = {
+        ["gpt-4-0314"] = { -- (deprecated, retiring Mar 2026)
           pricing = {
             input = 30.0,
             output = 60.0,
@@ -628,34 +658,16 @@ return {
             output = 1.50,
           },
         },
-        ["gpt-3.5-turbo-1106"] = {
+        ["gpt-3.5-turbo-1106"] = { -- (deprecated, retiring Sep 2026)
           pricing = {
             input = 1.0,
             output = 2.0,
           },
         },
-        ["gpt-3.5-turbo-0613"] = {
+        ["gpt-3.5-turbo-instruct"] = { -- (deprecated, retiring Sep 2026)
           pricing = {
             input = 1.50,
             output = 2.0,
-          },
-        },
-        ["gpt-3.5-0301"] = {
-          pricing = {
-            input = 1.50,
-            output = 2.0,
-          },
-        },
-        ["gpt-3.5-turbo-instruct"] = {
-          pricing = {
-            input = 1.50,
-            output = 2.0,
-          },
-        },
-        ["gpt-3.5-turbo-16k-0613"] = {
-          pricing = {
-            input = 3.0,
-            output = 4.0,
           },
         },
       },

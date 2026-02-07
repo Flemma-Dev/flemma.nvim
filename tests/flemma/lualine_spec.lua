@@ -123,7 +123,7 @@ describe("Lualine component", function()
   it("should return an empty string if filetype is not 'chat'", function()
     -- Arrange
     vim.bo.filetype = "lua"
-    core.switch_provider("openai", "o1-mini", { reasoning = "high" })
+    core.switch_provider("openai", "o4-mini", { reasoning = "high" })
 
     -- Act
     local status = flemma_component:update_status()

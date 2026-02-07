@@ -14,7 +14,7 @@ describe("OpenAI Provider", function()
         { model = "gpt-4o-mini", max_tokens = 2000 },
         { model = "gpt-5-mini", max_tokens = 3000 },
         { model = "o1", max_tokens = 4000 },
-        { model = "o1-mini", max_tokens = 5000 },
+        { model = "o4-mini", max_tokens = 5000 },
         { model = "o3", max_tokens = 6000 },
       }
 
