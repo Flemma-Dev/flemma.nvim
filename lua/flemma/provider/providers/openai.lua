@@ -116,7 +116,7 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
               .. ")"
           )
         elseif part.kind == "unsupported_file" then
-          table.insert(content_parts_for_api, { type = "text", text = "@" .. (part.raw_filename or "") })
+          table.insert(content_parts_for_api, { type = "text", text = "@" .. (part.filename or "") })
         elseif part.kind == "tool_result" then
           -- Normalize tool ID for OpenAI compatibility (handles Vertex URN-style IDs)
           local normalized_id = base.normalize_tool_id(part.tool_use_id)
