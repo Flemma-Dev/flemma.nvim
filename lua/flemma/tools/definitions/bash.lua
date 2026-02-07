@@ -119,6 +119,10 @@ M.definitions = {
 
       -- Setup timeout
       timer = vim.uv.new_timer()
+      if not timer then
+        callback({ success = false, error = "Failed to create timer" })
+        return nil
+      end
       timer:start(
         timeout * 1000,
         0,

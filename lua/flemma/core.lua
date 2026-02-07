@@ -30,7 +30,7 @@ local function initialize_provider(provider_name, model_name, parameters)
   -- Prepare configuration using the centralized config manager
   local provider_config, err = config_manager.prepare_config(provider_name, model_name, parameters)
   if not provider_config then
-    vim.notify(err, vim.log.levels.ERROR)
+    vim.notify(err --[[@as string]], vim.log.levels.ERROR)
     return nil
   end
 
@@ -354,6 +354,10 @@ function M.send_to_provider(opts)
 
   -- Get endpoint first to check for fixtures
   local endpoint = current_provider:get_endpoint()
+  if not endpoint then
+    vim.notify("Flemma: Provider did not return an endpoint.", vim.log.levels.ERROR)
+    return nil
+  end
 
   -- Check if there's a fixture for this endpoint (for testing)
   local client = require("flemma.client")
@@ -372,6 +376,10 @@ function M.send_to_provider(opts)
       return nil
     end
     headers = current_provider:get_request_headers()
+    if not headers then
+      vim.notify("Flemma: Provider did not return request headers.", vim.log.levels.ERROR)
+      return nil
+    end
   else
     -- For fixtures, provide dummy headers since they won't be used
     headers = { "content-type: application/json" }
@@ -389,6 +397,7 @@ function M.send_to_provider(opts)
       .. log.inspect(current_provider.parameters.model)
   )
 
+  ---@type integer|nil
   local spinner_timer = ui.start_loading_spinner(bufnr) -- Handles its own modifiable toggles for writes
   local response_started = false
 
@@ -626,10 +635,11 @@ function M.send_to_provider(opts)
             last_line_content = vim.api.nvim_buf_get_lines(bufnr, last_line_idx - 1, last_line_idx, false)[1] or ""
           end
 
-          local lines_to_insert = {}
-          local cursor_line_offset = 1
+          local lines_to_insert
+          local cursor_line_offset
           if last_line_content == "" then
             lines_to_insert = { "@You: " }
+            cursor_line_offset = 1
           else
             lines_to_insert = { "", "@You: " }
             cursor_line_offset = 2

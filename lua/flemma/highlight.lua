@@ -315,7 +315,7 @@ local function setup_signs()
       -- Set the sign highlight group if highlighting is enabled
       if sign_data.config.hl ~= false then
         local target_hl = sign_data.config.hl == true and sign_data.highlight or sign_data.config.hl
-        set_highlight(sign_hl_group, target_hl) -- Use the helper function
+        set_highlight(sign_hl_group, target_hl --[[@as string|table]]) -- Use the helper function
 
         -- Define the sign using the internal key (e.g., flemma_user)
         local sign_name = "flemma_" .. internal_role_key

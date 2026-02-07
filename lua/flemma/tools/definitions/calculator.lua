@@ -96,6 +96,10 @@ M.definitions = {
       end
       local delay = input.delay or 1000
       local timer = vim.uv.new_timer()
+      if not timer then
+        callback({ success = true, output = tostring(result) })
+        return nil
+      end
       timer:start(delay, 0, function()
         timer:stop()
         timer:close()

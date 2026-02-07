@@ -58,9 +58,7 @@ local function generate_access_token(service_account_json)
   -- Capture both stdout and stderr for better error reporting
   local cmd = string.format("GOOGLE_APPLICATION_CREDENTIALS=%s gcloud auth print-access-token 2>&1", tmp_file)
   local handle = io.popen(cmd)
-  local output = nil
-  local token = nil
-  local err = nil
+  local output, token, err
 
   if handle then
     output = handle:read("*a")
@@ -213,9 +211,9 @@ end
 ---Build request body for Vertex AI API
 ---
 ---@param prompt flemma.provider.Prompt The prepared prompt with history and system
----@param context? flemma.Context The shared context object for resolving file paths
+---@param _context? flemma.Context The shared context object for resolving file paths
 ---@return table<string, any> request_body The request body for the API
-function M.build_request(self, prompt, context) ---@diagnostic disable-line: unused-local
+function M.build_request(self, prompt, _context) ---@diagnostic disable-line: unused-local
   -- Convert prompt.history to Vertex AI format
   local contents = {}
 
@@ -543,7 +541,7 @@ function M.process_response_line(self, line, callbacks)
 
   -- Handle error responses
   if data.error then
-    local msg = self:extract_json_response_error(data)
+    local msg = self:extract_json_response_error(data) or "Unknown API error"
     log.error("vertex.process_response_line(): Vertex AI API error: " .. log.inspect(msg))
     if callbacks.on_error then
       callbacks.on_error(msg)
@@ -696,7 +694,7 @@ function M.extract_json_response_error(self, data)
   -- First try Vertex AI specific patterns
 
   -- Pattern 1: Array response with error [{ error: { ... } }]
-  if vim.tbl_islist(data) and #data > 0 and type(data[1]) == "table" and data[1].error then
+  if vim.islist(data) and #data > 0 and type(data[1]) == "table" and data[1].error then
     local error_data = data[1]
     local msg = "Vertex AI API error"
 

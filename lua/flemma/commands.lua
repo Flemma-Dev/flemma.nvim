@@ -74,7 +74,7 @@ local function setup_commands()
     end
 
     return function()
-      local ok, err = pcall(vim.cmd, value)
+      local ok, err = pcall(vim.cmd --[[@as function]], value)
       if not ok then
         vim.notify(("Flemma: %s command failed: %s"):format(label, err), vim.log.levels.ERROR)
       end

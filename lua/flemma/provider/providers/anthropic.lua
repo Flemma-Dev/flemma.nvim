@@ -53,9 +53,9 @@ end
 ---Build request body for Anthropic API
 ---
 ---@param prompt flemma.provider.Prompt The prepared prompt with history and system (from pipeline)
----@param context? flemma.Context The shared context object (not used, parts already resolved)
+---@param _context? flemma.Context The shared context object (not used, parts already resolved)
 ---@return table<string, any> request_body The request body for the API
-function M.build_request(self, prompt, context) ---@diagnostic disable-line: unused-local
+function M.build_request(self, prompt, _context) ---@diagnostic disable-line: unused-local
   local api_messages = {}
 
   for _, msg in ipairs(prompt.history) do
@@ -283,7 +283,7 @@ function M.process_response_line(self, line, callbacks)
 
   -- Handle error responses
   if data.type == "error" then
-    local msg = self:extract_json_response_error(data)
+    local msg = self:extract_json_response_error(data) or "Unknown API error"
     log.error("anthropic.process_response_line(): Anthropic API error: " .. log.inspect(msg))
     if callbacks.on_error then
       callbacks.on_error(msg)

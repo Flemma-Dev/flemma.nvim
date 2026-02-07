@@ -14,7 +14,6 @@ local tools = require("flemma.tools")
 local registry = require("flemma.tools.registry")
 local context = require("flemma.tools.context")
 local injector = require("flemma.tools.injector")
-local parser = require("flemma.parser")
 
 --- Helper: create a scratch buffer with given lines
 --- @param lines string[]
@@ -1338,7 +1337,7 @@ describe("Cancel Priority Logic", function()
     assert.is_not_nil(buffer_state.current_request, "API request should be active")
 
     -- Verify that with an active API request, we would NOT touch tools
-    local pending = executor.get_pending(bufnr)
+    executor.get_pending(bufnr)
     -- Even if tools were pending, API cancellation takes priority
     -- This test verifies the priority check condition
     assert.is_truthy(buffer_state.current_request, "Should detect active API request first")

@@ -535,7 +535,7 @@ end
 ---otherwise sets folding on the current window.
 ---@param bufnr? integer
 function M.setup_folding(bufnr)
-  local winid = nil
+  local winid
 
   if bufnr then
     winid = vim.fn.bufwinid(bufnr)
@@ -583,11 +583,6 @@ local function apply_chat_buffer_settings(bufnr)
 
   if config.editing.disable_textwidth then
     vim.bo[bufnr].textwidth = 0
-  end
-
-  if config.editing.auto_write then
-    -- autowrite is buffer-local, use vim.bo
-    vim.bo[bufnr].autowrite = true
   end
 end
 

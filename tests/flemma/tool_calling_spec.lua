@@ -794,15 +794,12 @@ describe("OpenAI Streaming Tool Use Response", function()
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/openai_tool_use_streaming.txt")
     local accumulated_content = ""
-    local response_complete = false
 
     local callbacks = {
       on_content = function(content)
         accumulated_content = accumulated_content .. content
       end,
-      on_response_complete = function()
-        response_complete = true
-      end,
+      on_response_complete = function() end,
     }
 
     for _, line in ipairs(lines) do
@@ -843,15 +840,12 @@ describe("OpenAI Streaming Tool Use Response", function()
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/openai_final_response_streaming.txt")
     local accumulated_content = ""
-    local response_complete = false
 
     local callbacks = {
       on_content = function(content)
         accumulated_content = accumulated_content .. content
       end,
-      on_response_complete = function()
-        response_complete = true
-      end,
+      on_response_complete = function() end,
     }
 
     for _, line in ipairs(lines) do
@@ -1083,15 +1077,12 @@ describe("Vertex AI Streaming Tool Use Response", function()
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/vertex_function_call_streaming.txt")
     local accumulated_content = ""
-    local response_complete = false
 
     local callbacks = {
       on_content = function(content)
         accumulated_content = accumulated_content .. content
       end,
-      on_response_complete = function()
-        response_complete = true
-      end,
+      on_response_complete = function() end,
     }
 
     for _, line in ipairs(lines) do
@@ -1144,15 +1135,12 @@ describe("Vertex AI Streaming Tool Use Response", function()
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/vertex_final_response_streaming.txt")
     local accumulated_content = ""
-    local response_complete = false
 
     local callbacks = {
       on_content = function(content)
         accumulated_content = accumulated_content .. content
       end,
-      on_response_complete = function()
-        response_complete = true
-      end,
+      on_response_complete = function() end,
     }
 
     for _, line in ipairs(lines) do

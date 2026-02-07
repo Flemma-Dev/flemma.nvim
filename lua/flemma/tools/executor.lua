@@ -130,7 +130,7 @@ local function do_completion(bufnr, tool_id, result, is_async)
   -- For sync tools, all changes are already in one undo block (same handler),
   -- and calling undojoin would incorrectly merge with the PREVIOUS handler's block.
   if is_async and entry and entry.placeholder_modified then
-    pcall(vim.cmd, "undojoin")
+    pcall(vim.cmd --[[@as function]], "undojoin")
   end
 
   -- Inject result into buffer

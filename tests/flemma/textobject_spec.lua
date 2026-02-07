@@ -37,7 +37,7 @@ describe("Flemma Text Objects", function()
 
   it("selects inner message with 'im'", function()
     -- Arrange
-    local bufnr = setup_buffer_and_cursor()
+    setup_buffer_and_cursor()
 
     -- Act
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("vim", true, false, true), "x", false)
@@ -55,7 +55,7 @@ describe("Flemma Text Objects", function()
 
   it("selects around message with 'am' linewise including trailing empty lines", function()
     -- Arrange
-    local bufnr = setup_buffer_and_cursor()
+    setup_buffer_and_cursor()
 
     -- Act
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("vam", true, false, true), "x", false)

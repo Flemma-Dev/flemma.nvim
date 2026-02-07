@@ -5,7 +5,6 @@ describe("State Management", function()
   local flemma
   local ui
   local state
-  local core
 
   before_each(function()
     -- Invalidate caches to ensure clean setup
@@ -19,7 +18,6 @@ describe("State Management", function()
     flemma = require("flemma")
     ui = require("flemma.ui")
     state = require("flemma.state")
-    core = require("flemma.core")
 
     flemma.setup({
       editing = {

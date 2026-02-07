@@ -85,7 +85,7 @@ local function parse_segments(text, base_line)
       ---@cast payload string
       local raw_file_match, mime_with_punct = payload:match("^([^;]+);type=(.+)$")
       local mime_override = nil
-      local trailing_punct = nil
+      local trailing_punct
 
       if not raw_file_match then
         raw_file_match = payload

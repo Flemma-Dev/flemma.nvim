@@ -63,6 +63,8 @@
 ---@field vertex? flemma.config.VertexParams
 ---@field openai? flemma.config.OpenAIParams
 ---@field anthropic? flemma.config.AnthropicParams
+---@field reasoning? string
+---@field thinking_budget? number
 
 ---@class flemma.config.BashToolConfig
 ---@field shell? string
@@ -96,7 +98,29 @@
 ---@field insert flemma.config.InsertKeymaps
 ---@field enabled boolean
 
----@class flemma.Config
+---User-facing setup options — every field is optional (merged with defaults).
+---@class flemma.Config.Opts
+---@field defaults? { dark: { bg: string, fg: string }, light: { bg: string, fg: string } }
+---@field highlights? flemma.config.Highlights
+---@field role_style? string
+---@field ruler? flemma.config.Ruler
+---@field signs? flemma.config.Signs
+---@field line_highlights? flemma.config.LineHighlights
+---@field notify? flemma.notify.Options
+---@field pricing? flemma.config.Pricing
+---@field statusline? flemma.config.Statusline
+---@field provider? string
+---@field model? string
+---@field parameters? flemma.config.Parameters
+---@field tools? flemma.config.ToolsConfig
+---@field presets? table<string, any>
+---@field text_object? string|false
+---@field editing? flemma.config.Editing
+---@field logging? flemma.logging.Config
+---@field keymaps? flemma.config.Keymaps
+
+---Full resolved config (all fields present after merging with defaults).
+---@class flemma.Config : flemma.Config.Opts
 ---@field defaults { dark: { bg: string, fg: string }, light: { bg: string, fg: string } }
 ---@field highlights flemma.config.Highlights
 ---@field role_style string
@@ -107,7 +131,6 @@
 ---@field pricing flemma.config.Pricing
 ---@field statusline flemma.config.Statusline
 ---@field provider string
----@field model? string
 ---@field parameters flemma.config.Parameters
 ---@field tools flemma.config.ToolsConfig
 ---@field presets table<string, any>

@@ -1,7 +1,6 @@
 describe("UI Folding", function()
   local flemma
   local ui
-  local parser
 
   before_each(function()
     -- Invalidate caches to ensure clean setup
@@ -12,7 +11,6 @@ describe("UI Folding", function()
 
     flemma = require("flemma")
     ui = require("flemma.ui")
-    parser = require("flemma.parser")
 
     flemma.setup({})
 

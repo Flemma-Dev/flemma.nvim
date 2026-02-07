@@ -157,10 +157,10 @@ local function create_notification(msg, opts, target_bufnr)
   vim.api.nvim_buf_set_lines(notify_bufnr, 0, -1, false, padded_lines)
 
   -- Set buffer options
-  vim.api.nvim_buf_set_option(notify_bufnr, "modifiable", false)
-  vim.api.nvim_buf_set_option(notify_bufnr, "buftype", "nofile")
-  vim.api.nvim_buf_set_option(notify_bufnr, "bufhidden", "wipe")
-  vim.api.nvim_buf_set_option(notify_bufnr, "filetype", "flemma_notify")
+  vim.bo[notify_bufnr].modifiable = false
+  vim.bo[notify_bufnr].buftype = "nofile"
+  vim.bo[notify_bufnr].bufhidden = "wipe"
+  vim.bo[notify_bufnr].filetype = "flemma_notify"
   -- Remove markdown parser since we're using our own syntax
   vim.treesitter.stop(notify_bufnr)
 
@@ -191,10 +191,10 @@ local function create_notification(msg, opts, target_bufnr)
   local notify_win_id = vim.api.nvim_open_win(notify_bufnr, false, win_opts)
 
   -- Set window options
-  vim.api.nvim_win_set_option(notify_win_id, "wrap", true)
-  vim.api.nvim_win_set_option(notify_win_id, "winblend", 15)
-  vim.api.nvim_win_set_option(notify_win_id, "conceallevel", 3)
-  vim.api.nvim_win_set_option(notify_win_id, "concealcursor", "nvic")
+  vim.wo[notify_win_id].wrap = true
+  vim.wo[notify_win_id].winblend = 15
+  vim.wo[notify_win_id].conceallevel = 3
+  vim.wo[notify_win_id].concealcursor = "nvic"
 
   -- Initialize per-buffer notifications table if needed
   if target_bufnr and not buffer_notifications[target_bufnr] then

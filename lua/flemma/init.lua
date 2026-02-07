@@ -17,13 +17,14 @@ local highlight = require("flemma.highlight")
 local config = {}
 
 ---Setup function to initialize the plugin
----@param user_opts? flemma.Config User configuration overrides (merged with defaults)
+---@param user_opts? flemma.Config.Opts User configuration overrides (merged with defaults)
 M.setup = function(user_opts)
   if vim.fn.has("nvim-0.11") ~= 1 then
     local msg = "Flemma requires Neovim 0.11 or newer. Please upgrade Neovim to use this plugin."
-    local notifier = vim.notify or function(message)
-      vim.api.nvim_err_writeln(message)
-    end
+    local notifier = vim.notify
+      or function(message)
+        vim.api.nvim_echo({ { message, "ErrorMsg" } }, true, {})
+      end
     -- Use a scheduled notification so initialization exits gracefully
     vim.schedule(function()
       notifier(msg, vim.log and vim.log.levels and vim.log.levels.ERROR or nil)

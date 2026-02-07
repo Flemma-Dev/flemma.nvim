@@ -244,11 +244,11 @@ describe("MIME type detection", function()
         -- Mock io.popen for both calls
         local call_count = 0
         local io_popen_stub = create_stub(io, "popen")
-        io_popen_stub.invokes(function(cmd, mode)
+        io_popen_stub.invokes(function(_cmd, _mode)
           call_count = call_count + 1
           return {
-            read = function(self, mode)
-              if mode == "*a" then
+            read = function(self, fmt)
+              if fmt == "*a" then
                 return "text/plain\n"
               end
             end,
