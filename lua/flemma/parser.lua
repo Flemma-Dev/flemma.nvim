@@ -280,11 +280,13 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
     -- Check for thinking tags on their own lines
     -- Patterns:
     --   <thinking> or <thinking provider:signature="..."> (opening tag)
+    --   <thinking redacted> (opening tag for redacted thinking)
     --   <thinking provider:signature="..."/> (self-closing tag)
     -- Supports any provider:signature attribute (e.g., vertex:signature, anthropic:signature)
     local self_closing_sig = line:match('^<thinking%s+%w+:signature="([^"]*)"%s*/>$')
     local open_tag_sig = line:match('^<thinking%s+%w+:signature="([^"]*)"%s*>$')
     local simple_open_tag = line:match("^<thinking>$")
+    local redacted_open_tag = line:match("^<thinking%s+redacted>$")
 
     if self_closing_sig then
       -- Self-closing tag with signature, no content
@@ -294,11 +296,12 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
         ast.thinking("", {
           start_line = thinking_line,
           end_line = thinking_line,
-        }, self_closing_sig)
+        }, { signature = self_closing_sig })
       )
       i = i + 1
-    elseif open_tag_sig or simple_open_tag then
-      local signature = open_tag_sig -- nil for simple open tag
+    elseif open_tag_sig or simple_open_tag or redacted_open_tag then
+      local signature = open_tag_sig -- nil for simple/redacted open tag
+      local redacted = redacted_open_tag ~= nil
       local thinking_start_line = current_line_num
       local thinking_content_lines = {}
       i = i + 1
@@ -313,7 +316,7 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
             ast.thinking(thinking_content, {
               start_line = thinking_start_line,
               end_line = thinking_end_line,
-            }, signature)
+            }, { signature = signature, redacted = redacted or nil })
           )
           i = i + 1
           break

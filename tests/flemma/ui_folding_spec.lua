@@ -60,6 +60,24 @@ describe("UI Folding", function()
       assert.are.equal(">2", fold_level)
     end)
 
+    it("should return >2 for <thinking redacted> tag", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: response",
+        "<thinking redacted>",
+        "encrypted-data-here",
+        "</thinking>",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Line 2 is <thinking redacted>
+      local fold_level = ui.get_fold_level(2)
+      assert.are.equal(">2", fold_level)
+    end)
+
     it("should NOT return >2 for self-closing <thinking/> tag", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
@@ -332,6 +350,38 @@ describe("UI Folding", function()
       -- The first thinking block (line 2) should remain open
       local foldclosed_first = vim.fn.foldclosed(2)
       assert.are.equal(-1, foldclosed_first, "First thinking block should remain open")
+    end)
+
+    it("should fold <thinking redacted> block", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: response",
+        "<thinking redacted>",
+        "encrypted-data-here",
+        "</thinking>",
+        "actual response",
+        "@You: follow up",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Open a window for the buffer and set window-local options
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99 -- Start with all folds open
+
+      -- Call the function
+      ui.fold_last_thinking_block(bufnr)
+
+      -- Check that the fold exists and is closed
+      local foldlevel = vim.fn.foldlevel(2)
+      assert.is_true(foldlevel > 0, "Fold should exist at redacted thinking block")
+
+      local foldclosed = vim.fn.foldclosed(2)
+      assert.are.equal(2, foldclosed, "Redacted thinking block should be folded at line 2")
     end)
 
     it("should fold thinking block with vertex:signature attribute", function()

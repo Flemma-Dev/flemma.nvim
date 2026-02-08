@@ -87,6 +87,7 @@ local M = {}
 ---@field kind "thinking"
 ---@field content string
 ---@field signature? string
+---@field redacted? boolean
 
 ---@class flemma.ast.GenericToolUsePart
 ---@field kind "tool_use"
@@ -150,10 +151,17 @@ end
 
 ---@param content string
 ---@param pos flemma.ast.Position
----@param signature string|nil
+---@param opts? { signature?: string, redacted?: boolean }
 ---@return flemma.ast.ThinkingSegment
-function M.thinking(content, pos, signature)
-  return { kind = "thinking", content = content, position = pos, signature = signature }
+function M.thinking(content, pos, opts)
+  opts = opts or {}
+  return {
+    kind = "thinking",
+    content = content,
+    position = pos,
+    signature = opts.signature,
+    redacted = opts.redacted or nil,
+  }
 end
 
 ---@param id string
@@ -241,11 +249,12 @@ function M.to_generic_parts(evaluated_parts, source_file)
         table.insert(parts, { kind = "unsupported_file", filename = p.filename })
       end
     elseif p.kind == "thinking" then
-      -- Preserve thinking nodes with signature for provider state preservation
+      -- Preserve thinking nodes with signature/redacted for provider state preservation
       table.insert(parts, {
         kind = "thinking",
         content = p.content,
         signature = p.signature,
+        redacted = p.redacted,
       })
     elseif p.kind == "tool_use" then
       table.insert(parts, {

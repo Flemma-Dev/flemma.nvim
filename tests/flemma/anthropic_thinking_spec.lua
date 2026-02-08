@@ -1,4 +1,7 @@
 --- Test file for Anthropic provider extended thinking functionality
+local pipeline = require("flemma.pipeline")
+local ctx = require("flemma.context")
+
 describe("Anthropic Provider Extended Thinking", function()
   local anthropic = require("flemma.provider.providers.anthropic")
 
@@ -249,6 +252,207 @@ describe("Anthropic Provider Extended Thinking", function()
       )
       assert.are.equal("text", provider._response_buffer.extra.current_block_type)
     end)
+
+    it("should capture signature and include in thinking tag", function()
+      local provider = anthropic.new({
+        model = "claude-sonnet-4-5-20250929",
+        thinking_budget = 2048,
+        max_tokens = 4000,
+      })
+
+      local lines = vim.fn.readfile("tests/fixtures/tool_calling/anthropic_thinking_with_signature_streaming.txt")
+      local accumulated_content = ""
+      local callbacks = {
+        on_content = function(content)
+          accumulated_content = accumulated_content .. content
+        end,
+        on_response_complete = function() end,
+        on_usage = function() end,
+      }
+
+      for _, line in ipairs(lines) do
+        provider:process_response_line(line, callbacks)
+      end
+
+      -- Should include thinking tag with anthropic:signature attribute (structural check)
+      assert.is_truthy(
+        accumulated_content:match('<thinking anthropic:signature="[^"]+">'),
+        "Should emit thinking tag with anthropic:signature"
+      )
+      assert.is_truthy(accumulated_content:match("</thinking>"))
+      -- Should have text content outside the thinking block
+      local text_outside_thinking = accumulated_content:gsub("<thinking.-</thinking>", "")
+      assert.is_truthy(vim.trim(text_outside_thinking) ~= "", "Should have text response outside thinking block")
+    end)
+
+    it("should capture redacted thinking and emit as <thinking redacted> block", function()
+      local provider = anthropic.new({
+        model = "claude-sonnet-4-5-20250929",
+        thinking_budget = 2048,
+        max_tokens = 4000,
+      })
+
+      local lines = vim.fn.readfile("tests/fixtures/tool_calling/anthropic_redacted_thinking_streaming.txt")
+      local accumulated_content = ""
+      local callbacks = {
+        on_content = function(content)
+          accumulated_content = accumulated_content .. content
+        end,
+        on_response_complete = function() end,
+        on_usage = function() end,
+      }
+
+      for _, line in ipairs(lines) do
+        provider:process_response_line(line, callbacks)
+      end
+
+      -- Should have visible thinking with signature
+      assert.is_truthy(
+        accumulated_content:match('<thinking anthropic:signature="sig%-visible%-abc123">'),
+        "Should emit visible thinking with signature"
+      )
+      assert.is_truthy(accumulated_content:match("Visible thinking."))
+
+      -- Should have redacted thinking block
+      assert.is_truthy(accumulated_content:match("<thinking redacted>"), "Should emit <thinking redacted> tag")
+      assert.is_truthy(
+        accumulated_content:match("encrypted%-redacted%-data%-xyz789"),
+        "Should include redacted data as content"
+      )
+
+      -- Should have text response
+      assert.is_truthy(accumulated_content:match("Here is my response."))
+    end)
+  end)
+
+  describe("build_request", function()
+    it("should include thinking blocks with signature in content array", function()
+      local provider = anthropic.new({
+        model = "claude-sonnet-4-5-20250929",
+        thinking_budget = 2048,
+        max_tokens = 4000,
+      })
+
+      local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat")
+      local prompt =
+        pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat"))
+      local req = provider:build_request(prompt, {})
+
+      -- Find the assistant message
+      local assistant_msg = nil
+      for _, msg in ipairs(req.messages) do
+        if msg.role == "assistant" then
+          assistant_msg = msg
+          break
+        end
+      end
+
+      assert.is_not_nil(assistant_msg, "Should have assistant message")
+
+      -- Should have thinking block first, then text (structural assertions)
+      local has_thinking = false
+      local thinking_idx = nil
+      local text_idx = nil
+      for idx, block in ipairs(assistant_msg.content) do
+        if block.type == "thinking" then
+          has_thinking = true
+          thinking_idx = idx
+          assert.is_truthy(block.signature and #block.signature > 0, "Should have non-empty signature")
+          assert.is_truthy(block.thinking and #block.thinking > 0, "Should have non-empty thinking content")
+        elseif block.type == "text" then
+          text_idx = text_idx or idx
+        end
+      end
+
+      assert.is_true(has_thinking, "Should include thinking block with signature")
+      assert.is_true(thinking_idx < text_idx, "Thinking should precede text in content array")
+    end)
+
+    it("should include redacted thinking blocks in content array", function()
+      local provider = anthropic.new({
+        model = "claude-sonnet-4-5-20250929",
+        thinking_budget = 2048,
+        max_tokens = 4000,
+      })
+
+      local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat")
+      local prompt =
+        pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat"))
+      local req = provider:build_request(prompt, {})
+
+      -- Find the assistant message
+      local assistant_msg = nil
+      for _, msg in ipairs(req.messages) do
+        if msg.role == "assistant" then
+          assistant_msg = msg
+          break
+        end
+      end
+
+      assert.is_not_nil(assistant_msg)
+
+      -- Should have thinking, redacted_thinking, then text
+      local has_thinking = false
+      local has_redacted = false
+      local redacted_idx = nil
+      local text_idx = nil
+      for idx, block in ipairs(assistant_msg.content) do
+        if block.type == "thinking" then
+          has_thinking = true
+        elseif block.type == "redacted_thinking" then
+          has_redacted = true
+          redacted_idx = idx
+          assert.are.equal("encrypted-redacted-data-xyz789", block.data)
+        elseif block.type == "text" then
+          text_idx = text_idx or idx
+        end
+      end
+
+      assert.is_true(has_thinking, "Should include thinking block")
+      assert.is_true(has_redacted, "Should include redacted_thinking block")
+      assert.is_true(redacted_idx < text_idx, "Redacted thinking should precede text")
+    end)
+
+    it("should skip thinking blocks without signature (backward compat)", function()
+      local provider = anthropic.new({
+        model = "claude-sonnet-4-5-20250929",
+        thinking_budget = 2048,
+        max_tokens = 4000,
+      })
+
+      local prompt = {
+        system = "You are helpful.",
+        history = {
+          { role = "user", parts = { { kind = "text", text = "Hello" } } },
+          {
+            role = "assistant",
+            parts = {
+              { kind = "thinking", content = "old thinking without signature" },
+              { kind = "text", text = "The answer." },
+            },
+          },
+          { role = "user", parts = { { kind = "text", text = "Follow up" } } },
+        },
+      }
+
+      local req = provider:build_request(prompt, {})
+
+      -- Find assistant message
+      local assistant_msg = nil
+      for _, msg in ipairs(req.messages) do
+        if msg.role == "assistant" then
+          assistant_msg = msg
+          break
+        end
+      end
+
+      assert.is_not_nil(assistant_msg)
+
+      -- Should only have text, no thinking block
+      for _, block in ipairs(assistant_msg.content) do
+        assert.is_not_equal("thinking", block.type, "Should not include thinking without signature")
+      end
+    end)
   end)
 
   describe("reset", function()
@@ -261,6 +465,8 @@ describe("Anthropic Provider Extended Thinking", function()
 
       -- Manually set some state
       provider._response_buffer.extra.accumulated_thinking = "some thinking"
+      provider._response_buffer.extra.accumulated_signature = "some-sig"
+      provider._response_buffer.extra.redacted_thinking_blocks = { "data1" }
       provider._response_buffer.extra.current_block_type = "thinking"
 
       -- Reset
@@ -268,6 +474,8 @@ describe("Anthropic Provider Extended Thinking", function()
 
       -- State should be cleared
       assert.are.equal("", provider._response_buffer.extra.accumulated_thinking)
+      assert.are.equal("", provider._response_buffer.extra.accumulated_signature)
+      assert.are.same({}, provider._response_buffer.extra.redacted_thinking_blocks)
       assert.is_nil(provider._response_buffer.extra.current_block_type)
     end)
   end)

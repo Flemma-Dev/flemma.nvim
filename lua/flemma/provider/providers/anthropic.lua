@@ -49,6 +49,8 @@ end
 function M.reset(self)
   base.reset(self)
   self._response_buffer.extra.accumulated_thinking = ""
+  self._response_buffer.extra.accumulated_signature = ""
+  self._response_buffer.extra.redacted_thinking_blocks = {}
   self._response_buffer.extra.current_block_type = nil
   self._response_buffer.extra.current_tool_use = nil
   self._response_buffer.extra.accumulated_tool_input = ""
@@ -157,16 +159,34 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
       end
     elseif msg.role == "assistant" then
       -- Build content blocks for assistant message
+      -- Two-pass approach: thinking/redacted_thinking must precede text/tool_use (API requirement)
       local content_blocks = {}
 
+      -- First pass: collect thinking blocks (only those with signatures or redacted)
+      for _, p in ipairs(msg.parts or {}) do
+        if p.kind == "thinking" and p.redacted then
+          table.insert(content_blocks, {
+            type = "redacted_thinking",
+            data = p.content,
+          })
+          log.debug("anthropic.build_request: Added redacted_thinking block")
+        elseif p.kind == "thinking" and p.signature and #p.signature > 0 then
+          table.insert(content_blocks, {
+            type = "thinking",
+            thinking = p.content,
+            signature = p.signature,
+          })
+          log.debug("anthropic.build_request: Added thinking block with signature")
+        end
+      end
+
+      -- Second pass: collect text and tool_use
       for _, p in ipairs(msg.parts or {}) do
         if p.kind == "text" then
           local text = vim.trim(p.text or "")
           if #text > 0 then
             table.insert(content_blocks, { type = "text", text = text })
           end
-        elseif p.kind == "thinking" then
-          -- Skip thinking nodes - Anthropic doesn't need them
         elseif p.kind == "tool_use" then
           -- Normalize tool ID for Anthropic compatibility (handles Vertex URN-style IDs)
           local normalized_id = base.normalize_tool_id(p.id)
@@ -406,15 +426,41 @@ function M.process_response_line(self, line, callbacks)
 
     -- Append accumulated thinking at the end (after text content)
     local accumulated = self._response_buffer.extra.accumulated_thinking
+    local signature = self._response_buffer.extra.accumulated_signature or ""
+
     if accumulated and #accumulated > 0 then
       local stripped = vim.trim(accumulated)
       -- Use single newline prefix if content already ends with newline, else double
       local prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
-      local thinking_block = prefix .. "<thinking>\n" .. stripped .. "\n</thinking>\n"
+      local open_tag
+      if #signature > 0 then
+        open_tag = '<thinking anthropic:signature="' .. signature .. '">'
+      else
+        open_tag = "<thinking>"
+      end
+      local thinking_block = prefix .. open_tag .. "\n" .. stripped .. "\n</thinking>\n"
       base._signal_content(self, thinking_block, callbacks)
-      self._response_buffer.extra.accumulated_thinking = ""
       log.debug("anthropic.process_response_line(): Appended thinking block at end of response")
+    elseif #signature > 0 then
+      -- Signature but no thinking content — emit self-closing tag
+      local prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
+      local tag = prefix .. '<thinking anthropic:signature="' .. signature .. '"/>\n'
+      base._signal_content(self, tag, callbacks)
+      log.debug("anthropic.process_response_line(): Appended self-closing thinking tag with signature")
     end
+
+    -- Append redacted thinking blocks
+    for _, redacted_data in ipairs(self._response_buffer.extra.redacted_thinking_blocks or {}) do
+      local prefix = self:_content_ends_with_newline() and "" or "\n"
+      local block = prefix .. "<thinking redacted>\n" .. redacted_data .. "\n</thinking>\n"
+      base._signal_content(self, block, callbacks)
+      log.debug("anthropic.process_response_line(): Appended redacted thinking block")
+    end
+
+    -- Reset accumulated state
+    self._response_buffer.extra.accumulated_thinking = ""
+    self._response_buffer.extra.accumulated_signature = ""
+    self._response_buffer.extra.redacted_thinking_blocks = {}
 
     if callbacks.on_response_complete then
       callbacks.on_response_complete()
@@ -429,6 +475,15 @@ function M.process_response_line(self, line, callbacks)
     if data.content_block and data.content_block.type then
       self._response_buffer.extra.current_block_type = data.content_block.type
       log.debug("anthropic.process_response_line(): Started block type: " .. data.content_block.type)
+
+      -- Track redacted_thinking block
+      if data.content_block.type == "redacted_thinking" then
+        if not self._response_buffer.extra.redacted_thinking_blocks then
+          self._response_buffer.extra.redacted_thinking_blocks = {}
+        end
+        table.insert(self._response_buffer.extra.redacted_thinking_blocks, data.content_block.data or "")
+        log.debug("anthropic.process_response_line(): Captured redacted_thinking block")
+      end
 
       -- Track tool_use block
       if data.content_block.type == "tool_use" then
@@ -520,6 +575,8 @@ function M.process_response_line(self, line, callbacks)
       self._response_buffer.extra.accumulated_thinking = (self._response_buffer.extra.accumulated_thinking or "")
         .. data.delta.thinking
     elseif data.delta.type == "signature_delta" and data.delta.signature then
+      self._response_buffer.extra.accumulated_signature = (self._response_buffer.extra.accumulated_signature or "")
+        .. data.delta.signature
       log.debug("anthropic.process_response_line(): Content signature delta received")
     else
       log.error("anthropic.process_response_line(): Unknown delta type: " .. log.inspect(data.delta.type))

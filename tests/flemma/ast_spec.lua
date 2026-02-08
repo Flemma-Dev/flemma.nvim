@@ -145,6 +145,32 @@ describe("Parser", function()
     assert.is_true(has_thinking, "Should have parsed thinking node")
   end)
 
+  it("parses redacted thinking tags in Assistant messages", function()
+    local lines = {
+      "@Assistant: Here is my response.",
+      "",
+      "<thinking redacted>",
+      "encrypted-data-abc123",
+      "</thinking>",
+    }
+    local doc = parser.parse_lines(lines)
+    local msg = doc.messages[1]
+    assert.equals("Assistant", msg.role)
+
+    local thinking_seg = nil
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "thinking" and seg.redacted then
+        thinking_seg = seg
+        break
+      end
+    end
+
+    assert.is_not_nil(thinking_seg, "Should have parsed redacted thinking node")
+    assert.equals("encrypted-data-abc123", thinking_seg.content)
+    assert.is_true(thinking_seg.redacted)
+    assert.is_nil(thinking_seg.signature, "Redacted thinking should not have signature")
+  end)
+
   it("parses thinking tags with line positions when on separate lines", function()
     local lines = {
       "@Assistant: Here is my response",
@@ -366,6 +392,40 @@ describe("AST to Parts Mapper", function()
     assert.equals("pdf", parts[3].kind)
     assert.equals("text_file", parts[4].kind)
     assert.equals("hello", parts[4].text)
+  end)
+
+  it("preserves redacted flag on thinking parts", function()
+    local parts = ast.to_generic_parts({
+      { kind = "thinking", content = "normal thought", signature = "sig1" },
+      { kind = "thinking", content = "encrypted-data", redacted = true },
+    })
+    assert.equals(2, #parts)
+    assert.equals("thinking", parts[1].kind)
+    assert.equals("sig1", parts[1].signature)
+    assert.is_nil(parts[1].redacted)
+    assert.equals("thinking", parts[2].kind)
+    assert.is_true(parts[2].redacted)
+    assert.equals("encrypted-data", parts[2].content)
+  end)
+end)
+
+describe("AST Thinking Constructor", function()
+  it("creates thinking node with redacted flag", function()
+    local seg = ast.thinking("encrypted-data", { start_line = 5, end_line = 7 }, { redacted = true })
+    assert.equals("thinking", seg.kind)
+    assert.equals("encrypted-data", seg.content)
+    assert.is_true(seg.redacted)
+    assert.is_nil(seg.signature)
+    assert.equals(5, seg.position.start_line)
+    assert.equals(7, seg.position.end_line)
+  end)
+
+  it("creates normal thinking node without redacted flag", function()
+    local seg = ast.thinking("thought", { start_line = 1, end_line = 3 }, { signature = "sig-abc" })
+    assert.equals("thinking", seg.kind)
+    assert.equals("thought", seg.content)
+    assert.equals("sig-abc", seg.signature)
+    assert.is_nil(seg.redacted)
   end)
 end)
 

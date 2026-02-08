@@ -126,8 +126,10 @@ function M.get_fold_text()
   end
 
   -- Check if this is a thinking fold (level 2)
-  -- Match opening tags: <thinking> or <thinking provider:signature="...">
-  if first_line_content:match("^<thinking>$") or first_line_content:match("^<thinking%s.+[^/>]>$") then
+  -- Match opening tags: <thinking>, <thinking redacted>, or <thinking provider:signature="...">
+  if first_line_content:match("^<thinking%s+redacted>$") then
+    return string.format("<thinking redacted> (%d lines)", total_fold_lines)
+  elseif first_line_content:match("^<thinking>$") or first_line_content:match("^<thinking%s.+[^/>]>$") then
     local preview = get_fold_content_preview(foldstart_lnum, foldend_lnum)
     if preview ~= "" then
       return string.format("<thinking> %s </thinking> (%d lines)", preview, total_fold_lines)

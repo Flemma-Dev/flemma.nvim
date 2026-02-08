@@ -1158,6 +1158,91 @@ describe("Vertex AI Streaming Tool Use Response", function()
   end)
 end)
 
+describe("Anthropic Thinking Signature and Redacted Thinking Round-Trip", function()
+  local anthropic = require("flemma.provider.providers.anthropic")
+
+  it("preserves redacted thinking through parse → pipeline → build_request", function()
+    local provider = anthropic.new({
+      model = "claude-sonnet-4-5-20250929",
+      thinking_budget = 2048,
+      max_tokens = 4000,
+    })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat")
+    local prompt =
+      pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat"))
+    local req = provider:build_request(prompt, {})
+
+    -- Find assistant message
+    local assistant_msg = nil
+    for _, msg in ipairs(req.messages) do
+      if msg.role == "assistant" then
+        assistant_msg = msg
+        break
+      end
+    end
+
+    assert.is_not_nil(assistant_msg)
+
+    -- Verify thinking with signature (synthetic fixture — exact values known)
+    local has_thinking = false
+    local has_redacted = false
+    for _, block in ipairs(assistant_msg.content) do
+      if block.type == "thinking" then
+        has_thinking = true
+        assert.is_truthy(block.signature and #block.signature > 0, "Should have non-empty signature")
+        assert.is_truthy(block.thinking and #block.thinking > 0, "Should have non-empty thinking content")
+      elseif block.type == "redacted_thinking" then
+        has_redacted = true
+        assert.is_truthy(block.data and #block.data > 0, "Should have non-empty redacted data")
+      end
+    end
+
+    assert.is_true(has_thinking, "Should preserve thinking with signature through round-trip")
+    assert.is_true(has_redacted, "Should preserve redacted thinking through round-trip")
+  end)
+
+  it("preserves thinking with signature through parse → pipeline → build_request", function()
+    local provider = anthropic.new({
+      model = "claude-sonnet-4-5-20250929",
+      thinking_budget = 2048,
+      max_tokens = 4000,
+    })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat")
+    local prompt =
+      pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat"))
+    local req = provider:build_request(prompt, {})
+
+    -- Find assistant message
+    local assistant_msg = nil
+    for _, msg in ipairs(req.messages) do
+      if msg.role == "assistant" then
+        assistant_msg = msg
+        break
+      end
+    end
+
+    assert.is_not_nil(assistant_msg)
+
+    -- Thinking should precede text (structural assertions)
+    local thinking_idx = nil
+    local text_idx = nil
+    for idx, block in ipairs(assistant_msg.content) do
+      if block.type == "thinking" then
+        thinking_idx = idx
+        assert.is_truthy(block.signature and #block.signature > 0, "Should have non-empty signature")
+      elseif block.type == "text" then
+        text_idx = text_idx or idx
+      end
+    end
+
+    assert.is_not_nil(thinking_idx, "Should have thinking block")
+    assert.is_not_nil(text_idx, "Should have text block")
+    assert.is_true(thinking_idx < text_idx, "Thinking should precede text")
+  end)
+end)
+
 describe("Vertex AI Thought Signature Support", function()
   local vertex = require("flemma.provider.providers.vertex")
 
