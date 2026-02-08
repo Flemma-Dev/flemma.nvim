@@ -141,15 +141,6 @@ describe("Anthropic Provider", function()
   end)
 
   describe("prompt caching", function()
-    --- Helper to find a tool by name
-    local function find_tool(tools_array, name)
-      for _, t in ipairs(tools_array) do
-        if t.name == name then
-          return t
-        end
-      end
-    end
-
     it("tools are sorted alphabetically by name", function()
       local p = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 100, cache_retention = "short" })
       local prompt = {
