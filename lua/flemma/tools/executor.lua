@@ -115,8 +115,8 @@ end
 ---@param bufnr integer
 ---@param tool_id string
 ---@param result flemma.tools.ExecutionResult
----@param is_async boolean whether completion was scheduled via vim.schedule
-local function do_completion(bufnr, tool_id, result, is_async)
+---@param opts? { async?: boolean } whether completion was scheduled via vim.schedule
+local function do_completion(bufnr, tool_id, result, opts)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     cleanup_pending(bufnr, tool_id)
     return
@@ -129,7 +129,8 @@ local function do_completion(bufnr, tool_id, result, is_async)
   -- only when the placeholder actually modified the buffer.
   -- For sync tools, all changes are already in one undo block (same handler),
   -- and calling undojoin would incorrectly merge with the PREVIOUS handler's block.
-  if is_async and entry and entry.placeholder_modified then
+  opts = opts or {}
+  if opts.async and entry and entry.placeholder_modified then
     pcall(vim.cmd --[[@as function]], "undojoin")
   end
 
@@ -187,10 +188,10 @@ local function handle_completion(bufnr, tool_id, result, opts)
 
   if opts.async then
     vim.schedule(function()
-      do_completion(bufnr, tool_id, result, true)
+      do_completion(bufnr, tool_id, result, { async = true })
     end)
   else
-    do_completion(bufnr, tool_id, result, false)
+    do_completion(bufnr, tool_id, result)
   end
 end
 

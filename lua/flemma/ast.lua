@@ -173,16 +173,16 @@ end
 
 ---@param tool_use_id string
 ---@param content string
----@param is_error boolean|nil
----@param pos flemma.ast.Position
+---@param opts? { is_error?: boolean, start_line?: integer, end_line?: integer }
 ---@return flemma.ast.ToolResultSegment
-function M.tool_result(tool_use_id, content, is_error, pos)
+function M.tool_result(tool_use_id, content, opts)
+  opts = opts or {}
   return {
     kind = "tool_result",
     tool_use_id = tool_use_id,
     content = content,
-    is_error = is_error or false,
-    position = pos,
+    is_error = opts.is_error or false,
+    position = { start_line = opts.start_line, end_line = opts.end_line },
   }
 end
 

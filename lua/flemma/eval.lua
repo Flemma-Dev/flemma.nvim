@@ -29,12 +29,12 @@ end
 
 --- Read file content (binary or text mode).
 ---@param path string
----@param binary boolean
+---@param opts? { binary?: boolean }
 ---@return string data
 ---@return nil
----@overload fun(path: string, binary: boolean): nil, string
-local function read_file(path, binary)
-  local mode = binary and "rb" or "r"
+---@overload fun(path: string, opts?: { binary?: boolean }): nil, string
+local function read_file(path, opts)
+  local mode = (opts and opts.binary) and "rb" or "r"
   local f, err = io.open(path, mode)
   if not f then
     return nil, ("Failed to open file: " .. (err or "unknown"))
@@ -94,7 +94,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
         })
       end
 
-      local data, read_err = read_file(target_path, true)
+      local data, read_err = read_file(target_path, { binary = true })
       if not data then
         error({
           type = "file",
@@ -122,7 +122,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
     end
 
     -- Text mode: read, parse, evaluate, return composite IncludePart
-    local content, read_err = read_file(target_path, false)
+    local content, read_err = read_file(target_path)
     if not content then
       error({
         type = "file",

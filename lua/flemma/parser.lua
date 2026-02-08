@@ -208,7 +208,8 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
 
         table.insert(
           segments,
-          ast.tool_result(tool_use_id, result_content, is_error, {
+          ast.tool_result(tool_use_id, result_content, {
+            is_error = is_error,
             start_line = result_start_line,
             end_line = base_line_num + block_end - 1,
           })
