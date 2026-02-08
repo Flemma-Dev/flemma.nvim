@@ -54,9 +54,6 @@ end
 ---@param _context? flemma.Context The shared context object (not used, parts already resolved)
 ---@return table<string, any> request_body The request body for the API
 function M.build_request(self, prompt, _context) ---@diagnostic disable-line: unused-local
-  -- Per-buffer parameter merge: override provider params with frontmatter opts
-  local params = self:_resolve_params(prompt.opts, "openai")
-
   local api_messages = {}
 
   -- Add system message first if present
@@ -227,7 +224,7 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
   end
 
   local request_body = {
-    model = params.model,
+    model = self.parameters.model,
     messages = api_messages,
     -- max_tokens or max_completion_tokens will be set conditionally below
     -- temperature will be set conditionally below
@@ -245,23 +242,23 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
   end
 
   -- Use max_completion_tokens for all OpenAI models (recommended by OpenAI)
-  request_body.max_completion_tokens = params.max_tokens
+  request_body.max_completion_tokens = self.parameters.max_tokens
 
-  if params.reasoning and params.reasoning ~= "" then
-    request_body.reasoning_effort = params.reasoning
+  if self.parameters.reasoning and self.parameters.reasoning ~= "" then
+    request_body.reasoning_effort = self.parameters.reasoning
     log.debug(
       "openai.build_request: Using max_completion_tokens: "
-        .. tostring(params.max_tokens)
+        .. tostring(self.parameters.max_tokens)
         .. " and reasoning_effort: "
-        .. params.reasoning
+        .. self.parameters.reasoning
     )
   else
-    request_body.temperature = params.temperature
+    request_body.temperature = self.parameters.temperature
     log.debug(
       "openai.build_request: Using max_completion_tokens: "
-        .. tostring(params.max_tokens)
+        .. tostring(self.parameters.max_tokens)
         .. " and temperature: "
-        .. tostring(params.temperature)
+        .. tostring(self.parameters.temperature)
     )
   end
 

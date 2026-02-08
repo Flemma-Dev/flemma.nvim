@@ -56,9 +56,6 @@ end
 ---@param _context? flemma.Context The shared context object (not used, parts already resolved)
 ---@return table<string, any> request_body The request body for the API
 function M.build_request(self, prompt, _context) ---@diagnostic disable-line: unused-local
-  -- Per-buffer parameter merge: override provider params with frontmatter opts
-  local params = self:_resolve_params(prompt.opts, "anthropic")
-
   local api_messages = {}
 
   for _, msg in ipairs(prompt.history) do
@@ -176,8 +173,7 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
     end
   end
 
-  -- Resolve cache_control from params
-  local cache_retention = params.cache_retention or "short"
+  local cache_retention = self.parameters.cache_retention or "short"
   local cache_control
   if cache_retention == "short" then
     cache_control = { type = "ephemeral" }
@@ -223,10 +219,10 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
   end
 
   local request_body = {
-    model = params.model,
+    model = self.parameters.model,
     messages = api_messages,
-    max_tokens = params.max_tokens,
-    temperature = params.temperature,
+    max_tokens = self.parameters.max_tokens,
+    temperature = self.parameters.temperature,
     stream = true,
   }
 
@@ -249,7 +245,7 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
   end
 
   -- Add thinking configuration if enabled
-  local thinking_budget = params.thinking_budget
+  local thinking_budget = self.parameters.thinking_budget
 
   if type(thinking_budget) == "number" and thinking_budget >= 1024 then
     request_body.thinking = {

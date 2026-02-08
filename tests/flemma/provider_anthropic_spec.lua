@@ -253,24 +253,25 @@ describe("Anthropic Provider", function()
 
     it("per-buffer thinking_budget override does not mutate self.parameters", function()
       local p = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 100, cache_retention = "short" })
+      p:set_parameter_overrides({ thinking_budget = 2048 })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
         system = nil,
-        opts = { anthropic = { thinking_budget = 2048 } },
       }
       local req = p:build_request(prompt)
       assert.is_not_nil(req.thinking)
       assert.are.equal(2048, req.thinking.budget_tokens)
-      -- Original parameters untouched
+      -- Original parameters untouched: clear overrides, then check base
+      p:set_parameter_overrides(nil)
       assert.is_nil(p.parameters.thinking_budget)
     end)
 
     it("per-buffer cache_retention=none override disables caching", function()
       local p = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 100, cache_retention = "short" })
+      p:set_parameter_overrides({ cache_retention = "none" })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
         system = "Be helpful",
-        opts = { anthropic = { cache_retention = "none" } },
       }
       local req = p:build_request(prompt)
       -- System should be plain string (no caching)

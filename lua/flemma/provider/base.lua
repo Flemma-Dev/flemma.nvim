@@ -39,6 +39,7 @@ local log = require("flemma.logging")
 ---@field endpoint? string
 ---@field api_version? string
 ---@field _response_buffer? flemma.provider.ResponseBuffer
+---@field set_parameter_overrides fun(self, overrides: table<string, any>|nil)
 local M = {}
 
 --- Whether output_tokens already includes thoughts_tokens for this provider.
@@ -49,12 +50,34 @@ M.output_has_thoughts = false
 ---@param opts flemma.provider.Parameters|nil
 ---@return flemma.provider.Base
 function M.new(opts)
+  local base_params = opts or {}
+  local overrides = nil
+
+  local params_proxy = setmetatable({}, {
+    __index = function(_, k)
+      if overrides and overrides[k] ~= nil then
+        return overrides[k]
+      end
+      return base_params[k]
+    end,
+    __newindex = function(_, k, v)
+      base_params[k] = v
+    end,
+  })
+
   local provider = setmetatable({
-    parameters = opts or {}, -- parameters now includes the model
+    parameters = params_proxy,
     state = {
       api_key = nil,
     },
   }, { __index = M })
+
+  --- Set per-request parameter overrides (from frontmatter).
+  --- Each call replaces any previous overrides; pass nil to clear.
+  ---@param new_overrides table<string, any>|nil
+  function provider.set_parameter_overrides(_, new_overrides)
+    overrides = new_overrides
+  end
 
   ---@diagnostic disable-next-line: return-type-mismatch
   return provider
@@ -436,18 +459,6 @@ end
 function M._content_ends_with_newline(self)
   local content = self._response_buffer.content or ""
   return content:sub(-1) == "\n"
-end
-
---- Resolve effective parameters by merging per-buffer overrides from prompt.opts
----@param self flemma.provider.Base
----@param prompt_opts flemma.opt.ResolvedOpts|nil
----@param key string Provider registry key (e.g., "anthropic", "openai", "vertex")
----@return flemma.provider.Parameters
-function M._resolve_params(self, prompt_opts, key)
-  if prompt_opts and prompt_opts[key] then
-    return vim.tbl_extend("force", {}, self.parameters, prompt_opts[key])
-  end
-  return self.parameters
 end
 
 --- Reset provider state before a new request

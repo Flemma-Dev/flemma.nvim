@@ -214,9 +214,6 @@ end
 ---@param _context? flemma.Context The shared context object for resolving file paths
 ---@return table<string, any> request_body The request body for the API
 function M.build_request(self, prompt, _context) ---@diagnostic disable-line: unused-local
-  -- Per-buffer parameter merge: override provider params with frontmatter opts
-  local params = self:_resolve_params(prompt.opts, "vertex")
-
   -- Convert prompt.history to Vertex AI format
   local contents = {}
 
@@ -370,13 +367,13 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
   local request_body = {
     contents = contents,
     generationConfig = {
-      maxOutputTokens = params.max_tokens,
-      temperature = params.temperature,
+      maxOutputTokens = self.parameters.max_tokens,
+      temperature = self.parameters.temperature,
     },
   }
 
   -- Add thinking budget if configured
-  local configured_budget = params.thinking_budget
+  local configured_budget = self.parameters.thinking_budget
   local add_thinking_config = false -- Default to false, only set true if budget >= 1
   local api_budget_value
 

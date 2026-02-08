@@ -353,6 +353,10 @@ function M.send_to_provider(opts)
   log.debug("send_to_provider(): Prompt history for provider: " .. log.inspect(prompt.history))
   log.debug("send_to_provider(): System instruction: " .. log.inspect(prompt.system))
 
+  -- Apply frontmatter parameter overrides so that get_endpoint / get_api_key see them
+  local provider_key = state.get_config().provider
+  current_provider:set_parameter_overrides(prompt.opts and prompt.opts[provider_key])
+
   -- Validate provider (endpoint, API key, headers) and build request body.
   -- Wrapped in pcall so any provider error unlocks the buffer cleanly.
   local client = require("flemma.client")
@@ -392,6 +396,9 @@ function M.send_to_provider(opts)
   local headers = prep_result.headers
   local request_body = prep_result.request_body
   last_request_body_for_testing = request_body -- Store for testing
+
+  -- Capture timeout now so the on_request_complete closure doesn't read stale proxy state
+  local effective_timeout = current_provider.parameters.timeout
 
   -- Log the request details (using the provider's stored model)
   log.debug(
@@ -716,7 +723,7 @@ function M.send_to_provider(opts)
               code
             )
           elseif code == 28 then -- cURL timeout error
-            local timeout_value = current_provider.parameters.timeout or state.get_config().parameters.timeout -- Get effective timeout
+            local timeout_value = effective_timeout -- Captured before async callback
             error_msg = string.format(
               "Flemma: cURL request timed out (exit code %d). Timeout is %s seconds.",
               code,
