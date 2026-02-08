@@ -498,4 +498,67 @@ describe("flemma.opt", function()
       assert.is_nil(req.tools)
     end)
   end)
+
+  describe("provider parameter overrides", function()
+    it("flemma.opt.anthropic.cache_retention resolves correctly", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.anthropic.cache_retention = "long"
+      local resolved = resolve()
+      assert.are.same({ cache_retention = "long" }, resolved.anthropic)
+    end)
+
+    it("flemma.opt.anthropic.thinking_budget resolves correctly", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.anthropic.thinking_budget = 20000
+      local resolved = resolve()
+      assert.are.same({ thinking_budget = 20000 }, resolved.anthropic)
+    end)
+
+    it("table assignment works for provider params", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.anthropic = { thinking_budget = 5000 }
+      local resolved = resolve()
+      assert.are.same({ thinking_budget = 5000 }, resolved.anthropic)
+    end)
+
+    it("provider params don't leak across create() calls", function()
+      local opt_proxy1, resolve1 = opt.create()
+      opt_proxy1.anthropic.cache_retention = "long"
+      local resolved1 = resolve1()
+      assert.are.same({ cache_retention = "long" }, resolved1.anthropic)
+
+      local _, resolve2 = opt.create()
+      local resolved2 = resolve2()
+      assert.is_nil(resolved2.anthropic)
+    end)
+
+    it("errors on non-table assignment to provider key", function()
+      local opt_proxy = opt.create()
+      assert.has_error(function()
+        opt_proxy.anthropic = "bad"
+      end, "flemma.opt.anthropic: expected table, got string")
+    end)
+
+    it("provider params flow through frontmatter pipeline", function()
+      local lines = {
+        "```lua",
+        'flemma.opt.anthropic.cache_retention = "long"',
+        "```",
+        "@You: test",
+      }
+      local context = ctx.from_file("test.chat")
+      local prompt = pipeline.run(lines, context)
+
+      assert.is_not_nil(prompt.opts)
+      assert.is_not_nil(prompt.opts.anthropic)
+      assert.are.same({ cache_retention = "long" }, prompt.opts.anthropic)
+    end)
+
+    it("empty provider params are not included in resolve", function()
+      local opt_proxy, resolve = opt.create()
+      local _ = opt_proxy.anthropic -- just access, no assignment
+      local resolved = resolve()
+      assert.is_nil(resolved.anthropic)
+    end)
+  end)
 end)

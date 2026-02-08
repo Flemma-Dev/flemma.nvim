@@ -5,6 +5,9 @@ local M = {}
 
 ---@class flemma.opt.ResolvedOpts
 ---@field tools string[]|nil List of allowed tool names
+---@field anthropic table<string, any>|nil Per-buffer Anthropic parameter overrides
+---@field openai table<string, any>|nil Per-buffer OpenAI parameter overrides
+---@field vertex table<string, any>|nil Per-buffer Vertex parameter overrides
 
 ---@class flemma.opt.Entry
 ---@field name string
@@ -248,34 +251,65 @@ function M.create()
   ---@type table<string, boolean>
   local touched = {}
 
+  -- Per-provider parameter overrides (e.g., { anthropic = { cache_retention = "long" } })
+  ---@type table<string, table<string, any>>
+  local provider_params = {}
+  ---@type table<string, table>
+  local provider_proxies = {}
+
   local opt_proxy = setmetatable({}, {
     ---@param _ table
     ---@param key string
-    ---@return flemma.opt.ListOption
+    ---@return flemma.opt.ListOption|table
     __index = function(_, key)
-      if not option_defs[key] then
-        error(string.format("flemma.opt: unknown option '%s'", key))
+      if option_defs[key] then
+        touched[key] = true
+        return options[key]
       end
-      touched[key] = true
-      return options[key]
+      local provider_reg = require("flemma.provider.registry")
+      if provider_reg.has(key) then
+        if not provider_proxies[key] then
+          provider_params[key] = provider_params[key] or {}
+          provider_proxies[key] = setmetatable({}, {
+            __index = function(_, param)
+              return provider_params[key][param]
+            end,
+            __newindex = function(_, param, value)
+              provider_params[key][param] = value
+            end,
+          })
+        end
+        return provider_proxies[key]
+      end
+      error(string.format("flemma.opt: unknown option '%s'", key))
     end,
 
     ---@param _ table
     ---@param key string
     ---@param value any
     __newindex = function(_, key, value)
-      if not option_defs[key] then
-        error(string.format("flemma.opt: unknown option '%s'", key))
-      end
-      -- Operator chains (+ - ^) already mutated in-place and return the ListOption
-      if is_list_option(value) then
+      if option_defs[key] then
+        -- Operator chains (+ - ^) already mutated in-place and return the ListOption
+        if is_list_option(value) then
+          return
+        end
+        if type(value) ~= "table" then
+          error(string.format("flemma.opt.%s: expected table, got %s", key, type(value)))
+        end
+        touched[key] = true
+        options[key]:set(value)
         return
       end
-      if type(value) ~= "table" then
-        error(string.format("flemma.opt.%s: expected table, got %s", key, type(value)))
+      local provider_reg = require("flemma.provider.registry")
+      if provider_reg.has(key) then
+        if type(value) ~= "table" then
+          error(string.format("flemma.opt.%s: expected table, got %s", key, type(value)))
+        end
+        provider_params[key] = value
+        provider_proxies[key] = nil -- invalidate cached proxy
+        return
       end
-      touched[key] = true
-      options[key]:set(value)
+      error(string.format("flemma.opt: unknown option '%s'", key))
     end,
   })
 
@@ -285,6 +319,11 @@ function M.create()
     local result = {}
     for name in pairs(touched) do
       result[name] = options[name]:get()
+    end
+    for pname, params in pairs(provider_params) do
+      if next(params) then
+        result[pname] = vim.deepcopy(params)
+      end
     end
     return result
   end

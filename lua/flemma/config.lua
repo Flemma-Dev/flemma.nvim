@@ -54,6 +54,7 @@
 
 ---@class flemma.config.AnthropicParams
 ---@field thinking_budget? integer
+---@field cache_retention? "none"|"short"|"long"
 
 ---@class flemma.config.Parameters
 ---@field max_tokens? integer
@@ -212,6 +213,7 @@ return {
     },
     anthropic = {
       thinking_budget = nil, -- Optional. Budget for model thinking, in tokens. nil or 0 disables thinking. Values >= 1024 enable thinking with the specified budget.
+      cache_retention = "short", -- Prompt caching: "none" (disabled), "short" (5-min TTL), "long" (1h TTL)
     },
   },
   tools = {

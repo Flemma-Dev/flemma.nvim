@@ -32,6 +32,10 @@ local M = {}
 ---@field bufnr? integer
 ---@field timestamp number
 ---@field output_has_thoughts boolean
+---@field cache_read_input_tokens number
+---@field cache_creation_input_tokens number
+---@field cache_read_multiplier? number Cache read cost as fraction of input price (e.g. 0.1)
+---@field cache_write_multiplier? number Cache write cost multiplier (e.g. 1.25 for short, 2.0 for long)
 local Request = {}
 Request.__index = Request
 
@@ -47,6 +51,10 @@ Request.__index = Request
 ---@field bufnr? integer Buffer number (fallback for unnamed buffers)
 ---@field timestamp? number Unix timestamp (defaults to current time)
 ---@field output_has_thoughts? boolean Whether output_tokens already includes thoughts (true for OpenAI/Anthropic, false for Vertex)
+---@field cache_read_input_tokens? number Number of cache read tokens
+---@field cache_creation_input_tokens? number Number of cache creation tokens
+---@field cache_read_multiplier? number Cache read cost as fraction of input price (e.g. 0.1)
+---@field cache_write_multiplier? number Cache write cost multiplier (e.g. 1.25 for short, 2.0 for long)
 
 --- Create a new Request instance
 ---@param opts flemma.session.RequestOpts Options for the request
@@ -66,14 +74,25 @@ function Request.new(opts)
   self.timestamp = opts.timestamp or os.time()
   -- Whether output_tokens already includes thoughts (true for OpenAI/Anthropic, false for Vertex)
   self.output_has_thoughts = opts.output_has_thoughts or false
+  self.cache_read_input_tokens = opts.cache_read_input_tokens or 0
+  self.cache_creation_input_tokens = opts.cache_creation_input_tokens or 0
+  self.cache_read_multiplier = opts.cache_read_multiplier
+  self.cache_write_multiplier = opts.cache_write_multiplier
 
   return self
 end
 
---- Calculate input cost for this request
+--- Calculate input cost for this request (cache-aware)
+--- When cache multipliers are available, cache reads/writes use discounted rates.
+--- When multipliers are nil (no pricing data), cache tokens are charged at full input price.
 ---@return number Cost in USD
 function Request:get_input_cost()
-  return (self.input_tokens / 1000000) * self.input_price
+  local base = (self.input_tokens / 1000000) * self.input_price
+  local read_mult = self.cache_read_multiplier or 1
+  local read = (self.cache_read_input_tokens / 1000000) * (self.input_price * read_mult)
+  local write_mult = self.cache_write_multiplier or 1
+  local write = (self.cache_creation_input_tokens / 1000000) * (self.input_price * write_mult)
+  return base + read + write
 end
 
 --- Calculate output cost for this request

@@ -214,6 +214,9 @@ end
 ---@param _context? flemma.Context The shared context object for resolving file paths
 ---@return table<string, any> request_body The request body for the API
 function M.build_request(self, prompt, _context) ---@diagnostic disable-line: unused-local
+  -- Per-buffer parameter merge: override provider params with frontmatter opts
+  local params = self:_resolve_params(prompt.opts, "vertex")
+
   -- Convert prompt.history to Vertex AI format
   local contents = {}
 
@@ -367,13 +370,13 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
   local request_body = {
     contents = contents,
     generationConfig = {
-      maxOutputTokens = self.parameters.max_tokens,
-      temperature = self.parameters.temperature,
+      maxOutputTokens = params.max_tokens,
+      temperature = params.temperature,
     },
   }
 
   -- Add thinking budget if configured
-  local configured_budget = self.parameters.thinking_budget
+  local configured_budget = params.thinking_budget
   local add_thinking_config = false -- Default to false, only set true if budget >= 1
   local api_budget_value
 
@@ -627,6 +630,13 @@ function M.process_response_line(self, line, callbacks)
     -- Handle thoughts tokens
     if usage.thoughtsTokenCount and callbacks.on_usage then
       callbacks.on_usage({ type = "thoughts", tokens = usage.thoughtsTokenCount })
+    end
+    -- Handle cached content tokens (implicit caching on Gemini 2.5+ models)
+    if usage.cachedContentTokenCount and usage.cachedContentTokenCount > 0 and callbacks.on_usage then
+      callbacks.on_usage({ type = "cache_read", tokens = usage.cachedContentTokenCount })
+      log.debug(
+        "vertex.process_response_line(): Cached content tokens: " .. tostring(usage.cachedContentTokenCount)
+      )
     end
   end
 

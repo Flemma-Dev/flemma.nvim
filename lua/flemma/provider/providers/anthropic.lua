@@ -56,6 +56,9 @@ end
 ---@param _context? flemma.Context The shared context object (not used, parts already resolved)
 ---@return table<string, any> request_body The request body for the API
 function M.build_request(self, prompt, _context) ---@diagnostic disable-line: unused-local
+  -- Per-buffer parameter merge: override provider params with frontmatter opts
+  local params = self:_resolve_params(prompt.opts, "anthropic")
+
   local api_messages = {}
 
   for _, msg in ipairs(prompt.history) do
@@ -173,6 +176,16 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
     end
   end
 
+  -- Resolve cache_control from params
+  local cache_retention = params.cache_retention or "short"
+  local cache_control
+  if cache_retention == "short" then
+    cache_control = { type = "ephemeral" }
+  elseif cache_retention == "long" then
+    cache_control = { type = "ephemeral", ttl = "1h" }
+  end
+  -- nil when "none"
+
   -- Build tools array from registry (filtered by per-buffer opts if present)
   local tools_module = require("flemma.tools")
   local all_tools = tools_module.get_for_prompt(prompt.opts)
@@ -186,14 +199,47 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
     })
   end
 
+  -- Stable alphabetical ordering for cache efficiency
+  table.sort(tools_array, function(a, b)
+    return a.name < b.name
+  end)
+
+  -- Breakpoint 1: last tool definition
+  if cache_control and #tools_array > 0 then
+    tools_array[#tools_array].cache_control = cache_control
+  end
+
+  -- Breakpoint 3: last user message's last content block
+  if cache_control then
+    for i = #api_messages, 1, -1 do
+      if api_messages[i].role == "user" then
+        local content = api_messages[i].content
+        if #content > 0 then
+          content[#content].cache_control = cache_control
+        end
+        break
+      end
+    end
+  end
+
   local request_body = {
-    model = self.parameters.model,
+    model = params.model,
     messages = api_messages,
-    system = prompt.system,
-    max_tokens = self.parameters.max_tokens,
-    temperature = self.parameters.temperature,
+    max_tokens = params.max_tokens,
+    temperature = params.temperature,
     stream = true,
   }
+
+  -- Breakpoint 2: system prompt
+  if prompt.system and #prompt.system > 0 then
+    if cache_control then
+      request_body.system = {
+        { type = "text", text = prompt.system, cache_control = cache_control },
+      }
+    else
+      request_body.system = prompt.system
+    end
+  end
 
   -- Add tools if any are registered
   if #tools_array > 0 then
@@ -203,7 +249,7 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
   end
 
   -- Add thinking configuration if enabled
-  local thinking_budget = self.parameters.thinking_budget
+  local thinking_budget = params.thinking_budget
 
   if type(thinking_budget) == "number" and thinking_budget >= 1024 then
     request_body.thinking = {
@@ -309,6 +355,14 @@ function M.process_response_line(self, line, callbacks)
           type = "input",
           tokens = data.message.usage.input_tokens,
         })
+      end
+      -- Parse cache usage tokens from message_start
+      local usage = data.message.usage
+      if usage.cache_read_input_tokens and callbacks.on_usage then
+        callbacks.on_usage({ type = "cache_read", tokens = usage.cache_read_input_tokens })
+      end
+      if usage.cache_creation_input_tokens and callbacks.on_usage then
+        callbacks.on_usage({ type = "cache_creation", tokens = usage.cache_creation_input_tokens })
       end
     else
       log.debug("anthropic.process_response_line(): ... No usage information in message_start event")

@@ -408,6 +408,8 @@ function M.send_to_provider(opts)
     output_tokens = 0,
     thoughts_tokens = 0,
     output_has_thoughts = current_provider.output_has_thoughts,
+    cache_read_input_tokens = 0,
+    cache_creation_input_tokens = 0,
   }
 
   -- Set up callbacks for the provider
@@ -441,6 +443,10 @@ function M.send_to_provider(opts)
         buffer_state.inflight_usage.output_tokens = usage_data.tokens
       elseif usage_data.type == "thoughts" then
         buffer_state.inflight_usage.thoughts_tokens = usage_data.tokens
+      elseif usage_data.type == "cache_read" then
+        buffer_state.inflight_usage.cache_read_input_tokens = usage_data.tokens
+      elseif usage_data.type == "cache_creation" then
+        buffer_state.inflight_usage.cache_creation_input_tokens = usage_data.tokens
       end
     end,
 
@@ -465,6 +471,20 @@ function M.send_to_provider(opts)
         -- Add request to session with pricing snapshot
         local pricing_info = usage.models[config.model]
         if pricing_info then
+          -- Look up cache multipliers from provider model data
+          local models_data = require("flemma.models")
+          local provider_data = models_data.providers[config.provider]
+          local cache_retention = (config.parameters.anthropic or {}).cache_retention or "short"
+          local cache_write_multiplier
+          local cache_read_multiplier
+          if provider_data and provider_data.cache_write_multipliers and cache_retention ~= "none" then
+            cache_write_multiplier = provider_data.cache_write_multipliers[cache_retention]
+          end
+          if provider_data and provider_data.cache_read_multiplier then
+            -- Read multiplier applies regardless of write multipliers (e.g., OpenAI has automatic caching)
+            cache_read_multiplier = provider_data.cache_read_multiplier
+          end
+
           state.get_session():add_request({
             provider = config.provider,
             model = config.model,
@@ -477,6 +497,10 @@ function M.send_to_provider(opts)
             bufnr = filepath and nil or bufnr, -- Only store bufnr for unnamed buffers
             -- Get flag from provider (set in inflight_usage, available via closure)
             output_has_thoughts = current_provider.output_has_thoughts,
+            cache_read_input_tokens = buffer_state.inflight_usage.cache_read_input_tokens,
+            cache_creation_input_tokens = buffer_state.inflight_usage.cache_creation_input_tokens,
+            cache_write_multiplier = cache_write_multiplier,
+            cache_read_multiplier = cache_read_multiplier,
           })
         end
 
@@ -498,6 +522,8 @@ function M.send_to_provider(opts)
           output_tokens = 0,
           thoughts_tokens = 0,
           output_has_thoughts = false, -- Default, will be overwritten on next request
+          cache_read_input_tokens = 0,
+          cache_creation_input_tokens = 0,
         }
       end)
     end,

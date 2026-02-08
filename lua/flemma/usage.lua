@@ -122,6 +122,12 @@ function M.format_notification(current, session)
         usage_lines,
         string.format("  Input:  %d tokens / $%.2f", current.input_tokens or 0, current_cost.input)
       )
+      -- Show cache line when tokens > 0
+      local cache_read = current.cache_read_input_tokens or 0
+      local cache_write = current.cache_creation_input_tokens or 0
+      if cache_read > 0 or cache_write > 0 then
+        table.insert(usage_lines, string.format("  Cache:  %d read + %d write", cache_read, cache_write))
+      end
       local output_display_string
       if current.thoughts_tokens and current.thoughts_tokens > 0 then
         output_display_string = string.format(
@@ -137,6 +143,11 @@ function M.format_notification(current, session)
       table.insert(usage_lines, string.format("  Total:  $%.2f", current_cost.total))
     else
       table.insert(usage_lines, string.format("  Input:  %d tokens", current.input_tokens or 0))
+      local cache_read = current.cache_read_input_tokens or 0
+      local cache_write = current.cache_creation_input_tokens or 0
+      if cache_read > 0 or cache_write > 0 then
+        table.insert(usage_lines, string.format("  Cache:  %d read + %d write", cache_read, cache_write))
+      end
       local output_display_string
       if current.thoughts_tokens and current.thoughts_tokens > 0 then
         output_display_string =

@@ -14,6 +14,8 @@
 ---@class flemma.models.ProviderModels
 ---@field default string Default model name for this provider
 ---@field models table<string, flemma.models.ModelInfo>
+---@field cache_read_multiplier? number Cache read cost as fraction of base input price (e.g. 0.1 = 10%)
+---@field cache_write_multipliers? table<string, number> Cache write cost multipliers keyed by retention ("short", "long")
 
 ---@class flemma.models.Data
 ---@field providers table<string, flemma.models.ProviderModels>
@@ -24,6 +26,11 @@ return {
     -- Note: "claude" is a deprecated alias for "anthropic" (see provider/providers.lua)
     anthropic = {
       default = "claude-sonnet-4-5",
+      cache_read_multiplier = 0.1, -- Cache reads cost 10% of base input price
+      cache_write_multipliers = {
+        short = 1.25, -- 5-minute TTL: 1.25× base input price
+        long = 2.0, -- 1-hour TTL: 2.0× base input price
+      },
       models = {
         -- Claude Opus 4.6
         ["claude-opus-4-6"] = {
@@ -157,6 +164,7 @@ return {
 
     vertex = {
       default = "gemini-2.5-pro",
+      cache_read_multiplier = 0.1, -- Implicit cache reads cost 10% of base input price (Gemini 2.5+)
       models = {
         -- Gemini 3 Flash Preview
         ["gemini-3-flash-preview"] = {
@@ -242,6 +250,7 @@ return {
 
     openai = {
       default = "gpt-5",
+      cache_read_multiplier = 0.5, -- Cached input tokens cost 50% of base input price
       models = {
         -- GPT-5.2 models
         ["gpt-5.2"] = {

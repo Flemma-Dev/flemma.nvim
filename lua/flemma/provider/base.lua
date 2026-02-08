@@ -3,7 +3,7 @@
 local log = require("flemma.logging")
 
 ---@class flemma.provider.UsageData
----@field type "input"|"output"|"thoughts" Type of token usage
+---@field type "input"|"output"|"thoughts"|"cache_read"|"cache_creation" Type of token usage
 ---@field tokens number Number of tokens used
 
 ---@class flemma.provider.Callbacks
@@ -436,6 +436,18 @@ end
 function M._content_ends_with_newline(self)
   local content = self._response_buffer.content or ""
   return content:sub(-1) == "\n"
+end
+
+--- Resolve effective parameters by merging per-buffer overrides from prompt.opts
+---@param self flemma.provider.Base
+---@param prompt_opts flemma.opt.ResolvedOpts|nil
+---@param key string Provider registry key (e.g., "anthropic", "openai", "vertex")
+---@return flemma.provider.Parameters
+function M._resolve_params(self, prompt_opts, key)
+  if prompt_opts and prompt_opts[key] then
+    return vim.tbl_extend("force", {}, self.parameters, prompt_opts[key])
+  end
+  return self.parameters
 end
 
 --- Reset provider state before a new request

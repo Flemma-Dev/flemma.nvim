@@ -65,7 +65,7 @@ On a personal level, I've used Flemma to generate bedtime stories with recurring
 - **Structured templates** – combine Lua or JSON frontmatter, inline `{{ expressions }}`, and `include()` helpers to assemble prompts without leaving Neovim.
 - **Context attachments** – reference local files with `@./path`; Flemma handles MIME detection and surfaces warnings when a provider can't ingest the asset.
 - **Theme-aware UI** – line highlights, rulers, and signs adapt to your colour scheme via blend expressions. Dark and light modes are first-class.
-- **Usage reporting** – per-request and session notifications show token totals and costs using the bundled pricing tables.
+- **Usage reporting** – per-request and session notifications show token totals, costs, and cache metrics (read/write tokens) using the bundled pricing tables.
 - **Presets and hooks** – store favourite provider configurations, run `on_request_*` callbacks, auto-write finished chats, and recall the latest usage notification when auditing work.
 - **Contributor tooling** – toggle structured logs, drop into the project's Nix dev shell, and run the bundled headless tests without extra setup.
 
@@ -261,17 +261,75 @@ Switch using `:Flemma switch $fast` or `:Flemma switch $review temperature=0.1` 
 
 ### Provider-specific capabilities
 
-| Provider  | Defaults            | Extra parameters                                                                             | Notes                                                                                 |
-| --------- | ------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Anthropic | `claude-sonnet-4-5` | `thinking_budget` enables extended thinking (≥ 1024). Disables `temperature` when active.    | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer.    |
-| OpenAI    | `gpt-5`             | `reasoning=<low\|medium\|high>` toggles reasoning effort.                                    | Cost notifications include reasoning tokens. Lualine shows the reasoning level.       |
-| Vertex AI | `gemini-2.5-pro`    | `project_id` (required), `location` (default `global`), `thinking_budget` (≥ 1 to activate). | `thinking_budget` activates Google's thinking output; set to `0` or `nil` to disable. |
+| Provider  | Defaults            | Extra parameters                                                                                                                       | Notes                                                                                 |
+| --------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Anthropic | `claude-sonnet-4-5` | `thinking_budget` enables extended thinking (≥ 1024). `cache_retention` controls prompt caching (`"short"`, `"long"`, or `"none"`).    | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer.    |
+| OpenAI    | `gpt-5`             | `reasoning=<low\|medium\|high>` toggles reasoning effort.                                                                              | Cost notifications include reasoning tokens. Lualine shows the reasoning level.       |
+| Vertex AI | `gemini-2.5-pro`    | `project_id` (required), `location` (default `global`), `thinking_budget` (≥ 1 to activate).                                           | `thinking_budget` activates Google's thinking output; set to `0` or `nil` to disable. |
 
 The full model catalogue (including pricing) is in `lua/flemma/models.lua`. You can access it from Neovim with:
 
 ```lua
 :lua print(vim.inspect(require("flemma.provider.config").models))
 ```
+
+### Prompt caching (Anthropic)
+
+Flemma automatically adds cache breakpoints to Anthropic API requests, letting the provider reuse previously processed prefixes at a fraction of the cost[^anthropic-cache]. Three breakpoints are placed: the tool definitions, the system prompt, and the last user message. Tools are sorted alphabetically so the prefix stays stable across requests.
+
+The `cache_retention` parameter controls the caching strategy[^anthropic-cache-pricing]:
+
+| Value    | TTL    | Write cost | Read cost | Description                    |
+| -------- | ------ | ---------- | --------- | ------------------------------ |
+| `"short"` | 5 min  | 1.25×      | 0.1×      | Default. Good for active chat. |
+| `"long"`  | 1 hour | 2.0×       | 0.1×      | Better for long-running tasks. |
+| `"none"`  | —      | —          | —         | Disable caching entirely.      |
+
+When caching is active, usage notifications show a `Cache:` line with read and write token counts. Costs are adjusted accordingly — cache reads are 90% cheaper than regular input tokens.
+
+> [!NOTE]
+> Anthropic requires a **minimum number of tokens** in the cached prefix before caching activates[^anthropic-cache-limits]. The thresholds vary by model: **4096 tokens** for Opus 4.6, Opus 4.5, and Haiku 4.5; **1024 tokens** for Sonnet 4.5, Opus 4.1, Opus 4, and Sonnet 4. If your conversation is below this threshold, the API returns zero cache tokens and charges the standard input rate. This is expected — caching benefits grow with longer conversations and system prompts.
+
+### Prompt caching (OpenAI)
+
+OpenAI applies prompt caching automatically to all Chat Completions API requests[^openai-cache]. No configuration or request-side changes are needed — the API detects reusable prompt prefixes and serves them from cache transparently. When a cache hit occurs, the usage notification shows a `Cache:` line with the number of read tokens. Costs are adjusted to reflect the 50% discount on cached input[^openai-cache-pricing].
+
+| Metric      | Value        | Description                              |
+| ----------- | ------------ | ---------------------------------------- |
+| Read cost   | 0.5× (50%)   | Cached input tokens cost half the normal input rate. |
+| Write cost  | —            | No additional charge; caching is automatic. |
+| Min. tokens | 1,024        | Prompts shorter than 1,024 tokens are never cached. |
+| TTL         | 5–10 minutes | Caches are cleared after inactivity; always evicted within 1 hour. |
+
+> [!IMPORTANT]
+> OpenAI caching is **best-effort and not guaranteed**. Even when the prompt meets all requirements, the API may return zero cached tokens. Key conditions:
+>
+> - **Minimum 1,024 tokens** in the prompt prefix[^openai-cache]. Shorter prompts are never cached.
+> - **Prefix must be byte-identical** between requests. Any change to tools, system prompt, or earlier messages invalidates the cache from that point forward.
+> - **Cache propagation takes time.** The first request populates the cache; subsequent requests can hit it. Sending requests in rapid succession (within a few seconds) may miss the cache because the entry hasn't propagated yet. Wait at least 5–10 seconds between requests for the best chance of a hit.
+> - **128-token granularity.** Only the first 1,024 tokens plus whole 128-token increments are cacheable. Tokens beyond the last 128-token boundary are always processed fresh.
+> - **No user control.** Unlike Anthropic, there is no `cache_retention` parameter or opt-out — caching is entirely managed by OpenAI's infrastructure. You cannot force a cache hit or extend the TTL.
+
+### Prompt caching (Vertex AI)
+
+Gemini 2.5+ models support implicit context caching[^vertex-cache]. When consecutive requests share a common input prefix, the Vertex AI serving infrastructure automatically caches and reuses it — no configuration or request changes are needed. When a cache hit occurs, the usage notification shows a `Cache:` line with the number of read tokens. Costs are adjusted to reflect the 90% discount on cached input[^vertex-cache-pricing].
+
+| Metric      | Value           | Description                                              |
+| ----------- | --------------- | -------------------------------------------------------- |
+| Read cost   | 0.1× (10%)      | Cached input tokens cost 10% of the normal input rate.   |
+| Write cost  | —               | No additional charge; caching is automatic.              |
+| Min. tokens | 1,024 / 2,048   | 1,024 for Flash models, 2,048 for Pro models.            |
+
+> [!IMPORTANT]
+> Vertex AI implicit caching is **automatic and best-effort** — cache hits are not guaranteed. Key conditions:
+>
+> - **Minimum token thresholds** vary by model: **1,024 tokens** for Flash, **2,048 tokens** for Pro[^vertex-cache]. Shorter prompts are never cached.
+> - **Prefix must be identical** between requests. Changing tools, system instructions, or earlier conversation turns invalidates the cache from that point forward.
+> - **Only Gemini 2.5+ models** support implicit caching. Older Gemini models (2.0, 1.5) do not report cached tokens.
+> - **Cache propagation takes time.** Like OpenAI, the first request populates the cache and immediate follow-up requests may not see a hit. Allow a few seconds between requests.
+> - **No user control.** There is no TTL parameter or opt-out — caching is managed entirely by Google's infrastructure.
+>
+> Google also offers an **explicit Context Caching API**[^vertex-cache-explicit] that creates named cache resources with configurable TTLs via a separate endpoint. Explicit caching requires a different workflow (create cache, then reference it) and is not yet supported by Flemma.
 
 ---
 
@@ -405,6 +463,29 @@ Tools registered with `enabled = false` (such as `calculator_async` used by Flem
 
 Misspelled tool names produce an error with a "did you mean" suggestion when a close match exists.
 
+### Per-buffer provider parameter overrides
+
+Provider-specific parameters can also be overridden per-buffer using `flemma.opt.<provider>.*`:
+
+````lua
+```lua
+-- Override Anthropic parameters for this buffer:
+flemma.opt.anthropic.cache_retention = "none"   -- Disable prompt caching
+flemma.opt.anthropic.thinking_budget = 20000    -- Increase thinking budget
+
+-- Override OpenAI parameters:
+flemma.opt.openai.reasoning = "high"
+
+-- Override Vertex parameters:
+flemma.opt.vertex.thinking_budget = 4096
+
+-- Table assignment also works:
+flemma.opt.anthropic = { cache_retention = "long", thinking_budget = 10000 }
+```
+````
+
+Provider parameter overrides follow the same per-buffer isolation as tool selection — each buffer starts from the global defaults.
+
 ---
 
 ## Template System and Automation
@@ -526,7 +607,7 @@ If a file cannot be read or the provider refuses its MIME type, Flemma warns you
 
 ## Usage, Pricing, and Notifications
 
-Each completed request emits a floating report that names the provider/model, lists input/output tokens (reasoning tokens are counted under `⊂ thoughts`), and – when pricing is enabled – shows the per-request and cumulative session cost derived from `lua/flemma/models.lua`. Token accounting persists for the lifetime of the Neovim instance; call `require("flemma.state").reset_session()` if you need to zero the counters without restarting. `pricing.enabled = false` suppresses the dollar amounts while keeping token totals for comparison.
+Each completed request emits a floating report that names the provider/model, lists input/output tokens (reasoning tokens are counted under `⊂ thoughts`), and – when pricing is enabled – shows the per-request and cumulative session cost derived from `lua/flemma/models.lua`. When prompt caching is active (Anthropic, OpenAI, or Vertex AI), a `Cache:` line shows read and write token counts, and costs are adjusted to reflect the provider-specific discount on cached input. Token accounting persists for the lifetime of the Neovim instance; call `require("flemma.state").reset_session()` if you need to zero the counters without restarting. `pricing.enabled = false` suppresses the dollar amounts while keeping token totals for comparison.
 
 Notifications are buffer-local – each `.chat` buffer gets its own notification stack, positioned relative to its window. Notifications for hidden buffers (e.g., in another tab) are queued and shown when the buffer becomes visible.
 
@@ -666,6 +747,7 @@ require("flemma").setup({
     connect_timeout = 10,                    -- Connection timeout (seconds)
     anthropic = {
       thinking_budget = nil,                 -- Extended thinking (≥ 1024, or nil to disable)
+      cache_retention = "short",             -- Prompt caching: "none" | "short" (5-min) | "long" (1h TTL)
     },
     vertex = {
       project_id = nil,                      -- Google Cloud project ID (required for Vertex)
@@ -861,3 +943,12 @@ nvim --cmd "set runtimepath+=`pwd`" \
 - **Cross-buffer issues:** Flemma manages state per-buffer. If something feels off after switching between multiple `.chat` buffers, ensure each buffer has been saved (unsaved buffers lack `__dirname` for path resolution).
 
 Happy prompting!
+
+[^anthropic-cache]: https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching
+[^anthropic-cache-pricing]: https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching#pricing
+[^anthropic-cache-limits]: https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching#cache-limitations
+[^openai-cache]: https://platform.openai.com/docs/guides/prompt-caching
+[^openai-cache-pricing]: https://platform.openai.com/docs/pricing
+[^vertex-cache]: https://developers.googleblog.com/en/gemini-2-5-models-now-support-implicit-caching/
+[^vertex-cache-pricing]: https://cloud.google.com/vertex-ai/generative-ai/pricing
+[^vertex-cache-explicit]: https://docs.cloud.google.com/vertex-ai/generative-ai/docs/context-cache/context-cache-overview

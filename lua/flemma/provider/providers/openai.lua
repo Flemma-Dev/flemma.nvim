@@ -54,6 +54,9 @@ end
 ---@param _context? flemma.Context The shared context object (not used, parts already resolved)
 ---@return table<string, any> request_body The request body for the API
 function M.build_request(self, prompt, _context) ---@diagnostic disable-line: unused-local
+  -- Per-buffer parameter merge: override provider params with frontmatter opts
+  local params = self:_resolve_params(prompt.opts, "openai")
+
   local api_messages = {}
 
   -- Add system message first if present
@@ -224,7 +227,7 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
   end
 
   local request_body = {
-    model = self.parameters.model,
+    model = params.model,
     messages = api_messages,
     -- max_tokens or max_completion_tokens will be set conditionally below
     -- temperature will be set conditionally below
@@ -242,23 +245,23 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
   end
 
   -- Use max_completion_tokens for all OpenAI models (recommended by OpenAI)
-  request_body.max_completion_tokens = self.parameters.max_tokens
+  request_body.max_completion_tokens = params.max_tokens
 
-  if self.parameters.reasoning and self.parameters.reasoning ~= "" then
-    request_body.reasoning_effort = self.parameters.reasoning
+  if params.reasoning and params.reasoning ~= "" then
+    request_body.reasoning_effort = params.reasoning
     log.debug(
       "openai.build_request: Using max_completion_tokens: "
-        .. tostring(self.parameters.max_tokens)
+        .. tostring(params.max_tokens)
         .. " and reasoning_effort: "
-        .. self.parameters.reasoning
+        .. params.reasoning
     )
   else
-    request_body.temperature = self.parameters.temperature
+    request_body.temperature = params.temperature
     log.debug(
       "openai.build_request: Using max_completion_tokens: "
-        .. tostring(self.parameters.max_tokens)
+        .. tostring(params.max_tokens)
         .. " and temperature: "
-        .. tostring(self.parameters.temperature)
+        .. tostring(params.temperature)
     )
   end
 
@@ -341,6 +344,18 @@ function M.process_response_line(self, line, callbacks)
         and data.usage.completion_tokens_details.reasoning_tokens
       then
         callbacks.on_usage({ type = "thoughts", tokens = data.usage.completion_tokens_details.reasoning_tokens })
+      end
+      if
+        callbacks.on_usage
+        and data.usage.prompt_tokens_details
+        and data.usage.prompt_tokens_details.cached_tokens
+        and data.usage.prompt_tokens_details.cached_tokens > 0
+      then
+        callbacks.on_usage({ type = "cache_read", tokens = data.usage.prompt_tokens_details.cached_tokens })
+        log.debug(
+          "openai.process_response_line(): Cached input tokens: "
+            .. tostring(data.usage.prompt_tokens_details.cached_tokens)
+        )
       end
 
       if callbacks.on_response_complete then

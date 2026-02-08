@@ -10,6 +10,8 @@ local session_module = require("flemma.session")
 ---@field output_tokens number
 ---@field thoughts_tokens number
 ---@field output_has_thoughts boolean
+---@field cache_read_input_tokens number
+---@field cache_creation_input_tokens number
 
 ---@class flemma.state.BufferState
 ---@field current_request integer|nil Job ID of the active cURL request
@@ -78,6 +80,8 @@ local function init_buffer(bufnr)
       output_tokens = 0,
       thoughts_tokens = 0,
       output_has_thoughts = false,
+      cache_read_input_tokens = 0,
+      cache_creation_input_tokens = 0,
     },
   }
 end

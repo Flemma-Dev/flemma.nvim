@@ -50,7 +50,9 @@ describe(":FlemmaSend command", function()
     assert.is_not_nil(captured_request_body, "request_body was not captured")
 
     assert.equals(default_anthropic_model, captured_request_body.model)
-    assert.equals("Be brief.", captured_request_body.system)
+    -- With cache_retention="short" (default), system is an array with cache_control
+    assert.equals(1, #captured_request_body.system)
+    assert.equals("Be brief.", captured_request_body.system[1].text)
     assert.equals(config.parameters.max_tokens, captured_request_body.max_tokens)
     assert.equals(config.parameters.temperature, captured_request_body.temperature)
     assert.equals(true, captured_request_body.stream)
