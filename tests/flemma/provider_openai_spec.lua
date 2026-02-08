@@ -124,7 +124,8 @@ describe("OpenAI Provider", function()
       local found_cache_read = false
       for _, event in ipairs(usage_events) do
         if event.type == "input" then
-          assert.equals(1500, event.tokens)
+          -- input_tokens = prompt_tokens - cached_tokens (1500 - 1024 = 476)
+          assert.equals(476, event.tokens)
           found_input = true
         elseif event.type == "output" then
           assert.equals(200, event.tokens)

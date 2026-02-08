@@ -633,9 +633,16 @@ function M.process_response_line(self, line, callbacks)
   -- Process usage information if available (can come with content or with finishReason)
   if data.usageMetadata then
     local usage = data.usageMetadata
+    -- Extract cached tokens first so we can subtract from promptTokenCount.
+    -- Vertex's promptTokenCount includes cachedContentTokenCount as a subset, so we
+    -- normalize to make input_tokens mean "non-cached input" (matching Anthropic's semantics).
+    local cached_tokens = (usage.cachedContentTokenCount and usage.cachedContentTokenCount > 0)
+        and usage.cachedContentTokenCount
+      or 0
+
     -- Handle input tokens
     if usage.promptTokenCount and callbacks.on_usage then
-      callbacks.on_usage({ type = "input", tokens = usage.promptTokenCount })
+      callbacks.on_usage({ type = "input", tokens = usage.promptTokenCount - cached_tokens })
     end
     -- Handle output tokens
     if usage.candidatesTokenCount and callbacks.on_usage then
@@ -646,9 +653,9 @@ function M.process_response_line(self, line, callbacks)
       callbacks.on_usage({ type = "thoughts", tokens = usage.thoughtsTokenCount })
     end
     -- Handle cached content tokens (implicit caching on Gemini 2.5+ models)
-    if usage.cachedContentTokenCount and usage.cachedContentTokenCount > 0 and callbacks.on_usage then
-      callbacks.on_usage({ type = "cache_read", tokens = usage.cachedContentTokenCount })
-      log.debug("vertex.process_response_line(): Cached content tokens: " .. tostring(usage.cachedContentTokenCount))
+    if cached_tokens > 0 and callbacks.on_usage then
+      callbacks.on_usage({ type = "cache_read", tokens = cached_tokens })
+      log.debug("vertex.process_response_line(): Cached content tokens: " .. tostring(cached_tokens))
     end
   end
 

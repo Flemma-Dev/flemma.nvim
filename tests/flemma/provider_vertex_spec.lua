@@ -54,7 +54,8 @@ describe("Vertex AI Provider", function()
       local found_cache_read = false
       for _, event in ipairs(usage_events) do
         if event.type == "input" then
-          assert.equals(3000, event.tokens)
+          -- input_tokens = promptTokenCount - cachedContentTokenCount (3000 - 2048 = 952)
+          assert.equals(952, event.tokens)
           found_input = true
         elseif event.type == "output" then
           assert.equals(50, event.tokens)
@@ -163,7 +164,8 @@ describe("Vertex AI Provider", function()
       local found_cache_read = false
       for _, event in ipairs(usage_events) do
         if event.type == "input" then
-          assert.equals(5000, event.tokens)
+          -- input_tokens = promptTokenCount - cachedContentTokenCount (5000 - 3000 = 2000)
+          assert.equals(2000, event.tokens)
           found_input = true
         elseif event.type == "output" then
           assert.equals(200, event.tokens)

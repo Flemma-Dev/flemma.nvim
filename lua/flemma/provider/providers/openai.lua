@@ -340,8 +340,19 @@ function M.process_response_line(self, line, callbacks)
     log.debug("openai.process_response_line(): Received final chunk with usage: " .. log.inspect(data.usage))
 
     if type(data.usage) == "table" then
+      -- Extract cached tokens first so we can subtract from prompt_tokens.
+      -- OpenAI's prompt_tokens includes cached_tokens as a subset, so we normalize
+      -- to make input_tokens mean "non-cached input" (matching Anthropic's semantics).
+      local cached_tokens = (
+        data.usage.prompt_tokens_details
+        and data.usage.prompt_tokens_details.cached_tokens
+        and data.usage.prompt_tokens_details.cached_tokens > 0
+      )
+          and data.usage.prompt_tokens_details.cached_tokens
+        or 0
+
       if callbacks.on_usage and data.usage.prompt_tokens then
-        callbacks.on_usage({ type = "input", tokens = data.usage.prompt_tokens })
+        callbacks.on_usage({ type = "input", tokens = data.usage.prompt_tokens - cached_tokens })
       end
       if callbacks.on_usage and data.usage.completion_tokens then
         callbacks.on_usage({ type = "output", tokens = data.usage.completion_tokens })
@@ -353,17 +364,9 @@ function M.process_response_line(self, line, callbacks)
       then
         callbacks.on_usage({ type = "thoughts", tokens = data.usage.completion_tokens_details.reasoning_tokens })
       end
-      if
-        callbacks.on_usage
-        and data.usage.prompt_tokens_details
-        and data.usage.prompt_tokens_details.cached_tokens
-        and data.usage.prompt_tokens_details.cached_tokens > 0
-      then
-        callbacks.on_usage({ type = "cache_read", tokens = data.usage.prompt_tokens_details.cached_tokens })
-        log.debug(
-          "openai.process_response_line(): Cached input tokens: "
-            .. tostring(data.usage.prompt_tokens_details.cached_tokens)
-        )
+      if callbacks.on_usage and cached_tokens > 0 then
+        callbacks.on_usage({ type = "cache_read", tokens = cached_tokens })
+        log.debug("openai.process_response_line(): Cached input tokens: " .. tostring(cached_tokens))
       end
 
       if callbacks.on_response_complete then
