@@ -63,6 +63,8 @@ When you resolve a non-obvious issue — something that required real investigat
 
   If your changes seem to have no effect, verify with `debug.getinfo(require('flemma.ui').some_fn, 'S').source` — it should point to your working directory, not a `vim-pack-dir` path.
 
+- **Don't abbreviate variable names.** Use full, descriptive names (`definition` not `def_entry`, `provider_name` not `prov_name`). The codebase consistently spells things out; cryptic abbreviations stand out and hurt readability.
+
 ## Session Closure Checklist
 
 - Finish with `make test` (no redirection) and record that it exited with status 0.

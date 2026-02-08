@@ -9,6 +9,23 @@ local M = {}
 -- Inherit from base provider
 setmetatable(M, { __index = base })
 
+---@type flemma.provider.Metadata
+M.metadata = {
+  name = "vertex",
+  display_name = "Vertex AI",
+  capabilities = {
+    supports_reasoning = false,
+    supports_thinking_budget = true,
+    outputs_thinking = true,
+    min_thinking_budget = 1,
+  },
+  default_parameters = {
+    project_id = nil,
+    location = "global",
+    thinking_budget = nil,
+  },
+}
+
 ---@param self flemma.provider.Vertex
 local function _validate_config(self)
   local project_id = self.parameters.project_id

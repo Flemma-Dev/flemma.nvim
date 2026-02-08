@@ -9,6 +9,22 @@ local M = {}
 -- Inherit from base provider
 setmetatable(M, { __index = base })
 
+---@type flemma.provider.Metadata
+M.metadata = {
+  name = "anthropic",
+  display_name = "Anthropic",
+  capabilities = {
+    supports_reasoning = false,
+    supports_thinking_budget = true,
+    outputs_thinking = true,
+    min_thinking_budget = 1024,
+  },
+  default_parameters = {
+    thinking_budget = nil,
+    cache_retention = "short",
+  },
+}
+
 -- Anthropic's output_tokens already includes thinking tokens in the usage response,
 -- so we should NOT add thoughts_tokens separately for cost calculation.
 M.output_has_thoughts = true

@@ -10,6 +10,17 @@ local M = {}
 -- Inherit from base provider
 setmetatable(M, { __index = base })
 
+---@type flemma.provider.Metadata
+M.metadata = {
+  name = "openai",
+  display_name = "OpenAI",
+  capabilities = {
+    supports_reasoning = true,
+    supports_thinking_budget = false,
+    outputs_thinking = false,
+  },
+}
+
 -- OpenAI's completion_tokens already includes reasoning_tokens,
 -- so we should NOT add thoughts_tokens separately for cost calculation.
 M.output_has_thoughts = true

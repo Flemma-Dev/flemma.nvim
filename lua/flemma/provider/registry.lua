@@ -1,6 +1,5 @@
 --- Provider registry for Flemma
 --- Manages provider modules, capabilities, and model configuration
---- (Merged from providers.lua and config.lua)
 
 ---@class flemma.provider.Registry
 ---@field defaults table<string, string>
@@ -26,6 +25,12 @@ local models_data = require("flemma.models")
 ---@field display_name string
 ---@field default_parameters? table<string, any>
 
+---@class flemma.provider.Metadata
+---@field name string Provider identifier (e.g., "anthropic")
+---@field display_name string Human-readable name
+---@field capabilities flemma.provider.Capabilities
+---@field default_parameters? table<string, any> Provider-specific param defaults
+
 ---@class flemma.provider.RegistrationEntry
 ---@field module string Lua module path
 ---@field capabilities flemma.provider.Capabilities
@@ -47,46 +52,11 @@ local provider_aliases = {
 ---@type table<string, flemma.provider.ProviderEntry>
 local providers = {}
 
--- Built-in provider definitions
-local builtin_providers = {
-  openai = {
-    module = "flemma.provider.providers.openai",
-    capabilities = {
-      supports_reasoning = true,
-      supports_thinking_budget = false,
-      outputs_thinking = false,
-    },
-    display_name = "OpenAI",
-  },
-  vertex = {
-    module = "flemma.provider.providers.vertex",
-    capabilities = {
-      supports_reasoning = false,
-      supports_thinking_budget = true,
-      outputs_thinking = true,
-      min_thinking_budget = 1,
-    },
-    display_name = "Vertex AI",
-    default_parameters = {
-      project_id = nil,
-      location = "global",
-      thinking_budget = nil,
-    },
-  },
-  anthropic = {
-    module = "flemma.provider.providers.anthropic",
-    capabilities = {
-      supports_reasoning = false,
-      supports_thinking_budget = true,
-      outputs_thinking = true,
-      min_thinking_budget = 1024,
-    },
-    display_name = "Anthropic",
-    default_parameters = {
-      thinking_budget = nil,
-      cache_retention = "short",
-    },
-  },
+-- Built-in provider module paths (each module exports M.metadata)
+local builtin_provider_modules = {
+  "flemma.provider.providers.openai",
+  "flemma.provider.providers.anthropic",
+  "flemma.provider.providers.vertex",
 }
 
 --------------------------------------------------------------------------------
@@ -110,48 +80,72 @@ local function get_provider_models(provider_name)
 end
 
 --------------------------------------------------------------------------------
--- Setup and registration
+-- Setup and definition
 --------------------------------------------------------------------------------
 
----Register a provider
----@param name string Provider identifier (e.g., "ollama")
----@param entry flemma.provider.RegistrationEntry
-function M.register(name, entry)
-  local capabilities = vim.tbl_extend("keep", entry.capabilities or {}, {
+---Register a provider.
+---Dispatches on arguments:
+---  register("module.path")      — load module, read .metadata, register
+---  register("name", entry)      — direct definition with entry table
+---@param source string Module path (single arg) or provider name (with entry)
+---@param entry? flemma.provider.RegistrationEntry Registration entry (when source is a name)
+function M.register(source, entry)
+  local name, definition
+
+  if entry then
+    -- Two-arg form: register("name", entry)
+    name = source
+    definition = entry
+  else
+    -- Single-arg form: register("module.path") — load module and read metadata
+    local mod = require(source)
+    if not mod.metadata then
+      error("Provider module " .. source .. " does not export metadata", 2)
+    end
+    name = mod.metadata.name
+    definition = {
+      module = source,
+      capabilities = mod.metadata.capabilities,
+      display_name = mod.metadata.display_name,
+      default_parameters = mod.metadata.default_parameters,
+    }
+  end
+
+  local capabilities = vim.tbl_extend("keep", definition.capabilities or {}, {
     supports_reasoning = false,
     supports_thinking_budget = false,
     outputs_thinking = false,
   })
 
   providers[name] = {
-    module = entry.module,
+    module = definition.module,
     capabilities = capabilities,
-    display_name = entry.display_name,
-    default_parameters = entry.default_parameters,
+    display_name = definition.display_name,
+    default_parameters = definition.default_parameters,
   }
 
   -- If models or default_model provided, update models_data
-  if entry.default_model or entry.models then
+  if definition.default_model or definition.models then
     if not models_data.providers[name] then
       models_data.providers[name] = {
-        default = entry.default_model or "",
-        models = entry.models or {},
+        default = definition.default_model or "",
+        models = definition.models or {},
       }
     else
-      if entry.default_model then
-        models_data.providers[name].default = entry.default_model
+      if definition.default_model then
+        models_data.providers[name].default = definition.default_model
       end
-      if entry.models then
-        for model_name, model_info in pairs(entry.models) do
+      if definition.models then
+        for model_name, model_info in pairs(definition.models) do
           models_data.providers[name].models[model_name] = model_info
         end
       end
     end
-    if entry.cache_read_multiplier then
-      models_data.providers[name].cache_read_multiplier = entry.cache_read_multiplier
+    if definition.cache_read_multiplier then
+      models_data.providers[name].cache_read_multiplier = definition.cache_read_multiplier
     end
-    if entry.cache_write_multipliers then
-      models_data.providers[name].cache_write_multipliers = entry.cache_write_multipliers
+    if definition.cache_write_multipliers then
+      models_data.providers[name].cache_write_multipliers = definition.cache_write_multipliers
     end
   end
 
@@ -162,9 +156,10 @@ end
 
 ---Initialize built-in providers (called during setup)
 function M.setup()
-  for name, entry in pairs(builtin_providers) do
-    if not providers[name] then
-      M.register(name, entry)
+  for _, module_path in ipairs(builtin_provider_modules) do
+    local mod = require(module_path)
+    if mod.metadata and not providers[mod.metadata.name] then
+      M.register(module_path)
     end
   end
 end
