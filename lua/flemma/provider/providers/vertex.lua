@@ -631,9 +631,7 @@ function M.process_response_line(self, line, callbacks)
     -- Handle cached content tokens (implicit caching on Gemini 2.5+ models)
     if usage.cachedContentTokenCount and usage.cachedContentTokenCount > 0 and callbacks.on_usage then
       callbacks.on_usage({ type = "cache_read", tokens = usage.cachedContentTokenCount })
-      log.debug(
-        "vertex.process_response_line(): Cached content tokens: " .. tostring(usage.cachedContentTokenCount)
-      )
+      log.debug("vertex.process_response_line(): Cached content tokens: " .. tostring(usage.cachedContentTokenCount))
     end
   end
 

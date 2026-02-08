@@ -150,8 +150,10 @@ describe("Anthropic Provider", function()
       local req = p:build_request(prompt)
       assert.is_not_nil(req.tools)
       for i = 1, #req.tools - 1 do
-        assert.is_true(req.tools[i].name < req.tools[i + 1].name,
-          "Expected " .. req.tools[i].name .. " < " .. req.tools[i + 1].name)
+        assert.is_true(
+          req.tools[i].name < req.tools[i + 1].name,
+          "Expected " .. req.tools[i].name .. " < " .. req.tools[i + 1].name
+        )
       end
     end)
 

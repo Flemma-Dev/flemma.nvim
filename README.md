@@ -261,11 +261,11 @@ Switch using `:Flemma switch $fast` or `:Flemma switch $review temperature=0.1` 
 
 ### Provider-specific capabilities
 
-| Provider  | Defaults            | Extra parameters                                                                                                                       | Notes                                                                                 |
-| --------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Anthropic | `claude-sonnet-4-5` | `thinking_budget` enables extended thinking (≥ 1024). `cache_retention` controls prompt caching (`"short"`, `"long"`, or `"none"`).    | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer.    |
-| OpenAI    | `gpt-5`             | `reasoning=<low\|medium\|high>` toggles reasoning effort.                                                                              | Cost notifications include reasoning tokens. Lualine shows the reasoning level.       |
-| Vertex AI | `gemini-2.5-pro`    | `project_id` (required), `location` (default `global`), `thinking_budget` (≥ 1 to activate).                                           | `thinking_budget` activates Google's thinking output; set to `0` or `nil` to disable. |
+| Provider  | Defaults            | Extra parameters                                                                                                                    | Notes                                                                                 |
+| --------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Anthropic | `claude-sonnet-4-5` | `thinking_budget` enables extended thinking (≥ 1024). `cache_retention` controls prompt caching (`"short"`, `"long"`, or `"none"`). | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer.    |
+| OpenAI    | `gpt-5`             | `reasoning=<low\|medium\|high>` toggles reasoning effort.                                                                           | Cost notifications include reasoning tokens. Lualine shows the reasoning level.       |
+| Vertex AI | `gemini-2.5-pro`    | `project_id` (required), `location` (default `global`), `thinking_budget` (≥ 1 to activate).                                        | `thinking_budget` activates Google's thinking output; set to `0` or `nil` to disable. |
 
 The full model catalogue (including pricing) is in `lua/flemma/models.lua`. You can access it from Neovim with:
 
@@ -279,8 +279,8 @@ Flemma automatically adds cache breakpoints to Anthropic API requests, letting t
 
 The `cache_retention` parameter controls the caching strategy[^anthropic-cache-pricing]:
 
-| Value    | TTL    | Write cost | Read cost | Description                    |
-| -------- | ------ | ---------- | --------- | ------------------------------ |
+| Value     | TTL    | Write cost | Read cost | Description                    |
+| --------- | ------ | ---------- | --------- | ------------------------------ |
 | `"short"` | 5 min  | 1.25×      | 0.1×      | Default. Good for active chat. |
 | `"long"`  | 1 hour | 2.0×       | 0.1×      | Better for long-running tasks. |
 | `"none"`  | —      | —          | —         | Disable caching entirely.      |
@@ -294,11 +294,11 @@ When caching is active, usage notifications show a `Cache:` line with read and w
 
 OpenAI applies prompt caching automatically to all Chat Completions API requests[^openai-cache]. No configuration or request-side changes are needed — the API detects reusable prompt prefixes and serves them from cache transparently. When a cache hit occurs, the usage notification shows a `Cache:` line with the number of read tokens. Costs are adjusted to reflect the 50% discount on cached input[^openai-cache-pricing].
 
-| Metric      | Value        | Description                              |
-| ----------- | ------------ | ---------------------------------------- |
-| Read cost   | 0.5× (50%)   | Cached input tokens cost half the normal input rate. |
-| Write cost  | —            | No additional charge; caching is automatic. |
-| Min. tokens | 1,024        | Prompts shorter than 1,024 tokens are never cached. |
+| Metric      | Value        | Description                                                        |
+| ----------- | ------------ | ------------------------------------------------------------------ |
+| Read cost   | 0.5× (50%)   | Cached input tokens cost half the normal input rate.               |
+| Write cost  | —            | No additional charge; caching is automatic.                        |
+| Min. tokens | 1,024        | Prompts shorter than 1,024 tokens are never cached.                |
 | TTL         | 5–10 minutes | Caches are cleared after inactivity; always evicted within 1 hour. |
 
 > [!IMPORTANT]
@@ -314,11 +314,11 @@ OpenAI applies prompt caching automatically to all Chat Completions API requests
 
 Gemini 2.5+ models support implicit context caching[^vertex-cache]. When consecutive requests share a common input prefix, the Vertex AI serving infrastructure automatically caches and reuses it — no configuration or request changes are needed. When a cache hit occurs, the usage notification shows a `Cache:` line with the number of read tokens. Costs are adjusted to reflect the 90% discount on cached input[^vertex-cache-pricing].
 
-| Metric      | Value           | Description                                              |
-| ----------- | --------------- | -------------------------------------------------------- |
-| Read cost   | 0.1× (10%)      | Cached input tokens cost 10% of the normal input rate.   |
-| Write cost  | —               | No additional charge; caching is automatic.              |
-| Min. tokens | 1,024 / 2,048   | 1,024 for Flash models, 2,048 for Pro models.            |
+| Metric      | Value         | Description                                            |
+| ----------- | ------------- | ------------------------------------------------------ |
+| Read cost   | 0.1× (10%)    | Cached input tokens cost 10% of the normal input rate. |
+| Write cost  | —             | No additional charge; caching is automatic.            |
+| Min. tokens | 1,024 / 2,048 | 1,024 for Flash models, 2,048 for Pro models.          |
 
 > [!IMPORTANT]
 > Vertex AI implicit caching is **automatic and best-effort** — cache hits are not guaranteed. Key conditions:
