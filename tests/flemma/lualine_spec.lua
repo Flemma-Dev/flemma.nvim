@@ -147,4 +147,58 @@ describe("Lualine component", function()
     -- Cleanup
     s:revert()
   end)
+
+  describe("frontmatter overrides", function()
+    local state = require("flemma.state")
+
+    it("should reflect reasoning override from frontmatter", function()
+      -- Start with base config: no reasoning
+      core.switch_provider("openai", "o3", { temperature = 1 })
+      assert.are.equal("o3", flemma_component:update_status())
+
+      -- Simulate frontmatter override (as core.lua does during a request)
+      local provider = state.get_provider()
+      provider:set_parameter_overrides({ reasoning = "high" })
+
+      -- Lualine should now show the overridden reasoning level
+      assert.are.equal("o3 (high)", flemma_component:update_status())
+    end)
+
+    it("should reflect thinking_budget override from frontmatter", function()
+      -- Start with base config: no thinking_budget
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+      assert.are.equal("claude-sonnet-4-5", flemma_component:update_status())
+
+      -- Simulate frontmatter override
+      local provider = state.get_provider()
+      provider:set_parameter_overrides({ thinking_budget = 2048 })
+
+      -- Lualine should now show the thinking indicator
+      assert.are.equal("claude-sonnet-4-5  ✓ thinking", flemma_component:update_status())
+    end)
+
+    it("should let frontmatter override win over base config", function()
+      -- Start with base reasoning = "low"
+      core.switch_provider("openai", "o3", { reasoning = "low", temperature = 1 })
+      assert.are.equal("o3 (low)", flemma_component:update_status())
+
+      -- Frontmatter sets reasoning = "high"
+      local provider = state.get_provider()
+      provider:set_parameter_overrides({ reasoning = "high" })
+
+      assert.are.equal("o3 (high)", flemma_component:update_status())
+    end)
+
+    it("should revert to base config when overrides are cleared", function()
+      core.switch_provider("openai", "o3", { reasoning = "low", temperature = 1 })
+      local provider = state.get_provider()
+
+      -- Set then clear overrides
+      provider:set_parameter_overrides({ reasoning = "high" })
+      assert.are.equal("o3 (high)", flemma_component:update_status())
+
+      provider:set_parameter_overrides(nil)
+      assert.are.equal("o3 (low)", flemma_component:update_status())
+    end)
+  end)
 end)

@@ -7,7 +7,8 @@ local models = require("flemma.models")
 -- Create a new component for displaying the Flemma model
 local flemma_model_component = lualine_component:extend()
 
----Get the current reasoning setting if the provider and model support it
+---Get the current reasoning setting if the provider and model support it.
+---Reads from the provider's parameter proxy which includes frontmatter overrides.
 ---@return string|nil reasoning "low"|"medium"|"high" or nil
 local function get_current_reasoning_setting()
   local current_config = state.get_config()
@@ -30,9 +31,11 @@ local function get_current_reasoning_setting()
     return nil
   end
 
-  -- If both provider and model support reasoning, check if it's configured
-  if current_config.parameters and current_config.parameters.reasoning then
-    local reasoning = current_config.parameters.reasoning
+  -- Read from the provider's parameter proxy (includes frontmatter overrides)
+  local provider = state.get_provider()
+  local params = provider and provider.parameters or current_config.parameters
+  if params and params.reasoning then
+    local reasoning = params.reasoning
     if reasoning == "low" or reasoning == "medium" or reasoning == "high" then
       return reasoning
     end
@@ -41,7 +44,8 @@ local function get_current_reasoning_setting()
   return nil
 end
 
----Get the current thinking budget setting if the provider supports it
+---Get the current thinking budget setting if the provider supports it.
+---Reads from the provider's parameter proxy which includes frontmatter overrides.
 ---@return number|nil budget
 local function get_current_thinking_budget()
   local current_config = state.get_config()
@@ -55,18 +59,20 @@ local function get_current_thinking_budget()
     return nil
   end
 
-  -- Check if thinking_budget is configured and meets minimum requirements
-  if current_config.parameters and current_config.parameters.thinking_budget then
-    local budget = current_config.parameters.thinking_budget
+  -- Read from the provider's parameter proxy (includes frontmatter overrides)
+  local provider = state.get_provider()
+  local params = provider and provider.parameters or current_config.parameters
+  if params and params.thinking_budget then
+    local budget = params.thinking_budget
     if type(budget) ~= "number" then
       return nil
     end
 
     -- Provider-specific minimum budget requirements
-    local provider = current_config.provider
-    if provider == "anthropic" and budget >= 1024 then
+    local provider_name = current_config.provider
+    if provider_name == "anthropic" and budget >= 1024 then
       return budget
-    elseif provider == "vertex" and budget >= 1 then
+    elseif provider_name == "vertex" and budget >= 1 then
       return budget
     end
   end
