@@ -27,13 +27,17 @@ describe("flemma.usage", function()
 
   describe("format_notification", function()
     it("should format request usage without session data", function()
-      local inflight_usage = {
+      local request = session_module.Request.new({
+        provider = "openai",
+        model = "gpt-4o",
         input_tokens = 100,
         output_tokens = 50,
         thoughts_tokens = 0,
-      }
+        input_price = 2.50,
+        output_price = 10.00,
+      })
 
-      local result = usage.format_notification(inflight_usage, nil)
+      local result = usage.format_notification(request, nil)
 
       assert.is_string(result)
       assert.has_match("Request:", result)
@@ -44,15 +48,18 @@ describe("flemma.usage", function()
 
     it("should format request usage with thoughts tokens (OpenAI - thoughts included in output)", function()
       -- OpenAI: completion_tokens already includes reasoning_tokens
-      -- So output_tokens = 50 is the total, and thoughts_tokens = 25 is a breakdown
-      local inflight_usage = {
+      local request = session_module.Request.new({
+        provider = "openai",
+        model = "o1",
         input_tokens = 100,
         output_tokens = 50, -- completion_tokens (includes reasoning)
         thoughts_tokens = 25, -- reasoning_tokens (subset, for display)
+        input_price = 15.00,
+        output_price = 60.00,
         output_has_thoughts = true, -- OpenAI behavior
-      }
+      })
 
-      local result = usage.format_notification(inflight_usage, nil)
+      local result = usage.format_notification(request, nil)
 
       assert.is_string(result)
       assert.has_match("Request:", result)
@@ -63,15 +70,18 @@ describe("flemma.usage", function()
 
     it("should format request usage with thoughts tokens (Vertex - thoughts separate)", function()
       -- Vertex: candidatesTokenCount and thoughtsTokenCount are separate
-      -- So total output = output_tokens + thoughts_tokens
-      local inflight_usage = {
+      local request = session_module.Request.new({
+        provider = "vertex",
+        model = "gemini-2.5-pro",
         input_tokens = 100,
         output_tokens = 50, -- candidatesTokenCount
         thoughts_tokens = 25, -- thoughtsTokenCount
+        input_price = 1.25,
+        output_price = 10.00,
         output_has_thoughts = false, -- Vertex behavior
-      }
+      })
 
-      local result = usage.format_notification(inflight_usage, nil)
+      local result = usage.format_notification(request, nil)
 
       assert.is_string(result)
       assert.has_match("Request:", result)
@@ -81,13 +91,17 @@ describe("flemma.usage", function()
     end)
 
     it("should format both request and session usage", function()
-      local inflight_usage = {
+      local request = session_module.Request.new({
+        provider = "openai",
+        model = "gpt-4o",
         input_tokens = 100,
         output_tokens = 50,
         thoughts_tokens = 0,
-      }
+        input_price = 2.50,
+        output_price = 10.00,
+      })
 
-      -- Create a session with requests
+      -- Create a session with the same request
       local session = session_module.Session.new()
       session:add_request({
         provider = "openai",
@@ -99,7 +113,7 @@ describe("flemma.usage", function()
         output_price = 10.00,
       })
 
-      local result = usage.format_notification(inflight_usage, session)
+      local result = usage.format_notification(request, session)
 
       assert.is_string(result)
       assert.has_match("Request:", result)
@@ -108,23 +122,17 @@ describe("flemma.usage", function()
       assert.has_match("Input:.*500 tokens", result) -- Session
     end)
 
-    it("should handle zero token usage gracefully", function()
-      local inflight_usage = {
-        input_tokens = 0,
-        output_tokens = 0,
-        thoughts_tokens = 0,
-      }
-
+    it("should handle nil request gracefully", function()
       -- Create an empty session
       local session = session_module.Session.new()
 
-      local result = usage.format_notification(inflight_usage, session)
+      local result = usage.format_notification(nil, session)
 
-      -- Should return empty string when no meaningful usage
+      -- Should return empty string when no request and empty session
       assert.are.equal("", result)
     end)
 
-    it("should format session usage only when no in-flight usage", function()
+    it("should format session usage only when no request", function()
       -- Create a session with requests
       local session = session_module.Session.new()
       session:add_request({
@@ -146,13 +154,17 @@ describe("flemma.usage", function()
     end)
 
     it("should include cost information when pricing is enabled", function()
-      local inflight_usage = {
+      local request = session_module.Request.new({
+        provider = "openai",
+        model = "gpt-4o",
         input_tokens = 1000,
         output_tokens = 500,
         thoughts_tokens = 0,
-      }
+        input_price = 2.50,
+        output_price = 10.00,
+      })
 
-      local result = usage.format_notification(inflight_usage, nil)
+      local result = usage.format_notification(request, nil)
 
       assert.is_string(result)
       -- Should contain dollar signs indicating cost calculation
@@ -170,13 +182,17 @@ describe("flemma.usage", function()
         },
       })
 
-      local inflight_usage = {
+      local request = session_module.Request.new({
+        provider = "openai",
+        model = "gpt-4o",
         input_tokens = 1000,
         output_tokens = 500,
         thoughts_tokens = 0,
-      }
+        input_price = 2.50,
+        output_price = 10.00,
+      })
 
-      local result = usage.format_notification(inflight_usage, nil)
+      local result = usage.format_notification(request, nil)
 
       assert.is_string(result)
       assert.has_match("1000 tokens", result)
@@ -207,6 +223,66 @@ describe("flemma.usage", function()
       -- Should show combined output + thoughts tokens for cost (500 total)
       assert.has_match("Output:.*500 tokens", result)
       assert.has_match("%$", result) -- Should include cost
+    end)
+
+    it("should display cost from request's pre-computed fields", function()
+      local request = session_module.Request.new({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 1000000,
+        output_tokens = 500000,
+        thoughts_tokens = 0,
+        input_price = 3.00,
+        output_price = 15.00,
+      })
+
+      local result = usage.format_notification(request, nil)
+
+      -- Input cost: 1000000 / 1000000 * 3.00 = $3.00
+      assert.has_match("Input:.*1000000 tokens.*%$3%.00", result)
+      -- Output cost: 500000 / 1000000 * 15.00 = $7.50
+      assert.has_match("Output:.*500000 tokens.*%$7%.50", result)
+      -- Total cost: $10.50
+      assert.has_match("Total:.*%$10%.50", result)
+    end)
+
+    it("should show model and provider from request, not config", function()
+      -- Config says openai/gpt-4o, but request was made with anthropic/claude-sonnet-4-5
+      local request = session_module.Request.new({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 100,
+        output_tokens = 50,
+        thoughts_tokens = 0,
+        input_price = 3.00,
+        output_price = 15.00,
+      })
+
+      local result = usage.format_notification(request, nil)
+
+      -- Should show the request's model/provider, not config's
+      assert.has_match("Model:.*claude%-sonnet%-4%-5.*anthropic", result)
+      assert.has_no_match("gpt%-4o", result)
+    end)
+
+    it("should display cache line from request fields", function()
+      local request = session_module.Request.new({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 500,
+        output_tokens = 200,
+        thoughts_tokens = 0,
+        input_price = 3.00,
+        output_price = 15.00,
+        cache_read_input_tokens = 1000,
+        cache_creation_input_tokens = 300,
+        cache_read_multiplier = 0.1,
+        cache_write_multiplier = 1.25,
+      })
+
+      local result = usage.format_notification(request, nil)
+
+      assert.has_match("Cache:.*1000 read.*300 write", result)
     end)
   end)
 end)

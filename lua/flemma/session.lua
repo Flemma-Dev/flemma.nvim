@@ -20,6 +20,13 @@
 ---@class flemma.SessionModule
 local M = {}
 
+--- Current wall-clock time with microsecond precision
+---@return number Unix timestamp as a float (e.g. 1700000042.123456)
+function M.now()
+  local sec, usec = vim.uv.gettimeofday()
+  return sec + usec / 1000000
+end
+
 ---@class flemma.session.Request
 ---@field provider string
 ---@field model string
@@ -30,7 +37,8 @@ local M = {}
 ---@field output_price number
 ---@field filepath? string
 ---@field bufnr? integer
----@field timestamp number
+---@field started_at? number Seconds since epoch with microsecond precision
+---@field completed_at number Seconds since epoch with microsecond precision
 ---@field output_has_thoughts boolean
 ---@field cache_read_input_tokens number
 ---@field cache_creation_input_tokens number
@@ -49,7 +57,8 @@ Request.__index = Request
 ---@field output_price number USD per million output tokens
 ---@field filepath? string Resolved absolute filepath (nil for unnamed buffers)
 ---@field bufnr? integer Buffer number (fallback for unnamed buffers)
----@field timestamp? number Unix timestamp (defaults to current time)
+---@field started_at? number Seconds since epoch with microsecond precision
+---@field completed_at? number Seconds since epoch with microsecond precision (defaults to session.now())
 ---@field output_has_thoughts? boolean Whether output_tokens already includes thoughts (true for OpenAI/Anthropic, false for Vertex)
 ---@field cache_read_input_tokens? number Number of cache read tokens
 ---@field cache_creation_input_tokens? number Number of cache creation tokens
@@ -71,7 +80,8 @@ function Request.new(opts)
   self.output_price = opts.output_price
   self.filepath = opts.filepath
   self.bufnr = opts.bufnr
-  self.timestamp = opts.timestamp or os.time()
+  self.started_at = opts.started_at
+  self.completed_at = opts.completed_at or M.now()
   -- Whether output_tokens already includes thoughts (true for OpenAI/Anthropic, false for Vertex)
   self.output_has_thoughts = opts.output_has_thoughts or false
   self.cache_read_input_tokens = opts.cache_read_input_tokens or 0
@@ -223,6 +233,23 @@ end
 --- Reset the session (clear all requests)
 function Session:reset()
   self.requests = {}
+end
+
+--- Load requests from a list of raw option tables (for session restoration)
+--- Replaces all existing requests. Each entry uses the same format as add_request().
+---@param requests_data flemma.session.RequestOpts[]
+function Session:load(requests_data)
+  self.requests = {}
+  for _, opts in ipairs(requests_data) do
+    table.insert(self.requests, Request.new(opts))
+  end
+end
+
+--- Get the global session instance (tracks all requests across buffers)
+--- Lazy-requires state to avoid circular dependency (state.lua requires session.lua at load time).
+---@return flemma.session.Session
+function M.get()
+  return require("flemma.state").get_session()
 end
 
 M.Request = Request

@@ -59,7 +59,7 @@ On a personal level, I've used Flemma to generate bedtime stories with recurring
 ## What Flemma Delivers
 
 - **Multi-provider chat** – work with Anthropic, OpenAI, and Vertex AI models through one command tree while keeping prompts in plain `.chat` buffers.
-- **Tool calling** – models can request calculator evaluations, bash commands, file reads, edits, and writes. Flemma executes them (with your approval) and injects results back into the buffer. Works across all three providers with parallel tool support. Per-buffer `flemma.opt` lets you control which tools each conversation can use. Custom tools can resolve definitions asynchronously — from CLI subprocesses, remote APIs, or plugin loaders — with zero startup cost.
+- **Tool calling** – models can request calculator evaluations, bash commands, file reads, edits, and writes. Flemma executes them (with your approval) and injects results back into the buffer. Works across all three providers with parallel tool support. Per-buffer `flemma.opt` lets you control which tools each conversation can use. Custom tools can resolve definitions asynchronously – from CLI subprocesses, remote APIs, or plugin loaders – with zero startup cost.
 - **Extended thinking and reasoning** – stream Anthropic thinking traces, tune OpenAI reasoning effort, and control Vertex thinking budgets. Thinking blocks auto-fold and get dedicated highlighting.
 - **`.chat` editing tools** – get Markdown folding, visual rulers, `<thinking>` highlighting, tool call syntax highlighting, and message text objects tuned for chat transcripts.
 - **Structured templates** – combine Lua or JSON frontmatter, inline `{{ expressions }}`, and `include()` helpers to assemble prompts without leaving Neovim.
@@ -289,14 +289,14 @@ The `cache_retention` parameter controls the caching strategy[^anthropic-cache-p
 | `"long"`  | 1 hour | 2.0×       | 0.1×      | Better for long-running tasks. |
 | `"none"`  | —      | —          | —         | Disable caching entirely.      |
 
-When caching is active, usage notifications show a `Cache:` line with read and write token counts. Costs are adjusted accordingly — cache reads are 90% cheaper than regular input tokens.
+When caching is active, usage notifications show a `Cache:` line with read and write token counts. Costs are adjusted accordingly – cache reads are 90% cheaper than regular input tokens.
 
 > [!NOTE]
-> Anthropic requires a **minimum number of tokens** in the cached prefix before caching activates[^anthropic-cache-limits]. The thresholds vary by model: **4096 tokens** for Opus 4.6, Opus 4.5, and Haiku 4.5; **1024 tokens** for Sonnet 4.5, Opus 4.1, Opus 4, and Sonnet 4. If your conversation is below this threshold, the API returns zero cache tokens and charges the standard input rate. This is expected — caching benefits grow with longer conversations and system prompts.
+> Anthropic requires a **minimum number of tokens** in the cached prefix before caching activates[^anthropic-cache-limits]. The thresholds vary by model: **4096 tokens** for Opus 4.6, Opus 4.5, and Haiku 4.5; **1024 tokens** for Sonnet 4.5, Opus 4.1, Opus 4, and Sonnet 4. If your conversation is below this threshold, the API returns zero cache tokens and charges the standard input rate. This is expected – caching benefits grow with longer conversations and system prompts.
 
 ### Prompt caching (OpenAI)
 
-OpenAI applies prompt caching automatically to all Chat Completions API requests[^openai-cache]. No configuration or request-side changes are needed — the API detects reusable prompt prefixes and serves them from cache transparently. When a cache hit occurs, the usage notification shows a `Cache:` line with the number of read tokens. Costs are adjusted to reflect the 50% discount on cached input[^openai-cache-pricing].
+OpenAI applies prompt caching automatically to all Chat Completions API requests[^openai-cache]. No configuration or request-side changes are needed – the API detects reusable prompt prefixes and serves them from cache transparently. When a cache hit occurs, the usage notification shows a `Cache:` line with the number of read tokens. Costs are adjusted to reflect the 50% discount on cached input[^openai-cache-pricing].
 
 | Metric      | Value        | Description                                                        |
 | ----------- | ------------ | ------------------------------------------------------------------ |
@@ -312,11 +312,11 @@ OpenAI applies prompt caching automatically to all Chat Completions API requests
 > - **Prefix must be byte-identical** between requests. Any change to tools, system prompt, or earlier messages invalidates the cache from that point forward.
 > - **Cache propagation takes time.** The first request populates the cache; subsequent requests can hit it. Sending requests in rapid succession (within a few seconds) may miss the cache because the entry hasn't propagated yet. Wait at least 5–10 seconds between requests for the best chance of a hit.
 > - **128-token granularity.** Only the first 1,024 tokens plus whole 128-token increments are cacheable. Tokens beyond the last 128-token boundary are always processed fresh.
-> - **No user control.** Unlike Anthropic, there is no `cache_retention` parameter or opt-out — caching is entirely managed by OpenAI's infrastructure. You cannot force a cache hit or extend the TTL.
+> - **No user control.** Unlike Anthropic, there is no `cache_retention` parameter or opt-out – caching is entirely managed by OpenAI's infrastructure. You cannot force a cache hit or extend the TTL.
 
 ### Prompt caching (Vertex AI)
 
-Gemini 2.5+ models support implicit context caching[^vertex-cache]. When consecutive requests share a common input prefix, the Vertex AI serving infrastructure automatically caches and reuses it — no configuration or request changes are needed. When a cache hit occurs, the usage notification shows a `Cache:` line with the number of read tokens. Costs are adjusted to reflect the 90% discount on cached input[^vertex-cache-pricing].
+Gemini 2.5+ models support implicit context caching[^vertex-cache]. When consecutive requests share a common input prefix, the Vertex AI serving infrastructure automatically caches and reuses it – no configuration or request changes are needed. When a cache hit occurs, the usage notification shows a `Cache:` line with the number of read tokens. Costs are adjusted to reflect the 90% discount on cached input[^vertex-cache-pricing].
 
 | Metric      | Value         | Description                                            |
 | ----------- | ------------- | ------------------------------------------------------ |
@@ -325,13 +325,13 @@ Gemini 2.5+ models support implicit context caching[^vertex-cache]. When consecu
 | Min. tokens | 1,024 / 2,048 | 1,024 for Flash models, 2,048 for Pro models.          |
 
 > [!IMPORTANT]
-> Vertex AI implicit caching is **automatic and best-effort** — cache hits are not guaranteed. Key conditions:
+> Vertex AI implicit caching is **automatic and best-effort** – cache hits are not guaranteed. Key conditions:
 >
 > - **Minimum token thresholds** vary by model: **1,024 tokens** for Flash, **2,048 tokens** for Pro[^vertex-cache]. Shorter prompts are never cached.
 > - **Prefix must be identical** between requests. Changing tools, system instructions, or earlier conversation turns invalidates the cache from that point forward.
 > - **Only Gemini 2.5+ models** support implicit caching. Older Gemini models (2.0, 1.5) do not report cached tokens.
 > - **Cache propagation takes time.** Like OpenAI, the first request populates the cache and immediate follow-up requests may not see a hit. Allow a few seconds between requests.
-> - **No user control.** There is no TTL parameter or opt-out — caching is managed entirely by Google's infrastructure.
+> - **No user control.** There is no TTL parameter or opt-out – caching is managed entirely by Google's infrastructure.
 >
 > Google also offers an **explicit Context Caching API**[^vertex-cache-explicit] that creates named cache resources with configurable TTLs via a separate endpoint. Explicit caching requires a different workflow (create cache, then reference it) and is not yet supported by Flemma.
 
@@ -433,7 +433,7 @@ tools.register({
 
 ### Async tool definitions
 
-Tool definitions that need to call external processes or remote APIs can resolve asynchronously. Flemma gates API requests on all sources being ready — if you send while definitions are still loading, the buffer shows "Waiting for tool definitions to load…" and auto-sends once everything resolves.
+Tool definitions that need to call external processes or remote APIs can resolve asynchronously. Flemma gates API requests on all sources being ready – if you send while definitions are still loading, the buffer shows "Waiting for tool definitions to load…" and auto-sends once everything resolves.
 
 **Function form** – pass a resolve function directly:
 
@@ -487,8 +487,8 @@ Key details:
 
 - **`register(name, def)`** can be called multiple times within a single source to register several tools.
 - **`done(err?)`** must be called exactly once. Pass an error string to signal failure (the source completes but a warning is shown). Double-calling `done()` is safe (idempotent).
-- **Timeout** — if `done()` is never called, the source times out after `tools.default_timeout` seconds (default 30). This prevents a broken source from blocking requests forever.
-- **Error handling** — if the resolve function throws, `done(err)` is called automatically.
+- **Timeout** – if `done()` is never called, the source times out after `tools.default_timeout` seconds (default 30). This prevents a broken source from blocking requests forever.
+- **Error handling** – if the resolve function throws, `done(err)` is called automatically.
 
 ### Tool configuration
 
@@ -536,7 +536,7 @@ flemma.opt.tools:append({"read", "write"})
 ```
 ````
 
-Each evaluation starts from defaults (all enabled tools). Changes only affect the current buffer's request — other buffers and future evaluations are unaffected.
+Each evaluation starts from defaults (all enabled tools). Changes only affect the current buffer's request – other buffers and future evaluations are unaffected.
 
 Tools registered with `enabled = false` (such as `calculator_async` used by Flemma devs for debugging tool calls) are excluded from the defaults but can be explicitly added via `:append()` or direct assignment.
 
@@ -563,7 +563,7 @@ flemma.opt.anthropic = { cache_retention = "long", thinking_budget = 10000 }
 ```
 ````
 
-Provider parameter overrides follow the same per-buffer isolation as tool selection — each buffer starts from the global defaults.
+Provider parameter overrides follow the same per-buffer isolation as tool selection – each buffer starts from the global defaults.
 
 ---
 
@@ -1008,6 +1008,69 @@ nvim --cmd "set runtimepath+=`pwd`" \
 
 > [!NOTE]
 > **Almost every line of code** in Flemma has been authored through AI pair-programming tools (Aider, Amp, Claude Code, and Codex). Traditional contributions are welcome – just keep changes focused, documented, and tested.
+
+---
+
+## Session API
+
+Flemma tracks token usage and costs for every API request in a global session object. The session lives in memory for the lifetime of the Neovim instance and is accessible through the `flemma.session` module.
+
+### Reading the current session
+
+```lua
+local session = require("flemma.session").get()
+
+-- Aggregate stats
+print("Requests:", session:get_request_count())
+print("Total cost: $" .. string.format("%.2f", session:get_total_cost()))
+
+-- Iterate individual requests
+for _, request in ipairs(session.requests) do
+  print(string.format(
+    "%s/%s  in=%d out=%d  $%.4f  %s",
+    request.provider,
+    request.model,
+    request.input_tokens,
+    request:get_total_output_tokens(),
+    request:get_total_cost(),
+    request.filepath or "(unnamed)"
+  ))
+end
+```
+
+Each request stores raw data – tokens, per-million prices, cache multipliers, and timestamps – so costs are always derived from the underlying components. Available fields on a request:
+
+| Field                                                    | Description                                                                             |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `provider`, `model`                                      | Provider and model that handled the request                                             |
+| `input_tokens`, `output_tokens`, `thoughts_tokens`       | Raw token counts                                                                        |
+| `input_price`, `output_price`                            | USD per million tokens (snapshot at request time)                                       |
+| `cache_read_input_tokens`, `cache_creation_input_tokens` | Cache token counts                                                                      |
+| `cache_read_multiplier`, `cache_write_multiplier`        | Cache cost multipliers (nil when not applicable)                                        |
+| `output_has_thoughts`                                    | Whether `output_tokens` already includes thinking tokens                                |
+| `started_at`, `completed_at`                             | Timestamps as seconds since epoch with microsecond precision (e.g. `1700000042.123456`) |
+| `filepath`, `bufnr`                                      | Source buffer identifier                                                                |
+
+Methods: `get_input_cost()`, `get_output_cost()`, `get_total_cost()`, `get_total_output_tokens()`.
+
+### Saving and restoring a session
+
+`Session:load()` accepts a list of option tables in the same format as `add_request()` and replaces the current session contents. Combined with reading `session.requests`, this enables crude persistence:
+
+```lua
+-- Save to a JSON file
+local session = require("flemma.session").get()
+local json = vim.fn.json_encode(session.requests)
+vim.fn.writefile({ json }, vim.fn.stdpath("data") .. "/flemma_session.json")
+
+-- Restore from a saved file
+local path = vim.fn.stdpath("data") .. "/flemma_session.json"
+local lines = vim.fn.readfile(path)
+if #lines > 0 then
+  local saved = vim.fn.json_decode(table.concat(lines, "\n"))
+  require("flemma.session").get():load(saved)
+end
+```
 
 ---
 

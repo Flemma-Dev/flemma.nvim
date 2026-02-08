@@ -1,157 +1,74 @@
 --- Usage and pricing functionality for Flemma plugin
---- Centralizes cost calculation and notification display
+--- Centralizes notification display for request and session costs
 
 ---@class flemma.Usage
----@field models table<string, flemma.models.Pricing>
 local M = {}
 
--- Load models from centralized models.lua
-local models_data = require("flemma.models")
-
----Get all models with pricing (extract from data-only models.lua)
----@return table<string, flemma.models.Pricing>
-local function get_all_models_with_pricing()
-  local all_models = {}
-
-  for _, provider in pairs(models_data.providers) do
-    for model_name, model in pairs(provider.models) do
-      if model.pricing then
-        all_models[model_name] = model.pricing
-      end
-    end
-  end
-
-  return all_models
-end
-
--- Pricing information for models (USD per million tokens) - cached for performance
-M.models = get_all_models_with_pricing()
-
----Find the closest matching model name
----@param model_name string
----@return string|nil
-local function find_matching_model(model_name)
-  -- Try exact match first
-  if M.models[model_name] then
-    return model_name
-  end
-
-  -- Split the model name by both - and . delimiters
-  local parts = {}
-  for part in model_name:gmatch("[^-%.]+") do
-    table.insert(parts, part)
-  end
-
-  -- Try progressively shorter combinations from the start
-  local current = parts[1] -- Start with the first part (provider name)
-  for i = 2, #parts do
-    current = current .. "-" .. parts[i]
-    if M.models[current] then
-      return current
-    end
-  end
-
-  return nil
-end
-
----Calculate cost for tokens
----@param model string
----@param input_tokens number
----@param output_tokens number
----@return { input: number, output: number, total: number }|nil
-function M.calculate_cost(model, input_tokens, output_tokens)
-  local matching_model = find_matching_model(model)
-  if not matching_model then
-    return nil
-  end
-
-  local pricing = M.models[matching_model]
-
-  -- Calculate costs (per million tokens)
-  local input_cost = (input_tokens / 1000000) * pricing.input
-  local output_cost = (output_tokens / 1000000) * pricing.output
-
-  -- Round to 2 decimal places
-  return {
-    input = math.ceil(input_cost * 100) / 100,
-    output = math.ceil(output_cost * 100) / 100,
-    total = math.ceil((input_cost + output_cost) * 100) / 100,
-  }
-end
-
 ---Format usage information for notification display
----@param current? flemma.state.InflightUsage In-flight usage data
+---@param request? flemma.session.Request Most recent completed request
 ---@param session? flemma.session.Session Session instance
 ---@return string
-function M.format_notification(current, session)
+function M.format_notification(request, session)
   local state = require("flemma.state")
   local usage_lines = {}
 
   -- Request usage (most recent request)
-  if
-    current
-    and (
-      current.input_tokens > 0
-      or current.output_tokens > 0
-      or (current.thoughts_tokens and current.thoughts_tokens > 0)
-    )
-  then
+  if request then
+    local total_output_tokens = request:get_total_output_tokens()
+
     local config = state.get_config()
+    local pricing_enabled = config.pricing.enabled
 
-    -- Get the flag from inflight_usage (set by the provider in core.lua)
-    -- This tells us whether thoughts_tokens is already included in output_tokens
-    local output_has_thoughts = current.output_has_thoughts or false
-
-    -- Calculate total output tokens for cost/display
-    local total_output_tokens
-    if output_has_thoughts then
-      -- Provider reports thoughts are already counted in output_tokens (e.g., OpenAI, Anthropic)
-      total_output_tokens = current.output_tokens or 0
-    else
-      -- Provider reports thoughts are separate from output tokens (e.g., Vertex)
-      total_output_tokens = (current.output_tokens or 0) + (current.thoughts_tokens or 0)
-    end
-
-    local current_cost = config.pricing.enabled
-      and M.calculate_cost(config.model, current.input_tokens, total_output_tokens)
     table.insert(usage_lines, "Request:")
-    -- Add model and provider information
-    table.insert(usage_lines, string.format("  Model:  `%s` (%s)", config.model, config.provider))
-    if current_cost then
+    -- Use model and provider from the request's own snapshot
+    table.insert(usage_lines, string.format("  Model:  `%s` (%s)", request.model, request.provider))
+
+    if pricing_enabled then
       table.insert(
         usage_lines,
-        string.format("  Input:  %d tokens / $%.2f", current.input_tokens or 0, current_cost.input)
+        string.format("  Input:  %d tokens / $%.2f", request.input_tokens, request:get_input_cost())
       )
       -- Show cache line when tokens > 0
-      local cache_read = current.cache_read_input_tokens or 0
-      local cache_write = current.cache_creation_input_tokens or 0
-      if cache_read > 0 or cache_write > 0 then
-        table.insert(usage_lines, string.format("  Cache:  %d read + %d write", cache_read, cache_write))
+      if request.cache_read_input_tokens > 0 or request.cache_creation_input_tokens > 0 then
+        table.insert(
+          usage_lines,
+          string.format(
+            "  Cache:  %d read + %d write",
+            request.cache_read_input_tokens,
+            request.cache_creation_input_tokens
+          )
+        )
       end
       local output_display_string
-      if current.thoughts_tokens and current.thoughts_tokens > 0 then
+      if request.thoughts_tokens > 0 then
         output_display_string = string.format(
           " Output:  %d tokens (⊂ %d thoughts) / $%.2f",
           total_output_tokens,
-          current.thoughts_tokens,
-          current_cost.output
+          request.thoughts_tokens,
+          request:get_output_cost()
         )
       else
-        output_display_string = string.format(" Output:  %d tokens / $%.2f", total_output_tokens, current_cost.output)
+        output_display_string =
+          string.format(" Output:  %d tokens / $%.2f", total_output_tokens, request:get_output_cost())
       end
       table.insert(usage_lines, output_display_string)
-      table.insert(usage_lines, string.format("  Total:  $%.2f", current_cost.total))
+      table.insert(usage_lines, string.format("  Total:  $%.2f", request:get_total_cost()))
     else
-      table.insert(usage_lines, string.format("  Input:  %d tokens", current.input_tokens or 0))
-      local cache_read = current.cache_read_input_tokens or 0
-      local cache_write = current.cache_creation_input_tokens or 0
-      if cache_read > 0 or cache_write > 0 then
-        table.insert(usage_lines, string.format("  Cache:  %d read + %d write", cache_read, cache_write))
+      table.insert(usage_lines, string.format("  Input:  %d tokens", request.input_tokens))
+      if request.cache_read_input_tokens > 0 or request.cache_creation_input_tokens > 0 then
+        table.insert(
+          usage_lines,
+          string.format(
+            "  Cache:  %d read + %d write",
+            request.cache_read_input_tokens,
+            request.cache_creation_input_tokens
+          )
+        )
       end
       local output_display_string
-      if current.thoughts_tokens and current.thoughts_tokens > 0 then
+      if request.thoughts_tokens > 0 then
         output_display_string =
-          string.format(" Output:  %d tokens (⊂ %d thoughts)", total_output_tokens, current.thoughts_tokens)
+          string.format(" Output:  %d tokens (⊂ %d thoughts)", total_output_tokens, request.thoughts_tokens)
       else
         output_display_string = string.format(" Output:  %d tokens", total_output_tokens)
       end

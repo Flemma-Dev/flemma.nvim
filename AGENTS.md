@@ -65,6 +65,8 @@ When you resolve a non-obvious issue — something that required real investigat
 
 - **Don't abbreviate variable names.** Use full, descriptive names (`definition` not `def_entry`, `provider_name` not `prov_name`). The codebase consistently spells things out; cryptic abbreviations stand out and hurt readability.
 
+- **Don't add convenience wrappers to `init.lua`.** Public API functions belong in the module that owns the domain (`flemma.session` for session access, `flemma.provider.registry` for provider lookup, etc.). Users can require the specific module directly — `require("flemma.session").get()`. Dumping accessors into `init.lua` just to shorten the require path pollutes the top-level namespace and obscures where logic actually lives.
+
 ## Session Closure Checklist
 
 - Finish with `make test` (no redirection) and record that it exited with status 0.

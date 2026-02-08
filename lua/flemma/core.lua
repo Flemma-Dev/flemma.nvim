@@ -441,6 +441,9 @@ function M.send_to_provider(opts)
     cache_creation_input_tokens = 0,
   }
 
+  -- Capture request start time for duration tracking (before callbacks so closures can see it)
+  local request_started_at = require("flemma.session").now()
+
   -- Set up callbacks for the provider
   local callbacks = {
     on_error = function(msg)
@@ -498,11 +501,13 @@ function M.send_to_provider(opts)
         end
 
         -- Add request to session with pricing snapshot
-        local pricing_info = usage.models[config.model]
+        local models_data = require("flemma.models")
+        local provider_data = models_data.providers[config.provider]
+        local model_info = provider_data and provider_data.models[config.model]
+        local pricing_info = model_info and model_info.pricing
+
         if pricing_info then
           -- Look up cache multipliers from provider model data
-          local models_data = require("flemma.models")
-          local provider_data = models_data.providers[config.provider]
           local cache_retention = current_provider.parameters.cache_retention
           local cache_write_multiplier
           local cache_read_multiplier
@@ -515,11 +520,11 @@ function M.send_to_provider(opts)
             cache_write_multiplier = provider_data.cache_write_multipliers[cache_retention]
           end
           if provider_data and provider_data.cache_read_multiplier then
-            -- Read multiplier applies regardless of write multipliers (e.g., OpenAI has automatic caching)
             cache_read_multiplier = provider_data.cache_read_multiplier
           end
 
-          state.get_session():add_request({
+          local session = state.get_session()
+          session:add_request({
             provider = config.provider,
             model = config.model,
             input_tokens = input_tokens,
@@ -529,26 +534,29 @@ function M.send_to_provider(opts)
             output_price = pricing_info.output,
             filepath = filepath,
             bufnr = filepath and nil or bufnr, -- Only store bufnr for unnamed buffers
-            -- Get flag from provider (set in inflight_usage, available via closure)
+            started_at = request_started_at,
+            completed_at = require("flemma.session").now(),
             output_has_thoughts = current_provider.output_has_thoughts,
             cache_read_input_tokens = buffer_state.inflight_usage.cache_read_input_tokens,
             cache_creation_input_tokens = buffer_state.inflight_usage.cache_creation_input_tokens,
             cache_write_multiplier = cache_write_multiplier,
             cache_read_multiplier = cache_read_multiplier,
           })
+
+          -- Use the just-created Request for the notification
+          local latest_request = session:get_latest_request()
+          local usage_str = usage.format_notification(latest_request, session)
+          if usage_str ~= "" then
+            local notify_opts = vim.tbl_deep_extend("force", config.notify, {
+              title = "Usage",
+            })
+            require("flemma.notify").show(usage_str, notify_opts, bufnr)
+          end
         end
 
         -- Auto-write when response is complete
         auto_write_buffer(bufnr)
 
-        -- Format and display usage information using our custom notification
-        local usage_str = usage.format_notification(buffer_state.inflight_usage, state.get_session())
-        if usage_str ~= "" then
-          local notify_opts = vim.tbl_deep_extend("force", state.get_config().notify, {
-            title = "Usage",
-          })
-          require("flemma.notify").show(usage_str, notify_opts, bufnr)
-        end
         -- Reset in-flight usage for next request
         -- Note: output_has_thoughts will be set again when the next request starts
         buffer_state.inflight_usage = {
