@@ -590,6 +590,12 @@ describe("flemma.session", function()
     it("should survive a JSON round-trip without losing data", function()
       local session = session_module.Session.new()
 
+      -- Use microsecond-precision floats to verify they survive JSON encoding
+      local started_1 = 1700000000.123456
+      local completed_1 = 1700000042.654321
+      local started_2 = 1700000100.111222
+      local completed_2 = 1700000110.999888
+
       -- Add a request with every field populated (no nils)
       session:add_request({
         provider = "anthropic",
@@ -600,8 +606,8 @@ describe("flemma.session", function()
         input_price = 3.00,
         output_price = 15.00,
         filepath = "/home/user/project/chat.chat",
-        started_at = 1700000000,
-        completed_at = 1700000042,
+        started_at = started_1,
+        completed_at = completed_1,
         output_has_thoughts = false,
         cache_read_input_tokens = 5000,
         cache_creation_input_tokens = 2000,
@@ -619,8 +625,8 @@ describe("flemma.session", function()
         input_price = 15.00,
         output_price = 60.00,
         output_has_thoughts = true,
-        started_at = 1700000100,
-        completed_at = 1700000110,
+        started_at = started_2,
+        completed_at = completed_2,
       })
 
       -- Snapshot costs before round-trip
@@ -628,9 +634,9 @@ describe("flemma.session", function()
       local input_cost_before = session:get_total_input_cost()
       local output_cost_before = session:get_total_output_cost()
 
-      -- JSON round-trip (exactly what README suggests)
-      local json = vim.fn.json_encode(session.requests)
-      local decoded = vim.fn.json_decode(json)
+      -- JSON round-trip using vim.json (lua-cjson, preserves full precision)
+      local json = vim.json.encode(session.requests)
+      local decoded = vim.json.decode(json)
       session:load(decoded)
 
       -- Same number of requests
@@ -646,8 +652,8 @@ describe("flemma.session", function()
       assert.are.equal(3.00, first.input_price)
       assert.are.equal(15.00, first.output_price)
       assert.are.equal("/home/user/project/chat.chat", first.filepath)
-      assert.are.equal(1700000000, first.started_at)
-      assert.are.equal(1700000042, first.completed_at)
+      assert.are.equal(started_1, first.started_at)
+      assert.are.equal(completed_1, first.completed_at)
       assert.are.equal(false, first.output_has_thoughts)
       assert.are.equal(5000, first.cache_read_input_tokens)
       assert.are.equal(2000, first.cache_creation_input_tokens)
