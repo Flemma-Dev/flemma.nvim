@@ -11,18 +11,30 @@ local M = {}
 local models_data = require("flemma.models")
 
 --------------------------------------------------------------------------------
--- Provider registry (from providers.lua)
+-- Provider registry
 --------------------------------------------------------------------------------
 
 ---@class flemma.provider.Capabilities
 ---@field supports_reasoning boolean
 ---@field supports_thinking_budget boolean
 ---@field outputs_thinking boolean
+---@field min_thinking_budget? integer Minimum thinking budget value for this provider
 
 ---@class flemma.provider.ProviderEntry
 ---@field module string
 ---@field capabilities flemma.provider.Capabilities
 ---@field display_name string
+---@field default_parameters? table<string, any>
+
+---@class flemma.provider.RegistrationEntry
+---@field module string Lua module path
+---@field capabilities flemma.provider.Capabilities
+---@field display_name string
+---@field default_parameters? table<string, any> Provider-specific param defaults
+---@field default_model? string Default model name
+---@field models? table<string, flemma.models.ModelInfo> Model definitions with pricing
+---@field cache_read_multiplier? number
+---@field cache_write_multipliers? table<string, number>
 
 ---@type table<string, boolean>
 local deprecated_warning_shown = {}
@@ -33,7 +45,10 @@ local provider_aliases = {
 }
 
 ---@type table<string, flemma.provider.ProviderEntry>
-local providers = {
+local providers = {}
+
+-- Built-in provider definitions
+local builtin_providers = {
   openai = {
     module = "flemma.provider.providers.openai",
     capabilities = {
@@ -49,8 +64,14 @@ local providers = {
       supports_reasoning = false,
       supports_thinking_budget = true,
       outputs_thinking = true,
+      min_thinking_budget = 1,
     },
     display_name = "Vertex AI",
+    default_parameters = {
+      project_id = nil,
+      location = "global",
+      thinking_budget = nil,
+    },
   },
   anthropic = {
     module = "flemma.provider.providers.anthropic",
@@ -58,10 +79,100 @@ local providers = {
       supports_reasoning = false,
       supports_thinking_budget = true,
       outputs_thinking = true,
+      min_thinking_budget = 1024,
     },
     display_name = "Anthropic",
+    default_parameters = {
+      thinking_budget = nil,
+      cache_retention = "short",
+    },
   },
 }
+
+--------------------------------------------------------------------------------
+-- Model helpers (must be defined before register())
+--------------------------------------------------------------------------------
+
+---@param provider_name string
+---@return string[]
+local function get_provider_models(provider_name)
+  local provider = models_data.providers[provider_name]
+  if not provider then
+    return {}
+  end
+
+  local models = {}
+  for model_name, _ in pairs(provider.models) do
+    table.insert(models, model_name)
+  end
+
+  return models
+end
+
+--------------------------------------------------------------------------------
+-- Setup and registration
+--------------------------------------------------------------------------------
+
+---Register a provider
+---@param name string Provider identifier (e.g., "ollama")
+---@param entry flemma.provider.RegistrationEntry
+function M.register(name, entry)
+  providers[name] = {
+    module = entry.module,
+    capabilities = entry.capabilities,
+    display_name = entry.display_name,
+    default_parameters = entry.default_parameters,
+  }
+
+  -- If models or default_model provided, update models_data
+  if entry.default_model or entry.models then
+    if not models_data.providers[name] then
+      models_data.providers[name] = {
+        default = entry.default_model or "",
+        models = entry.models or {},
+      }
+    else
+      if entry.default_model then
+        models_data.providers[name].default = entry.default_model
+      end
+      if entry.models then
+        for model_name, model_info in pairs(entry.models) do
+          models_data.providers[name].models[model_name] = model_info
+        end
+      end
+    end
+    if entry.cache_read_multiplier then
+      models_data.providers[name].cache_read_multiplier = entry.cache_read_multiplier
+    end
+    if entry.cache_write_multipliers then
+      models_data.providers[name].cache_write_multipliers = entry.cache_write_multipliers
+    end
+  end
+
+  -- Refresh defaults and models for this provider
+  M.defaults[name] = models_data.providers[name] and models_data.providers[name].default or nil
+  M.models[name] = get_provider_models(name)
+end
+
+---Initialize built-in providers (called during setup)
+function M.setup()
+  for name, entry in pairs(builtin_providers) do
+    if not providers[name] then
+      M.register(name, entry)
+    end
+  end
+end
+
+---Clear all registered providers (for test isolation)
+function M.clear()
+  providers = {}
+  M.defaults = {}
+  M.models = {}
+end
+
+--------------------------------------------------------------------------------
+-- Provider queries
+--------------------------------------------------------------------------------
 
 ---Resolve a provider name, handling deprecated aliases
 ---Shows a deprecation warning once per session for deprecated names
@@ -133,41 +244,28 @@ function M.get_display_name(provider_name)
   return provider and provider.display_name or nil
 end
 
---------------------------------------------------------------------------------
--- Model configuration (from config.lua)
---------------------------------------------------------------------------------
-
----@param provider_name string
----@return string[]
-local function get_provider_models(provider_name)
-  local provider = models_data.providers[provider_name]
-  if not provider then
-    return {}
-  end
-
-  local models = {}
-  for model_name, _ in pairs(provider.models) do
-    table.insert(models, model_name)
-  end
-
-  return models
+---Get provider default parameters
+---@param provider_name string The provider identifier
+---@return table<string, any>|nil default_parameters Provider default parameters, or nil if not found
+function M.get_default_parameters(provider_name)
+  local resolved = M.resolve(provider_name)
+  local provider = providers[resolved]
+  return provider and provider.default_parameters or nil
 end
+
+--------------------------------------------------------------------------------
+-- Model configuration
+--------------------------------------------------------------------------------
 
 -- Legacy compatibility - expose defaults and models from models.lua
 M.defaults = {}
 M.models = {}
 
--- Populate defaults from models.lua
-for provider_name, provider_data in pairs(models_data.providers) do
-  M.defaults[provider_name] = provider_data.default
-  M.models[provider_name] = get_provider_models(provider_name)
-end
-
 ---@param provider_name string
----@return string
+---@return string|nil
 function M.get_model(provider_name)
   local provider = models_data.providers[provider_name]
-  return provider and provider.default or models_data.providers.anthropic.default
+  return provider and provider.default or nil
 end
 
 ---@param model_name string|nil
@@ -179,10 +277,11 @@ function M.is_provider_model(model_name, provider_name)
     return false
   end
 
-  -- Check if the provider exists
+  -- Check if the provider exists in models_data
   local provider = models_data.providers[provider_name]
-  if not provider then
-    return false
+  if not provider or not provider.models or vim.tbl_isempty(provider.models) then
+    -- Custom provider with no model list: accept any model string
+    return providers[provider_name] ~= nil
   end
 
   -- Check if the model_name exists in the models for that provider
@@ -191,7 +290,7 @@ end
 
 ---@param model_name string|nil
 ---@param provider_name string
----@return string
+---@return string|nil
 function M.get_appropriate_model(model_name, provider_name)
   -- If the model is appropriate for the provider, use it
   if M.is_provider_model(model_name, provider_name) then

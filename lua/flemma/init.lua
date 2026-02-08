@@ -53,6 +53,9 @@ M.setup = function(user_opts)
 
   log.info("setup(): Flemma starting...")
 
+  -- Initialize provider registry with built-in providers
+  require("flemma.provider.registry").setup()
+
   -- Initialize provider based on the merged config
   local current_config = state.get_config()
   core.initialize_provider(current_config.provider, current_config.model, current_config.parameters)

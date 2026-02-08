@@ -101,6 +101,10 @@ end
 --------------------------------------------------------------------------------
 
 ---Merges parameters for a provider, handling general and provider-specific parameters
+---Priority (lowest to highest):
+---  1. Registered default_parameters from provider registry
+---  2. General params from base_params (max_tokens, temperature, etc.)
+---  3. Provider-specific overrides from base_params[provider_name] or explicit overrides
 ---@param base_params table<string, any>
 ---@param provider_name string
 ---@param provider_overrides? table<string, any>
@@ -110,7 +114,15 @@ function M.merge_parameters(base_params, provider_name, provider_overrides)
   base_params = base_params or {}
   provider_overrides = provider_overrides or base_params[provider_name] or {}
 
-  -- 1. Copy all non-provider-specific keys from the base parameters
+  -- 1. Start with registered default parameters (lowest priority)
+  local registered_defaults = registry.get_default_parameters(provider_name)
+  if registered_defaults then
+    for k, v in pairs(registered_defaults) do
+      merged_params[k] = v
+    end
+  end
+
+  -- 2. Copy all non-provider-specific keys from the base parameters
   for k, v in pairs(base_params) do
     -- Only copy if it's not a provider-specific table or if it's a general parameter
     if type(v) ~= "table" or is_general_parameter(k) then
@@ -118,7 +130,7 @@ function M.merge_parameters(base_params, provider_name, provider_overrides)
     end
   end
 
-  -- 2. Merge the provider-specific overrides, potentially overwriting general keys
+  -- 3. Merge the provider-specific overrides, potentially overwriting general keys
   for k, v in pairs(provider_overrides) do
     merged_params[k] = v
   end

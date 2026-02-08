@@ -68,11 +68,9 @@ local function get_current_thinking_budget()
       return nil
     end
 
-    -- Provider-specific minimum budget requirements
-    local provider_name = current_config.provider
-    if provider_name == "anthropic" and budget >= 1024 then
-      return budget
-    elseif provider_name == "vertex" and budget >= 1 then
+    -- Capability-based minimum budget check
+    local caps = capabilities
+    if caps.min_thinking_budget and budget >= caps.min_thinking_budget then
       return budget
     end
   end
