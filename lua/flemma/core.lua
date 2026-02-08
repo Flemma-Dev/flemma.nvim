@@ -503,10 +503,10 @@ function M.send_to_provider(opts)
           -- Look up cache multipliers from provider model data
           local models_data = require("flemma.models")
           local provider_data = models_data.providers[config.provider]
-          local cache_retention = current_provider.parameters.cache_retention or "short"
+          local cache_retention = current_provider.parameters.cache_retention
           local cache_write_multiplier
           local cache_read_multiplier
-          if provider_data and provider_data.cache_write_multipliers and cache_retention ~= "none" then
+          if provider_data and provider_data.cache_write_multipliers and cache_retention and cache_retention ~= "none" then
             cache_write_multiplier = provider_data.cache_write_multipliers[cache_retention]
           end
           if provider_data and provider_data.cache_read_multiplier then

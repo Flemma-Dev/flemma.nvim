@@ -1,5 +1,77 @@
 --- Base provider for Flemma
 --- Defines the interface that all providers must implement
+
+--[[
+Provider Contract
+=================
+
+This module is the authoritative reference for implementing custom providers.
+Every provider must inherit from `base` and satisfy the contract below.
+
+Required class-level fields
+---------------------------
+- `output_has_thoughts` (boolean) — whether `output_tokens` already includes
+  thinking tokens for cost calculation.  Default `false` (thinking is reported
+  separately); set `true` if the provider bundles them together.
+- `endpoint` (string) — base API URL.
+- `api_version` (string|nil) — optional API version identifier.
+
+Required method overrides
+-------------------------
+- `new(opts)` — constructor; must call `base.new(opts)` and set provider-
+  specific fields.
+- `get_api_key(self, opts)` — authentication; call `base.get_api_key()` with
+  the appropriate env/keyring opts table.
+- `get_endpoint(self)` — return the API URL (default returns `self.endpoint`).
+- `get_request_headers(self)` — return a string array of HTTP headers.
+- `build_request(self, prompt, context)` — convert a canonical `Prompt` into
+  the provider's API request format.
+- `process_response_line(self, line, callbacks)` — parse one SSE line and call
+  the appropriate callbacks.
+- `reset(self)` — call `base.reset(self)` plus any provider-specific state
+  initialization.
+
+Optional method overrides
+-------------------------
+- `validate_parameters(model_name, parameters)` — parameter validation
+  (warnings, not failures).
+- `finalize_response(self, exit_code, callbacks)` — post-request cleanup.
+- `extract_json_response_error(self, data)` — custom error extraction from
+  JSON responses.
+- `try_import_from_buffer(self, lines)` — import conversations from external
+  formats.
+
+Callbacks contract (`callbacks` table passed to `process_response_line`)
+------------------------------------------------------------------------
+- `on_content(text)` — streamed text content.
+- `on_thinking(text)` — streamed thinking/reasoning content (optional).
+- `on_usage(usage_data)` — token usage; `usage_data.type` is one of:
+  `"input"`, `"output"`, `"thoughts"`, `"cache_read"`, `"cache_creation"`.
+- `on_error(message)` — API error string.
+- `on_response_complete()` — signals end of response content.
+
+Capabilities contract (registered via `registry.register`)
+----------------------------------------------------------
+- `supports_reasoning` — provider accepts a reasoning effort level.
+- `supports_thinking_budget` — provider accepts a token budget for thinking.
+- `outputs_thinking` — provider streams thinking content into the buffer.
+- `min_thinking_budget` — minimum valid thinking budget value (omit if N/A).
+
+Missing boolean capabilities default to `false` at registration time.
+
+Helper methods available to providers (call via `self:method()`)
+----------------------------------------------------------------
+- `_parse_sse_line(line, opts)` — parse SSE `data:`/`event:` lines.
+- `_signal_content(self, text, callbacks)` — emit content and mark response
+  successful.
+- `_handle_non_sse_line(self, line, callbacks)` — buffer non-SSE lines and try
+  JSON error parsing.
+- `_has_content(self)` / `_content_ends_with_newline(self)` — query accumulated
+  content.
+- `normalize_tool_id(id)` — convert URN-style Flemma tool IDs to
+  `[a-zA-Z0-9_-]+` format.
+]]
+
 local log = require("flemma.logging")
 
 ---@class flemma.provider.UsageData

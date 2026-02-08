@@ -117,9 +117,15 @@ end
 ---@param name string Provider identifier (e.g., "ollama")
 ---@param entry flemma.provider.RegistrationEntry
 function M.register(name, entry)
+  local capabilities = vim.tbl_extend("keep", entry.capabilities or {}, {
+    supports_reasoning = false,
+    supports_thinking_budget = false,
+    outputs_thinking = false,
+  })
+
   providers[name] = {
     module = entry.module,
-    capabilities = entry.capabilities,
+    capabilities = capabilities,
     display_name = entry.display_name,
     default_parameters = entry.default_parameters,
   }

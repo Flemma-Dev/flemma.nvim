@@ -44,28 +44,14 @@
 ---@field thinking_format string
 ---@field reasoning_format string
 
----@class flemma.config.VertexParams
----@field project_id? string
----@field location? string
----@field thinking_budget? integer
-
----@class flemma.config.OpenAIParams
----@field reasoning? string
-
----@class flemma.config.AnthropicParams
----@field thinking_budget? integer
----@field cache_retention? "none"|"short"|"long"
-
 ---@class flemma.config.Parameters
 ---@field max_tokens? integer
 ---@field temperature? number
 ---@field timeout? integer
 ---@field connect_timeout? integer
----@field vertex? flemma.config.VertexParams
----@field openai? flemma.config.OpenAIParams
----@field anthropic? flemma.config.AnthropicParams
 ---@field reasoning? string
 ---@field thinking_budget? number
+---@field [string] table<string, any>|nil Provider-specific parameter overrides
 
 ---@class flemma.config.BashToolConfig
 ---@field shell? string
@@ -203,18 +189,6 @@ return {
     temperature = 0.7, -- Default temperature for all providers
     timeout = 120, -- Default response timeout for cURL requests
     connect_timeout = 10, -- Default connection timeout for cURL requests
-    vertex = {
-      project_id = nil, -- Google Cloud project ID
-      location = "global", -- Google Cloud region
-      thinking_budget = nil, -- Optional. Budget for model thinking, in tokens. nil or 0 disables thinking. Values >= 1 enable thinking with the specified budget.
-    },
-    openai = {
-      reasoning = nil, -- Optional. "low", "medium", "high". Controls reasoning effort.
-    },
-    anthropic = {
-      thinking_budget = nil, -- Optional. Budget for model thinking, in tokens. nil or 0 disables thinking. Values >= 1024 enable thinking with the specified budget.
-      cache_retention = "short", -- Prompt caching: "none" (disabled), "short" (5-min TTL), "long" (1h TTL)
-    },
   },
   tools = {
     default_timeout = 30, -- Default timeout for async tools (seconds)
