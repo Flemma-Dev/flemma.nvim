@@ -729,10 +729,9 @@ function M.move_to_bottom(bufnr)
     local winid = vim.fn.bufwinid(bufnr)
     if winid ~= -1 then
       vim.fn.win_execute(winid, "normal! G")
-      return
     end
+    return
   end
-  -- Fallback to current window
   vim.cmd("normal! G")
 end
 
@@ -743,10 +742,9 @@ function M.center_cursor(bufnr)
     local winid = vim.fn.bufwinid(bufnr)
     if winid ~= -1 then
       vim.fn.win_execute(winid, "normal! zz")
-      return
     end
+    return
   end
-  -- Fallback to current window
   vim.cmd("normal! zz")
 end
 
@@ -759,10 +757,9 @@ function M.set_cursor(line, col, bufnr)
     local winid = vim.fn.bufwinid(bufnr)
     if winid ~= -1 then
       vim.api.nvim_win_set_cursor(winid, { line, col })
-      return
     end
+    return
   end
-  -- Fallback to current window
   vim.api.nvim_win_set_cursor(0, { line, col })
 end
 
