@@ -151,7 +151,7 @@ secret-tool store --label="Vertex AI Service Account" service vertex key api pro
    - Documented presets in the README.
    ```
 
-4. Press <kbd>Ctrl-]</kbd> (normal or insert mode) or run `:Flemma send`. Flemma freezes the buffer while the request is streaming and shows `@Assistant: Thinking...`.
+4. Press <kbd>Ctrl-]</kbd> (normal or insert mode) or run `:Flemma send`. Flemma freezes the buffer while the request is streaming and shows `@Assistant: Thinking...`. <kbd>Ctrl-]</kbd> is a hybrid key – if the model responded with tool calls, pressing it again executes them all, and once every tool has a result, the next press sends the conversation back to the provider.
 5. When the reply finishes, a floating notification lists token counts and cost for the request and the session.
 
 Cancel an in-flight response with <kbd>Ctrl-c</kbd> or `:Flemma cancel`.
@@ -214,7 +214,7 @@ Inside `.chat` buffers Flemma defines:
 
 - `]m` / `[m` – jump to the next/previous message header.
 - `im` / `am` (configurable) – select the inside or entire message as a text object. `am` selects linewise and includes thinking blocks and trailing blank lines, making `dam` delete entire conversation turns. `im` skips `<thinking>` sections so yanking `im` never includes reasoning traces.
-- Buffer-local mappings for send/cancel default to `<C-]>` and `<C-c>` in normal mode. Insert-mode `<C-]>` stops insert, sends, and re-enters insert when the response finishes.
+- Buffer-local mappings for send/cancel default to `<C-]>` and `<C-c>` in normal mode. `<C-]>` is a hybrid key: it executes all pending tool calls when any exist, otherwise sends the conversation. Insert-mode `<C-]>` behaves identically but re-enters insert when the operation finishes.
 
 Disable or remap these through the `keymaps` section (see [Configuration reference](#configuration-reference)).
 
@@ -356,7 +356,7 @@ Flemma includes a tool system that lets models request actions – run a calcula
    ```
    ````
 
-3. You can execute the tool by pressing <kbd>Alt-Enter</kbd> with the cursor on or near the tool use block. Flemma runs the tool, locks the buffer during execution, and injects a `**Tool Result:**` block:
+3. You can execute the tool by pressing <kbd>Alt-Enter</kbd> with the cursor on or near the tool use block. Flemma runs the tool, locks the buffer during execution, and injects a `**Tool Result:**` block. Alternatively, press <kbd>Ctrl-]</kbd> to execute all pending tool calls at once:
 
    ````markdown
    @You: **Tool Result:** `toolu_abc123`
@@ -366,7 +366,7 @@ Flemma includes a tool system that lets models request actions – run a calcula
    ```
    ````
 
-4. Send the buffer again to continue the conversation. The model sees the tool result and can respond accordingly.
+4. Send the buffer again (<kbd>Ctrl-]</kbd> or `:Flemma send`) to continue the conversation. The model sees the tool result and can respond accordingly.
 
 ### Built-in tools
 
@@ -380,7 +380,8 @@ Flemma includes a tool system that lets models request actions – run a calcula
 
 ### Tool execution
 
-- **<kbd>Alt-Enter</kbd>** – execute the tool at the cursor position (normal mode).
+- **<kbd>Ctrl-]</kbd>** – the single interaction key. When pending tool calls exist it executes them all; when every tool call has a result it sends the conversation to the provider.
+- **<kbd>Alt-Enter</kbd>** – execute the tool at the cursor position (normal mode). Useful when you want to run one specific tool call instead of all pending ones.
 - **Async tools** (like `bash`) show an animated spinner while running and can be cancelled.
 - **Buffer locking** – the buffer is made non-modifiable during tool execution to prevent race conditions.
 - **Output truncation** – large outputs (> 4000 lines or 8 MB) are automatically truncated with a summary. The full output is saved to a temporary file and the path is included in the truncated result.
@@ -388,7 +389,7 @@ Flemma includes a tool system that lets models request actions – run a calcula
 
 ### Parallel tool use
 
-All three providers support parallel tool calls – the model can request multiple tools in a single response. Execute them individually with <kbd>Alt-Enter</kbd> on each block.
+All three providers support parallel tool calls – the model can request multiple tools in a single response. Press <kbd>Ctrl-]</kbd> to execute all pending calls at once, or use <kbd>Alt-Enter</kbd> on individual blocks.
 
 Flemma validates that every `**Tool Use:**` block has a matching `**Tool Result:**` before sending. Missing results produce a diagnostic warning.
 
@@ -905,14 +906,14 @@ require("flemma").setup({
   keymaps = {
     enabled = true,
     normal = {
-      send = "<C-]>",
+      send = "<C-]>",                        -- Hybrid: execute pending tools or send
       cancel = "<C-c>",
       tool_execute = "<M-CR>",               -- Execute tool at cursor
       next_message = "]m",
       prev_message = "[m",
     },
     insert = {
-      send = "<C-]>",
+      send = "<C-]>",                        -- Same hybrid behaviour, re-enters insert after
     },
   },
 })
@@ -926,6 +927,22 @@ Additional notes:
 - `notify.default_opts` exposes floating-window appearance (timeout, width, border, title).
 - `logging.enabled = true` starts the session with logging already active.
 - `keymaps.enabled = false` disables all built-in mappings so you can register your own `:Flemma` commands.
+- The `send` key is a hybrid dispatch: when pending tool calls exist it executes them all, otherwise it sends the conversation to the provider. To restore the previous send-only behaviour, disable the built-in mapping and bind directly to `send_to_provider`:
+
+  ```lua
+  keymaps = { normal = { send = false }, insert = { send = false } },
+  ```
+
+  ```lua
+  vim.api.nvim_create_autocmd("FileType", {
+    pattern = "chat",
+    callback = function()
+      vim.keymap.set("n", "<C-]>", function()
+        require("flemma.core").send_to_provider()
+      end, { buffer = true })
+    end,
+  })
+  ```
 
 ---
 

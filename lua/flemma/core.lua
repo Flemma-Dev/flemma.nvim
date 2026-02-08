@@ -177,6 +177,25 @@ function M.cancel_request()
   end
 end
 
+---Hybrid dispatch: execute all pending tool calls if any exist, otherwise send to provider
+---@param opts? { on_request_complete?: fun() }
+function M.send_or_execute(opts)
+  local bufnr = vim.api.nvim_get_current_buf()
+  local tool_context = require("flemma.tools.context")
+  local pending = tool_context.resolve_all_pending(bufnr)
+
+  if #pending > 0 then
+    local executor = require("flemma.tools.executor")
+    local ok, err = executor.execute_all_pending(bufnr)
+    if not ok then
+      vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+    end
+    return
+  end
+
+  M.send_to_provider(opts)
+end
+
 ---Handle the AI provider interaction
 ---@param opts? { on_request_complete?: fun() }
 function M.send_to_provider(opts)

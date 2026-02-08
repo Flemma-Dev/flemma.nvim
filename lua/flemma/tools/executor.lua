@@ -411,6 +411,37 @@ function M.cancel_at_cursor(bufnr)
   return false
 end
 
+---Execute all pending tool calls (tool_use blocks without tool_result) in the buffer
+---@param bufnr integer
+---@return boolean any_executed true if at least one tool was executed
+---@return string|nil error first error encountered, if any
+function M.execute_all_pending(bufnr)
+  local tool_context = require("flemma.tools.context")
+  local contexts = tool_context.resolve_all_pending(bufnr)
+
+  if #contexts == 0 then
+    return false, "No pending tool calls"
+  end
+
+  local any_executed = false
+  local first_error = nil
+
+  for _, ctx in ipairs(contexts) do
+    local ok, err = M.execute(bufnr, ctx)
+    if ok then
+      any_executed = true
+    elseif not first_error then
+      first_error = err
+    end
+  end
+
+  if not any_executed and first_error then
+    return false, first_error
+  end
+
+  return any_executed, nil
+end
+
 ---Resolve and execute the tool at cursor position
 ---@param bufnr integer
 ---@return boolean success

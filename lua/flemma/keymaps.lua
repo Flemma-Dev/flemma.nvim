@@ -24,7 +24,7 @@ M.setup = function()
         -- Normal mode mappings
         if config.keymaps.normal.send then
           vim.keymap.set("n", config.keymaps.normal.send, function()
-            core.send_to_provider()
+            core.send_or_execute()
           end, { buffer = true, desc = "Send to Flemma" })
         end
 
@@ -76,7 +76,7 @@ M.setup = function()
           vim.keymap.set("i", config.keymaps.insert.send, function()
             local bufnr = vim.api.nvim_get_current_buf()
             ui.buffer_cmd(bufnr, "stopinsert")
-            core.send_to_provider({
+            core.send_or_execute({
               on_request_complete = function()
                 ui.buffer_cmd(bufnr, "startinsert!")
               end,

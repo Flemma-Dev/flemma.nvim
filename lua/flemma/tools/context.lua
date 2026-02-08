@@ -76,6 +76,47 @@ local function find_nearest_tool_use(tool_uses, cursor_line)
   return best
 end
 
+---Find all tool_use blocks in the buffer that lack a corresponding tool_result
+---@param bufnr integer Buffer number
+---@return flemma.tools.ToolContext[] pending_contexts
+function M.resolve_all_pending(bufnr)
+  local parser = require("flemma.parser")
+  local doc = parser.get_parsed_document(bufnr)
+
+  -- Collect all tool_result IDs across the entire document
+  local result_ids = {}
+  for _, msg in ipairs(doc.messages) do
+    if msg.role == "You" then
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "tool_result" then
+          result_ids[seg.tool_use_id] = true
+        end
+      end
+    end
+  end
+
+  -- Collect tool_use segments that have no matching tool_result
+  local pending = {}
+  for _, msg in ipairs(doc.messages) do
+    if msg.role == "Assistant" then
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "tool_use" and not result_ids[seg.id] then
+          table.insert(pending, {
+            tool_id = seg.id,
+            tool_name = seg.name,
+            input = seg.input or {},
+            node = seg,
+            start_line = seg.position.start_line,
+            end_line = seg.position.end_line,
+          })
+        end
+      end
+    end
+  end
+
+  return pending
+end
+
 ---Resolve tool context from cursor position
 ---@param bufnr integer Buffer number
 ---@param cursor_pos {row: integer, col: integer} 1-based cursor position
