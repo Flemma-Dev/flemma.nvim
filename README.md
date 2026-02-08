@@ -59,7 +59,7 @@ On a personal level, I've used Flemma to generate bedtime stories with recurring
 ## What Flemma Delivers
 
 - **Multi-provider chat** – work with Anthropic, OpenAI, and Vertex AI models through one command tree while keeping prompts in plain `.chat` buffers.
-- **Tool calling** – models can request calculator evaluations, bash commands, file reads, edits, and writes. Flemma executes them (with your approval) and injects results back into the buffer. Works across all three providers with parallel tool support. Per-buffer `flemma.opt` lets you control which tools each conversation can use.
+- **Tool calling** – models can request calculator evaluations, bash commands, file reads, edits, and writes. Flemma executes them (with your approval) and injects results back into the buffer. Works across all three providers with parallel tool support. Per-buffer `flemma.opt` lets you control which tools each conversation can use. Custom tools can resolve definitions asynchronously — from CLI subprocesses, remote APIs, or plugin loaders — with zero startup cost.
 - **Extended thinking and reasoning** – stream Anthropic thinking traces, tune OpenAI reasoning effort, and control Vertex thinking budgets. Thinking blocks auto-fold and get dedicated highlighting.
 - **`.chat` editing tools** – get Markdown folding, visual rulers, `<thinking>` highlighting, tool call syntax highlighting, and message text objects tuned for chat transcripts.
 - **Structured templates** – combine Lua or JSON frontmatter, inline `{{ expressions }}`, and `include()` helpers to assemble prompts without leaving Neovim.
@@ -394,7 +394,9 @@ Flemma validates that every `**Tool Use:**` block has a matching `**Tool Result:
 
 ### Registering custom tools
 
-Tools are registered through a simple API:
+`require("flemma.tools").register()` is a single entry point that accepts several forms:
+
+**Single definition** – pass a name and definition table:
 
 ```lua
 local tools = require("flemma.tools")
@@ -408,12 +410,85 @@ tools.register("my_tool", {
     },
     required = { "query" },
   },
-  execute = function(input, callback)
-    -- Sync: return result directly
-    callback({ result = "done" })
+  execute = function(input)
+    return { success = true, output = "done: " .. input.query }
   end,
 })
 ```
+
+**Module name** – pass a module path. If the module exports `.definitions` (an array of definition tables), they are registered synchronously. If it exports `.resolve(register, done)`, it is registered as an async source (see below):
+
+```lua
+tools.register("my_plugin.tools.search")
+```
+
+**Batch** – pass an array of definition tables:
+
+```lua
+tools.register({
+  { name = "tool_a", description = "…", input_schema = { type = "object", properties = {} } },
+  { name = "tool_b", description = "…", input_schema = { type = "object", properties = {} } },
+})
+```
+
+### Async tool definitions
+
+Tool definitions that need to call external processes or remote APIs can resolve asynchronously. Flemma gates API requests on all sources being ready — if you send while definitions are still loading, the buffer shows "Waiting for tool definitions to load…" and auto-sends once everything resolves.
+
+**Function form** – pass a resolve function directly:
+
+```lua
+tools.register(function(register, done)
+  vim.fn.jobstart({ "my-cli", "list-tools" }, {
+    on_exit = function()
+      register("discovered_tool", { --[[ definition ]] })
+      done()       -- signals this source is complete
+    end,
+  })
+end)
+```
+
+**Table form** – pass a table with `.resolve` and an optional `.timeout` (seconds):
+
+```lua
+tools.register({
+  timeout = 60,
+  resolve = function(register, done)
+    -- fetch definitions from a remote API...
+    register("remote_tool", { --[[ definition ]] })
+    done()
+  end,
+})
+```
+
+**Module form** – export a `resolve` function from your module:
+
+```lua
+-- In lua/my_plugin/tools.lua
+local M = {}
+
+function M.resolve(register, done)
+  -- async work...
+  register("my_tool", { --[[ definition ]] })
+  done()
+end
+
+M.timeout = 45  -- optional, defaults to tools.default_timeout (30s)
+
+return M
+```
+
+```lua
+-- In your setup:
+tools.register("my_plugin.tools")
+```
+
+Key details:
+
+- **`register(name, def)`** can be called multiple times within a single source to register several tools.
+- **`done(err?)`** must be called exactly once. Pass an error string to signal failure (the source completes but a warning is shown). Double-calling `done()` is safe (idempotent).
+- **Timeout** — if `done()` is never called, the source times out after `tools.default_timeout` seconds (default 30). This prevents a broken source from blocking requests forever.
+- **Error handling** — if the resolve function throws, `done(err)` is called automatically.
 
 ### Tool configuration
 

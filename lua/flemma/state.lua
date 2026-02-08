@@ -20,6 +20,7 @@ local session_module = require("flemma.session")
 ---@field api_error_occurred boolean Whether an API error occurred during the last request
 ---@field inflight_usage flemma.state.InflightUsage Token counters accumulated during streaming
 ---@field locked boolean Whether the buffer is locked (non-modifiable) for request/tool execution
+---@field waiting_for_tools? boolean Whether a send is queued waiting for async tool resolution
 ---@field ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached parsed AST
 
 ---@diagnostic disable-next-line: missing-fields
@@ -77,6 +78,7 @@ local function init_buffer(bufnr)
     spinner_timer = nil,
     api_error_occurred = false,
     locked = false,
+    waiting_for_tools = false,
     inflight_usage = {
       input_tokens = 0,
       output_tokens = 0,

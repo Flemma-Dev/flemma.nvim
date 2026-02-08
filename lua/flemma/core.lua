@@ -200,6 +200,24 @@ function M.send_to_provider(opts)
     end
   end
 
+  -- Gate on async tool sources being ready
+  local tools_module = require("flemma.tools")
+  if not tools_module.is_ready() then
+    vim.notify("Flemma: Waiting for tool definitions to load...", vim.log.levels.WARN)
+    if buffer_state.waiting_for_tools then
+      return -- already queued
+    end
+    buffer_state.waiting_for_tools = true
+    local target_bufnr = bufnr
+    tools_module.on_ready(function()
+      buffer_state.waiting_for_tools = false
+      if vim.api.nvim_buf_is_valid(target_bufnr) and vim.api.nvim_get_current_buf() == target_bufnr then
+        M.send_to_provider(opts)
+      end
+    end)
+    return
+  end
+
   log.info("send_to_provider(): Starting new request for buffer " .. bufnr)
   buffer_state.request_cancelled = false
   buffer_state.api_error_occurred = false -- Initialize flag for API errors

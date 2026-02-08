@@ -1,5 +1,5 @@
 --- Tool definition storage
---- Manages registered tools for API requests and execution
+--- Pure storage for tool definitions — no async logic
 ---@class flemma.tools.Registry
 local M = {}
 
@@ -27,10 +27,10 @@ local M = {}
 ---@type table<string, flemma.tools.ToolDefinition>
 local tools = {}
 
----Register a tool definition
+---Store a single tool definition
 ---@param name string The tool name
 ---@param definition flemma.tools.ToolDefinition The tool definition
-function M.register(name, definition)
+function M.define(name, definition)
   tools[name] = definition
 end
 
