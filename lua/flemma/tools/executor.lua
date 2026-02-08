@@ -49,19 +49,11 @@ local function count_pending(bufnr)
   return n
 end
 
----Lock the buffer to prevent user edits during tool execution
----@param bufnr integer
-local function lock_buffer(bufnr)
-  if vim.api.nvim_buf_is_valid(bufnr) then
-    vim.bo[bufnr].modifiable = false
-  end
-end
-
 ---Unlock the buffer if no more tools are actively executing
 ---@param bufnr integer
 local function maybe_unlock_buffer(bufnr)
-  if vim.api.nvim_buf_is_valid(bufnr) and count_pending(bufnr) == 0 then
-    vim.bo[bufnr].modifiable = true
+  if count_pending(bufnr) == 0 then
+    state.unlock_buffer(bufnr)
   end
 end
 
@@ -244,7 +236,7 @@ function M.execute(bufnr, context)
   }
 
   -- Lock buffer to prevent user edits during execution
-  lock_buffer(bufnr)
+  state.lock_buffer(bufnr)
 
   -- Phase 1: Inject placeholder
   local header_line, inject_err, placeholder_opts = injector.inject_placeholder(bufnr, tool_id)

@@ -157,7 +157,7 @@ function M.cancel_request()
         auto_write_buffer(bufnr)
       end
 
-      vim.bo[bufnr].modifiable = true -- Restore modifiable state
+      state.unlock_buffer(bufnr)
 
       local msg = "Flemma: Request cancelled"
       if log.is_enabled() then
@@ -170,8 +170,9 @@ function M.cancel_request()
   else
     log.debug("cancel_request(): No current request found")
     -- If there was no request, ensure buffer is modifiable if it somehow got stuck
-    if not vim.bo[bufnr].modifiable then
-      vim.bo[bufnr].modifiable = true
+    local bs = state.get_buffer_state(bufnr)
+    if bs.locked then
+      state.unlock_buffer(bufnr)
     end
   end
 end
@@ -204,13 +205,13 @@ function M.send_to_provider(opts)
   buffer_state.api_error_occurred = false -- Initialize flag for API errors
 
   -- Make the buffer non-modifiable to prevent user edits during request
-  vim.bo[bufnr].modifiable = false
+  state.lock_buffer(bufnr)
 
   -- Check if buffer has content
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   if #lines == 0 or (#lines == 1 and lines[1] == "") then
     log.warn("send_to_provider(): Empty buffer - nothing to send")
-    vim.bo[bufnr].modifiable = true -- Restore modifiable state before returning
+    state.unlock_buffer(bufnr)
     return
   end
 
@@ -219,7 +220,7 @@ function M.send_to_provider(opts)
   if not current_provider then
     log.error("send_to_provider(): No provider available")
     vim.notify("Flemma: No provider configured. Use :Flemma switch to select one.", vim.log.levels.ERROR)
-    vim.bo[bufnr].modifiable = true -- Restore modifiable state
+    state.unlock_buffer(bufnr)
     return
   end
 
@@ -234,7 +235,7 @@ function M.send_to_provider(opts)
   if #prompt.history == 0 then
     log.warn("send_to_provider(): No messages found in buffer")
     vim.notify("Flemma: No messages found in buffer.", vim.log.levels.WARN)
-    vim.bo[bufnr].modifiable = true -- Restore modifiable state
+    state.unlock_buffer(bufnr)
     return
   end
 
@@ -344,7 +345,7 @@ function M.send_to_provider(opts)
     -- Block request if there are critical errors (frontmatter parsing failures)
     if has_errors then
       log.error("send_to_provider(): Blocking request due to critical errors")
-      vim.bo[bufnr].modifiable = true
+      state.unlock_buffer(bufnr)
       return
     end
   end
@@ -352,41 +353,44 @@ function M.send_to_provider(opts)
   log.debug("send_to_provider(): Prompt history for provider: " .. log.inspect(prompt.history))
   log.debug("send_to_provider(): System instruction: " .. log.inspect(prompt.system))
 
-  -- Get endpoint first to check for fixtures
-  local endpoint = current_provider:get_endpoint()
-  if not endpoint then
-    vim.notify("Flemma: Provider did not return an endpoint.", vim.log.levels.ERROR)
-    return nil
-  end
-
-  -- Check if there's a fixture for this endpoint (for testing)
+  -- Validate provider (endpoint, API key, headers) and build request body.
+  -- Wrapped in pcall so any provider error unlocks the buffer cleanly.
   local client = require("flemma.client")
-  local fixture_path = client.find_fixture_for_endpoint(endpoint)
+  local prep_ok, prep_result = pcall(function()
+    local endpoint = current_provider:get_endpoint()
+    if not endpoint then
+      error("Provider did not return an endpoint.", 0)
+    end
 
-  -- Only get API key and headers if not using a fixture
-  local headers
-  if not fixture_path then
-    -- Get API key if not using a fixture
-    local api_key = current_provider:get_api_key()
-    if not api_key then
-      vim.notify(
-        "Flemma: No API key available for provider '" .. state.get_config().provider .. "'.",
-        vim.log.levels.ERROR
-      )
-      return nil
+    local fixture_path = client.find_fixture_for_endpoint(endpoint)
+
+    local headers
+    if not fixture_path then
+      local api_key = current_provider:get_api_key()
+      if not api_key then
+        error("No API key available for provider '" .. state.get_config().provider .. "'.", 0)
+      end
+      headers = current_provider:get_request_headers()
+      if not headers then
+        error("Provider did not return request headers.", 0)
+      end
+    else
+      headers = { "content-type: application/json" }
     end
-    headers = current_provider:get_request_headers()
-    if not headers then
-      vim.notify("Flemma: Provider did not return request headers.", vim.log.levels.ERROR)
-      return nil
-    end
-  else
-    -- For fixtures, provide dummy headers since they won't be used
-    headers = { "content-type: application/json" }
+
+    local request_body = current_provider:build_request(prompt, context)
+    return { endpoint = endpoint, headers = headers, request_body = request_body }
+  end)
+
+  if not prep_ok then
+    vim.notify("Flemma: " .. tostring(prep_result), vim.log.levels.ERROR)
+    state.unlock_buffer(bufnr)
+    return
   end
 
-  -- Build request body using the validated model stored in the provider
-  local request_body = current_provider:build_request(prompt, context)
+  local endpoint = prep_result.endpoint
+  local headers = prep_result.headers
+  local request_body = prep_result.request_body
   last_request_body_for_testing = request_body -- Store for testing
 
   -- Log the request details (using the provider's stored model)
@@ -423,7 +427,7 @@ function M.send_to_provider(opts)
         buffer_state.current_request = nil
         buffer_state.api_error_occurred = true -- Set flag indicating API error
 
-        vim.bo[bufnr].modifiable = true -- Restore modifiable state
+        state.unlock_buffer(bufnr)
 
         -- Auto-write on error if enabled
         auto_write_buffer(bufnr)
@@ -630,7 +634,7 @@ function M.send_to_provider(opts)
         buffer_state.current_request = nil -- Mark request as no longer current
 
         -- Ensure buffer is modifiable for final operations and user interaction
-        vim.bo[bufnr].modifiable = true
+        state.unlock_buffer(bufnr)
 
         if code == 0 then
           -- cURL request completed successfully (exit code 0)
@@ -763,7 +767,7 @@ function M.send_to_provider(opts)
       buffer_state.spinner_timer = nil
     end
     ui.cleanup_spinner(bufnr) -- Clean up any "Thinking..." message, handles its own modifiable toggles
-    vim.bo[bufnr].modifiable = true -- Restore modifiable state
+    state.unlock_buffer(bufnr)
     return
   end
   -- If job started successfully, modifiable remains false (as set at the start of this function).

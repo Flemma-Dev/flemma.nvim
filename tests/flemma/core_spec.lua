@@ -193,6 +193,7 @@ describe(":FlemmaSend command", function()
 
     -- Assert: Check that the buffer is modifiable and clean
     assert.is_true(vim.bo[bufnr].modifiable, "Buffer should be modifiable after an error")
+    assert.is_false(state.get_buffer_state(bufnr).locked, "Buffer state should not be locked after an error")
     local final_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     assert.are.same({ "@You: This will fail", "" }, final_lines, "Buffer content should not have spinner artifacts")
 

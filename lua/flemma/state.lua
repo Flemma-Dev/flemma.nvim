@@ -19,6 +19,7 @@ local session_module = require("flemma.session")
 ---@field spinner_timer integer|nil Timer ID for the spinner animation
 ---@field api_error_occurred boolean Whether an API error occurred during the last request
 ---@field inflight_usage flemma.state.InflightUsage Token counters accumulated during streaming
+---@field locked boolean Whether the buffer is locked (non-modifiable) for request/tool execution
 ---@field ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached parsed AST
 
 ---@diagnostic disable-next-line: missing-fields
@@ -75,6 +76,7 @@ local function init_buffer(bufnr)
     request_cancelled = false,
     spinner_timer = nil,
     api_error_occurred = false,
+    locked = false,
     inflight_usage = {
       input_tokens = 0,
       output_tokens = 0,
@@ -131,6 +133,26 @@ function M.cleanup_buffer_state(bufnr)
   end
   -- Clean up any notifications associated with this buffer
   require("flemma.notify").cleanup_buffer(bufnr)
+end
+
+---Lock a buffer (mark non-modifiable for request/tool execution)
+---@param bufnr integer
+function M.lock_buffer(bufnr)
+  local bs = M.get_buffer_state(bufnr)
+  bs.locked = true
+  if vim.api.nvim_buf_is_valid(bufnr) then
+    vim.bo[bufnr].modifiable = false
+  end
+end
+
+---Unlock a buffer (restore modifiable after request/tool execution completes)
+---@param bufnr integer
+function M.unlock_buffer(bufnr)
+  local bs = M.get_buffer_state(bufnr)
+  bs.locked = false
+  if vim.api.nvim_buf_is_valid(bufnr) then
+    vim.bo[bufnr].modifiable = true
+  end
 end
 
 return M
