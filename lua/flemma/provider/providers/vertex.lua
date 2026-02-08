@@ -431,9 +431,9 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
     }
   end
 
-  -- Build tools array from registry (Vertex AI format with functionDeclarations)
+  -- Build tools array from registry (Vertex AI format, filtered by per-buffer opts if present)
   local tools_module = require("flemma.tools")
-  local all_tools = tools_module.get_all()
+  local all_tools = tools_module.get_for_prompt(prompt.opts)
   local function_declarations = {}
 
   for _, def in pairs(all_tools) do

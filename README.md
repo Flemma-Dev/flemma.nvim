@@ -59,7 +59,7 @@ On a personal level, I've used Flemma to generate bedtime stories with recurring
 ## What Flemma Delivers
 
 - **Multi-provider chat** – work with Anthropic, OpenAI, and Vertex AI models through one command tree while keeping prompts in plain `.chat` buffers.
-- **Tool calling** – models can request calculator evaluations, bash commands, file reads, edits, and writes. Flemma executes them (with your approval) and injects results back into the buffer. Works across all three providers with parallel tool support.
+- **Tool calling** – models can request calculator evaluations, bash commands, file reads, edits, and writes. Flemma executes them (with your approval) and injects results back into the buffer. Works across all three providers with parallel tool support. Per-buffer `flemma.opt` lets you control which tools each conversation can use.
 - **Extended thinking and reasoning** – stream Anthropic thinking traces, tune OpenAI reasoning effort, and control Vertex thinking budgets. Thinking blocks auto-fold and get dedicated highlighting.
 - **`.chat` editing tools** – get Markdown folding, visual rulers, `<thinking>` highlighting, tool call syntax highlighting, and message text objects tuned for chat transcripts.
 - **Structured templates** – combine Lua or JSON frontmatter, inline `{{ expressions }}`, and `include()` helpers to assemble prompts without leaving Neovim.
@@ -192,7 +192,7 @@ Model thoughts stream here and auto-fold.
 </thinking>
 ````
 
-- **Frontmatter** sits on the first line and must be fenced with triple backticks. Lua and JSON parsers ship with Flemma; you can register more via `flemma.frontmatter.parsers.register("yaml", parser_fn)`.
+- **Frontmatter** sits on the first line and must be fenced with triple backticks. Lua and JSON parsers ship with Flemma; you can register more via `flemma.frontmatter.parsers.register("yaml", parser_fn)`. Lua frontmatter also exposes `flemma.opt` for [per-buffer tool selection](#per-buffer-tool-selection).
 - **Messages** begin with `@System:`, `@You:`, or `@Assistant:`. The parser is whitespace-tolerant and handles blank lines between messages.
 - **Thinking blocks** appear only in assistant messages. Anthropic and Vertex AI models stream `<thinking>` sections; Flemma folds them automatically and keeps dedicated highlights for the tags and body.
 
@@ -369,6 +369,41 @@ require("flemma").setup({
   },
 })
 ```
+
+### Per-buffer tool selection
+
+Control which tools are available on a per-buffer basis using `flemma.opt` in Lua frontmatter. The API follows `vim.opt` conventions:
+
+``````lua
+```lua
+-- Only send specific tools with the request:
+flemma.opt.tools = {"bash", "read"}
+
+-- Remove a tool from the defaults:
+flemma.opt.tools:remove("calculator")
+
+-- Add a tool (including disabled tools like calculator_async used in debugging):
+flemma.opt.tools:append("calculator_async")
+
+-- Add at the beginning of the tool list:
+flemma.opt.tools:prepend("read")
+
+-- Operator overloads (same as vim.opt):
+flemma.opt.tools = flemma.opt.tools + "read"        -- append
+flemma.opt.tools = flemma.opt.tools - "calculator"   -- remove
+flemma.opt.tools = flemma.opt.tools ^ "read"         -- prepend
+
+-- All methods accept both strings and tables:
+flemma.opt.tools:remove({"calculator", "bash"})
+flemma.opt.tools:append({"read", "write"})
+```
+``````
+
+Each evaluation starts from defaults (all enabled tools). Changes only affect the current buffer's request — other buffers and future evaluations are unaffected.
+
+Tools registered with `enabled = false` (such as `calculator_async` used by Flemma devs for debugging tool calls) are excluded from the defaults but can be explicitly added via `:append()` or direct assignment.
+
+Misspelled tool names produce an error with a "did you mean" suggestion when a close match exists.
 
 ---
 

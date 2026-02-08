@@ -37,6 +37,7 @@ end
 
 ---@class flemma.pipeline.Prompt : flemma.provider.Prompt
 ---@field pending_tool_calls flemma.pipeline.UnresolvedTool[]
+---@field opts flemma.opt.ResolvedOpts|nil
 
 --- Run full pipeline for given buffer lines and context
 ---@param lines string[]
@@ -103,7 +104,7 @@ function M.run(lines, context)
   -- Update evaluated with merged diagnostics
   evaluated.diagnostics = all_diagnostics
 
-  return { history = history, system = system, pending_tool_calls = unresolved_tools }, evaluated
+  return { history = history, system = system, pending_tool_calls = unresolved_tools, opts = evaluated.opts }, evaluated
 end
 
 return M

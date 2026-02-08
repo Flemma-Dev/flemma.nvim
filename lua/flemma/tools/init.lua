@@ -42,6 +42,31 @@ function M.build_description(tool)
   return desc
 end
 
+--- Get tools filtered by resolved per-buffer opts
+--- When opts.tools is present, only matching tools are returned (including disabled tools
+--- that were explicitly listed — this allows users to enable disabled tools via flemma.opt).
+--- When opts is nil or opts.tools is nil, all enabled tools are returned.
+---@param opts flemma.opt.ResolvedOpts|nil
+---@return table<string, flemma.tools.ToolDefinition>
+function M.get_for_prompt(opts)
+  if opts and opts.tools then
+    -- Include disabled tools so users can explicitly enable them
+    local all_tools = M.get_all({ include_disabled = true })
+    local allowed = {}
+    for _, name in ipairs(opts.tools) do
+      allowed[name] = true
+    end
+    local filtered = {}
+    for name, def in pairs(all_tools) do
+      if allowed[name] then
+        filtered[name] = def
+      end
+    end
+    return filtered
+  end
+  return M.get_all()
+end
+
 M.register = registry.register
 M.get = registry.get
 M.get_all = registry.get_all

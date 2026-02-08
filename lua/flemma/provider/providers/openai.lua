@@ -207,9 +207,9 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
     end
   end
 
-  -- Build tools array from registry (OpenAI format)
+  -- Build tools array from registry (OpenAI format, filtered by per-buffer opts if present)
   local tools_module = require("flemma.tools")
-  local all_tools = tools_module.get_all()
+  local all_tools = tools_module.get_for_prompt(prompt.opts)
   local tools_array = {}
 
   for _, def in pairs(all_tools) do

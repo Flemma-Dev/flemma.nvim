@@ -15,7 +15,7 @@ local M = {}
 ---@field input_schema flemma.tools.JSONSchema JSON Schema for the tool input
 ---@field output_schema? flemma.tools.JSONSchema JSON Schema for the tool output (used in description)
 ---@field async? boolean True if execute takes a callback (default false)
----@field hidden? boolean True to exclude from API requests (still executable)
+---@field enabled? boolean Set to false to exclude from API requests by default (still executable, can be enabled via flemma.opt.tools)
 ---@field executable? boolean Set to false to disable execution
 ---@field execute? fun(input: table<string, any>, callback?: fun(result: flemma.tools.ExecutionResult)): any Executor function (sync returns ExecutionResult, async returns cancel fn or nil)
 
@@ -41,17 +41,17 @@ function M.get(name)
   return tools[name]
 end
 
----Get all registered tools (excludes hidden tools by default)
----@param opts? { include_hidden: boolean }
+---Get all registered tools (excludes disabled tools by default)
+---@param opts? { include_disabled: boolean }
 ---@return table<string, flemma.tools.ToolDefinition> tools A copy of matching tool definitions
 function M.get_all(opts)
   opts = opts or {}
-  if opts.include_hidden then
+  if opts.include_disabled then
     return vim.deepcopy(tools)
   end
   local result = {}
   for name, def in pairs(tools) do
-    if not def.hidden then
+    if def.enabled ~= false then
       result[name] = vim.deepcopy(def)
     end
   end

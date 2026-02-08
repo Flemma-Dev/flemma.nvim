@@ -45,6 +45,7 @@ end
 ---@class flemma.processor.EvaluatedResult
 ---@field messages flemma.processor.EvaluatedMessage[]
 ---@field diagnostics flemma.ast.Diagnostic[]
+---@field opts flemma.opt.ResolvedOpts|nil
 
 --- Evaluate a document AST.
 ---@param doc flemma.ast.DocumentNode
@@ -198,6 +199,7 @@ function M.evaluate(doc, base_context)
   return {
     messages = evaluated_messages,
     diagnostics = diagnostics,
+    opts = context:get_opts(),
   }
 end
 
