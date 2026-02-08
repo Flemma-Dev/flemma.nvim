@@ -436,8 +436,17 @@ function M.fold_last_thinking_block(bufnr)
   if winid ~= -1 then
     local fold_exists = vim.fn.win_execute(winid, string.format("echo foldlevel(%d)", start_lnum_1idx))
     if tonumber(vim.trim(fold_exists)) and tonumber(vim.trim(fold_exists)) > 0 then
-      vim.fn.win_execute(winid, string.format("%d,%d foldclose", start_lnum_1idx, end_lnum_1idx))
-      log.debug("fold_last_thinking_block(): Executed foldclose command via win_execute.")
+      -- Check if the fold is already closed (e.g. by foldlevel setting).
+      -- Running foldclose on an already-closed nested fold escalates to closing the parent fold.
+      local already_closed = vim.fn.win_execute(winid, string.format("echo foldclosed(%d)", start_lnum_1idx))
+      if tonumber(vim.trim(already_closed)) ~= -1 then
+        log.debug(
+          "fold_last_thinking_block(): Fold already closed at line " .. start_lnum_1idx .. ". Skipping foldclose."
+        )
+      else
+        vim.fn.win_execute(winid, string.format("%d,%d foldclose", start_lnum_1idx, end_lnum_1idx))
+        log.debug("fold_last_thinking_block(): Executed foldclose command via win_execute.")
+      end
     else
       log.debug("fold_last_thinking_block(): No fold exists at line " .. start_lnum_1idx .. ". Skipping foldclose.")
     end

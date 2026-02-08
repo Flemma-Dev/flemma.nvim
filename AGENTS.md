@@ -15,6 +15,20 @@ Flemma.nvim is evolving quickly; keep each contribution focused, reversible, and
 - **Never** invoke `make lint`, `make check`, `luacheck`, or `lua-language-server --check`; they currently emit only false diagnostics.
 - Use the `flemma-fmt` alias to reformat the entire codebase near the end of your session or immediately before a user-requested commit.
 
+### Headless Neovim Testing Caveat
+
+A packaged copy of Flemma may already exist in `vim-pack-dir` early in `rtp`. When running headless Neovim with `--cmd "set rtp+=..."`, that stale copy takes priority over your working-directory changes. **Always prepend** with `rtp^=` instead of appending with `rtp+=`:
+
+```bash
+# WRONG — packaged copy shadows your edits:
+nvim --headless --clean -u NONE --cmd "set rtp+=/data/public/github.com/Flemma-Dev/flemma.nvim" ...
+
+# CORRECT — your working copy takes priority:
+nvim --headless --clean -u NONE --cmd "set rtp^=/data/public/github.com/Flemma-Dev/flemma.nvim" ...
+```
+
+If your changes seem to have no effect, verify the load path with `debug.getinfo(require('flemma.ui').some_fn, 'S').source` — it should point to your working directory, not a `vim-pack-dir` path.
+
 ## Architecture Principles
 
 - **Flemma is stateless; the buffer is the state.** All conversation data, tool calls, and results must be fully represented in the buffer text. Never rely on in-memory state that would be lost when Neovim restarts or when a `.chat` file is shared. If you need to persist information (e.g., synthetic IDs for providers that don't supply them), embed it in the buffer format itself so it can be parsed back later.
