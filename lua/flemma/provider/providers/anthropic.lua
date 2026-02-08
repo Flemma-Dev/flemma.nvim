@@ -97,7 +97,9 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
       -- Then other content
       for _, part in ipairs(msg.parts or {}) do
         if part.kind == "text" then
-          table.insert(content_blocks, { type = "text", text = part.text })
+          if vim.trim(part.text or "") ~= "" then
+            table.insert(content_blocks, { type = "text", text = part.text })
+          end
         elseif part.kind == "image" then
           table.insert(content_blocks, {
             type = "image",

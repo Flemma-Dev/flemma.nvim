@@ -273,7 +273,9 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
       -- Then other content
       for _, part in ipairs(msg.parts or {}) do
         if part.kind == "text" then
-          table.insert(parts, { text = part.text })
+          if vim.trim(part.text or "") ~= "" then
+            table.insert(parts, { text = part.text })
+          end
         elseif part.kind == "text_file" then
           table.insert(parts, { text = part.text })
           log.debug(
