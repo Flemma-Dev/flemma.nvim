@@ -23,10 +23,16 @@ ListOption.__index = ListOption
 ---@return integer
 local function levenshtein(a, b)
   local la, lb = #a, #b
-  if la == 0 then return lb end
-  if lb == 0 then return la end
+  if la == 0 then
+    return lb
+  end
+  if lb == 0 then
+    return la
+  end
   local prev, curr = {}, {}
-  for j = 0, lb do prev[j] = j end
+  for j = 0, lb do
+    prev[j] = j
+  end
   for i = 1, la do
     curr[0] = i
     for j = 1, lb do
@@ -208,7 +214,9 @@ local option_defs = {
     for name, def in pairs(all_tools) do
       table.insert(entries, { name = name, enabled = def.enabled ~= false })
     end
-    table.sort(entries, function(a, b) return a.name < b.name end)
+    table.sort(entries, function(a, b)
+      return a.name < b.name
+    end)
     return entries
   end,
 }

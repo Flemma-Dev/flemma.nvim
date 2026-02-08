@@ -261,11 +261,11 @@ Switch using `:Flemma switch $fast` or `:Flemma switch $review temperature=0.1` 
 
 ### Provider-specific capabilities
 
-| Provider  | Defaults            | Extra parameters                                                                              | Notes                                                                                                  |
-| --------- | ------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Anthropic | `claude-sonnet-4-5` | `thinking_budget` enables extended thinking (≥ 1024). Disables `temperature` when active.     | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer.                     |
-| OpenAI    | `gpt-5`             | `reasoning=<low\|medium\|high>` toggles reasoning effort.                                     | Cost notifications include reasoning tokens. Lualine shows the reasoning level.                        |
-| Vertex AI | `gemini-2.5-pro`    | `project_id` (required), `location` (default `global`), `thinking_budget` (≥ 1 to activate). | `thinking_budget` activates Google's thinking output; set to `0` or `nil` to disable.                  |
+| Provider  | Defaults            | Extra parameters                                                                             | Notes                                                                                 |
+| --------- | ------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Anthropic | `claude-sonnet-4-5` | `thinking_budget` enables extended thinking (≥ 1024). Disables `temperature` when active.    | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer.    |
+| OpenAI    | `gpt-5`             | `reasoning=<low\|medium\|high>` toggles reasoning effort.                                    | Cost notifications include reasoning tokens. Lualine shows the reasoning level.       |
+| Vertex AI | `gemini-2.5-pro`    | `project_id` (required), `location` (default `global`), `thinking_budget` (≥ 1 to activate). | `thinking_budget` activates Google's thinking output; set to `0` or `nil` to disable. |
 
 The full model catalogue (including pricing) is in `lua/flemma/models.lua`. You can access it from Neovim with:
 
@@ -290,7 +290,7 @@ Flemma includes a tool system that lets models request actions – run a calcula
    **Tool Use:** `calculator` (`toolu_abc123`)
 
    ```json
-   {"expression": "20 + 30 + 50"}
+   { "expression": "20 + 30 + 50" }
    ```
    ````
 
@@ -308,13 +308,13 @@ Flemma includes a tool system that lets models request actions – run a calcula
 
 ### Built-in tools
 
-| Tool           | Type  | Description                                                                                                       |
-| -------------- | ----- | ----------------------------------------------------------------------------------------------------------------- |
-| `calculator`   | sync  | Evaluates mathematical expressions using Lua's `math` library. Sandboxed – only `math.*` functions are available. |
-| `bash`         | async | Executes shell commands. Configurable shell, working directory, and environment. Supports timeout and cancellation. |
-| `read`         | sync  | Reads file contents with optional offset and line limit. Relative paths resolve against the `.chat` file.          |
-| `write`        | sync  | Writes or creates files. Creates parent directories automatically.                                                 |
-| `edit`         | sync  | Find-and-replace with exact text matching. The old text must appear exactly once in the target file.               |
+| Tool         | Type  | Description                                                                                                         |
+| ------------ | ----- | ------------------------------------------------------------------------------------------------------------------- |
+| `calculator` | sync  | Evaluates mathematical expressions using Lua's `math` library. Sandboxed – only `math.*` functions are available.   |
+| `bash`       | async | Executes shell commands. Configurable shell, working directory, and environment. Supports timeout and cancellation. |
+| `read`       | sync  | Reads file contents with optional offset and line limit. Relative paths resolve against the `.chat` file.           |
+| `write`      | sync  | Writes or creates files. Creates parent directories automatically.                                                  |
+| `edit`       | sync  | Find-and-replace with exact text matching. The old text must appear exactly once in the target file.                |
 
 ### Tool execution
 
@@ -374,7 +374,7 @@ require("flemma").setup({
 
 Control which tools are available on a per-buffer basis using `flemma.opt` in Lua frontmatter. The API follows `vim.opt` conventions:
 
-``````lua
+````lua
 ```lua
 -- Only send specific tools with the request:
 flemma.opt.tools = {"bash", "read"}
@@ -397,7 +397,7 @@ flemma.opt.tools = flemma.opt.tools ^ "read"         -- prepend
 flemma.opt.tools:remove({"calculator", "bash"})
 flemma.opt.tools:append({"read", "write"})
 ```
-``````
+````
 
 Each evaluation starts from defaults (all enabled tools). Changes only affect the current buffer's request — other buffers and future evaluations are unaffected.
 
@@ -417,7 +417,7 @@ Flemma's prompt pipeline runs through three stages: parse, evaluate, and send. E
 - Return a table of variables to inject into the template environment.
 - Errors (syntax problems, missing parser) block the request and show in a detailed notification with filename and line number.
 
-``````lua
+````lua
 ```lua
 recipient = "QA team"
 notes = [[
@@ -426,7 +426,7 @@ notes = [[
 - Confirm logging commands live under :Flemma logging:*.
 ]]
 ```
-``````
+````
 
 ### Inline expressions
 
