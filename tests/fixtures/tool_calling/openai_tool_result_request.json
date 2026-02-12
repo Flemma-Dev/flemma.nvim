@@ -1,56 +1,52 @@
 {
   "model": "gpt-4o-mini",
-  "messages": [
+  "input": [
     {
       "role": "system",
       "content": "You are a helpful assistant with access to a calculator tool. When asked to perform calculations, use the calculator tool."
     },
     {
       "role": "user",
-      "content": "What is 15 multiplied by 7?"
-    },
-    {
-      "role": "assistant",
-      "content": null,
-      "tool_calls": [
+      "content": [
         {
-          "id": "call_zKVQISSUvL3HNmgE80n28JcM",
-          "type": "function",
-          "function": {
-            "name": "calculator",
-            "arguments": "{\"expression\": \"15 * 7\"}"
-          }
+          "type": "input_text",
+          "text": "What is 15 multiplied by 7?"
         }
       ]
     },
     {
-      "role": "tool",
-      "tool_call_id": "call_zKVQISSUvL3HNmgE80n28JcM",
-      "content": "105"
+      "type": "function_call",
+      "call_id": "call_zKVQISSUvL3HNmgE80n28JcM",
+      "name": "calculator",
+      "arguments": "{\"expression\": \"15 * 7\"}"
+    },
+    {
+      "type": "function_call_output",
+      "call_id": "call_zKVQISSUvL3HNmgE80n28JcM",
+      "output": "105"
     }
   ],
   "tools": [
     {
       "type": "function",
-      "function": {
-        "name": "calculator",
-        "description": "Evaluates a mathematical expression and returns the result. Use this for any arithmetic calculations.",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "expression": {
-              "type": "string",
-              "description": "The mathematical expression to evaluate (e.g., '2 + 2', '15 * 3', 'sqrt(16)')"
-            }
-          },
-          "required": [
-            "expression"
-          ]
-        }
+      "name": "calculator",
+      "description": "Evaluates a mathematical expression and returns the result. Use this for any arithmetic calculations.",
+
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "The mathematical expression to evaluate (e.g., '2 + 2', '15 * 3', 'sqrt(16)')"
+          }
+        },
+        "required": [
+          "expression"
+        ]
       }
     }
   ],
   "tool_choice": "auto",
-  "parallel_tool_calls": false,
-  "stream": true
+  "stream": true,
+  "store": false
 }

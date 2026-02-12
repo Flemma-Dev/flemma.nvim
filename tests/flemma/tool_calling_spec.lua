@@ -24,10 +24,10 @@ local function find_anthropic_tool(tools_array, name)
   end
 end
 
---- Find a tool by name in an OpenAI-format tools array ({function={name=...}})
+--- Find a tool by name in an OpenAI Responses API tools array ({name=...})
 local function find_openai_tool(tools_array, name)
   for _, t in ipairs(tools_array) do
-    if t["function"] and t["function"].name == name then
+    if t.name == name then
       return t
     end
   end
@@ -681,108 +681,122 @@ describe("OpenAI Provider Request Building with Tools", function()
     local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
 
     local lines = { "@You: Calculate something" }
-    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
-    local req = provider:build_request(prompt, {})
+    local context = ctx.from_file("tests/fixtures/doc.chat")
+    local prompt = pipeline.run(lines, context)
+    local req = provider:build_request(prompt, context)
 
     assert.is_not_nil(req.tools, "Request should include tools array")
     assert.equals(5, #req.tools)
     local calc = find_openai_tool(req.tools, "calculator")
     assert.is_not_nil(calc, "calculator tool should be in tools array")
     assert.equals("function", calc.type)
-    assert.is_not_nil(calc["function"].parameters)
-    assert.is_not_nil(calc["function"].parameters.properties.expression)
+
+    assert.is_not_nil(calc.parameters)
+    assert.is_not_nil(calc.parameters.properties.expression)
   end)
 
   it("includes tool_choice auto (parallel tool use enabled)", function()
     local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
 
     local lines = { "@You: Calculate something" }
-    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
-    local req = provider:build_request(prompt, {})
+    local context = ctx.from_file("tests/fixtures/doc.chat")
+    local prompt = pipeline.run(lines, context)
+    local req = provider:build_request(prompt, context)
 
     assert.equals("auto", req.tool_choice)
     -- Parallel tool use is now enabled (no parallel_tool_calls: false flag)
     assert.is_nil(req.parallel_tool_calls)
   end)
 
-  it("includes tool_calls in assistant message", function()
+  it("includes function_call items in input array", function()
     local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
-    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
-    local req = provider:build_request(prompt, {})
+    local context = ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat")
+    local prompt = pipeline.run(lines, context)
+    local req = provider:build_request(prompt, context)
 
-    local assistant_msg = nil
-    for _, msg in ipairs(req.messages) do
-      if msg.role == "assistant" then
-        assistant_msg = msg
-        break
-      end
-    end
+    local function_calls = vim.tbl_filter(function(item)
+      return item.type == "function_call"
+    end, req.input)
 
-    assert.is_not_nil(assistant_msg)
-    assert.is_not_nil(assistant_msg.tool_calls)
-    assert.equals(1, #assistant_msg.tool_calls)
-    assert.equals("toolu_01A09q90qw90lq917835lgs0", assistant_msg.tool_calls[1].id)
-    assert.equals("function", assistant_msg.tool_calls[1].type)
-    assert.equals("calculator", assistant_msg.tool_calls[1]["function"].name)
+    assert.equals(1, #function_calls)
+    assert.equals("toolu_01A09q90qw90lq917835lgs0", function_calls[1].call_id)
+    assert.equals("calculator", function_calls[1].name)
+    assert.is_not_nil(function_calls[1].arguments)
   end)
 
-  it("includes tool results as role:tool messages", function()
+  it("includes function_call_output items in input array", function()
     local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
-    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
-    local req = provider:build_request(prompt, {})
+    local context = ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat")
+    local prompt = pipeline.run(lines, context)
+    local req = provider:build_request(prompt, context)
 
-    local tool_msgs = vim.tbl_filter(function(m)
-      return m.role == "tool"
-    end, req.messages)
+    local function_call_outputs = vim.tbl_filter(function(item)
+      return item.type == "function_call_output"
+    end, req.input)
 
-    assert.equals(1, #tool_msgs)
-    assert.equals("toolu_01A09q90qw90lq917835lgs0", tool_msgs[1].tool_call_id)
-    assert.equals("105", tool_msgs[1].content)
+    assert.equals(1, #function_call_outputs)
+    assert.equals("toolu_01A09q90qw90lq917835lgs0", function_call_outputs[1].call_id)
+    assert.equals("105", function_call_outputs[1].output)
   end)
 
-  it("prefixes tool result content with [ERROR] when is_error is true", function()
+  it("prefixes tool result output with Error: when is_error is true", function()
     local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_tool_error.chat")
-    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_tool_error.chat"))
-    local req = provider:build_request(prompt, {})
+    local context = ctx.from_file("tests/fixtures/tool_calling/conversation_tool_error.chat")
+    local prompt = pipeline.run(lines, context)
+    local req = provider:build_request(prompt, context)
 
-    local tool_msgs = vim.tbl_filter(function(m)
-      return m.role == "tool"
-    end, req.messages)
+    local function_call_outputs = vim.tbl_filter(function(item)
+      return item.type == "function_call_output"
+    end, req.input)
 
-    assert.equals(1, #tool_msgs)
-    assert.is_true(tool_msgs[1].content:match("^Error: ") ~= nil, "Error content should be prefixed with 'Error: '")
-    assert.is_true(tool_msgs[1].content:match("Division by zero") ~= nil, "Should contain original error message")
+    assert.equals(1, #function_call_outputs)
+    assert.is_true(
+      function_call_outputs[1].output:match("^Error: ") ~= nil,
+      "Error content should be prefixed with 'Error: '"
+    )
+    assert.is_true(
+      function_call_outputs[1].output:match("Division by zero") ~= nil,
+      "Should contain original error message"
+    )
   end)
 
-  it("orders tool results before follow-up user content in same message", function()
+  it("orders function_call_output before follow-up user content in input array", function()
     local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_tool_result_with_followup.chat")
-    local prompt =
-      pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_tool_result_with_followup.chat"))
-    local req = provider:build_request(prompt, {})
+    local context = ctx.from_file("tests/fixtures/tool_calling/conversation_tool_result_with_followup.chat")
+    local prompt = pipeline.run(lines, context)
+    local req = provider:build_request(prompt, context)
 
-    -- Find indices of tool message and last user message
-    local tool_msg_idx = nil
-    local followup_user_msg_idx = nil
+    -- Find indices of function_call_output and follow-up user message in input array
+    local tool_output_idx = nil
+    local followup_user_idx = nil
 
-    for i, msg in ipairs(req.messages) do
-      if msg.role == "tool" then
-        tool_msg_idx = i
-      elseif msg.role == "user" and msg.content and msg.content:match("20 plus 30") then
-        followup_user_msg_idx = i
+    for i, item in ipairs(req.input) do
+      if item.type == "function_call_output" then
+        tool_output_idx = i
+      elseif item.role == "user" and item.content then
+        -- Check if any content part mentions "20 plus 30"
+        for _, part in ipairs(item.content) do
+          if part.text and part.text:match("20 plus 30") then
+            followup_user_idx = i
+          end
+        end
       end
     end
 
-    assert.is_not_nil(tool_msg_idx, "Should have a tool message")
-    assert.is_not_nil(followup_user_msg_idx, "Should have a follow-up user message")
-    assert.is_true(tool_msg_idx < followup_user_msg_idx, "Tool result should come BEFORE follow-up user message")
+    assert.is_not_nil(tool_output_idx, "Should have a function_call_output item")
+    assert.is_not_nil(followup_user_idx, "Should have a follow-up user message")
+    assert.is_true(
+      tool_output_idx < followup_user_idx,
+      "function_call_output should come BEFORE follow-up user message"
+    )
   end)
 end)
 
@@ -813,7 +827,7 @@ describe("OpenAI Streaming Tool Use Response", function()
 
     assert.is_true(accumulated_content:match("%*%*Tool Use:%*%*") ~= nil, "Should emit tool_use header")
     assert.is_true(accumulated_content:match("calculator") ~= nil, "Should include tool name")
-    assert.is_true(accumulated_content:match("call_zKVQISSUvL3HNmgE80n28JcM") ~= nil, "Should include tool id")
+    assert.is_true(accumulated_content:match("call_KXAyUFOnxWTpzW3JS6qKZ7mI") ~= nil, "Should include tool id")
     assert.is_true(accumulated_content:match("15 %* 7") ~= nil, "Should include expression")
   end)
 
@@ -871,17 +885,21 @@ describe("OpenAI Request Body Validation with Tools", function()
     tools.setup()
   end)
 
-  it("builds request matching expected OpenAI structure with tool_result", function()
+  it("builds request matching expected Responses API structure with tool_result", function()
     local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 4000, temperature = 0 })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
-    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
-    local req = provider:build_request(prompt, {})
+    local context = ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat")
+    local prompt = pipeline.run(lines, context)
+    local req = provider:build_request(prompt, context)
 
-    -- Validate structure matches OpenAI format
+    -- Validate structure matches Responses API format
     assert.equals("gpt-4o-mini", req.model)
-    assert.equals(4000, req.max_completion_tokens)
+    assert.equals(4000, req.max_output_tokens)
     assert.equals(true, req.stream)
+    assert.equals(false, req.store)
+    assert.is_not_nil(req.input, "Should use input field")
+    assert.is_nil(req.messages, "Should NOT use messages field")
 
     -- Validate tools array in OpenAI format
     assert.is_not_nil(req.tools)
@@ -889,31 +907,31 @@ describe("OpenAI Request Body Validation with Tools", function()
     local calc = find_openai_tool(req.tools, "calculator")
     assert.is_not_nil(calc, "calculator tool should be in tools array")
     assert.equals("function", calc.type)
-    assert.is_not_nil(calc["function"].parameters)
-    assert.is_not_nil(calc["function"].parameters.properties.expression)
+
+    assert.is_not_nil(calc.parameters)
+    assert.is_not_nil(calc.parameters.properties.expression)
 
     -- Validate tool_choice (parallel tool use is enabled, no disable flag)
     assert.equals("auto", req.tool_choice)
     assert.is_nil(req.parallel_tool_calls)
 
-    -- Validate message structure
-    local assistant_msgs = vim.tbl_filter(function(m)
-      return m.role == "assistant"
-    end, req.messages)
-    local tool_msgs = vim.tbl_filter(function(m)
-      return m.role == "tool"
-    end, req.messages)
+    -- Validate input array structure
+    local function_calls = vim.tbl_filter(function(item)
+      return item.type == "function_call"
+    end, req.input)
+    local function_call_outputs = vim.tbl_filter(function(item)
+      return item.type == "function_call_output"
+    end, req.input)
 
-    -- Assistant message has tool_calls
-    assert.is_not_nil(assistant_msgs[1].tool_calls)
-    assert.equals(1, #assistant_msgs[1].tool_calls)
-    assert.equals("calculator", assistant_msgs[1].tool_calls[1]["function"].name)
-    assert.is_not_nil(assistant_msgs[1].tool_calls[1].id)
+    -- Should have function_call item
+    assert.equals(1, #function_calls)
+    assert.equals("calculator", function_calls[1].name)
+    assert.is_not_nil(function_calls[1].call_id)
 
-    -- Tool message has tool_call_id and content
-    assert.equals(1, #tool_msgs)
-    assert.is_not_nil(tool_msgs[1].tool_call_id)
-    assert.equals("105", tool_msgs[1].content)
+    -- Should have function_call_output item
+    assert.equals(1, #function_call_outputs)
+    assert.is_not_nil(function_call_outputs[1].call_id)
+    assert.equals("105", function_call_outputs[1].output)
   end)
 end)
 
@@ -1697,56 +1715,52 @@ describe("OpenAI Provider with Vertex URN IDs", function()
     tools.setup()
   end)
 
-  it("normalizes Vertex URN tool_calls IDs in request", function()
+  it("normalizes Vertex URN function_call IDs in request", function()
     local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
-    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"))
-    local req = provider:build_request(prompt, {})
+    local context = ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+    local prompt = pipeline.run(lines, context)
+    local req = provider:build_request(prompt, context)
 
-    -- Find assistant message with tool_calls
-    local assistant_msg = nil
-    for _, msg in ipairs(req.messages) do
-      if msg.role == "assistant" and msg.tool_calls then
-        assistant_msg = msg
-        break
-      end
-    end
+    -- Find function_call items in input array
+    local function_calls = vim.tbl_filter(function(item)
+      return item.type == "function_call"
+    end, req.input)
 
-    assert.is_not_nil(assistant_msg)
-    assert.is_not_nil(assistant_msg.tool_calls)
-    assert.equals(1, #assistant_msg.tool_calls)
+    assert.equals(1, #function_calls)
 
-    local tool_call = assistant_msg.tool_calls[1]
+    local function_call = function_calls[1]
     -- Should be normalized (colons replaced with underscores)
     assert.is_true(
-      tool_call.id:match("^urn_flemma_tool_calculator_") ~= nil,
-      "Tool call ID should be normalized from URN format"
+      function_call.call_id:match("^urn_flemma_tool_calculator_") ~= nil,
+      "function_call call_id should be normalized from URN format"
     )
-    assert.is_true(tool_call.id:match(":") == nil, "Normalized ID should not contain colons")
+    assert.is_true(function_call.call_id:match(":") == nil, "Normalized ID should not contain colons")
   end)
 
-  it("normalizes Vertex URN tool_call_id in tool messages", function()
+  it("normalizes Vertex URN call_id in function_call_output items", function()
     local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
-    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"))
-    local req = provider:build_request(prompt, {})
+    local context = ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+    local prompt = pipeline.run(lines, context)
+    local req = provider:build_request(prompt, context)
 
-    -- Find tool message
-    local tool_msgs = vim.tbl_filter(function(m)
-      return m.role == "tool"
-    end, req.messages)
+    -- Find function_call_output items in input array
+    local function_call_outputs = vim.tbl_filter(function(item)
+      return item.type == "function_call_output"
+    end, req.input)
 
-    assert.equals(1, #tool_msgs)
-    local tool_msg = tool_msgs[1]
+    assert.equals(1, #function_call_outputs)
+    local output_item = function_call_outputs[1]
 
     -- Should be normalized (colons replaced with underscores)
     assert.is_true(
-      tool_msg.tool_call_id:match("^urn_flemma_tool_calculator_") ~= nil,
-      "Tool message ID should be normalized from URN format"
+      output_item.call_id:match("^urn_flemma_tool_calculator_") ~= nil,
+      "function_call_output call_id should be normalized from URN format"
     )
-    assert.is_true(tool_msg.tool_call_id:match(":") == nil, "Normalized ID should not contain colons")
+    assert.is_true(output_item.call_id:match(":") == nil, "Normalized ID should not contain colons")
   end)
 end)
 

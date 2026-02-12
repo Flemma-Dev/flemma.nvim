@@ -1,5 +1,5 @@
 --- OpenAI provider for Flemma
---- Implements the OpenAI API integration
+--- Implements the OpenAI Responses API integration
 local base = require("flemma.provider.base")
 local log = require("flemma.logging")
 local models = require("flemma.models")
@@ -19,9 +19,12 @@ M.metadata = {
     supports_thinking_budget = false,
     outputs_thinking = false,
   },
+  default_parameters = {
+    cache_retention = "short",
+  },
 }
 
--- OpenAI's completion_tokens already includes reasoning_tokens,
+-- OpenAI's output_tokens already includes reasoning_tokens,
 -- so we should NOT add thoughts_tokens separately for cost calculation.
 M.output_has_thoughts = true
 
@@ -30,9 +33,8 @@ M.output_has_thoughts = true
 function M.new(merged_config)
   local provider = base.new(merged_config) -- Pass the already merged config to base
 
-  -- OpenAI-specific state (endpoint, version)
-  provider.endpoint = "https://api.openai.com/v1/chat/completions"
-  provider.api_version = "2023-05-15" -- OpenAI API version
+  -- OpenAI Responses API endpoint
+  provider.endpoint = "https://api.openai.com/v1/responses"
 
   provider:reset()
 
@@ -44,7 +46,7 @@ end
 ---@param self flemma.provider.OpenAI
 function M.reset(self)
   base.reset(self)
-  self._response_buffer.extra.tool_calls = {}
+  self._response_buffer.extra.current_tool_call = nil
   log.debug("openai.reset(): Reset OpenAI provider state")
 end
 
@@ -59,45 +61,43 @@ function M.get_api_key(self)
   })
 end
 
----Build request body for OpenAI API
+---Build request body for OpenAI Responses API
 ---
 ---@param prompt flemma.provider.Prompt The prepared prompt with history and system (from pipeline)
----@param _context? flemma.Context The shared context object (not used, parts already resolved)
+---@param context? flemma.Context The shared context object (used for prompt caching hints)
 ---@return table<string, any> request_body The request body for the API
-function M.build_request(self, prompt, _context) ---@diagnostic disable-line: unused-local
-  local api_messages = {}
+function M.build_request(self, prompt, context)
+  local input_items = {}
 
   -- Add system message first if present
   if prompt.system and #prompt.system > 0 then
-    table.insert(api_messages, {
-      role = "system",
+    -- Use "developer" role for reasoning models, "system" for others
+    local system_role = (self.parameters.reasoning and self.parameters.reasoning ~= "") and "developer" or "system"
+    table.insert(input_items, {
+      role = system_role,
       content = prompt.system,
     })
   end
 
   for _, msg in ipairs(prompt.history) do
     if msg.role == "user" then
-      -- Map generic parts (already resolved by pipeline) to OpenAI-specific format
+      -- Map generic parts (already resolved by pipeline) to Responses API format
       local content_parts_for_api = {}
-      local has_multimedia_part = false
       local tool_results = {}
 
       for _, part in ipairs(msg.parts or {}) do
         if part.kind == "text" then
           if vim.trim(part.text or "") ~= "" then
-            table.insert(content_parts_for_api, { type = "text", text = part.text })
+            table.insert(content_parts_for_api, { type = "input_text", text = part.text })
           end
         elseif part.kind == "image" then
           table.insert(content_parts_for_api, {
-            type = "image_url",
-            image_url = {
-              url = part.data_url,
-              detail = "auto",
-            },
+            type = "input_image",
+            image_url = part.data_url,
+            detail = "auto",
           })
-          has_multimedia_part = true
           log.debug(
-            'openai.build_request: Added image_url part for "'
+            'openai.build_request: Added input_image part for "'
               .. (part.filename or "image")
               .. '" (MIME: '
               .. part.mime_type
@@ -105,13 +105,10 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
           )
         elseif part.kind == "pdf" then
           table.insert(content_parts_for_api, {
-            type = "file",
-            file = {
-              filename = part.filename or "document.pdf",
-              file_data = part.data_url,
-            },
+            type = "input_file",
+            filename = part.filename or "document.pdf",
+            file_data = part.data_url,
           })
-          has_multimedia_part = true
           log.debug(
             'openai.build_request: Added file part for PDF "'
               .. (part.filename or "document")
@@ -120,21 +117,21 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
               .. ")"
           )
         elseif part.kind == "text_file" then
-          table.insert(content_parts_for_api, { type = "text", text = part.text })
+          table.insert(content_parts_for_api, { type = "input_text", text = part.text })
           log.debug(
-            'openai.build_request: Added text part for "'
+            'openai.build_request: Added input_text part for "'
               .. (part.filename or "text_file")
               .. '" (MIME: '
               .. part.mime_type
               .. ")"
           )
         elseif part.kind == "unsupported_file" then
-          table.insert(content_parts_for_api, { type = "text", text = "@" .. (part.filename or "") })
+          table.insert(content_parts_for_api, { type = "input_text", text = "@" .. (part.filename or "") })
         elseif part.kind == "tool_result" then
           -- Normalize tool ID for OpenAI compatibility (handles Vertex URN-style IDs)
           local normalized_id = base.normalize_tool_id(part.tool_use_id)
           table.insert(tool_results, {
-            tool_call_id = normalized_id,
+            call_id = normalized_id,
             content = part.content,
             is_error = part.is_error,
           })
@@ -142,81 +139,76 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
         end
       end
 
-      local final_api_content
-      if #content_parts_for_api == 0 then
-        final_api_content = ""
-      elseif has_multimedia_part then
-        final_api_content = content_parts_for_api
-      else
-        -- Concatenate all text parts into a single string
-        local text_only_accumulator = {}
-        for _, api_part in ipairs(content_parts_for_api) do
-          if api_part.type == "text" and api_part.text then
-            table.insert(text_only_accumulator, api_part.text)
-          end
-        end
-        final_api_content = table.concat(text_only_accumulator)
-      end
-
-      -- Add tool results FIRST as separate role:tool messages (OpenAI format)
+      -- Add tool results FIRST as top-level function_call_output items
       -- Tool results must come before any new user content in the same turn
       for _, tr in ipairs(tool_results) do
         -- OpenAI doesn't have is_error field; prefix content with "Error: " to signal error semantics
         local result_content = tr.content
         if tr.is_error then
           result_content = "Error: " .. (tr.content or "Tool execution failed")
-          log.debug("openai.build_request: Tool result marked as error for " .. tr.tool_call_id)
+          log.debug("openai.build_request: Tool result marked as error for " .. tr.call_id)
         end
-        table.insert(api_messages, {
-          role = "tool",
-          tool_call_id = tr.tool_call_id,
-          content = result_content,
+        table.insert(input_items, {
+          type = "function_call_output",
+          call_id = tr.call_id,
+          output = result_content,
         })
       end
 
       -- Add user message AFTER tool results, only if it has non-tool-result content
-      if #content_parts_for_api > 0 or (final_api_content ~= "" and #tool_results == 0) then
-        table.insert(api_messages, {
-          role = msg.role,
-          content = final_api_content,
+      if #content_parts_for_api > 0 then
+        table.insert(input_items, {
+          role = "user",
+          content = content_parts_for_api,
         })
       end
     elseif msg.role == "assistant" then
-      -- Extract text and tool_use from parts, skip thinking nodes
+      -- Emit assistant parts as flat top-level items in the input array
+      -- Collect text parts for a single message item
       local text_parts = {}
-      local tool_calls = {}
 
       for _, p in ipairs(msg.parts or {}) do
         if p.kind == "text" then
           table.insert(text_parts, p.text or "")
         elseif p.kind == "thinking" then
-          -- Skip thinking nodes - OpenAI doesn't need them
+          -- Skip thinking nodes for now (future enhancement)
         elseif p.kind == "tool_use" then
+          -- Flush any accumulated text before the tool call
+          if #text_parts > 0 then
+            local text = table.concat(text_parts, "")
+            if #text > 0 then
+              table.insert(input_items, {
+                role = "assistant",
+                content = text,
+              })
+            end
+            text_parts = {}
+          end
+
           -- Normalize tool ID for OpenAI compatibility (handles Vertex URN-style IDs)
           local normalized_id = base.normalize_tool_id(p.id)
-          table.insert(tool_calls, {
-            id = normalized_id,
-            type = "function",
-            ["function"] = {
-              name = p.name,
-              arguments = vim.fn.json_encode(p.input),
-            },
+          table.insert(input_items, {
+            type = "function_call",
+            call_id = normalized_id,
+            name = p.name,
+            arguments = vim.fn.json_encode(p.input),
           })
-          log.debug("openai.build_request: Added tool_use for " .. p.name .. " (" .. normalized_id .. ")")
+          log.debug("openai.build_request: Added function_call for " .. p.name .. " (" .. normalized_id .. ")")
         end
       end
 
-      local content = table.concat(text_parts, "")
-      local api_msg = {
-        role = msg.role,
-        content = #content > 0 and content or nil,
-      }
-
-      if #tool_calls > 0 then
-        api_msg.tool_calls = tool_calls
+      -- Flush remaining text
+      if #text_parts > 0 then
+        local text = table.concat(text_parts, "")
+        if #text > 0 then
+          table.insert(input_items, {
+            type = "message",
+            role = "assistant",
+            content = { { type = "output_text", text = text, annotations = {} } },
+            status = "completed",
+          })
+        end
       end
-
-      table.insert(api_messages, api_msg)
     end
   end
 
@@ -225,26 +217,21 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
   local all_tools = tools_module.get_for_prompt(prompt.opts)
   local tools_array = {}
 
-  for _, def in pairs(all_tools) do
+  for _, definition in pairs(all_tools) do
     table.insert(tools_array, {
       type = "function",
-      ["function"] = {
-        name = def.name,
-        description = tools_module.build_description(def),
-        parameters = def.input_schema,
-      },
+      name = definition.name,
+      description = tools_module.build_description(definition),
+      parameters = definition.input_schema,
     })
   end
 
   local request_body = {
     model = self.parameters.model,
-    messages = api_messages,
-    -- max_tokens or max_completion_tokens will be set conditionally below
-    -- temperature will be set conditionally below
+    input = input_items,
     stream = true,
-    stream_options = {
-      include_usage = true, -- Request usage information in the final chunk
-    },
+    store = false,
+    max_output_tokens = self.parameters.max_tokens,
   }
 
   -- Add tools if any are registered
@@ -254,25 +241,32 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
     log.debug("openai.build_request: Added " .. #tools_array .. " tools to request")
   end
 
-  -- Use max_completion_tokens for all OpenAI models (recommended by OpenAI)
-  request_body.max_completion_tokens = self.parameters.max_tokens
-
   if self.parameters.reasoning and self.parameters.reasoning ~= "" then
-    request_body.reasoning_effort = self.parameters.reasoning
+    request_body.reasoning = { effort = self.parameters.reasoning }
     log.debug(
-      "openai.build_request: Using max_completion_tokens: "
+      "openai.build_request: Using max_output_tokens: "
         .. tostring(self.parameters.max_tokens)
-        .. " and reasoning_effort: "
+        .. " and reasoning.effort: "
         .. self.parameters.reasoning
     )
   else
     request_body.temperature = self.parameters.temperature
     log.debug(
-      "openai.build_request: Using max_completion_tokens: "
+      "openai.build_request: Using max_output_tokens: "
         .. tostring(self.parameters.max_tokens)
         .. " and temperature: "
         .. tostring(self.parameters.temperature)
     )
+  end
+
+  -- Prompt caching (Responses API)
+  local cache_retention = self.parameters.cache_retention or "short"
+  if cache_retention ~= "none" then
+    local filename = context and context:get_filename() or ""
+    if filename ~= "" then
+      request_body.prompt_cache_key = filename
+    end
+    request_body.prompt_cache_retention = cache_retention == "long" and "24h" or "in_memory"
   end
 
   return request_body
@@ -289,24 +283,22 @@ function M.get_request_headers(self)
   }
 end
 
--- Get API endpoint
---- Process a single line of OpenAI API streaming response
+--- Process a single line of OpenAI Responses API streaming response
 --- Parses OpenAI's server-sent events format and extracts content, usage, and completion information
 ---@param self flemma.provider.OpenAI
 ---@param line string A single line from the OpenAI API response stream
 ---@param callbacks flemma.provider.Callbacks Table of callback functions to handle parsed data
 function M.process_response_line(self, line, callbacks)
-  -- Use base SSE parser
-  local parsed = base._parse_sse_line(line)
+  -- Use base SSE parser (no [DONE] in Responses API)
+  local parsed = base._parse_sse_line(line, { allow_done = false })
   if not parsed then
     -- Handle non-SSE lines
     base._handle_non_sse_line(self, line, callbacks)
     return
   end
 
-  -- Handle [DONE] message
-  if parsed.type == "done" then
-    log.debug("openai.process_response_line(): Received [DONE] message")
+  -- Skip event: lines (we use data.type instead)
+  if parsed.type == "event" then
     return
   end
 
@@ -329,148 +321,157 @@ function M.process_response_line(self, line, callbacks)
 
   -- Handle error responses
   if data.error then
-    local msg = self:extract_json_response_error(data) or "Unknown API error"
-    log.error("openai.process_response_line(): OpenAI API error: " .. log.inspect(msg))
+    local error_message = self:extract_json_response_error(data) or "Unknown API error"
+    log.error("openai.process_response_line(): OpenAI API error: " .. log.inspect(error_message))
     if callbacks.on_error then
-      callbacks.on_error(msg)
+      callbacks.on_error(error_message)
     end
     return
   end
 
-  -- Handle final chunk with usage information
-  if data.choices and #data.choices == 0 and data.usage then
-    log.debug("openai.process_response_line(): Received final chunk with usage: " .. log.inspect(data.usage))
+  local event_type = data.type
 
-    if type(data.usage) == "table" then
-      -- Extract cached tokens first so we can subtract from prompt_tokens.
-      -- OpenAI's prompt_tokens includes cached_tokens as a subset, so we normalize
+  if not event_type then
+    log.debug("openai.process_response_line(): Data without type field, skipping")
+    return
+  end
+
+  -- Handle text content deltas
+  if event_type == "response.output_text.delta" then
+    if data.delta then
+      log.debug("openai.process_response_line(): Text delta: " .. log.inspect(data.delta))
+      base._signal_content(self, data.delta, callbacks)
+    end
+    return
+  end
+
+  -- Handle function call start
+  if event_type == "response.output_item.added" then
+    if data.item and data.item.type == "function_call" then
+      self._response_buffer.extra.current_tool_call = {
+        name = data.item.name or "",
+        call_id = data.item.call_id or "",
+        arguments_json = "",
+      }
+      log.debug(
+        "openai.process_response_line(): Started function_call: "
+          .. (data.item.name or "")
+          .. " ("
+          .. (data.item.call_id or "")
+          .. ")"
+      )
+    elseif data.item and data.item.type == "reasoning" then
+      log.debug("openai.process_response_line(): Reasoning item added (ignored for now)")
+    end
+    return
+  end
+
+  -- Handle function call arguments streaming
+  if event_type == "response.function_call_arguments.delta" then
+    if data.delta and self._response_buffer.extra.current_tool_call then
+      self._response_buffer.extra.current_tool_call.arguments_json = self._response_buffer.extra.current_tool_call.arguments_json
+        .. data.delta
+      log.debug("openai.process_response_line(): Appending function_call arguments")
+    end
+    return
+  end
+
+  -- Handle function call completion
+  if event_type == "response.output_item.done" then
+    if data.item and data.item.type == "function_call" then
+      local arguments_json = data.item.arguments or ""
+      local parse_ok, input = pcall(vim.fn.json_decode, arguments_json)
+      if not parse_ok then
+        input = {}
+        log.warn("openai.process_response_line(): Failed to parse tool arguments JSON: " .. arguments_json)
+      end
+
+      local json_str = vim.fn.json_encode(input)
+
+      local max_ticks = 0
+      for ticks in json_str:gmatch("`+") do
+        max_ticks = math.max(max_ticks, #ticks)
+      end
+      local fence = string.rep("`", math.max(3, max_ticks + 1))
+
+      -- Use appropriate prefix based on what's already accumulated
+      local prefix = ""
+      if self:_has_content() then
+        prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
+      end
+      local formatted = string.format(
+        "%s**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n",
+        prefix,
+        data.item.name or "",
+        data.item.call_id or "",
+        fence,
+        json_str,
+        fence
+      )
+
+      base._signal_content(self, formatted, callbacks)
+      log.debug("openai.process_response_line(): Emitted tool_use block for " .. (data.item.name or ""))
+
+      -- Reset tool state
+      self._response_buffer.extra.current_tool_call = nil
+    end
+    return
+  end
+
+  -- Handle response completion with usage
+  if event_type == "response.completed" then
+    log.debug("openai.process_response_line(): Response completed")
+
+    if data.response and data.response.usage and type(data.response.usage) == "table" then
+      local usage = data.response.usage
+
+      -- Extract cached tokens first so we can subtract from input_tokens.
+      -- OpenAI's input_tokens includes cached_tokens as a subset, so we normalize
       -- to make input_tokens mean "non-cached input" (matching Anthropic's semantics).
       local cached_tokens = (
-        data.usage.prompt_tokens_details
-        and data.usage.prompt_tokens_details.cached_tokens
-        and data.usage.prompt_tokens_details.cached_tokens > 0
+        usage.input_tokens_details
+        and usage.input_tokens_details.cached_tokens
+        and usage.input_tokens_details.cached_tokens > 0
       )
-          and data.usage.prompt_tokens_details.cached_tokens
+          and usage.input_tokens_details.cached_tokens
         or 0
 
-      if callbacks.on_usage and data.usage.prompt_tokens then
-        callbacks.on_usage({ type = "input", tokens = data.usage.prompt_tokens - cached_tokens })
+      if callbacks.on_usage and usage.input_tokens then
+        callbacks.on_usage({ type = "input", tokens = usage.input_tokens - cached_tokens })
       end
-      if callbacks.on_usage and data.usage.completion_tokens then
-        callbacks.on_usage({ type = "output", tokens = data.usage.completion_tokens })
+      if callbacks.on_usage and usage.output_tokens then
+        callbacks.on_usage({ type = "output", tokens = usage.output_tokens })
       end
-      if
-        callbacks.on_usage
-        and data.usage.completion_tokens_details
-        and data.usage.completion_tokens_details.reasoning_tokens
-      then
-        callbacks.on_usage({ type = "thoughts", tokens = data.usage.completion_tokens_details.reasoning_tokens })
+      if callbacks.on_usage and usage.output_tokens_details and usage.output_tokens_details.reasoning_tokens then
+        callbacks.on_usage({ type = "thoughts", tokens = usage.output_tokens_details.reasoning_tokens })
       end
       if callbacks.on_usage and cached_tokens > 0 then
         callbacks.on_usage({ type = "cache_read", tokens = cached_tokens })
         log.debug("openai.process_response_line(): Cached input tokens: " .. tostring(cached_tokens))
       end
+    end
 
-      if callbacks.on_response_complete then
-        callbacks.on_response_complete()
-      end
+    if callbacks.on_response_complete then
+      callbacks.on_response_complete()
     end
     return
   end
 
-  -- Handle content deltas
-  if not data.choices or not data.choices[1] or not data.choices[1].delta then
+  -- Handle response failure
+  if event_type == "response.failed" then
+    local error_message = "Response failed"
+    if data.response and data.response.error then
+      error_message = data.response.error.message or error_message
+    end
+    log.error("openai.process_response_line(): " .. error_message)
+    if callbacks.on_error then
+      callbacks.on_error(error_message)
+    end
     return
   end
 
-  local delta = data.choices[1].delta
-
-  -- Skip role marker without content and without tool_calls
-  if delta.role == "assistant" and not delta.content and not delta.tool_calls then
-    log.debug("openai.process_response_line(): Received assistant role marker, skipping")
-    return
-  end
-
-  -- Handle actual content (check for vim.NIL as well)
-  if delta.content and delta.content ~= vim.NIL then
-    log.debug("openai.process_response_line(): Content delta: " .. log.inspect(delta.content))
-    base._signal_content(self, delta.content, callbacks)
-  end
-
-  -- Handle tool_calls streaming
-  if delta.tool_calls then
-    for _, tc in ipairs(delta.tool_calls) do
-      local idx = tc.index or 0
-      local tool_calls = self._response_buffer.extra.tool_calls or {}
-
-      if tc.id then
-        tool_calls[idx] = {
-          id = tc.id,
-          name = tc["function"] and tc["function"].name or "",
-          arguments = tc["function"] and tc["function"].arguments or "",
-        }
-        log.debug(
-          "openai.process_response_line(): Started tool_call: "
-            .. (tool_calls[idx].name or "")
-            .. " ("
-            .. (tool_calls[idx].id or "")
-            .. ")"
-        )
-      elseif tool_calls[idx] then
-        if tc["function"] and tc["function"].arguments then
-          tool_calls[idx].arguments = tool_calls[idx].arguments .. tc["function"].arguments
-          log.debug("openai.process_response_line(): Appending arguments for tool_call index " .. tostring(idx))
-        end
-      end
-
-      self._response_buffer.extra.tool_calls = tool_calls
-    end
-  end
-
-  -- Handle finish_reason
-  local finish_reason = data.choices[1].finish_reason
-  if finish_reason and finish_reason ~= vim.NIL then
-    log.debug("openai.process_response_line(): Received finish_reason: " .. log.inspect(finish_reason))
-
-    if finish_reason == "tool_calls" then
-      local tool_calls = self._response_buffer.extra.tool_calls or {}
-      for _, tc in pairs(tool_calls) do
-        local parse_ok, input = pcall(vim.fn.json_decode, tc.arguments)
-        if not parse_ok then
-          input = {}
-          log.warn("openai.process_response_line(): Failed to parse tool arguments JSON: " .. tc.arguments)
-        end
-
-        local json_str = vim.fn.json_encode(input)
-
-        local max_ticks = 0
-        for ticks in json_str:gmatch("`+") do
-          max_ticks = math.max(max_ticks, #ticks)
-        end
-        local fence = string.rep("`", math.max(3, max_ticks + 1))
-
-        -- Use appropriate prefix based on what's already accumulated
-        local prefix = ""
-        if self:_has_content() then
-          prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
-        end
-        local formatted = string.format(
-          "%s**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n",
-          prefix,
-          tc.name,
-          tc.id,
-          fence,
-          json_str,
-          fence
-        )
-
-        base._signal_content(self, formatted, callbacks)
-        log.debug("openai.process_response_line(): Emitted tool_use block for " .. tc.name)
-      end
-
-      self._response_buffer.extra.tool_calls = {}
-    end
-  end
+  -- All other events are ignored
+  log.debug("openai.process_response_line(): Ignoring event type: " .. event_type)
 end
 
 ---Validate provider-specific parameters

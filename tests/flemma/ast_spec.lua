@@ -501,8 +501,14 @@ describe("Provider Integration", function()
       "@Assistant: Got it",
     }
 
-    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
-    local req = provider:build_request(prompt, {})
-    assert.equals("user", req.messages[1].role)
+    local context = ctx.from_file("tests/fixtures/doc.chat")
+    local prompt = pipeline.run(lines, context)
+    local req = provider:build_request(prompt, context)
+    -- Responses API uses input[] instead of messages[]
+    local user_items = vim.tbl_filter(function(item)
+      return item.role == "user"
+    end, req.input)
+    assert.equals(1, #user_items)
+    assert.equals("user", user_items[1].role)
   end)
 end)

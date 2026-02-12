@@ -87,13 +87,17 @@ describe(":FlemmaSend command", function()
     local config = state.get_config()
 
     assert.equals("o3", captured_request_body.model)
-    assert.equals(1, #captured_request_body.messages)
-    assert.equals("user", captured_request_body.messages[1].role)
-    assert.equals("Hello", captured_request_body.messages[1].content)
+    assert.is_not_nil(captured_request_body.input, "Should use input field (Responses API)")
+    assert.is_nil(captured_request_body.messages, "Should NOT use messages field")
+    -- Find the user message in the input array
+    local user_items = vim.tbl_filter(function(item)
+      return item.role == "user"
+    end, captured_request_body.input)
+    assert.equals(1, #user_items)
     assert.equals(true, captured_request_body.stream)
-    assert.is_not_nil(captured_request_body.stream_options)
-    assert.equals(true, captured_request_body.stream_options.include_usage)
-    assert.equals(config.parameters.max_tokens, captured_request_body.max_completion_tokens)
+    assert.equals(false, captured_request_body.store)
+    assert.is_nil(captured_request_body.stream_options, "Responses API does not use stream_options")
+    assert.equals(config.parameters.max_tokens, captured_request_body.max_output_tokens)
     assert.equals(config.parameters.temperature, captured_request_body.temperature)
 
     -- Tools are now included by default (parallel tool use enabled)
