@@ -76,11 +76,15 @@ M.setup = function()
           vim.keymap.set("i", config.keymaps.insert.send, function()
             local bufnr = vim.api.nvim_get_current_buf()
             ui.buffer_cmd(bufnr, "stopinsert")
-            core.send_or_execute({
-              on_request_complete = function()
-                ui.buffer_cmd(bufnr, "startinsert!")
-              end,
-            })
+            -- Defer to next event loop iteration so stopinsert takes effect
+            -- and we exit any textlock context (e.g., Copilot's keymap wrapper)
+            vim.schedule(function()
+              core.send_or_execute({
+                on_request_complete = function()
+                  ui.buffer_cmd(bufnr, "startinsert!")
+                end,
+              })
+            end)
           end, { buffer = true, desc = "Send to Flemma and continue editing" })
         end
       end,
