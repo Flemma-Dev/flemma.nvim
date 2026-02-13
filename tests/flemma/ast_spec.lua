@@ -422,8 +422,11 @@ describe("AST Thinking Constructor", function()
   end)
 
   it("creates normal thinking node without redacted flag", function()
-    local seg =
-      ast.thinking("thought", { start_line = 1, end_line = 3 }, { signature = { value = "sig-abc", provider = "anthropic" } })
+    local seg = ast.thinking(
+      "thought",
+      { start_line = 1, end_line = 3 },
+      { signature = { value = "sig-abc", provider = "anthropic" } }
+    )
     assert.equals("thinking", seg.kind)
     assert.equals("thought", seg.content)
     assert.equals("sig-abc", seg.signature.value)

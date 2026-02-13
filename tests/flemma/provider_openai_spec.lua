@@ -320,7 +320,11 @@ describe("OpenAI Provider", function()
           {
             role = "assistant",
             parts = {
-              { kind = "thinking", content = "I thought about this.", signature = { value = signature, provider = "openai" } },
+              {
+                kind = "thinking",
+                content = "I thought about this.",
+                signature = { value = signature, provider = "openai" },
+              },
               { kind = "text", text = "The answer is 42." },
             },
           },

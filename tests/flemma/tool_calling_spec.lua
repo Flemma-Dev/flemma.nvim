@@ -1403,7 +1403,11 @@ describe("Vertex AI Thought Signature Support", function()
 
     assert.is_not_nil(thinking_seg, "Should parse self-closing thinking tag")
     assert.is_not_nil(thinking_seg.signature, "Should have signature table")
-    assert.equals("sig-self-closing-123", thinking_seg.signature.value, "Should extract signature value from self-closing tag")
+    assert.equals(
+      "sig-self-closing-123",
+      thinking_seg.signature.value,
+      "Should extract signature value from self-closing tag"
+    )
     assert.equals("vertex", thinking_seg.signature.provider, "Should extract signature provider from self-closing tag")
     assert.equals("", thinking_seg.content, "Self-closing tag should have empty content")
   end)
