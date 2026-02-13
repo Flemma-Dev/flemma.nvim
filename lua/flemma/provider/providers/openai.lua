@@ -564,6 +564,9 @@ function M.process_response_line(self, line, callbacks)
       self._response_buffer.extra.accumulated_reasoning_summary = (
         self._response_buffer.extra.accumulated_reasoning_summary or ""
       ) .. data.delta
+      if callbacks.on_thinking then
+        callbacks.on_thinking(data.delta)
+      end
     end
     return
   end

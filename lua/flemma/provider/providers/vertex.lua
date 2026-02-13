@@ -608,6 +608,9 @@ function M.process_response_line(self, line, callbacks)
         log.debug("vertex.process_response_line(): Accumulating thought text: " .. log.inspect(part.text))
         self._response_buffer.extra.accumulated_thoughts = (self._response_buffer.extra.accumulated_thoughts or "")
           .. part.text
+        if callbacks.on_thinking then
+          callbacks.on_thinking(part.text)
+        end
       elseif part.functionCall then
         -- Handle function call
         local fc = part.functionCall

@@ -346,6 +346,10 @@ function M.start_loading_spinner(bufnr)
       spell = false,
     })
 
+    -- Expose extmark info so update_thinking_preview can update it
+    buffer_state.spinner_extmark_id = spinner_extmark_id
+    buffer_state.spinner_line_idx0 = spinner_line_idx0
+
     -- Immediately update UI after adding the thinking message
     M.update_ui(bufnr)
     -- Move to bottom and center the line so user sees the message
@@ -393,6 +397,10 @@ function M.cleanup_spinner(bufnr)
     buffer_state.spinner_timer = nil
   end
 
+  -- Clear thinking preview extmark references
+  buffer_state.spinner_extmark_id = nil
+  buffer_state.spinner_line_idx0 = nil
+
   vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1) -- Clear rulers/virtual text
   vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1) -- Remove spinner suppression
 
@@ -429,6 +437,28 @@ function M.cleanup_spinner(bufnr)
 
   M.update_ui(bufnr) -- Force UI update after cleaning up spinner
   vim.bo[bufnr].modifiable = original_modifiable -- Restore previous modifiable state
+end
+
+---Update the spinner extmark with a live thinking preview
+---Replaces the spinning animation with a rolling snippet of thinking content
+---@param bufnr integer
+---@param preview_text string Truncated preview to display
+function M.update_thinking_preview(bufnr, preview_text)
+  local buffer_state = state.get_buffer_state(bufnr)
+  local extmark_id = buffer_state.spinner_extmark_id
+  local line_idx0 = buffer_state.spinner_line_idx0
+  if not extmark_id or not line_idx0 then
+    return
+  end
+
+  vim.api.nvim_buf_set_extmark(bufnr, spinner_ns, line_idx0, 0, {
+    id = extmark_id,
+    virt_text = { { " " .. config.spinner.thinking_char .. " (" .. preview_text .. ")", "FlemmaAssistantSpinner" } },
+    virt_text_pos = "eol",
+    hl_mode = "combine",
+    priority = PRIORITY.SPINNER,
+    spell = false,
+  })
 end
 
 ---Fold the last thinking block in a buffer

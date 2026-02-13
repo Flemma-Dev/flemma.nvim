@@ -153,14 +153,22 @@ function M.cancel_request()
       local last_line = vim.api.nvim_buf_line_count(bufnr)
       local last_line_content = vim.api.nvim_buf_get_lines(bufnr, last_line - 1, last_line, false)[1]
 
-      -- If we're still showing the thinking message, remove it
       if last_line_content == "@Assistant: Thinking..." then
+        -- No content received — clean up spinner placeholder
         log.debug("cancel_request(): ... Cleaning up 'Thinking...' message")
         ui.cleanup_spinner(bufnr)
-      end
-
-      -- Auto-write if enabled and we've received some content
-      if buffer_state.request_cancelled and last_line_content ~= "@Assistant: Thinking..." then
+      else
+        -- Content was received — mark the response as aborted
+        ui.cleanup_spinner(bufnr)
+        local original_modifiable = vim.bo[bufnr].modifiable
+        vim.bo[bufnr].modifiable = true
+        local line_count = vim.api.nvim_buf_line_count(bufnr)
+        ui.buffer_cmd(bufnr, "undojoin")
+        vim.api.nvim_buf_set_lines(bufnr, line_count, line_count, false, {
+          "",
+          "<!-- response aborted by user -->",
+        })
+        vim.bo[bufnr].modifiable = original_modifiable
         auto_write_buffer(bufnr)
       end
 
@@ -534,6 +542,8 @@ function M.send_to_provider(opts)
   ---@type integer|nil
   local spinner_timer = ui.start_loading_spinner(bufnr) -- Handles its own modifiable toggles for writes
   local response_started = false
+  local thinking_char_count = 0
+  local thinking_preview_active = false
 
   -- Reset in-flight usage tracking for this buffer
   -- Include the provider's output_has_thoughts flag so usage.lua can display correctly
@@ -677,6 +687,30 @@ function M.send_to_provider(opts)
           cache_read_input_tokens = 0,
           cache_creation_input_tokens = 0,
         }
+      end)
+    end,
+
+    on_thinking = function(delta)
+      vim.schedule(function()
+        thinking_char_count = thinking_char_count + #delta
+
+        -- Stop the spinning animation on first thinking delta (keep extmark for preview)
+        if spinner_timer and not thinking_preview_active then
+          vim.fn.timer_stop(spinner_timer)
+          spinner_timer = nil
+          thinking_preview_active = true
+        end
+
+        local display
+        if thinking_char_count >= 1000 then
+          display = string.format("%.1fk characters", thinking_char_count / 1000)
+        elseif thinking_char_count == 1 then
+          display = "1 character"
+        else
+          display = thinking_char_count .. " characters"
+        end
+
+        ui.update_thinking_preview(bufnr, display)
       end)
     end,
 

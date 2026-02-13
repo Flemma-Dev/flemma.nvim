@@ -22,6 +22,8 @@ local session_module = require("flemma.session")
 ---@field locked boolean Whether the buffer is locked (non-modifiable) for request/tool execution
 ---@field waiting_for_tools? boolean Whether a send is queued waiting for async tool resolution
 ---@field ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached parsed AST
+---@field spinner_extmark_id integer|nil Extmark ID for the spinner/thinking preview
+---@field spinner_line_idx0 integer|nil 0-indexed line of the spinner extmark
 
 ---@diagnostic disable-next-line: missing-fields
 local config = {} ---@type flemma.Config

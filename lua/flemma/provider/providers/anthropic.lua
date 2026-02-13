@@ -600,6 +600,9 @@ function M.process_response_line(self, line, callbacks)
       log.debug("anthropic.process_response_line(): Content thinking delta: " .. log.inspect(data.delta.thinking))
       self._response_buffer.extra.accumulated_thinking = (self._response_buffer.extra.accumulated_thinking or "")
         .. data.delta.thinking
+      if callbacks.on_thinking then
+        callbacks.on_thinking(data.delta.thinking)
+      end
     elseif data.delta.type == "signature_delta" and data.delta.signature then
       self._response_buffer.extra.accumulated_signature = (self._response_buffer.extra.accumulated_signature or "")
         .. data.delta.signature

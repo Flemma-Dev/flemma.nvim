@@ -863,6 +863,14 @@ Set `signs.enabled = true` to place signs for each message line. Each role (`sys
 
 While a request runs Flemma appends `@Assistant: Thinking...` with an animated braille spinner using virtual text extmarks. The line is flagged as non-spellable so spell check integrations stay quiet. Once streaming starts, the spinner is removed and replaced with the streamed content.
 
+When the model is in a thinking/reasoning phase (Anthropic extended thinking, OpenAI reasoning, or Vertex thinking), the spinner animation is replaced with a live character count — e.g., `❖ (3.2k characters)` — so you can gauge progress. The symbol is configurable via `spinner.thinking_char`:
+
+```lua
+spinner = {
+  thinking_char = "●",  -- default: "❖"
+}
+```
+
 Tool execution also shows a spinner next to the tool result block while the tool is running.
 
 ---
@@ -967,6 +975,9 @@ require("flemma").setup({
     system = { char = nil, hl = true },
     user = { char = "▏", hl = true },
     assistant = { char = nil, hl = true },
+  },
+  spinner = {
+    thinking_char = "❖",              -- Char shown during thinking (e.g. "❖ (3.2k characters)")
   },
   line_highlights = {
     enabled = true,
