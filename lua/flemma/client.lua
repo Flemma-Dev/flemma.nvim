@@ -211,32 +211,75 @@ function M.send_request(opts)
     log.debug("send_request(): ... @request.json <<< " .. vim.fn.json_encode(opts.request_body))
   end
 
+  -- Buffers for partial lines split across on_stdout/on_stderr callbacks.
+  -- Neovim's jobstart splits output on newlines: the last element of each
+  -- callback's data array is either "" (chunk ended with \n) or a partial
+  -- line that must be prepended to the first element of the next callback.
+  local stdout_buffer = ""
+  local stderr_buffer = ""
+
   -- Start job
   local job_id = vim.fn.jobstart(cmd, {
     detach = true, -- Put process in its own group
     on_stdout = function(_, data)
-      if data then
-        for _, line in ipairs(data) do
-          if line and #line > 0 then
-            -- Log the raw response line
-            log.debug("send_request(): on_stdout: " .. line)
+      if not data then
+        return
+      end
 
-            -- Process the response line (single path)
-            if opts.process_response_line_fn then
-              opts.process_response_line_fn(line, opts.callbacks)
-            end
+      -- Detect EOF: Neovim sends {""} when the stream ends, allowing
+      -- any buffered partial line to be flushed as a complete line.
+      local is_eof = (#data == 1 and data[1] == "")
+
+      -- Prepend any buffered partial line to the first element
+      data[1] = stdout_buffer .. data[1]
+
+      -- The last element is always either "" (complete) or a partial line
+      stdout_buffer = data[#data]
+
+      -- Process all complete lines (everything except the last element)
+      for i = 1, #data - 1 do
+        local line = data[i]
+        if line and #line > 0 then
+          log.debug("send_request(): on_stdout: " .. line)
+
+          if opts.process_response_line_fn then
+            opts.process_response_line_fn(line, opts.callbacks)
           end
+        end
+      end
+
+      -- At EOF, flush any remaining buffered content as a complete line
+      if is_eof and #stdout_buffer > 0 then
+        local line = stdout_buffer
+        stdout_buffer = ""
+        log.debug("send_request(): on_stdout: " .. line)
+
+        if opts.process_response_line_fn then
+          opts.process_response_line_fn(line, opts.callbacks)
         end
       end
     end,
     on_stderr = function(_, data)
-      if data then
-        for _, line in ipairs(data) do
-          if line and #line > 0 then
-            -- Log stderr output directly
-            log.error("send_request(): stderr: " .. line)
-          end
+      if not data then
+        return
+      end
+
+      local is_eof = (#data == 1 and data[1] == "")
+
+      data[1] = stderr_buffer .. data[1]
+      stderr_buffer = data[#data]
+
+      for i = 1, #data - 1 do
+        local line = data[i]
+        if line and #line > 0 then
+          log.error("send_request(): stderr: " .. line)
         end
+      end
+
+      if is_eof and #stderr_buffer > 0 then
+        local line = stderr_buffer
+        stderr_buffer = ""
+        log.error("send_request(): stderr: " .. line)
       end
     end,
     on_exit = function(_, code)
