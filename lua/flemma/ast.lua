@@ -28,6 +28,7 @@ local M = {}
 ---@class flemma.ast.TextSegment
 ---@field kind "text"
 ---@field value string
+---@field position flemma.ast.Position|nil
 
 ---@class flemma.ast.ExpressionSegment
 ---@field kind "expression"
@@ -83,10 +84,14 @@ local M = {}
 ---@field kind "unsupported_file"
 ---@field filename? string
 
+---@class flemma.ast.ThinkingSignature
+---@field value string The opaque signature string
+---@field provider string Provider that created the signature (e.g., "openai", "anthropic", "vertex")
+
 ---@class flemma.ast.GenericThinkingPart
 ---@field kind "thinking"
 ---@field content string
----@field signature? string
+---@field signature? flemma.ast.ThinkingSignature
 ---@field redacted? boolean
 
 ---@class flemma.ast.GenericToolUsePart
@@ -100,6 +105,7 @@ local M = {}
 ---@field tool_use_id string
 ---@field content string
 ---@field is_error boolean
+---@field pending? boolean
 
 ---@alias flemma.ast.GenericPart flemma.ast.GenericTextPart|flemma.ast.GenericImagePart|flemma.ast.GenericPdfPart|flemma.ast.GenericTextFilePart|flemma.ast.GenericUnsupportedFilePart|flemma.ast.GenericThinkingPart|flemma.ast.GenericToolUsePart|flemma.ast.GenericToolResultPart
 
@@ -137,9 +143,10 @@ function M.message(role, segments, pos)
 end
 
 ---@param value string
+---@param pos flemma.ast.Position|nil
 ---@return flemma.ast.TextSegment
-function M.text(value)
-  return { kind = "text", value = value }
+function M.text(value, pos)
+  return { kind = "text", value = value, position = pos }
 end
 
 ---@param code string
@@ -151,7 +158,7 @@ end
 
 ---@param content string
 ---@param pos flemma.ast.Position
----@param opts? { signature?: string, redacted?: boolean }
+---@param opts? { signature?: flemma.ast.ThinkingSignature, redacted?: boolean }
 ---@return flemma.ast.ThinkingSegment
 function M.thinking(content, pos, opts)
   opts = opts or {}
@@ -181,7 +188,7 @@ end
 
 ---@param tool_use_id string
 ---@param content string
----@param opts? { is_error?: boolean, start_line?: integer, end_line?: integer }
+---@param opts? { is_error?: boolean, pending?: boolean, start_line?: integer, end_line?: integer }
 ---@return flemma.ast.ToolResultSegment
 function M.tool_result(tool_use_id, content, opts)
   opts = opts or {}
@@ -190,6 +197,7 @@ function M.tool_result(tool_use_id, content, opts)
     tool_use_id = tool_use_id,
     content = content,
     is_error = opts.is_error or false,
+    pending = opts.pending or nil,
     position = { start_line = opts.start_line, end_line = opts.end_line },
   }
 end
@@ -253,7 +261,7 @@ function M.to_generic_parts(evaluated_parts, source_file)
       table.insert(parts, {
         kind = "thinking",
         content = p.content,
-        signature = p.signature,
+        signature = p.signature, -- table { value, provider } or nil
         redacted = p.redacted,
       })
     elseif p.kind == "tool_use" then

@@ -4,14 +4,16 @@
 local M = {}
 
 ---@class flemma.tools.JSONSchema
----@field type string JSON Schema type ("object", "string", "number", etc.)
+---@field type string|string[] JSON Schema type ("object", "string", "number", or nullable array like {"number", "null"})
 ---@field description? string Human-readable description of this schema element
 ---@field properties? table<string, flemma.tools.JSONSchema> Property schemas keyed by name
 ---@field required? string[] Required property names
+---@field additionalProperties? boolean Whether to allow extra properties (set false for strict mode)
 
 ---@class flemma.tools.ToolDefinition
 ---@field name string Tool name (must match registry key)
 ---@field description string Human-readable description
+---@field strict? boolean Enable strict schema enforcement (OpenAI only; requires additionalProperties=false on input_schema)
 ---@field input_schema flemma.tools.JSONSchema JSON Schema for the tool input
 ---@field output_schema? flemma.tools.JSONSchema JSON Schema for the tool output (used in description)
 ---@field async? boolean True if execute takes a callback (default false)

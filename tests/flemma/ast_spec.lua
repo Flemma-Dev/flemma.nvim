@@ -396,12 +396,13 @@ describe("AST to Parts Mapper", function()
 
   it("preserves redacted flag on thinking parts", function()
     local parts = ast.to_generic_parts({
-      { kind = "thinking", content = "normal thought", signature = "sig1" },
+      { kind = "thinking", content = "normal thought", signature = { value = "sig1", provider = "anthropic" } },
       { kind = "thinking", content = "encrypted-data", redacted = true },
     })
     assert.equals(2, #parts)
     assert.equals("thinking", parts[1].kind)
-    assert.equals("sig1", parts[1].signature)
+    assert.equals("sig1", parts[1].signature.value)
+    assert.equals("anthropic", parts[1].signature.provider)
     assert.is_nil(parts[1].redacted)
     assert.equals("thinking", parts[2].kind)
     assert.is_true(parts[2].redacted)
@@ -421,10 +422,15 @@ describe("AST Thinking Constructor", function()
   end)
 
   it("creates normal thinking node without redacted flag", function()
-    local seg = ast.thinking("thought", { start_line = 1, end_line = 3 }, { signature = "sig-abc" })
+    local seg = ast.thinking(
+      "thought",
+      { start_line = 1, end_line = 3 },
+      { signature = { value = "sig-abc", provider = "anthropic" } }
+    )
     assert.equals("thinking", seg.kind)
     assert.equals("thought", seg.content)
-    assert.equals("sig-abc", seg.signature)
+    assert.equals("sig-abc", seg.signature.value)
+    assert.equals("anthropic", seg.signature.provider)
     assert.is_nil(seg.redacted)
   end)
 end)
@@ -436,7 +442,7 @@ describe("Pipeline Integration", function()
       "@You: Hello",
       "@Assistant: Hi there!",
     }
-    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
     assert.equals("You are helpful.", prompt.system)
     assert.equals(2, #prompt.history)
   end)
@@ -450,7 +456,7 @@ describe("Pipeline Integration", function()
       "@Assistant: Got it",
     }
 
-    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
 
     assert.is_nil(prompt.system)
     assert.equals(2, #prompt.history)
@@ -482,7 +488,7 @@ describe("Provider Integration", function()
       "@You: Hello",
       "@Assistant: Hi there!",
     }
-    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
     local req = provider:build_request(prompt, {})
     assert.is_not_nil(req.model)
     assert.equals("table", type(req.messages))
@@ -501,8 +507,14 @@ describe("Provider Integration", function()
       "@Assistant: Got it",
     }
 
-    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
-    local req = provider:build_request(prompt, {})
-    assert.equals("user", req.messages[1].role)
+    local context = ctx.from_file("tests/fixtures/doc.chat")
+    local prompt = pipeline.run(parser.parse_lines(lines), context)
+    local req = provider:build_request(prompt, context)
+    -- Responses API uses input[] instead of messages[]
+    local user_items = vim.tbl_filter(function(item)
+      return item.role == "user"
+    end, req.input)
+    assert.equals(1, #user_items)
+    assert.equals("user", user_items[1].role)
   end)
 end)

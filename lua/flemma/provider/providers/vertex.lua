@@ -134,11 +134,12 @@ function M.new(provider_config)
   -- Set the API version
   provider.api_version = "v1" -- Or potentially make this configurable in future
 
+  -- Set metatable BEFORE reset so M.reset (not base.reset) initializes provider-specific state
+  setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
   provider:reset()
 
-  -- Set metatable to use Vertex AI methods
   ---@diagnostic disable-next-line: return-type-mismatch
-  return setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
+  return provider
 end
 
 ---@param self flemma.provider.Vertex
@@ -319,8 +320,8 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
 
       -- First pass: extract signature from thinking parts
       for _, p in ipairs(msg.parts or {}) do
-        if p.kind == "thinking" and p.signature then
-          thought_signature = p.signature
+        if p.kind == "thinking" and p.signature and p.signature.provider == "vertex" then
+          thought_signature = p.signature.value
           log.debug("vertex.build_request: Found thought signature in thinking part")
         end
       end
@@ -380,6 +381,31 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
     table.insert(contents, {
       role = vertex_role,
       parts = parts,
+    })
+  end
+
+  -- Inject synthetic error results for orphaned tool calls
+  local pending = prompt.pending_tool_calls
+  if pending and #pending > 0 then
+    local synthetic_parts = {}
+    for _, orphan in ipairs(pending) do
+      table.insert(synthetic_parts, {
+        functionResponse = {
+          name = orphan.name,
+          response = { error = "No result provided", success = false },
+        },
+      })
+      log.debug(
+        "vertex.build_request: Injected synthetic functionResponse for orphaned "
+          .. orphan.name
+          .. " ("
+          .. orphan.id
+          .. ")"
+      )
+    end
+    table.insert(contents, {
+      role = "user",
+      parts = synthetic_parts,
     })
   end
 
@@ -582,6 +608,9 @@ function M.process_response_line(self, line, callbacks)
         log.debug("vertex.process_response_line(): Accumulating thought text: " .. log.inspect(part.text))
         self._response_buffer.extra.accumulated_thoughts = (self._response_buffer.extra.accumulated_thoughts or "")
           .. part.text
+        if callbacks.on_thinking then
+          callbacks.on_thinking(part.text)
+        end
       elseif part.functionCall then
         -- Handle function call
         local fc = part.functionCall
@@ -694,11 +723,11 @@ function M.process_response_line(self, line, callbacks)
           thoughts_block = prefix .. "<thinking>\n" .. stripped_thoughts .. "\n</thinking>\n"
         end
       else
-        -- No thinking content but have signature - emit self-closing tag (namespaced for Vertex)
+        -- No thinking content but have signature — emit open/close tag (enables folding)
         thoughts_block = prefix
           .. '<thinking vertex:signature="'
           .. self._response_buffer.extra.thought_signature
-          .. '"/>\n'
+          .. '">\n</thinking>\n'
       end
 
       log.debug("vertex.process_response_line(): Appending thinking block: " .. log.inspect(thoughts_block))

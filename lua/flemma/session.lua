@@ -8,7 +8,7 @@
 ---
 --- Request Identification:
 --- - filepath: Resolved absolute path (handles symlinks, relative paths, etc.)
---- - bufnr: Only stored for unnamed/unsaved buffers as fallback identifier
+--- - bufnr: Buffer number where the request originated
 ---
 --- Flow:
 --- 1. During streaming: tokens accumulate in buffer_state.inflight_usage
@@ -56,7 +56,7 @@ Request.__index = Request
 ---@field input_price number USD per million input tokens
 ---@field output_price number USD per million output tokens
 ---@field filepath? string Resolved absolute filepath (nil for unnamed buffers)
----@field bufnr? integer Buffer number (fallback for unnamed buffers)
+---@field bufnr? integer Buffer number where the request originated
 ---@field started_at? number Seconds since epoch with microsecond precision
 ---@field completed_at? number Seconds since epoch with microsecond precision (defaults to session.now())
 ---@field output_has_thoughts? boolean Whether output_tokens already includes thoughts (true for OpenAI/Anthropic, false for Vertex)

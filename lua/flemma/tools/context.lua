@@ -117,6 +117,52 @@ function M.resolve_all_pending(bufnr)
   return pending
 end
 
+---Find all tool_use blocks whose tool_result has the `flemma:pending` marker (awaiting execution).
+---These are placeholders injected by the approval flow that the user has not manually overridden.
+---@param bufnr integer Buffer number
+---@return flemma.tools.ToolContext[] awaiting_contexts
+function M.resolve_all_awaiting_execution(bufnr)
+  local parser = require("flemma.parser")
+  local doc = parser.get_parsed_document(bufnr)
+
+  -- Find tool_result segments marked as pending
+  local pending_result_ids = {}
+  for _, msg in ipairs(doc.messages) do
+    if msg.role == "You" then
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "tool_result" and seg.pending and not seg.is_error then
+          pending_result_ids[seg.tool_use_id] = true
+        end
+      end
+    end
+  end
+
+  if vim.tbl_isempty(pending_result_ids) then
+    return {}
+  end
+
+  -- Find matching tool_use segments
+  local awaiting = {}
+  for _, msg in ipairs(doc.messages) do
+    if msg.role == "Assistant" then
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "tool_use" and pending_result_ids[seg.id] then
+          table.insert(awaiting, {
+            tool_id = seg.id,
+            tool_name = seg.name,
+            input = seg.input or {},
+            node = seg,
+            start_line = seg.position.start_line,
+            end_line = seg.position.end_line,
+          })
+        end
+      end
+    end
+  end
+
+  return awaiting
+end
+
 ---Resolve tool context from cursor position
 ---@param bufnr integer Buffer number
 ---@param cursor_pos {row: integer, col: integer} 1-based cursor position

@@ -238,8 +238,13 @@ function M.execute(bufnr, context)
   -- Lock buffer to prevent user edits during execution
   state.lock_buffer(bufnr)
 
-  -- Phase 1: Inject placeholder
-  local header_line, inject_err, placeholder_opts = injector.inject_placeholder(bufnr, tool_id)
+  -- Phase 1: Inject placeholder (pcall to ensure cleanup on unexpected errors like textlock)
+  local ph_ok, header_line, inject_err, placeholder_opts = pcall(injector.inject_placeholder, bufnr, tool_id)
+  if not ph_ok then
+    cleanup_pending(bufnr, tool_id)
+    maybe_unlock_buffer(bufnr)
+    return false, "Failed to inject placeholder: " .. tostring(header_line)
+  end
   if not header_line then
     cleanup_pending(bufnr, tool_id)
     maybe_unlock_buffer(bufnr)

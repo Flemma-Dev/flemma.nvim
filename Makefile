@@ -43,26 +43,46 @@ develop:
 
 # Launch Flemma.nvim in a new Ghostty terminal and screenshot
 .PHONY: screenshot ghostty-screenshot-cmd
-screenshot:
+screenshot: .vapor/dracula-vim
 	@ghostty																			\
 		--gtk-titlebar=true																\
 		--window-decoration=auto														\
-		--window-width=80																\
-		--window-height=48																\
+		--window-width=96																\
+		--window-height=40																\
 		--maximize=false																\
-		--font-family="Adwaita Mono"													\
-		--font-family-bold="Adwaita Mono, Bold"											\
-		--font-family-italic="Adwaita Mono, Regular Italic"								\
-		--font-family-bold-italic="Adwaita Mono, Bold Italic"							\
-		--font-size=12																	\
+		--font-family="Berkeley Mono"													\
+		--font-family-bold="Berkeley Mono, Bold"										\
+		--font-family-italic="Berkeley Mono, Regular Oblique"							\
+		--font-family-bold-italic="Berkeley Mono, Bold Oblique"							\
+		--font-size=14																	\
 		--gtk-custom-css="`pwd`/contrib/ghostty/gtk-overlay.css"						\
 		-e sh -c "cd `pwd` && make ghostty-screenshot-cmd"
 
+.vapor/dracula-vim:
+	@mkdir -p .vapor
+	git clone --depth 1 https://github.com/dracula/vim.git .vapor/dracula-vim
+
 ghostty-screenshot-cmd:
 	@-rm ~/.cache/nvim/flemma.log
-	@nvim --cmd "set runtimepath^=`pwd`"												\
-		-c ":colorscheme industry"														\
+	@nvim																				\
+		--cmd "set runtimepath^=`pwd`,`pwd`/.vapor/dracula-vim"							\
+		-c ":colorscheme dracula"														\
 		-c "lua require(\"flemma\").setup({												\
+			ruler = {																	\
+				hl = \"Comment-fg:#101010\",											\
+			},																			\
+			highlights = {																\
+				system = \"Normal\",													\
+				user_lua_expression = \"Added\",										\
+				user_file_reference = \"Added\",										\
+				thinking_block = \"Comment+bg:#102020-fg:#111111\",						\
+			},																			\
+			line_highlights = {															\
+				frontmatter = \"Normal+bg:#100310\",									\
+				system = \"Normal+bg:#100300\",											\
+				user = \"Normal\",														\
+				assistant = \"Normal+bg:#031010\",										\
+			},																			\
 		})"																				\
 		-c ":tabedit example.chat"														\
 		-c ':set nornu nospell nocursorline' -c ':set showtabline=0' -c ':set cmdheight=0' -c ':set guicursor=n-v-c-sm:ver25' -c ':normal! ggzaza'

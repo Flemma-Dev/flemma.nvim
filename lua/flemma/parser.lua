@@ -47,12 +47,6 @@ local function parse_segments(text, base_line)
   local idx = 1
   local s = text
 
-  local function emit_text(str)
-    if str and #str > 0 then
-      table.insert(segments, ast.text(str))
-    end
-  end
-
   local function char_to_line_col(pos)
     -- Count newlines up to pos to determine line and column
     local line = base_line
@@ -65,6 +59,19 @@ local function parse_segments(text, base_line)
     end
     local col = pos - last_newline
     return line, col
+  end
+
+  local function emit_text(str, char_start)
+    if str and #str > 0 then
+      local start_line = char_to_line_col(char_start)
+      local end_line = start_line
+      for i = 1, #str do
+        if str:sub(i, i) == "\n" then
+          end_line = end_line + 1
+        end
+      end
+      table.insert(segments, ast.text(str, { start_line = start_line, end_line = end_line }))
+    end
   end
 
   while idx <= #s do
@@ -81,12 +88,12 @@ local function parse_segments(text, base_line)
     end
 
     if not next_kind then
-      emit_text(s:sub(idx))
+      emit_text(s:sub(idx), idx)
       break
     end
 
     -- Emit preceding text
-    emit_text(s:sub(idx, next_start - 1))
+    emit_text(s:sub(idx, next_start - 1), idx)
 
     if next_kind == "expr" then
       local line, col = char_to_line_col(next_start)
@@ -125,7 +132,7 @@ local function parse_segments(text, base_line)
 
       -- Emit trailing punctuation as a separate text segment
       if #trailing_punct > 0 then
-        emit_text(trailing_punct)
+        emit_text(trailing_punct, next_end - #trailing_punct + 1)
       end
     end
     idx = next_end + 1
@@ -179,8 +186,13 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
 
       if block then
         local result_content
+        local is_pending = false
 
-        if block.language then
+        if block.language == "flemma:pending" then
+          -- Pending approval placeholder — no content to parse
+          result_content = ""
+          is_pending = true
+        elseif block.language then
           -- Parse the content based on language
           local content, parse_err = codeblock.parse(block.language, block.content)
 
@@ -210,6 +222,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
           segments,
           ast.tool_result(tool_use_id, result_content, {
             is_error = is_error,
+            pending = is_pending or nil,
             start_line = result_start_line,
             end_line = base_line_num + block_end - 1,
           })
@@ -244,7 +257,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
       -- Regular content line - parse for expressions and file references
       emit_text_with_parsing(line, current_line_num)
       if i < #lines then
-        table.insert(segments, ast.text("\n"))
+        table.insert(segments, ast.text("\n", { start_line = current_line_num, end_line = current_line_num }))
       end
       i = i + 1
     end
@@ -266,9 +279,9 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
     return { ast.text("") }, diagnostics
   end
 
-  local function emit_text(str)
+  local function emit_text(str, line_num)
     if str and #str > 0 then
-      table.insert(segments, ast.text(str))
+      table.insert(segments, ast.text(str, { start_line = line_num, end_line = line_num }))
     end
   end
 
@@ -283,8 +296,8 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
     --   <thinking redacted> (opening tag for redacted thinking)
     --   <thinking provider:signature="..."/> (self-closing tag)
     -- Supports any provider:signature attribute (e.g., vertex:signature, anthropic:signature)
-    local self_closing_sig = line:match('^<thinking%s+%w+:signature="([^"]*)"%s*/>$')
-    local open_tag_sig = line:match('^<thinking%s+%w+:signature="([^"]*)"%s*>$')
+    local self_closing_provider, self_closing_sig = line:match('^<thinking%s+(%w+):signature="([^"]*)"%s*/>$')
+    local open_tag_provider, open_tag_sig = line:match('^<thinking%s+(%w+):signature="([^"]*)"%s*>$')
     local simple_open_tag = line:match("^<thinking>$")
     local redacted_open_tag = line:match("^<thinking%s+redacted>$")
 
@@ -296,11 +309,11 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
         ast.thinking("", {
           start_line = thinking_line,
           end_line = thinking_line,
-        }, { signature = self_closing_sig })
+        }, { signature = { value = self_closing_sig, provider = self_closing_provider } })
       )
       i = i + 1
     elseif open_tag_sig or simple_open_tag or redacted_open_tag then
-      local signature = open_tag_sig -- nil for simple/redacted open tag
+      local signature = open_tag_sig and { value = open_tag_sig, provider = open_tag_provider } or nil
       local redacted = redacted_open_tag ~= nil
       local thinking_start_line = current_line_num
       local thinking_content_lines = {}
@@ -391,9 +404,9 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
       end
     else
       -- Regular text line
-      emit_text(line)
+      emit_text(line, current_line_num)
       if i < #lines then
-        emit_text("\n")
+        emit_text("\n", current_line_num)
       end
       i = i + 1
     end

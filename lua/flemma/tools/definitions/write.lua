@@ -12,6 +12,7 @@ M.definitions = {
     description = "Write content to a file. "
       .. "Creates the file if it doesn't exist, overwrites if it does. "
       .. "Automatically creates parent directories.",
+    strict = true,
     input_schema = {
       type = "object",
       properties = {
@@ -29,6 +30,7 @@ M.definitions = {
         },
       },
       required = { "label", "path", "content" },
+      additionalProperties = false,
     },
     async = false,
     execute = function(input)

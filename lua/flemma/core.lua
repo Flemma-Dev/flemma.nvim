@@ -12,6 +12,13 @@ local registry = require("flemma.provider.registry")
 -- For testing purposes
 local last_request_body_for_testing = nil
 
+---Get the 0-indexed column where content starts after a role prefix (@Role: )
+---@param role string
+---@return integer
+local function content_col(role)
+  return #("@" .. role .. ": ")
+end
+
 ---Auto-write buffer if configured and modified
 ---@param bufnr integer
 local function auto_write_buffer(bufnr)
@@ -146,14 +153,22 @@ function M.cancel_request()
       local last_line = vim.api.nvim_buf_line_count(bufnr)
       local last_line_content = vim.api.nvim_buf_get_lines(bufnr, last_line - 1, last_line, false)[1]
 
-      -- If we're still showing the thinking message, remove it
       if last_line_content == "@Assistant: Thinking..." then
+        -- No content received — clean up spinner placeholder
         log.debug("cancel_request(): ... Cleaning up 'Thinking...' message")
         ui.cleanup_spinner(bufnr)
-      end
-
-      -- Auto-write if enabled and we've received some content
-      if buffer_state.request_cancelled and last_line_content ~= "@Assistant: Thinking..." then
+      else
+        -- Content was received — mark the response as aborted
+        ui.cleanup_spinner(bufnr)
+        local original_modifiable = vim.bo[bufnr].modifiable
+        vim.bo[bufnr].modifiable = true
+        local line_count = vim.api.nvim_buf_line_count(bufnr)
+        ui.buffer_cmd(bufnr, "undojoin")
+        vim.api.nvim_buf_set_lines(bufnr, line_count, line_count, false, {
+          "",
+          "<!-- response aborted by user -->",
+        })
+        vim.bo[bufnr].modifiable = original_modifiable
         auto_write_buffer(bufnr)
       end
 
@@ -177,22 +192,99 @@ function M.cancel_request()
   end
 end
 
----Hybrid dispatch: execute all pending tool calls if any exist, otherwise send to provider
+---Hybrid dispatch: execute pending tools, awaiting tools, or send to provider.
+---When require_approval is enabled, pending tools get empty placeholder results injected
+---so the user can review before execution. On the next invocation, tools with empty
+---placeholders are executed. When all tools have results, the request is sent.
 ---@param opts? { on_request_complete?: fun() }
 function M.send_or_execute(opts)
+  opts = opts or {}
   local bufnr = vim.api.nvim_get_current_buf()
   local tool_context = require("flemma.tools.context")
+  local config = state.get_config()
+  local require_approval = config.tools and config.tools.require_approval
+  if require_approval == nil then
+    require_approval = true
+  end
+
+  -- Phase 1: Handle tool_use blocks that have no tool_result at all
   local pending = tool_context.resolve_all_pending(bufnr)
 
   if #pending > 0 then
-    local executor = require("flemma.tools.executor")
-    local ok, err = executor.execute_all_pending(bufnr)
-    if not ok then
-      vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+    if require_approval then
+      local approval = require("flemma.tools.approval")
+      local injector = require("flemma.tools.injector")
+      local executor = require("flemma.tools.executor")
+      local to_execute = {}
+      local first_placeholder_line = nil
+
+      for _, ctx in ipairs(pending) do
+        local decision = approval.resolve(ctx.tool_name, ctx.input, { bufnr = bufnr, tool_id = ctx.tool_id })
+
+        if decision == "approve" then
+          table.insert(to_execute, ctx)
+        elseif decision == "deny" then
+          injector.inject_placeholder(bufnr, ctx.tool_id)
+          injector.inject_result(bufnr, ctx.tool_id, {
+            success = false,
+            error = "Denied by auto_approve policy",
+          })
+        else
+          local header_line = injector.inject_placeholder(bufnr, ctx.tool_id, { pending = true })
+          if header_line and (not first_placeholder_line or header_line < first_placeholder_line) then
+            first_placeholder_line = header_line
+          end
+        end
+      end
+
+      -- Move cursor to first injected placeholder so the user can review
+      if first_placeholder_line then
+        local winid = vim.fn.bufwinid(bufnr)
+        if winid ~= -1 then
+          vim.api.nvim_win_set_cursor(winid, { first_placeholder_line, 0 })
+        end
+      end
+
+      for _, ctx in ipairs(to_execute) do
+        local ok, err = executor.execute(bufnr, ctx)
+        if not ok then
+          vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+        end
+      end
+
+      if opts.on_request_complete then
+        opts.on_request_complete()
+      end
+      return
+    else
+      local executor = require("flemma.tools.executor")
+      local ok, err = executor.execute_all_pending(bufnr)
+      if not ok then
+        vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+      end
+      return
     end
-    return
   end
 
+  -- Phase 2: Handle tool_result blocks with empty content (awaiting execution)
+  if require_approval then
+    local awaiting = tool_context.resolve_all_awaiting_execution(bufnr)
+    if #awaiting > 0 then
+      local executor = require("flemma.tools.executor")
+      for _, ctx in ipairs(awaiting) do
+        local ok, err = executor.execute(bufnr, ctx)
+        if not ok then
+          vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+        end
+      end
+      if opts.on_request_complete then
+        opts.on_request_complete()
+      end
+      return
+    end
+  end
+
+  -- Phase 3: No pending tools, no awaiting execution → send to provider
   M.send_to_provider(opts)
 end
 
@@ -244,9 +336,12 @@ function M.send_to_provider(opts)
   -- Make the buffer non-modifiable to prevent user edits during request
   state.lock_buffer(bufnr)
 
+  -- Parse buffer via cached AST (single buffer read + parse, reused below)
+  local parser = require("flemma.parser")
+  local doc = parser.get_parsed_document(bufnr)
+
   -- Check if buffer has content
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  if #lines == 0 or (#lines == 1 and lines[1] == "") then
+  if #doc.messages == 0 and not doc.frontmatter then
     log.warn("send_to_provider(): Empty buffer - nothing to send")
     state.unlock_buffer(bufnr)
     return
@@ -264,10 +359,9 @@ function M.send_to_provider(opts)
   -- Create context ONCE for the entire pipeline (used by frontmatter, @./file refs, etc.)
   local context = require("flemma.context").from_buffer(bufnr)
 
-  -- Run the new AST-based pipeline
-  local buf_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  -- Run the pipeline with the pre-parsed document (no redundant buffer read or re-parse)
   local pipeline = require("flemma.pipeline")
-  local prompt, evaluated = pipeline.run(buf_lines, context)
+  local prompt, evaluated = pipeline.run(doc, context)
 
   if #prompt.history == 0 then
     log.warn("send_to_provider(): No messages found in buffer")
@@ -448,6 +542,8 @@ function M.send_to_provider(opts)
   ---@type integer|nil
   local spinner_timer = ui.start_loading_spinner(bufnr) -- Handles its own modifiable toggles for writes
   local response_started = false
+  local thinking_char_count = 0
+  local thinking_preview_active = false
 
   -- Reset in-flight usage tracking for this buffer
   -- Include the provider's output_has_thoughts flag so usage.lua can display correctly
@@ -480,8 +576,13 @@ function M.send_to_provider(opts)
         auto_write_buffer(bufnr)
 
         local notify_msg = "Flemma: " .. msg
+        if current_provider:is_context_overflow(msg) then
+          notify_msg = notify_msg
+            .. "\n\nYour conversation is too long for this model."
+            .. " Remove earlier messages or start a new conversation."
+        end
         if log.is_enabled() then
-          notify_msg = notify_msg .. ". See " .. log.get_path() .. " for details"
+          notify_msg = notify_msg .. "\nSee " .. log.get_path() .. " for details"
         end
         vim.notify(notify_msg, vim.log.levels.ERROR)
       end)
@@ -552,7 +653,7 @@ function M.send_to_provider(opts)
             input_price = pricing_info.input,
             output_price = pricing_info.output,
             filepath = filepath,
-            bufnr = filepath and nil or bufnr, -- Only store bufnr for unnamed buffers
+            bufnr = bufnr,
             started_at = request_started_at,
             completed_at = require("flemma.session").now(),
             output_has_thoughts = current_provider.output_has_thoughts,
@@ -586,6 +687,30 @@ function M.send_to_provider(opts)
           cache_read_input_tokens = 0,
           cache_creation_input_tokens = 0,
         }
+      end)
+    end,
+
+    on_thinking = function(delta)
+      vim.schedule(function()
+        thinking_char_count = thinking_char_count + #delta
+
+        -- Stop the spinning animation on first thinking delta (keep extmark for preview)
+        if spinner_timer and not thinking_preview_active then
+          vim.fn.timer_stop(spinner_timer)
+          spinner_timer = nil
+          thinking_preview_active = true
+        end
+
+        local display
+        if thinking_char_count >= 1000 then
+          display = string.format("%.1fk characters", thinking_char_count / 1000)
+        elseif thinking_char_count == 1 then
+          display = "1 character"
+        else
+          display = thinking_char_count .. " characters"
+        end
+
+        ui.update_thinking_preview(bufnr, display)
       end)
     end,
 
@@ -735,19 +860,10 @@ function M.send_to_provider(opts)
           ui.buffer_cmd(bufnr, "undojoin")
           vim.api.nvim_buf_set_lines(bufnr, last_line_idx, last_line_idx, false, lines_to_insert)
 
-          local new_prompt_line_num = last_line_idx + cursor_line_offset - 1
-          local new_prompt_lines =
-            vim.api.nvim_buf_get_lines(bufnr, new_prompt_line_num, new_prompt_line_num + 1, false)
-          if #new_prompt_lines > 0 then
-            local line_text = new_prompt_lines[1]
-            local col = line_text:find(":%s*") + 1
-            while line_text:sub(col, col) == " " do
-              col = col + 1
-            end
-            -- Only set cursor if we're in the buffer's window, passing bufnr for safety
-            if vim.api.nvim_get_current_buf() == bufnr then
-              ui.set_cursor(new_prompt_line_num + 1, col - 1, bufnr)
-            end
+          -- Position cursor after "@You: " on the new prompt line
+          local new_prompt_line = last_line_idx + cursor_line_offset
+          if vim.api.nvim_get_current_buf() == bufnr then
+            ui.set_cursor(new_prompt_line, content_col("You"), bufnr)
           end
           ui.move_to_bottom(bufnr)
 

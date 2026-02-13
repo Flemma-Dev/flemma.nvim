@@ -30,6 +30,9 @@
 ---@field user flemma.config.SignRole
 ---@field assistant flemma.config.SignRole
 
+---@class flemma.config.Spinner
+---@field thinking_char string Character shown next to the thinking character count
+
 ---@class flemma.config.LineHighlights
 ---@field enabled boolean
 ---@field frontmatter flemma.config.HighlightValue
@@ -58,7 +61,19 @@
 ---@field cwd? string
 ---@field env? table<string, string>
 
+---@class flemma.config.AutoApproveContext
+---@field bufnr integer
+---@field tool_id string
+
+---@alias flemma.config.AutoApproveDecision true|false|"deny"
+
+---@alias flemma.config.AutoApproveFunction fun(tool_name: string, input: table, context: flemma.config.AutoApproveContext): flemma.config.AutoApproveDecision|nil
+
+---@alias flemma.config.AutoApprove string[]|flemma.config.AutoApproveFunction
+
 ---@class flemma.config.ToolsConfig
+---@field require_approval boolean
+---@field auto_approve? flemma.config.AutoApprove
 ---@field default_timeout integer
 ---@field show_spinner boolean
 ---@field cursor_after_result "result"|"stay"|"next"
@@ -92,6 +107,7 @@
 ---@field role_style? string
 ---@field ruler? flemma.config.Ruler
 ---@field signs? flemma.config.Signs
+---@field spinner? flemma.config.Spinner
 ---@field line_highlights? flemma.config.LineHighlights
 ---@field notify? flemma.notify.Options
 ---@field pricing? flemma.config.Pricing
@@ -113,6 +129,7 @@
 ---@field role_style string
 ---@field ruler flemma.config.Ruler
 ---@field signs flemma.config.Signs
+---@field spinner flemma.config.Spinner
 ---@field line_highlights flemma.config.LineHighlights
 ---@field notify flemma.notify.Options
 ---@field pricing flemma.config.Pricing
@@ -167,6 +184,9 @@ return {
       hl = true, -- Inherit from highlights.assistant, set false to disable, or provide specific group/hex color
     },
   },
+  spinner = {
+    thinking_char = "❖", -- Character shown next to the thinking character count (e.g. "❖ (3.2k characters)")
+  },
   line_highlights = {
     enabled = true, -- Enable full-line background highlighting to distinguish roles
     frontmatter = { dark = "Normal+bg:#201020", light = "Normal-bg:#201020" }, -- Background color for frontmatter lines
@@ -191,6 +211,8 @@ return {
     connect_timeout = 10, -- Default connection timeout for cURL requests
   },
   tools = {
+    require_approval = true, -- Require user approval before executing tool calls (two-step <C-]> flow)
+    auto_approve = nil, -- Tools that bypass approval: string[] of tool names, or function(tool_name, input, context) → true|false|"deny"
     default_timeout = 30, -- Default timeout for async tools (seconds)
     show_spinner = true, -- Show spinner animation during execution
     cursor_after_result = "result", -- Cursor behavior after result injection: "result", "stay", or "next"
@@ -206,7 +228,7 @@ return {
     disable_textwidth = true, -- Whether to disable textwidth in chat buffers
     auto_write = false, -- Whether to automatically write the buffer after changes
     manage_updatetime = true, -- Whether to set updatetime to 100 in chat buffers and restore original value when leaving
-    foldlevel = 1, -- Default fold level: 0=all closed, 1=thinking collapsed, 99=all open
+    foldlevel = 1, -- Default fold level: 0=all closed, 1=thinking/frontmatter collapsed, 99=all open
   },
   logging = {
     enabled = false, -- Logging disabled by default

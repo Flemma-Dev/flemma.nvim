@@ -1,37 +1,42 @@
 {
   "model": "gpt-4o-mini",
-  "messages": [
+  "input": [
     {
-      "role": "system",
+      "role": "developer",
       "content": "You are a helpful assistant with access to a calculator tool. When asked to perform calculations, use the calculator tool."
     },
     {
       "role": "user",
-      "content": "What is 15 multiplied by 7?"
+      "content": [
+        {
+          "type": "input_text",
+          "text": "What is 15 multiplied by 7?"
+        }
+      ]
     }
   ],
   "tools": [
     {
       "type": "function",
-      "function": {
-        "name": "calculator",
-        "description": "Evaluates a mathematical expression and returns the result. Use this for any arithmetic calculations.",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "expression": {
-              "type": "string",
-              "description": "The mathematical expression to evaluate (e.g., '2 + 2', '15 * 3', 'sqrt(16)')"
-            }
-          },
-          "required": [
-            "expression"
-          ]
-        }
-      }
+      "name": "calculator",
+      "description": "Evaluates a mathematical expression and returns the numeric result. Use this for any arithmetic calculations including addition, subtraction, multiplication, division, exponents, and common math functions.\\n\\nReturns (JSON Schema): {\"$schema\":\"https:\\/\\/json-schema.org\\/draft\\/2020-12\\/schema\",\"type\":\"object\",\"required\":[\"result\"],\"properties\":{\"result\":{\"description\":\"The numeric result of the calculation\",\"type\":\"number\"}}}",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "The mathematical expression to evaluate (e.g., '2 + 2', '15 * 7', 'sqrt(16)', '2^10')"
+          }
+        },
+        "required": [
+          "expression"
+        ],
+        "additionalProperties": false
+      },
+      "strict": true
     }
   ],
   "tool_choice": "auto",
-  "parallel_tool_calls": false,
-  "stream": true
+  "stream": true,
+  "store": false
 }

@@ -18,7 +18,7 @@
               "expression": "15 * 7"
             }
           },
-          "thoughtSignature": "CiQBjz1rX5JIlnkYKHfjpgrgPDyIGvYvhDEBM1LoYLBfTN8bNUoKWAGPPWtf3TGWu3T2eDSLMBPWowFMXW3aTBPuhoa+6gSv0LasjBoQjLi01Y8nu4NnjquE5kSb2RNKYoqXwUq9NEuPg9QP2IUP3LUP3ThPW3bunSELviU7jYsKXQGPPWtfpI1E8btCyeAATELmkmi6vaSmDXF8Uw6zeyDrddicwCVuLPAZj+AfFtBAsa94BFpgS8zP5o435VX8RhJL6eFb1fnmFrrgQuZr3lnjpxHz2Wa0lN3oF0W0NQ=="
+          "thoughtSignature": "CugBAY89a18SC/4J5e9cZ6arG/TrZw0Kghsb8+eRdAtIYPeEyF5BK7w42oIpqlMKYUyD9WfMEke5SWqo4GfbGqp9G1VsekayyBhF4fLWfN/7epoeUluW2TAa4ia2FPBNvikFvUupEyEP/iQAYE+jXQRGpJqw8zmqZww/OcMYt3YAylLto/gyZvnfL+02gHjCzXsCJGBI4x3iCUaA9cn67gkMe29QP5tGxs7YKFAmE/JOexMpVM3iZ8IuK4JNnDWMZXX44bIW8e54jTf/qJwvwm1Tiaet/wrz7+R3ngDs3xkCV15LYPq9K1K3YQ=="
         }
       ]
     },
@@ -41,13 +41,13 @@
       "functionDeclarations": [
         {
           "name": "calculator",
-          "description": "Evaluates a mathematical expression and returns the result. Use this for any arithmetic calculations.",
+          "description": "Evaluates a mathematical expression and returns the numeric result. Use this for any arithmetic calculations including addition, subtraction, multiplication, division, exponents, and common math functions.\\n\\nReturns (JSON Schema): {\"$schema\":\"https:\\/\\/json-schema.org\\/draft\\/2020-12\\/schema\",\"type\":\"object\",\"required\":[\"result\"],\"properties\":{\"result\":{\"description\":\"The numeric result of the calculation\",\"type\":\"number\"}}}",
           "parameters": {
             "type": "object",
             "properties": {
               "expression": {
                 "type": "string",
-                "description": "The mathematical expression to evaluate (e.g., '2 + 2', '15 * 3', 'sqrt(16)')"
+                "description": "The mathematical expression to evaluate (e.g., '2 + 2', '15 * 7', 'sqrt(16)', '2^10')"
               }
             },
             "required": [

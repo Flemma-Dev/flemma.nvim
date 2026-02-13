@@ -12,6 +12,7 @@ M.definitions = {
     description = "Edit a file by replacing exact text. "
       .. "The oldText must match exactly (including whitespace). "
       .. "Use this for precise, surgical edits.",
+    strict = true,
     input_schema = {
       type = "object",
       properties = {
@@ -33,6 +34,7 @@ M.definitions = {
         },
       },
       required = { "label", "path", "oldText", "newText" },
+      additionalProperties = false,
     },
     async = false,
     execute = function(input)

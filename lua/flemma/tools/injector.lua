@@ -122,10 +122,11 @@ end
 --- which is required for correct multi-tool ordering on subsequent injections.
 --- @param bufnr integer
 --- @param tool_id string
+--- @param inject_opts? { pending?: boolean } When pending=true, uses ```flemma:pending fence marker
 --- @return integer|nil header_line 1-based line number where header was inserted, or nil on error
 --- @return string|nil error message
 --- @return { modified: boolean }|nil opts Metadata about the injection (e.g., whether buffer was modified)
-function M.inject_placeholder(bufnr, tool_id)
+function M.inject_placeholder(bufnr, tool_id, inject_opts)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return nil, "Buffer is no longer valid", { modified = false }
   end
@@ -171,6 +172,7 @@ function M.inject_placeholder(bufnr, tool_id)
   local you_msg = find_you_message_after(doc, assistant_idx)
 
   local header_text = ("**Tool Result:** `%s`"):format(tool_id)
+  local fence_open = (inject_opts and inject_opts.pending) and "```flemma:pending" or "```"
 
   if you_msg then
     -- @You: message exists - find where to insert our placeholder
@@ -197,7 +199,7 @@ function M.inject_placeholder(bufnr, tool_id)
       if predecessor then
         -- Insert after the predecessor result's block
         local insert_after = predecessor.position.end_line
-        set_lines(bufnr, insert_after, insert_after, { "", header_text, "", "```", "```" })
+        set_lines(bufnr, insert_after, insert_after, { "", header_text, "", fence_open, "```" })
         return insert_after + 2, nil, { modified = true } -- +1 for blank line, +1 for 1-based
       else
         -- Our tool comes before all existing results - insert before the first one
@@ -212,7 +214,7 @@ function M.inject_placeholder(bufnr, tool_id)
           set_lines(bufnr, you_start - 1, you_start, {
             "@You: " .. header_text,
             "",
-            "```",
+            fence_open,
             "```",
             "",
             old_header or "",
@@ -220,7 +222,7 @@ function M.inject_placeholder(bufnr, tool_id)
           return you_start, nil, { modified = true }
         else
           -- First result is on a separate line - insert before it
-          set_lines(bufnr, first_start - 1, first_start - 1, { header_text, "", "```", "```", "" })
+          set_lines(bufnr, first_start - 1, first_start - 1, { header_text, "", fence_open, "```", "" })
           return first_start, nil, { modified = true }
         end
       end
@@ -240,7 +242,7 @@ function M.inject_placeholder(bufnr, tool_id)
         set_lines(bufnr, you_start - 1, you_start, {
           "@You: " .. header_text,
           "",
-          "```",
+          fence_open,
           "```",
           "",
           remaining_content,
@@ -248,14 +250,14 @@ function M.inject_placeholder(bufnr, tool_id)
         return you_start, nil, { modified = true }
       else
         -- @You: line is empty or whitespace-only - replace it with header
-        set_lines(bufnr, you_start - 1, you_start, { "@You: " .. header_text, "", "```", "```" })
+        set_lines(bufnr, you_start - 1, you_start, { "@You: " .. header_text, "", fence_open, "```" })
         return you_start, nil, { modified = true }
       end
     end
   else
     -- No @You: message exists - create one after the assistant message
     local insert_after = assistant_msg.position.end_line
-    set_lines(bufnr, insert_after, insert_after, { "", "@You: " .. header_text, "", "```", "```" })
+    set_lines(bufnr, insert_after, insert_after, { "", "@You: " .. header_text, "", fence_open, "```" })
     return insert_after + 2, nil, { modified = true } -- +1 for blank, +1 for 1-based
   end
 end

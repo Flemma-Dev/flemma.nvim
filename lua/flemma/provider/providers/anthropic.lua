@@ -38,11 +38,12 @@ function M.new(merged_config)
   provider.endpoint = "https://api.anthropic.com/v1/messages"
   provider.api_version = "2023-06-01"
 
+  -- Set metatable BEFORE reset so M.reset (not base.reset) initializes provider-specific state
+  setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
   provider:reset()
 
-  -- Set metatable to use Anthropic methods
   ---@diagnostic disable-next-line: return-type-mismatch
-  return setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
+  return provider
 end
 
 ---@param self flemma.provider.Anthropic
@@ -170,11 +171,11 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
             data = p.content,
           })
           log.debug("anthropic.build_request: Added redacted_thinking block")
-        elseif p.kind == "thinking" and p.signature and #p.signature > 0 then
+        elseif p.kind == "thinking" and p.signature and p.signature.provider == "anthropic" then
           table.insert(content_blocks, {
             type = "thinking",
             thinking = p.content,
-            signature = p.signature,
+            signature = p.signature.value,
           })
           log.debug("anthropic.build_request: Added thinking block with signature")
         end
@@ -209,6 +210,31 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
         log.debug("anthropic.build_request: Skipping empty assistant message")
       end
     end
+  end
+
+  -- Inject synthetic error results for orphaned tool calls
+  local pending = prompt.pending_tool_calls
+  if pending and #pending > 0 then
+    local synthetic_blocks = {}
+    for _, orphan in ipairs(pending) do
+      table.insert(synthetic_blocks, {
+        type = "tool_result",
+        tool_use_id = base.normalize_tool_id(orphan.id),
+        content = "No result provided",
+        is_error = true,
+      })
+      log.debug(
+        "anthropic.build_request: Injected synthetic tool_result for orphaned "
+          .. orphan.name
+          .. " ("
+          .. orphan.id
+          .. ")"
+      )
+    end
+    table.insert(api_messages, {
+      role = "user",
+      content = synthetic_blocks,
+    })
   end
 
   local cache_retention = self.parameters.cache_retention or "short"
@@ -442,11 +468,11 @@ function M.process_response_line(self, line, callbacks)
       base._signal_content(self, thinking_block, callbacks)
       log.debug("anthropic.process_response_line(): Appended thinking block at end of response")
     elseif #signature > 0 then
-      -- Signature but no thinking content — emit self-closing tag
+      -- Signature but no thinking content — emit open/close tag (enables folding)
       local prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
-      local tag = prefix .. '<thinking anthropic:signature="' .. signature .. '"/>\n'
+      local tag = prefix .. '<thinking anthropic:signature="' .. signature .. '">\n</thinking>\n'
       base._signal_content(self, tag, callbacks)
-      log.debug("anthropic.process_response_line(): Appended self-closing thinking tag with signature")
+      log.debug("anthropic.process_response_line(): Appended empty thinking tag with signature")
     end
 
     -- Append redacted thinking blocks
@@ -574,6 +600,9 @@ function M.process_response_line(self, line, callbacks)
       log.debug("anthropic.process_response_line(): Content thinking delta: " .. log.inspect(data.delta.thinking))
       self._response_buffer.extra.accumulated_thinking = (self._response_buffer.extra.accumulated_thinking or "")
         .. data.delta.thinking
+      if callbacks.on_thinking then
+        callbacks.on_thinking(data.delta.thinking)
+      end
     elseif data.delta.type == "signature_delta" and data.delta.signature then
       self._response_buffer.extra.accumulated_signature = (self._response_buffer.extra.accumulated_signature or "")
         .. data.delta.signature

@@ -445,7 +445,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Look at @./image.png",
         }
-        local prompt = pipeline.run(lines, {})
+        local prompt = pipeline.run(parser.parse_lines(lines), {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -510,7 +510,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Review @./document.pdf",
         }
-        local prompt = pipeline.run(lines, {})
+        local prompt = pipeline.run(parser.parse_lines(lines), {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -564,7 +564,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Read @./notes.txt",
         }
-        local prompt = pipeline.run(lines, {})
+        local prompt = pipeline.run(parser.parse_lines(lines), {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -617,27 +617,30 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Analyze @./chart.png",
         }
-        local prompt = pipeline.run(lines, {})
+        local prompt = pipeline.run(parser.parse_lines(lines), {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
 
-        -- Verify request body format
+        -- Verify request body format (Responses API uses input[] not messages[])
         assert.is_not_nil(request_body)
-        assert.is_not_nil(request_body.messages)
-        assert.equals(1, #request_body.messages)
+        assert.is_not_nil(request_body.input)
 
-        local user_message = request_body.messages[1]
-        assert.equals("user", user_message.role)
+        -- Find user message in input array
+        local user_items = vim.tbl_filter(function(item)
+          return item.role == "user"
+        end, request_body.input)
+        assert.equals(1, #user_items)
+        local user_message = user_items[1]
         assert.is_table(user_message.content)
 
-        -- Should have text part and image_url part
+        -- Should have input_text part and input_image part
         local text_part = nil
         local image_part = nil
         for _, part in ipairs(user_message.content) do
-          if part.type == "text" then
+          if part.type == "input_text" then
             text_part = part
-          elseif part.type == "image_url" then
+          elseif part.type == "input_image" then
             image_part = part
           end
         end
@@ -646,11 +649,10 @@ describe("File References and Path Parsing", function()
         assert.equals("Analyze ", text_part.text)
 
         assert.is_not_nil(image_part)
-        assert.equals("image_url", image_part.type)
-        assert.is_not_nil(image_part.image_url)
-        assert.is_string(image_part.image_url.url)
-        assert.is_true(string.match(image_part.image_url.url, "^data:image/png;base64,") ~= nil)
-        assert.equals("auto", image_part.image_url.detail)
+        assert.equals("input_image", image_part.type)
+        assert.is_string(image_part.image_url)
+        assert.is_true(string.match(image_part.image_url, "^data:image/png;base64,") ~= nil)
+        assert.equals("auto", image_part.detail)
       end)
 
       it("formats PDF documents correctly", function()
@@ -682,29 +684,32 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Summarize @./report.pdf",
         }
-        local prompt = pipeline.run(lines, {})
+        local prompt = pipeline.run(parser.parse_lines(lines), {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
 
-        -- Verify request body format
+        -- Verify request body format (Responses API uses input[])
         assert.is_not_nil(request_body)
 
-        local user_message = request_body.messages[1]
+        -- Find user message in input array
+        local user_items = vim.tbl_filter(function(item)
+          return item.role == "user"
+        end, request_body.input)
+        local user_message = user_items[1]
         local file_part = nil
         for _, part in ipairs(user_message.content) do
-          if part.type == "file" then
+          if part.type == "input_file" then
             file_part = part
             break
           end
         end
 
         assert.is_not_nil(file_part)
-        assert.equals("file", file_part.type)
-        assert.is_not_nil(file_part.file)
-        assert.is_string(file_part.file.filename)
-        assert.is_string(file_part.file.file_data)
-        assert.is_true(string.match(file_part.file.file_data, "^data:application/pdf;base64,") ~= nil)
+        assert.equals("input_file", file_part.type)
+        assert.is_string(file_part.filename)
+        assert.is_string(file_part.file_data)
+        assert.is_true(string.match(file_part.file_data, "^data:application/pdf;base64,") ~= nil)
       end)
 
       it("formats text files correctly", function()
@@ -736,33 +741,33 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Process @./data.txt",
         }
-        local prompt = pipeline.run(lines, {})
+        local prompt = pipeline.run(parser.parse_lines(lines), {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
 
-        -- Verify request body format
+        -- Verify request body format (Responses API uses input[])
         assert.is_not_nil(request_body)
 
-        local user_message = request_body.messages[1]
+        -- Find user message in input array
+        local user_items = vim.tbl_filter(function(item)
+          return item.role == "user"
+        end, request_body.input)
+        local user_message = user_items[1]
 
-        -- For OpenAI, when there are only text parts, they get concatenated into a single string
-        if type(user_message.content) == "string" then
-          assert.equals("Process Sample text file content.", user_message.content)
-        else
-          -- If it's a table, extract text parts
-          local text_parts = {}
-          for _, part in ipairs(user_message.content) do
-            if part.type == "text" then
-              table.insert(text_parts, part.text)
-            end
+        -- Content is always an array of input_text parts in the Responses API
+        assert.is_table(user_message.content)
+        local text_parts = {}
+        for _, part in ipairs(user_message.content) do
+          if part.type == "input_text" then
+            table.insert(text_parts, part.text)
           end
-
-          -- Should have "Process " and the file content as separate text parts
-          assert.equals(2, #text_parts)
-          assert.equals("Process ", text_parts[1])
-          assert.equals("Sample text file content.", text_parts[2])
         end
+
+        -- Should have "Process " and the file content as separate input_text parts
+        assert.equals(2, #text_parts)
+        assert.equals("Process ", text_parts[1])
+        assert.equals("Sample text file content.", text_parts[2])
       end)
     end)
 
@@ -796,7 +801,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Describe @./photo.png",
         }
-        local prompt = pipeline.run(lines, {})
+        local prompt = pipeline.run(parser.parse_lines(lines), {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -860,7 +865,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Analyze @./study.pdf",
         }
-        local prompt = pipeline.run(lines, {})
+        local prompt = pipeline.run(parser.parse_lines(lines), {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -913,7 +918,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Check @./config.txt",
         }
-        local prompt = pipeline.run(lines, {})
+        local prompt = pipeline.run(parser.parse_lines(lines), {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -957,7 +962,7 @@ describe("File References and Path Parsing", function()
       local lines = {
         "@You: File @./symlink-file.sh",
       }
-      local _, evaluated = pipeline.run(lines, {})
+      local _, evaluated = pipeline.run(parser.parse_lines(lines), {})
 
       -- Check diagnostics
       local file_diags = vim.tbl_filter(function(d)
@@ -1014,7 +1019,7 @@ describe("File References and Path Parsing", function()
       local lines = {
         "@You: Binary file @./binary.bin",
       }
-      local _, evaluated = pipeline.run(lines, {})
+      local _, evaluated = pipeline.run(parser.parse_lines(lines), {})
 
       -- Check diagnostics
       local file_diags = vim.tbl_filter(function(d)

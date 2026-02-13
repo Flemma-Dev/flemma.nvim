@@ -78,21 +78,25 @@ describe("UI Folding", function()
       assert.are.equal(">2", fold_level)
     end)
 
-    it("should NOT return >2 for self-closing <thinking/> tag", function()
+    it("should return >2 for empty thinking tag with signature", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
         "@Assistant: response",
-        '<thinking vertex:signature="abc123"/>',
+        '<thinking vertex:signature="abc123">',
+        "</thinking>",
         "more content",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      -- Line 2 is self-closing, should not start a fold
+      -- Line 2 is opening tag, should start a fold
       local fold_level = ui.get_fold_level(2)
-      assert.are_not.equal(">2", fold_level)
+      assert.are.equal(">2", fold_level)
+      -- Line 3 is closing tag, should end the fold
+      fold_level = ui.get_fold_level(3)
+      assert.are.equal("<2", fold_level)
     end)
 
     it("should return <2 for </thinking> tag", function()
@@ -145,23 +149,26 @@ describe("UI Folding", function()
       assert.are.equal("<1", fold_level)
     end)
 
-    it("should return >3 for frontmatter on line 1", function()
+    it("should include trailing empty lines in the message fold", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "```lua",
-        "x = 5",
-        "```",
-        "@You: question",
+        "@You: question", -- line 1: >1
+        "more content", -- line 2: =
+        "", -- line 3: <1 (end of message, trailing empty line)
+        "@Assistant: answer", -- line 4: >1
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal(">3", ui.get_fold_level(1))
+      assert.are.equal(">1", ui.get_fold_level(1))
+      assert.are.equal("=", ui.get_fold_level(2))
+      assert.are.equal("<1", ui.get_fold_level(3))
+      assert.are.equal(">1", ui.get_fold_level(4))
     end)
 
-    it("should return <3 for closing frontmatter fence", function()
+    it("should return >2 for frontmatter on line 1", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
@@ -174,7 +181,23 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal("<3", ui.get_fold_level(3))
+      assert.are.equal(">2", ui.get_fold_level(1))
+    end)
+
+    it("should return <2 for closing frontmatter fence", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "```lua",
+        "x = 5",
+        "```",
+        "@You: question",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      assert.are.equal("<2", ui.get_fold_level(3))
     end)
   end)
 

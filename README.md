@@ -126,8 +126,7 @@ secret-tool store --label="Vertex AI Service Account" service vertex key api pro
 3. Ensure the Google Cloud CLI is on your `$PATH`; Flemma shells out to `gcloud auth application-default print-access-token` whenever it needs to refresh the token.
 4. Set the project/location in configuration or via `:Flemma switch vertex gemini-2.5-pro project_id=my-project location=us-central1`.
 
-> [!NOTE]
-> If you only supply `VERTEX_AI_ACCESS_TOKEN`, Flemma uses that token until it expires and skips `gcloud`.
+**Note:** If you only supply `VERTEX_AI_ACCESS_TOKEN`, Flemma uses that token until it expires and skips `gcloud`.
 
 </details>
 
@@ -151,7 +150,7 @@ secret-tool store --label="Vertex AI Service Account" service vertex key api pro
    - Documented presets in the README.
    ```
 
-4. Press <kbd>Ctrl-]</kbd> (normal or insert mode) or run `:Flemma send`. Flemma freezes the buffer while the request is streaming and shows `@Assistant: Thinking...`. <kbd>Ctrl-]</kbd> is a hybrid key – if the model responded with tool calls, pressing it again executes them all, and once every tool has a result, the next press sends the conversation back to the provider.
+4. Press <kbd>Ctrl-]</kbd> (normal or insert mode) or run `:Flemma send`. Flemma freezes the buffer while the request is streaming and shows `@Assistant: Thinking...`. <kbd>Ctrl-]</kbd> is a hybrid key with a three-phase cycle: when the model responds with tool calls, the first press injects empty placeholders for review (see [Tool approval](#tool-approval)); the second press executes approved tools; the third press sends the conversation back to the provider.
 5. When the reply finishes, a floating notification lists token counts and cost for the request and the session.
 
 Cancel an in-flight response with <kbd>Ctrl-c</kbd> or `:Flemma cancel`.
@@ -196,11 +195,14 @@ Model thoughts stream here and auto-fold.
 - **Messages** begin with `@System:`, `@You:`, or `@Assistant:`. The parser is whitespace-tolerant and handles blank lines between messages.
 - **Thinking blocks** appear only in assistant messages. Anthropic and Vertex AI models stream `<thinking>` sections; Flemma folds them automatically and keeps dedicated highlights for the tags and body.
 
+> [!NOTE]
+> **Cross-provider thinking.** When you switch providers mid-conversation, thinking blocks from the previous provider are visible in the buffer but are **not forwarded** to the new provider's API. The visible text inside `<thinking>` tags is a summary for your reference; the actual reasoning data lives in provider-specific signature attributes on the tag. Only matching-provider signatures are replayed.
+
 ### Folding and layout
 
 | Fold level | What folds                 | Why                                                             |
 | ---------- | -------------------------- | --------------------------------------------------------------- |
-| Level 3    | The frontmatter block      | Keep templates out of the way while you focus on chat history.  |
+| Level 2    | The frontmatter block      | Keep templates out of the way while you focus on chat history.  |
 | Level 2    | `<thinking>...</thinking>` | Reasoning traces are useful, but often secondary to the answer. |
 | Level 1    | Each message               | Collapse long exchanges without losing context.                 |
 
@@ -214,7 +216,7 @@ Inside `.chat` buffers Flemma defines:
 
 - `]m` / `[m` – jump to the next/previous message header.
 - `im` / `am` (configurable) – select the inside or entire message as a text object. `am` selects linewise and includes thinking blocks and trailing blank lines, making `dam` delete entire conversation turns. `im` skips `<thinking>` sections so yanking `im` never includes reasoning traces.
-- Buffer-local mappings for send/cancel default to `<C-]>` and `<C-c>` in normal mode. `<C-]>` is a hybrid key: it executes all pending tool calls when any exist, otherwise sends the conversation. Insert-mode `<C-]>` behaves identically but re-enters insert when the operation finishes.
+- Buffer-local mappings for send/cancel default to `<C-]>` and `<C-c>` in normal mode. `<C-]>` is a hybrid key with three phases: inject approval placeholders → execute approved tools → send the conversation. Insert-mode `<C-]>` behaves identically but re-enters insert when the operation finishes.
 
 Disable or remap these through the `keymaps` section (see [Configuration reference](#configuration-reference)).
 
@@ -265,11 +267,11 @@ Switch using `:Flemma switch $fast` or `:Flemma switch $review temperature=0.1` 
 
 ### Provider-specific capabilities
 
-| Provider  | Defaults            | Extra parameters                                                                                                                    | Notes                                                                                 |
-| --------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Anthropic | `claude-sonnet-4-5` | `thinking_budget` enables extended thinking (≥ 1024). `cache_retention` controls prompt caching (`"short"`, `"long"`, or `"none"`). | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer.    |
-| OpenAI    | `gpt-5`             | `reasoning=<low\|medium\|high>` toggles reasoning effort.                                                                           | Cost notifications include reasoning tokens. Lualine shows the reasoning level.       |
-| Vertex AI | `gemini-2.5-pro`    | `project_id` (required), `location` (default `global`), `thinking_budget` (≥ 1 to activate).                                        | `thinking_budget` activates Google's thinking output; set to `0` or `nil` to disable. |
+| Provider  | Defaults            | Extra parameters                                                                                                                        | Notes                                                                                 |
+| --------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Anthropic | `claude-sonnet-4-5` | `thinking_budget` enables extended thinking (≥ 1024). `cache_retention` controls prompt caching (`"short"`, `"long"`, or `"none"`).     | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer.    |
+| OpenAI    | `gpt-5`             | `reasoning=<low\|medium\|high>` toggles reasoning effort. `cache_retention` controls prompt caching (`"short"`, `"long"`, or `"none"`). | Cost notifications include reasoning tokens. Lualine shows the reasoning level.       |
+| Vertex AI | `gemini-2.5-pro`    | `project_id` (required), `location` (default `global`), `thinking_budget` (≥ 1 to activate).                                            | `thinking_budget` activates Google's thinking output; set to `0` or `nil` to disable. |
 
 The full model catalogue (including pricing) is in `lua/flemma/models.lua`. You can access it from Neovim with:
 
@@ -296,14 +298,18 @@ When caching is active, usage notifications show a `Cache:` line with read and w
 
 ### Prompt caching (OpenAI)
 
-OpenAI applies prompt caching automatically to all Chat Completions API requests[^openai-cache]. No configuration or request-side changes are needed – the API detects reusable prompt prefixes and serves them from cache transparently. When a cache hit occurs, the usage notification shows a `Cache:` line with the number of read tokens. Costs are adjusted to reflect the 50% discount on cached input[^openai-cache-pricing].
+Flemma sends prompt caching hints to the OpenAI Responses API using the `cache_retention` parameter[^openai-cache]. When caching is active, Flemma sends the buffer's file path as `prompt_cache_key` and a retention policy as `prompt_cache_retention`. When a cache hit occurs, the usage notification shows a `Cache:` line with the number of read tokens. Costs are adjusted to reflect the 50% discount on cached input[^openai-cache-pricing].
 
-| Metric      | Value        | Description                                                        |
-| ----------- | ------------ | ------------------------------------------------------------------ |
-| Read cost   | 0.5× (50%)   | Cached input tokens cost half the normal input rate.               |
-| Write cost  | —            | No additional charge; caching is automatic.                        |
-| Min. tokens | 1,024        | Prompts shorter than 1,024 tokens are never cached.                |
-| TTL         | 5–10 minutes | Caches are cleared after inactivity; always evicted within 1 hour. |
+The `cache_retention` parameter controls the caching strategy:
+
+| Value     | TTL        | Write cost       | Read cost | Description                                           |
+| --------- | ---------- | ---------------- | --------- | ----------------------------------------------------- |
+| `"short"` | 5–10 min   | free (invisible) | 0.5×      | Default. `in_memory` retention, good for active chat. |
+| `"long"`  | up to 24 h | free (invisible) | 0.5×      | Extended retention for long sessions.                 |
+| `"none"`  | —          | —                | —         | No caching hints sent.                                |
+
+> [!NOTE]
+> Unlike Anthropic, OpenAI does not report cache **write** tokens in the API response. Writes happen automatically and are free, so the usage notification only shows cache reads.
 
 > [!IMPORTANT]
 > OpenAI caching is **best-effort and not guaranteed**. Even when the prompt meets all requirements, the API may return zero cached tokens. Key conditions:
@@ -312,7 +318,6 @@ OpenAI applies prompt caching automatically to all Chat Completions API requests
 > - **Prefix must be byte-identical** between requests. Any change to tools, system prompt, or earlier messages invalidates the cache from that point forward.
 > - **Cache propagation takes time.** The first request populates the cache; subsequent requests can hit it. Sending requests in rapid succession (within a few seconds) may miss the cache because the entry hasn't propagated yet. Wait at least 5–10 seconds between requests for the best chance of a hit.
 > - **128-token granularity.** Only the first 1,024 tokens plus whole 128-token increments are cacheable. Tokens beyond the last 128-token boundary are always processed fresh.
-> - **No user control.** Unlike Anthropic, there is no `cache_retention` parameter or opt-out – caching is entirely managed by OpenAI's infrastructure. You cannot force a cache hit or extend the TTL.
 
 ### Prompt caching (Vertex AI)
 
@@ -356,7 +361,7 @@ Flemma includes a tool system that lets models request actions – run a calcula
    ```
    ````
 
-3. You can execute the tool by pressing <kbd>Alt-Enter</kbd> with the cursor on or near the tool use block. Flemma runs the tool, locks the buffer during execution, and injects a `**Tool Result:**` block. Alternatively, press <kbd>Ctrl-]</kbd> to execute all pending tool calls at once:
+3. Press <kbd>Ctrl-]</kbd> to review tool calls. Flemma injects empty `**Tool Result:**` placeholders (fenced with `` `flemma:pending `) so you can inspect each call before execution. Edit or fill in a placeholder to override the tool's output, or leave it empty to let Flemma execute it. Press <kbd>Ctrl-]</kbd> again to execute all remaining pending tools. Alternatively, press <kbd>Alt-Enter</kbd> to execute a single tool at the cursor without the approval step:
 
    ````markdown
    @You: **Tool Result:** `toolu_abc123`
@@ -378,10 +383,22 @@ Flemma includes a tool system that lets models request actions – run a calcula
 | `write`      | sync  | Writes or creates files. Creates parent directories automatically.                                                  |
 | `edit`       | sync  | Find-and-replace with exact text matching. The old text must appear exactly once in the target file.                |
 
+### Tool approval
+
+By default, Flemma requires you to review tool calls before execution. When you press <kbd>Ctrl-]</kbd> and the model has requested tools, Flemma enters a three-phase cycle:
+
+1. **Inject placeholders** – empty `**Tool Result:**` blocks are added to the buffer, fenced with `` `flemma:pending `. The cursor moves to the first placeholder so you can review each tool call.
+2. **Execute** – press <kbd>Ctrl-]</kbd> again. Tools whose placeholders still contain ` ```flemma:pending ``` ` are executed; tools where you edited the fence or filled in content are treated as manual overrides and left as-is.
+3. **Send** – once every tool has a result, the next <kbd>Ctrl-]</kbd> sends the conversation to the provider.
+
+This prevents a model from executing arbitrary commands (e.g., `bash rm -rf /`) without your knowledge. To override a dangerous tool call, simply replace its `flemma:pending` content with your own text before pressing <kbd>Ctrl-]</kbd>.
+
+Disable approval with `tools.require_approval = false` to restore the old execute-immediately behaviour. Use `tools.auto_approve` to whitelist specific tools or write a custom policy (see [Tool configuration](#tool-configuration)).
+
 ### Tool execution
 
-- **<kbd>Ctrl-]</kbd>** – the single interaction key. When pending tool calls exist it executes them all; when every tool call has a result it sends the conversation to the provider.
-- **<kbd>Alt-Enter</kbd>** – execute the tool at the cursor position (normal mode). Useful when you want to run one specific tool call instead of all pending ones.
+- **<kbd>Ctrl-]</kbd>** – the single interaction key. Three-phase cycle: inject placeholders → execute pending → send conversation.
+- **<kbd>Alt-Enter</kbd>** – execute the tool at the cursor position (normal mode), bypassing the approval step. Useful when you want to run one specific tool call.
 - **Async tools** (like `bash`) show an animated spinner while running and can be cancelled.
 - **Buffer locking** – the buffer is made non-modifiable during tool execution to prevent race conditions.
 - **Output truncation** – large outputs (> 4000 lines or 8 MB) are automatically truncated with a summary. The full output is saved to a temporary file and the path is included in the truncated result.
@@ -431,6 +448,39 @@ tools.register({
   { name = "tool_b", description = "…", input_schema = { type = "object", properties = {} } },
 })
 ```
+
+### Strict mode for tool schemas
+
+OpenAI's Responses API supports [strict mode](https://platform.openai.com/docs/guides/structured-outputs) for function calling, which guarantees that the model's arguments will conform exactly to your JSON Schema. All of Flemma's built-in tools use strict mode.
+
+To opt in for your custom tools, set `strict = true` on the definition and ensure the `input_schema` meets OpenAI's strict-mode requirements:
+
+- All properties must be listed in `required`
+- The schema must include `additionalProperties = false`
+- Optional parameters use a nullable type array instead of being omitted from `required`:
+
+```lua
+tools.register("my_tool", {
+  name = "my_tool",
+  description = "Does something",
+  strict = true,
+  input_schema = {
+    type = "object",
+    properties = {
+      query   = { type = "string", description = "Required input" },
+      max_results = { type = { "number", "null" }, description = "Optional limit (default: 10)" },
+    },
+    required = { "query", "max_results" },
+    additionalProperties = false,
+  },
+  execute = function(input)
+    local limit = input.max_results or 10
+    return { success = true, output = "found results" }
+  end,
+})
+```
+
+When `strict` is not set (or set to `false`), the field is omitted from the API request entirely. Schema validation is your responsibility when opting in — Flemma passes the schema through as-is.
 
 ### Async tool definitions
 
@@ -496,6 +546,8 @@ Key details:
 ```lua
 require("flemma").setup({
   tools = {
+    require_approval = true,           -- Review tool calls before execution (default: true)
+    auto_approve = nil,                -- string[] | function | nil (see below)
     default_timeout = 30,              -- Timeout for async tools (seconds)
     show_spinner = true,               -- Animated spinner during execution
     cursor_after_result = "result",    -- "result" | "stay" | "next"
@@ -507,6 +559,39 @@ require("flemma").setup({
   },
 })
 ```
+
+#### `auto_approve`
+
+Controls which tools skip the approval step. Accepts a list of tool names or a function for fine-grained control:
+
+**List form** – tools in the list are executed immediately; all others require approval:
+
+```lua
+tools = {
+  auto_approve = { "calculator", "read" },
+}
+```
+
+**Function form** – receives the tool name, parsed input, and context. Return `true` to auto-approve, `false`/`nil` to require approval, or `"deny"` to block execution entirely:
+
+```lua
+tools = {
+  auto_approve = function(tool_name, input, context)
+    -- Always allow the calculator
+    if tool_name == "calculator" then return true end
+
+    -- Block destructive commands
+    if tool_name == "bash" and input.command:match("rm %-rf") then
+      return "deny"
+    end
+
+    -- Everything else requires manual approval
+    return false
+  end,
+}
+```
+
+The function signature is `fun(tool_name: string, input: table, context: { bufnr: integer, tool_id: string })`. The context table is forward-compatible – new fields may be added in future versions. If the function throws, Flemma catches the error and falls back to requiring approval.
 
 ### Per-buffer tool selection
 
@@ -555,6 +640,7 @@ flemma.opt.anthropic.thinking_budget = 20000    -- Increase thinking budget
 
 -- Override OpenAI parameters:
 flemma.opt.openai.reasoning = "high"
+flemma.opt.openai.cache_retention = "long"
 
 -- Override Vertex parameters:
 flemma.opt.vertex.thinking_budget = 4096
@@ -777,6 +863,14 @@ Set `signs.enabled = true` to place signs for each message line. Each role (`sys
 
 While a request runs Flemma appends `@Assistant: Thinking...` with an animated braille spinner using virtual text extmarks. The line is flagged as non-spellable so spell check integrations stay quiet. Once streaming starts, the spinner is removed and replaced with the streamed content.
 
+When the model is in a thinking/reasoning phase (Anthropic extended thinking, OpenAI reasoning, or Vertex thinking), the spinner animation is replaced with a live character count — e.g., `❖ (3.2k characters)` — so you can gauge progress. The symbol is configurable via `spinner.thinking_char`:
+
+```lua
+spinner = {
+  thinking_char = "●",  -- default: "❖"
+}
+```
+
 Tool execution also shows a spinner next to the tool result block while the tool is running.
 
 ---
@@ -836,10 +930,13 @@ require("flemma").setup({
     },
     openai = {
       reasoning = nil,                       -- "low" | "medium" | "high" (nil to disable)
+      cache_retention = "short",             -- Prompt caching: "none" | "short" (in_memory) | "long" (24h)
     },
   },
   presets = {},                              -- Named presets: ["$name"] = "provider model key=val"
   tools = {
+    require_approval = true,                 -- Review tool calls before execution
+    auto_approve = nil,                      -- string[] | function | nil
     default_timeout = 30,                    -- Async tool timeout (seconds)
     show_spinner = true,                     -- Animated spinner during execution
     cursor_after_result = "result",          -- "result" | "stay" | "next"
@@ -878,6 +975,9 @@ require("flemma").setup({
     system = { char = nil, hl = true },
     user = { char = "▏", hl = true },
     assistant = { char = nil, hl = true },
+  },
+  spinner = {
+    thinking_char = "❖",              -- Char shown during thinking (e.g. "❖ (3.2k characters)")
   },
   line_highlights = {
     enabled = true,
@@ -927,7 +1027,7 @@ Additional notes:
 - `notify.default_opts` exposes floating-window appearance (timeout, width, border, title).
 - `logging.enabled = true` starts the session with logging already active.
 - `keymaps.enabled = false` disables all built-in mappings so you can register your own `:Flemma` commands.
-- The `send` key is a hybrid dispatch: when pending tool calls exist it executes them all, otherwise it sends the conversation to the provider. To restore the previous send-only behaviour, disable the built-in mapping and bind directly to `send_to_provider`:
+- The `send` key is a hybrid dispatch with three phases: inject approval placeholders, execute pending tools, then send. Set `tools.require_approval = false` to skip the approval step, or bind directly to `send_to_provider` for send-only behaviour:
 
   ```lua
   keymaps = { normal = { send = false }, insert = { send = false } },

@@ -87,13 +87,17 @@ describe(":FlemmaSend command", function()
     local config = state.get_config()
 
     assert.equals("o3", captured_request_body.model)
-    assert.equals(1, #captured_request_body.messages)
-    assert.equals("user", captured_request_body.messages[1].role)
-    assert.equals("Hello", captured_request_body.messages[1].content)
+    assert.is_not_nil(captured_request_body.input, "Should use input field (Responses API)")
+    assert.is_nil(captured_request_body.messages, "Should NOT use messages field")
+    -- Find the user message in the input array
+    local user_items = vim.tbl_filter(function(item)
+      return item.role == "user"
+    end, captured_request_body.input)
+    assert.equals(1, #user_items)
     assert.equals(true, captured_request_body.stream)
-    assert.is_not_nil(captured_request_body.stream_options)
-    assert.equals(true, captured_request_body.stream_options.include_usage)
-    assert.equals(config.parameters.max_tokens, captured_request_body.max_completion_tokens)
+    assert.equals(false, captured_request_body.store)
+    assert.is_nil(captured_request_body.stream_options, "Responses API does not use stream_options")
+    assert.equals(config.parameters.max_tokens, captured_request_body.max_output_tokens)
     assert.equals(config.parameters.temperature, captured_request_body.temperature)
 
     -- Tools are now included by default (parallel tool use enabled)
@@ -103,6 +107,47 @@ describe(":FlemmaSend command", function()
       -- Parallel tool use is enabled (no parallel_tool_calls: false flag)
       assert.is_nil(captured_request_body.parallel_tool_calls)
     end
+  end)
+
+  it("always stores bufnr in session requests", function()
+    -- Arrange: Switch to OpenAI
+    core.switch_provider("openai", "o3", {})
+    client.register_fixture("api%.openai%.com", "tests/fixtures/openai_hello_success_stream.txt")
+
+    -- Test 1: Named buffer → both filepath and bufnr should be set
+    local named_bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(named_bufnr)
+    vim.api.nvim_buf_set_name(named_bufnr, vim.fn.tempname() .. ".chat")
+    vim.api.nvim_buf_set_lines(named_bufnr, 0, -1, false, { "@You: Hello" })
+
+    vim.cmd("FlemmaSend")
+    vim.wait(1000, function()
+      local lines = vim.api.nvim_buf_get_lines(named_bufnr, 0, -1, false)
+      return #lines >= 5 and lines[5] == "@You: "
+    end)
+
+    local session = state.get_session()
+    local named_request = session:get_latest_request()
+    assert.is_not_nil(named_request, "Session should have a request after named buffer send")
+    assert.is_not_nil(named_request.filepath, "Named buffer should have a filepath")
+    assert.equals(named_bufnr, named_request.bufnr, "Named buffer request should store bufnr")
+
+    -- Test 2: Unnamed buffer → bufnr should be set, filepath should be nil
+    client.register_fixture("api%.openai%.com", "tests/fixtures/openai_hello_success_stream.txt")
+    local unnamed_bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(unnamed_bufnr)
+    vim.api.nvim_buf_set_lines(unnamed_bufnr, 0, -1, false, { "@You: Hello" })
+
+    vim.cmd("FlemmaSend")
+    vim.wait(1000, function()
+      local lines = vim.api.nvim_buf_get_lines(unnamed_bufnr, 0, -1, false)
+      return #lines >= 5 and lines[5] == "@You: "
+    end)
+
+    local unnamed_request = session:get_latest_request()
+    assert.is_not_nil(unnamed_request, "Session should have a request after unnamed buffer send")
+    assert.is_nil(unnamed_request.filepath, "Unnamed buffer should NOT have a filepath")
+    assert.equals(unnamed_bufnr, unnamed_request.bufnr, "Unnamed buffer request should store bufnr")
   end)
 
   it("handles a successful streaming response from a fixture", function()
