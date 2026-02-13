@@ -150,7 +150,7 @@ secret-tool store --label="Vertex AI Service Account" service vertex key api pro
    - Documented presets in the README.
    ```
 
-4. Press <kbd>Ctrl-]</kbd> (normal or insert mode) or run `:Flemma send`. Flemma freezes the buffer while the request is streaming and shows `@Assistant: Thinking...`. <kbd>Ctrl-]</kbd> is a hybrid key – if the model responded with tool calls, pressing it again executes them all, and once every tool has a result, the next press sends the conversation back to the provider.
+4. Press <kbd>Ctrl-]</kbd> (normal or insert mode) or run `:Flemma send`. Flemma freezes the buffer while the request is streaming and shows `@Assistant: Thinking...`. <kbd>Ctrl-]</kbd> is a hybrid key with a three-phase cycle: when the model responds with tool calls, the first press injects empty placeholders for review (see [Tool approval](#tool-approval)); the second press executes approved tools; the third press sends the conversation back to the provider.
 5. When the reply finishes, a floating notification lists token counts and cost for the request and the session.
 
 Cancel an in-flight response with <kbd>Ctrl-c</kbd> or `:Flemma cancel`.
@@ -216,7 +216,7 @@ Inside `.chat` buffers Flemma defines:
 
 - `]m` / `[m` – jump to the next/previous message header.
 - `im` / `am` (configurable) – select the inside or entire message as a text object. `am` selects linewise and includes thinking blocks and trailing blank lines, making `dam` delete entire conversation turns. `im` skips `<thinking>` sections so yanking `im` never includes reasoning traces.
-- Buffer-local mappings for send/cancel default to `<C-]>` and `<C-c>` in normal mode. `<C-]>` is a hybrid key: it executes all pending tool calls when any exist, otherwise sends the conversation. Insert-mode `<C-]>` behaves identically but re-enters insert when the operation finishes.
+- Buffer-local mappings for send/cancel default to `<C-]>` and `<C-c>` in normal mode. `<C-]>` is a hybrid key with three phases: inject approval placeholders → execute approved tools → send the conversation. Insert-mode `<C-]>` behaves identically but re-enters insert when the operation finishes.
 
 Disable or remap these through the `keymaps` section (see [Configuration reference](#configuration-reference)).
 
@@ -361,7 +361,7 @@ Flemma includes a tool system that lets models request actions – run a calcula
    ```
    ````
 
-3. You can execute the tool by pressing <kbd>Alt-Enter</kbd> with the cursor on or near the tool use block. Flemma runs the tool, locks the buffer during execution, and injects a `**Tool Result:**` block. Alternatively, press <kbd>Ctrl-]</kbd> to execute all pending tool calls at once:
+3. Press <kbd>Ctrl-]</kbd> to review tool calls. Flemma injects empty `**Tool Result:**` placeholders (fenced with `` `flemma:pending `) so you can inspect each call before execution. Edit or fill in a placeholder to override the tool's output, or leave it empty to let Flemma execute it. Press <kbd>Ctrl-]</kbd> again to execute all remaining pending tools. Alternatively, press <kbd>Alt-Enter</kbd> to execute a single tool at the cursor without the approval step:
 
    ````markdown
    @You: **Tool Result:** `toolu_abc123`
@@ -383,10 +383,22 @@ Flemma includes a tool system that lets models request actions – run a calcula
 | `write`      | sync  | Writes or creates files. Creates parent directories automatically.                                                  |
 | `edit`       | sync  | Find-and-replace with exact text matching. The old text must appear exactly once in the target file.                |
 
+### Tool approval
+
+By default, Flemma requires you to review tool calls before execution. When you press <kbd>Ctrl-]</kbd> and the model has requested tools, Flemma enters a three-phase cycle:
+
+1. **Inject placeholders** – empty `**Tool Result:**` blocks are added to the buffer, fenced with `` `flemma:pending `. The cursor moves to the first placeholder so you can review each tool call.
+2. **Execute** – press <kbd>Ctrl-]</kbd> again. Tools whose placeholders still contain ` ```flemma:pending ``` ` are executed; tools where you edited the fence or filled in content are treated as manual overrides and left as-is.
+3. **Send** – once every tool has a result, the next <kbd>Ctrl-]</kbd> sends the conversation to the provider.
+
+This prevents a model from executing arbitrary commands (e.g., `bash rm -rf /`) without your knowledge. To override a dangerous tool call, simply replace its `flemma:pending` content with your own text before pressing <kbd>Ctrl-]</kbd>.
+
+Disable approval with `tools.require_approval = false` to restore the old execute-immediately behaviour. Use `tools.auto_approve` to whitelist specific tools or write a custom policy (see [Tool configuration](#tool-configuration)).
+
 ### Tool execution
 
-- **<kbd>Ctrl-]</kbd>** – the single interaction key. When pending tool calls exist it executes them all; when every tool call has a result it sends the conversation to the provider.
-- **<kbd>Alt-Enter</kbd>** – execute the tool at the cursor position (normal mode). Useful when you want to run one specific tool call instead of all pending ones.
+- **<kbd>Ctrl-]</kbd>** – the single interaction key. Three-phase cycle: inject placeholders → execute pending → send conversation.
+- **<kbd>Alt-Enter</kbd>** – execute the tool at the cursor position (normal mode), bypassing the approval step. Useful when you want to run one specific tool call.
 - **Async tools** (like `bash`) show an animated spinner while running and can be cancelled.
 - **Buffer locking** – the buffer is made non-modifiable during tool execution to prevent race conditions.
 - **Output truncation** – large outputs (> 4000 lines or 8 MB) are automatically truncated with a summary. The full output is saved to a temporary file and the path is included in the truncated result.
@@ -534,6 +546,8 @@ Key details:
 ```lua
 require("flemma").setup({
   tools = {
+    require_approval = true,           -- Review tool calls before execution (default: true)
+    auto_approve = nil,                -- string[] | function | nil (see below)
     default_timeout = 30,              -- Timeout for async tools (seconds)
     show_spinner = true,               -- Animated spinner during execution
     cursor_after_result = "result",    -- "result" | "stay" | "next"
@@ -545,6 +559,39 @@ require("flemma").setup({
   },
 })
 ```
+
+#### `auto_approve`
+
+Controls which tools skip the approval step. Accepts a list of tool names or a function for fine-grained control:
+
+**List form** – tools in the list are executed immediately; all others require approval:
+
+```lua
+tools = {
+  auto_approve = { "calculator", "read" },
+}
+```
+
+**Function form** – receives the tool name, parsed input, and context. Return `true` to auto-approve, `false`/`nil` to require approval, or `"deny"` to block execution entirely:
+
+```lua
+tools = {
+  auto_approve = function(tool_name, input, context)
+    -- Always allow the calculator
+    if tool_name == "calculator" then return true end
+
+    -- Block destructive commands
+    if tool_name == "bash" and input.command:match("rm %-rf") then
+      return "deny"
+    end
+
+    -- Everything else requires manual approval
+    return false
+  end,
+}
+```
+
+The function signature is `fun(tool_name: string, input: table, context: { bufnr: integer, tool_id: string })`. The context table is forward-compatible – new fields may be added in future versions. If the function throws, Flemma catches the error and falls back to requiring approval.
 
 ### Per-buffer tool selection
 
@@ -880,6 +927,8 @@ require("flemma").setup({
   },
   presets = {},                              -- Named presets: ["$name"] = "provider model key=val"
   tools = {
+    require_approval = true,                 -- Review tool calls before execution
+    auto_approve = nil,                      -- string[] | function | nil
     default_timeout = 30,                    -- Async tool timeout (seconds)
     show_spinner = true,                     -- Animated spinner during execution
     cursor_after_result = "result",          -- "result" | "stay" | "next"
@@ -967,7 +1016,7 @@ Additional notes:
 - `notify.default_opts` exposes floating-window appearance (timeout, width, border, title).
 - `logging.enabled = true` starts the session with logging already active.
 - `keymaps.enabled = false` disables all built-in mappings so you can register your own `:Flemma` commands.
-- The `send` key is a hybrid dispatch: when pending tool calls exist it executes them all, otherwise it sends the conversation to the provider. To restore the previous send-only behaviour, disable the built-in mapping and bind directly to `send_to_provider`:
+- The `send` key is a hybrid dispatch with three phases: inject approval placeholders, execute pending tools, then send. Set `tools.require_approval = false` to skip the approval step, or bind directly to `send_to_provider` for send-only behaviour:
 
   ```lua
   keymaps = { normal = { send = false }, insert = { send = false } },
