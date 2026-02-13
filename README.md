@@ -365,7 +365,7 @@ Flemma includes a tool system that lets models request actions – run a calcula
    ```
    ````
 
-3. Press <kbd>Ctrl-]</kbd> to review tool calls. Flemma injects empty `**Tool Result:**` placeholders (fenced with `` `flemma:pending `) so you can inspect each call before execution. Edit or fill in a placeholder to override the tool's output, or leave it empty to let Flemma execute it. Press <kbd>Ctrl-]</kbd> again to execute all remaining pending tools. Alternatively, press <kbd>Alt-Enter</kbd> to execute a single tool at the cursor without the approval step:
+3. Press <kbd>Ctrl-]</kbd> to review tool calls. Flemma injects empty `**Tool Result:**` placeholders (fenced with ` ```flemma:pending `) so you can inspect each call before execution. Edit or fill in a placeholder to override the tool's output, or leave it empty to let Flemma execute it. Press <kbd>Ctrl-]</kbd> again to execute all remaining pending tools. Alternatively, press <kbd>Alt-Enter</kbd> to execute a single tool at the cursor without the approval step:
 
    ````markdown
    @You: **Tool Result:** `toolu_abc123`
@@ -391,7 +391,7 @@ Flemma includes a tool system that lets models request actions – run a calcula
 
 By default, Flemma requires you to review tool calls before execution. When you press <kbd>Ctrl-]</kbd> and the model has requested tools, Flemma enters a three-phase cycle:
 
-1. **Inject placeholders** – empty `**Tool Result:**` blocks are added to the buffer, fenced with `` `flemma:pending `. The cursor moves to the first placeholder so you can review each tool call.
+1. **Inject placeholders** – empty `**Tool Result:**` blocks are added to the buffer, fenced with ` ```flemma:pending `. The cursor moves to the first placeholder so you can review each tool call.
 2. **Execute** – press <kbd>Ctrl-]</kbd> again. Tools whose placeholders still contain ` ```flemma:pending ``` ` are executed; tools where you edited the fence or filled in content are treated as manual overrides and left as-is.
 3. **Send** – once every tool has a result, the next <kbd>Ctrl-]</kbd> sends the conversation to the provider.
 
