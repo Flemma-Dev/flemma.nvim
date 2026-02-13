@@ -41,51 +41,32 @@ develop:
 		-c ":edit $$HOME/.cache/nvim/flemma.log"										\
 		-c ":tabedit example.chat"
 
-# Launch Flemma.nvim in a new Ghostty terminal and screenshot
-.PHONY: screenshot ghostty-screenshot-cmd
-screenshot: .vapor/dracula-vim
-	@ghostty																			\
-		--gtk-titlebar=true																\
-		--window-decoration=auto														\
-		--window-width=96																\
-		--window-height=40																\
-		--maximize=false																\
-		--font-family="Berkeley Mono"													\
-		--font-family-bold="Berkeley Mono, Bold"										\
-		--font-family-italic="Berkeley Mono, Regular Oblique"							\
-		--font-family-bold-italic="Berkeley Mono, Bold Oblique"							\
-		--font-size=14																	\
-		--gtk-custom-css="`pwd`/contrib/ghostty/gtk-overlay.css"						\
-		-e sh -c "cd `pwd` && make ghostty-screenshot-cmd"
+.PHONY: screencast
+screencast: .vapor/dracula-vim
+	@-rm -R .vapor/cache/ .vapor/state/ .vapor/scratch.chat .vapor/math.png assets/flemma_cast.mp4
+	@mkdir -p .vapor/cache/ .vapor/state/
+	@echo -e "\`\`\`lua\nname = \"Flemma\"\n\nflemma.opt.anthropic.thinking_budget = 2000\n\nflemma.opt.tools = { \"bash\", \"calculator_async\" }\n\`\`\`\n@System: If asked by the user to do calculations, never do those yourself. Use tools that are available to you, such as a calculator or a code execution environment. To preserve resources, add a 1s delay to each computation.\n\n" > .vapor/scratch.chat
+	magick \
+		-size 400x200 \
+		xc:white \
+		-font DejaVu-Sans \
+		-pointsize 48 \
+		-fill black \
+		-gravity center \
+		-annotate +0+0 '(20+30)/2' \
+		-bordercolor white \
+		-border 20 \
+		.vapor/math.png
+	env \
+		PS1='$$ ' \
+		XDG_CONFIG_HOME=`pwd`/contrib/vhs \
+		XDG_CACHE_HOME=`pwd`/.vapor/cache \
+		XDG_STATE_HOME=`pwd`/.vapor/state \
+	vhs contrib/vhs/flemma_cast.tape
 
 .vapor/dracula-vim:
 	@mkdir -p .vapor
 	git clone --depth 1 https://github.com/dracula/vim.git .vapor/dracula-vim
 
-ghostty-screenshot-cmd:
-	@-rm ~/.cache/nvim/flemma.log
-	@nvim																				\
-		--cmd "set runtimepath^=`pwd`,`pwd`/.vapor/dracula-vim"							\
-		-c ":colorscheme dracula"														\
-		-c "lua require(\"flemma\").setup({												\
-			ruler = {																	\
-				hl = \"Comment-fg:#101010\",											\
-			},																			\
-			highlights = {																\
-				system = \"Normal\",													\
-				user_lua_expression = \"Added\",										\
-				user_file_reference = \"Added\",										\
-				thinking_block = \"Comment+bg:#102020-fg:#111111\",						\
-			},																			\
-			line_highlights = {															\
-				frontmatter = \"Normal+bg:#100310\",									\
-				system = \"Normal+bg:#100300\",											\
-				user = \"Normal\",														\
-				assistant = \"Normal+bg:#031010\",										\
-			},																			\
-		})"																				\
-		-c ":tabedit example.chat"														\
-		-c ':set nornu nospell nocursorline' -c ':set showtabline=0' -c ':set cmdheight=0' -c ':set guicursor=n-v-c-sm:ver25' -c ':normal! ggzaza'
 
-
-# vim: set ts=4 sts=4 sw=4 et:
+# vim: set ts=4 sts=4 sw=4 noet:

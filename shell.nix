@@ -17,9 +17,10 @@ pkgs.mkShell rec {
   '';
 
   buildInputs = with pkgs; [
-    nodejs.pkgs.pnpm
     google-cloud-sdk
+    imagemagick
     libsecret
+    nodejs.pkgs.pnpm
     vhs
     # Neovim plug-ins
     plenary-nvim
