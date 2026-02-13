@@ -149,6 +149,25 @@ describe("UI Folding", function()
       assert.are.equal("<1", fold_level)
     end)
 
+    it("should include trailing empty lines in the message fold", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You: question",     -- line 1: >1
+        "more content",       -- line 2: =
+        "",                   -- line 3: <1 (end of message, trailing empty line)
+        "@Assistant: answer",  -- line 4: >1
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      assert.are.equal(">1", ui.get_fold_level(1))
+      assert.are.equal("=", ui.get_fold_level(2))
+      assert.are.equal("<1", ui.get_fold_level(3))
+      assert.are.equal(">1", ui.get_fold_level(4))
+    end)
+
     it("should return >3 for frontmatter on line 1", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)

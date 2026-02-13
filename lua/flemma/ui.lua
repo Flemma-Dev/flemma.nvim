@@ -131,35 +131,15 @@ function M.get_fold_level(lnum)
   end
 
   -- Level 1 folds: messages
-  local msg, msg_boundary = find_message_at_line(doc, lnum)
-  if msg then
-    if msg_boundary == "start" then
+  -- Neovim's ">1" implicitly closes a previous level-1 fold, so single-line
+  -- messages (start_line == end_line) and adjacent messages work correctly
+  -- without explicit "<1" for every end_line.
+  for _, msg in ipairs(doc.messages) do
+    if msg.position.start_line == lnum then
       return ">1"
-    end
-    -- End of a message: check if this is the last line before the next message starts,
-    -- or the last line of the buffer
-    local next_line_num = lnum + 1
-    local last_buf_line = vim.fn.line("$")
-    if lnum == last_buf_line then
+    elseif msg.position.end_line == lnum then
       return "<1"
     end
-    -- Check if next line starts a new message
-    local next_msg = find_message_at_line(doc, next_line_num)
-    if next_msg then
-      return "<1"
-    end
-  end
-
-  -- Check if next line starts a new message (for lines not on a message boundary)
-  local next_line_num = lnum + 1
-  local last_buf_line = vim.fn.line("$")
-  if next_line_num <= last_buf_line then
-    local next_msg = find_message_at_line(doc, next_line_num)
-    if next_msg then
-      return "<1"
-    end
-  elseif lnum == last_buf_line then
-    return "<1"
   end
 
   return "="

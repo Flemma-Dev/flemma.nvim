@@ -28,6 +28,7 @@ local M = {}
 ---@class flemma.ast.TextSegment
 ---@field kind "text"
 ---@field value string
+---@field position flemma.ast.Position|nil
 
 ---@class flemma.ast.ExpressionSegment
 ---@field kind "expression"
@@ -141,9 +142,10 @@ function M.message(role, segments, pos)
 end
 
 ---@param value string
+---@param pos flemma.ast.Position|nil
 ---@return flemma.ast.TextSegment
-function M.text(value)
-  return { kind = "text", value = value }
+function M.text(value, pos)
+  return { kind = "text", value = value, position = pos }
 end
 
 ---@param code string

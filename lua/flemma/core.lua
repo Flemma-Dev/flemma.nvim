@@ -12,6 +12,13 @@ local registry = require("flemma.provider.registry")
 -- For testing purposes
 local last_request_body_for_testing = nil
 
+---Get the 0-indexed column where content starts after a role prefix (@Role: )
+---@param role string
+---@return integer
+local function content_col(role)
+  return #("@" .. role .. ": ")
+end
+
 ---Auto-write buffer if configured and modified
 ---@param bufnr integer
 local function auto_write_buffer(bufnr)
@@ -735,19 +742,10 @@ function M.send_to_provider(opts)
           ui.buffer_cmd(bufnr, "undojoin")
           vim.api.nvim_buf_set_lines(bufnr, last_line_idx, last_line_idx, false, lines_to_insert)
 
-          local new_prompt_line_num = last_line_idx + cursor_line_offset - 1
-          local new_prompt_lines =
-            vim.api.nvim_buf_get_lines(bufnr, new_prompt_line_num, new_prompt_line_num + 1, false)
-          if #new_prompt_lines > 0 then
-            local line_text = new_prompt_lines[1]
-            local col = line_text:find(":%s*") + 1
-            while line_text:sub(col, col) == " " do
-              col = col + 1
-            end
-            -- Only set cursor if we're in the buffer's window, passing bufnr for safety
-            if vim.api.nvim_get_current_buf() == bufnr then
-              ui.set_cursor(new_prompt_line_num + 1, col - 1, bufnr)
-            end
+          -- Position cursor after "@You: " on the new prompt line
+          local new_prompt_line = last_line_idx + cursor_line_offset
+          if vim.api.nvim_get_current_buf() == bufnr then
+            ui.set_cursor(new_prompt_line, content_col("You"), bufnr)
           end
           ui.move_to_bottom(bufnr)
 
