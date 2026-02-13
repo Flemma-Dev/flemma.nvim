@@ -1,26 +1,85 @@
 {
-  "id": "resp_043e8530b054123601698e3597c2a88196ac2fa61456d24222",
+  "id": "resp_04685729d63bb32001698f0bea6b3081958dabe1999236053e",
   "object": "response",
+  "created_at": 1770982378,
   "status": "completed",
+  "background": false,
+  "billing": {
+    "payer": "developer"
+  },
+  "completed_at": 1770982379,
+  "error": null,
+  "frequency_penalty": 0.0,
+  "incomplete_details": null,
+  "instructions": null,
+  "max_output_tokens": null,
+  "max_tool_calls": null,
+  "model": "gpt-4o-mini-2024-07-18",
   "output": [
     {
+      "id": "fc_04685729d63bb32001698f0beb2bb48195a71a25d667ea3792",
       "type": "function_call",
-      "id": "fc_043e8530b054123601698e35981a488196843a243414edaf56",
-      "call_id": "call_0oUfycgJJBCDciA4omI9jIXc",
-      "name": "calculator",
+      "status": "completed",
       "arguments": "{\"expression\":\"15 * 7\"}",
-      "status": "completed"
+      "call_id": "call_Jpm7YQ9ZbeFR5Zlffk8GZCVY",
+      "name": "calculator"
     }
   ],
+  "parallel_tool_calls": true,
+  "presence_penalty": 0.0,
+  "previous_response_id": null,
+  "prompt_cache_key": null,
+  "prompt_cache_retention": null,
+  "reasoning": {
+    "effort": null,
+    "summary": null
+  },
+  "safety_identifier": null,
+  "service_tier": "default",
+  "store": false,
+  "temperature": 1.0,
+  "text": {
+    "format": {
+      "type": "text"
+    },
+    "verbosity": "medium"
+  },
+  "tool_choice": "auto",
+  "tools": [
+    {
+      "type": "function",
+      "description": "Evaluates a mathematical expression and returns the numeric result. Use this for any arithmetic calculations including addition, subtraction, multiplication, division, exponents, and common math functions.\\n\\nReturns (JSON Schema): {\"$schema\":\"https:\\/\\/json-schema.org\\/draft\\/2020-12\\/schema\",\"type\":\"object\",\"required\":[\"result\"],\"properties\":{\"result\":{\"description\":\"The numeric result of the calculation\",\"type\":\"number\"}}}",
+      "name": "calculator",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "The mathematical expression to evaluate (e.g., '2 + 2', '15 * 7', 'sqrt(16)', '2^10')"
+          }
+        },
+        "required": [
+          "expression"
+        ],
+        "additionalProperties": false
+      },
+      "strict": true
+    }
+  ],
+  "top_logprobs": 0,
+  "top_p": 1.0,
+  "truncation": "disabled",
   "usage": {
-    "input_tokens": 119,
+    "input_tokens": 185,
     "input_tokens_details": {
       "cached_tokens": 0
     },
-    "output_tokens": 9,
+    "output_tokens": 18,
     "output_tokens_details": {
       "reasoning_tokens": 0
     },
-    "total_tokens": 128
-  }
+    "total_tokens": 203
+  },
+  "user": null,
+  "metadata": {}
 }

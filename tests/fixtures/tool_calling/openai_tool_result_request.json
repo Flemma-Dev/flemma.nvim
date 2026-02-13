@@ -2,7 +2,7 @@
   "model": "gpt-4o-mini",
   "input": [
     {
-      "role": "system",
+      "role": "developer",
       "content": "You are a helpful assistant with access to a calculator tool. When asked to perform calculations, use the calculator tool."
     },
     {
@@ -16,13 +16,14 @@
     },
     {
       "type": "function_call",
-      "call_id": "call_zKVQISSUvL3HNmgE80n28JcM",
+      "call_id": "call_Jpm7YQ9ZbeFR5Zlffk8GZCVY",
       "name": "calculator",
-      "arguments": "{\"expression\": \"15 * 7\"}"
+      "arguments": "{\"expression\":\"15 * 7\"}",
+      "status": "completed"
     },
     {
       "type": "function_call_output",
-      "call_id": "call_zKVQISSUvL3HNmgE80n28JcM",
+      "call_id": "call_Jpm7YQ9ZbeFR5Zlffk8GZCVY",
       "output": "105"
     }
   ],
@@ -30,20 +31,21 @@
     {
       "type": "function",
       "name": "calculator",
-      "description": "Evaluates a mathematical expression and returns the result. Use this for any arithmetic calculations.",
-
+      "description": "Evaluates a mathematical expression and returns the numeric result. Use this for any arithmetic calculations including addition, subtraction, multiplication, division, exponents, and common math functions.\\n\\nReturns (JSON Schema): {\"$schema\":\"https:\\/\\/json-schema.org\\/draft\\/2020-12\\/schema\",\"type\":\"object\",\"required\":[\"result\"],\"properties\":{\"result\":{\"description\":\"The numeric result of the calculation\",\"type\":\"number\"}}}",
       "parameters": {
         "type": "object",
         "properties": {
           "expression": {
             "type": "string",
-            "description": "The mathematical expression to evaluate (e.g., '2 + 2', '15 * 3', 'sqrt(16)')"
+            "description": "The mathematical expression to evaluate (e.g., '2 + 2', '15 * 7', 'sqrt(16)', '2^10')"
           }
         },
         "required": [
           "expression"
-        ]
-      }
+        ],
+        "additionalProperties": false
+      },
+      "strict": true
     }
   ],
   "tool_choice": "auto",
