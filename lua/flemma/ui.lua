@@ -80,9 +80,11 @@ local function find_thinking_at_line(doc, lnum)
     for _, seg in ipairs(msg.segments) do
       if seg.kind == "thinking" and seg.position then
         if seg.position.start_line == lnum then
-          return seg --[[@as flemma.ast.ThinkingSegment]], "start"
+          return seg, --[[@as flemma.ast.ThinkingSegment]]
+            "start"
         elseif seg.position.end_line == lnum then
-          return seg --[[@as flemma.ast.ThinkingSegment]], "end"
+          return seg, --[[@as flemma.ast.ThinkingSegment]]
+            "end"
         end
       end
     end
@@ -112,13 +114,13 @@ end
 function M.get_fold_level(lnum)
   local doc = get_document()
 
-  -- Level 3 folds: frontmatter
+  -- Level 2 folds: frontmatter (same level as thinking; they never overlap in position)
   local fm = doc.frontmatter
   if fm then
     if fm.position.start_line == lnum then
-      return ">3"
+      return ">2"
     elseif fm.position.end_line == lnum then
-      return "<3"
+      return "<2"
     end
   end
 
@@ -153,7 +155,7 @@ function M.get_fold_text()
   local total_fold_lines = foldend_lnum - foldstart_lnum + 1
   local doc = get_document()
 
-  -- Check for frontmatter fold (level 3)
+  -- Check for frontmatter fold (level 2)
   local fm = doc.frontmatter
   if fm and fm.position.start_line == foldstart_lnum then
     local preview = format_content_preview(fm.code)

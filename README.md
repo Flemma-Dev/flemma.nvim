@@ -200,7 +200,7 @@ Model thoughts stream here and auto-fold.
 
 | Fold level | What folds                 | Why                                                             |
 | ---------- | -------------------------- | --------------------------------------------------------------- |
-| Level 3    | The frontmatter block      | Keep templates out of the way while you focus on chat history.  |
+| Level 2    | The frontmatter block      | Keep templates out of the way while you focus on chat history.  |
 | Level 2    | `<thinking>...</thinking>` | Reasoning traces are useful, but often secondary to the answer. |
 | Level 1    | Each message               | Collapse long exchanges without losing context.                 |
 

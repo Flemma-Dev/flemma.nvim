@@ -206,7 +206,7 @@ return {
     disable_textwidth = true, -- Whether to disable textwidth in chat buffers
     auto_write = false, -- Whether to automatically write the buffer after changes
     manage_updatetime = true, -- Whether to set updatetime to 100 in chat buffers and restore original value when leaving
-    foldlevel = 1, -- Default fold level: 0=all closed, 1=thinking collapsed, 99=all open
+    foldlevel = 1, -- Default fold level: 0=all closed, 1=thinking/frontmatter collapsed, 99=all open
   },
   logging = {
     enabled = false, -- Logging disabled by default
