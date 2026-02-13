@@ -1,6 +1,4 @@
 .direnv/
 .vapor/
 
-.aider*
-!.aider.conf.yml
 .env
