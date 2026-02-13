@@ -477,7 +477,8 @@ describe("Anthropic Provider Tool Support", function()
     local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
+    local prompt =
+      pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
     local req = provider:build_request(prompt, {})
 
     local assistant_msg = nil
@@ -505,7 +506,8 @@ describe("Anthropic Provider Tool Support", function()
     local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
+    local prompt =
+      pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
     local req = provider:build_request(prompt, {})
 
     local user_msgs = vim.tbl_filter(function(m)
@@ -523,7 +525,8 @@ describe("Anthropic Provider Tool Support", function()
     local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_tool_error.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_tool_error.chat"))
+    local prompt =
+      pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_tool_error.chat"))
     local req = provider:build_request(prompt, {})
 
     local user_msgs = vim.tbl_filter(function(m)
@@ -648,7 +651,8 @@ describe("Request Body Validation", function()
     local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 4000, temperature = 0 })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
+    local prompt =
+      pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
     local req = provider:build_request(prompt, {})
 
     -- Validate structure matches expected_tool_result_request.json
@@ -1034,7 +1038,10 @@ describe("Vertex AI Provider Request Building with Tools", function()
     })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"))
+    local prompt = pipeline.run(
+      parser.parse_lines(lines),
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+    )
     local req = provider:build_request(prompt, {})
 
     local model_msg = nil
@@ -1068,7 +1075,10 @@ describe("Vertex AI Provider Request Building with Tools", function()
     })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"))
+    local prompt = pipeline.run(
+      parser.parse_lines(lines),
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+    )
     local req = provider:build_request(prompt, {})
 
     -- Find user message with functionResponse (should be the one after model's functionCall)
@@ -1098,7 +1108,10 @@ describe("Vertex AI Provider Request Building with Tools", function()
     })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_tool_error_vertex.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_tool_error_vertex.chat"))
+    local prompt = pipeline.run(
+      parser.parse_lines(lines),
+      ctx.from_file("tests/fixtures/tool_calling/conversation_tool_error_vertex.chat")
+    )
     local req = provider:build_request(prompt, {})
 
     local has_error_response = false
@@ -1227,8 +1240,10 @@ describe("Anthropic Thinking Signature and Redacted Thinking Round-Trip", functi
     })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat")
-    local prompt =
-      pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat"))
+    local prompt = pipeline.run(
+      parser.parse_lines(lines),
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat")
+    )
     local req = provider:build_request(prompt, {})
 
     -- Find assistant message
@@ -1268,8 +1283,10 @@ describe("Anthropic Thinking Signature and Redacted Thinking Round-Trip", functi
     })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat")
-    local prompt =
-      pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat"))
+    local prompt = pipeline.run(
+      parser.parse_lines(lines),
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat")
+    )
     local req = provider:build_request(prompt, {})
 
     -- Find assistant message
@@ -1386,8 +1403,10 @@ describe("Vertex AI Thought Signature Support", function()
     })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_thought_signature_vertex.chat")
-    local prompt =
-      pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_thought_signature_vertex.chat"))
+    local prompt = pipeline.run(
+      parser.parse_lines(lines),
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_thought_signature_vertex.chat")
+    )
     local req = provider:build_request(prompt, {})
 
     -- Find the model message with functionCall
@@ -1585,7 +1604,10 @@ describe("Vertex AI Request Body Validation with Tools", function()
     })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"))
+    local prompt = pipeline.run(
+      parser.parse_lines(lines),
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+    )
     local req = provider:build_request(prompt, {})
 
     -- Validate basic structure
@@ -1675,11 +1697,33 @@ describe("Base Provider Tool ID Normalization", function()
     assert.equals("", normalized)
   end)
 
-  it("does not modify IDs that only partially match URN pattern", function()
-    -- Just starts with 'urn:' but not 'urn:flemma:tool:'
+  it("normalizes all non-Flemma URN IDs too", function()
     local id = "urn:other:something:123"
     local normalized = base.normalize_tool_id(id)
-    assert.equals("urn:other:something:123", normalized)
+    assert.equals("urn_other_something_123", normalized)
+  end)
+
+  it("replaces all non-alphanumeric non-underscore non-hyphen characters", function()
+    assert.equals("tool_call_1_test", base.normalize_tool_id("tool.call#1@test"))
+  end)
+
+  it("enforces 64 character maximum length", function()
+    local long_id = string.rep("a", 100)
+    assert.equals(64, #base.normalize_tool_id(long_id))
+  end)
+
+  it("strips trailing underscores", function()
+    assert.equals("tool_call", base.normalize_tool_id("tool_call___"))
+  end)
+
+  it("strips trailing underscores created by truncation", function()
+    local id = string.rep("a", 63) .. "!!"
+    local normalized = base.normalize_tool_id(id)
+    assert.equals(string.rep("a", 63), normalized)
+  end)
+
+  it("preserves hyphens in IDs", function()
+    assert.equals("tool-call-123", base.normalize_tool_id("tool-call-123"))
   end)
 end)
 
@@ -1695,7 +1739,10 @@ describe("Anthropic Provider with Vertex URN IDs", function()
     local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"))
+    local prompt = pipeline.run(
+      parser.parse_lines(lines),
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+    )
     local req = provider:build_request(prompt, {})
 
     -- Find assistant message with tool_use
@@ -1728,7 +1775,10 @@ describe("Anthropic Provider with Vertex URN IDs", function()
     local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"))
+    local prompt = pipeline.run(
+      parser.parse_lines(lines),
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+    )
     local req = provider:build_request(prompt, {})
 
     -- Find user message with tool_result
@@ -1820,7 +1870,8 @@ describe("Parallel Tool Use Validation", function()
 
   it("returns empty pending_tool_calls when all tool_uses have results", function()
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
+    local prompt =
+      pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
 
     assert.is_not_nil(prompt.pending_tool_calls)
     assert.equals(0, #prompt.pending_tool_calls)
@@ -1828,8 +1879,10 @@ describe("Parallel Tool Use Validation", function()
 
   it("returns pending_tool_calls when tool_uses are missing results", function()
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat")
-    local prompt, evaluated =
-      pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat"))
+    local prompt, evaluated = pipeline.run(
+      parser.parse_lines(lines),
+      ctx.from_file("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat")
+    )
 
     -- Should have one pending tool call (toolu_01BBB)
     assert.is_not_nil(prompt.pending_tool_calls)
@@ -1897,5 +1950,146 @@ describe("Parallel Tool Use Validation", function()
     assert.equals(2, #tool_results, "User message should have 2 tool_result blocks")
     assert.equals("toolu_01AAA", tool_results[1].tool_use_id)
     assert.equals("toolu_01BBB", tool_results[2].tool_use_id)
+  end)
+end)
+
+-- ============================================================================
+-- Context Overflow Detection Tests
+-- ============================================================================
+
+describe("Context overflow detection", function()
+  local base = require("flemma.provider.base")
+
+  it("detects Anthropic overflow", function()
+    assert.is_true(base:is_context_overflow("prompt is too long: 250000 tokens > 200000 maximum"))
+  end)
+
+  it("detects OpenAI overflow", function()
+    assert.is_true(base:is_context_overflow("Your input exceeds the context window of this model"))
+  end)
+
+  it("detects OpenAI maximum context length", function()
+    assert.is_true(base:is_context_overflow("This model's maximum context length is 128000 tokens"))
+  end)
+
+  it("detects Vertex overflow", function()
+    assert.is_true(
+      base:is_context_overflow("The input token count (1196265) exceeds the maximum number of tokens allowed (1048575)")
+    )
+  end)
+
+  it("detects generic overflow patterns", function()
+    assert.is_true(base:is_context_overflow("context length exceeded"))
+    assert.is_true(base:is_context_overflow("too many tokens in the request"))
+    assert.is_true(base:is_context_overflow("token limit exceeded for this model"))
+  end)
+
+  it("does not false-positive on unrelated errors", function()
+    assert.is_false(base:is_context_overflow("Invalid API key"))
+    assert.is_false(base:is_context_overflow("Rate limit exceeded"))
+    assert.is_false(base:is_context_overflow(""))
+  end)
+
+  it("handles nil gracefully", function()
+    assert.is_false(base:is_context_overflow(nil))
+  end)
+end)
+
+-- ============================================================================
+-- Orphaned Tool Call Synthetic Injection Tests
+-- ============================================================================
+
+describe("Orphaned tool call synthetic injection", function()
+  local anthropic = require("flemma.provider.providers.anthropic")
+  local openai = require("flemma.provider.providers.openai")
+  local vertex = require("flemma.provider.providers.vertex")
+
+  before_each(function()
+    tools.clear()
+    tools.setup()
+  end)
+
+  it("Anthropic injects synthetic tool_result for orphaned tool calls", function()
+    local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat")
+    local prompt = pipeline.run(
+      parser.parse_lines(lines),
+      ctx.from_file("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat")
+    )
+    local req = provider:build_request(prompt, {})
+
+    -- The last message should be a synthetic user message with tool_result
+    local last_msg = req.messages[#req.messages]
+    assert.equals("user", last_msg.role)
+
+    -- Find the synthetic tool_result in the last message
+    local synthetic_result = nil
+    for _, block in ipairs(last_msg.content) do
+      if block.type == "tool_result" and block.tool_use_id == "toolu_01BBB" then
+        synthetic_result = block
+      end
+    end
+
+    assert.is_not_nil(synthetic_result)
+    assert.equals("No result provided", synthetic_result.content)
+    assert.is_true(synthetic_result.is_error)
+  end)
+
+  it("OpenAI injects synthetic function_call_output for orphaned tool calls", function()
+    local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat")
+    local context = ctx.from_file("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat")
+    local prompt = pipeline.run(parser.parse_lines(lines), context)
+    local req = provider:build_request(prompt, context)
+
+    -- Find synthetic function_call_output for the orphaned call
+    local synthetic_outputs = vim.tbl_filter(function(item)
+      return item.type == "function_call_output" and item.call_id == "toolu_01BBB"
+    end, req.input)
+
+    assert.equals(1, #synthetic_outputs)
+    assert.equals("Error: No result provided", synthetic_outputs[1].output)
+  end)
+
+  it("Vertex injects synthetic functionResponse for orphaned tool calls", function()
+    local provider = vertex.new({ model = "gemini-2.5-flash", max_tokens = 1024, temperature = 0 })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat")
+    local prompt = pipeline.run(
+      parser.parse_lines(lines),
+      ctx.from_file("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat")
+    )
+    local req = provider:build_request(prompt)
+
+    -- The last content message should be a synthetic user message with functionResponse
+    local last_content = req.contents[#req.contents]
+    assert.equals("user", last_content.role)
+
+    -- Find the synthetic functionResponse
+    local synthetic_response = nil
+    for _, part in ipairs(last_content.parts) do
+      if part.functionResponse and part.functionResponse.name == "calculator" then
+        synthetic_response = part.functionResponse
+      end
+    end
+
+    assert.is_not_nil(synthetic_response)
+    assert.equals("No result provided", synthetic_response.response.error)
+    assert.is_false(synthetic_response.response.success)
+  end)
+
+  it("does not inject synthetic results when all tool calls have results", function()
+    local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
+
+    local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
+    local prompt =
+      pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
+    local req = provider:build_request(prompt, {})
+
+    -- The last message should be the assistant's final answer, not a synthetic tool_result
+    local last_msg = req.messages[#req.messages]
+    assert.equals("assistant", last_msg.role)
   end)
 end)

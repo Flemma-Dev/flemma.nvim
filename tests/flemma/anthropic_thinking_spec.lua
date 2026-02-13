@@ -335,8 +335,10 @@ describe("Anthropic Provider Extended Thinking", function()
       })
 
       local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat")
-      local prompt =
-        pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat"))
+      local prompt = pipeline.run(
+        parser.parse_lines(lines),
+        ctx.from_file("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat")
+      )
       local req = provider:build_request(prompt, {})
 
       -- Find the assistant message
@@ -377,8 +379,10 @@ describe("Anthropic Provider Extended Thinking", function()
       })
 
       local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat")
-      local prompt =
-        pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat"))
+      local prompt = pipeline.run(
+        parser.parse_lines(lines),
+        ctx.from_file("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat")
+      )
       local req = provider:build_request(prompt, {})
 
       -- Find the assistant message

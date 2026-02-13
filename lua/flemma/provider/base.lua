@@ -248,6 +248,7 @@ end
 ---@field history flemma.provider.HistoryMessage[] User/assistant messages (canonical roles)
 ---@field system string|nil The system instruction, if any
 ---@field opts flemma.opt.ResolvedOpts|nil Per-buffer options from frontmatter
+---@field pending_tool_calls flemma.pipeline.UnresolvedTool[]|nil Tool calls without matching results
 
 ---Prepare prompt from raw messages
 ---
@@ -424,22 +425,62 @@ function M.extract_json_response_error(self, data) ---@diagnostic disable-line: 
 end
 
 --- Normalize tool call ID for provider compatibility
---- Converts URN-style Flemma IDs (urn:flemma:tool:name:unique) to provider-compatible format
---- by replacing colons with underscores. Non-Flemma IDs are passed through unchanged.
+--- Ensures the ID satisfies all provider constraints:
+--- - Only contains characters matching [a-zA-Z0-9_-]
+--- - Maximum 64 characters (Anthropic's documented limit)
+--- - No trailing underscores (rejected by some providers)
 ---@param id string The tool call ID to normalize
----@return string normalized_id The normalized ID safe for Anthropic/OpenAI APIs
+---@return string normalized_id The normalized ID safe for all supported providers
 function M.normalize_tool_id(id)
   if not id then
     return id
   end
-  -- Check if this is a Flemma URN-style ID (urn:flemma:tool:...)
-  if id:match("^urn:flemma:tool:") then
-    -- Replace colons with underscores to satisfy ^[a-zA-Z0-9_-]+$ pattern
-    local normalized = id:gsub(":", "_")
-    return normalized
+  -- Replace any character not in [a-zA-Z0-9_-] with underscore
+  local normalized = id:gsub("[^a-zA-Z0-9_%-]", "_")
+  -- Enforce maximum length of 64 characters
+  if #normalized > 64 then
+    normalized = normalized:sub(1, 64)
   end
-  -- Pass through other IDs unchanged (e.g., native Anthropic/OpenAI IDs)
-  return id
+  -- Strip trailing underscores
+  normalized = normalized:gsub("_+$", "")
+  return normalized
+end
+
+--- Detect whether an error message indicates a context window overflow
+--- Providers can override this to add provider-specific patterns.
+---@param message string|nil The error message to check
+---@return boolean
+function M:is_context_overflow(message)
+  if not message or type(message) ~= "string" then
+    return false
+  end
+  local lower = message:lower()
+  -- Anthropic: "prompt is too long: N tokens > M maximum"
+  if lower:match("prompt is too long") then
+    return true
+  end
+  -- OpenAI: "exceeds the context window" / "maximum context length"
+  if lower:match("exceeds the context window") then
+    return true
+  end
+  if lower:match("maximum context length") then
+    return true
+  end
+  -- Vertex/Google: "input token count (N) exceeds the maximum"
+  if lower:match("input token count") and lower:match("exceeds the maximum") then
+    return true
+  end
+  -- Generic fallbacks
+  if lower:match("context[_ ]length[_ ]exceeded") then
+    return true
+  end
+  if lower:match("too many tokens") then
+    return true
+  end
+  if lower:match("token limit exceeded") then
+    return true
+  end
+  return false
 end
 
 ---@class flemma.provider.SSELine

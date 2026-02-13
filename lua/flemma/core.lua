@@ -489,8 +489,13 @@ function M.send_to_provider(opts)
         auto_write_buffer(bufnr)
 
         local notify_msg = "Flemma: " .. msg
+        if current_provider:is_context_overflow(msg) then
+          notify_msg = notify_msg
+            .. "\n\nYour conversation is too long for this model."
+            .. " Remove earlier messages or start a new conversation."
+        end
         if log.is_enabled() then
-          notify_msg = notify_msg .. ". See " .. log.get_path() .. " for details"
+          notify_msg = notify_msg .. "\nSee " .. log.get_path() .. " for details"
         end
         vim.notify(notify_msg, vim.log.levels.ERROR)
       end)

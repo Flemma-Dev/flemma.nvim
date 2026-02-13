@@ -92,7 +92,7 @@ function M.run(doc, context)
       type = "tool_use",
       severity = "warning",
       error = string.format(
-        "Tool call '%s' (%s) has no matching tool result. Add a **Tool Result:** block with the tool's output.",
+        "Tool call '%s' (%s) has no matching tool result. A synthetic 'No result provided' error response will be sent to the API.",
         tool.name,
         tool.id
       ),

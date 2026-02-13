@@ -384,6 +384,31 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
     })
   end
 
+  -- Inject synthetic error results for orphaned tool calls
+  local pending = prompt.pending_tool_calls
+  if pending and #pending > 0 then
+    local synthetic_parts = {}
+    for _, orphan in ipairs(pending) do
+      table.insert(synthetic_parts, {
+        functionResponse = {
+          name = orphan.name,
+          response = { error = "No result provided", success = false },
+        },
+      })
+      log.debug(
+        "vertex.build_request: Injected synthetic functionResponse for orphaned "
+          .. orphan.name
+          .. " ("
+          .. orphan.id
+          .. ")"
+      )
+    end
+    table.insert(contents, {
+      role = "user",
+      parts = synthetic_parts,
+    })
+  end
+
   local request_body = {
     contents = contents,
     generationConfig = {

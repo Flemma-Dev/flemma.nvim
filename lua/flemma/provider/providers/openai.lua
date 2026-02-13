@@ -256,6 +256,25 @@ function M.build_request(self, prompt, context)
     end
   end
 
+  -- Inject synthetic error results for orphaned tool calls
+  local pending = prompt.pending_tool_calls
+  if pending and #pending > 0 then
+    for _, orphan in ipairs(pending) do
+      table.insert(input_items, {
+        type = "function_call_output",
+        call_id = base.normalize_tool_id(orphan.id),
+        output = "Error: No result provided",
+      })
+      log.debug(
+        "openai.build_request: Injected synthetic function_call_output for orphaned "
+          .. orphan.name
+          .. " ("
+          .. orphan.id
+          .. ")"
+      )
+    end
+  end
+
   -- Build tools array from registry (OpenAI format, filtered by per-buffer opts if present)
   local tools_module = require("flemma.tools")
   local all_tools = tools_module.get_for_prompt(prompt.opts)

@@ -212,6 +212,31 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
     end
   end
 
+  -- Inject synthetic error results for orphaned tool calls
+  local pending = prompt.pending_tool_calls
+  if pending and #pending > 0 then
+    local synthetic_blocks = {}
+    for _, orphan in ipairs(pending) do
+      table.insert(synthetic_blocks, {
+        type = "tool_result",
+        tool_use_id = base.normalize_tool_id(orphan.id),
+        content = "No result provided",
+        is_error = true,
+      })
+      log.debug(
+        "anthropic.build_request: Injected synthetic tool_result for orphaned "
+          .. orphan.name
+          .. " ("
+          .. orphan.id
+          .. ")"
+      )
+    end
+    table.insert(api_messages, {
+      role = "user",
+      content = synthetic_blocks,
+    })
+  end
+
   local cache_retention = self.parameters.cache_retention or "short"
   local cache_control
   if cache_retention == "short" then
