@@ -9,69 +9,33 @@ Flemma turns Neovim into a first-class AI workspace. It gives `.chat` buffers st
 
 <a href="assets/frame_linux_slate.webp" target="_blank"><img align="center" width="1010" height="970" src="assets/frame_linux_slate.webp" alt="Flemma chat buffer example" /></a>
 
-### The buffer is the state
+- **Multi-provider chat** – Anthropic, OpenAI, and Vertex AI through one command tree.
+- **Tool calling** – calculator, bash, file read/edit/write, with approval flow and parallel execution.
+- **Extended thinking** – Anthropic thinking traces, OpenAI reasoning effort, and Vertex thinking budgets.
+- **Template system** – Lua/JSON frontmatter, inline `{{ expressions }}`, `include()` helpers.
+- **Context attachments** – reference local files with `@./path`; MIME detection and provider-aware formatting.
+- **Usage reporting** – per-request and session token totals, costs, and cache metrics.
+- **Theme-aware UI** – line highlights, rulers, signs, and folding that adapt to your colour scheme.
 
-Most AI tools keep the real conversation hidden – in a SQLite file or a JSON log you can't touch. **Flemma doesn't.** The `.chat` buffer **is** the conversation, and nothing exists outside it. What you see is exactly what the model receives. Edit an assistant response to correct a hallucination, delete a tangent, rewrite your own message, paste in a tool result by hand – it all just works because there is no shadow state to fall out of sync. Want to fork a conversation? Duplicate the file. Want version history? You have Git. Switch from GPT to Claude mid-conversation, or turn thinking on for one turn and off for the next – every choice lives in the buffer where you can see and control it.
+## Table of Contents
 
----
-
-<details>
-<summary>
-<strong>Q: What is this and who is it for?</strong><br>
-<strong>A:</strong> Flemma is a Neovim-native AI workspace. I [<a href="https://github.com/StanAngeloff"><img src="https://images.weserv.nl/?url=gravatar.com%2Favatar%2Fea3f8f366bb2aa0855db031884e3a8e8%3Fs%3D400%26d%3Drobohash%26r%3Dg&mask=circle" valign="middle" width="18" height="18" alt="Photo of @StanAngeloff">&thinsp;@StanAngeloff</a>] created Flemma as the place where I think, write, and experiment with AI. <em>[continued]</em>
-</summary>
-
-Flemma is for the technical writers, researchers, creators, and tinkerers, for those who occasionally get in hot water and need advice. It's for everyone who wants to experiment with AI.
-
-With built-in tool calling, Flemma is also becoming a capable environment for coding experiments – it can run shell commands, read and edit files, and evaluate expressions, all from within a chat buffer. Flemma is not trying to replace dedicated coding agents like Claude Code or Codex, but it gives you a conversational workspace where code tasks sit naturally alongside everything else.
-
-</details>
-
-<details>
-<summary>
-<strong>Q: Why Flemma and not X or Y? <em>(where X = Claude Workbench, Y = ChatGPT, etc.)</em></strong><br>
-<strong>A:</strong> The terminal and Neovim are where I spend most of my time. I needed a plug-in that would maximize my productivity and let me experiment with multiple models. I needn't worry about <em>[continued]</em>
-</summary>
-
-…accidentally pressing <kbd>&lt;C-R></kbd> and refreshing the page midway through a prompt (or <kbd>&lt;C-W></kbd> trying to delete a word)… or Chrome sending a tab to sleep whilst I had an unsaved session… or having to worry about whether files I shared with Claude Workbench were stored on some Anthropic server indefinitely. I can be fast! I can be reckless! I can tinker! I can use my Vim keybindings and years of muscle memory!
-
-If I have an idea, it's a buffer away. Should I want to branch off and experiment, I'd duplicate the `.chat` file and go in a different direction. Is the conversation getting too long? I'd summarize a set of instructions and start with them in a new `.chat` file, then share them each time I need a fresh start. Need backups or history? I have Git for that.
-
-</details>
-
-<details>
-<summary>
-<strong>Q: What can I use Flemma for?</strong><br>
-<strong>A:</strong> Flemma is versatile - I'm personally using it mostly professionally and occasionally for personal tasks. Over the last 6+ months since Flemma was created, I've used it to <em>[continued]</em>
-</summary>
-
-- Write countless technical documents, from <abbr title="Product Requirements Document">PRDs (Product Requirements Document)</abbr>, <abbr title="Architecture Knowledge Management">AKM (Architecture Knowledge Management)</abbr>, infrastructure and architecture diagrams with Mermaid, detailed storyboards for <abbr title="Learning Management System">LMS (Learning Management System)</abbr> content, release notes, <abbr title="Functional Requirements">FR (Functional Requirements)</abbr>, etc.
-- Write detailed software design documents using Figma designs as input and the cheap OCR capabilities of Gemini Flash to annotate them, then the excellent reasoning capabilities of Gemini Pro to generate storyboards and interaction flows.
-- Record video sessions which I later transcribed using Whisper and then turned into training materials using Flemma.
-- Generate client-facing documentation from very technical input, stripping it of technical jargon and making it accessible to a wider audience.
-- Create multiple <abbr title="Statement of Work">SOW (Statement of Work)</abbr> documents for clients.
-- Keep track of evolving requirements and decisions by maintaining a long history of meeting minutes.
-- Collect large swaths of emails, meeting minutes, Slack conversations, Trello cards, and distill them into actionable tasks and project plans.
-- As a tool for other AI agents – generate prompts for Midjourney, Reve, etc. and even prompts that I'd feed to different `.chat` buffers in Flemma.
-
-There really is no limit to what you can do with Flemma – if you can write it down and reason about it, you can use Flemma to help you with it.
-
-On a personal level, I've used Flemma to generate bedtime stories with recurring characters for my kids, made small financial decisions based on collected evidence, asked for advice on how to respond to difficult situations, consulted _(usual disclaimer, blah blah)_ it for legal advice and much more.
-
-</details>
-
-## What Flemma Delivers
-
-- **Multi-provider chat** – work with Anthropic, OpenAI, and Vertex AI models through one command tree while keeping prompts in plain `.chat` buffers.
-- **Tool calling** – models can request calculator evaluations, bash commands, file reads, edits, and writes. Flemma executes them (with your approval) and injects results back into the buffer. Works across all three providers with parallel tool support. Per-buffer `flemma.opt` lets you control which tools each conversation can use. Custom tools can resolve definitions asynchronously – from CLI subprocesses, remote APIs, or plugin loaders – with zero startup cost.
-- **Extended thinking and reasoning** – stream Anthropic thinking traces, tune OpenAI reasoning effort, and control Vertex thinking budgets. Thinking blocks auto-fold and get dedicated highlighting.
-- **`.chat` editing tools** – get Markdown folding, visual rulers, `<thinking>` highlighting, tool call syntax highlighting, and message text objects tuned for chat transcripts.
-- **Structured templates** – combine Lua or JSON frontmatter, inline `{{ expressions }}`, and `include()` helpers to assemble prompts without leaving Neovim.
-- **Context attachments** – reference local files with `@./path`; Flemma handles MIME detection and surfaces warnings when a provider can't ingest the asset.
-- **Theme-aware UI** – line highlights, rulers, and signs adapt to your colour scheme via blend expressions. Dark and light modes are first-class.
-- **Usage reporting** – per-request and session notifications show token totals, costs, and cache metrics (read/write tokens) using the bundled pricing tables.
-- **Presets and hooks** – store favourite provider configurations, run `on_request_*` callbacks, auto-write finished chats, and recall the latest usage notification when auditing work.
-- **Contributor tooling** – toggle structured logs, drop into the project's Nix dev shell, and run the bundled headless tests without extra setup.
+- [Installation](#installation)
+- [Requirements](#requirements)
+- [Quick Start](#quick-start)
+- [The Buffer Is the State](#the-buffer-is-the-state)
+- [Understanding `.chat` Buffers](#understanding-chat-buffers)
+- [Commands and Provider Management](#commands-and-provider-management)
+- [Providers](#providers)
+- [Tool Calling](#tool-calling)
+- [Template System and Automation](#template-system-and-automation)
+- [Referencing Local Files](#referencing-local-files)
+- [Usage, Pricing, and Notifications](#usage-pricing-and-notifications)
+- [UI Customisation](#ui-customisation)
+- [Configuration Reference](#configuration-reference)
+- [Developing and Testing](#developing-and-testing)
+- [FAQ](#faq)
+- [Troubleshooting Checklist](#troubleshooting-checklist)
+- [License](#license)
 
 ---
 
@@ -159,8 +123,11 @@ secret-tool store --label="Vertex AI Service Account" service vertex key api pro
 
 Cancel an in-flight response with <kbd>Ctrl-c</kbd> or `:Flemma cancel`.
 
-> [!TIP]
-> Legacy commands (`:FlemmaSend`, `:FlemmaCancel`, …) still work but forward to the new command tree with a deprecation notice.
+---
+
+## The Buffer Is the State
+
+Most AI tools keep the real conversation hidden – in a SQLite file or a JSON log you can't touch. **Flemma doesn't.** The `.chat` buffer **is** the conversation, and nothing exists outside it. What you see is exactly what the model receives. Edit an assistant response to correct a hallucination, delete a tangent, rewrite your own message, paste in a tool result by hand – it all just works because there is no shadow state to fall out of sync. Want to fork a conversation? Duplicate the file. Want version history? You have Git. Switch from GPT to Claude mid-conversation, or turn thinking on for one turn and off for the next – every choice lives in the buffer where you can see and control it.
 
 ---
 
@@ -220,9 +187,9 @@ Inside `.chat` buffers Flemma defines:
 
 - `]m` / `[m` – jump to the next/previous message header.
 - `im` / `am` (configurable) – select the inside or entire message as a text object. `am` selects linewise and includes thinking blocks and trailing blank lines, making `dam` delete entire conversation turns. `im` skips `<thinking>` sections so yanking `im` never includes reasoning traces.
-- Buffer-local mappings for send/cancel default to `<C-]>` and `<C-c>` in normal mode. `<C-]>` is a hybrid key with three phases: inject approval placeholders → execute approved tools → send the conversation. Insert-mode `<C-]>` behaves identically but re-enters insert when the operation finishes.
+- Buffer-local mappings for send/cancel default to `<C-]>` and `<C-c>` in normal mode. `<C-]>` is a hybrid key with three phases: inject approval placeholders, execute approved tools, send the conversation. Insert-mode `<C-]>` behaves identically but re-enters insert when the operation finishes.
 
-Disable or remap these through the `keymaps` section (see [Configuration reference](#configuration-reference)).
+Disable or remap these through the `keymaps` section (see [Configuration Reference](#configuration-reference)).
 
 ---
 
@@ -230,19 +197,22 @@ Disable or remap these through the `keymaps` section (see [Configuration referen
 
 Use the single entry point `:Flemma {command}`. Autocompletion lists every available sub-command.
 
-| Command                                             | Purpose                                                                   | Example                                                                     |
-| --------------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `:Flemma send [key=value …]`                        | Send the current buffer. Optional callbacks run before/after the request. | `:Flemma send on_request_start=stopinsert on_request_complete=startinsert!` |
-| `:Flemma cancel`                                    | Abort the active request and clean up the spinner.                        |                                                                             |
-| `:Flemma switch …`                                  | Choose or override provider/model parameters.                             | See below.                                                                  |
-| `:Flemma import`                                    | Convert Claude Workbench code snippets into `.chat` format.               |                                                                             |
-| `:Flemma message:next` / `:Flemma message:previous` | Jump through message headers.                                             |                                                                             |
-| `:Flemma tool:execute`                              | Execute the tool at the cursor position.                                  |                                                                             |
-| `:Flemma tool:cancel`                               | Cancel the tool execution at the cursor.                                  |                                                                             |
-| `:Flemma tool:cancel-all`                           | Cancel all pending tool executions in the buffer.                         |                                                                             |
-| `:Flemma tool:list`                                 | List pending tool executions with IDs and elapsed time.                   |                                                                             |
-| `:Flemma logging:enable` / `:…:disable` / `:…:open` | Toggle structured logging and open the log file.                          |                                                                             |
-| `:Flemma notification:recall`                       | Reopen the last usage/cost notification.                                  |                                                                             |
+| Command                                                 | Purpose                                                                                  | Example                                                                     |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `:Flemma send [key=value ...]`                          | Send the current buffer. Optional callbacks run before/after the request.                | `:Flemma send on_request_start=stopinsert on_request_complete=startinsert!` |
+| `:Flemma cancel`                                        | Abort the active request and clean up the spinner.                                       |                                                                             |
+| `:Flemma switch ...`                                    | Choose or override provider/model parameters.                                            | See below.                                                                  |
+| `:Flemma import`                                        | Convert Claude Workbench code snippets into `.chat` format ([guide](docs/importing.md)). |                                                                             |
+| `:Flemma message:next` / `:Flemma message:previous`     | Jump through message headers.                                                            |                                                                             |
+| `:Flemma tool:execute`                                  | Execute the tool at the cursor position.                                                 |                                                                             |
+| `:Flemma tool:cancel`                                   | Cancel the tool execution at the cursor.                                                 |                                                                             |
+| `:Flemma tool:cancel-all`                               | Cancel all pending tool executions in the buffer.                                        |                                                                             |
+| `:Flemma tool:list`                                     | List pending tool executions with IDs and elapsed time.                                  |                                                                             |
+| `:Flemma logging:enable` / `:...:disable` / `:...:open` | Toggle structured logging and open the log file.                                         |                                                                             |
+| `:Flemma notification:recall`                           | Reopen the last usage/cost notification.                                                 |                                                                             |
+
+> [!TIP]
+> Legacy commands (`:FlemmaSend`, `:FlemmaCancel`, ...) still work but forward to the new command tree with a deprecation notice.
 
 ### Switching providers and models
 
@@ -269,13 +239,17 @@ require("flemma").setup({
 
 Switch using `:Flemma switch $fast` or `:Flemma switch $review temperature=0.1` to override individual values.
 
+---
+
+## Providers
+
 ### Provider-specific capabilities
 
 | Provider  | Defaults            | Extra parameters                                                                                                                        | Notes                                                                                 |
 | --------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Anthropic | `claude-sonnet-4-5` | `thinking_budget` enables extended thinking (≥ 1024). `cache_retention` controls prompt caching (`"short"`, `"long"`, or `"none"`).     | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer.    |
+| Anthropic | `claude-sonnet-4-5` | `thinking_budget` enables extended thinking (>= 1024). `cache_retention` controls prompt caching (`"short"`, `"long"`, or `"none"`).    | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer.    |
 | OpenAI    | `gpt-5`             | `reasoning=<low\|medium\|high>` toggles reasoning effort. `cache_retention` controls prompt caching (`"short"`, `"long"`, or `"none"`). | Cost notifications include reasoning tokens. Lualine shows the reasoning level.       |
-| Vertex AI | `gemini-2.5-pro`    | `project_id` (required), `location` (default `global`), `thinking_budget` (≥ 1 to activate).                                            | `thinking_budget` activates Google's thinking output; set to `0` or `nil` to disable. |
+| Vertex AI | `gemini-2.5-pro`    | `project_id` (required), `location` (default `global`), `thinking_budget` (>= 1 to activate).                                           | `thinking_budget` activates Google's thinking output; set to `0` or `nil` to disable. |
 
 The full model catalogue (including pricing) is in `lua/flemma/models.lua`. You can access it from Neovim with:
 
@@ -283,66 +257,17 @@ The full model catalogue (including pricing) is in `lua/flemma/models.lua`. You 
 :lua print(vim.inspect(require("flemma.provider.config").models))
 ```
 
-### Prompt caching (Anthropic)
+### Prompt caching
 
-Flemma automatically adds cache breakpoints to Anthropic API requests, letting the provider reuse previously processed prefixes at a fraction of the cost[^anthropic-cache]. Three breakpoints are placed: the tool definitions, the system prompt, and the last user message. Tools are sorted alphabetically so the prefix stays stable across requests.
+All three providers support prompt caching. Flemma handles breakpoint placement (Anthropic), cache keys (OpenAI), and implicit caching (Vertex) automatically. The `cache_retention` parameter controls the strategy where applicable:
 
-The `cache_retention` parameter controls the caching strategy[^anthropic-cache-pricing]:
+|               | Anthropic         | OpenAI                | Vertex AI   |
+| ------------- | ----------------- | --------------------- | ----------- |
+| Default       | `"short"` (5 min) | `"short"` (in-memory) | Automatic   |
+| Min. tokens   | 1,024–4,096       | 1,024                 | 1,024–2,048 |
+| Read discount | 90%               | 50%                   | 90%         |
 
-| Value     | TTL    | Write cost | Read cost | Description                    |
-| --------- | ------ | ---------- | --------- | ------------------------------ |
-| `"short"` | 5 min  | 1.25×      | 0.1×      | Default. Good for active chat. |
-| `"long"`  | 1 hour | 2.0×       | 0.1×      | Better for long-running tasks. |
-| `"none"`  | —      | —          | —         | Disable caching entirely.      |
-
-When caching is active, usage notifications show a `Cache:` line with read and write token counts. Costs are adjusted accordingly – cache reads are 90% cheaper than regular input tokens.
-
-> [!NOTE]
-> Anthropic requires a **minimum number of tokens** in the cached prefix before caching activates[^anthropic-cache-limits]. The thresholds vary by model: **4096 tokens** for Opus 4.6, Opus 4.5, and Haiku 4.5; **1024 tokens** for Sonnet 4.5, Opus 4.1, Opus 4, and Sonnet 4. If your conversation is below this threshold, the API returns zero cache tokens and charges the standard input rate. This is expected – caching benefits grow with longer conversations and system prompts.
-
-### Prompt caching (OpenAI)
-
-Flemma sends prompt caching hints to the OpenAI Responses API using the `cache_retention` parameter[^openai-cache]. When caching is active, Flemma sends the buffer's file path as `prompt_cache_key` and a retention policy as `prompt_cache_retention`. When a cache hit occurs, the usage notification shows a `Cache:` line with the number of read tokens. Costs are adjusted to reflect the 50% discount on cached input[^openai-cache-pricing].
-
-The `cache_retention` parameter controls the caching strategy:
-
-| Value     | TTL        | Write cost       | Read cost | Description                                           |
-| --------- | ---------- | ---------------- | --------- | ----------------------------------------------------- |
-| `"short"` | 5–10 min   | free (invisible) | 0.5×      | Default. `in_memory` retention, good for active chat. |
-| `"long"`  | up to 24 h | free (invisible) | 0.5×      | Extended retention for long sessions.                 |
-| `"none"`  | —          | —                | —         | No caching hints sent.                                |
-
-> [!NOTE]
-> Unlike Anthropic, OpenAI does not report cache **write** tokens in the API response. Writes happen automatically and are free, so the usage notification only shows cache reads.
-
-> [!IMPORTANT]
-> OpenAI caching is **best-effort and not guaranteed**. Even when the prompt meets all requirements, the API may return zero cached tokens. Key conditions:
->
-> - **Minimum 1,024 tokens** in the prompt prefix[^openai-cache]. Shorter prompts are never cached.
-> - **Prefix must be byte-identical** between requests. Any change to tools, system prompt, or earlier messages invalidates the cache from that point forward.
-> - **Cache propagation takes time.** The first request populates the cache; subsequent requests can hit it. Sending requests in rapid succession (within a few seconds) may miss the cache because the entry hasn't propagated yet. Wait at least 5–10 seconds between requests for the best chance of a hit.
-> - **128-token granularity.** Only the first 1,024 tokens plus whole 128-token increments are cacheable. Tokens beyond the last 128-token boundary are always processed fresh.
-
-### Prompt caching (Vertex AI)
-
-Gemini 2.5+ models support implicit context caching[^vertex-cache]. When consecutive requests share a common input prefix, the Vertex AI serving infrastructure automatically caches and reuses it – no configuration or request changes are needed. When a cache hit occurs, the usage notification shows a `Cache:` line with the number of read tokens. Costs are adjusted to reflect the 90% discount on cached input[^vertex-cache-pricing].
-
-| Metric      | Value         | Description                                            |
-| ----------- | ------------- | ------------------------------------------------------ |
-| Read cost   | 0.1× (10%)    | Cached input tokens cost 10% of the normal input rate. |
-| Write cost  | —             | No additional charge; caching is automatic.            |
-| Min. tokens | 1,024 / 2,048 | 1,024 for Flash models, 2,048 for Pro models.          |
-
-> [!IMPORTANT]
-> Vertex AI implicit caching is **automatic and best-effort** – cache hits are not guaranteed. Key conditions:
->
-> - **Minimum token thresholds** vary by model: **1,024 tokens** for Flash, **2,048 tokens** for Pro[^vertex-cache]. Shorter prompts are never cached.
-> - **Prefix must be identical** between requests. Changing tools, system instructions, or earlier conversation turns invalidates the cache from that point forward.
-> - **Only Gemini 2.5+ models** support implicit caching. Older Gemini models (2.0, 1.5) do not report cached tokens.
-> - **Cache propagation takes time.** Like OpenAI, the first request populates the cache and immediate follow-up requests may not see a hit. Allow a few seconds between requests.
-> - **No user control.** There is no TTL parameter or opt-out – caching is managed entirely by Google's infrastructure.
->
-> Google also offers an **explicit Context Caching API**[^vertex-cache-explicit] that creates named cache resources with configurable TTLs via a separate endpoint. Explicit caching requires a different workflow (create cache, then reference it) and is not yet supported by Flemma.
+When a cache hit occurs, the usage notification shows a `Cache:` line with read/write token counts. See [docs/prompt-caching.md](docs/prompt-caching.md) for provider-specific details, caveats, and pricing tables.
 
 ---
 
@@ -353,29 +278,9 @@ Flemma includes a tool system that lets models request actions – run a calcula
 ### How it works
 
 1. When you send a message, Flemma includes definitions for available tools in the API request.
-2. If the model decides to use a tool, it emits a `**Tool Use:**` block in its response:
-
-   ````markdown
-   @Assistant: Let me calculate that for you.
-
-   **Tool Use:** `calculator` (`toolu_abc123`)
-
-   ```json
-   { "expression": "20 + 30 + 50" }
-   ```
-   ````
-
-3. Press <kbd>Ctrl-]</kbd> to review tool calls. Flemma injects empty `**Tool Result:**` placeholders (fenced with ` ```flemma:pending `) so you can inspect each call before execution. Edit or fill in a placeholder to override the tool's output, or leave it empty to let Flemma execute it. Press <kbd>Ctrl-]</kbd> again to execute all remaining pending tools. Alternatively, press <kbd>Alt-Enter</kbd> to execute a single tool at the cursor without the approval step:
-
-   ````markdown
-   @You: **Tool Result:** `toolu_abc123`
-
-   ```
-   100
-   ```
-   ````
-
-4. Send the buffer again (<kbd>Ctrl-]</kbd> or `:Flemma send`) to continue the conversation. The model sees the tool result and can respond accordingly.
+2. If the model decides to use a tool, it emits a `**Tool Use:**` block in its response.
+3. Press <kbd>Ctrl-]</kbd> to review tool calls. Flemma injects empty `**Tool Result:**` placeholders so you can inspect each call before execution. Press <kbd>Ctrl-]</kbd> again to execute all remaining pending tools, or press <kbd>Alt-Enter</kbd> to execute a single tool at the cursor.
+4. Send the buffer again (<kbd>Ctrl-]</kbd> or `:Flemma send`) to continue the conversation.
 
 ### Built-in tools
 
@@ -389,272 +294,66 @@ Flemma includes a tool system that lets models request actions – run a calcula
 
 ### Tool approval
 
-By default, Flemma requires you to review tool calls before execution. When you press <kbd>Ctrl-]</kbd> and the model has requested tools, Flemma enters a three-phase cycle:
+By default, Flemma requires you to review tool calls before execution (<kbd>Ctrl-]</kbd> enters a three-phase cycle):
 
-1. **Inject placeholders** – empty `**Tool Result:**` blocks are added to the buffer, fenced with ` ```flemma:pending `. The cursor moves to the first placeholder so you can review each tool call.
-2. **Execute** – press <kbd>Ctrl-]</kbd> again. Tools whose placeholders still contain ` ```flemma:pending ``` ` are executed; tools where you edited the fence or filled in content are treated as manual overrides and left as-is.
-3. **Send** – once every tool has a result, the next <kbd>Ctrl-]</kbd> sends the conversation to the provider.
+1. **Inject placeholders** – empty `**Tool Result:**` blocks are added, fenced with `` `flemma:pending ``. The cursor moves to the first placeholder.
+2. **Execute** – press <kbd>Ctrl-]</kbd> again. Pending placeholders are executed; any you edited are treated as manual overrides.
+3. **Send** – once every tool has a result, the next <kbd>Ctrl-]</kbd> sends the conversation.
 
-This prevents a model from executing arbitrary commands (e.g., `bash rm -rf /`) without your knowledge. To override a dangerous tool call, simply replace its `flemma:pending` content with your own text before pressing <kbd>Ctrl-]</kbd>.
+Disable approval with `tools.require_approval = false`. Use `tools.auto_approve` to whitelist specific tools or write a custom policy function:
 
-Disable approval with `tools.require_approval = false` to restore the old execute-immediately behaviour. Use `tools.auto_approve` to whitelist specific tools or write a custom policy (see [Tool configuration](#tool-configuration)).
+```lua
+tools = {
+  auto_approve = { "calculator", "read" },       -- list form
+  auto_approve = function(tool_name, input, ctx)  -- function form
+    if tool_name == "calculator" then return true end
+    if tool_name == "bash" and input.command:match("rm %-rf") then return "deny" end
+    return false  -- require approval
+  end,
+}
+```
 
 ### Tool execution
 
-- **<kbd>Ctrl-]</kbd>** – the single interaction key. Three-phase cycle: inject placeholders → execute pending → send conversation.
-- **<kbd>Alt-Enter</kbd>** – execute the tool at the cursor position (normal mode), bypassing the approval step. Useful when you want to run one specific tool call.
 - **Async tools** (like `bash`) show an animated spinner while running and can be cancelled.
 - **Buffer locking** – the buffer is made non-modifiable during tool execution to prevent race conditions.
-- **Output truncation** – large outputs (> 4000 lines or 8 MB) are automatically truncated with a summary. The full output is saved to a temporary file and the path is included in the truncated result.
+- **Output truncation** – large outputs (> 4000 lines or 8 MB) are automatically truncated. The full output is saved to a temporary file.
 - **Cursor positioning** – after injection, the cursor can move to the result (`"result"`), stay put (`"stay"`), or jump to the next `@You:` prompt (`"next"`). Controlled by `tools.cursor_after_result`.
 
 ### Parallel tool use
 
-All three providers support parallel tool calls – the model can request multiple tools in a single response. Press <kbd>Ctrl-]</kbd> to execute all pending calls at once, or use <kbd>Alt-Enter</kbd> on individual blocks.
+All three providers support parallel tool calls. Press <kbd>Ctrl-]</kbd> to execute all pending calls at once, or use <kbd>Alt-Enter</kbd> on individual blocks. Flemma validates that every `**Tool Use:**` block has a matching `**Tool Result:**` before sending.
 
-Flemma validates that every `**Tool Use:**` block has a matching `**Tool Result:**` before sending. Missing results produce a diagnostic warning.
+### Custom tools
 
-### Registering custom tools
-
-`require("flemma.tools").register()` is a single entry point that accepts several forms:
-
-**Single definition** – pass a name and definition table:
-
-```lua
-local tools = require("flemma.tools")
-tools.register("my_tool", {
-  name = "my_tool",
-  description = "Does something useful",
-  input_schema = {
-    type = "object",
-    properties = {
-      query = { type = "string", description = "The input query" },
-    },
-    required = { "query" },
-  },
-  execute = function(input)
-    return { success = true, output = "done: " .. input.query }
-  end,
-})
-```
-
-**Module name** – pass a module path. If the module exports `.definitions` (an array of definition tables), they are registered synchronously. If it exports `.resolve(register, done)`, it is registered as an async source (see below):
-
-```lua
-tools.register("my_plugin.tools.search")
-```
-
-**Batch** – pass an array of definition tables:
-
-```lua
-tools.register({
-  { name = "tool_a", description = "…", input_schema = { type = "object", properties = {} } },
-  { name = "tool_b", description = "…", input_schema = { type = "object", properties = {} } },
-})
-```
-
-### Strict mode for tool schemas
-
-OpenAI's Responses API supports [strict mode](https://platform.openai.com/docs/guides/structured-outputs) for function calling, which guarantees that the model's arguments will conform exactly to your JSON Schema. All of Flemma's built-in tools use strict mode.
-
-To opt in for your custom tools, set `strict = true` on the definition and ensure the `input_schema` meets OpenAI's strict-mode requirements:
-
-- All properties must be listed in `required`
-- The schema must include `additionalProperties = false`
-- Optional parameters use a nullable type array instead of being omitted from `required`:
-
-```lua
-tools.register("my_tool", {
-  name = "my_tool",
-  description = "Does something",
-  strict = true,
-  input_schema = {
-    type = "object",
-    properties = {
-      query   = { type = "string", description = "Required input" },
-      max_results = { type = { "number", "null" }, description = "Optional limit (default: 10)" },
-    },
-    required = { "query", "max_results" },
-    additionalProperties = false,
-  },
-  execute = function(input)
-    local limit = input.max_results or 10
-    return { success = true, output = "found results" }
-  end,
-})
-```
-
-When `strict` is not set (or set to `false`), the field is omitted from the API request entirely. Schema validation is your responsibility when opting in – Flemma passes the schema through as-is.
-
-### Async tool definitions
-
-Tool definitions that need to call external processes or remote APIs can resolve asynchronously. Flemma gates API requests on all sources being ready – if you send while definitions are still loading, the buffer shows "Waiting for tool definitions to load…" and auto-sends once everything resolves.
-
-**Function form** – pass a resolve function directly:
-
-```lua
-tools.register(function(register, done)
-  vim.fn.jobstart({ "my-cli", "list-tools" }, {
-    on_exit = function()
-      register("discovered_tool", { --[[ definition ]] })
-      done()       -- signals this source is complete
-    end,
-  })
-end)
-```
-
-**Table form** – pass a table with `.resolve` and an optional `.timeout` (seconds):
-
-```lua
-tools.register({
-  timeout = 60,
-  resolve = function(register, done)
-    -- fetch definitions from a remote API...
-    register("remote_tool", { --[[ definition ]] })
-    done()
-  end,
-})
-```
-
-**Module form** – export a `resolve` function from your module:
-
-```lua
--- In lua/my_plugin/tools.lua
-local M = {}
-
-function M.resolve(register, done)
-  -- async work...
-  register("my_tool", { --[[ definition ]] })
-  done()
-end
-
-M.timeout = 45  -- optional, defaults to tools.default_timeout (30s)
-
-return M
-```
-
-```lua
--- In your setup:
-tools.register("my_plugin.tools")
-```
-
-Key details:
-
-- **`register(name, def)`** can be called multiple times within a single source to register several tools.
-- **`done(err?)`** must be called exactly once. Pass an error string to signal failure (the source completes but a warning is shown). Double-calling `done()` is safe (idempotent).
-- **Timeout** – if `done()` is never called, the source times out after `tools.default_timeout` seconds (default 30). This prevents a broken source from blocking requests forever.
-- **Error handling** – if the resolve function throws, `done(err)` is called automatically.
-
-### Tool configuration
-
-```lua
-require("flemma").setup({
-  tools = {
-    require_approval = true,           -- Review tool calls before execution (default: true)
-    auto_approve = nil,                -- string[] | function | nil (see below)
-    default_timeout = 30,              -- Timeout for async tools (seconds)
-    show_spinner = true,               -- Animated spinner during execution
-    cursor_after_result = "result",    -- "result" | "stay" | "next"
-    bash = {
-      shell = nil,                     -- Shell binary (default: bash)
-      cwd = nil,                       -- Working directory (nil = buffer dir)
-      env = nil,                       -- Extra environment variables
-    },
-  },
-})
-```
-
-#### `auto_approve`
-
-Controls which tools skip the approval step. Accepts a list of tool names or a function for fine-grained control:
-
-**List form** – tools in the list are executed immediately; all others require approval:
-
-```lua
-tools = {
-  auto_approve = { "calculator", "read" },
-}
-```
-
-**Function form** – receives the tool name, parsed input, and context. Return `true` to auto-approve, `false`/`nil` to require approval, or `"deny"` to block execution entirely:
-
-```lua
-tools = {
-  auto_approve = function(tool_name, input, context)
-    -- Always allow the calculator
-    if tool_name == "calculator" then return true end
-
-    -- Block destructive commands
-    if tool_name == "bash" and input.command:match("rm %-rf") then
-      return "deny"
-    end
-
-    -- Everything else requires manual approval
-    return false
-  end,
-}
-```
-
-The function signature is `fun(tool_name: string, input: table, context: { bufnr: integer, tool_id: string })`. The context table is forward-compatible – new fields may be added in future versions. If the function throws, Flemma catches the error and falls back to requiring approval.
+Register your own tools with `require("flemma.tools").register()`, which supports single definitions, batch registration, module paths, and async resolution for tools that need to call external processes. See [docs/custom-tools.md](docs/custom-tools.md) for the full registration API, strict mode, and async patterns.
 
 ### Per-buffer tool selection
 
-Control which tools are available on a per-buffer basis using `flemma.opt` in Lua frontmatter. The API follows `vim.opt` conventions:
+Control which tools are available per-buffer using `flemma.opt` in Lua frontmatter:
 
 ````lua
 ```lua
--- Only send specific tools with the request:
-flemma.opt.tools = {"bash", "read"}
-
--- Remove a tool from the defaults:
-flemma.opt.tools:remove("calculator")
-
--- Add a tool (including disabled tools like calculator_async used in debugging):
-flemma.opt.tools:append("calculator_async")
-
--- Add at the beginning of the tool list:
-flemma.opt.tools:prepend("read")
-
--- Operator overloads (same as vim.opt):
-flemma.opt.tools = flemma.opt.tools + "read"        -- append
-flemma.opt.tools = flemma.opt.tools - "calculator"   -- remove
-flemma.opt.tools = flemma.opt.tools ^ "read"         -- prepend
-
--- All methods accept both strings and tables:
-flemma.opt.tools:remove({"calculator", "bash"})
-flemma.opt.tools:append({"read", "write"})
+flemma.opt.tools = {"bash", "read"}             -- only these tools
+flemma.opt.tools:remove("calculator")           -- remove from defaults
+flemma.opt.tools:append("calculator_async")     -- add a tool
+flemma.opt.tools = flemma.opt.tools + "read"    -- operator overloads work too
 ```
 ````
 
-Each evaluation starts from defaults (all enabled tools). Changes only affect the current buffer's request – other buffers and future evaluations are unaffected.
-
-Tools registered with `enabled = false` (such as `calculator_async` used by Flemma devs for debugging tool calls) are excluded from the defaults but can be explicitly added via `:append()` or direct assignment.
-
-Misspelled tool names produce an error with a "did you mean" suggestion when a close match exists.
+Each evaluation starts from defaults (all enabled tools). Misspelled tool names produce an error with a "did you mean" suggestion.
 
 ### Per-buffer provider parameter overrides
 
-Provider-specific parameters can also be overridden per-buffer using `flemma.opt.<provider>.*`:
+Provider-specific parameters can also be overridden per-buffer:
 
 ````lua
 ```lua
--- Override Anthropic parameters for this buffer:
-flemma.opt.anthropic.cache_retention = "none"   -- Disable prompt caching
-flemma.opt.anthropic.thinking_budget = 20000    -- Increase thinking budget
-
--- Override OpenAI parameters:
+flemma.opt.anthropic.thinking_budget = 20000
 flemma.opt.openai.reasoning = "high"
-flemma.opt.openai.cache_retention = "long"
-
--- Override Vertex parameters:
 flemma.opt.vertex.thinking_budget = 4096
-
--- Table assignment also works:
-flemma.opt.anthropic = { cache_retention = "long", thinking_budget = 10000 }
 ```
 ````
-
-Provider parameter overrides follow the same per-buffer isolation as tool selection – each buffer starts from the global defaults.
 
 ---
 
@@ -777,11 +476,11 @@ If a file cannot be read or the provider refuses its MIME type, Flemma warns you
 
 ## Usage, Pricing, and Notifications
 
-Each completed request emits a floating report that names the provider/model, lists input/output tokens (reasoning tokens are counted under `⊂ thoughts`), and – when pricing is enabled – shows the per-request and cumulative session cost derived from `lua/flemma/models.lua`. When prompt caching is active (Anthropic, OpenAI, or Vertex AI), a `Cache:` line shows read and write token counts, and costs are adjusted to reflect the provider-specific discount on cached input. Token accounting persists for the lifetime of the Neovim instance; call `require("flemma.state").reset_session()` if you need to zero the counters without restarting. `pricing.enabled = false` suppresses the dollar amounts while keeping token totals for comparison.
+Each completed request emits a floating report that names the provider/model, lists input/output tokens (reasoning tokens are counted under `thoughts`), and – when pricing is enabled – shows the per-request and cumulative session cost derived from `lua/flemma/models.lua`. When prompt caching is active, a `Cache:` line shows read and write token counts. Token accounting persists for the lifetime of the Neovim instance; call `require("flemma.state").reset_session()` to zero the counters without restarting. `pricing.enabled = false` suppresses the dollar amounts while keeping token totals.
 
-Notifications are buffer-local – each `.chat` buffer gets its own notification stack, positioned relative to its window. Notifications for hidden buffers (e.g., in another tab) are queued and shown when the buffer becomes visible.
+Notifications are buffer-local – each `.chat` buffer gets its own notification stack, positioned relative to its window. Notifications for hidden buffers are queued and shown when the buffer becomes visible. Recall the most recent notification with `:Flemma notification:recall`.
 
-Flemma keeps the most recent notification available via `:Flemma notification:recall`, which helps when you close the floating window before capturing the numbers. Logging lives in the same subsystem: toggle it with `:Flemma logging:enable` / `:Flemma logging:disable` and open the log file (`~/.local/state/nvim/flemma.log` or your `stdpath("cache")`) through `:Flemma logging:open` whenever you need the redacted curl command and streaming trace.
+For programmatic access to token usage and cost data, see [docs/session-api.md](docs/session-api.md).
 
 ---
 
@@ -865,21 +564,11 @@ Set `signs.enabled = true` to place signs for each message line. Each role (`sys
 
 ### Spinner behaviour
 
-While a request runs Flemma appends `@Assistant: Thinking...` with an animated braille spinner using virtual text extmarks. The line is flagged as non-spellable so spell check integrations stay quiet. Once streaming starts, the spinner is removed and replaced with the streamed content.
+While a request runs Flemma appends `@Assistant: Thinking...` with an animated braille spinner using virtual text extmarks. Once streaming starts, the spinner is removed and replaced with the streamed content.
 
-When the model is in a thinking/reasoning phase (Anthropic extended thinking, OpenAI reasoning, or Vertex thinking), the spinner animation is replaced with a live character count – e.g., `❖ (3.2k characters)` – so you can gauge progress. The symbol is configurable via `spinner.thinking_char`:
+When the model is in a thinking/reasoning phase, the spinner animation is replaced with a live character count – e.g., `❖ (3.2k characters)` – so you can gauge progress. The symbol is configurable via `spinner.thinking_char`. Tool execution also shows a spinner next to the tool result block while the tool is running.
 
-```lua
-spinner = {
-  thinking_char = "●",  -- default: "❖"
-}
-```
-
-Tool execution also shows a spinner next to the tool result block while the tool is running.
-
----
-
-## Lualine Integration
+### Lualine integration
 
 Add the bundled component to show the active model (and reasoning effort or thinking status when set):
 
@@ -895,18 +584,7 @@ require("lualine").setup({
 })
 ```
 
-The component only renders in `chat` buffers. Switching providers or toggling reasoning/thinking causes Flemma to refresh lualine automatically.
-
-The display format is configurable:
-
-```lua
-require("flemma").setup({
-  statusline = {
-    thinking_format = "{model}  ✓ thinking",   -- When thinking_budget is set
-    reasoning_format = "{model} ({level})",     -- When OpenAI reasoning is set
-  },
-})
-```
+The component only renders in `chat` buffers. The display format is configurable via `statusline.thinking_format` and `statusline.reasoning_format` in the [Configuration Reference](#configuration-reference).
 
 ---
 
@@ -924,13 +602,13 @@ require("flemma").setup({
     timeout = 120,                           -- Response timeout (seconds)
     connect_timeout = 10,                    -- Connection timeout (seconds)
     anthropic = {
-      thinking_budget = nil,                 -- Extended thinking (≥ 1024, or nil to disable)
+      thinking_budget = nil,                 -- Extended thinking (>= 1024, or nil to disable)
       cache_retention = "short",             -- Prompt caching: "none" | "short" (5-min) | "long" (1h TTL)
     },
     vertex = {
       project_id = nil,                      -- Google Cloud project ID (required for Vertex)
       location = "global",                   -- Google Cloud region
-      thinking_budget = nil,                 -- Thinking output (≥ 1 to enable, nil/0 to disable)
+      thinking_budget = nil,                 -- Thinking output (>= 1 to enable, nil/0 to disable)
     },
     openai = {
       reasoning = nil,                       -- "low" | "medium" | "high" (nil to disable)
@@ -981,7 +659,7 @@ require("flemma").setup({
     assistant = { char = nil, hl = true },
   },
   spinner = {
-    thinking_char = "❖",              -- Char shown during thinking (e.g. "❖ (3.2k characters)")
+    thinking_char = "❖",
   },
   line_highlights = {
     enabled = true,
@@ -1023,67 +701,7 @@ require("flemma").setup({
 })
 ```
 
-Additional notes:
-
-- `editing.auto_write = true` writes the buffer after each successful request or cancellation.
-- `editing.foldlevel` controls the initial fold state: `0` folds everything, `1` keeps messages open but collapses thinking blocks, `99` opens everything.
-- Set `text_object = false` to disable the message text object entirely.
-- `notify.default_opts` exposes floating-window appearance (timeout, width, border, title).
-- `logging.enabled = true` starts the session with logging already active.
-- `keymaps.enabled = false` disables all built-in mappings so you can register your own `:Flemma` commands.
-- The `send` key is a hybrid dispatch with three phases: inject approval placeholders, execute pending tools, then send. Set `tools.require_approval = false` to skip the approval step, or bind directly to `send_to_provider` for send-only behaviour:
-
-  ```lua
-  keymaps = { normal = { send = false }, insert = { send = false } },
-  ```
-
-  ```lua
-  vim.api.nvim_create_autocmd("FileType", {
-    pattern = "chat",
-    callback = function()
-      vim.keymap.set("n", "<C-]>", function()
-        require("flemma.core").send_to_provider()
-      end, { buffer = true })
-    end,
-  })
-  ```
-
----
-
-## Importing from Claude Workbench
-
-<details>
-<summary><strong>Quick steps</strong> – Export the TypeScript snippet in Claude Workbench, paste it into Neovim, then run <code>:Flemma import</code>.</summary>
-
-Flemma can turn Claude Workbench exports into ready-to-send `.chat` buffers. Follow the short checklist above when you only need a reminder; the full walkthrough below explains each step and the safeguards in place.
-
-**Before you start**
-
-- `:Flemma import` delegates to the current provider. Keep Anthropic active (`:Flemma switch anthropic`) so the importer knows how to interpret the snippet.
-- Use an empty scratch buffer – `Flemma import` overwrites the entire buffer with the converted chat.
-
-**Export from Claude Workbench**
-
-1. Navigate to <https://console.anthropic.com/workbench> and open the saved prompt you want to migrate.
-2. Click **Get code** in the top-right corner, then switch the language dropdown to **TypeScript**. The importer expects the `anthropic.messages.create({ ... })` call produced by that export.
-3. Press **Copy code**; Claude Workbench copies the whole TypeScript example (including the `import Anthropic from "@anthropic-ai/sdk"` header).
-
-**Convert inside Neovim**
-
-1. In Neovim, paste the snippet into a new buffer (or delete any existing text first).
-2. Run `:Flemma import`. The command:
-   - Scans the buffer for `anthropic.messages.create(...)`.
-   - Normalises the JavaScript object syntax and decodes it as JSON.
-   - Emits a system message (if present) and rewrites every Workbench message as `@You:` / `@Assistant:` lines.
-   - Switches the buffer's filetype to `chat` so folds, highlights, and keymaps activate immediately.
-
-**Troubleshooting**
-
-- If the snippet does not contain an `anthropic.messages.create` call, the importer aborts with "No Anthropic API call found".
-- JSON decoding errors write both the original snippet and the cleaned JSON to `flemma_import_debug.log` in your temporary directory (e.g. `/tmp/flemma_import_debug.log`). Open that file to spot mismatched brackets or truncated copies.
-- Nothing happens? Confirm Anthropic is the active provider – other providers currently do not ship an importer.
-
-</details>
+Set `keymaps.enabled = false` to disable all built-in mappings. The `send` key is a hybrid dispatch with three phases: inject approval placeholders, execute pending tools, then send. For send-only behaviour, bind directly to `require("flemma.core").send_to_provider()`.
 
 ---
 
@@ -1119,78 +737,59 @@ make develop       # Launch Neovim with Flemma loaded for local testing
 make screenshot    # Generate screenshots
 ```
 
-To exercise the plugin without installing it globally:
-
-```bash
-nvim --cmd "set runtimepath+=`pwd`" \
-  -c 'lua require("flemma").setup({})' \
-  -c ':edit scratch.chat'
-```
+To exercise the plugin without installing it globally, run `make develop` – it launches Neovim with Flemma on the runtime path and opens a scratch `.chat` buffer.
 
 > [!NOTE]
-> **Almost every line of code** in Flemma has been authored through AI pair-programming tools (Aider, Amp, Claude Code, and Codex). Traditional contributions are welcome – just keep changes focused, documented, and tested.
+> **Almost every line of code** in Flemma has been authored through AI pair-programming tools (Claude Code as of late, Amp and Aider in the past). Traditional contributions are welcome – just keep changes focused, documented, and tested.
 
 ---
 
-## Session API
+## FAQ
 
-Flemma tracks token usage and costs for every API request in a global session object. The session lives in memory for the lifetime of the Neovim instance and is accessible through the `flemma.session` module.
+<details>
+<summary>
+<strong>Q: What is this and who is it for?</strong><br>
+<strong>A:</strong> Flemma is a Neovim-native AI workspace. I [<a href="https://github.com/StanAngeloff"><img src="https://images.weserv.nl/?url=gravatar.com%2Favatar%2Fea3f8f366bb2aa0855db031884e3a8e8%3Fs%3D400%26d%3Drobohash%26r%3Dg&mask=circle" valign="middle" width="18" height="18" alt="Photo of @StanAngeloff">&thinsp;@StanAngeloff</a>] created Flemma as the place where I think, write, and experiment with AI. <em>[continued]</em>
+</summary>
 
-### Reading the current session
+Flemma is for the technical writers, researchers, creators, and tinkerers, for those who occasionally get in hot water and need advice. It's for everyone who wants to experiment with AI.
 
-```lua
-local session = require("flemma.session").get()
+With built-in tool calling, Flemma is also becoming a capable environment for coding experiments – it can run shell commands, read and edit files, and evaluate expressions, all from within a chat buffer. Flemma is not trying to replace dedicated coding agents like Claude Code or Codex, but it gives you a conversational workspace where code tasks sit naturally alongside everything else.
 
--- Aggregate stats
-print("Requests:", session:get_request_count())
-print("Total cost: $" .. string.format("%.2f", session:get_total_cost()))
+</details>
 
--- Iterate individual requests
-for _, request in ipairs(session.requests) do
-  print(string.format(
-    "%s/%s  in=%d out=%d  $%.4f  %s",
-    request.provider,
-    request.model,
-    request.input_tokens,
-    request:get_total_output_tokens(),
-    request:get_total_cost(),
-    request.filepath or "(unnamed)"
-  ))
-end
-```
+<details>
+<summary>
+<strong>Q: Why Flemma and not X or Y? <em>(where X = Claude Workbench, Y = ChatGPT, etc.)</em></strong><br>
+<strong>A:</strong> The terminal and Neovim are where I spend most of my time. I needed a plug-in that would maximize my productivity and let me experiment with multiple models. I needn't worry about <em>[continued]</em>
+</summary>
 
-Each request stores raw data – tokens, per-million prices, cache multipliers, and timestamps – so costs are always derived from the underlying components. Available fields on a request:
+...accidentally pressing <kbd>&lt;C-R></kbd> and refreshing the page midway through a prompt (or <kbd>&lt;C-W></kbd> trying to delete a word)... or Chrome sending a tab to sleep whilst I had an unsaved session... or having to worry about whether files I shared with Claude Workbench were stored on some Anthropic server indefinitely. I can be fast! I can be reckless! I can tinker! I can use my Vim keybindings and years of muscle memory!
 
-| Field                                                    | Description                                                                             |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `provider`, `model`                                      | Provider and model that handled the request                                             |
-| `input_tokens`, `output_tokens`, `thoughts_tokens`       | Raw token counts                                                                        |
-| `input_price`, `output_price`                            | USD per million tokens (snapshot at request time)                                       |
-| `cache_read_input_tokens`, `cache_creation_input_tokens` | Cache token counts                                                                      |
-| `cache_read_multiplier`, `cache_write_multiplier`        | Cache cost multipliers (nil when not applicable)                                        |
-| `output_has_thoughts`                                    | Whether `output_tokens` already includes thinking tokens                                |
-| `started_at`, `completed_at`                             | Timestamps as seconds since epoch with microsecond precision (e.g. `1700000042.123456`) |
-| `filepath`, `bufnr`                                      | Source buffer identifier                                                                |
+If I have an idea, it's a buffer away. Should I want to branch off and experiment, I'd duplicate the `.chat` file and go in a different direction. Is the conversation getting too long? I'd summarize a set of instructions and start with them in a new `.chat` file, then share them each time I need a fresh start. Need backups or history? I have Git for that.
 
-Methods: `get_input_cost()`, `get_output_cost()`, `get_total_cost()`, `get_total_output_tokens()`.
+</details>
 
-### Saving and restoring a session
+<details>
+<summary>
+<strong>Q: What can I use Flemma for?</strong><br>
+<strong>A:</strong> Flemma is versatile - I'm personally using it mostly professionally and occasionally for personal tasks. Over the last 6+ months since Flemma was created, I've used it to <em>[continued]</em>
+</summary>
 
-`Session:load()` accepts a list of option tables in the same format as `add_request()` and replaces the current session contents. Combined with reading `session.requests`, this enables crude persistence:
+- Write countless technical documents, from <abbr title="Product Requirements Document">PRDs (Product Requirements Document)</abbr>, <abbr title="Architecture Knowledge Management">AKM (Architecture Knowledge Management)</abbr>, infrastructure and architecture diagrams with Mermaid, detailed storyboards for <abbr title="Learning Management System">LMS (Learning Management System)</abbr> content, release notes, <abbr title="Functional Requirements">FR (Functional Requirements)</abbr>, etc.
+- Write detailed software design documents using Figma designs as input and the cheap OCR capabilities of Gemini Flash to annotate them, then the excellent reasoning capabilities of Gemini Pro to generate storyboards and interaction flows.
+- Record video sessions which I later transcribed using Whisper and then turned into training materials using Flemma.
+- Generate client-facing documentation from very technical input, stripping it of technical jargon and making it accessible to a wider audience.
+- Create multiple <abbr title="Statement of Work">SOW (Statement of Work)</abbr> documents for clients.
+- Keep track of evolving requirements and decisions by maintaining a long history of meeting minutes.
+- Collect large swaths of emails, meeting minutes, Slack conversations, Trello cards, and distill them into actionable tasks and project plans.
+- As a tool for other AI agents – generate prompts for Midjourney, Reve, etc. and even prompts that I'd feed to different `.chat` buffers in Flemma.
 
-```lua
--- Save to a JSON file (use vim.json for full numeric precision)
-local session = require("flemma.session").get()
-local json = vim.json.encode(session.requests)
-vim.fn.writefile({ json }, vim.fn.stdpath("data") .. "/flemma_session.json")
+There really is no limit to what you can do with Flemma – if you can write it down and reason about it, you can use Flemma to help you with it.
 
--- Restore from a saved file
-local path = vim.fn.stdpath("data") .. "/flemma_session.json"
-local lines = vim.fn.readfile(path)
-if #lines > 0 then
-  require("flemma.session").get():load(vim.json.decode(table.concat(lines, "\n")))
-end
-```
+On a personal level, I've used Flemma to generate bedtime stories with recurring characters for my kids, made small financial decisions based on collected evidence, asked for advice on how to respond to difficult situations, consulted _(usual disclaimer, blah blah)_ it for legal advice and much more.
+
+</details>
 
 ---
 
@@ -1204,13 +803,8 @@ end
 - **Keymaps clash:** disable built-in mappings via `keymaps.enabled = false` and register your own `:Flemma` commands.
 - **Cross-buffer issues:** Flemma manages state per-buffer. If something feels off after switching between multiple `.chat` buffers, ensure each buffer has been saved (unsaved buffers lack `__dirname` for path resolution).
 
-Happy prompting!
+## License
 
-[^anthropic-cache]: https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching
-[^anthropic-cache-pricing]: https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching#pricing
-[^anthropic-cache-limits]: https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching#cache-limitations
-[^openai-cache]: https://platform.openai.com/docs/guides/prompt-caching
-[^openai-cache-pricing]: https://platform.openai.com/docs/pricing
-[^vertex-cache]: https://developers.googleblog.com/en/gemini-2-5-models-now-support-implicit-caching/
-[^vertex-cache-pricing]: https://cloud.google.com/vertex-ai/generative-ai/pricing
-[^vertex-cache-explicit]: https://docs.cloud.google.com/vertex-ai/generative-ai/docs/context-cache/context-cache-overview
+Flemma is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
+
+Happy prompting!
