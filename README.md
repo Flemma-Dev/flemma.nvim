@@ -7,7 +7,11 @@
 
 Flemma turns Neovim into a first-class AI workspace. It gives `.chat` buffers streaming conversations, tool calling, reusable prompt templates, attachment support, cost tracking, and ergonomic commands for the three major providers: Anthropic, OpenAI, and Google Vertex AI.
 
-<a href="assets/frame_linux_slate.webp" target="_blank"><img align="center" width="730" height="882" src="assets/frame_linux_slate.webp" alt="Flemma chat buffer example" /></a>
+<a href="assets/frame_linux_slate.webp" target="_blank"><img align="center" width="1010" height="970" src="assets/frame_linux_slate.webp" alt="Flemma chat buffer example" /></a>
+
+### The buffer is the state
+
+Most AI tools keep the real conversation hidden – in a SQLite file or a JSON log you can't touch. **Flemma doesn't.** The `.chat` buffer **is** the conversation, and nothing exists outside it. What you see is exactly what the model receives. Edit an assistant response to correct a hallucination, delete a tangent, rewrite your own message, paste in a tool result by hand – it all just works because there is no shadow state to fall out of sync. Want to fork a conversation? Duplicate the file. Want version history? You have Git. Switch from GPT to Claude mid-conversation, or turn thinking on for one turn and off for the next – every choice lives in the buffer where you can see and control it.
 
 ---
 
@@ -480,7 +484,7 @@ tools.register("my_tool", {
 })
 ```
 
-When `strict` is not set (or set to `false`), the field is omitted from the API request entirely. Schema validation is your responsibility when opting in — Flemma passes the schema through as-is.
+When `strict` is not set (or set to `false`), the field is omitted from the API request entirely. Schema validation is your responsibility when opting in – Flemma passes the schema through as-is.
 
 ### Async tool definitions
 
@@ -863,7 +867,7 @@ Set `signs.enabled = true` to place signs for each message line. Each role (`sys
 
 While a request runs Flemma appends `@Assistant: Thinking...` with an animated braille spinner using virtual text extmarks. The line is flagged as non-spellable so spell check integrations stay quiet. Once streaming starts, the spinner is removed and replaced with the streamed content.
 
-When the model is in a thinking/reasoning phase (Anthropic extended thinking, OpenAI reasoning, or Vertex thinking), the spinner animation is replaced with a live character count — e.g., `❖ (3.2k characters)` — so you can gauge progress. The symbol is configurable via `spinner.thinking_char`:
+When the model is in a thinking/reasoning phase (Anthropic extended thinking, OpenAI reasoning, or Vertex thinking), the spinner animation is replaced with a live character count – e.g., `❖ (3.2k characters)` – so you can gauge progress. The symbol is configurable via `spinner.thinking_char`:
 
 ```lua
 spinner = {
