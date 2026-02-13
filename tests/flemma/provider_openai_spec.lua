@@ -814,7 +814,7 @@ describe("OpenAI Provider", function()
       assert.equals("encrypted_data_roundtrip_test", decoded.encrypted_content)
     end)
 
-    it("should emit self-closing thinking tag when reasoning has no summary", function()
+    it("should emit empty thinking tag when reasoning has no summary", function()
       local provider = openai.new({
         model = "o3",
         max_tokens = 4000,
@@ -855,10 +855,10 @@ describe("OpenAI Provider", function()
         callbacks
       )
 
-      -- Should contain self-closing thinking tag
+      -- Should contain empty thinking tag (open/close, not self-closing)
       assert.is_true(
-        accumulated_content:find('<thinking openai:signature="[^"]+"/>') ~= nil,
-        "Should emit self-closing thinking tag"
+        accumulated_content:find('<thinking openai:signature="[^"]+">\n</thinking>') ~= nil,
+        "Should emit empty thinking tag with open/close format"
       )
     end)
   end)

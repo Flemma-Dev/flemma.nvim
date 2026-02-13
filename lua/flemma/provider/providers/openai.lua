@@ -343,8 +343,8 @@ function M._emit_reasoning_block(self, callbacks)
       .. "\n</thinking>\n"
     base._signal_content(self, thinking_block, callbacks)
   else
-    -- Signature but no visible summary — emit self-closing tag
-    local tag = prefix .. '<thinking openai:signature="' .. signature .. '"/>\n'
+    -- Signature but no visible summary — emit open/close tag (enables folding)
+    local tag = prefix .. '<thinking openai:signature="' .. signature .. '">\n</thinking>\n'
     base._signal_content(self, tag, callbacks)
   end
   log.debug("openai._emit_reasoning_block(): Emitted thinking block")

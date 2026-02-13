@@ -1412,7 +1412,7 @@ describe("Vertex AI Thought Signature Support", function()
     assert.equals("", thinking_seg.content, "Self-closing tag should have empty content")
   end)
 
-  it("emits self-closing thinking tag when signature exists but no thinking content", function()
+  it("emits empty thinking tag when signature exists but no thinking content", function()
     local provider = vertex.new({
       model = "gemini-3-flash",
       max_tokens = 1024,
@@ -1435,10 +1435,10 @@ describe("Vertex AI Thought Signature Support", function()
 
     provider:process_response_line(streaming_line, callbacks)
 
-    -- Should emit self-closing thinking tag with vertex:signature
+    -- Should emit empty thinking tag with vertex:signature (open/close, not self-closing)
     assert.is_true(
-      accumulated_content:match('<thinking vertex:signature="sig%-no%-thinking"/>') ~= nil,
-      "Should emit self-closing thinking tag with vertex:signature when no thinking content"
+      accumulated_content:match('<thinking vertex:signature="sig%-no%-thinking">\n</thinking>') ~= nil,
+      "Should emit empty thinking tag with vertex:signature when no thinking content"
     )
   end)
 

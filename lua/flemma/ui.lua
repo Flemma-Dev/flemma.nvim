@@ -28,75 +28,134 @@ local PRIORITY = {
   SPINNER = 300,
 }
 
----Generate content preview for folds
----@param fold_start_lnum integer
----@param fold_end_lnum integer
+---Generate a truncated preview string from content
+---@param content string
 ---@return string
-local function get_fold_content_preview(fold_start_lnum, fold_end_lnum)
-  local content_lines = {}
-  local num_content_lines_in_fold = fold_end_lnum - fold_start_lnum - 1
-
-  if num_content_lines_in_fold <= 0 then
+local function format_content_preview(content)
+  local trimmed = vim.trim(content)
+  if #trimmed == 0 then
     return ""
   end
 
-  local lines_to_fetch = math.min(num_content_lines_in_fold, MAX_CONTENT_PREVIEW_LINES)
-
-  for i = 1, lines_to_fetch do
-    local current_content_line_num = fold_start_lnum + i
-    local line_text = vim.fn.getline(current_content_line_num)
-    table.insert(content_lines, vim.fn.trim(line_text))
+  -- Take up to MAX_CONTENT_PREVIEW_LINES lines, join with newline indicator
+  local lines = {}
+  local count = 0
+  for line in (trimmed .. "\n"):gmatch("([^\n]*)\n") do
+    count = count + 1
+    if count > MAX_CONTENT_PREVIEW_LINES then
+      break
+    end
+    table.insert(lines, vim.trim(line))
   end
 
-  local preview_str = table.concat(content_lines, CONTENT_PREVIEW_NEWLINE_CHAR)
-  preview_str = vim.fn.trim(preview_str)
+  local preview = table.concat(lines, CONTENT_PREVIEW_NEWLINE_CHAR)
+  preview = vim.trim(preview)
 
-  if #preview_str > MAX_CONTENT_PREVIEW_LENGTH then
+  if #preview > MAX_CONTENT_PREVIEW_LENGTH then
     local truncated_length = MAX_CONTENT_PREVIEW_LENGTH - #CONTENT_PREVIEW_TRUNCATION_MARKER
     if truncated_length < 0 then
       truncated_length = 0
     end
-
-    preview_str = preview_str:sub(1, truncated_length)
-    preview_str = preview_str .. CONTENT_PREVIEW_TRUNCATION_MARKER
+    preview = preview:sub(1, truncated_length) .. CONTENT_PREVIEW_TRUNCATION_MARKER
   end
 
-  return preview_str
+  return preview
+end
+
+---Get the cached AST document for the current buffer
+---@return flemma.ast.DocumentNode
+local function get_document()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local parser = require("flemma.parser")
+  return parser.get_parsed_document(bufnr)
+end
+
+---Find a thinking segment whose start or end line matches the given line number
+---@param doc flemma.ast.DocumentNode
+---@param lnum integer 1-indexed line number
+---@return flemma.ast.ThinkingSegment|nil segment
+---@return "start"|"end"|nil boundary Whether lnum is the start or end of the segment
+local function find_thinking_at_line(doc, lnum)
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "thinking" and seg.position then
+        if seg.position.start_line == lnum then
+          return seg --[[@as flemma.ast.ThinkingSegment]], "start"
+        elseif seg.position.end_line == lnum then
+          return seg --[[@as flemma.ast.ThinkingSegment]], "end"
+        end
+      end
+    end
+  end
+  return nil, nil
+end
+
+---Find a message whose start or end line matches the given line number
+---@param doc flemma.ast.DocumentNode
+---@param lnum integer 1-indexed line number
+---@return flemma.ast.MessageNode|nil message
+---@return "start"|"end"|nil boundary
+local function find_message_at_line(doc, lnum)
+  for _, msg in ipairs(doc.messages) do
+    if msg.position.start_line == lnum then
+      return msg, "start"
+    elseif msg.position.end_line == lnum then
+      return msg, "end"
+    end
+  end
+  return nil, nil
 end
 
 ---Get fold level for a line number
 ---@param lnum integer
 ---@return string
 function M.get_fold_level(lnum)
-  local line = vim.fn.getline(lnum)
-  local next_line_num = lnum + 1
-  local last_buf_line = vim.fn.line("$")
+  local doc = get_document()
 
-  -- Level 3 folds: ```<language> ... ``` (only if on the first line)
-  if lnum == 1 and line:match("^```%w+$") then
-    return ">3"
-  elseif line:match("^```$") then
-    return "<3"
+  -- Level 3 folds: frontmatter
+  local fm = doc.frontmatter
+  if fm then
+    if fm.position.start_line == lnum then
+      return ">3"
+    elseif fm.position.end_line == lnum then
+      return "<3"
+    end
   end
 
   -- Level 2 folds: <thinking>...</thinking>
-  -- Match opening tags: <thinking> or <thinking provider:signature="..."> (but not self-closing />)
-  -- Pattern [^/>] excludes both / and > so the final > can match
-  if line:match("^<thinking>$") or line:match("^<thinking%s.+[^/>]>$") then
+  local _, thinking_boundary = find_thinking_at_line(doc, lnum)
+  if thinking_boundary == "start" then
     return ">2"
-  elseif line:match("^</thinking>$") then
+  elseif thinking_boundary == "end" then
     return "<2"
   end
 
-  -- Level 1 folds: @Role:...
-  if line:match("^@[%w]+:") then
-    return ">1"
+  -- Level 1 folds: messages
+  local msg, msg_boundary = find_message_at_line(doc, lnum)
+  if msg then
+    if msg_boundary == "start" then
+      return ">1"
+    end
+    -- End of a message: check if this is the last line before the next message starts,
+    -- or the last line of the buffer
+    local next_line_num = lnum + 1
+    local last_buf_line = vim.fn.line("$")
+    if lnum == last_buf_line then
+      return "<1"
+    end
+    -- Check if next line starts a new message
+    local next_msg = find_message_at_line(doc, next_line_num)
+    if next_msg then
+      return "<1"
+    end
   end
 
-  -- Check for end of level 1 fold
+  -- Check if next line starts a new message (for lines not on a message boundary)
+  local next_line_num = lnum + 1
+  local last_buf_line = vim.fn.line("$")
   if next_line_num <= last_buf_line then
-    local next_line_content = vim.fn.getline(next_line_num)
-    if next_line_content:match("^@[%w]+:") then
+    local next_msg = find_message_at_line(doc, next_line_num)
+    if next_msg then
       return "<1"
     end
   elseif lnum == last_buf_line then
@@ -111,41 +170,54 @@ end
 function M.get_fold_text()
   local foldstart_lnum = vim.v.foldstart
   local foldend_lnum = vim.v.foldend
-  local first_line_content = vim.fn.getline(foldstart_lnum)
   local total_fold_lines = foldend_lnum - foldstart_lnum + 1
+  local doc = get_document()
 
-  -- Check for frontmatter fold (level 3) - only if it started on line 1
-  local fm_language = first_line_content:match("^```(%w+)$")
-  if foldstart_lnum == 1 and fm_language then
-    local preview = get_fold_content_preview(foldstart_lnum, foldend_lnum)
+  -- Check for frontmatter fold (level 3)
+  local fm = doc.frontmatter
+  if fm and fm.position.start_line == foldstart_lnum then
+    local preview = format_content_preview(fm.code)
     if preview ~= "" then
-      return string.format("```%s %s ``` (%d lines)", fm_language, preview, total_fold_lines)
+      return string.format("```%s %s ``` (%d lines)", fm.language, preview, total_fold_lines)
     else
-      return string.format("```%s (%d lines)", fm_language, total_fold_lines)
+      return string.format("```%s (%d lines)", fm.language, total_fold_lines)
     end
   end
 
   -- Check if this is a thinking fold (level 2)
-  -- Match opening tags: <thinking>, <thinking redacted>, or <thinking provider:signature="...">
-  if first_line_content:match("^<thinking%s+redacted>$") then
-    return string.format("<thinking redacted> (%d lines)", total_fold_lines)
-  elseif first_line_content:match("^<thinking>$") or first_line_content:match("^<thinking%s.+[^/>]>$") then
-    local preview = get_fold_content_preview(foldstart_lnum, foldend_lnum)
+  local thinking_seg = find_thinking_at_line(doc, foldstart_lnum)
+  if thinking_seg then
+    if thinking_seg.redacted then
+      return string.format("<thinking redacted> (%d lines)", total_fold_lines)
+    end
+    local provider = thinking_seg.signature and thinking_seg.signature.provider
+    local preview = format_content_preview(thinking_seg.content)
     if preview ~= "" then
-      return string.format("<thinking> %s </thinking> (%d lines)", preview, total_fold_lines)
+      local tag = provider and string.format("<thinking %s>", provider) or "<thinking>"
+      return string.format("%s %s </thinking> (%d lines)", tag, preview, total_fold_lines)
     else
-      return string.format("<thinking> (%d lines)", total_fold_lines)
+      local tag = provider and string.format("<thinking %s/>", provider) or "<thinking/>"
+      return string.format("%s (%d lines)", tag, total_fold_lines)
     end
   end
 
   -- Message folds (level 1)
-  local role_type = first_line_content:match("^(@[%w]+:)")
-  if not role_type then
-    return first_line_content
+  local msg = find_message_at_line(doc, foldstart_lnum)
+  if msg then
+    local role_prefix = "@" .. msg.role .. ":"
+    -- Get preview from the first text segment
+    local content = ""
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "text" then
+        content = seg.value
+        break
+      end
+    end
+    local preview = format_content_preview(content)
+    return string.format("%s %s (%d lines)", role_prefix, preview, total_fold_lines)
   end
 
-  local content_preview_for_message = first_line_content:sub(#role_type + 1):gsub("^%s*", "")
-  return string.format("%s %s... (%d lines)", role_type, content_preview_for_message:sub(1, 50), total_fold_lines)
+  return vim.fn.getline(foldstart_lnum)
 end
 
 -- Define namespace for our extmarks

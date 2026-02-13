@@ -443,11 +443,11 @@ function M.process_response_line(self, line, callbacks)
       base._signal_content(self, thinking_block, callbacks)
       log.debug("anthropic.process_response_line(): Appended thinking block at end of response")
     elseif #signature > 0 then
-      -- Signature but no thinking content — emit self-closing tag
+      -- Signature but no thinking content — emit open/close tag (enables folding)
       local prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
-      local tag = prefix .. '<thinking anthropic:signature="' .. signature .. '"/>\n'
+      local tag = prefix .. '<thinking anthropic:signature="' .. signature .. '">\n</thinking>\n'
       base._signal_content(self, tag, callbacks)
-      log.debug("anthropic.process_response_line(): Appended self-closing thinking tag with signature")
+      log.debug("anthropic.process_response_line(): Appended empty thinking tag with signature")
     end
 
     -- Append redacted thinking blocks

@@ -695,11 +695,11 @@ function M.process_response_line(self, line, callbacks)
           thoughts_block = prefix .. "<thinking>\n" .. stripped_thoughts .. "\n</thinking>\n"
         end
       else
-        -- No thinking content but have signature - emit self-closing tag (namespaced for Vertex)
+        -- No thinking content but have signature — emit open/close tag (enables folding)
         thoughts_block = prefix
           .. '<thinking vertex:signature="'
           .. self._response_buffer.extra.thought_signature
-          .. '"/>\n'
+          .. '">\n</thinking>\n'
       end
 
       log.debug("vertex.process_response_line(): Appending thinking block: " .. log.inspect(thoughts_block))

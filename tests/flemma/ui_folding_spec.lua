@@ -78,21 +78,25 @@ describe("UI Folding", function()
       assert.are.equal(">2", fold_level)
     end)
 
-    it("should NOT return >2 for self-closing <thinking/> tag", function()
+    it("should return >2 for empty thinking tag with signature", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
         "@Assistant: response",
-        '<thinking vertex:signature="abc123"/>',
+        '<thinking vertex:signature="abc123">',
+        "</thinking>",
         "more content",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      -- Line 2 is self-closing, should not start a fold
+      -- Line 2 is opening tag, should start a fold
       local fold_level = ui.get_fold_level(2)
-      assert.are_not.equal(">2", fold_level)
+      assert.are.equal(">2", fold_level)
+      -- Line 3 is closing tag, should end the fold
+      fold_level = ui.get_fold_level(3)
+      assert.are.equal("<2", fold_level)
     end)
 
     it("should return <2 for </thinking> tag", function()
