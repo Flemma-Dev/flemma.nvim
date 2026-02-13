@@ -10,6 +10,7 @@ M.definitions = {
     description = "Evaluates a mathematical expression and returns the numeric result. "
       .. "Use this for any arithmetic calculations including addition, subtraction, "
       .. "multiplication, division, exponents, and common math functions.",
+    strict = true,
     input_schema = {
       type = "object",
       properties = {
@@ -19,6 +20,7 @@ M.definitions = {
         },
       },
       required = { "expression" },
+      additionalProperties = false,
     },
     output_schema = {
       type = "object",
@@ -53,6 +55,7 @@ M.definitions = {
     description = "Evaluates a mathematical expression asynchronously and returns the numeric result. "
       .. "Use this for any arithmetic calculations including addition, subtraction, "
       .. "multiplication, division, exponents, and common math functions.",
+    strict = true,
     input_schema = {
       type = "object",
       properties = {
@@ -61,11 +64,12 @@ M.definitions = {
           description = "The mathematical expression to evaluate (e.g., '2 + 2', '15 * 7', 'sqrt(16)', '2^10')",
         },
         delay = {
-          type = "number",
+          type = { "number", "null" },
           description = "Delay in milliseconds before returning the result (default: 1000)",
         },
       },
-      required = { "expression" },
+      required = { "expression", "delay" },
+      additionalProperties = false,
     },
     output_schema = {
       type = "object",

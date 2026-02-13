@@ -17,6 +17,7 @@ M.definitions = {
       .. math.floor(truncate.MAX_BYTES / 1024)
       .. "KB (whichever is hit first). "
       .. "Use offset/limit for large files. When you need the full file, continue with offset until complete.",
+    strict = true,
     input_schema = {
       type = "object",
       properties = {
@@ -29,15 +30,16 @@ M.definitions = {
           description = "Path to the file to read (relative or absolute)",
         },
         offset = {
-          type = "number",
+          type = { "number", "null" },
           description = "Line number to start reading from (1-indexed)",
         },
         limit = {
-          type = "number",
+          type = { "number", "null" },
           description = "Maximum number of lines to read",
         },
       },
-      required = { "label", "path" },
+      required = { "label", "path", "offset", "limit" },
+      additionalProperties = false,
     },
     async = false,
     execute = function(input)

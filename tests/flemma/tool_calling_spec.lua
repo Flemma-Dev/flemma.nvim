@@ -85,6 +85,46 @@ describe("Tool Registry", function()
   end)
 end)
 
+describe("Built-in Tool Strict Mode Schemas", function()
+  before_each(function()
+    tools.clear()
+    tools.setup()
+  end)
+
+  it("all built-in tools should have strict=true and additionalProperties=false", function()
+    local all = tools.get_all({ include_disabled = true })
+    local count = 0
+    for name, definition in pairs(all) do
+      count = count + 1
+      assert.equals(true, definition.strict, "Tool '" .. name .. "' should have strict=true")
+      assert.equals(
+        false,
+        definition.input_schema.additionalProperties,
+        "Tool '" .. name .. "' input_schema should have additionalProperties=false"
+      )
+    end
+    assert.is_true(count >= 5, "Should have at least 5 built-in tools (got " .. count .. ")")
+  end)
+
+  it("tools with nullable properties should list them in required", function()
+    local all = tools.get_all({ include_disabled = true })
+
+    -- Check bash tool: timeout should be nullable and required
+    local bash = all.bash
+    assert.is_not_nil(bash, "bash tool should exist")
+    assert.same({ "number", "null" }, bash.input_schema.properties.timeout.type)
+    assert.truthy(vim.tbl_contains(bash.input_schema.required, "timeout"), "bash.timeout should be in required")
+
+    -- Check read tool: offset and limit should be nullable and required
+    local read = all.read
+    assert.is_not_nil(read, "read tool should exist")
+    assert.same({ "number", "null" }, read.input_schema.properties.offset.type)
+    assert.same({ "number", "null" }, read.input_schema.properties.limit.type)
+    assert.truthy(vim.tbl_contains(read.input_schema.required, "offset"), "read.offset should be in required")
+    assert.truthy(vim.tbl_contains(read.input_schema.required, "limit"), "read.limit should be in required")
+  end)
+end)
+
 describe("Calculator Tool", function()
   before_each(function()
     tools.clear()

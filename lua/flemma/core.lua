@@ -559,7 +559,7 @@ function M.send_to_provider(opts)
             input_price = pricing_info.input,
             output_price = pricing_info.output,
             filepath = filepath,
-            bufnr = filepath and nil or bufnr, -- Only store bufnr for unnamed buffers
+            bufnr = bufnr,
             started_at = request_started_at,
             completed_at = require("flemma.session").now(),
             output_has_thoughts = current_provider.output_has_thoughts,

@@ -146,6 +146,7 @@ secret-tool store --label="Vertex AI Service Account" service vertex key api pro
 
    ```markdown
    @You: Turn the notes below into a short project update.
+
    - Added Vertex thinking budget support.
    - Refactored :Flemma command routing.
    - Documented presets in the README.
@@ -184,6 +185,7 @@ notes = [[
 {{notes}}
 
 @Assistant:
+
 - Changelog bullets...
 - Follow-up actions...
 
@@ -434,6 +436,39 @@ tools.register({
   { name = "tool_b", description = "…", input_schema = { type = "object", properties = {} } },
 })
 ```
+
+### Strict mode for tool schemas
+
+OpenAI's Responses API supports [strict mode](https://platform.openai.com/docs/guides/structured-outputs) for function calling, which guarantees that the model's arguments will conform exactly to your JSON Schema. All of Flemma's built-in tools use strict mode.
+
+To opt in for your custom tools, set `strict = true` on the definition and ensure the `input_schema` meets OpenAI's strict-mode requirements:
+
+- All properties must be listed in `required`
+- The schema must include `additionalProperties = false`
+- Optional parameters use a nullable type array instead of being omitted from `required`:
+
+```lua
+tools.register("my_tool", {
+  name = "my_tool",
+  description = "Does something",
+  strict = true,
+  input_schema = {
+    type = "object",
+    properties = {
+      query   = { type = "string", description = "Required input" },
+      max_results = { type = { "number", "null" }, description = "Optional limit (default: 10)" },
+    },
+    required = { "query", "max_results" },
+    additionalProperties = false,
+  },
+  execute = function(input)
+    local limit = input.max_results or 10
+    return { success = true, output = "found results" }
+  end,
+})
+```
+
+When `strict` is not set (or set to `false`), the field is omitted from the API request entirely. Schema validation is your responsibility when opting in — Flemma passes the schema through as-is.
 
 ### Async tool definitions
 
@@ -1108,10 +1143,17 @@ end
 Happy prompting!
 
 [^anthropic-cache]: https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching
+
 [^anthropic-cache-pricing]: https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching#pricing
+
 [^anthropic-cache-limits]: https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching#cache-limitations
+
 [^openai-cache]: https://platform.openai.com/docs/guides/prompt-caching
+
 [^openai-cache-pricing]: https://platform.openai.com/docs/pricing
+
 [^vertex-cache]: https://developers.googleblog.com/en/gemini-2-5-models-now-support-implicit-caching/
+
 [^vertex-cache-pricing]: https://cloud.google.com/vertex-ai/generative-ai/pricing
+
 [^vertex-cache-explicit]: https://docs.cloud.google.com/vertex-ai/generative-ai/docs/context-cache/context-cache-overview

@@ -10,6 +10,22 @@ local M = {}
 -- Inherit from base provider
 setmetatable(M, { __index = base })
 
+-- Known informational events that require no action.
+-- Handled as explicit no-ops to suppress debug logging noise.
+-- stylua: ignore
+local NOOP_EVENTS = {
+  ["response.created"]                      = true, -- response object created
+  ["response.in_progress"]                  = true, -- response processing started
+  ["response.content_part.added"]           = true, -- content part started; we accumulate via text.delta
+  ["response.content_part.done"]            = true, -- content part finished; final text in response.completed
+  ["response.output_text.done"]             = true, -- final text for output; redundant with accumulated deltas
+  ["response.function_call_arguments.delta"] = true, -- incremental args; final args come via output_item.done
+  ["response.function_call_arguments.done"] = true, -- final args; redundant with output_item.done
+  ["response.reasoning_summary_part.added"] = true, -- reasoning summary part started
+  ["response.reasoning_summary_part.done"]  = true, -- reasoning summary part finished
+  ["response.reasoning_summary_text.done"]  = true, -- final reasoning summary; redundant with accumulated deltas
+}
+
 ---@type flemma.provider.Metadata
 M.metadata = {
   name = "openai",
@@ -186,6 +202,7 @@ function M.build_request(self, prompt, context)
 
       -- Second pass: collect text and tool_use
       local text_parts = {}
+      local item_index = 0
 
       for _, p in ipairs(msg.parts or {}) do
         if p.kind == "text" then
@@ -197,10 +214,11 @@ function M.build_request(self, prompt, context)
           if #text_parts > 0 then
             local text = table.concat(text_parts, "")
             if #text > 0 then
+              item_index = item_index + 1
               table.insert(input_items, {
                 type = "message",
                 role = "assistant",
-                id = "msg_" .. tostring(msg_index),
+                id = "msg_" .. tostring(msg_index) .. "_" .. tostring(item_index),
                 content = { { type = "output_text", text = text, annotations = {} } },
                 status = "completed",
               })
@@ -225,10 +243,11 @@ function M.build_request(self, prompt, context)
       if #text_parts > 0 then
         local text = table.concat(text_parts, "")
         if #text > 0 then
+          item_index = item_index + 1
           table.insert(input_items, {
             type = "message",
             role = "assistant",
-            id = "msg_" .. tostring(msg_index),
+            id = "msg_" .. tostring(msg_index) .. "_" .. tostring(item_index),
             content = { { type = "output_text", text = text, annotations = {} } },
             status = "completed",
           })
@@ -243,12 +262,16 @@ function M.build_request(self, prompt, context)
   local tools_array = {}
 
   for _, definition in pairs(all_tools) do
-    table.insert(tools_array, {
+    local tool_entry = {
       type = "function",
       name = definition.name,
       description = tools_module.build_description(definition),
       parameters = definition.input_schema,
-    })
+    }
+    if definition.strict == true then
+      tool_entry.strict = true
+    end
+    table.insert(tools_array, tool_entry)
   end
 
   -- Sort for deterministic ordering (improves prompt caching hit rates)
@@ -470,27 +493,20 @@ function M.process_response_line(self, line, callbacks)
     return
   end
 
-  -- Handle function call arguments streaming
-  -- Delta arguments are unused; response.output_item.done provides the final complete arguments.
-  -- Kept as a no-op handler to suppress debug logging.
-  if event_type == "response.function_call_arguments.delta" then
-    return
-  end
-
   -- Handle function call completion
   if event_type == "response.output_item.done" then
     if data.item and data.item.type == "function_call" then
+      -- Preserve the original JSON string from the API to avoid decode/re-encode
+      -- roundtrips that alter formatting and hurt prompt caching hit rates.
       local arguments_json = data.item.arguments or ""
-      local parse_ok, input = pcall(vim.fn.json_decode, arguments_json)
+      local parse_ok, _ = pcall(vim.fn.json_decode, arguments_json)
       if not parse_ok then
-        input = {}
         log.warn("openai.process_response_line(): Failed to parse tool arguments JSON: " .. arguments_json)
+        arguments_json = "{}"
       end
 
-      local json_str = vim.fn.json_encode(input)
-
       local max_ticks = 0
-      for ticks in json_str:gmatch("`+") do
+      for ticks in arguments_json:gmatch("`+") do
         max_ticks = math.max(max_ticks, #ticks)
       end
       local fence = string.rep("`", math.max(3, max_ticks + 1))
@@ -506,7 +522,7 @@ function M.process_response_line(self, line, callbacks)
         data.item.name or "",
         data.item.call_id or "",
         fence,
-        json_str,
+        arguments_json,
         fence
       )
 
@@ -582,8 +598,13 @@ function M.process_response_line(self, line, callbacks)
     return
   end
 
-  -- All other events are ignored
-  log.debug("openai.process_response_line(): Ignoring event type: " .. event_type)
+  -- Suppress known informational events that we intentionally don't act on
+  if NOOP_EVENTS[event_type] then
+    return
+  end
+
+  -- Truly unknown events get logged for debugging
+  log.debug("openai.process_response_line(): Ignoring unknown event type: " .. event_type)
 end
 
 ---Validate provider-specific parameters

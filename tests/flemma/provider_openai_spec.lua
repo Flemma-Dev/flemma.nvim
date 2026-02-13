@@ -271,6 +271,55 @@ describe("OpenAI Provider", function()
       assert.equals("calculator", function_call.name)
     end)
 
+    it("should generate unique synthetic IDs for split assistant message items", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1000,
+        temperature = 0.7,
+      })
+
+      -- Assistant turn with text + tool_call + more text (split message)
+      local prompt = {
+        system = nil,
+        history = {
+          { role = "user", parts = { { kind = "text", text = "Hello" } } },
+          {
+            role = "assistant",
+            parts = {
+              { kind = "text", text = "Let me check." },
+              { kind = "tool_use", id = "call_abc", name = "calculator", input = { expression = "2+2" } },
+              { kind = "text", text = "The answer is 4." },
+            },
+          },
+          {
+            role = "user",
+            parts = {
+              { kind = "tool_result", tool_use_id = "call_abc", content = "4" },
+              { kind = "text", text = "Thanks" },
+            },
+          },
+        },
+      }
+
+      local request_body = provider:build_request(prompt)
+
+      -- Collect all assistant message items
+      local message_ids = {}
+      for _, item in ipairs(request_body.input) do
+        if item.type == "message" and item.role == "assistant" then
+          table.insert(message_ids, item.id)
+        end
+      end
+
+      -- Should have two distinct text items (before and after tool call)
+      assert.equals(2, #message_ids, "Should have two assistant message items for split text")
+      assert.not_equals(message_ids[1], message_ids[2], "IDs must be unique across split message items")
+
+      -- Both IDs should share the same message prefix (same assistant turn)
+      assert.truthy(message_ids[1]:match("^msg_1_"), "First ID should start with msg_1_")
+      assert.truthy(message_ids[2]:match("^msg_1_"), "Second ID should start with msg_1_")
+    end)
+
     it("should sort tools array by name for deterministic ordering", function()
       local provider = openai.new({
         model = "gpt-4o",
@@ -295,6 +344,85 @@ describe("OpenAI Provider", function()
           )
         end
       end
+    end)
+
+    it("should propagate strict field on tool definitions to API request", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1000,
+        temperature = 0.7,
+      })
+
+      local prompt = {
+        system = nil,
+        history = {
+          { role = "user", parts = { { kind = "text", text = "Hello" } } },
+        },
+      }
+
+      local request_body = provider:build_request(prompt)
+
+      assert.is_not_nil(request_body.tools, "Should have tools")
+      assert.is_true(#request_body.tools > 0, "Should have at least one tool")
+
+      -- All built-in tools should have strict = true
+      for _, tool in ipairs(request_body.tools) do
+        assert.equals(true, tool.strict, "Built-in tool '" .. tool.name .. "' should have strict=true")
+      end
+
+      -- Verify additionalProperties = false is present in the parameters schema
+      for _, tool in ipairs(request_body.tools) do
+        assert.equals(
+          false,
+          tool.parameters.additionalProperties,
+          "Built-in tool '" .. tool.name .. "' should have additionalProperties=false"
+        )
+      end
+    end)
+
+    it("should not include strict field for tools without explicit strict=true", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1000,
+        temperature = 0.7,
+      })
+
+      -- Register a user-defined tool without strict
+      local registry = require("flemma.tools.registry")
+      registry.define("custom_tool", {
+        name = "custom_tool",
+        description = "A custom tool",
+        input_schema = {
+          type = "object",
+          properties = {
+            query = { type = "string", description = "query" },
+          },
+          required = { "query" },
+        },
+      })
+
+      local prompt = {
+        system = nil,
+        history = {
+          { role = "user", parts = { { kind = "text", text = "Hello" } } },
+        },
+      }
+
+      local request_body = provider:build_request(prompt)
+
+      -- Find the custom tool in the array
+      local custom = nil
+      for _, tool in ipairs(request_body.tools) do
+        if tool.name == "custom_tool" then
+          custom = tool
+        end
+      end
+
+      assert.is_not_nil(custom, "Should find custom_tool in tools array")
+      assert.is_nil(custom.strict, "User-defined tool without strict should not have strict field")
+
+      -- Cleanup
+      registry.define("custom_tool", nil)
     end)
 
     it("should replay reasoning items from thinking blocks with signature", function()
@@ -682,6 +810,44 @@ describe("OpenAI Provider", function()
       assert.is_true(accumulated_content:match("%*%*Tool Use:%*%*") ~= nil, "Should emit tool_use header")
       assert.is_true(accumulated_content:match("calculator") ~= nil, "Should include tool name")
       assert.is_true(accumulated_content:match("call_abc") ~= nil, "Should include call_id")
+    end)
+
+    it("should preserve original JSON formatting for tool call arguments", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1024,
+        temperature = 0,
+      })
+
+      local accumulated_content = ""
+      local callbacks = {
+        on_content = function(content)
+          accumulated_content = accumulated_content .. content
+        end,
+        on_response_complete = function() end,
+        on_error = function() end,
+      }
+
+      -- Use a specific JSON formatting that would be altered by decode/re-encode
+      -- (e.g., extra whitespace, specific key order)
+      local original_json = '{"expression":  "2+2", "note": "test"}'
+
+      provider:process_response_line(
+        'data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_fmt","name":"calculator","arguments":"","status":"in_progress"}}',
+        callbacks
+      )
+      provider:process_response_line(
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_fmt","name":"calculator","arguments":"'
+          .. original_json:gsub('"', '\\"')
+          .. '","status":"completed"}}',
+        callbacks
+      )
+
+      -- The original JSON should appear verbatim in the output (not re-encoded)
+      assert.truthy(
+        accumulated_content:find(original_json, 1, true),
+        "Original JSON formatting should be preserved in buffer output"
+      )
     end)
   end)
 

@@ -19,6 +19,7 @@ M.definitions = {
       .. "KB (whichever is hit first). "
       .. "If truncated, full output is saved to a temp file. "
       .. "Optionally provide a timeout in seconds.",
+    strict = true,
     input_schema = {
       type = "object",
       properties = {
@@ -31,11 +32,12 @@ M.definitions = {
           description = "The bash command to execute",
         },
         timeout = {
-          type = "number",
+          type = { "number", "null" },
           description = "Timeout in seconds (default: 30)",
         },
       },
-      required = { "label", "command" },
+      required = { "label", "command", "timeout" },
+      additionalProperties = false,
     },
     async = true,
     execute = function(input, callback)
