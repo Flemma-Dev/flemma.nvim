@@ -1,0 +1,23 @@
+@System: You are a helpful assistant with access to a calculator tool.
+
+@You: What is 15 multiplied by 7?
+
+@Assistant: I'll calculate that for you.
+
+**Tool Use:** `calculator` (`toolu_01A09q90qw90lq917835lgs0`)
+
+```json
+{
+  "expression": "15 * 7"
+}
+```
+
+@You: **Tool Result:** `toolu_01A09q90qw90lq917835lgs0`
+
+```json
+{
+  "result": 105
+}
+```
+
+@Assistant: 15 multiplied by 7 equals **105**.

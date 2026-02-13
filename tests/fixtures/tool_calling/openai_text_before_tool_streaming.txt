@@ -1,0 +1,93 @@
+event: response.created
+data: {"type":"response.created","response":{"id":"resp_0a93ab36b71f912901698e3594aac48197a4194743c7bfcdaf","object":"response","created_at":1770927508,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":300,"max_tool_calls":null,"model":"gpt-4o-mini-2024-07-18","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":false,"temperature":0.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"function","description":"Evaluates a mathematical expression and returns the result. Use this for any arithmetic calculations.","name":"calculator","parameters":{"type":"object","properties":{"expression":{"type":"string","description":"The mathematical expression to evaluate (e.g., '2 + 2', '15 * 3', 'sqrt(16)')"}},"required":["expression"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+event: response.in_progress
+data: {"type":"response.in_progress","response":{"id":"resp_0a93ab36b71f912901698e3594aac48197a4194743c7bfcdaf","object":"response","created_at":1770927508,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":300,"max_tool_calls":null,"model":"gpt-4o-mini-2024-07-18","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":false,"temperature":0.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"function","description":"Evaluates a mathematical expression and returns the result. Use this for any arithmetic calculations.","name":"calculator","parameters":{"type":"object","properties":{"expression":{"type":"string","description":"The mathematical expression to evaluate (e.g., '2 + 2', '15 * 3', 'sqrt(16)')"}},"required":["expression"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","item":{"id":"msg_0a93ab36b71f912901698e3595151c81979b0e500000fa78a7","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":2}
+
+event: response.content_part.added
+data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_0a93ab36b71f912901698e3595151c81979b0e500000fa78a7","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":"I","item_id":"msg_0a93ab36b71f912901698e3595151c81979b0e500000fa78a7","logprobs":[],"obfuscation":"dayeqojuurtkHi2","output_index":0,"sequence_number":4}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":" will","item_id":"msg_0a93ab36b71f912901698e3595151c81979b0e500000fa78a7","logprobs":[],"obfuscation":"3yRA1jGfQzf","output_index":0,"sequence_number":5}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":" calculate","item_id":"msg_0a93ab36b71f912901698e3595151c81979b0e500000fa78a7","logprobs":[],"obfuscation":"BFeXZw","output_index":0,"sequence_number":6}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":" the","item_id":"msg_0a93ab36b71f912901698e3595151c81979b0e500000fa78a7","logprobs":[],"obfuscation":"jWgVu7jcJKQA","output_index":0,"sequence_number":7}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":" sum","item_id":"msg_0a93ab36b71f912901698e3595151c81979b0e500000fa78a7","logprobs":[],"obfuscation":"vT8FgoZJX50p","output_index":0,"sequence_number":8}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":" of","item_id":"msg_0a93ab36b71f912901698e3595151c81979b0e500000fa78a7","logprobs":[],"obfuscation":"xGUzDXAODCIQd","output_index":0,"sequence_number":9}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":" ","item_id":"msg_0a93ab36b71f912901698e3595151c81979b0e500000fa78a7","logprobs":[],"obfuscation":"ie1ilXY8uwgAbXu","output_index":0,"sequence_number":10}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":"23","item_id":"msg_0a93ab36b71f912901698e3595151c81979b0e500000fa78a7","logprobs":[],"obfuscation":"Pz83EWUI2Dhz8P","output_index":0,"sequence_number":11}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":" and","item_id":"msg_0a93ab36b71f912901698e3595151c81979b0e500000fa78a7","logprobs":[],"obfuscation":"B8nX32hNckj1","output_index":0,"sequence_number":12}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":" ","item_id":"msg_0a93ab36b71f912901698e3595151c81979b0e500000fa78a7","logprobs":[],"obfuscation":"qaRJJpGBWLlpamv","output_index":0,"sequence_number":13}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":"45","item_id":"msg_0a93ab36b71f912901698e3595151c81979b0e500000fa78a7","logprobs":[],"obfuscation":"p1hxlfhp31MVV8","output_index":0,"sequence_number":14}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":".","item_id":"msg_0a93ab36b71f912901698e3595151c81979b0e500000fa78a7","logprobs":[],"obfuscation":"zNYwrgmHBEc9Kf9","output_index":0,"sequence_number":15}
+
+event: response.output_text.done
+data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_0a93ab36b71f912901698e3595151c81979b0e500000fa78a7","logprobs":[],"output_index":0,"sequence_number":16,"text":"I will calculate the sum of 23 and 45."}
+
+event: response.content_part.done
+data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_0a93ab36b71f912901698e3595151c81979b0e500000fa78a7","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"I will calculate the sum of 23 and 45."},"sequence_number":17}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","item":{"id":"msg_0a93ab36b71f912901698e3595151c81979b0e500000fa78a7","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"I will calculate the sum of 23 and 45."}],"role":"assistant"},"output_index":0,"sequence_number":18}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","item":{"id":"fc_0a93ab36b71f912901698e359624e08197a1f40252f6fdc00f","type":"function_call","status":"in_progress","arguments":"","call_id":"call_o5Vcs8kz2HGQP5btOFGHNG9L","name":"calculator"},"output_index":1,"sequence_number":19}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"{\"","item_id":"fc_0a93ab36b71f912901698e359624e08197a1f40252f6fdc00f","obfuscation":"OH74Abj9M18nAE","output_index":1,"sequence_number":20}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"expression","item_id":"fc_0a93ab36b71f912901698e359624e08197a1f40252f6fdc00f","obfuscation":"etSPLA","output_index":1,"sequence_number":21}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"\":\"","item_id":"fc_0a93ab36b71f912901698e359624e08197a1f40252f6fdc00f","obfuscation":"Wn1xxhf2I6gNo","output_index":1,"sequence_number":22}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"23","item_id":"fc_0a93ab36b71f912901698e359624e08197a1f40252f6fdc00f","obfuscation":"1d63Kvhtc2h2FW","output_index":1,"sequence_number":23}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":" +","item_id":"fc_0a93ab36b71f912901698e359624e08197a1f40252f6fdc00f","obfuscation":"YjH2htPFZ3srxt","output_index":1,"sequence_number":24}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":" ","item_id":"fc_0a93ab36b71f912901698e359624e08197a1f40252f6fdc00f","obfuscation":"INKKr7eoFOJ7KKo","output_index":1,"sequence_number":25}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"45","item_id":"fc_0a93ab36b71f912901698e359624e08197a1f40252f6fdc00f","obfuscation":"yI9TnGfCY7e5xR","output_index":1,"sequence_number":26}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"\"}","item_id":"fc_0a93ab36b71f912901698e359624e08197a1f40252f6fdc00f","obfuscation":"UZdwiv3LO7tial","output_index":1,"sequence_number":27}
+
+event: response.function_call_arguments.done
+data: {"type":"response.function_call_arguments.done","arguments":"{\"expression\":\"23 + 45\"}","item_id":"fc_0a93ab36b71f912901698e359624e08197a1f40252f6fdc00f","output_index":1,"sequence_number":28}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","item":{"id":"fc_0a93ab36b71f912901698e359624e08197a1f40252f6fdc00f","type":"function_call","status":"completed","arguments":"{\"expression\":\"23 + 45\"}","call_id":"call_o5Vcs8kz2HGQP5btOFGHNG9L","name":"calculator"},"output_index":1,"sequence_number":29}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_0a93ab36b71f912901698e3594aac48197a4194743c7bfcdaf","object":"response","created_at":1770927508,"status":"completed","background":false,"completed_at":1770927510,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":300,"max_tool_calls":null,"model":"gpt-4o-mini-2024-07-18","output":[{"id":"msg_0a93ab36b71f912901698e3595151c81979b0e500000fa78a7","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"I will calculate the sum of 23 and 45."}],"role":"assistant"},{"id":"fc_0a93ab36b71f912901698e359624e08197a1f40252f6fdc00f","type":"function_call","status":"completed","arguments":"{\"expression\":\"23 + 45\"}","call_id":"call_o5Vcs8kz2HGQP5btOFGHNG9L","name":"calculator"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":false,"temperature":0.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"function","description":"Evaluates a mathematical expression and returns the result. Use this for any arithmetic calculations.","name":"calculator","parameters":{"type":"object","properties":{"expression":{"type":"string","description":"The mathematical expression to evaluate (e.g., '2 + 2', '15 * 3', 'sqrt(16)')"}},"required":["expression"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":146,"input_tokens_details":{"cached_tokens":0},"output_tokens":32,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":178},"user":null,"metadata":{}},"sequence_number":30}
+

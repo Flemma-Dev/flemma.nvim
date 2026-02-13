@@ -1,34 +1,13 @@
 local ctxutil = require("flemma.context")
 local eval = require("flemma.eval")
-local mime_util = require("flemma.mime")
-local frontmatter_parsers = require("flemma.frontmatter.parsers")
+local emittable = require("flemma.emittable")
+local codeblock_parsers = require("flemma.codeblock.parsers")
 
+---@class flemma.Processor
 local M = {}
 
-local function safe_read_binary(path)
-  local f, err = io.open(path, "rb")
-  if not f then
-    return nil, ("Failed to open file: " .. (err or "unknown"))
-  end
-  local data = f:read("*a")
-  f:close()
-  if not data then
-    return nil, "Failed to read content"
-  end
-  return data, nil
-end
-
-local function detect_mime(path, override)
-  if override and #override > 0 then
-    return override
-  end
-  local ok, mt, _ = pcall(mime_util.get_mime_type, path)
-  if ok and mt then
-    return mt
-  end
-  return mime_util.get_mime_by_extension(path)
-end
-
+---@param v any
+---@return string
 local function to_text(v)
   if v == nil then
     return ""
@@ -42,18 +21,45 @@ local function to_text(v)
   return tostring(v)
 end
 
+-- Part types shared with ast.lua (canonical definitions live there)
+---@alias flemma.processor.TextPart flemma.ast.GenericTextPart
+---@alias flemma.processor.ThinkingPart flemma.ast.GenericThinkingPart
+---@alias flemma.processor.ToolUsePart flemma.ast.GenericToolUsePart
+---@alias flemma.processor.ToolResultPart flemma.ast.GenericToolResultPart
+
+-- Part types unique to the processor stage (pre-conversion)
+---@class flemma.processor.FilePart
+---@field kind "file"
+---@field filename string
+---@field mime_type string
+---@field data string
+---@field position? flemma.ast.Position
+
+---@alias flemma.processor.EvaluatedPart flemma.processor.TextPart|flemma.processor.ThinkingPart|flemma.processor.FilePart|flemma.processor.ToolUsePart|flemma.processor.ToolResultPart
+
+---@class flemma.processor.EvaluatedMessage
+---@field role "You"|"Assistant"|"System"
+---@field parts flemma.processor.EvaluatedPart[]
+---@field position flemma.ast.Position
+
+---@class flemma.processor.EvaluatedResult
+---@field messages flemma.processor.EvaluatedMessage[]
+---@field diagnostics flemma.ast.Diagnostic[]
+---@field opts flemma.opt.ResolvedOpts|nil
+
 --- Evaluate a document AST.
---- Returns:
---- - evaluated: { messages = { role, parts=[{kind,text|mime|data|...}] }, diagnostics }
+---@param doc flemma.ast.DocumentNode
+---@param base_context flemma.Context|nil
+---@return flemma.processor.EvaluatedResult
 function M.evaluate(doc, base_context)
   -- Use doc.errors as the unified diagnostics array (parser may have populated it)
   local diagnostics = doc.errors or {}
-  local context = ctxutil.clone(base_context or {})
+  local context = ctxutil.clone(base_context)
 
   -- 1) Frontmatter execution using the parser registry
   if doc.frontmatter then
-    local fm = doc.frontmatter
-    local parser = frontmatter_parsers.get(fm.language)
+    local fm = doc.frontmatter ---@cast fm -nil
+    local parser = codeblock_parsers.get(fm.language)
 
     if parser then
       local ok, result = pcall(parser, fm.code, context)
@@ -65,7 +71,7 @@ function M.evaluate(doc, base_context)
             type = "frontmatter",
             severity = "warning",
             language = fm.language,
-            error = "Frontmatter parser returned non-table; ignoring",
+            error = string.format("Frontmatter must be an object, got %s", type(result)),
             position = fm.position,
             source_file = context:get_filename() or "N/A",
           })
@@ -106,77 +112,86 @@ function M.evaluate(doc, base_context)
         end
       elseif seg.kind == "thinking" then
         -- Preserve thinking nodes - providers can choose to filter them
-        table.insert(parts, { kind = "thinking", content = seg.content })
+        -- Include signature if present (for provider state preservation)
+        -- Include redacted flag for encrypted thinking blocks
+        table.insert(parts, {
+          kind = "thinking",
+          content = seg.content,
+          signature = seg.signature, -- table { value, provider } or nil
+          redacted = seg.redacted,
+        })
       elseif seg.kind == "expression" then
         local ok, result = pcall(eval.eval_expression, seg.code, env)
         if not ok then
-          -- Collect the error for reporting
-          table.insert(diagnostics, {
-            type = "expression",
-            severity = "warning",
-            expression = seg.code,
-            error = tostring(result),
-            position = seg.position,
-            message_role = msg.role,
-            source_file = context:get_filename() or "N/A",
-          })
+          -- Check if the error is a structured table (e.g. from include())
+          if type(result) == "table" and result.type then
+            table.insert(diagnostics, {
+              type = result.type,
+              severity = "warning",
+              filename = result.filename,
+              raw = result.raw,
+              error = result.error or tostring(result),
+              position = seg.position,
+              message_role = msg.role,
+              source_file = context:get_filename() or "N/A",
+            })
+          else
+            table.insert(diagnostics, {
+              type = "expression",
+              severity = "warning",
+              expression = seg.code,
+              error = tostring(result),
+              position = seg.position,
+              message_role = msg.role,
+              source_file = context:get_filename() or "N/A",
+            })
+          end
           -- Keep original expression text in output
           table.insert(parts, { kind = "text", text = "{{" .. (seg.code or "") .. "}}" })
+        elseif emittable.is_emittable(result) then
+          -- Emittable result: create EmitContext and collect parts
+          local emit_ctx = emittable.EmitContext.new({
+            position = seg.position,
+            diagnostics = diagnostics,
+            source_file = context:get_filename() or "N/A",
+          })
+          local emit_ok, emit_err = pcall(result.emit, result, emit_ctx)
+          if emit_ok then
+            for _, ep in ipairs(emit_ctx.parts) do
+              table.insert(parts, ep)
+            end
+          else
+            table.insert(diagnostics, {
+              type = "expression",
+              severity = "warning",
+              expression = seg.code,
+              error = "Error during emit: " .. tostring(emit_err),
+              position = seg.position,
+              message_role = msg.role,
+              source_file = context:get_filename() or "N/A",
+            })
+            table.insert(parts, { kind = "text", text = "{{" .. (seg.code or "") .. "}}" })
+          end
         else
           local str_result = to_text(result)
           if str_result and #str_result > 0 then
             table.insert(parts, { kind = "text", text = str_result })
           end
         end
-      elseif seg.kind == "file_reference" then
-        local filename = seg.path
-        -- Resolve relative to context filename
-        if context then
-          local ctx_filename = context:get_filename()
-          if ctx_filename and filename:match("^%.%.?/") then
-            local buffer_dir = vim.fn.fnamemodify(ctx_filename, ":h")
-            filename = vim.fn.simplify(buffer_dir .. "/" .. filename)
-          end
-        end
-        local mime = detect_mime(filename, seg.mime_override)
-        if vim.fn.filereadable(filename) == 1 and mime then
-          local data, err = safe_read_binary(filename)
-          if data then
-            table.insert(parts, {
-              kind = "file",
-              filename = filename,
-              raw = seg.raw,
-              mime_type = mime,
-              data = data,
-            })
-          else
-            table.insert(diagnostics, {
-              type = "file",
-              severity = "warning",
-              filename = filename,
-              raw = seg.raw,
-              error = err or "read error",
-              position = seg.position,
-              source_file = context:get_filename() or "N/A",
-            })
-            table.insert(parts, { kind = "unsupported_file", raw = seg.raw })
-          end
-        else
-          local err = "File not found or MIME undetermined"
-          table.insert(diagnostics, {
-            type = "file",
-            severity = "warning",
-            filename = filename,
-            raw = seg.raw,
-            error = err,
-            position = seg.position,
-            source_file = context:get_filename() or "N/A",
-          })
-          table.insert(parts, { kind = "unsupported_file", raw = seg.raw })
-        end
-        if seg.trailing_punct and #seg.trailing_punct > 0 then
-          table.insert(parts, { kind = "text", text = seg.trailing_punct })
-        end
+      elseif seg.kind == "tool_use" then
+        table.insert(parts, {
+          kind = "tool_use",
+          id = seg.id,
+          name = seg.name,
+          input = seg.input,
+        })
+      elseif seg.kind == "tool_result" then
+        table.insert(parts, {
+          kind = "tool_result",
+          tool_use_id = seg.tool_use_id,
+          content = seg.content,
+          is_error = seg.is_error,
+        })
       end
     end
 
@@ -190,6 +205,7 @@ function M.evaluate(doc, base_context)
   return {
     messages = evaluated_messages,
     diagnostics = diagnostics,
+    opts = context:get_opts(),
   }
 end
 

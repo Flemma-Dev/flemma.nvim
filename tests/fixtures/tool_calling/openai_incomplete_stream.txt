@@ -1,0 +1,72 @@
+event: response.created
+data: {"type":"response.created","response":{"id":"resp_0f7d483a772176c101698ed19429f08194a674c1e25da8ea34","object":"response","created_at":1770967444,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":16,"max_tool_calls":null,"model":"gpt-4o-mini-2024-07-18","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":false,"temperature":0.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+event: response.in_progress
+data: {"type":"response.in_progress","response":{"id":"resp_0f7d483a772176c101698ed19429f08194a674c1e25da8ea34","object":"response","created_at":1770967444,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":16,"max_tool_calls":null,"model":"gpt-4o-mini-2024-07-18","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":false,"temperature":0.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","item":{"id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":2}
+
+event: response.content_part.added
+data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":"#","item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","logprobs":[],"obfuscation":"ZFk0cUrRZkBH9rX","output_index":0,"sequence_number":4}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":" The","item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","logprobs":[],"obfuscation":"yvLW7PPMUfs8","output_index":0,"sequence_number":5}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":" History","item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","logprobs":[],"obfuscation":"A88SCAO5","output_index":0,"sequence_number":6}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":" of","item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","logprobs":[],"obfuscation":"0MaCYfo1JyBm7","output_index":0,"sequence_number":7}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":" Mathematics","item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","logprobs":[],"obfuscation":"yvbv","output_index":0,"sequence_number":8}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":":","item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","logprobs":[],"obfuscation":"vTOhoCMw8MMOOYB","output_index":0,"sequence_number":9}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":" From","item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","logprobs":[],"obfuscation":"30di7R4PL6r","output_index":0,"sequence_number":10}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":" Ancient","item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","logprobs":[],"obfuscation":"Rl64Olwo","output_index":0,"sequence_number":11}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":" Babylon","item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","logprobs":[],"obfuscation":"82TD8Zg5","output_index":0,"sequence_number":12}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":" to","item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","logprobs":[],"obfuscation":"pwnPCvnGqGyaN","output_index":0,"sequence_number":13}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":" Modern","item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","logprobs":[],"obfuscation":"1OTfcOneg","output_index":0,"sequence_number":14}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":" Times","item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","logprobs":[],"obfuscation":"7XdIJR1smR","output_index":0,"sequence_number":15}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":"\n\n","item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","logprobs":[],"obfuscation":"5OjJg24xGG5FOP","output_index":0,"sequence_number":16}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":"Mat","item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","logprobs":[],"obfuscation":"o6lH3FTpOW0MH","output_index":0,"sequence_number":17}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":"hemat","item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","logprobs":[],"obfuscation":"X7QZW8tev8d","output_index":0,"sequence_number":18}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","content_index":0,"delta":"ics","item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","logprobs":[],"obfuscation":"90qW48GBNEbLo","output_index":0,"sequence_number":19}
+
+event: response.output_text.done
+data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","logprobs":[],"output_index":0,"sequence_number":20,"text":"# The History of Mathematics: From Ancient Babylon to Modern Times\n\nMathematics"}
+
+event: response.content_part.done
+data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"# The History of Mathematics: From Ancient Babylon to Modern Times\n\nMathematics"},"sequence_number":21}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","item":{"id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","type":"message","status":"incomplete","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"# The History of Mathematics: From Ancient Babylon to Modern Times\n\nMathematics"}],"role":"assistant"},"output_index":0,"sequence_number":22}
+
+event: response.incomplete
+data: {"type":"response.incomplete","response":{"id":"resp_0f7d483a772176c101698ed19429f08194a674c1e25da8ea34","object":"response","created_at":1770967444,"status":"incomplete","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":{"reason":"max_output_tokens"},"instructions":null,"max_output_tokens":16,"max_tool_calls":null,"model":"gpt-4o-mini-2024-07-18","output":[{"id":"msg_0f7d483a772176c101698ed1945c708194a151a87486bdea1c","type":"message","status":"incomplete","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"# The History of Mathematics: From Ancient Babylon to Modern Times\n\nMathematics"}],"role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":false,"temperature":0.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":27,"input_tokens_details":{"cached_tokens":0},"output_tokens":16,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":43},"user":null,"metadata":{}},"sequence_number":23}
+

@@ -228,7 +228,7 @@ describe(":Flemma switch completion ordering", function()
     assert.are.same({
       "$alpha",
       "$zulu",
-      "claude",
+      "anthropic",
       "openai",
       "vertex",
     }, completions, "completion order should list presets first followed by providers")

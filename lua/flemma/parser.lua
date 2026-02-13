@@ -1,8 +1,15 @@
 local ast = require("flemma.ast")
+local codeblock = require("flemma.codeblock")
 
+---@class flemma.Parser
 local M = {}
 
--- Utilities
+local TOOL_USE_PATTERN = "^%*%*Tool Use:%*%*%s*`([^`]+)`%s*%(`([^)]+)`%)"
+local TOOL_RESULT_PATTERN = "^%*%*Tool Result:%*%*%s*`([^`]+)`"
+local TOOL_RESULT_ERROR_PATTERN = "%s*%(error%)%s*$"
+
+---@param str string|nil
+---@return string|nil
 local function url_decode(str)
   if not str then
     return nil
@@ -14,10 +21,22 @@ local function url_decode(str)
   return str
 end
 
--- Unified segment parser: parse text for {{ }} expressions and @./ file references
--- Returns array of AST segments (text, expression, file_reference)
--- Note: <thinking> tags are NOT parsed here - only in @Assistant messages
--- base_line: optional 1-indexed line number for accurate position tracking
+--- Escape a string for use inside a Lua single-quoted string literal.
+---@param str string
+---@return string
+local function lua_string_escape(str)
+  str = str:gsub("\\", "\\\\")
+  str = str:gsub("'", "\\'")
+  str = str:gsub("\n", "\\n")
+  return str
+end
+
+--- Unified segment parser: parse text for {{ }} expressions and @./ file references
+--- Returns array of AST segments (text, expression)
+--- Note: <thinking> tags are NOT parsed here - only in @Assistant messages
+---@param text string|nil
+---@param base_line integer|nil 1-indexed line number for accurate position tracking
+---@return flemma.ast.Segment[]
 local function parse_segments(text, base_line)
   local segments = {}
   if text == "" or text == nil then
@@ -27,12 +46,6 @@ local function parse_segments(text, base_line)
 
   local idx = 1
   local s = text
-
-  local function emit_text(str)
-    if str and #str > 0 then
-      table.insert(segments, ast.text(str))
-    end
-  end
 
   local function char_to_line_col(pos)
     -- Count newlines up to pos to determine line and column
@@ -46,6 +59,19 @@ local function parse_segments(text, base_line)
     end
     local col = pos - last_newline
     return line, col
+  end
+
+  local function emit_text(str, char_start)
+    if str and #str > 0 then
+      local start_line = char_to_line_col(char_start)
+      local end_line = start_line
+      for i = 1, #str do
+        if str:sub(i, i) == "\n" then
+          end_line = end_line + 1
+        end
+      end
+      table.insert(segments, ast.text(str, { start_line = start_line, end_line = end_line }))
+    end
   end
 
   while idx <= #s do
@@ -62,20 +88,21 @@ local function parse_segments(text, base_line)
     end
 
     if not next_kind then
-      emit_text(s:sub(idx))
+      emit_text(s:sub(idx), idx)
       break
     end
 
     -- Emit preceding text
-    emit_text(s:sub(idx, next_start - 1))
+    emit_text(s:sub(idx, next_start - 1), idx)
 
     if next_kind == "expr" then
       local line, col = char_to_line_col(next_start)
-      table.insert(segments, ast.expression(payload, { start_line = line, start_col = col }))
+      table.insert(segments, ast.expression(payload --[[@as string]], { start_line = line, start_col = col }))
     elseif next_kind == "file" then
+      ---@cast payload string
       local raw_file_match, mime_with_punct = payload:match("^([^;]+);type=(.+)$")
       local mime_override = nil
-      local trailing_punct = nil
+      local trailing_punct
 
       if not raw_file_match then
         raw_file_match = payload
@@ -88,19 +115,25 @@ local function parse_segments(text, base_line)
         mime_override = mime_no_punct
       end
 
+      -- URL-decode and escape the path for use in a Lua string literal
       local cleaned_path = url_decode(raw_file_match)
+      ---@cast cleaned_path string
+      local escaped_path = lua_string_escape(cleaned_path)
       local line, col = char_to_line_col(next_start)
 
-      table.insert(
-        segments,
-        ast.file_reference(
-          mime_override and (raw_file_match .. ";type=" .. mime_override) or raw_file_match,
-          cleaned_path,
-          mime_override,
-          #trailing_punct > 0 and trailing_punct or nil,
-          { start_line = line, start_col = col }
-        )
-      )
+      -- Build the include() expression code
+      local opts_parts = { "binary = true" }
+      if mime_override then
+        opts_parts[#opts_parts + 1] = "mime = '" .. lua_string_escape(mime_override) .. "'"
+      end
+      local code = "include('" .. escaped_path .. "', { " .. table.concat(opts_parts, ", ") .. " })"
+
+      table.insert(segments, ast.expression(code, { start_line = line, start_col = col }))
+
+      -- Emit trailing punctuation as a separate text segment
+      if #trailing_punct > 0 then
+        emit_text(trailing_punct, next_end - #trailing_punct + 1)
+      end
     end
     idx = next_end + 1
   end
@@ -108,18 +141,147 @@ local function parse_segments(text, base_line)
   return segments
 end
 
--- Parse assistant messages - only extract <thinking> tags, treat rest as text
--- lines: array of content lines (without the @Assistant: prefix)
--- base_line_num: the line number where the message content starts (1-indexed)
-local function parse_assistant_segments(lines, base_line_num)
+--- Parse user messages - handle **Tool Result:** blocks and regular content
+---@param lines string[]|nil Content lines (without the @You: prefix)
+---@param base_line_num integer Line number where the message content starts (1-indexed)
+---@param diagnostics flemma.ast.Diagnostic[]|nil Optional table to collect parsing diagnostics
+---@return flemma.ast.Segment[] segments
+---@return flemma.ast.Diagnostic[] diagnostics
+local function parse_user_segments(lines, base_line_num, diagnostics)
   local segments = {}
+  diagnostics = diagnostics or {}
   if not lines or #lines == 0 then
-    return { ast.text("") }
+    return { ast.text("") }, diagnostics
   end
 
-  local function emit_text(str)
+  local function emit_text_with_parsing(text, line_num)
+    if text and #text > 0 then
+      local parsed = parse_segments(text, line_num)
+      for _, seg in ipairs(parsed) do
+        table.insert(segments, seg)
+      end
+    end
+  end
+
+  local i = 1
+  while i <= #lines do
+    local line = lines[i]
+    local current_line_num = base_line_num + i - 1
+
+    -- Check for **Tool Result:** marker
+    local tool_use_id = line:match(TOOL_RESULT_PATTERN)
+    if tool_use_id then
+      local is_error = line:match(TOOL_RESULT_ERROR_PATTERN) ~= nil
+      local result_start_line = current_line_num
+
+      -- Skip blank lines to find content
+      local content_start = codeblock.skip_blank_lines(lines, i + 1)
+
+      -- Check if line starts with backticks (fence opener)
+      local content_line = lines[content_start]
+      local has_fence_opener = content_line and content_line:match("^`+")
+
+      -- Try to parse a fenced code block
+      local block, block_end = codeblock.parse_fenced_block(lines, content_start)
+
+      if block then
+        local result_content
+        local is_pending = false
+
+        if block.language == "flemma:pending" then
+          -- Pending approval placeholder — no content to parse
+          result_content = ""
+          is_pending = true
+        elseif block.language then
+          -- Parse the content based on language
+          local content, parse_err = codeblock.parse(block.language, block.content)
+
+          if parse_err then
+            table.insert(diagnostics, {
+              type = "tool_result",
+              severity = "warning",
+              error = "Failed to parse tool result: " .. parse_err,
+              position = { start_line = result_start_line },
+            })
+            -- Treat as plain text result
+            result_content = block.content
+          else
+            -- If parsed to a simple value, convert to string for API
+            if type(content) == "table" then
+              result_content = vim.fn.json_encode(content)
+            else
+              result_content = tostring(content)
+            end
+          end
+        else
+          -- No language specified - treat as plain text
+          result_content = block.content
+        end
+
+        table.insert(
+          segments,
+          ast.tool_result(tool_use_id, result_content, {
+            is_error = is_error,
+            pending = is_pending or nil,
+            start_line = result_start_line,
+            end_line = base_line_num + block_end - 1,
+          })
+        )
+        i = block_end + 1
+      elseif has_fence_opener then
+        -- Started a fence but didn't close it properly - this is an error
+        table.insert(diagnostics, {
+          type = "tool_result",
+          severity = "warning",
+          error = "Unclosed fenced code block in tool result (missing closing fence)",
+          position = { start_line = result_start_line },
+        })
+        -- Skip to end of message (next @Role: marker) to avoid parsing garbage
+        local j = content_start + 1
+        while j <= #lines and not lines[j]:match("^@[%w]+:") do
+          j = j + 1
+        end
+        i = j
+      else
+        -- No fence at all - tool results require a fenced code block
+        table.insert(diagnostics, {
+          type = "tool_result",
+          severity = "warning",
+          error = "Tool result requires a fenced code block",
+          position = { start_line = result_start_line },
+        })
+        -- Skip to next line and continue
+        i = content_start
+      end
+    else
+      -- Regular content line - parse for expressions and file references
+      emit_text_with_parsing(line, current_line_num)
+      if i < #lines then
+        table.insert(segments, ast.text("\n", { start_line = current_line_num, end_line = current_line_num }))
+      end
+      i = i + 1
+    end
+  end
+
+  return segments, diagnostics
+end
+
+--- Parse assistant messages - extract <thinking> tags and **Tool Use:** blocks, treat rest as text
+---@param lines string[]|nil Content lines (without the @Assistant: prefix)
+---@param base_line_num integer Line number where the message content starts (1-indexed)
+---@param diagnostics flemma.ast.Diagnostic[]|nil Optional table to collect parsing diagnostics
+---@return flemma.ast.Segment[] segments
+---@return flemma.ast.Diagnostic[] diagnostics
+local function parse_assistant_segments(lines, base_line_num, diagnostics)
+  local segments = {}
+  diagnostics = diagnostics or {}
+  if not lines or #lines == 0 then
+    return { ast.text("") }, diagnostics
+  end
+
+  local function emit_text(str, line_num)
     if str and #str > 0 then
-      table.insert(segments, ast.text(str))
+      table.insert(segments, ast.text(str, { start_line = line_num, end_line = line_num }))
     end
   end
 
@@ -129,7 +291,30 @@ local function parse_assistant_segments(lines, base_line_num)
     local current_line_num = base_line_num + i - 1
 
     -- Check for thinking tags on their own lines
-    if line:match("^<thinking>$") then
+    -- Patterns:
+    --   <thinking> or <thinking provider:signature="..."> (opening tag)
+    --   <thinking redacted> (opening tag for redacted thinking)
+    --   <thinking provider:signature="..."/> (self-closing tag)
+    -- Supports any provider:signature attribute (e.g., vertex:signature, anthropic:signature)
+    local self_closing_provider, self_closing_sig = line:match('^<thinking%s+(%w+):signature="([^"]*)"%s*/>$')
+    local open_tag_provider, open_tag_sig = line:match('^<thinking%s+(%w+):signature="([^"]*)"%s*>$')
+    local simple_open_tag = line:match("^<thinking>$")
+    local redacted_open_tag = line:match("^<thinking%s+redacted>$")
+
+    if self_closing_sig then
+      -- Self-closing tag with signature, no content
+      local thinking_line = current_line_num
+      table.insert(
+        segments,
+        ast.thinking("", {
+          start_line = thinking_line,
+          end_line = thinking_line,
+        }, { signature = { value = self_closing_sig, provider = self_closing_provider } })
+      )
+      i = i + 1
+    elseif open_tag_sig or simple_open_tag or redacted_open_tag then
+      local signature = open_tag_sig and { value = open_tag_sig, provider = open_tag_provider } or nil
+      local redacted = redacted_open_tag ~= nil
       local thinking_start_line = current_line_num
       local thinking_content_lines = {}
       i = i + 1
@@ -144,7 +329,7 @@ local function parse_assistant_segments(lines, base_line_num)
             ast.thinking(thinking_content, {
               start_line = thinking_start_line,
               end_line = thinking_end_line,
-            })
+            }, { signature = signature, redacted = redacted or nil })
           )
           i = i + 1
           break
@@ -153,20 +338,89 @@ local function parse_assistant_segments(lines, base_line_num)
           i = i + 1
         end
       end
+    elseif line:match(TOOL_USE_PATTERN) then
+      local tool_name, tool_id = line:match(TOOL_USE_PATTERN)
+      local tool_start_line = current_line_num
+
+      -- Skip blank lines to find the code block
+      local block_start = codeblock.skip_blank_lines(lines, i + 1)
+
+      -- Check if line starts with backticks (fence opener)
+      local content_line = lines[block_start]
+      local has_fence_opener = content_line and content_line:match("^`+")
+
+      local block, block_end = codeblock.parse_fenced_block(lines, block_start)
+
+      if block then
+        -- Parse the JSON content
+        local input, parse_err = codeblock.parse(block.language or "json", block.content)
+
+        if parse_err then
+          table.insert(diagnostics, {
+            type = "tool_use",
+            severity = "warning",
+            error = "Failed to parse tool input: " .. parse_err,
+            position = { start_line = tool_start_line },
+          })
+          -- Skip to end of malformed block
+          local j = block_start + 1
+          while j <= #lines and not lines[j]:match("^@[%w]+:") do
+            j = j + 1
+          end
+          i = j
+        else
+          table.insert(
+            segments,
+            ast.tool_use(tool_id, tool_name, input, {
+              start_line = tool_start_line,
+              end_line = base_line_num + block_end - 1,
+            })
+          )
+          i = block_end + 1
+        end
+      elseif has_fence_opener then
+        -- Started a fence but didn't close it properly
+        table.insert(diagnostics, {
+          type = "tool_use",
+          severity = "warning",
+          error = "Unclosed fenced code block in tool use (missing closing fence)",
+          position = { start_line = tool_start_line },
+        })
+        -- Skip to end of message
+        local j = block_start + 1
+        while j <= #lines and not lines[j]:match("^@[%w]+:") do
+          j = j + 1
+        end
+        i = j
+      else
+        -- No fence at all
+        table.insert(diagnostics, {
+          type = "tool_use",
+          severity = "warning",
+          error = "Tool use requires a fenced code block with JSON input",
+          position = { start_line = tool_start_line },
+        })
+        i = block_start
+      end
     else
       -- Regular text line
-      emit_text(line)
+      emit_text(line, current_line_num)
       if i < #lines then
-        emit_text("\n")
+        emit_text("\n", current_line_num)
       end
       i = i + 1
     end
   end
 
-  return segments
+  return segments, diagnostics
 end
 
--- Split into frontmatter and body lines. Frontmatter fence: ```language ... ```
+--- Split into frontmatter and body lines. Frontmatter fence: ```language ... ```
+---@param lines string[]
+---@return flemma.ast.FrontmatterNode|nil frontmatter
+---@return string[]|nil fm_lines
+---@return string[] body
+---@return integer body_start
 local function parse_frontmatter(lines)
   if not lines[1] then
     return nil, nil, lines, 1
@@ -198,17 +452,24 @@ local function parse_frontmatter(lines)
   return fm, fm_lines, body, body_start
 end
 
--- Parse message role line: @Role:
--- line_offset: offset to add to line numbers (for frontmatter adjustment)
-local function parse_message(lines, start_idx, line_offset)
+--- Parse message role line: @Role:
+---@param lines string[]
+---@param start_idx integer
+---@param line_offset integer|nil Offset to add to line numbers (for frontmatter adjustment)
+---@param diagnostics flemma.ast.Diagnostic[]|nil Optional table to collect parsing diagnostics
+---@return flemma.ast.MessageNode|nil message
+---@return integer last_line_idx
+---@return flemma.ast.Diagnostic[] diagnostics
+local function parse_message(lines, start_idx, line_offset, diagnostics)
   line_offset = line_offset or 0
+  diagnostics = diagnostics or {}
   local line = lines[start_idx]
   if not line then
-    return nil, start_idx
+    return nil, start_idx, diagnostics
   end
   local role = line:match("^@([%w]+):")
   if not role then
-    return nil, start_idx
+    return nil, start_idx, diagnostics
   end
 
   local content_first = line:sub(#role + 3)
@@ -228,18 +489,27 @@ local function parse_message(lines, start_idx, line_offset)
     i = i + 1
   end
 
-  -- For @Assistant messages, only parse thinking tags (no expressions or file refs)
   local segments
+  local content_start_line = (content_first and content_first:match("%S")) and start_idx + line_offset
+    or (start_idx + 1 + line_offset)
+
   if role == "Assistant" then
-    -- Pass content_lines and the line number where content starts (after the @Assistant: line)
-    local content_start_line = (content_first and content_first:match("%S")) and start_idx + line_offset
-      or (start_idx + 1 + line_offset)
-    segments = parse_assistant_segments(content_lines, content_start_line)
+    -- Parse thinking tags and tool_use blocks
+    local msg_diagnostics
+    segments, msg_diagnostics = parse_assistant_segments(content_lines, content_start_line, {})
+    for _, diag in ipairs(msg_diagnostics) do
+      table.insert(diagnostics, diag)
+    end
+  elseif role == "You" then
+    -- Parse tool_result blocks and regular content
+    local msg_diagnostics
+    segments, msg_diagnostics = parse_user_segments(content_lines, content_start_line, {})
+    for _, diag in ipairs(msg_diagnostics) do
+      table.insert(diagnostics, diag)
+    end
   else
+    -- Other roles (System, etc.) - parse expressions and file references
     local content = table.concat(content_lines, "\n")
-    -- Calculate base line for non-Assistant messages
-    local content_start_line = (content_first and content_first:match("%S")) and start_idx + line_offset
-      or (start_idx + 1 + line_offset)
     segments = parse_segments(content, content_start_line)
   end
 
@@ -247,9 +517,11 @@ local function parse_message(lines, start_idx, line_offset)
     start_line = start_idx + line_offset,
     end_line = (i - 1) + line_offset,
   })
-  return msg, (i - 1)
+  return msg, (i - 1), diagnostics
 end
 
+---@param lines string[]|nil
+---@return flemma.ast.DocumentNode
 function M.parse_lines(lines)
   lines = lines or {}
   local errors = {}
@@ -261,9 +533,12 @@ function M.parse_lines(lines)
   local line_offset = body and (body_start - 1) or 0
 
   while i <= #content_lines do
-    local msg, last = parse_message(content_lines, i, line_offset)
+    local msg, last, diagnostics = parse_message(content_lines, i, line_offset, {})
     if msg then
       table.insert(messages, msg)
+      for _, diag in ipairs(diagnostics) do
+        table.insert(errors, diag)
+      end
       i = last + 1
     else
       i = i + 1
@@ -274,29 +549,33 @@ function M.parse_lines(lines)
   return doc
 end
 
--- Parse inline content (for include() results) - no frontmatter, no message roles
--- Just scan for @./ file references and {{ }} expressions
+--- Parse inline content (for include() results) - no frontmatter, no message roles
+--- Just scan for @./ file references and {{ }} expressions
+---@param text string|nil
+---@return flemma.ast.Segment[]
 function M.parse_inline_content(text)
   return parse_segments(text or "")
 end
 
--- Get parsed document with automatic caching based on buffer changedtick
--- Returns cached AST if buffer unchanged, otherwise parses and caches
+--- Get parsed document with automatic caching based on buffer changedtick
+--- Returns cached AST if buffer unchanged, otherwise parses and caches
+---@param bufnr integer
+---@return flemma.ast.DocumentNode
 function M.get_parsed_document(bufnr)
-  local buffers = require("flemma.buffers")
-  local state = buffers.get_state(bufnr)
+  local state = require("flemma.state")
+  local buffer_state = state.get_buffer_state(bufnr)
   local current_tick = vim.api.nvim_buf_get_changedtick(bufnr)
 
   -- Return cached if still valid
-  if state.ast_cache and state.ast_cache.changedtick == current_tick then
-    return state.ast_cache.document
+  if buffer_state.ast_cache and buffer_state.ast_cache.changedtick == current_tick then
+    return buffer_state.ast_cache.document
   end
 
   -- Parse and cache
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local doc = M.parse_lines(lines)
 
-  state.ast_cache = {
+  buffer_state.ast_cache = {
     changedtick = current_tick,
     document = doc,
   }

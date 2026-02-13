@@ -50,19 +50,19 @@ describe("Lualine component", function()
     -- Act
     local status = flemma_component:update_status()
 
-    -- Assert
+    -- Assert (uses default format "{model} ({level})")
     assert.are.equal("o3 (high)", status)
   end)
 
   it("should display only the model name when reasoning is not set for an o-series model", function()
     -- Arrange
-    core.switch_provider("openai", "o1-mini", {}) -- No reasoning parameter
+    core.switch_provider("openai", "o4-mini", {}) -- No reasoning parameter
 
     -- Act
     local status = flemma_component:update_status()
 
     -- Assert
-    assert.are.equal("o1-mini", status)
+    assert.are.equal("o4-mini", status)
   end)
 
   it("should display only the model name for non-o-series models", function()
@@ -76,21 +76,54 @@ describe("Lualine component", function()
     assert.are.equal("gpt-4o", status)
   end)
 
-  it("should display only the model name for non-openai providers", function()
+  it("should display only the model name for non-openai providers without thinking", function()
     -- Arrange
-    core.switch_provider("claude", "claude-sonnet-4-0", {})
+    core.switch_provider("anthropic", "claude-sonnet-4-5", {})
 
     -- Act
     local status = flemma_component:update_status()
 
     -- Assert
-    assert.are.equal("claude-sonnet-4-0", status)
+    assert.are.equal("claude-sonnet-4-5", status)
+  end)
+
+  it("should display model with thinking indicator for Anthropic with valid thinking_budget", function()
+    -- Arrange
+    core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking_budget = 2048 })
+
+    -- Act
+    local status = flemma_component:update_status()
+
+    -- Assert
+    assert.are.equal("claude-sonnet-4-5  ✓ thinking", status)
+  end)
+
+  it("should not display thinking indicator for Anthropic with thinking_budget below 1024", function()
+    -- Arrange
+    core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking_budget = 500 })
+
+    -- Act
+    local status = flemma_component:update_status()
+
+    -- Assert
+    assert.are.equal("claude-sonnet-4-5", status)
+  end)
+
+  it("should display model with thinking indicator for Vertex with valid thinking_budget", function()
+    -- Arrange
+    core.switch_provider("vertex", "gemini-2.5-pro", { thinking_budget = 1000, project_id = "test-project" })
+
+    -- Act
+    local status = flemma_component:update_status()
+
+    -- Assert
+    assert.are.equal("gemini-2.5-pro  ✓ thinking", status)
   end)
 
   it("should return an empty string if filetype is not 'chat'", function()
     -- Arrange
     vim.bo.filetype = "lua"
-    core.switch_provider("openai", "o1-mini", { reasoning = "high" })
+    core.switch_provider("openai", "o4-mini", { reasoning = "high" })
 
     -- Act
     local status = flemma_component:update_status()
@@ -113,5 +146,59 @@ describe("Lualine component", function()
 
     -- Cleanup
     s:revert()
+  end)
+
+  describe("frontmatter overrides", function()
+    local state = require("flemma.state")
+
+    it("should reflect reasoning override from frontmatter", function()
+      -- Start with base config: no reasoning
+      core.switch_provider("openai", "o3", { temperature = 1 })
+      assert.are.equal("o3", flemma_component:update_status())
+
+      -- Simulate frontmatter override (as core.lua does during a request)
+      local provider = state.get_provider()
+      provider:set_parameter_overrides({ reasoning = "high" })
+
+      -- Lualine should now show the overridden reasoning level
+      assert.are.equal("o3 (high)", flemma_component:update_status())
+    end)
+
+    it("should reflect thinking_budget override from frontmatter", function()
+      -- Start with base config: no thinking_budget
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+      assert.are.equal("claude-sonnet-4-5", flemma_component:update_status())
+
+      -- Simulate frontmatter override
+      local provider = state.get_provider()
+      provider:set_parameter_overrides({ thinking_budget = 2048 })
+
+      -- Lualine should now show the thinking indicator
+      assert.are.equal("claude-sonnet-4-5  ✓ thinking", flemma_component:update_status())
+    end)
+
+    it("should let frontmatter override win over base config", function()
+      -- Start with base reasoning = "low"
+      core.switch_provider("openai", "o3", { reasoning = "low", temperature = 1 })
+      assert.are.equal("o3 (low)", flemma_component:update_status())
+
+      -- Frontmatter sets reasoning = "high"
+      local provider = state.get_provider()
+      provider:set_parameter_overrides({ reasoning = "high" })
+
+      assert.are.equal("o3 (high)", flemma_component:update_status())
+    end)
+
+    it("should revert to base config when overrides are cleared", function()
+      core.switch_provider("openai", "o3", { reasoning = "low", temperature = 1 })
+      local provider = state.get_provider()
+
+      -- Set then clear overrides
+      provider:set_parameter_overrides({ reasoning = "high" })
+      assert.are.equal("o3 (high)", flemma_component:update_status())
+
+      provider:set_parameter_overrides(nil)
+      assert.are.equal("o3 (low)", flemma_component:update_status())
+    end)
   end)
 end)

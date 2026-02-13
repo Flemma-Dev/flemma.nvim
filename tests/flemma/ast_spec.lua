@@ -21,11 +21,30 @@ describe("AST and Context", function()
     assert.equals(base:get_filename(), ext:get_filename())
     local vars = ext:get_variables()
     assert.equals(1, vars.x)
+  end)
 
-    local child = ctx.for_include(ext, "/tmp/child.txt")
-    assert.equals("/tmp/child.txt", child:get_filename())
-    local stack = child:get_include_stack()
-    assert.is_true(#stack >= 2)
+  it("provides __dirname from filename", function()
+    local base = ctx.from_file("/tmp/flemma.chat")
+    assert.equals("/tmp", base:get_dirname())
+  end)
+
+  it("returns nil dirname when no filename", function()
+    local empty = ctx.clone(nil)
+    assert.is_nil(empty:get_dirname())
+  end)
+
+  it("clone preserves filename", function()
+    local base = ctx.from_file("/tmp/flemma.chat")
+    local cloned = ctx.clone(base)
+    assert.equals("/tmp/flemma.chat", cloned:get_filename())
+    assert.equals("/tmp", cloned:get_dirname())
+  end)
+
+  it("extend preserves filename", function()
+    local base = ctx.from_file("/tmp/flemma.chat")
+    local ext = ctx.extend(base, { y = 2 })
+    assert.equals("/tmp/flemma.chat", ext:get_filename())
+    assert.equals("/tmp", ext:get_dirname())
   end)
 
   it("creates eval environment from context", function()
@@ -33,7 +52,15 @@ describe("AST and Context", function()
     local ext = ctx.extend(base, { foo = "bar" })
     local env = ctx.to_eval_env(ext)
     assert.equals("/tmp/flemma.chat", env.__filename)
+    assert.equals("/tmp", env.__dirname)
     assert.equals("bar", env.foo)
+  end)
+
+  it("sets __dirname to nil when context has no filename", function()
+    local empty = ctx.clone(nil)
+    local env = ctx.to_eval_env(empty)
+    assert.is_nil(env.__filename)
+    assert.is_nil(env.__dirname)
   end)
 end)
 
@@ -69,11 +96,12 @@ describe("Parser", function()
     for _, s in ipairs(m1.segments) do
       kinds[#kinds + 1] = s.kind
     end
-    -- Expected: text("Hello "), expression, text(" world "), file_reference, text(".")
+    -- Expected: text("Hello "), expression(1+1), text(" world "), expression(include), text(".")
     assert.equals("text", kinds[1])
     assert.equals("expression", kinds[2])
     assert.equals("text", kinds[3])
-    assert.equals("file_reference", kinds[4])
+    assert.equals("expression", kinds[4])
+    assert.equals("text", kinds[5])
   end)
 
   it("parses MIME override and URL-encoded filenames", function()
@@ -81,11 +109,17 @@ describe("Parser", function()
       "@You: See @./my%20file.bin;type=image/png!",
     }
     local doc = parser.parse_lines(lines)
-    local fr = doc.messages[1].segments[2]
-    assert.equals("file_reference", fr.kind)
-    assert.equals("image/png", fr.mime_override)
-    assert.is_true(fr.path:match("my file.bin") ~= nil)
-    assert.equals("!", fr.trailing_punct)
+    -- After desugaring, @./file becomes an ExpressionSegment with include() code
+    local seg = doc.messages[1].segments[2]
+    assert.equals("expression", seg.kind)
+    -- The include() call should contain the decoded path and MIME override
+    assert.is_true(seg.code:match("my file.bin") ~= nil)
+    assert.is_true(seg.code:match("image/png") ~= nil)
+    assert.is_true(seg.code:match("binary = true") ~= nil)
+    -- Trailing punctuation should be a separate text segment
+    local trailing = doc.messages[1].segments[3]
+    assert.equals("text", trailing.kind)
+    assert.equals("!", trailing.value)
   end)
 
   it("parses thinking tags in Assistant messages", function()
@@ -109,6 +143,32 @@ describe("Parser", function()
       end
     end
     assert.is_true(has_thinking, "Should have parsed thinking node")
+  end)
+
+  it("parses redacted thinking tags in Assistant messages", function()
+    local lines = {
+      "@Assistant: Here is my response.",
+      "",
+      "<thinking redacted>",
+      "encrypted-data-abc123",
+      "</thinking>",
+    }
+    local doc = parser.parse_lines(lines)
+    local msg = doc.messages[1]
+    assert.equals("Assistant", msg.role)
+
+    local thinking_seg = nil
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "thinking" and seg.redacted then
+        thinking_seg = seg
+        break
+      end
+    end
+
+    assert.is_not_nil(thinking_seg, "Should have parsed redacted thinking node")
+    assert.equals("encrypted-data-abc123", thinking_seg.content)
+    assert.is_true(thinking_seg.redacted)
+    assert.is_nil(thinking_seg.signature, "Redacted thinking should not have signature")
   end)
 
   it("parses thinking tags with line positions when on separate lines", function()
@@ -219,11 +279,11 @@ describe("Processor", function()
     }
     local b = ctx.from_file("tests/fixtures/loop1.txt")
     local doc = parser.parse_lines(lines)
-    local ok, res = pcall(processor.evaluate, doc, b)
+    local ok = pcall(processor.evaluate, doc, b)
     assert.is_true(ok, "Processor should not crash; include() error handled in expression eval as text")
   end)
 
-  it("resolves @./ file references inside included content", function()
+  it("resolves @./ file references inside included content as file parts", function()
     local f = io.open("tests/fixtures/with_ref.txt", "w")
     f:write("Content: @./a.txt here")
     f:close()
@@ -234,15 +294,21 @@ describe("Processor", function()
     local b = ctx.from_file("tests/fixtures/doc.chat")
     local doc = parser.parse_lines(lines)
     local out = processor.evaluate(doc, b)
-    -- include() should have resolved @./a.txt to its content
-    local text_parts = {}
-    for _, p in ipairs(out.messages[1].parts) do
-      if p.kind == "text" then
-        table.insert(text_parts, p.text)
+
+    -- After the emit protocol: @./a.txt inside included content produces a FilePart
+    local parts = out.messages[1].parts
+    local has_text_content = false
+    local has_file_part = false
+    for _, p in ipairs(parts) do
+      if p.kind == "text" and p.text:match("Content:") then
+        has_text_content = true
+      end
+      if p.kind == "file" and p.data:match("hello A") then
+        has_file_part = true
       end
     end
-    local result = table.concat(text_parts, "")
-    assert.is_true(result:match("hello A") ~= nil, "include() should have resolved @./a.txt")
+    assert.is_true(has_text_content, "Should have text content from included file")
+    assert.is_true(has_file_part, "Should have file part for @./a.txt (the key improvement)")
   end)
 
   it("does not process expressions or file refs in @Assistant messages", function()
@@ -320,14 +386,52 @@ describe("AST to Parts Mapper", function()
       { kind = "file", filename = "x.png", mime_type = "image/png", data = "abcd" },
       { kind = "file", filename = "x.pdf", mime_type = "application/pdf", data = "pdf" },
       { kind = "file", filename = "x.txt", mime_type = "text/plain", data = "hello" },
-      { kind = "unsupported_file", raw = "./unknown.bin" },
     })
     assert.equals("text", parts[1].kind)
     assert.equals("image", parts[2].kind)
     assert.equals("pdf", parts[3].kind)
     assert.equals("text_file", parts[4].kind)
     assert.equals("hello", parts[4].text)
-    assert.equals("unsupported_file", parts[5].kind)
+  end)
+
+  it("preserves redacted flag on thinking parts", function()
+    local parts = ast.to_generic_parts({
+      { kind = "thinking", content = "normal thought", signature = { value = "sig1", provider = "anthropic" } },
+      { kind = "thinking", content = "encrypted-data", redacted = true },
+    })
+    assert.equals(2, #parts)
+    assert.equals("thinking", parts[1].kind)
+    assert.equals("sig1", parts[1].signature.value)
+    assert.equals("anthropic", parts[1].signature.provider)
+    assert.is_nil(parts[1].redacted)
+    assert.equals("thinking", parts[2].kind)
+    assert.is_true(parts[2].redacted)
+    assert.equals("encrypted-data", parts[2].content)
+  end)
+end)
+
+describe("AST Thinking Constructor", function()
+  it("creates thinking node with redacted flag", function()
+    local seg = ast.thinking("encrypted-data", { start_line = 5, end_line = 7 }, { redacted = true })
+    assert.equals("thinking", seg.kind)
+    assert.equals("encrypted-data", seg.content)
+    assert.is_true(seg.redacted)
+    assert.is_nil(seg.signature)
+    assert.equals(5, seg.position.start_line)
+    assert.equals(7, seg.position.end_line)
+  end)
+
+  it("creates normal thinking node without redacted flag", function()
+    local seg = ast.thinking(
+      "thought",
+      { start_line = 1, end_line = 3 },
+      { signature = { value = "sig-abc", provider = "anthropic" } }
+    )
+    assert.equals("thinking", seg.kind)
+    assert.equals("thought", seg.content)
+    assert.equals("sig-abc", seg.signature.value)
+    assert.equals("anthropic", seg.signature.provider)
+    assert.is_nil(seg.redacted)
   end)
 end)
 
@@ -338,7 +442,7 @@ describe("Pipeline Integration", function()
       "@You: Hello",
       "@Assistant: Hi there!",
     }
-    local prompt, evaluated = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
     assert.equals("You are helpful.", prompt.system)
     assert.equals(2, #prompt.history)
   end)
@@ -352,7 +456,7 @@ describe("Pipeline Integration", function()
       "@Assistant: Got it",
     }
 
-    local prompt, evaluated = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
 
     assert.is_nil(prompt.system)
     assert.equals(2, #prompt.history)
@@ -375,16 +479,16 @@ describe("Pipeline Integration", function()
 end)
 
 describe("Provider Integration", function()
-  it("builds Claude request from pipeline output", function()
-    local claude = require("flemma.provider.providers.claude")
-    local provider = claude.new({ model = "claude-3-haiku-20240307", max_tokens = 256, temperature = 0 })
+  it("builds Anthropic request from pipeline output", function()
+    local anthropic = require("flemma.provider.providers.anthropic")
+    local provider = anthropic.new({ model = "claude-3-haiku-20240307", max_tokens = 256, temperature = 0 })
 
     local lines = {
       "@System: You are helpful.",
       "@You: Hello",
       "@Assistant: Hi there!",
     }
-    local prompt, evaluated = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
     local req = provider:build_request(prompt, {})
     assert.is_not_nil(req.model)
     assert.equals("table", type(req.messages))
@@ -403,8 +507,14 @@ describe("Provider Integration", function()
       "@Assistant: Got it",
     }
 
-    local prompt, evaluated = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
-    local req = provider:build_request(prompt, {})
-    assert.equals("user", req.messages[1].role)
+    local context = ctx.from_file("tests/fixtures/doc.chat")
+    local prompt = pipeline.run(parser.parse_lines(lines), context)
+    local req = provider:build_request(prompt, context)
+    -- Responses API uses input[] instead of messages[]
+    local user_items = vim.tbl_filter(function(item)
+      return item.role == "user"
+    end, req.input)
+    assert.equals(1, #user_items)
+    assert.equals("user", user_items[1].role)
   end)
 end)

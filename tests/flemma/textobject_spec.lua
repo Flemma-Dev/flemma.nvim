@@ -37,7 +37,7 @@ describe("Flemma Text Objects", function()
 
   it("selects inner message with 'im'", function()
     -- Arrange
-    local bufnr = setup_buffer_and_cursor()
+    setup_buffer_and_cursor()
 
     -- Act
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("vim", true, false, true), "x", false)
@@ -53,22 +53,25 @@ describe("Flemma Text Objects", function()
     assert.are.same({ 5, 22 }, { end_pos[2], end_pos[3] })
   end)
 
-  it("selects around message with 'am'", function()
+  it("selects around message with 'am' linewise including trailing empty lines", function()
     -- Arrange
-    local bufnr = setup_buffer_and_cursor()
+    setup_buffer_and_cursor()
 
     -- Act
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("vam", true, false, true), "x", false)
     vim.wait(100) -- Wait for keys to be processed
 
     -- Assert
+    local mode = vim.fn.mode()
     local start_pos = vim.fn.getpos("v")
     local end_pos = vim.fn.getpos(".")
 
-    -- Expected start: line 3, column 1
-    assert.are.same({ 3, 1 }, { start_pos[2], start_pos[3] })
-    -- Expected end: line 5, last non-blank character (excludes trailing empty lines)
-    assert.are.same({ 5, 22 }, { end_pos[2], end_pos[3] })
+    -- Should be linewise mode
+    assert.are.same("V", mode)
+    -- Expected start: line 3 (beginning of @You message)
+    assert.are.same(3, start_pos[2])
+    -- Expected end: line 6 (includes trailing empty line before @Assistant)
+    assert.are.same(6, end_pos[2])
   end)
 
   it("selects inner message with 'im' on single-line message", function()
@@ -125,7 +128,7 @@ describe("Flemma Text Objects", function()
     assert.are.same({ 5, 12 }, { end_pos[2], end_pos[3] })
   end)
 
-  it("selects around message with 'am' excluding trailing empty lines", function()
+  it("selects around message with 'am' linewise including trailing empty lines", function()
     -- Arrange
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
@@ -144,13 +147,16 @@ describe("Flemma Text Objects", function()
     vim.wait(100)
 
     -- Assert
+    local mode = vim.fn.mode()
     local start_pos = vim.fn.getpos("v")
     local end_pos = vim.fn.getpos(".")
 
-    -- Should start at beginning of message
-    assert.are.same({ 1, 1 }, { start_pos[2], start_pos[3] })
-    -- Should end at last non-empty line (line 2), excluding trailing empty lines
-    assert.are.same({ 2, 11 }, { end_pos[2], end_pos[3] })
+    -- Should be linewise mode
+    assert.are.same("V", mode)
+    -- Should start at beginning of message (line 1)
+    assert.are.same(1, start_pos[2])
+    -- Should end at last line of message including trailing empty lines (line 4)
+    assert.are.same(4, end_pos[2])
   end)
 
   it("selects inner message with 'im' excluding <thinking> blocks", function()
@@ -185,7 +191,7 @@ describe("Flemma Text Objects", function()
     assert.are.same({ 7, 12 }, { end_pos[2], end_pos[3] })
   end)
 
-  it("selects around message with 'vam' excluding <thinking> blocks", function()
+  it("selects around message with 'vam' linewise including <thinking> blocks", function()
     -- Arrange
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
@@ -207,13 +213,16 @@ describe("Flemma Text Objects", function()
     vim.wait(100)
 
     -- Assert
+    local mode = vim.fn.mode()
     local start_pos = vim.fn.getpos("v")
     local end_pos = vim.fn.getpos(".")
 
-    -- Should start at beginning of message (line 1, column 1)
-    assert.are.same({ 1, 1 }, { start_pos[2], start_pos[3] })
-    -- Should end at last non-empty, non-thinking line (line 6, last char)
-    assert.are.same({ 6, 13 }, { end_pos[2], end_pos[3] })
+    -- Should be linewise mode
+    assert.are.same("V", mode)
+    -- Should start at beginning of message (line 1)
+    assert.are.same(1, start_pos[2])
+    -- Should end at last line of message including thinking blocks and trailing empty (line 7)
+    assert.are.same(7, end_pos[2])
   end)
 
   it("selects inner message with 'im' when cursor is on content after thinking block", function()

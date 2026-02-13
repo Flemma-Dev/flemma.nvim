@@ -1,23 +1,43 @@
 --- Core runtime functionality for Flemma plugin
 --- Handles provider initialization, switching, and main request-response lifecycle
+---@class flemma.Core
 local M = {}
 
-local buffers = require("flemma.buffers")
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local config_manager = require("flemma.core.config.manager")
 local ui = require("flemma.ui")
-local providers_registry = require("flemma.provider.providers")
+local registry = require("flemma.provider.registry")
 
 -- For testing purposes
 local last_request_body_for_testing = nil
 
--- Initialize or switch provider based on configuration (local function)
+---Get the 0-indexed column where content starts after a role prefix (@Role: )
+---@param role string
+---@return integer
+local function content_col(role)
+  return #("@" .. role .. ": ")
+end
+
+---Auto-write buffer if configured and modified
+---@param bufnr integer
+local function auto_write_buffer(bufnr)
+  local config = state.get_config()
+  if config.editing and config.editing.auto_write and vim.bo[bufnr].modified then
+    ui.buffer_cmd(bufnr, "silent! write")
+  end
+end
+
+---Initialize or switch provider based on configuration
+---@param provider_name string
+---@param model_name? string
+---@param parameters? table<string, any>
+---@return flemma.provider.Base|nil
 local function initialize_provider(provider_name, model_name, parameters)
   -- Prepare configuration using the centralized config manager
   local provider_config, err = config_manager.prepare_config(provider_name, model_name, parameters)
   if not provider_config then
-    vim.notify(err, vim.log.levels.ERROR)
+    vim.notify(err --[[@as string]], vim.log.levels.ERROR)
     return nil
   end
 
@@ -25,7 +45,7 @@ local function initialize_provider(provider_name, model_name, parameters)
   config_manager.apply_config(provider_config)
 
   -- Create a fresh provider instance with the merged parameters
-  local provider_module = providers_registry.get(provider_config.provider)
+  local provider_module = registry.get(provider_config.provider)
   if not provider_module then
     local err_msg = "initialize_provider(): Invalid provider after validation: " .. tostring(provider_config.provider)
     log.error(err_msg)
@@ -40,12 +60,20 @@ local function initialize_provider(provider_name, model_name, parameters)
   return new_provider
 end
 
--- Initialize provider for initial setup (exposed version)
+---Initialize provider for initial setup (exposed version)
+---@param provider_name string
+---@param model_name? string
+---@param parameters? table<string, any>
+---@return flemma.provider.Base|nil
 function M.initialize_provider(provider_name, model_name, parameters)
   return initialize_provider(provider_name, model_name, parameters)
 end
 
--- Switch to a different provider or model
+---Switch to a different provider or model
+---@param provider_name string
+---@param model_name? string
+---@param parameters? table<string, any>
+---@return flemma.provider.Base|nil
 function M.switch_provider(provider_name, model_name, parameters)
   if not provider_name then
     vim.notify("Flemma: Provider name is required", vim.log.levels.ERROR)
@@ -54,7 +82,7 @@ function M.switch_provider(provider_name, model_name, parameters)
 
   -- Check for ongoing requests
   local bufnr = vim.api.nvim_get_current_buf()
-  local buffer_state = buffers.get_state(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
   if buffer_state.current_request then
     vim.notify("Flemma: Cannot switch providers while a request is in progress.", vim.log.levels.WARN)
     return
@@ -105,10 +133,10 @@ function M.switch_provider(provider_name, model_name, parameters)
   return new_provider
 end
 
--- Cancel ongoing request if any
+---Cancel ongoing request if any
 function M.cancel_request()
   local bufnr = vim.api.nvim_get_current_buf()
-  local buffer_state = buffers.get_state(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
 
   if buffer_state.current_request then
     log.info("cancel_request(): job_id = " .. tostring(buffer_state.current_request))
@@ -125,18 +153,26 @@ function M.cancel_request()
       local last_line = vim.api.nvim_buf_line_count(bufnr)
       local last_line_content = vim.api.nvim_buf_get_lines(bufnr, last_line - 1, last_line, false)[1]
 
-      -- If we're still showing the thinking message, remove it
-      if last_line_content:match("^@Assistant:.*Thinking%.%.%.$") then
+      if last_line_content == "@Assistant: Thinking..." then
+        -- No content received — clean up spinner placeholder
         log.debug("cancel_request(): ... Cleaning up 'Thinking...' message")
         ui.cleanup_spinner(bufnr)
+      else
+        -- Content was received — mark the response as aborted
+        ui.cleanup_spinner(bufnr)
+        local original_modifiable = vim.bo[bufnr].modifiable
+        vim.bo[bufnr].modifiable = true
+        local line_count = vim.api.nvim_buf_line_count(bufnr)
+        ui.buffer_cmd(bufnr, "undojoin")
+        vim.api.nvim_buf_set_lines(bufnr, line_count, line_count, false, {
+          "",
+          "<!-- response aborted by user -->",
+        })
+        vim.bo[bufnr].modifiable = original_modifiable
+        auto_write_buffer(bufnr)
       end
 
-      -- Auto-write if enabled and we've received some content
-      if buffer_state.request_cancelled and not last_line_content:match("^@Assistant:.*Thinking%.%.%.$") then
-        buffers.auto_write_buffer(bufnr)
-      end
-
-      vim.bo[bufnr].modifiable = true -- Restore modifiable state
+      state.unlock_buffer(bufnr)
 
       local msg = "Flemma: Request cancelled"
       if log.is_enabled() then
@@ -149,21 +185,147 @@ function M.cancel_request()
   else
     log.debug("cancel_request(): No current request found")
     -- If there was no request, ensure buffer is modifiable if it somehow got stuck
-    if not vim.bo[bufnr].modifiable then
-      vim.bo[bufnr].modifiable = true
+    local bs = state.get_buffer_state(bufnr)
+    if bs.locked then
+      state.unlock_buffer(bufnr)
     end
   end
 end
 
--- Handle the AI provider interaction
+---Hybrid dispatch: execute pending tools, awaiting tools, or send to provider.
+---When require_approval is enabled, pending tools get empty placeholder results injected
+---so the user can review before execution. On the next invocation, tools with empty
+---placeholders are executed. When all tools have results, the request is sent.
+---@param opts? { on_request_complete?: fun() }
+function M.send_or_execute(opts)
+  opts = opts or {}
+  local bufnr = vim.api.nvim_get_current_buf()
+  local tool_context = require("flemma.tools.context")
+  local config = state.get_config()
+  local require_approval = config.tools and config.tools.require_approval
+  if require_approval == nil then
+    require_approval = true
+  end
+
+  -- Phase 1: Handle tool_use blocks that have no tool_result at all
+  local pending = tool_context.resolve_all_pending(bufnr)
+
+  if #pending > 0 then
+    if require_approval then
+      local approval = require("flemma.tools.approval")
+      local injector = require("flemma.tools.injector")
+      local executor = require("flemma.tools.executor")
+      local to_execute = {}
+      local first_placeholder_line = nil
+
+      for _, ctx in ipairs(pending) do
+        local decision = approval.resolve(ctx.tool_name, ctx.input, { bufnr = bufnr, tool_id = ctx.tool_id })
+
+        if decision == "approve" then
+          table.insert(to_execute, ctx)
+        elseif decision == "deny" then
+          injector.inject_placeholder(bufnr, ctx.tool_id)
+          injector.inject_result(bufnr, ctx.tool_id, {
+            success = false,
+            error = "Denied by auto_approve policy",
+          })
+        else
+          local header_line = injector.inject_placeholder(bufnr, ctx.tool_id, { pending = true })
+          if header_line and (not first_placeholder_line or header_line < first_placeholder_line) then
+            first_placeholder_line = header_line
+          end
+        end
+      end
+
+      -- Move cursor to first injected placeholder so the user can review
+      if first_placeholder_line then
+        local winid = vim.fn.bufwinid(bufnr)
+        if winid ~= -1 then
+          vim.api.nvim_win_set_cursor(winid, { first_placeholder_line, 0 })
+        end
+      end
+
+      for _, ctx in ipairs(to_execute) do
+        local ok, err = executor.execute(bufnr, ctx)
+        if not ok then
+          vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+        end
+      end
+
+      if opts.on_request_complete then
+        opts.on_request_complete()
+      end
+      return
+    else
+      local executor = require("flemma.tools.executor")
+      local ok, err = executor.execute_all_pending(bufnr)
+      if not ok then
+        vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+      end
+      return
+    end
+  end
+
+  -- Phase 2: Handle tool_result blocks with empty content (awaiting execution)
+  if require_approval then
+    local awaiting = tool_context.resolve_all_awaiting_execution(bufnr)
+    if #awaiting > 0 then
+      local executor = require("flemma.tools.executor")
+      for _, ctx in ipairs(awaiting) do
+        local ok, err = executor.execute(bufnr, ctx)
+        if not ok then
+          vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+        end
+      end
+      if opts.on_request_complete then
+        opts.on_request_complete()
+      end
+      return
+    end
+  end
+
+  -- Phase 3: No pending tools, no awaiting execution → send to provider
+  M.send_to_provider(opts)
+end
+
+---Handle the AI provider interaction
+---@param opts? { on_request_complete?: fun() }
 function M.send_to_provider(opts)
   opts = opts or {}
   local bufnr = vim.api.nvim_get_current_buf()
-  local buffer_state = buffers.get_state(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
 
   -- Check if there's already a request in progress
   if buffer_state.current_request then
     vim.notify("Flemma: A request is already in progress. Use <C-c> to cancel it first.", vim.log.levels.WARN)
+    return
+  end
+
+  -- Check if tool executions are in progress (mutually exclusive with API requests)
+  local ok_executor, executor = pcall(require, "flemma.tools.executor")
+  if ok_executor then
+    local pending = executor.get_pending(bufnr)
+    if #pending > 0 then
+      vim.notify("Flemma: Cannot send while tool execution is in progress.", vim.log.levels.WARN)
+      return
+    end
+  end
+
+  -- Gate on async tool sources being ready
+  local tools_module = require("flemma.tools")
+  if not tools_module.is_ready() then
+    vim.notify("Flemma: Waiting for tool definitions to load...", vim.log.levels.WARN)
+    if buffer_state.waiting_for_tools then
+      return -- already queued
+    end
+    buffer_state.waiting_for_tools = true
+    local target_bufnr = bufnr
+    tools_module.on_ready(function()
+      buffer_state.waiting_for_tools = false
+      if vim.api.nvim_buf_is_valid(target_bufnr) and vim.api.nvim_get_current_buf() == target_bufnr then
+        M.send_to_provider(opts)
+      end
+    end)
     return
   end
 
@@ -172,13 +334,16 @@ function M.send_to_provider(opts)
   buffer_state.api_error_occurred = false -- Initialize flag for API errors
 
   -- Make the buffer non-modifiable to prevent user edits during request
-  vim.bo[bufnr].modifiable = false
+  state.lock_buffer(bufnr)
+
+  -- Parse buffer via cached AST (single buffer read + parse, reused below)
+  local parser = require("flemma.parser")
+  local doc = parser.get_parsed_document(bufnr)
 
   -- Check if buffer has content
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  if #lines == 0 or (#lines == 1 and lines[1] == "") then
+  if #doc.messages == 0 and not doc.frontmatter then
     log.warn("send_to_provider(): Empty buffer - nothing to send")
-    vim.bo[bufnr].modifiable = true -- Restore modifiable state before returning
+    state.unlock_buffer(bufnr)
     return
   end
 
@@ -187,22 +352,21 @@ function M.send_to_provider(opts)
   if not current_provider then
     log.error("send_to_provider(): No provider available")
     vim.notify("Flemma: No provider configured. Use :Flemma switch to select one.", vim.log.levels.ERROR)
-    vim.bo[bufnr].modifiable = true -- Restore modifiable state
+    state.unlock_buffer(bufnr)
     return
   end
 
   -- Create context ONCE for the entire pipeline (used by frontmatter, @./file refs, etc.)
   local context = require("flemma.context").from_buffer(bufnr)
 
-  -- Run the new AST-based pipeline
-  local buf_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  -- Run the pipeline with the pre-parsed document (no redundant buffer read or re-parse)
   local pipeline = require("flemma.pipeline")
-  local prompt, evaluated = pipeline.run(buf_lines, context)
+  local prompt, evaluated = pipeline.run(doc, context)
 
   if #prompt.history == 0 then
     log.warn("send_to_provider(): No messages found in buffer")
     vim.notify("Flemma: No messages found in buffer.", vim.log.levels.WARN)
-    vim.bo[bufnr].modifiable = true -- Restore modifiable state
+    state.unlock_buffer(bufnr)
     return
   end
 
@@ -212,7 +376,7 @@ function M.send_to_provider(opts)
   local diagnostics = evaluated.diagnostics or {}
   if #diagnostics > 0 then
     local has_errors = false
-    local by_type = { frontmatter = {}, expression = {}, file = {} }
+    local by_type = { frontmatter = {}, expression = {}, file = {}, tool_result = {}, tool_use = {} }
 
     for _, diag in ipairs(diagnostics) do
       if diag.severity == "error" then
@@ -284,6 +448,27 @@ function M.send_to_provider(opts)
       end
     end
 
+    -- Format tool use/result warnings
+    local tool_diags = {}
+    for _, d in ipairs(by_type.tool_use) do
+      table.insert(tool_diags, d)
+    end
+    for _, d in ipairs(by_type.tool_result) do
+      table.insert(tool_diags, d)
+    end
+    if #tool_diags > 0 then
+      table.insert(diagnostic_lines, "Tool calling errors:")
+      for i, d in ipairs(tool_diags) do
+        if i <= max_per_type then
+          local loc = format_position(d.position)
+          table.insert(diagnostic_lines, string.format("  [%s] %s", loc, d.error))
+        elseif i == max_per_type + 1 then
+          table.insert(diagnostic_lines, string.format("  ... and %d more", #tool_diags - max_per_type))
+          break
+        end
+      end
+    end
+
     local level = has_errors and vim.log.levels.ERROR or vim.log.levels.WARN
     vim.notify("Flemma diagnostics:\n" .. table.concat(diagnostic_lines, "\n"), level)
     log.warn("send_to_provider(): Diagnostics occurred: " .. #diagnostics .. " total")
@@ -291,7 +476,7 @@ function M.send_to_provider(opts)
     -- Block request if there are critical errors (frontmatter parsing failures)
     if has_errors then
       log.error("send_to_provider(): Blocking request due to critical errors")
-      vim.bo[bufnr].modifiable = true
+      state.unlock_buffer(bufnr)
       return
     end
   end
@@ -299,34 +484,52 @@ function M.send_to_provider(opts)
   log.debug("send_to_provider(): Prompt history for provider: " .. log.inspect(prompt.history))
   log.debug("send_to_provider(): System instruction: " .. log.inspect(prompt.system))
 
-  -- Get endpoint first to check for fixtures
-  local endpoint = current_provider:get_endpoint()
+  -- Apply frontmatter parameter overrides so that get_endpoint / get_api_key see them
+  local provider_key = state.get_config().provider
+  current_provider:set_parameter_overrides(prompt.opts and prompt.opts[provider_key])
 
-  -- Check if there's a fixture for this endpoint (for testing)
+  -- Validate provider (endpoint, API key, headers) and build request body.
+  -- Wrapped in pcall so any provider error unlocks the buffer cleanly.
   local client = require("flemma.client")
-  local fixture_path = client.find_fixture_for_endpoint(endpoint)
-
-  -- Only get API key and headers if not using a fixture
-  local headers
-  if not fixture_path then
-    -- Get API key if not using a fixture
-    local api_key = current_provider:get_api_key()
-    if not api_key then
-      vim.notify(
-        "Flemma: No API key available for provider '" .. state.get_config().provider .. "'.",
-        vim.log.levels.ERROR
-      )
-      return nil
+  local prep_ok, prep_result = pcall(function()
+    local endpoint = current_provider:get_endpoint()
+    if not endpoint then
+      error("Provider did not return an endpoint.", 0)
     end
-    headers = current_provider:get_request_headers()
-  else
-    -- For fixtures, provide dummy headers since they won't be used
-    headers = { "content-type: application/json" }
+
+    local fixture_path = client.find_fixture_for_endpoint(endpoint)
+
+    local headers
+    if not fixture_path then
+      local api_key = current_provider:get_api_key()
+      if not api_key then
+        error("No API key available for provider '" .. state.get_config().provider .. "'.", 0)
+      end
+      headers = current_provider:get_request_headers()
+      if not headers then
+        error("Provider did not return request headers.", 0)
+      end
+    else
+      headers = { "content-type: application/json" }
+    end
+
+    local request_body = current_provider:build_request(prompt, context)
+    return { endpoint = endpoint, headers = headers, request_body = request_body }
+  end)
+
+  if not prep_ok then
+    vim.notify("Flemma: " .. tostring(prep_result), vim.log.levels.ERROR)
+    state.unlock_buffer(bufnr)
+    return
   end
 
-  -- Build request body using the validated model stored in the provider
-  local request_body = current_provider:build_request(prompt, context)
+  local endpoint = prep_result.endpoint
+  local headers = prep_result.headers
+  local request_body = prep_result.request_body
   last_request_body_for_testing = request_body -- Store for testing
+
+  -- Capture timeout now so the on_request_complete closure doesn't read stale proxy state
+  local effective_timeout = current_provider.parameters.timeout
 
   -- Log the request details (using the provider's stored model)
   log.debug(
@@ -336,15 +539,25 @@ function M.send_to_provider(opts)
       .. log.inspect(current_provider.parameters.model)
   )
 
+  ---@type integer|nil
   local spinner_timer = ui.start_loading_spinner(bufnr) -- Handles its own modifiable toggles for writes
   local response_started = false
+  local thinking_char_count = 0
+  local thinking_preview_active = false
 
   -- Reset in-flight usage tracking for this buffer
+  -- Include the provider's output_has_thoughts flag so usage.lua can display correctly
   buffer_state.inflight_usage = {
     input_tokens = 0,
     output_tokens = 0,
     thoughts_tokens = 0,
+    output_has_thoughts = current_provider.output_has_thoughts,
+    cache_read_input_tokens = 0,
+    cache_creation_input_tokens = 0,
   }
+
+  -- Capture request start time for duration tracking (before callbacks so closures can see it)
+  local request_started_at = require("flemma.session").now()
 
   -- Set up callbacks for the provider
   local callbacks = {
@@ -357,14 +570,19 @@ function M.send_to_provider(opts)
         buffer_state.current_request = nil
         buffer_state.api_error_occurred = true -- Set flag indicating API error
 
-        vim.bo[bufnr].modifiable = true -- Restore modifiable state
+        state.unlock_buffer(bufnr)
 
         -- Auto-write on error if enabled
-        buffers.auto_write_buffer(bufnr)
+        auto_write_buffer(bufnr)
 
         local notify_msg = "Flemma: " .. msg
+        if current_provider:is_context_overflow(msg) then
+          notify_msg = notify_msg
+            .. "\n\nYour conversation is too long for this model."
+            .. " Remove earlier messages or start a new conversation."
+        end
         if log.is_enabled() then
-          notify_msg = notify_msg .. ". See " .. log.get_path() .. " for details"
+          notify_msg = notify_msg .. "\nSee " .. log.get_path() .. " for details"
         end
         vim.notify(notify_msg, vim.log.levels.ERROR)
       end)
@@ -377,13 +595,16 @@ function M.send_to_provider(opts)
         buffer_state.inflight_usage.output_tokens = usage_data.tokens
       elseif usage_data.type == "thoughts" then
         buffer_state.inflight_usage.thoughts_tokens = usage_data.tokens
+      elseif usage_data.type == "cache_read" then
+        buffer_state.inflight_usage.cache_read_input_tokens = usage_data.tokens
+      elseif usage_data.type == "cache_creation" then
+        buffer_state.inflight_usage.cache_creation_input_tokens = usage_data.tokens
       end
     end,
 
     on_response_complete = function()
       vim.schedule(function()
         local usage = require("flemma.usage")
-        local pricing = require("flemma.pricing")
         local config = state.get_config()
 
         -- Get tokens from in-flight usage
@@ -400,9 +621,30 @@ function M.send_to_provider(opts)
         end
 
         -- Add request to session with pricing snapshot
-        local pricing_info = pricing.models[config.model]
+        local models_data = require("flemma.models")
+        local provider_data = models_data.providers[config.provider]
+        local model_info = provider_data and provider_data.models[config.model]
+        local pricing_info = model_info and model_info.pricing
+
         if pricing_info then
-          state.get_session():add_request({
+          -- Look up cache multipliers from provider model data
+          local cache_retention = current_provider.parameters.cache_retention
+          local cache_write_multiplier
+          local cache_read_multiplier
+          if
+            provider_data
+            and provider_data.cache_write_multipliers
+            and cache_retention
+            and cache_retention ~= "none"
+          then
+            cache_write_multiplier = provider_data.cache_write_multipliers[cache_retention]
+          end
+          if provider_data and provider_data.cache_read_multiplier then
+            cache_read_multiplier = provider_data.cache_read_multiplier
+          end
+
+          local session = state.get_session()
+          session:add_request({
             provider = config.provider,
             model = config.model,
             input_tokens = input_tokens,
@@ -411,27 +653,64 @@ function M.send_to_provider(opts)
             input_price = pricing_info.input,
             output_price = pricing_info.output,
             filepath = filepath,
-            bufnr = filepath and nil or bufnr, -- Only store bufnr for unnamed buffers
+            bufnr = bufnr,
+            started_at = request_started_at,
+            completed_at = require("flemma.session").now(),
+            output_has_thoughts = current_provider.output_has_thoughts,
+            cache_read_input_tokens = buffer_state.inflight_usage.cache_read_input_tokens,
+            cache_creation_input_tokens = buffer_state.inflight_usage.cache_creation_input_tokens,
+            cache_write_multiplier = cache_write_multiplier,
+            cache_read_multiplier = cache_read_multiplier,
           })
+
+          -- Use the just-created Request for the notification
+          local latest_request = session:get_latest_request()
+          local usage_str = usage.format_notification(latest_request, session)
+          if usage_str ~= "" then
+            local notify_opts = vim.tbl_deep_extend("force", config.notify, {
+              title = "Usage",
+            })
+            require("flemma.notify").show(usage_str, notify_opts, bufnr)
+          end
         end
 
         -- Auto-write when response is complete
-        buffers.auto_write_buffer(bufnr)
+        auto_write_buffer(bufnr)
 
-        -- Format and display usage information using our custom notification
-        local usage_str = usage.format_notification(buffer_state.inflight_usage, state.get_session())
-        if usage_str ~= "" then
-          local notify_opts = vim.tbl_deep_extend("force", state.get_config().notify, {
-            title = "Usage",
-          })
-          require("flemma.notify").show(usage_str, notify_opts)
-        end
         -- Reset in-flight usage for next request
+        -- Note: output_has_thoughts will be set again when the next request starts
         buffer_state.inflight_usage = {
           input_tokens = 0,
           output_tokens = 0,
           thoughts_tokens = 0,
+          output_has_thoughts = false, -- Default, will be overwritten on next request
+          cache_read_input_tokens = 0,
+          cache_creation_input_tokens = 0,
         }
+      end)
+    end,
+
+    on_thinking = function(delta)
+      vim.schedule(function()
+        thinking_char_count = thinking_char_count + #delta
+
+        -- Stop the spinning animation on first thinking delta (keep extmark for preview)
+        if spinner_timer and not thinking_preview_active then
+          vim.fn.timer_stop(spinner_timer)
+          spinner_timer = nil
+          thinking_preview_active = true
+        end
+
+        local display
+        if thinking_char_count >= 1000 then
+          display = string.format("%.1fk characters", thinking_char_count / 1000)
+        elseif thinking_char_count == 1 then
+          display = "1 character"
+        else
+          display = thinking_char_count .. " characters"
+        end
+
+        ui.update_thinking_preview(bufnr, display)
       end)
     end,
 
@@ -462,17 +741,17 @@ function M.send_to_provider(opts)
             -- Check if response starts with a code fence
             if content_lines[1]:match("^```") then
               -- Add a newline before the code fence
-              buffers.buffer_cmd(bufnr, "undojoin")
+              ui.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant:", content_lines[1] })
             else
               -- Start with @Assistant: prefix as normal
-              buffers.buffer_cmd(bufnr, "undojoin")
+              ui.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant: " .. content_lines[1] })
             end
 
             -- Add remaining lines if any
             if #content_lines > 1 then
-              buffers.buffer_cmd(bufnr, "undojoin")
+              ui.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(bufnr, last_line + 1, last_line + 1, false, { unpack(content_lines, 2) })
             end
           else
@@ -481,7 +760,7 @@ function M.send_to_provider(opts)
 
             if #content_lines == 1 then
               -- Just append to the last line
-              buffers.buffer_cmd(bufnr, "undojoin")
+              ui.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(
                 bufnr,
                 last_line - 1,
@@ -491,7 +770,7 @@ function M.send_to_provider(opts)
               )
             else
               -- First chunk goes to the end of the last line
-              buffers.buffer_cmd(bufnr, "undojoin")
+              ui.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(
                 bufnr,
                 last_line - 1,
@@ -501,7 +780,7 @@ function M.send_to_provider(opts)
               )
 
               -- Remaining lines get added as new lines
-              buffers.buffer_cmd(bufnr, "undojoin")
+              ui.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { unpack(content_lines, 2) })
             end
           end
@@ -537,7 +816,7 @@ function M.send_to_provider(opts)
         buffer_state.current_request = nil -- Mark request as no longer current
 
         -- Ensure buffer is modifiable for final operations and user interaction
-        vim.bo[bufnr].modifiable = true
+        state.unlock_buffer(bufnr)
 
         if code == 0 then
           -- cURL request completed successfully (exit code 0)
@@ -549,7 +828,7 @@ function M.send_to_provider(opts)
             if not response_started then
               ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
             end
-            buffers.auto_write_buffer(bufnr) -- Still auto-write if configured
+            auto_write_buffer(bufnr) -- Still auto-write if configured
             ui.update_ui(bufnr) -- Update UI
             return -- Do not proceed to add new prompt or call opts.on_request_complete
           end
@@ -568,33 +847,27 @@ function M.send_to_provider(opts)
             last_line_content = vim.api.nvim_buf_get_lines(bufnr, last_line_idx - 1, last_line_idx, false)[1] or ""
           end
 
-          local lines_to_insert = {}
-          local cursor_line_offset = 1
+          local lines_to_insert
+          local cursor_line_offset
           if last_line_content == "" then
             lines_to_insert = { "@You: " }
+            cursor_line_offset = 1
           else
             lines_to_insert = { "", "@You: " }
             cursor_line_offset = 2
           end
 
-          buffers.buffer_cmd(bufnr, "undojoin")
+          ui.buffer_cmd(bufnr, "undojoin")
           vim.api.nvim_buf_set_lines(bufnr, last_line_idx, last_line_idx, false, lines_to_insert)
 
-          local new_prompt_line_num = last_line_idx + cursor_line_offset - 1
-          local new_prompt_lines =
-            vim.api.nvim_buf_get_lines(bufnr, new_prompt_line_num, new_prompt_line_num + 1, false)
-          if #new_prompt_lines > 0 then
-            local line_text = new_prompt_lines[1]
-            local col = line_text:find(":%s*") + 1
-            while line_text:sub(col, col) == " " do
-              col = col + 1
-            end
-            if vim.api.nvim_get_current_buf() == bufnr then
-              vim.api.nvim_win_set_cursor(0, { new_prompt_line_num + 1, col - 1 })
-            end
+          -- Position cursor after "@You: " on the new prompt line
+          local new_prompt_line = last_line_idx + cursor_line_offset
+          if vim.api.nvim_get_current_buf() == bufnr then
+            ui.set_cursor(new_prompt_line, content_col("You"), bufnr)
           end
+          ui.move_to_bottom(bufnr)
 
-          buffers.auto_write_buffer(bufnr)
+          auto_write_buffer(bufnr)
           ui.update_ui(bufnr)
           ui.fold_last_thinking_block(bufnr) -- Attempt to fold the last thinking block
 
@@ -616,7 +889,7 @@ function M.send_to_provider(opts)
               code
             )
           elseif code == 28 then -- cURL timeout error
-            local timeout_value = current_provider.parameters.timeout or state.get_config().parameters.timeout -- Get effective timeout
+            local timeout_value = effective_timeout -- Captured before async callback
             error_msg = string.format(
               "Flemma: cURL request timed out (exit code %d). Timeout is %s seconds.",
               code,
@@ -631,7 +904,7 @@ function M.send_to_provider(opts)
           end
           vim.notify(error_msg, vim.log.levels.ERROR)
 
-          buffers.auto_write_buffer(bufnr) -- Auto-write if enabled, even on error
+          auto_write_buffer(bufnr) -- Auto-write if enabled, even on error
           ui.update_ui(bufnr) -- Update UI to remove any artifacts
         end
       end)
@@ -660,26 +933,27 @@ function M.send_to_provider(opts)
 
   if not buffer_state.current_request or buffer_state.current_request == 0 or buffer_state.current_request == -1 then
     log.error("send_to_provider(): Failed to start provider job.")
-    if spinner_timer then -- Ensure spinner_timer is valid before trying to stop
+    -- Stop the spinner timer if it was started
+    -- Note: spinner_timer is the local variable, buffer_state.spinner_timer is where it's stored
+    if spinner_timer then
       vim.fn.timer_stop(spinner_timer)
-      -- state.spinner_timer might have been set by start_loading_spinner, clear it if so
-      if state.spinner_timer == spinner_timer then
-        state.spinner_timer = nil
-      end
+      buffer_state.spinner_timer = nil
     end
     ui.cleanup_spinner(bufnr) -- Clean up any "Thinking..." message, handles its own modifiable toggles
-    vim.bo[bufnr].modifiable = true -- Restore modifiable state
+    state.unlock_buffer(bufnr)
     return
   end
   -- If job started successfully, modifiable remains false (as set at the start of this function).
 end
 
--- Get the last request body for testing
+---Get the last request body (for testing)
+---@return table<string, any>|nil
 function M._get_last_request_body()
   return last_request_body_for_testing
 end
 
--- Expose UI update function
+---Expose UI update function
+---@param bufnr integer
 function M.update_ui(bufnr)
   return ui.update_ui(bufnr)
 end

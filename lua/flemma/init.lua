@@ -1,5 +1,6 @@
 --- Flemma plugin core functionality
 --- Provides chat interface and API integration
+---@class flemma.Plugin
 local M = {}
 
 local plugin_config = require("flemma.config")
@@ -15,13 +16,15 @@ local highlight = require("flemma.highlight")
 -- Module configuration (will hold merged user opts and defaults)
 local config = {}
 
--- Setup function to initialize the plugin
+---Setup function to initialize the plugin
+---@param user_opts? flemma.Config.Opts User configuration overrides (merged with defaults)
 M.setup = function(user_opts)
   if vim.fn.has("nvim-0.11") ~= 1 then
     local msg = "Flemma requires Neovim 0.11 or newer. Please upgrade Neovim to use this plugin."
-    local notifier = vim.notify or function(message)
-      vim.api.nvim_err_writeln(message)
-    end
+    local notifier = vim.notify
+      or function(message)
+        vim.api.nvim_echo({ { message, "ErrorMsg" } }, true, {})
+      end
     -- Use a scheduled notification so initialization exits gracefully
     vim.schedule(function()
       notifier(msg, vim.log and vim.log.levels and vim.log.levels.ERROR or nil)
@@ -31,7 +34,7 @@ M.setup = function(user_opts)
 
   -- Merge user config with defaults from the config module
   user_opts = user_opts or {}
-  config = vim.tbl_deep_extend("force", plugin_config, user_opts)
+  config = vim.tbl_deep_extend("force", {}, plugin_config, user_opts)
 
   -- Store config in state module
   state.set_config(config)
@@ -49,6 +52,9 @@ M.setup = function(user_opts)
   vim.treesitter.language.register("markdown", { "chat" })
 
   log.info("setup(): Flemma starting...")
+
+  -- Initialize provider registry with built-in providers
+  require("flemma.provider.registry").setup()
 
   -- Initialize provider based on the merged config
   local current_config = state.get_config()
@@ -76,11 +82,18 @@ M.setup = function(user_opts)
   -- Set up highlighting
   highlight.setup()
 
+  -- Set up notifications
+  require("flemma.notify").setup()
+
   -- Set up chat filetype handling
   ui.setup_chat_filetype_autocmds()
+
+  -- Initialize tool registry with built-in tools
+  require("flemma.tools").setup()
 end
 
--- Get the current model name
+---Get the current model name
+---@return string|nil
 function M.get_current_model_name()
   local current_config = state.get_config()
   if current_config and current_config.model then
@@ -89,7 +102,8 @@ function M.get_current_model_name()
   return nil -- Or an empty string, depending on desired behavior for uninitialized model
 end
 
--- Get the current provider name
+---Get the current provider name
+---@return string|nil
 function M.get_current_provider_name()
   local current_config = state.get_config()
   if current_config and current_config.provider then

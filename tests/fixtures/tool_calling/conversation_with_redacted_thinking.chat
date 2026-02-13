@@ -1,0 +1,14 @@
+@System: You are helpful.
+
+@You: What is 2+2?
+
+@Assistant: The answer is 4.
+
+<thinking anthropic:signature="sig-abc123">
+Let me verify.
+</thinking>
+<thinking redacted>
+encrypted-redacted-data-xyz789
+</thinking>
+
+@You: And 3+3?

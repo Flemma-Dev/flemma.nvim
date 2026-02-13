@@ -1,13 +1,15 @@
 --- Lualine component for Flemma model display
 local lualine_component = require("lualine.component")
 local state = require("flemma.state")
-local registry = require("flemma.provider.providers")
+local registry = require("flemma.provider.registry")
 local models = require("flemma.models")
 
 -- Create a new component for displaying the Flemma model
 local flemma_model_component = lualine_component:extend()
 
--- Get the current reasoning setting if the provider and model support it
+---Get the current reasoning setting if the provider and model support it.
+---Reads from the provider's parameter proxy which includes frontmatter overrides.
+---@return string|nil reasoning "low"|"medium"|"high" or nil
 local function get_current_reasoning_setting()
   local current_config = state.get_config()
   if not current_config or not current_config.provider or not current_config.model then
@@ -29,9 +31,11 @@ local function get_current_reasoning_setting()
     return nil
   end
 
-  -- If both provider and model support reasoning, check if it's configured
-  if current_config.parameters and current_config.parameters.reasoning then
-    local reasoning = current_config.parameters.reasoning
+  -- Read from the provider's parameter proxy (includes frontmatter overrides)
+  local provider = state.get_provider()
+  local params = provider and provider.parameters or current_config.parameters
+  if params and params.reasoning then
+    local reasoning = params.reasoning
     if reasoning == "low" or reasoning == "medium" or reasoning == "high" then
       return reasoning
     end
@@ -40,8 +44,43 @@ local function get_current_reasoning_setting()
   return nil
 end
 
---- Updates the status of the component.
--- This function is called by lualine to get the text to display.
+---Get the current thinking budget setting if the provider supports it.
+---Reads from the provider's parameter proxy which includes frontmatter overrides.
+---@return number|nil budget
+local function get_current_thinking_budget()
+  local current_config = state.get_config()
+  if not current_config or not current_config.provider then
+    return nil
+  end
+
+  -- Check if provider supports thinking budget via registry
+  local capabilities = registry.get_capabilities(current_config.provider)
+  if not capabilities or not capabilities.supports_thinking_budget then
+    return nil
+  end
+
+  -- Read from the provider's parameter proxy (includes frontmatter overrides)
+  local provider = state.get_provider()
+  local params = provider and provider.parameters or current_config.parameters
+  if params and params.thinking_budget then
+    local budget = params.thinking_budget
+    if type(budget) ~= "number" then
+      return nil
+    end
+
+    -- Capability-based minimum budget check
+    local caps = capabilities
+    if caps.min_thinking_budget and budget >= caps.min_thinking_budget then
+      return budget
+    end
+  end
+
+  return nil
+end
+
+---Updates the status of the component.
+---Called by lualine to get the text to display.
+---@return string
 function flemma_model_component:update_status()
   -- Only show the model if the filetype is 'chat'
   if vim.bo.filetype == "chat" then
@@ -52,13 +91,27 @@ function flemma_model_component:update_status()
         return "" -- No model, show nothing
       end
 
-      local reasoning_setting = get_current_reasoning_setting()
+      -- Get format strings from config
+      local full_config = state.get_config() or {}
+      local statusline_config = full_config.statusline or {}
+      local reasoning_format = statusline_config.reasoning_format or "{model} ({level})"
+      local thinking_format = statusline_config.thinking_format or "{model}  ✓ thinking"
 
+      -- Check for reasoning setting (OpenAI o-series)
+      local reasoning_setting = get_current_reasoning_setting()
       if reasoning_setting then
-        return string.format("%s (%s)", model_name, reasoning_setting)
-      else
-        return model_name
+        local result = reasoning_format:gsub("{model}", model_name):gsub("{level}", reasoning_setting)
+        return result
       end
+
+      -- Check for thinking budget (Anthropic, Vertex)
+      local thinking_budget = get_current_thinking_budget()
+      if thinking_budget then
+        local result = thinking_format:gsub("{model}", model_name)
+        return result
+      end
+
+      return model_name
     end
     return "" -- Fallback if flemma module is not available
   end

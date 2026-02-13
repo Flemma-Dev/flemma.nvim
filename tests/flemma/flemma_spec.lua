@@ -26,4 +26,24 @@ describe("flemma.setup", function()
     assert.are.equal("Special", config.highlights.system)
     assert.are.equal(true, config.pricing.enabled)
   end)
+
+  it("preserves nested defaults when user provides partial nested config", function()
+    local flemma = require("flemma")
+    flemma.setup({
+      provider = "openai",
+      model = "gpt-5-mini",
+      editing = {
+        auto_write = true,
+      },
+    })
+
+    local config = state.get_config()
+
+    -- Check that user-provided nested value is set
+    assert.are.equal(true, config.editing.auto_write)
+
+    -- Check that other nested defaults are preserved
+    assert.are.equal(true, config.editing.disable_textwidth)
+    assert.are.equal(true, config.editing.manage_updatetime)
+  end)
 end)

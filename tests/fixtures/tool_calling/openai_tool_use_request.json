@@ -1,0 +1,42 @@
+{
+  "model": "gpt-4o-mini",
+  "input": [
+    {
+      "role": "developer",
+      "content": "You are a helpful assistant with access to a calculator tool. When asked to perform calculations, use the calculator tool."
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "What is 15 multiplied by 7?"
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "name": "calculator",
+      "description": "Evaluates a mathematical expression and returns the numeric result. Use this for any arithmetic calculations including addition, subtraction, multiplication, division, exponents, and common math functions.\\n\\nReturns (JSON Schema): {\"$schema\":\"https:\\/\\/json-schema.org\\/draft\\/2020-12\\/schema\",\"type\":\"object\",\"required\":[\"result\"],\"properties\":{\"result\":{\"description\":\"The numeric result of the calculation\",\"type\":\"number\"}}}",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "The mathematical expression to evaluate (e.g., '2 + 2', '15 * 7', 'sqrt(16)', '2^10')"
+          }
+        },
+        "required": [
+          "expression"
+        ],
+        "additionalProperties": false
+      },
+      "strict": true
+    }
+  ],
+  "tool_choice": "auto",
+  "stream": true,
+  "store": false
+}

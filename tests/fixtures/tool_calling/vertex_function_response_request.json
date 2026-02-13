@@ -1,0 +1,77 @@
+{
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "What is 15 multiplied by 7?"
+        }
+      ]
+    },
+    {
+      "role": "model",
+      "parts": [
+        {
+          "functionCall": {
+            "name": "calculator",
+            "args": {
+              "expression": "15 * 7"
+            }
+          },
+          "thoughtSignature": "CugBAY89a18SC/4J5e9cZ6arG/TrZw0Kghsb8+eRdAtIYPeEyF5BK7w42oIpqlMKYUyD9WfMEke5SWqo4GfbGqp9G1VsekayyBhF4fLWfN/7epoeUluW2TAa4ia2FPBNvikFvUupEyEP/iQAYE+jXQRGpJqw8zmqZww/OcMYt3YAylLto/gyZvnfL+02gHjCzXsCJGBI4x3iCUaA9cn67gkMe29QP5tGxs7YKFAmE/JOexMpVM3iZ8IuK4JNnDWMZXX44bIW8e54jTf/qJwvwm1Tiaet/wrz7+R3ngDs3xkCV15LYPq9K1K3YQ=="
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "functionResponse": {
+            "name": "calculator",
+            "response": {
+              "result": "105"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "functionDeclarations": [
+        {
+          "name": "calculator",
+          "description": "Evaluates a mathematical expression and returns the numeric result. Use this for any arithmetic calculations including addition, subtraction, multiplication, division, exponents, and common math functions.\\n\\nReturns (JSON Schema): {\"$schema\":\"https:\\/\\/json-schema.org\\/draft\\/2020-12\\/schema\",\"type\":\"object\",\"required\":[\"result\"],\"properties\":{\"result\":{\"description\":\"The numeric result of the calculation\",\"type\":\"number\"}}}",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "expression": {
+                "type": "string",
+                "description": "The mathematical expression to evaluate (e.g., '2 + 2', '15 * 7', 'sqrt(16)', '2^10')"
+              }
+            },
+            "required": [
+              "expression"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "toolConfig": {
+    "functionCallingConfig": {
+      "mode": "AUTO"
+    }
+  },
+  "systemInstruction": {
+    "parts": [
+      {
+        "text": "You are a helpful assistant with access to a calculator tool. When asked to perform calculations, use the calculator tool."
+      }
+    ]
+  },
+  "generationConfig": {
+    "temperature": 0.7,
+    "maxOutputTokens": 1024
+  }
+}

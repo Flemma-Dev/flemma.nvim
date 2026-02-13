@@ -10,13 +10,14 @@ To complete this task, you will need to read and parse the following web pages:
 - For Anthropic Claude:
   - https://docs.claude.com/en/docs/about-claude/models/overview
   - https://docs.claude.com/en/docs/about-claude/pricing
+  - https://docs.claude.com/en/docs/about-claude/model-deprecations
 
 - For OpenAI:
   - https://platform.openai.com/docs/pricing?latest-pricing=standard
   - https://platform.openai.com/docs/deprecations
   - https://platform.openai.com/docs/models - this page requires you to scan the "Frontier models" section then recursively follow links to get the full list of OpenAI models and aliases.
 
-Today's date is {{date}}. You will need this when assessing model's retirement dates and deprecation notices.
+Today's date is {{date}}. You will need this when assessing model's retirement dates and deprecation notices - note a model that is deprecated but also still not retired is not to be removed. You should, however, leave a comment about its future retirement date, e.g., `-- Provider Model 1.2.3 (deprecated, retiring Jan 2030)`
 
 When parsing these pages, pay attention to model names as well as model aliases (usually include version numbers or dates).
 If any model names imply non-text capabilities (e.g., "vision", "image", "video", "audio", etc.), ignore those models and do not include them in the local file.

@@ -1,0 +1,12 @@
+@System: You are helpful.
+
+@You: What is 2+2?
+
+@Assistant: 2 + 2 equals 4.
+
+<thinking anthropic:signature="Ev0BCkYICxgCKkCkOkORi2wMs5KFDBiwy70+9VIBgiNeHgdOjQZNw+NcoF3wkQlHMQdT3eTiUjmNtH+J1fOkPtYjoeEP6+uWKyE6Egygh+yCcODxTd0ezywaDEeyWZ3RcwIA5X5hpCIwJcQh9BsIF4iXFI6N2WvDHgX40yjzMf8Eu/NHZEaBDTJ58HoDjcw88Z+R/hwbgdYYKmXB5oT5Lzx4E2Y/CafnXqKaxhWtJadHDX2hHHqmzmx0sRikoV/ihbYCYc0HlTzMtjBg7rNSklsyvrFmR9Rfwb2o+1PI6YkX0Z0rJzGadRjiBCC4t5N65ZVz+zHt8Lgqfhg6FLaV2RgB">
+This is a simple arithmetic question. 2+2 equals 4. I need to answer in one sentence.
+</thinking>
+
+@You: And 3+3?
+

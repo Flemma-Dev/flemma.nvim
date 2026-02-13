@@ -1,7 +1,6 @@
 describe("UI Folding", function()
   local flemma
   local ui
-  local parser
 
   before_each(function()
     -- Invalidate caches to ensure clean setup
@@ -12,7 +11,6 @@ describe("UI Folding", function()
 
     flemma = require("flemma")
     ui = require("flemma.ui")
-    parser = require("flemma.parser")
 
     flemma.setup({})
 
@@ -42,6 +40,63 @@ describe("UI Folding", function()
       -- Line 2 is <thinking>
       local fold_level = ui.get_fold_level(2)
       assert.are.equal(">2", fold_level)
+    end)
+
+    it("should return >2 for <thinking> tag with vertex:signature attribute", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: response",
+        '<thinking vertex:signature="abc123/def+ghi==">',
+        "thinking content",
+        "</thinking>",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Line 2 is <thinking vertex:signature="...">
+      local fold_level = ui.get_fold_level(2)
+      assert.are.equal(">2", fold_level)
+    end)
+
+    it("should return >2 for <thinking redacted> tag", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: response",
+        "<thinking redacted>",
+        "encrypted-data-here",
+        "</thinking>",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Line 2 is <thinking redacted>
+      local fold_level = ui.get_fold_level(2)
+      assert.are.equal(">2", fold_level)
+    end)
+
+    it("should return >2 for empty thinking tag with signature", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: response",
+        '<thinking vertex:signature="abc123">',
+        "</thinking>",
+        "more content",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Line 2 is opening tag, should start a fold
+      local fold_level = ui.get_fold_level(2)
+      assert.are.equal(">2", fold_level)
+      -- Line 3 is closing tag, should end the fold
+      fold_level = ui.get_fold_level(3)
+      assert.are.equal("<2", fold_level)
     end)
 
     it("should return <2 for </thinking> tag", function()
@@ -94,23 +149,26 @@ describe("UI Folding", function()
       assert.are.equal("<1", fold_level)
     end)
 
-    it("should return >3 for frontmatter on line 1", function()
+    it("should include trailing empty lines in the message fold", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "```lua",
-        "x = 5",
-        "```",
-        "@You: question",
+        "@You: question", -- line 1: >1
+        "more content", -- line 2: =
+        "", -- line 3: <1 (end of message, trailing empty line)
+        "@Assistant: answer", -- line 4: >1
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal(">3", ui.get_fold_level(1))
+      assert.are.equal(">1", ui.get_fold_level(1))
+      assert.are.equal("=", ui.get_fold_level(2))
+      assert.are.equal("<1", ui.get_fold_level(3))
+      assert.are.equal(">1", ui.get_fold_level(4))
     end)
 
-    it("should return <3 for closing frontmatter fence", function()
+    it("should return >2 for frontmatter on line 1", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
@@ -123,7 +181,23 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal("<3", ui.get_fold_level(3))
+      assert.are.equal(">2", ui.get_fold_level(1))
+    end)
+
+    it("should return <2 for closing frontmatter fence", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "```lua",
+        "x = 5",
+        "```",
+        "@You: question",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      assert.are.equal("<2", ui.get_fold_level(3))
     end)
   end)
 
@@ -147,6 +221,7 @@ describe("UI Folding", function()
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
       vim.wo.foldexpr = "v:lua.require('flemma.ui').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
       ui.fold_last_thinking_block(bufnr)
@@ -179,6 +254,7 @@ describe("UI Folding", function()
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
       vim.wo.foldexpr = "v:lua.require('flemma.ui').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
       ui.fold_last_thinking_block(bufnr)
@@ -230,7 +306,7 @@ describe("UI Folding", function()
 
       local lines = {
         "```lua",
-        "model = 'claude-3-5-sonnet-20241022'",
+        "model = 'claude-sonnet-4-5'",
         "```",
         "@Assistant: response",
         "<thinking>",
@@ -246,6 +322,7 @@ describe("UI Folding", function()
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
       vim.wo.foldexpr = "v:lua.require('flemma.ui').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
       ui.fold_last_thinking_block(bufnr)
@@ -284,6 +361,7 @@ describe("UI Folding", function()
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
       vim.wo.foldexpr = "v:lua.require('flemma.ui').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
       ui.fold_last_thinking_block(bufnr)
@@ -295,6 +373,71 @@ describe("UI Folding", function()
       -- The first thinking block (line 2) should remain open
       local foldclosed_first = vim.fn.foldclosed(2)
       assert.are.equal(-1, foldclosed_first, "First thinking block should remain open")
+    end)
+
+    it("should fold <thinking redacted> block", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: response",
+        "<thinking redacted>",
+        "encrypted-data-here",
+        "</thinking>",
+        "actual response",
+        "@You: follow up",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Open a window for the buffer and set window-local options
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99 -- Start with all folds open
+
+      -- Call the function
+      ui.fold_last_thinking_block(bufnr)
+
+      -- Check that the fold exists and is closed
+      local foldlevel = vim.fn.foldlevel(2)
+      assert.is_true(foldlevel > 0, "Fold should exist at redacted thinking block")
+
+      local foldclosed = vim.fn.foldclosed(2)
+      assert.are.equal(2, foldclosed, "Redacted thinking block should be folded at line 2")
+    end)
+
+    it("should fold thinking block with vertex:signature attribute", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: response",
+        '<thinking vertex:signature="abc123/def+ghi==">',
+        "thought process here",
+        "</thinking>",
+        "actual response",
+        "@You: follow up",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Open a window for the buffer and set window-local options
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99 -- Start with all folds open
+
+      -- Call the function
+      ui.fold_last_thinking_block(bufnr)
+
+      -- Check that the fold exists and is closed
+      -- Line 2 is the start of the thinking block
+      local foldlevel = vim.fn.foldlevel(2)
+      assert.is_true(foldlevel > 0, "Fold should exist at thinking block with signature")
+
+      local foldclosed = vim.fn.foldclosed(2)
+      assert.are.equal(2, foldclosed, "Thinking block with signature should be folded at line 2")
     end)
   end)
 end)

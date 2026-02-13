@@ -1,8 +1,10 @@
 --- MIME type detection utility
-local log = require("flemma.logging")
+---@class flemma.Mime
 local M = {}
 
--- Cache for file command availability check
+local log = require("flemma.logging")
+
+---@type boolean|nil Cache for file command availability check (nil = not checked yet)
 local file_command_available = nil
 
 -- MIME types by extension tailored for AI chat interface (fallback when 'file' command is unavailable)

@@ -1,20 +1,30 @@
 --- Preset management for Flemma switch command
+---@class flemma.Presets
 local M = {}
 
 local log = require("flemma.logging")
 local modeline = require("flemma.modeline")
-local provider_config = require("flemma.provider.config")
+local registry = require("flemma.provider.registry")
 
+---@class flemma.presets.NormalizedPreset
+---@field provider string Resolved provider name
+---@field model string|nil Model name (nil = use provider default)
+---@field parameters table<string, any> Provider parameters
+
+---@type table<string, flemma.presets.NormalizedPreset>
 local normalized_presets = {}
 
+---@param message string
 local function warn(message)
   log.warn("presets: " .. message)
   vim.notify("Flemma: " .. message, vim.log.levels.WARN)
 end
 
+---Validate and normalize a single preset definition
+---@param name string Preset name (e.g. "$fast")
+---@param definition string|table Raw preset definition from config
+---@return flemma.presets.NormalizedPreset|nil normalized, string|nil error
 local function normalize_definition(name, definition)
-  local provider
-  local model
   local definition_type = type(definition)
 
   if definition_type == "string" then
@@ -25,7 +35,7 @@ local function normalize_definition(name, definition)
     return nil, ("Preset '%s' must be a table or string, received %s"):format(name, definition_type)
   end
 
-  local extracted = provider_config.extract_switch_arguments(definition)
+  local extracted = registry.extract_switch_arguments(definition)
   local provider = extracted.provider
   local model = extracted.model
 
@@ -66,6 +76,8 @@ local function normalize_definition(name, definition)
   }, nil
 end
 
+---Hydrate all presets from raw config into normalized form
+---@param presets table|any Raw presets table from user config
 function M.refresh(presets)
   normalized_presets = {}
 
@@ -81,7 +93,7 @@ function M.refresh(presets)
     else
       local normalized, err = normalize_definition(name, definition)
       if not normalized then
-        warn(err)
+        warn(err --[[@as string]])
       else
         normalized_presets[name] = normalized
       end
@@ -89,6 +101,9 @@ function M.refresh(presets)
   end
 end
 
+---Get a normalized preset by name (returns a deep copy)
+---@param name string Preset name (e.g. "$fast")
+---@return flemma.presets.NormalizedPreset|nil
 function M.get(name)
   local preset = normalized_presets[name]
   if not preset then
@@ -101,6 +116,8 @@ function M.get(name)
   }
 end
 
+---List all registered preset names, sorted alphabetically
+---@return string[]
 function M.list()
   local keys = {}
   for name, _ in pairs(normalized_presets) do

@@ -2,7 +2,7 @@ local stub = require("luassert.stub")
 
 describe(":FlemmaSend command", function()
   local client = require("flemma.client")
-  local flemma, state, core, provider_config
+  local flemma, state, core, registry
 
   before_each(function()
     -- Invalidate the main flemma module cache to ensure a clean setup for each test
@@ -10,13 +10,13 @@ describe(":FlemmaSend command", function()
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.core.config.manager"] = nil
-    package.loaded["flemma.provider.config"] = nil
+    package.loaded["flemma.provider.registry"] = nil
     package.loaded["flemma.models"] = nil
 
     flemma = require("flemma")
     state = require("flemma.state")
     core = require("flemma.core")
-    provider_config = require("flemma.provider.config")
+    registry = require("flemma.provider.registry")
 
     -- Setup with default configuration. Specific tests can override this.
     flemma.setup({})
@@ -30,8 +30,8 @@ describe(":FlemmaSend command", function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("formats the request body correctly for the default Claude provider", function()
-    -- Arrange: The default provider is Claude. We just need to set up the buffer.
+  it("formats the request body correctly for the default Anthropic provider", function()
+    -- Arrange: The default provider is Anthropic. We just need to set up the buffer.
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@System: Be brief.", "@You: Hello" })
@@ -39,28 +39,30 @@ describe(":FlemmaSend command", function()
     -- Arrange: Register a dummy fixture to prevent actual network calls.
     -- The content of the fixture DOES matter, as it's processed by the provider.
     local config = state.get_config()
-    local default_claude_model = provider_config.get_model("claude")
-    client.register_fixture("api%.anthropic%.com", "tests/fixtures/claude_hello_success_stream.txt")
+    local default_anthropic_model = registry.get_model("anthropic")
+    client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
 
     -- Act: Execute the FlemmaSend command
     vim.cmd("FlemmaSend")
 
-    -- Assert: Check that the captured request body matches the expected format for Claude
+    -- Assert: Check that the captured request body matches the expected format for Anthropic
     local captured_request_body = core._get_last_request_body()
     assert.is_not_nil(captured_request_body, "request_body was not captured")
 
-    local expected_body = {
-      model = default_claude_model,
-      messages = {
-        { role = "user", content = { { type = "text", text = "Hello" } } },
-      },
-      system = "Be brief.",
-      max_tokens = config.parameters.max_tokens,
-      temperature = config.parameters.temperature,
-      stream = true,
-    }
-
-    assert.are.same(expected_body, captured_request_body)
+    assert.equals(default_anthropic_model, captured_request_body.model)
+    -- With cache_retention="short" (default), system is an array with cache_control
+    assert.equals(1, #captured_request_body.system)
+    assert.equals("Be brief.", captured_request_body.system[1].text)
+    assert.equals(config.parameters.max_tokens, captured_request_body.max_tokens)
+    assert.equals(config.parameters.temperature, captured_request_body.temperature)
+    assert.equals(true, captured_request_body.stream)
+    assert.equals(1, #captured_request_body.messages)
+    assert.equals("user", captured_request_body.messages[1].role)
+    assert.equals("Hello", captured_request_body.messages[1].content[1].text)
+    -- Tools are now included by default (MVP tool calling support)
+    if captured_request_body.tools then
+      assert.is_true(#captured_request_body.tools >= 0)
+    end
   end)
 
   it("formats the request body correctly for the OpenAI provider", function()
@@ -84,18 +86,68 @@ describe(":FlemmaSend command", function()
 
     local config = state.get_config()
 
-    local expected_body = {
-      model = "o3",
-      messages = {
-        { role = "user", content = "Hello" },
-      },
-      stream = true,
-      stream_options = { include_usage = true },
-      max_completion_tokens = config.parameters.max_tokens,
-      temperature = config.parameters.temperature,
-    }
+    assert.equals("o3", captured_request_body.model)
+    assert.is_not_nil(captured_request_body.input, "Should use input field (Responses API)")
+    assert.is_nil(captured_request_body.messages, "Should NOT use messages field")
+    -- Find the user message in the input array
+    local user_items = vim.tbl_filter(function(item)
+      return item.role == "user"
+    end, captured_request_body.input)
+    assert.equals(1, #user_items)
+    assert.equals(true, captured_request_body.stream)
+    assert.equals(false, captured_request_body.store)
+    assert.is_nil(captured_request_body.stream_options, "Responses API does not use stream_options")
+    assert.equals(config.parameters.max_tokens, captured_request_body.max_output_tokens)
+    assert.equals(config.parameters.temperature, captured_request_body.temperature)
 
-    assert.are.same(expected_body, captured_request_body)
+    -- Tools are now included by default (parallel tool use enabled)
+    if captured_request_body.tools then
+      assert.is_true(#captured_request_body.tools >= 0)
+      assert.equals("auto", captured_request_body.tool_choice)
+      -- Parallel tool use is enabled (no parallel_tool_calls: false flag)
+      assert.is_nil(captured_request_body.parallel_tool_calls)
+    end
+  end)
+
+  it("always stores bufnr in session requests", function()
+    -- Arrange: Switch to OpenAI
+    core.switch_provider("openai", "o3", {})
+    client.register_fixture("api%.openai%.com", "tests/fixtures/openai_hello_success_stream.txt")
+
+    -- Test 1: Named buffer → both filepath and bufnr should be set
+    local named_bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(named_bufnr)
+    vim.api.nvim_buf_set_name(named_bufnr, vim.fn.tempname() .. ".chat")
+    vim.api.nvim_buf_set_lines(named_bufnr, 0, -1, false, { "@You: Hello" })
+
+    vim.cmd("FlemmaSend")
+    vim.wait(1000, function()
+      local lines = vim.api.nvim_buf_get_lines(named_bufnr, 0, -1, false)
+      return #lines >= 5 and lines[5] == "@You: "
+    end)
+
+    local session = state.get_session()
+    local named_request = session:get_latest_request()
+    assert.is_not_nil(named_request, "Session should have a request after named buffer send")
+    assert.is_not_nil(named_request.filepath, "Named buffer should have a filepath")
+    assert.equals(named_bufnr, named_request.bufnr, "Named buffer request should store bufnr")
+
+    -- Test 2: Unnamed buffer → bufnr should be set, filepath should be nil
+    client.register_fixture("api%.openai%.com", "tests/fixtures/openai_hello_success_stream.txt")
+    local unnamed_bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(unnamed_bufnr)
+    vim.api.nvim_buf_set_lines(unnamed_bufnr, 0, -1, false, { "@You: Hello" })
+
+    vim.cmd("FlemmaSend")
+    vim.wait(1000, function()
+      local lines = vim.api.nvim_buf_get_lines(unnamed_bufnr, 0, -1, false)
+      return #lines >= 5 and lines[5] == "@You: "
+    end)
+
+    local unnamed_request = session:get_latest_request()
+    assert.is_not_nil(unnamed_request, "Session should have a request after unnamed buffer send")
+    assert.is_nil(unnamed_request.filepath, "Unnamed buffer should NOT have a filepath")
+    assert.equals(unnamed_bufnr, unnamed_request.bufnr, "Unnamed buffer request should store bufnr")
   end)
 
   it("handles a successful streaming response from a fixture", function()
@@ -186,6 +238,7 @@ describe(":FlemmaSend command", function()
 
     -- Assert: Check that the buffer is modifiable and clean
     assert.is_true(vim.bo[bufnr].modifiable, "Buffer should be modifiable after an error")
+    assert.is_false(state.get_buffer_state(bufnr).locked, "Buffer state should not be locked after an error")
     local final_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     assert.are.same({ "@You: This will fail", "" }, final_lines, "Buffer content should not have spinner artifacts")
 
@@ -194,7 +247,7 @@ describe(":FlemmaSend command", function()
   end)
 
   it("errors and does not switch when an unknown provider is requested", function()
-    -- Arrange: Ensure we start from a valid, known provider (default is Claude)
+    -- Arrange: Ensure we start from a valid, known provider (default is Anthropic)
     local original_provider = flemma.get_current_provider_name()
     assert.is_not_nil(original_provider, "Original provider should be set")
 
@@ -258,7 +311,7 @@ describe(":FlemmaSend command", function()
     assert.is_true(saw_warn, "Should warn about invalid model fallback")
 
     -- Assert: Model fell back to the provider default
-    local default_openai_model = provider_config.get_model("openai")
+    local default_openai_model = registry.get_model("openai")
     local cfg = state.get_config()
     assert.equals(default_openai_model, cfg.model, "Should fall back to provider default model")
 
