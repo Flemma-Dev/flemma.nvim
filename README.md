@@ -7,7 +7,7 @@
 
 Flemma turns Neovim into a first-class AI workspace. It gives `.chat` buffers streaming conversations, tool calling, reusable prompt templates, attachment support, cost tracking, and ergonomic commands for the three major providers: Anthropic, OpenAI, and Google Vertex AI.
 
-https://github.com/user-attachments/assets/ce8464af-b9f5-48a1-80be-dd8a7291143a
+https://github.com/user-attachments/assets/2c688830-baef-4d1d-98ef-ae560faacf61
 
 - **Multi-provider chat** – Anthropic, OpenAI, and Vertex AI through one command tree.
 - **Tool calling** – calculator, bash, file read/edit/write, with approval flow and parallel execution.

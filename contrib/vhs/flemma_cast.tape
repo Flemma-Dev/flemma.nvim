@@ -3,6 +3,7 @@ Output assets/flemma_cast.mp4
 Set Shell bash
 Set Width 1920
 Set Height 1080
+Set Padding 0
 Set FontFamily "BerkeleyMono Nerd Font Mono"
 Set FontSize 28
 Set Theme "Dracula"
@@ -33,7 +34,7 @@ Ctrl+]
 Wait+Line /@You:/
 Sleep 2000ms
 # Add pending tool results.
-Type@40ms "a-- Okay, calculator use! I'll add the tool to my next message, pause, then execute and merge the  result."
+Type@40ms "a-- Okay, calculator use! I'll add the tool to my next message, pause, then execute and merge the result."
 Ctrl+[
 Sleep 4000ms
 Type u
