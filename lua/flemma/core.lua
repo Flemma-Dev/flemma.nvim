@@ -184,22 +184,99 @@ function M.cancel_request()
   end
 end
 
----Hybrid dispatch: execute all pending tool calls if any exist, otherwise send to provider
+---Hybrid dispatch: execute pending tools, awaiting tools, or send to provider.
+---When require_approval is enabled, pending tools get empty placeholder results injected
+---so the user can review before execution. On the next invocation, tools with empty
+---placeholders are executed. When all tools have results, the request is sent.
 ---@param opts? { on_request_complete?: fun() }
 function M.send_or_execute(opts)
+  opts = opts or {}
   local bufnr = vim.api.nvim_get_current_buf()
   local tool_context = require("flemma.tools.context")
+  local config = state.get_config()
+  local require_approval = config.tools and config.tools.require_approval
+  if require_approval == nil then
+    require_approval = true
+  end
+
+  -- Phase 1: Handle tool_use blocks that have no tool_result at all
   local pending = tool_context.resolve_all_pending(bufnr)
 
   if #pending > 0 then
-    local executor = require("flemma.tools.executor")
-    local ok, err = executor.execute_all_pending(bufnr)
-    if not ok then
-      vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+    if require_approval then
+      local approval = require("flemma.tools.approval")
+      local injector = require("flemma.tools.injector")
+      local executor = require("flemma.tools.executor")
+      local to_execute = {}
+      local first_placeholder_line = nil
+
+      for _, ctx in ipairs(pending) do
+        local decision = approval.resolve(ctx.tool_name, ctx.input, { bufnr = bufnr, tool_id = ctx.tool_id })
+
+        if decision == "approve" then
+          table.insert(to_execute, ctx)
+        elseif decision == "deny" then
+          injector.inject_placeholder(bufnr, ctx.tool_id)
+          injector.inject_result(bufnr, ctx.tool_id, {
+            success = false,
+            error = "Denied by auto_approve policy",
+          })
+        else
+          local header_line = injector.inject_placeholder(bufnr, ctx.tool_id, { pending = true })
+          if header_line and (not first_placeholder_line or header_line < first_placeholder_line) then
+            first_placeholder_line = header_line
+          end
+        end
+      end
+
+      -- Move cursor to first injected placeholder so the user can review
+      if first_placeholder_line then
+        local winid = vim.fn.bufwinid(bufnr)
+        if winid ~= -1 then
+          vim.api.nvim_win_set_cursor(winid, { first_placeholder_line, 0 })
+        end
+      end
+
+      for _, ctx in ipairs(to_execute) do
+        local ok, err = executor.execute(bufnr, ctx)
+        if not ok then
+          vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+        end
+      end
+
+      if opts.on_request_complete then
+        opts.on_request_complete()
+      end
+      return
+    else
+      local executor = require("flemma.tools.executor")
+      local ok, err = executor.execute_all_pending(bufnr)
+      if not ok then
+        vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+      end
+      return
     end
-    return
   end
 
+  -- Phase 2: Handle tool_result blocks with empty content (awaiting execution)
+  if require_approval then
+    local awaiting = tool_context.resolve_all_awaiting_execution(bufnr)
+    if #awaiting > 0 then
+      local executor = require("flemma.tools.executor")
+      for _, ctx in ipairs(awaiting) do
+        local ok, err = executor.execute(bufnr, ctx)
+        if not ok then
+          vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+        end
+      end
+      if opts.on_request_complete then
+        opts.on_request_complete()
+      end
+      return
+    end
+  end
+
+  -- Phase 3: No pending tools, no awaiting execution → send to provider
   M.send_to_provider(opts)
 end
 

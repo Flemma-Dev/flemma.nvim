@@ -38,7 +38,7 @@ function M.parse_fenced_block(lines, start_idx)
     return nil, start_idx
   end
 
-  local fence, lang = line:match("^(`+)(%w*)%s*$")
+  local fence, lang = line:match("^(`+)([%w:._%-]*)%s*$")
   if not fence then
     return nil, start_idx
   end

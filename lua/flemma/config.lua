@@ -58,7 +58,19 @@
 ---@field cwd? string
 ---@field env? table<string, string>
 
+---@class flemma.config.AutoApproveContext
+---@field bufnr integer
+---@field tool_id string
+
+---@alias flemma.config.AutoApproveDecision true|false|"deny"
+
+---@alias flemma.config.AutoApproveFunction fun(tool_name: string, input: table, context: flemma.config.AutoApproveContext): flemma.config.AutoApproveDecision|nil
+
+---@alias flemma.config.AutoApprove string[]|flemma.config.AutoApproveFunction
+
 ---@class flemma.config.ToolsConfig
+---@field require_approval boolean
+---@field auto_approve? flemma.config.AutoApprove
 ---@field default_timeout integer
 ---@field show_spinner boolean
 ---@field cursor_after_result "result"|"stay"|"next"
@@ -191,6 +203,8 @@ return {
     connect_timeout = 10, -- Default connection timeout for cURL requests
   },
   tools = {
+    require_approval = true, -- Require user approval before executing tool calls (two-step <C-]> flow)
+    auto_approve = nil, -- Tools that bypass approval: string[] of tool names, or function(tool_name, input, context) → true|false|"deny"
     default_timeout = 30, -- Default timeout for async tools (seconds)
     show_spinner = true, -- Show spinner animation during execution
     cursor_after_result = "result", -- Cursor behavior after result injection: "result", "stay", or "next"
