@@ -79,12 +79,11 @@ local function find_thinking_at_line(doc, lnum)
   for _, msg in ipairs(doc.messages) do
     for _, seg in ipairs(msg.segments) do
       if seg.kind == "thinking" and seg.position then
+        ---@cast seg flemma.ast.ThinkingSegment
         if seg.position.start_line == lnum then
-          return seg, --[[@as flemma.ast.ThinkingSegment]]
-            "start"
+          return seg, "start"
         elseif seg.position.end_line == lnum then
-          return seg, --[[@as flemma.ast.ThinkingSegment]]
-            "end"
+          return seg, "end"
         end
       end
     end
