@@ -83,10 +83,14 @@ local M = {}
 ---@field kind "unsupported_file"
 ---@field filename? string
 
+---@class flemma.ast.ThinkingSignature
+---@field value string The opaque signature string
+---@field provider string Provider that created the signature (e.g., "openai", "anthropic", "vertex")
+
 ---@class flemma.ast.GenericThinkingPart
 ---@field kind "thinking"
 ---@field content string
----@field signature? string
+---@field signature? flemma.ast.ThinkingSignature
 ---@field redacted? boolean
 
 ---@class flemma.ast.GenericToolUsePart
@@ -151,7 +155,7 @@ end
 
 ---@param content string
 ---@param pos flemma.ast.Position
----@param opts? { signature?: string, redacted?: boolean }
+---@param opts? { signature?: flemma.ast.ThinkingSignature, redacted?: boolean }
 ---@return flemma.ast.ThinkingSegment
 function M.thinking(content, pos, opts)
   opts = opts or {}
@@ -253,7 +257,7 @@ function M.to_generic_parts(evaluated_parts, source_file)
       table.insert(parts, {
         kind = "thinking",
         content = p.content,
-        signature = p.signature,
+        signature = p.signature, -- table { value, provider } or nil
         redacted = p.redacted,
       })
     elseif p.kind == "tool_use" then

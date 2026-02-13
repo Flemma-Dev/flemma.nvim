@@ -112,12 +112,12 @@ function M.evaluate(doc, base_context)
         end
       elseif seg.kind == "thinking" then
         -- Preserve thinking nodes - providers can choose to filter them
-        -- Include signature if present (for provider state preservation, e.g., Vertex AI)
+        -- Include signature if present (for provider state preservation)
         -- Include redacted flag for encrypted thinking blocks
         table.insert(parts, {
           kind = "thinking",
           content = seg.content,
-          signature = seg.signature,
+          signature = seg.signature, -- table { value, provider } or nil
           redacted = seg.redacted,
         })
       elseif seg.kind == "expression" then

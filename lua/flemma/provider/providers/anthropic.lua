@@ -171,11 +171,11 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
             data = p.content,
           })
           log.debug("anthropic.build_request: Added redacted_thinking block")
-        elseif p.kind == "thinking" and p.signature and #p.signature > 0 then
+        elseif p.kind == "thinking" and p.signature and p.signature.provider == "anthropic" then
           table.insert(content_blocks, {
             type = "thinking",
             thinking = p.content,
-            signature = p.signature,
+            signature = p.signature.value,
           })
           log.debug("anthropic.build_request: Added thinking block with signature")
         end

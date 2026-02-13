@@ -1330,7 +1330,9 @@ describe("Vertex AI Thought Signature Support", function()
     end
 
     assert.is_not_nil(thinking_seg, "Should find thinking segment")
-    assert.equals("test-thought-signature-abc123", thinking_seg.signature, "Should extract signature attribute")
+    assert.is_not_nil(thinking_seg.signature, "Should have signature table")
+    assert.equals("test-thought-signature-abc123", thinking_seg.signature.value, "Should extract signature value")
+    assert.equals("vertex", thinking_seg.signature.provider, "Should extract signature provider")
     assert.is_true(thinking_seg.content:match("calculator tool") ~= nil, "Should preserve thinking content")
   end)
 
@@ -1400,7 +1402,9 @@ describe("Vertex AI Thought Signature Support", function()
     end
 
     assert.is_not_nil(thinking_seg, "Should parse self-closing thinking tag")
-    assert.equals("sig-self-closing-123", thinking_seg.signature, "Should extract signature from self-closing tag")
+    assert.is_not_nil(thinking_seg.signature, "Should have signature table")
+    assert.equals("sig-self-closing-123", thinking_seg.signature.value, "Should extract signature value from self-closing tag")
+    assert.equals("vertex", thinking_seg.signature.provider, "Should extract signature provider from self-closing tag")
     assert.equals("", thinking_seg.content, "Self-closing tag should have empty content")
   end)
 

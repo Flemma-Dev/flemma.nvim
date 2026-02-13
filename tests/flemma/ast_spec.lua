@@ -396,12 +396,13 @@ describe("AST to Parts Mapper", function()
 
   it("preserves redacted flag on thinking parts", function()
     local parts = ast.to_generic_parts({
-      { kind = "thinking", content = "normal thought", signature = "sig1" },
+      { kind = "thinking", content = "normal thought", signature = { value = "sig1", provider = "anthropic" } },
       { kind = "thinking", content = "encrypted-data", redacted = true },
     })
     assert.equals(2, #parts)
     assert.equals("thinking", parts[1].kind)
-    assert.equals("sig1", parts[1].signature)
+    assert.equals("sig1", parts[1].signature.value)
+    assert.equals("anthropic", parts[1].signature.provider)
     assert.is_nil(parts[1].redacted)
     assert.equals("thinking", parts[2].kind)
     assert.is_true(parts[2].redacted)
@@ -421,10 +422,12 @@ describe("AST Thinking Constructor", function()
   end)
 
   it("creates normal thinking node without redacted flag", function()
-    local seg = ast.thinking("thought", { start_line = 1, end_line = 3 }, { signature = "sig-abc" })
+    local seg =
+      ast.thinking("thought", { start_line = 1, end_line = 3 }, { signature = { value = "sig-abc", provider = "anthropic" } })
     assert.equals("thinking", seg.kind)
     assert.equals("thought", seg.content)
-    assert.equals("sig-abc", seg.signature)
+    assert.equals("sig-abc", seg.signature.value)
+    assert.equals("anthropic", seg.signature.provider)
     assert.is_nil(seg.redacted)
   end)
 end)

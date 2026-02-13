@@ -174,8 +174,8 @@ function M.build_request(self, prompt, context)
 
       -- First pass: reconstruct reasoning items from thinking blocks with signatures
       for _, p in ipairs(msg.parts or {}) do
-        if p.kind == "thinking" and p.signature and #p.signature > 0 then
-          local json_str = vim.base64.decode(p.signature)
+        if p.kind == "thinking" and p.signature and p.signature.provider == "openai" then
+          local json_str = vim.base64.decode(p.signature.value)
           local decode_ok, reasoning_item = pcall(vim.fn.json_decode, json_str)
           if decode_ok and type(reasoning_item) == "table" then
             table.insert(input_items, reasoning_item)

@@ -320,8 +320,8 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
 
       -- First pass: extract signature from thinking parts
       for _, p in ipairs(msg.parts or {}) do
-        if p.kind == "thinking" and p.signature then
-          thought_signature = p.signature
+        if p.kind == "thinking" and p.signature and p.signature.provider == "vertex" then
+          thought_signature = p.signature.value
           log.debug("vertex.build_request: Found thought signature in thinking part")
         end
       end
