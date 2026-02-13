@@ -445,7 +445,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Look at @./image.png",
         }
-        local prompt = pipeline.run(lines, {})
+        local prompt = pipeline.run(parser.parse_lines(lines), {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -510,7 +510,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Review @./document.pdf",
         }
-        local prompt = pipeline.run(lines, {})
+        local prompt = pipeline.run(parser.parse_lines(lines), {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -564,7 +564,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Read @./notes.txt",
         }
-        local prompt = pipeline.run(lines, {})
+        local prompt = pipeline.run(parser.parse_lines(lines), {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -617,7 +617,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Analyze @./chart.png",
         }
-        local prompt = pipeline.run(lines, {})
+        local prompt = pipeline.run(parser.parse_lines(lines), {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -684,7 +684,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Summarize @./report.pdf",
         }
-        local prompt = pipeline.run(lines, {})
+        local prompt = pipeline.run(parser.parse_lines(lines), {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -741,7 +741,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Process @./data.txt",
         }
-        local prompt = pipeline.run(lines, {})
+        local prompt = pipeline.run(parser.parse_lines(lines), {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -801,7 +801,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Describe @./photo.png",
         }
-        local prompt = pipeline.run(lines, {})
+        local prompt = pipeline.run(parser.parse_lines(lines), {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -865,7 +865,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Analyze @./study.pdf",
         }
-        local prompt = pipeline.run(lines, {})
+        local prompt = pipeline.run(parser.parse_lines(lines), {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -918,7 +918,7 @@ describe("File References and Path Parsing", function()
         local lines = {
           "@You: Check @./config.txt",
         }
-        local prompt = pipeline.run(lines, {})
+        local prompt = pipeline.run(parser.parse_lines(lines), {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -962,7 +962,7 @@ describe("File References and Path Parsing", function()
       local lines = {
         "@You: File @./symlink-file.sh",
       }
-      local _, evaluated = pipeline.run(lines, {})
+      local _, evaluated = pipeline.run(parser.parse_lines(lines), {})
 
       -- Check diagnostics
       local file_diags = vim.tbl_filter(function(d)
@@ -1019,7 +1019,7 @@ describe("File References and Path Parsing", function()
       local lines = {
         "@You: Binary file @./binary.bin",
       }
-      local _, evaluated = pipeline.run(lines, {})
+      local _, evaluated = pipeline.run(parser.parse_lines(lines), {})
 
       -- Check diagnostics
       local file_diags = vim.tbl_filter(function(d)

@@ -9,6 +9,7 @@ package.loaded["flemma.buffer.opt"] = nil
 
 local tools = require("flemma.tools")
 local opt = require("flemma.buffer.opt")
+local parser = require("flemma.parser")
 local pipeline = require("flemma.pipeline")
 local ctx = require("flemma.context")
 
@@ -346,7 +347,7 @@ describe("flemma.opt", function()
         "@You: test",
       }
       local context = ctx.from_file("test.chat")
-      local prompt = pipeline.run(lines, context)
+      local prompt = pipeline.run(parser.parse_lines(lines), context)
 
       assert.is_not_nil(prompt.opts)
       assert.is_not_nil(prompt.opts.tools)
@@ -368,7 +369,7 @@ describe("flemma.opt", function()
         "@You: test",
       }
       local context = ctx.from_file("test.chat")
-      local prompt = pipeline.run(lines, context)
+      local prompt = pipeline.run(parser.parse_lines(lines), context)
 
       assert.is_not_nil(prompt.opts)
       assert.are.same({ "bash" }, prompt.opts.tools)
@@ -379,7 +380,7 @@ describe("flemma.opt", function()
         "@You: test",
       }
       local context = ctx.from_file("test.chat")
-      local prompt = pipeline.run(lines, context)
+      local prompt = pipeline.run(parser.parse_lines(lines), context)
 
       assert.is_nil(prompt.opts)
     end)
@@ -392,7 +393,7 @@ describe("flemma.opt", function()
         "@You: test",
       }
       local context = ctx.from_file("test.chat")
-      local prompt = pipeline.run(lines, context)
+      local prompt = pipeline.run(parser.parse_lines(lines), context)
 
       assert.is_nil(prompt.opts.tools)
     end)
@@ -405,7 +406,7 @@ describe("flemma.opt", function()
         "@You: type is {{ type(flemma) }}",
       }
       local context = ctx.from_file("test.chat")
-      local prompt = pipeline.run(lines, context)
+      local prompt = pipeline.run(parser.parse_lines(lines), context)
 
       -- flemma should be nil in expression env, so type(flemma) returns "nil"
       local user_msg = prompt.history[1]
@@ -547,7 +548,7 @@ describe("flemma.opt", function()
         "@You: test",
       }
       local context = ctx.from_file("test.chat")
-      local prompt = pipeline.run(lines, context)
+      local prompt = pipeline.run(parser.parse_lines(lines), context)
 
       assert.is_not_nil(prompt.opts)
       assert.is_not_nil(prompt.opts.anthropic)

@@ -1,4 +1,3 @@
-local parser = require("flemma.parser")
 local processor = require("flemma.processor")
 local ast = require("flemma.ast")
 
@@ -39,13 +38,12 @@ end
 ---@field pending_tool_calls flemma.pipeline.UnresolvedTool[]
 ---@field opts flemma.opt.ResolvedOpts|nil
 
---- Run full pipeline for given buffer lines and context
----@param lines string[]
+--- Run full pipeline from a pre-parsed document and context
+---@param doc flemma.ast.DocumentNode
 ---@param context flemma.Context|nil
 ---@return flemma.pipeline.Prompt prompt
 ---@return flemma.processor.EvaluatedResult evaluated
-function M.run(lines, context)
-  local doc = parser.parse_lines(lines)
+function M.run(doc, context)
   local evaluated = processor.evaluate(doc, context)
 
   local history = {}

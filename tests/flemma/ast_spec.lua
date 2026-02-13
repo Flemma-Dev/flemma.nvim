@@ -442,7 +442,7 @@ describe("Pipeline Integration", function()
       "@You: Hello",
       "@Assistant: Hi there!",
     }
-    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
     assert.equals("You are helpful.", prompt.system)
     assert.equals(2, #prompt.history)
   end)
@@ -456,7 +456,7 @@ describe("Pipeline Integration", function()
       "@Assistant: Got it",
     }
 
-    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
 
     assert.is_nil(prompt.system)
     assert.equals(2, #prompt.history)
@@ -488,7 +488,7 @@ describe("Provider Integration", function()
       "@You: Hello",
       "@Assistant: Hi there!",
     }
-    local prompt = pipeline.run(lines, ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
     local req = provider:build_request(prompt, {})
     assert.is_not_nil(req.model)
     assert.equals("table", type(req.messages))
@@ -508,7 +508,7 @@ describe("Provider Integration", function()
     }
 
     local context = ctx.from_file("tests/fixtures/doc.chat")
-    local prompt = pipeline.run(lines, context)
+    local prompt = pipeline.run(parser.parse_lines(lines), context)
     local req = provider:build_request(prompt, context)
     -- Responses API uses input[] instead of messages[]
     local user_items = vim.tbl_filter(function(item)

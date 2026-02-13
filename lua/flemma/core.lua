@@ -251,9 +251,12 @@ function M.send_to_provider(opts)
   -- Make the buffer non-modifiable to prevent user edits during request
   state.lock_buffer(bufnr)
 
+  -- Parse buffer via cached AST (single buffer read + parse, reused below)
+  local parser = require("flemma.parser")
+  local doc = parser.get_parsed_document(bufnr)
+
   -- Check if buffer has content
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  if #lines == 0 or (#lines == 1 and lines[1] == "") then
+  if #doc.messages == 0 and not doc.frontmatter then
     log.warn("send_to_provider(): Empty buffer - nothing to send")
     state.unlock_buffer(bufnr)
     return
@@ -271,10 +274,9 @@ function M.send_to_provider(opts)
   -- Create context ONCE for the entire pipeline (used by frontmatter, @./file refs, etc.)
   local context = require("flemma.context").from_buffer(bufnr)
 
-  -- Run the new AST-based pipeline
-  local buf_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  -- Run the pipeline with the pre-parsed document (no redundant buffer read or re-parse)
   local pipeline = require("flemma.pipeline")
-  local prompt, evaluated = pipeline.run(buf_lines, context)
+  local prompt, evaluated = pipeline.run(doc, context)
 
   if #prompt.history == 0 then
     log.warn("send_to_provider(): No messages found in buffer")

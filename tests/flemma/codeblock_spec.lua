@@ -60,7 +60,7 @@ describe("flemma.codeblock", function()
         "@You: Value is {{ my_var }} and number is {{ my_num }}",
       }
       local base_context = ctx.from_file("test.chat")
-      local prompt = pipeline.run(lines, base_context)
+      local prompt = pipeline.run(parser.parse_lines(lines), base_context)
 
       -- Check that expressions were evaluated using frontmatter variables
       assert.are.equal(1, #prompt.history)
@@ -83,7 +83,7 @@ describe("flemma.codeblock", function()
         "@You: {{ greet('World') }}",
       }
       local base_context = ctx.from_file("test.chat")
-      local prompt = pipeline.run(lines, base_context)
+      local prompt = pipeline.run(parser.parse_lines(lines), base_context)
 
       -- Check that function was called successfully
       assert.are.equal(1, #prompt.history)
@@ -108,7 +108,7 @@ describe("flemma.codeblock", function()
         "@You: Name is {{ name }} and age is {{ age }}",
       }
       local base_context = ctx.from_file("test.chat")
-      local prompt = pipeline.run(lines, base_context)
+      local prompt = pipeline.run(parser.parse_lines(lines), base_context)
 
       -- Check that expressions were evaluated using frontmatter variables
       assert.are.equal(1, #prompt.history)
@@ -131,7 +131,7 @@ describe("flemma.codeblock", function()
         "@You: User {{ user.name }} has role {{ user.role }}",
       }
       local base_context = ctx.from_file("test.chat")
-      local prompt = pipeline.run(lines, base_context)
+      local prompt = pipeline.run(parser.parse_lines(lines), base_context)
 
       -- Check nested access works
       assert.are.equal(1, #prompt.history)
@@ -154,7 +154,7 @@ describe("flemma.codeblock", function()
         "@You: First tag is {{ tags[1] }} and second is {{ tags[2] }}",
       }
       local base_context = ctx.from_file("test.chat")
-      local prompt = pipeline.run(lines, base_context)
+      local prompt = pipeline.run(parser.parse_lines(lines), base_context)
 
       -- Check array access works
       assert.are.equal(1, #prompt.history)
@@ -249,7 +249,7 @@ describe("flemma.codeblock", function()
       }
 
       local context = ctx.from_file("test.chat")
-      local prompt = pipeline.run(lines, context)
+      local prompt = pipeline.run(parser.parse_lines(lines), context)
 
       -- Check that expression was evaluated
       assert.are.equal(1, #prompt.history)

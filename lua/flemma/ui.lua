@@ -325,10 +325,11 @@ function M.start_loading_spinner(bufnr)
     vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
     vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)
 
-    -- Check if we need to add a blank line
+    -- Check if we need to add a blank line before the spinner
     vim.bo[bufnr].modifiable = true
-    local buffer_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    if #buffer_lines > 0 and buffer_lines[#buffer_lines]:match("%S") then
+    local line_count = vim.api.nvim_buf_line_count(bufnr)
+    local last_line = line_count > 0 and vim.api.nvim_buf_get_lines(bufnr, line_count - 1, line_count, false)[1] or ""
+    if last_line:match("%S") then
       vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "", "@Assistant: Thinking..." })
     else
       vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "@Assistant: Thinking..." })
