@@ -17,10 +17,11 @@ M.metadata = {
   capabilities = {
     supports_reasoning = true,
     supports_thinking_budget = false,
-    outputs_thinking = false,
+    outputs_thinking = true,
   },
   default_parameters = {
     cache_retention = "short",
+    reasoning_summary = "auto",
   },
 }
 
@@ -36,17 +37,20 @@ function M.new(merged_config)
   -- OpenAI Responses API endpoint
   provider.endpoint = "https://api.openai.com/v1/responses"
 
+  -- Set metatable BEFORE reset so M.reset (not base.reset) initializes provider-specific state
+  setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
   provider:reset()
 
-  -- Set metatable to use OpenAI methods
   ---@diagnostic disable-next-line: return-type-mismatch
-  return setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
+  return provider
 end
 
 ---@param self flemma.provider.OpenAI
 function M.reset(self)
   base.reset(self)
-  self._response_buffer.extra.current_tool_call = nil
+  self._response_buffer.extra.tool_calls = {}
+  self._response_buffer.extra.accumulated_reasoning_summary = ""
+  self._response_buffer.extra.reasoning_item = nil
   log.debug("openai.reset(): Reset OpenAI provider state")
 end
 
@@ -71,14 +75,15 @@ function M.build_request(self, prompt, context)
 
   -- Add system message first if present
   if prompt.system and #prompt.system > 0 then
-    -- Use "developer" role for reasoning models, "system" for others
-    local system_role = (self.parameters.reasoning and self.parameters.reasoning ~= "") and "developer" or "system"
+    -- Responses API uses "developer" role (replaces Chat Completions "system" role)
+    local system_role = "developer"
     table.insert(input_items, {
       role = system_role,
       content = prompt.system,
     })
   end
 
+  local msg_index = 0
   for _, msg in ipairs(prompt.history) do
     if msg.role == "user" then
       -- Map generic parts (already resolved by pipeline) to Responses API format
@@ -164,22 +169,40 @@ function M.build_request(self, prompt, context)
       end
     elseif msg.role == "assistant" then
       -- Emit assistant parts as flat top-level items in the input array
-      -- Collect text parts for a single message item
+      -- Two-pass approach: reasoning items must precede text/function_calls (API requirement)
+      msg_index = msg_index + 1
+
+      -- First pass: reconstruct reasoning items from thinking blocks with signatures
+      for _, p in ipairs(msg.parts or {}) do
+        if p.kind == "thinking" and p.signature and #p.signature > 0 then
+          local json_str = vim.base64.decode(p.signature)
+          local decode_ok, reasoning_item = pcall(vim.fn.json_decode, json_str)
+          if decode_ok and type(reasoning_item) == "table" then
+            table.insert(input_items, reasoning_item)
+            log.debug("openai.build_request: Added reasoning item from thinking block signature")
+          end
+        end
+      end
+
+      -- Second pass: collect text and tool_use
       local text_parts = {}
 
       for _, p in ipairs(msg.parts or {}) do
         if p.kind == "text" then
           table.insert(text_parts, p.text or "")
         elseif p.kind == "thinking" then
-          -- Skip thinking nodes for now (future enhancement)
+          -- Already handled in first pass
         elseif p.kind == "tool_use" then
           -- Flush any accumulated text before the tool call
           if #text_parts > 0 then
             local text = table.concat(text_parts, "")
             if #text > 0 then
               table.insert(input_items, {
+                type = "message",
                 role = "assistant",
-                content = text,
+                id = "msg_" .. tostring(msg_index),
+                content = { { type = "output_text", text = text, annotations = {} } },
+                status = "completed",
               })
             end
             text_parts = {}
@@ -192,6 +215,7 @@ function M.build_request(self, prompt, context)
             call_id = normalized_id,
             name = p.name,
             arguments = vim.fn.json_encode(p.input),
+            status = "completed",
           })
           log.debug("openai.build_request: Added function_call for " .. p.name .. " (" .. normalized_id .. ")")
         end
@@ -204,6 +228,7 @@ function M.build_request(self, prompt, context)
           table.insert(input_items, {
             type = "message",
             role = "assistant",
+            id = "msg_" .. tostring(msg_index),
             content = { { type = "output_text", text = text, annotations = {} } },
             status = "completed",
           })
@@ -226,6 +251,11 @@ function M.build_request(self, prompt, context)
     })
   end
 
+  -- Sort for deterministic ordering (improves prompt caching hit rates)
+  table.sort(tools_array, function(a, b)
+    return a.name < b.name
+  end)
+
   local request_body = {
     model = self.parameters.model,
     input = input_items,
@@ -242,7 +272,12 @@ function M.build_request(self, prompt, context)
   end
 
   if self.parameters.reasoning and self.parameters.reasoning ~= "" then
-    request_body.reasoning = { effort = self.parameters.reasoning }
+    local reasoning_summary = self.parameters.reasoning_summary or "auto"
+    request_body.reasoning = {
+      effort = self.parameters.reasoning,
+      summary = reasoning_summary,
+    }
+    request_body.include = { "reasoning.encrypted_content" }
     log.debug(
       "openai.build_request: Using max_output_tokens: "
         .. tostring(self.parameters.max_tokens)
@@ -281,6 +316,75 @@ function M.get_request_headers(self)
     "Authorization: Bearer " .. api_key,
     "Content-Type: application/json",
   }
+end
+
+---Emit accumulated reasoning as a thinking block (called at response completion)
+---@param self flemma.provider.OpenAI
+---@param callbacks flemma.provider.Callbacks
+function M._emit_reasoning_block(self, callbacks)
+  local reasoning_item = self._response_buffer.extra.reasoning_item
+  if not reasoning_item then
+    return
+  end
+
+  local summary = self._response_buffer.extra.accumulated_reasoning_summary or ""
+  local stripped = vim.trim(summary)
+
+  -- Serialize the full reasoning item as base64 for the signature attribute
+  local signature = vim.base64.encode(vim.fn.json_encode(reasoning_item))
+
+  local prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
+  if #stripped > 0 then
+    local thinking_block = prefix
+      .. '<thinking openai:signature="'
+      .. signature
+      .. '">\n'
+      .. stripped
+      .. "\n</thinking>\n"
+    base._signal_content(self, thinking_block, callbacks)
+  else
+    -- Signature but no visible summary — emit self-closing tag
+    local tag = prefix .. '<thinking openai:signature="' .. signature .. '"/>\n'
+    base._signal_content(self, tag, callbacks)
+  end
+  log.debug("openai._emit_reasoning_block(): Emitted thinking block")
+end
+
+---Extract usage data from a response.completed or response.incomplete event
+---@param self flemma.provider.OpenAI
+---@param data table<string, any>
+---@param callbacks flemma.provider.Callbacks
+function M._extract_usage(self, data, callbacks) ---@diagnostic disable-line: unused-local
+  if not (data.response and data.response.usage and type(data.response.usage) == "table") then
+    return
+  end
+
+  local usage = data.response.usage
+
+  -- Extract cached tokens first so we can subtract from input_tokens.
+  -- OpenAI's input_tokens includes cached_tokens as a subset, so we normalize
+  -- to make input_tokens mean "non-cached input" (matching Anthropic's semantics).
+  local cached_tokens = (
+    usage.input_tokens_details
+    and usage.input_tokens_details.cached_tokens
+    and usage.input_tokens_details.cached_tokens > 0
+  )
+      and usage.input_tokens_details.cached_tokens
+    or 0
+
+  if callbacks.on_usage and usage.input_tokens then
+    callbacks.on_usage({ type = "input", tokens = usage.input_tokens - cached_tokens })
+  end
+  if callbacks.on_usage and usage.output_tokens then
+    callbacks.on_usage({ type = "output", tokens = usage.output_tokens })
+  end
+  if callbacks.on_usage and usage.output_tokens_details and usage.output_tokens_details.reasoning_tokens then
+    callbacks.on_usage({ type = "thoughts", tokens = usage.output_tokens_details.reasoning_tokens })
+  end
+  if callbacks.on_usage and cached_tokens > 0 then
+    callbacks.on_usage({ type = "cache_read", tokens = cached_tokens })
+    log.debug("openai._extract_usage(): Cached input tokens: " .. tostring(cached_tokens))
+  end
 end
 
 --- Process a single line of OpenAI Responses API streaming response
@@ -345,13 +449,12 @@ function M.process_response_line(self, line, callbacks)
     return
   end
 
-  -- Handle function call start
+  -- Handle output item start (function_call or reasoning)
   if event_type == "response.output_item.added" then
     if data.item and data.item.type == "function_call" then
-      self._response_buffer.extra.current_tool_call = {
+      self._response_buffer.extra.tool_calls[data.output_index] = {
         name = data.item.name or "",
         call_id = data.item.call_id or "",
-        arguments_json = "",
       }
       log.debug(
         "openai.process_response_line(): Started function_call: "
@@ -361,18 +464,16 @@ function M.process_response_line(self, line, callbacks)
           .. ")"
       )
     elseif data.item and data.item.type == "reasoning" then
-      log.debug("openai.process_response_line(): Reasoning item added (ignored for now)")
+      self._response_buffer.extra.accumulated_reasoning_summary = ""
+      log.debug("openai.process_response_line(): Reasoning item started")
     end
     return
   end
 
   -- Handle function call arguments streaming
+  -- Delta arguments are unused; response.output_item.done provides the final complete arguments.
+  -- Kept as a no-op handler to suppress debug logging.
   if event_type == "response.function_call_arguments.delta" then
-    if data.delta and self._response_buffer.extra.current_tool_call then
-      self._response_buffer.extra.current_tool_call.arguments_json = self._response_buffer.extra.current_tool_call.arguments_json
-        .. data.delta
-      log.debug("openai.process_response_line(): Appending function_call arguments")
-    end
     return
   end
 
@@ -412,8 +513,22 @@ function M.process_response_line(self, line, callbacks)
       base._signal_content(self, formatted, callbacks)
       log.debug("openai.process_response_line(): Emitted tool_use block for " .. (data.item.name or ""))
 
-      -- Reset tool state
-      self._response_buffer.extra.current_tool_call = nil
+      -- Reset tool state for this output index
+      self._response_buffer.extra.tool_calls[data.output_index] = nil
+    elseif data.item and data.item.type == "reasoning" then
+      -- Store the full reasoning item for signature (includes encrypted_content)
+      self._response_buffer.extra.reasoning_item = data.item
+      log.debug("openai.process_response_line(): Reasoning item completed")
+    end
+    return
+  end
+
+  -- Handle reasoning summary text deltas
+  if event_type == "response.reasoning_summary_text.delta" then
+    if data.delta then
+      self._response_buffer.extra.accumulated_reasoning_summary = (
+        self._response_buffer.extra.accumulated_reasoning_summary or ""
+      ) .. data.delta
     end
     return
   end
@@ -422,35 +537,32 @@ function M.process_response_line(self, line, callbacks)
   if event_type == "response.completed" then
     log.debug("openai.process_response_line(): Response completed")
 
-    if data.response and data.response.usage and type(data.response.usage) == "table" then
-      local usage = data.response.usage
+    -- Emit any accumulated reasoning as a thinking block
+    self:_emit_reasoning_block(callbacks)
 
-      -- Extract cached tokens first so we can subtract from input_tokens.
-      -- OpenAI's input_tokens includes cached_tokens as a subset, so we normalize
-      -- to make input_tokens mean "non-cached input" (matching Anthropic's semantics).
-      local cached_tokens = (
-        usage.input_tokens_details
-        and usage.input_tokens_details.cached_tokens
-        and usage.input_tokens_details.cached_tokens > 0
-      )
-          and usage.input_tokens_details.cached_tokens
-        or 0
-
-      if callbacks.on_usage and usage.input_tokens then
-        callbacks.on_usage({ type = "input", tokens = usage.input_tokens - cached_tokens })
-      end
-      if callbacks.on_usage and usage.output_tokens then
-        callbacks.on_usage({ type = "output", tokens = usage.output_tokens })
-      end
-      if callbacks.on_usage and usage.output_tokens_details and usage.output_tokens_details.reasoning_tokens then
-        callbacks.on_usage({ type = "thoughts", tokens = usage.output_tokens_details.reasoning_tokens })
-      end
-      if callbacks.on_usage and cached_tokens > 0 then
-        callbacks.on_usage({ type = "cache_read", tokens = cached_tokens })
-        log.debug("openai.process_response_line(): Cached input tokens: " .. tostring(cached_tokens))
-      end
+    self:_extract_usage(data, callbacks)
+    if callbacks.on_response_complete then
+      callbacks.on_response_complete()
     end
+    return
+  end
 
+  -- Handle incomplete response (truncation due to max_output_tokens, etc.)
+  if event_type == "response.incomplete" then
+    log.warn("openai.process_response_line(): Response incomplete")
+
+    local reason = data.response and data.response.incomplete_details and data.response.incomplete_details.reason
+      or "unknown"
+    vim.notify(
+      "Flemma: OpenAI response was truncated (reason: " .. reason .. ")",
+      vim.log.levels.WARN,
+      { title = "Flemma" }
+    ) ---@diagnostic disable-line: redundant-parameter
+
+    -- Emit any accumulated reasoning before completing
+    self:_emit_reasoning_block(callbacks)
+
+    self:_extract_usage(data, callbacks)
     if callbacks.on_response_complete then
       callbacks.on_response_complete()
     end

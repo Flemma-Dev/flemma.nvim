@@ -38,11 +38,12 @@ function M.new(merged_config)
   provider.endpoint = "https://api.anthropic.com/v1/messages"
   provider.api_version = "2023-06-01"
 
+  -- Set metatable BEFORE reset so M.reset (not base.reset) initializes provider-specific state
+  setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
   provider:reset()
 
-  -- Set metatable to use Anthropic methods
   ---@diagnostic disable-next-line: return-type-mismatch
-  return setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
+  return provider
 end
 
 ---@param self flemma.provider.Anthropic

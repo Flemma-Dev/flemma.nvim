@@ -134,11 +134,12 @@ function M.new(provider_config)
   -- Set the API version
   provider.api_version = "v1" -- Or potentially make this configurable in future
 
+  -- Set metatable BEFORE reset so M.reset (not base.reset) initializes provider-specific state
+  setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
   provider:reset()
 
-  -- Set metatable to use Vertex AI methods
   ---@diagnostic disable-next-line: return-type-mismatch
-  return setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
+  return provider
 end
 
 ---@param self flemma.provider.Vertex
