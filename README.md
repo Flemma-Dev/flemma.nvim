@@ -145,7 +145,6 @@ secret-tool store --label="Vertex AI Service Account" service vertex key api pro
 
    ```markdown
    @You: Turn the notes below into a short project update.
-
    - Added Vertex thinking budget support.
    - Refactored :Flemma command routing.
    - Documented presets in the README.
@@ -184,7 +183,6 @@ notes = [[
 {{notes}}
 
 @Assistant:
-
 - Changelog bullets...
 - Follow-up actions...
 
@@ -1145,17 +1143,10 @@ end
 Happy prompting!
 
 [^anthropic-cache]: https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching
-
 [^anthropic-cache-pricing]: https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching#pricing
-
 [^anthropic-cache-limits]: https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching#cache-limitations
-
 [^openai-cache]: https://platform.openai.com/docs/guides/prompt-caching
-
 [^openai-cache-pricing]: https://platform.openai.com/docs/pricing
-
 [^vertex-cache]: https://developers.googleblog.com/en/gemini-2-5-models-now-support-implicit-caching/
-
 [^vertex-cache-pricing]: https://cloud.google.com/vertex-ai/generative-ai/pricing
-
 [^vertex-cache-explicit]: https://docs.cloud.google.com/vertex-ai/generative-ai/docs/context-cache/context-cache-overview
