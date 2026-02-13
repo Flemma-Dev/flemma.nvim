@@ -42,8 +42,7 @@ function M.new(merged_config)
   setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
   provider:reset()
 
-  ---@diagnostic disable-next-line: return-type-mismatch
-  return provider
+  return provider --[[@as flemma.provider.Anthropic]]
 end
 
 ---@param self flemma.provider.Anthropic
@@ -74,7 +73,7 @@ end
 ---@param prompt flemma.provider.Prompt The prepared prompt with history and system (from pipeline)
 ---@param _context? flemma.Context The shared context object (not used, parts already resolved)
 ---@return table<string, any> request_body The request body for the API
-function M.build_request(self, prompt, _context) ---@diagnostic disable-line: unused-local
+function M.build_request(self, prompt, _context)
   local api_messages = {}
 
   for _, msg in ipairs(prompt.history) do
@@ -711,7 +710,7 @@ local function import_generate_chat(data)
 end
 
 -- Try to import from buffer lines (Claude Workbench format)
-function M.try_import_from_buffer(self, lines) ---@diagnostic disable-line: unused-local
+function M.try_import_from_buffer(self, lines)
   -- Extract and prepare content
   local content = import_extract_content(lines)
   if #content == 0 then

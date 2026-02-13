@@ -57,8 +57,7 @@ function M.new(merged_config)
   setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
   provider:reset()
 
-  ---@diagnostic disable-next-line: return-type-mismatch
-  return provider
+  return provider --[[@as flemma.provider.OpenAI]]
 end
 
 ---@param self flemma.provider.OpenAI
@@ -396,7 +395,7 @@ end
 ---@param self flemma.provider.OpenAI
 ---@param data table<string, any>
 ---@param callbacks flemma.provider.Callbacks
-function M._extract_usage(self, data, callbacks) ---@diagnostic disable-line: unused-local
+function M._extract_usage(self, data, callbacks)
   if not (data.response and data.response.usage and type(data.response.usage) == "table") then
     return
   end
@@ -595,8 +594,7 @@ function M.process_response_line(self, line, callbacks)
       "Flemma: OpenAI response was truncated (reason: " .. reason .. ")",
       vim.log.levels.WARN,
       { title = "Flemma" }
-    ) ---@diagnostic disable-line: redundant-parameter
-
+    )
     -- Emit any accumulated reasoning before completing
     self:_emit_reasoning_block(callbacks)
 
@@ -647,7 +645,7 @@ function M.validate_parameters(model_name, parameters)
         "Flemma: The 'reasoning' parameter is not supported by the selected OpenAI model '%s'. It may be ignored or cause an API error.",
         model_name
       )
-      vim.notify(warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" }) ---@diagnostic disable-line: redundant-parameter
+      vim.notify(warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
       log.warn(warning_msg)
     end
   end
@@ -672,7 +670,7 @@ function M.validate_parameters(model_name, parameters)
       "Flemma: For OpenAI o-series models with 'reasoning' active, 'temperature' must be 1 or omitted. Current value is '%s'. The API will likely reject this.",
       tostring(temp_value)
     )
-    vim.notify(temp_warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" }) ---@diagnostic disable-line: redundant-parameter
+    vim.notify(temp_warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
     log.warn(temp_warning_msg)
   end
 

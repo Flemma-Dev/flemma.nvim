@@ -153,7 +153,7 @@ M.output_has_thoughts = false
 ---@param prompt flemma.provider.Prompt The prepared prompt with history and system
 ---@param context? flemma.Context The shared context object for resolving file paths
 ---@return table<string, any> request_body The request body for the API
-function M.build_request(self, prompt, context) ---@diagnostic disable-line: unused-local
+function M.build_request(self, prompt, context)
   error("build_request() must be implemented by provider")
 end
 
@@ -161,7 +161,7 @@ end
 --- Return HTTP headers for the provider's API
 ---@param self flemma.provider.Base
 ---@return string[]|nil
-function M.get_request_headers(self) ---@diagnostic disable-line: unused-local
+function M.get_request_headers(self)
   error("get_request_headers() must be implemented by provider")
 end
 
@@ -173,7 +173,7 @@ end
 ---@param self flemma.provider.Base The provider instance
 ---@param line string A single line from the API response stream
 ---@param callbacks flemma.provider.Callbacks Table of callback functions to handle parsed data
-function M.process_response_line(self, line, callbacks) ---@diagnostic disable-line: unused-local
+function M.process_response_line(self, line, callbacks)
   error("process_response_line() must be implemented by provider")
 end
 
@@ -215,7 +215,6 @@ function M.new(opts)
     overrides = new_overrides
   end
 
-  ---@diagnostic disable-next-line: return-type-mismatch
   return provider
 end
 
@@ -326,7 +325,7 @@ end
 --- the pipeline instead.
 ---@param messages { type: string, content: string }[] The raw messages to prepare
 ---@return flemma.provider.Prompt prompt The prepared prompt with history and system (canonical roles)
-function M.prepare_prompt(self, messages) ---@diagnostic disable-line: unused-local
+function M.prepare_prompt(self, messages)
   local history = {}
   local system = nil
 
@@ -362,7 +361,7 @@ end
 ---@param model_name string The model name
 ---@param parameters table<string, any> The parameters to validate
 ---@return boolean success True if validation passes (warnings don't fail)
-function M.validate_parameters(model_name, parameters) ---@diagnostic disable-line: unused-local
+function M.validate_parameters(model_name, parameters)
   return true
 end
 
@@ -371,7 +370,7 @@ end
 ---@param self flemma.provider.Base The provider instance
 ---@param exit_code number The HTTP request exit code (0 for success, non-zero for failure)
 ---@param callbacks flemma.provider.Callbacks Table of callback functions for any remaining data processing
-function M.finalize_response(self, exit_code, callbacks) ---@diagnostic disable-line: unused-local
+function M.finalize_response(self, exit_code, callbacks)
   -- Check buffered response if we haven't processed content successfully
   if self._response_buffer and not self._response_buffer.successful then
     self:_check_buffered_response(callbacks)
@@ -384,7 +383,7 @@ end
 ---@param self flemma.provider.Base
 ---@param data table<string, any>
 ---@return string|nil
-function M.extract_json_response_error(self, data) ---@diagnostic disable-line: unused-local
+function M.extract_json_response_error(self, data)
   if type(data) ~= "table" then
     return nil
   end
@@ -424,7 +423,7 @@ end
 ---@param self flemma.provider.Base
 ---@param lines string[]
 ---@return string|nil
-function M.try_import_from_buffer(self, lines) ---@diagnostic disable-line: unused-local
+function M.try_import_from_buffer(self, lines)
   return nil
 end
 

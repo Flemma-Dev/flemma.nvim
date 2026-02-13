@@ -49,7 +49,7 @@ function M.validate_and_get_model(model_name, provider_name)
       tostring(provider_name),
       tostring(validated_model)
     )
-    vim.notify(warn_msg, vim.log.levels.WARN, { title = "Flemma Configuration" }) ---@diagnostic disable-line: redundant-parameter
+    vim.notify(warn_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
     log.warn(warn_msg)
 
     log.info(

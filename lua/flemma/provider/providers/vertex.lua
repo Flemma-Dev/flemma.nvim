@@ -138,8 +138,7 @@ function M.new(provider_config)
   setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
   provider:reset()
 
-  ---@diagnostic disable-next-line: return-type-mismatch
-  return provider
+  return provider --[[@as flemma.provider.Vertex]]
 end
 
 ---@param self flemma.provider.Vertex
@@ -231,7 +230,7 @@ end
 ---@param prompt flemma.provider.Prompt The prepared prompt with history and system
 ---@param _context? flemma.Context The shared context object for resolving file paths
 ---@return table<string, any> request_body The request body for the API
-function M.build_request(self, prompt, _context) ---@diagnostic disable-line: unused-local
+function M.build_request(self, prompt, _context)
   -- Convert prompt.history to Vertex AI format
   local contents = {}
 

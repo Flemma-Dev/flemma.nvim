@@ -510,10 +510,11 @@ local function setup_commands()
     local current = command_tree
 
     for _, segment in ipairs(segments) do
-      current = find_child(current, segment) ---@diagnostic disable-line: cast-local-type
-      if not current then
+      local child = find_child(current, segment)
+      if not child then
         return nil
       end
+      current = child
     end
 
     return current
