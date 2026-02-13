@@ -7,22 +7,26 @@ local M = {}
 ---@class flemma.pipeline.UnresolvedTool
 ---@field id string
 ---@field name string
+---@field position flemma.ast.Position|nil
 
---- Validate that all tool_uses have matching tool_results
----@param history flemma.provider.HistoryMessage[] Array of messages with parts
+--- Validate that all tool_uses have matching tool_results.
+--- Operates on the AST directly so positions come from the source of truth
+--- rather than being threaded through intermediate representations.
+---@param doc flemma.ast.DocumentNode
 ---@return flemma.pipeline.UnresolvedTool[]
-local function validate_tool_results(history)
+local function validate_tool_results(doc)
   local pending_tool_uses = {}
 
-  for _, msg in ipairs(history) do
-    for _, part in ipairs(msg.parts or {}) do
-      if part.kind == "tool_use" then
-        pending_tool_uses[part.id] = {
-          id = part.id,
-          name = part.name,
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "tool_use" then
+        pending_tool_uses[seg.id] = {
+          id = seg.id,
+          name = seg.name,
+          position = seg.position,
         }
-      elseif part.kind == "tool_result" then
-        pending_tool_uses[part.tool_use_id] = nil
+      elseif seg.kind == "tool_result" then
+        pending_tool_uses[seg.tool_use_id] = nil
       end
     end
   end
@@ -86,11 +90,12 @@ function M.run(doc, context)
   end
 
   -- Validate tool_use/tool_result matching
-  local unresolved_tools = validate_tool_results(history)
+  local unresolved_tools = validate_tool_results(doc)
   for _, tool in ipairs(unresolved_tools) do
     table.insert(all_diagnostics, {
       type = "tool_use",
       severity = "warning",
+      position = tool.position,
       error = string.format(
         "Tool call '%s' (%s) has no matching tool result. A synthetic 'No result provided' error response will be sent to the API.",
         tool.name,
