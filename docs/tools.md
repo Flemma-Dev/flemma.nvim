@@ -233,11 +233,11 @@ Flemma uses a priority-based resolver chain to decide whether a tool call should
 
 Built-in resolvers are registered during `setup()`:
 
-| Priority | Name                       | Source                                                |
-| -------- | -------------------------- | ----------------------------------------------------- |
-| 100      | `config:auto_approve`      | Global `tools.auto_approve` from config               |
+| Priority | Name                       | Source                                                      |
+| -------- | -------------------------- | ----------------------------------------------------------- |
+| 100      | `config:auto_approve`      | Global `tools.auto_approve` from config                     |
 | 90       | `frontmatter:auto_approve` | Per-buffer `flemma.opt.tools.auto_approve` from frontmatter |
-| 0        | `config:catch_all_approve` | Only when `tools.require_approval = false`            |
+| 0        | `config:catch_all_approve` | Only when `tools.require_approval = false`                  |
 
 Third-party plugins register at the default priority of 50. Set `priority` higher to run before built-in resolvers (e.g., 200 to override config), or lower to act as a fallback.
 
