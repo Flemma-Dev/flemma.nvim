@@ -40,6 +40,8 @@ Methods are grouped into three categories:
     external formats.
   - `is_context_overflow(self, message)` — detect context window overflow
     from error messages.
+  - `is_auth_error(self, message)` — detect authentication failures
+    (default `false`; override for providers with expiring tokens).
 
 Required class-level fields
 ---------------------------
@@ -129,6 +131,9 @@ local M = {}
 ---@field keyring_service_name? string
 ---@field keyring_key_name? string
 ---@field keyring_project_id? string
+
+---@class flemma.provider.ResetOpts
+---@field auth? boolean If true, reset authentication state only
 
 ---@class flemma.provider.SSELine
 ---@field type "data"|"event"|"done"
@@ -299,10 +304,19 @@ function M.get_api_key(self, opts)
 end
 
 --- Reset provider state before a new request.
+--- When called without opts, performs a full reset (response buffer, etc.).
+--- When called with opts, performs a selective reset (only the specified fields).
 --- Providers must call `base.reset(self)` plus any provider-specific state initialization.
 ---@param self flemma.provider.Base
-function M.reset(self)
-  -- Create response buffer for all providers
+---@param opts? flemma.provider.ResetOpts
+function M.reset(self, opts)
+  if opts then
+    if opts.auth then
+      self.state.api_key = nil
+    end
+    return
+  end
+  -- Full reset: create response buffer for all providers
   self:_new_response_buffer()
 end
 
@@ -461,6 +475,15 @@ function M:is_context_overflow(message)
   if lower:match("token limit exceeded") then
     return true
   end
+  return false
+end
+
+--- Detect whether an error message indicates an authentication failure.
+--- Override to add provider-specific patterns (e.g. Vertex UNAUTHENTICATED).
+--- Default returns false (most providers don't need reactive auth recovery).
+---@param message string|nil The error message to check
+---@return boolean
+function M:is_auth_error(message)
   return false
 end
 

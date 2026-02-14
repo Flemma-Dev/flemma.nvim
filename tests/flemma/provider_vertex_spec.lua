@@ -185,4 +185,265 @@ describe("Vertex AI Provider", function()
       assert.is_true(found_cache_read, "Expected cache_read usage event")
     end)
   end)
+
+  describe("is_auth_error", function()
+    it("should detect UNAUTHENTICATED status in error message", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+      })
+      assert.is_true(provider:is_auth_error("Request had invalid authentication credentials (Status: UNAUTHENTICATED)"))
+    end)
+
+    it("should detect lowercase unauthenticated", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+      })
+      assert.is_true(provider:is_auth_error("unauthenticated"))
+    end)
+
+    it("should detect invalid authentication credentials", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+      })
+      assert.is_true(provider:is_auth_error("Invalid Authentication Credentials"))
+    end)
+
+    it("should return false for non-auth errors", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+      })
+      assert.is_false(provider:is_auth_error("Rate limit exceeded"))
+      assert.is_false(provider:is_auth_error("Model not found"))
+      assert.is_false(provider:is_auth_error("Internal server error"))
+    end)
+
+    it("should handle nil and non-string input", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+      })
+      assert.is_false(provider:is_auth_error(nil))
+      assert.is_false(provider:is_auth_error(123 --[[@as any]]))
+    end)
+  end)
+
+  describe("reset with opts", function()
+    it("should clear api_key and token tracking when opts.auth is true", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+      })
+
+      -- Simulate a cached gcloud token
+      provider.state.api_key = "ya29.fake-token"
+      provider._token_generated_at = os.time()
+      provider._token_from = "gcloud"
+
+      provider:reset({ auth = true })
+
+      assert.is_nil(provider.state.api_key)
+      assert.is_nil(provider._token_generated_at)
+      assert.is_nil(provider._token_from)
+    end)
+
+    it("should NOT reset the response buffer when opts.auth is true", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+      })
+
+      -- Record what the response buffer looks like after construction
+      local original_buffer = provider._response_buffer
+      assert.is_not_nil(original_buffer)
+
+      -- Auth reset should preserve the response buffer
+      provider:reset({ auth = true })
+      assert.equals(original_buffer, provider._response_buffer)
+    end)
+
+    it("should perform full reset when no opts are passed", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+      })
+
+      local original_buffer = provider._response_buffer
+
+      -- Full reset creates a new response buffer
+      provider:reset()
+      assert.is_not.equals(original_buffer, provider._response_buffer)
+      assert.equals("", provider._response_buffer.extra.accumulated_thoughts)
+    end)
+  end)
+
+  describe("extract_json_response_error", function()
+    it("should handle non-array object format with status", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+      })
+
+      local data = {
+        error = {
+          code = 401,
+          message = "Request had invalid authentication credentials.",
+          status = "UNAUTHENTICATED",
+        },
+      }
+
+      local msg = provider:extract_json_response_error(data)
+      assert.is_not_nil(msg)
+      assert.truthy(msg:match("Request had invalid authentication credentials"))
+      assert.truthy(msg:match("UNAUTHENTICATED"))
+    end)
+
+    it("should handle non-array object format with details", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+      })
+
+      local data = {
+        error = {
+          code = 400,
+          message = "Invalid request",
+          status = "INVALID_ARGUMENT",
+          details = {
+            {
+              ["@type"] = "type.googleapis.com/google.rpc.BadRequest",
+              fieldViolations = {
+                { description = "Field X is required" },
+              },
+            },
+          },
+        },
+      }
+
+      local msg = provider:extract_json_response_error(data)
+      assert.is_not_nil(msg)
+      assert.truthy(msg:match("INVALID_ARGUMENT"))
+      assert.truthy(msg:match("Field X is required"))
+    end)
+
+    it("should still handle array format", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+      })
+
+      local data = {
+        {
+          error = {
+            message = "Array error message",
+            status = "PERMISSION_DENIED",
+          },
+        },
+      }
+
+      local msg = provider:extract_json_response_error(data)
+      assert.is_not_nil(msg)
+      assert.truthy(msg:match("Array error message"))
+      assert.truthy(msg:match("PERMISSION_DENIED"))
+    end)
+  end)
+
+  describe("proactive token refresh", function()
+    it("should clear stale gcloud token when age exceeds threshold", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+      })
+
+      -- Simulate a gcloud token generated 56 minutes ago (past the 55-min threshold)
+      provider.state.api_key = "ya29.stale-token"
+      provider._token_from = "gcloud"
+      provider._token_generated_at = os.time() - (56 * 60)
+
+      -- Set VERTEX_AI_ACCESS_TOKEN to catch the call after cache is cleared
+      -- (otherwise get_api_key would try gcloud/keyring which we can't mock easily)
+      local original_env = os.getenv("VERTEX_AI_ACCESS_TOKEN")
+      vim.env.VERTEX_AI_ACCESS_TOKEN = "ya29.fresh-env-token"
+
+      local token = provider:get_api_key()
+
+      -- Restore env
+      if original_env then
+        vim.env.VERTEX_AI_ACCESS_TOKEN = original_env
+      else
+        vim.env.VERTEX_AI_ACCESS_TOKEN = nil
+      end
+
+      -- Should have picked up the env token since the stale one was cleared
+      assert.equals("ya29.fresh-env-token", token)
+      assert.equals("env", provider._token_from)
+    end)
+
+    it("should keep valid gcloud token when age is within threshold", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+      })
+
+      -- Simulate a gcloud token generated 30 minutes ago (within the 55-min threshold)
+      provider.state.api_key = "ya29.valid-token"
+      provider._token_from = "gcloud"
+      provider._token_generated_at = os.time() - (30 * 60)
+
+      -- Temporarily clear VERTEX_AI_ACCESS_TOKEN to avoid short-circuiting
+      local original_env = os.getenv("VERTEX_AI_ACCESS_TOKEN")
+      vim.env.VERTEX_AI_ACCESS_TOKEN = nil
+
+      local token = provider:get_api_key()
+
+      -- Restore env
+      if original_env then
+        vim.env.VERTEX_AI_ACCESS_TOKEN = original_env
+      end
+
+      -- Should still use the cached token
+      assert.equals("ya29.valid-token", token)
+      assert.equals("gcloud", provider._token_from)
+    end)
+
+    it("should not check staleness for env tokens", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+      })
+
+      -- Simulate an env token that's old (but env tokens are always re-read)
+      provider.state.api_key = "old-env-token"
+      provider._token_from = "env"
+      provider._token_generated_at = os.time() - (120 * 60) -- 2 hours old
+
+      vim.env.VERTEX_AI_ACCESS_TOKEN = "ya29.current-env-token"
+
+      local token = provider:get_api_key()
+
+      -- Restore env
+      vim.env.VERTEX_AI_ACCESS_TOKEN = nil
+
+      -- Should pick up the current env token (re-read on every call)
+      assert.equals("ya29.current-env-token", token)
+      assert.equals("env", provider._token_from)
+    end)
+  end)
 end)

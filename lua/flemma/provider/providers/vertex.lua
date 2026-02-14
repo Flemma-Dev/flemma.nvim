@@ -3,7 +3,12 @@
 local base = require("flemma.provider.base")
 local log = require("flemma.logging")
 
+local TOKEN_TTL_SECONDS = 3600
+local TOKEN_REFRESH_BUFFER_SECONDS = 300
+
 ---@class flemma.provider.Vertex : flemma.provider.Base
+---@field _token_generated_at integer|nil os.time() when the gcloud token was generated
+---@field _token_from "gcloud"|"env"|"direct"|nil Source of the cached token
 local M = {}
 
 -- Inherit from base provider
@@ -142,7 +147,17 @@ function M.new(provider_config)
 end
 
 ---@param self flemma.provider.Vertex
-function M.reset(self)
+---@param opts? flemma.provider.ResetOpts
+function M.reset(self, opts)
+  if opts then
+    if opts.auth then
+      base.reset(self, opts)
+      self._token_generated_at = nil
+      self._token_from = nil
+    end
+    return
+  end
+  -- Full reset
   base.reset(self)
   -- Add Vertex-specific extension
   self._response_buffer.extra.accumulated_thoughts = ""
@@ -157,25 +172,48 @@ function M.get_api_key(self)
   -- Validate required configuration first
   _validate_config(self)
 
-  -- Access project_id directly from self.parameters (needed for keyring lookup)
-  local project_id = self.parameters.project_id
-
-  -- First try to get token from environment variable
+  -- 1. Check environment variable on every call (allows external rotation)
   local env_token = os.getenv("VERTEX_AI_ACCESS_TOKEN")
   if env_token and #env_token > 0 then
     self.state.api_key = env_token
+    self._token_from = "env"
     return env_token
   end
 
-  -- Try to get service account JSON from keyring
+  -- 2. Proactive staleness check for gcloud-generated tokens
+  if self._token_from == "gcloud" and self._token_generated_at then
+    local age = os.time() - self._token_generated_at
+    if age >= (TOKEN_TTL_SECONDS - TOKEN_REFRESH_BUFFER_SECONDS) then
+      log.debug(
+        "vertex.get_api_key(): gcloud token is "
+          .. tostring(age)
+          .. "s old (threshold "
+          .. tostring(TOKEN_TTL_SECONDS - TOKEN_REFRESH_BUFFER_SECONDS)
+          .. "s), clearing for refresh"
+      )
+      self.state.api_key = nil
+      self._token_generated_at = nil
+    end
+  end
+
+  -- 3. Return cached token if still valid
+  if self.state.api_key and self.state.api_key ~= "" then
+    return self.state.api_key
+  end
+
+  -- 4. Fetch service account JSON from env/keyring (re-fetched on each refresh)
+  local project_id = self.parameters.project_id
+
+  -- Clear cached api_key in base before calling get_api_key to force re-read
+  self.state.api_key = nil
   local service_account_json = base.get_api_key(self, {
     env_var_name = "VERTEX_SERVICE_ACCOUNT",
     keyring_service_name = "vertex",
     keyring_key_name = "api",
-    keyring_project_id = project_id, -- Use project_id from parameters
+    keyring_project_id = project_id,
   })
 
-  -- If we have service account JSON, try to generate an access token
+  -- 5. If we have service account JSON, generate a gcloud token
   if service_account_json and service_account_json:match("service_account") then
     log.debug("vertex.get_api_key(): Found service account JSON, attempting to generate access token")
 
@@ -183,29 +221,24 @@ function M.get_api_key(self)
     if generated_token then
       log.debug("vertex.get_api_key(): Successfully generated access token from service account")
       self.state.api_key = generated_token
+      self._token_generated_at = os.time()
+      self._token_from = "gcloud"
       return generated_token
     else
       log.error("vertex.get_api_key(): Failed to generate access token: " .. (err or "unknown error"))
-      if err then
-        error(
-          err
-            .. "\n\n---\n\nVertex AI requires the Google Cloud CLI (gcloud) to generate access tokens from service accounts.\n"
-            .. "Please install gcloud or set VERTEX_AI_ACCESS_TOKEN environment variable.",
-          0
-        )
-      else
-        error(
-          "Vertex AI requires the Google Cloud CLI (gcloud) to generate access tokens from service accounts.\n"
-            .. "Please install gcloud or set VERTEX_AI_ACCESS_TOKEN environment variable.",
-          0
-        )
-      end
+      error(
+        (err or "Unknown error generating access token")
+          .. "\n\n---\n\nVertex AI requires the Google Cloud CLI (gcloud) to generate access tokens from service accounts.\n"
+          .. "Please install gcloud or set VERTEX_AI_ACCESS_TOKEN environment variable.",
+        0
+      )
     end
   end
 
-  -- If we have something but it's not a service account JSON, it might be a direct token
+  -- 6. Fallback: treat as direct token
   if service_account_json and #service_account_json > 0 then
     self.state.api_key = service_account_json
+    self._token_from = "direct"
     return service_account_json
   end
 
@@ -783,8 +816,47 @@ function M.extract_json_response_error(self, data)
     return msg
   end
 
+  -- Pattern 2: Non-array object response { error: { message, status, details } }
+  if not vim.islist(data) and type(data.error) == "table" and data.error.message then
+    local msg = data.error.message
+    if data.error.status then
+      msg = msg .. " (Status: " .. data.error.status .. ")"
+    end
+    if data.error.details and type(data.error.details) == "table" and #data.error.details > 0 then
+      for _, detail in ipairs(data.error.details) do
+        if detail["@type"] and detail["@type"]:match("BadRequest") and detail.fieldViolations then
+          for _, violation in ipairs(detail.fieldViolations) do
+            if violation.description then
+              msg = msg .. "\n" .. violation.description
+            end
+          end
+        end
+      end
+    end
+    return msg
+  end
+
   -- If Vertex-specific patterns don't match, fall back to base class patterns
   return base.extract_json_response_error(self, data)
+end
+
+--- Detect whether an error message indicates an authentication failure.
+--- Overrides base virtual to match Vertex-specific UNAUTHENTICATED patterns.
+---@param self flemma.provider.Vertex
+---@param message string|nil The error message to check
+---@return boolean
+function M.is_auth_error(self, message)
+  if not message or type(message) ~= "string" then
+    return false
+  end
+  local lower = message:lower()
+  if lower:match("unauthenticated") then
+    return true
+  end
+  if lower:match("invalid authentication credentials") then
+    return true
+  end
+  return false
 end
 
 return M

@@ -113,9 +113,7 @@ function M.switch_provider(provider_name, model_name, parameters)
   local updated_config = state.get_config()
 
   -- Force the new provider to clear its API key cache
-  if new_provider and new_provider.state then
-    new_provider.state.api_key = nil
-  end
+  new_provider:reset({ auth = true })
 
   -- Notify the user
   local model_info = updated_config.model and (" with model '" .. updated_config.model .. "'") or ""
@@ -580,6 +578,9 @@ function M.send_to_provider(opts)
           notify_msg = notify_msg
             .. "\n\nYour conversation is too long for this model."
             .. " Remove earlier messages or start a new conversation."
+        elseif current_provider:is_auth_error(msg) then
+          current_provider:reset({ auth = true })
+          notify_msg = notify_msg .. "\n\nAuthentication expired. Send again to generate a fresh token."
         end
         if log.is_enabled() then
           notify_msg = notify_msg .. "\nSee " .. log.get_path() .. " for details"
