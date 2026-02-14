@@ -138,7 +138,7 @@ function M.new(provider_config)
   -- self.parameters.model is set via base.new
 
   -- Set the API version
-  provider.api_version = "v1" -- Or potentially make this configurable in future
+  provider.api_version = "v1beta1" -- v1beta1 supports parametersJsonSchema for full JSON Schema compatibility
 
   -- Set metatable BEFORE reset so M.reset (not base.reset) initializes provider-specific state
   setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
@@ -482,7 +482,7 @@ function M.build_request(self, prompt, _context)
     table.insert(function_declarations, {
       name = def.name,
       description = tools_module.build_description(def),
-      parameters = def.input_schema,
+      parametersJsonSchema = def.input_schema,
     })
   end
 
