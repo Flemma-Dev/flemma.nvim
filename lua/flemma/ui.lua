@@ -867,6 +867,38 @@ local function get_extmark_line(bufnr, extmark_id)
   return nil
 end
 
+--- Show pending-approval indicator for a tool
+--- Creates a static extmark (no spinner) at the tool result header line.
+--- Automatically replaced when `show_tool_indicator` starts the execution spinner.
+---@param bufnr integer
+---@param tool_id string
+---@param header_line integer 1-based line number of the tool result header
+function M.show_pending_tool_indicator(bufnr, tool_id, header_line)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  M.clear_tool_indicator(bufnr, tool_id)
+
+  local key = indicator_key(bufnr, tool_id)
+  local line_idx = header_line - 1
+
+  local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
+    virt_text = { { " ● Pending", "FlemmaToolPending" } },
+    virt_text_pos = "eol",
+    hl_mode = "combine",
+    priority = PRIORITY.TOOL_EXECUTION,
+    spell = false,
+  })
+
+  tool_indicators[key] = {
+    extmark_id = extmark_id,
+    timer = nil,
+    bufnr = bufnr,
+    tool_id = tool_id,
+  }
+end
+
 --- Show execution indicator for a tool
 --- Creates extmark with animated spinner at the tool result header line
 ---@param bufnr integer

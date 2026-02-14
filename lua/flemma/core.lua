@@ -221,6 +221,7 @@ function M.send_or_execute(opts)
       local executor = require("flemma.tools.executor")
       local to_execute = {}
       local first_placeholder_line = nil
+      local pending_indicators = {}
 
       for _, ctx in ipairs(pending) do
         local decision = approval.resolve(ctx.tool_name, ctx.input, { bufnr = bufnr, tool_id = ctx.tool_id })
@@ -235,10 +236,23 @@ function M.send_or_execute(opts)
           })
         else
           local header_line = injector.inject_placeholder(bufnr, ctx.tool_id, { pending = true })
-          if header_line and (not first_placeholder_line or header_line < first_placeholder_line) then
-            first_placeholder_line = header_line
+          if header_line then
+            table.insert(pending_indicators, { tool_id = ctx.tool_id, header_line = header_line })
+            if not first_placeholder_line or header_line < first_placeholder_line then
+              first_placeholder_line = header_line
+            end
           end
         end
+      end
+
+      -- Flash pending-approval indicators (after all placeholders are injected so
+      -- reposition can correct any displaced extmarks)
+      for _, ind in ipairs(pending_indicators) do
+        ui.show_pending_tool_indicator(bufnr, ind.tool_id, ind.header_line)
+        ui.schedule_tool_indicator_clear(bufnr, ind.tool_id, 1500)
+      end
+      if #pending_indicators > 0 then
+        ui.reposition_tool_indicators(bufnr)
       end
 
       -- Move cursor to first injected placeholder so the user can review
