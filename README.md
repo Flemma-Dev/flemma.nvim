@@ -166,7 +166,7 @@ Model thoughts stream here and auto-fold.
 </thinking>
 ````
 
-- **Frontmatter** sits on the first line and must be fenced with triple backticks. Lua and JSON parsers ship with Flemma; you can register more via `flemma.frontmatter.parsers.register("yaml", parser_fn)`. Lua frontmatter also exposes `flemma.opt` for [per-buffer tool selection, approval, and provider parameter overrides](docs/tools.md#per-buffer-tool-selection).
+- **Frontmatter** sits on the first line and must be fenced with triple backticks. Lua and JSON parsers ship with Flemma; you can register more via `flemma.codeblock.parsers.register("yaml", parser_fn)`. Lua frontmatter also exposes `flemma.opt` for [per-buffer tool selection, approval, and provider parameter overrides](docs/tools.md#per-buffer-tool-selection).
 - **Messages** begin with `@System:`, `@You:`, or `@Assistant:`. The parser is whitespace-tolerant and handles blank lines between messages.
 - **Thinking blocks** appear only in assistant messages. When thinking is enabled (default `"high"`), Anthropic and Vertex AI models stream `<thinking>` sections; Flemma folds them automatically and keeps dedicated highlights for the tags and body.
 
@@ -287,7 +287,7 @@ When thinking is active, the Lualine component shows the resolved level – e.g.
 The full model catalogue (including pricing) is in `lua/flemma/models.lua`. You can access it from Neovim with:
 
 ```lua
-:lua print(vim.inspect(require("flemma.provider.config").models))
+:lua print(vim.inspect(require("flemma.models")))
 ```
 
 ### Prompt caching
@@ -431,7 +431,7 @@ Other useful Makefile targets:
 make lint          # Run luacheck on all Lua files
 make check         # Run lua-language-server type checking
 make develop       # Launch Neovim with Flemma loaded for local testing
-make screenshot    # Generate screenshots
+make screencast    # Create a VHS screencast
 ```
 
 To exercise the plugin without installing it globally, run `make develop` – it launches Neovim with Flemma on the runtime path and opens a scratch `.chat` buffer.
