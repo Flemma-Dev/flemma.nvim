@@ -1,6 +1,6 @@
 local cwd = vim.fn.getcwd()
 vim.opt.runtimepath:prepend(cwd)
-vim.opt.runtimepath:prepend(cwd .. '/.vapor/dracula-vim')
+vim.opt.runtimepath:prepend(cwd .. "/.vapor/dracula-vim")
 
 vim.opt.termguicolors = true
 vim.cmd.colorscheme("dracula")
