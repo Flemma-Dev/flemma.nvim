@@ -5,6 +5,7 @@ local M = {}
 
 ---@class flemma.opt.ResolvedOpts
 ---@field tools string[]|nil List of allowed tool names
+---@field auto_approve flemma.config.AutoApprove|nil Per-buffer auto-approve policy
 ---@field anthropic table<string, any>|nil Per-buffer Anthropic parameter overrides
 ---@field openai table<string, any>|nil Per-buffer OpenAI parameter overrides
 ---@field vertex table<string, any>|nil Per-buffer Vertex parameter overrides
@@ -198,11 +199,19 @@ function ListOption:__pow(value)
   return self:prepend(value)
 end
 
---- Check if a value is a ListOption instance
+--- Marker used by is_list_option to identify ListOption instances across metatables.
+---@type boolean
+ListOption._is_list_option = true
+
+--- Check if a value is a ListOption instance (supports custom per-instance metatables)
 ---@param v any
 ---@return boolean
 local function is_list_option(v)
-  return type(v) == "table" and getmetatable(v) == ListOption
+  if type(v) ~= "table" then
+    return false
+  end
+  local mt = getmetatable(v)
+  return type(mt) == "table" and mt._is_list_option == true
 end
 
 -- Option definitions: each returns an array of {name, enabled} entries
@@ -251,6 +260,36 @@ function M.create()
   ---@type table<string, boolean>
   local touched = {}
 
+  -- Raw options that are sub-properties of ListOption instances (e.g., tools.auto_approve)
+  ---@type table<string, any>
+  local raw_options = {}
+
+  -- Give the tools ListOption a custom metatable so flemma.opt.tools.auto_approve works
+  -- while list operations (:remove, :append, +, -, ^) continue to function normally.
+  local tools_option = options["tools"]
+  setmetatable(tools_option, {
+    _is_list_option = true,
+    __index = function(_, key)
+      if key == "auto_approve" then
+        return raw_options.auto_approve
+      end
+      return ListOption[key]
+    end,
+    __newindex = function(_, key, value)
+      if key == "auto_approve" then
+        if type(value) ~= "table" and type(value) ~= "function" then
+          error(string.format("flemma.opt.tools.auto_approve: expected table or function, got %s", type(value)))
+        end
+        raw_options.auto_approve = value
+        return
+      end
+      rawset(tools_option, key, value)
+    end,
+    __add = ListOption.__add,
+    __sub = ListOption.__sub,
+    __pow = ListOption.__pow,
+  })
+
   -- Per-provider parameter overrides (e.g., { anthropic = { cache_retention = "long" } })
   ---@type table<string, table<string, any>>
   local provider_params = {}
@@ -260,7 +299,7 @@ function M.create()
   local opt_proxy = setmetatable({}, {
     ---@param _ table
     ---@param key string
-    ---@return flemma.opt.ListOption|table
+    ---@return flemma.opt.ListOption|table|nil
     __index = function(_, key)
       if option_defs[key] then
         touched[key] = true
@@ -319,6 +358,9 @@ function M.create()
     local result = {}
     for name in pairs(touched) do
       result[name] = options[name]:get()
+    end
+    if raw_options.auto_approve ~= nil then
+      result.auto_approve = raw_options.auto_approve
     end
     for pname, params in pairs(provider_params) do
       if next(params) then

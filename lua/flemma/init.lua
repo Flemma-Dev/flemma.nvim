@@ -90,6 +90,9 @@ M.setup = function(user_opts)
 
   -- Initialize tool registry with built-in tools
   require("flemma.tools").setup()
+
+  -- Initialize approval resolver chain from config
+  require("flemma.tools.approval").setup()
 end
 
 ---Get the current model name

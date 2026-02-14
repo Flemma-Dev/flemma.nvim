@@ -47,22 +47,21 @@ end
 ---@field diagnostics flemma.ast.Diagnostic[]
 ---@field opts flemma.opt.ResolvedOpts|nil
 
---- Evaluate a document AST.
+---Evaluate frontmatter and return the resulting context (with __opts and user variables set).
 ---@param doc flemma.ast.DocumentNode
 ---@param base_context flemma.Context|nil
----@return flemma.processor.EvaluatedResult
-function M.evaluate(doc, base_context)
-  -- Use doc.errors as the unified diagnostics array (parser may have populated it)
-  local diagnostics = doc.errors or {}
+---@return flemma.Context context
+---@return flemma.ast.Diagnostic[] diagnostics Frontmatter-specific diagnostics
+local function evaluate_frontmatter(doc, base_context)
   local context = ctxutil.clone(base_context)
+  local diagnostics = {}
 
-  -- 1) Frontmatter execution using the parser registry
   if doc.frontmatter then
     local fm = doc.frontmatter ---@cast fm -nil
-    local parser = codeblock_parsers.get(fm.language)
+    local fm_parser = codeblock_parsers.get(fm.language)
 
-    if parser then
-      local ok, result = pcall(parser, fm.code, context)
+    if fm_parser then
+      local ok, result = pcall(fm_parser, fm.code, context)
       if ok then
         if type(result) == "table" then
           context = ctxutil.extend(context, result)
@@ -96,6 +95,22 @@ function M.evaluate(doc, base_context)
         source_file = context:get_filename() or "N/A",
       })
     end
+  end
+
+  return context, diagnostics
+end
+
+--- Evaluate a document AST.
+---@param doc flemma.ast.DocumentNode
+---@param base_context flemma.Context|nil
+---@return flemma.processor.EvaluatedResult
+function M.evaluate(doc, base_context)
+  local context, fm_diagnostics = evaluate_frontmatter(doc, base_context)
+
+  -- Merge parser errors with frontmatter diagnostics
+  local diagnostics = doc.errors or {}
+  for _, d in ipairs(fm_diagnostics) do
+    table.insert(diagnostics, d)
   end
 
   -- 2) Evaluate messages
@@ -207,6 +222,17 @@ function M.evaluate(doc, base_context)
     diagnostics = diagnostics,
     opts = context:get_opts(),
   }
+end
+
+---Evaluate buffer frontmatter and return resolved per-buffer opts.
+---Returns nil silently on any error (broken frontmatter should not block callers).
+---@param bufnr integer
+---@return flemma.opt.ResolvedOpts|nil
+function M.resolve_buffer_opts(bufnr)
+  local parser = require("flemma.parser")
+  local doc = parser.get_parsed_document(bufnr)
+  local context = evaluate_frontmatter(doc, ctxutil.from_buffer(bufnr))
+  return context:get_opts()
 end
 
 return M

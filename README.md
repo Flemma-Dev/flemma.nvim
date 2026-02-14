@@ -162,7 +162,7 @@ Model thoughts stream here and auto-fold.
 </thinking>
 ````
 
-- **Frontmatter** sits on the first line and must be fenced with triple backticks. Lua and JSON parsers ship with Flemma; you can register more via `flemma.frontmatter.parsers.register("yaml", parser_fn)`. Lua frontmatter also exposes `flemma.opt` for [per-buffer tool selection](#per-buffer-tool-selection).
+- **Frontmatter** sits on the first line and must be fenced with triple backticks. Lua and JSON parsers ship with Flemma; you can register more via `flemma.frontmatter.parsers.register("yaml", parser_fn)`. Lua frontmatter also exposes `flemma.opt` for [per-buffer tool selection, approval, and provider parameter overrides](docs/tools.md#per-buffer-tool-selection).
 - **Messages** begin with `@System:`, `@You:`, or `@Assistant:`. The parser is whitespace-tolerant and handles blank lines between messages.
 - **Thinking blocks** appear only in assistant messages. Anthropic and Vertex AI models stream `<thinking>` sections; Flemma folds them automatically and keeps dedicated highlights for the tags and body.
 
@@ -292,68 +292,7 @@ Flemma includes a tool system that lets models request actions – run a calcula
 | `write`      | sync  | Writes or creates files. Creates parent directories automatically.                                                  |
 | `edit`       | sync  | Find-and-replace with exact text matching. The old text must appear exactly once in the target file.                |
 
-### Tool approval
-
-By default, Flemma requires you to review tool calls before execution (<kbd>Ctrl-]</kbd> enters a three-phase cycle):
-
-1. **Inject placeholders** – empty `**Tool Result:**` blocks are added, fenced with `` `flemma:pending ``. The cursor moves to the first placeholder.
-2. **Execute** – press <kbd>Ctrl-]</kbd> again. Pending placeholders are executed; any you edited are treated as manual overrides.
-3. **Send** – once every tool has a result, the next <kbd>Ctrl-]</kbd> sends the conversation.
-
-Disable approval with `tools.require_approval = false`. Use `tools.auto_approve` to whitelist specific tools or write a custom policy function:
-
-```lua
-tools = {
-  auto_approve = { "calculator", "read" },       -- list form
-  auto_approve = function(tool_name, input, ctx)  -- function form
-    if tool_name == "calculator" then return true end
-    if tool_name == "bash" and input.command:match("rm %-rf") then return "deny" end
-    return false  -- require approval
-  end,
-}
-```
-
-### Tool execution
-
-- **Async tools** (like `bash`) show an animated spinner while running and can be cancelled.
-- **Buffer locking** – the buffer is made non-modifiable during tool execution to prevent race conditions.
-- **Output truncation** – large outputs (> 4000 lines or 8 MB) are automatically truncated. The full output is saved to a temporary file.
-- **Cursor positioning** – after injection, the cursor can move to the result (`"result"`), stay put (`"stay"`), or jump to the next `@You:` prompt (`"next"`). Controlled by `tools.cursor_after_result`.
-
-### Parallel tool use
-
-All three providers support parallel tool calls. Press <kbd>Ctrl-]</kbd> to execute all pending calls at once, or use <kbd>Alt-Enter</kbd> on individual blocks. Flemma validates that every `**Tool Use:**` block has a matching `**Tool Result:**` before sending.
-
-### Custom tools
-
-Register your own tools with `require("flemma.tools").register()`, which supports single definitions, batch registration, module paths, and async resolution for tools that need to call external processes. See [docs/custom-tools.md](docs/custom-tools.md) for the full registration API, strict mode, and async patterns.
-
-### Per-buffer tool selection
-
-Control which tools are available per-buffer using `flemma.opt` in Lua frontmatter:
-
-````lua
-```lua
-flemma.opt.tools = {"bash", "read"}             -- only these tools
-flemma.opt.tools:remove("calculator")           -- remove from defaults
-flemma.opt.tools:append("calculator_async")     -- add a tool
-flemma.opt.tools = flemma.opt.tools + "read"    -- operator overloads work too
-```
-````
-
-Each evaluation starts from defaults (all enabled tools). Misspelled tool names produce an error with a "did you mean" suggestion.
-
-### Per-buffer provider parameter overrides
-
-Provider-specific parameters can also be overridden per-buffer:
-
-````lua
-```lua
-flemma.opt.anthropic.thinking_budget = 20000
-flemma.opt.openai.reasoning = "high"
-flemma.opt.vertex.thinking_budget = 4096
-```
-````
+By default, every tool call requires your approval before execution — <kbd>Ctrl-]</kbd> injects review placeholders first, then executes on a second press. Whitelist safe tools globally with `tools.auto_approve = { "calculator", "read" }`, or per-buffer via `flemma.opt.tools.auto_approve` in frontmatter. Set `tools.require_approval = false` to skip approval entirely. You can also register your own tools with `require("flemma.tools").register()` and extend the approval chain with custom resolvers for plugin-level security policies. See [docs/tools.md](docs/tools.md) for the full reference on approval, per-buffer configuration, custom tool registration, and the resolver API.
 
 ---
 

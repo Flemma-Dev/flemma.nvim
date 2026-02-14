@@ -562,4 +562,97 @@ describe("flemma.opt", function()
       assert.is_nil(resolved.anthropic)
     end)
   end)
+
+  describe("auto_approve", function()
+    it("setting string list resolves correctly", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.tools.auto_approve = { "calculator", "read" }
+      local resolved = resolve()
+      assert.are.same({ "calculator", "read" }, resolved.auto_approve)
+    end)
+
+    it("setting function resolves correctly", function()
+      local opt_proxy, resolve = opt.create()
+      local fn = function()
+        return true
+      end
+      opt_proxy.tools.auto_approve = fn
+      local resolved = resolve()
+      assert.equals(fn, resolved.auto_approve)
+    end)
+
+    it("reading auto_approve back returns the set value", function()
+      local opt_proxy = opt.create()
+      local policy = { "calculator" }
+      opt_proxy.tools.auto_approve = policy
+      assert.same(policy, opt_proxy.tools.auto_approve)
+    end)
+
+    it("not touching auto_approve results in nil in resolved opts", function()
+      local _, resolve = opt.create()
+      local resolved = resolve()
+      assert.is_nil(resolved.auto_approve)
+    end)
+
+    it("reading unset auto_approve returns nil", function()
+      local opt_proxy = opt.create()
+      assert.is_nil(opt_proxy.tools.auto_approve)
+    end)
+
+    it("errors on number value", function()
+      local opt_proxy = opt.create()
+      assert.has_error(function()
+        opt_proxy.tools.auto_approve = 42
+      end, "flemma.opt.tools.auto_approve: expected table or function, got number")
+    end)
+
+    it("errors on string value", function()
+      local opt_proxy = opt.create()
+      assert.has_error(function()
+        opt_proxy.tools.auto_approve = "calculator"
+      end, "flemma.opt.tools.auto_approve: expected table or function, got string")
+    end)
+
+    it("does not leak across create() calls", function()
+      local opt_proxy1, resolve1 = opt.create()
+      opt_proxy1.tools.auto_approve = { "calculator" }
+      local resolved1 = resolve1()
+      assert.are.same({ "calculator" }, resolved1.auto_approve)
+
+      local _, resolve2 = opt.create()
+      local resolved2 = resolve2()
+      assert.is_nil(resolved2.auto_approve)
+    end)
+
+    it("flows through frontmatter pipeline", function()
+      local lines = {
+        "```lua",
+        'flemma.opt.tools.auto_approve = { "calculator" }',
+        "```",
+        "@You: test",
+      }
+      local context = ctx.from_file("test.chat")
+      local prompt = pipeline.run(parser.parse_lines(lines), context)
+
+      assert.is_not_nil(prompt.opts)
+      assert.are.same({ "calculator" }, prompt.opts.auto_approve)
+    end)
+
+    it("function flows through frontmatter pipeline", function()
+      local lines = {
+        "```lua",
+        "flemma.opt.tools.auto_approve = function(tool_name)",
+        '  if tool_name == "calculator" then return true end',
+        "end",
+        "```",
+        "@You: test",
+      }
+      local context = ctx.from_file("test.chat")
+      local prompt = pipeline.run(parser.parse_lines(lines), context)
+
+      assert.is_not_nil(prompt.opts)
+      assert.is_not_nil(prompt.opts.auto_approve)
+      assert.equals("function", type(prompt.opts.auto_approve))
+    end)
+  end)
 end)
