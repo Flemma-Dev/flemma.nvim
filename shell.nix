@@ -41,7 +41,7 @@ pkgs.mkShell rec {
         find . -name "*.lua" -print0 | xargs -0 \
         stylua
 
-        find . -name "*.md" -print0 | xargs -0 \
+        find . -name "*.md" -not -path '*/.claude/*' -print0 | xargs -0 \
         prettier --write
       '';
     })
