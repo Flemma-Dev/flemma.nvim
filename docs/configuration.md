@@ -1,0 +1,204 @@
+# Configuration Reference
+
+Flemma works without arguments — `require("flemma").setup({})` uses sensible defaults (Anthropic provider, `thinking = "high"`, prompt caching enabled). Every option is documented with inline comments below.
+
+```lua
+require("flemma").setup({
+  provider = "anthropic",                    -- "anthropic" | "openai" | "vertex"
+  model = nil,                               -- nil = provider default
+  parameters = {
+    max_tokens = 4000,
+    temperature = 0.7,
+    timeout = 120,                           -- Response timeout (seconds)
+    connect_timeout = 10,                    -- Connection timeout (seconds)
+    thinking = "high",                       -- "low" | "medium" | "high" | number | false
+    cache_retention = "short",               -- "none" | "short" | "long"
+    anthropic = {
+      thinking_budget = nil,                 -- Override thinking with exact budget (>= 1024)
+    },
+    vertex = {
+      project_id = nil,                      -- Google Cloud project ID (required for Vertex)
+      location = "global",                   -- Google Cloud region
+      thinking_budget = nil,                 -- Override thinking with exact budget (>= 1)
+    },
+    openai = {
+      reasoning = nil,                       -- Override thinking with explicit effort level
+    },
+  },
+  presets = {},                              -- Named presets: ["$name"] = "provider model key=val"
+  tools = {
+    require_approval = true,                 -- Review tool calls before execution
+    auto_approve = nil,                      -- string[] | function | nil
+    default_timeout = 30,                    -- Async tool timeout (seconds)
+    show_spinner = true,                     -- Animated spinner during execution
+    cursor_after_result = "result",          -- "result" | "stay" | "next"
+    bash = {
+      shell = nil,                           -- Shell binary (default: bash)
+      cwd = nil,                             -- Working directory (nil = buffer dir)
+      env = nil,                             -- Extra environment variables
+    },
+  },
+  defaults = {
+    dark = { bg = "#000000", fg = "#ffffff" },
+    light = { bg = "#ffffff", fg = "#000000" },
+  },
+  highlights = {
+    system = "Special",
+    user = "Normal",
+    assistant = "Normal",
+    user_lua_expression = "PreProc",
+    user_file_reference = "Include",
+    thinking_tag = "Comment",
+    thinking_block = { dark = "Comment+bg:#102020-fg:#111111",
+                       light = "Comment-bg:#102020+fg:#111111" },
+    tool_use = "Function",
+    tool_result = "Function",
+    tool_result_error = "DiagnosticError",
+  },
+  role_style = "bold,underline",
+  ruler = {
+    enabled = true,
+    char = "─",
+    hl = { dark = "Comment-fg:#303030", light = "Comment+fg:#303030" },
+  },
+  signs = {
+    enabled = false,
+    char = "▌",
+    system = { char = nil, hl = true },
+    user = { char = "▏", hl = true },
+    assistant = { char = nil, hl = true },
+  },
+  spinner = {
+    thinking_char = "❖",
+  },
+  line_highlights = {
+    enabled = true,
+    frontmatter = { dark = "Normal+bg:#201020", light = "Normal-bg:#201020" },
+    system = { dark = "Normal+bg:#201000", light = "Normal-bg:#201000" },
+    user = { dark = "Normal", light = "Normal" },
+    assistant = { dark = "Normal+bg:#102020", light = "Normal-bg:#102020" },
+  },
+  notify = require("flemma.notify").default_opts,
+  pricing = { enabled = true },
+  statusline = {
+    thinking_format = "{model} ({level})",   -- Format when thinking is active
+  },
+  text_object = "m",                         -- "m" or false to disable
+  editing = {
+    disable_textwidth = true,
+    auto_write = false,                      -- Write buffer after each request
+    manage_updatetime = true,                -- Lower updatetime in chat buffers
+    foldlevel = 1,                           -- 0=all closed, 1=thinking collapsed, 99=all open
+  },
+  logging = {
+    enabled = false,
+    path = vim.fn.stdpath("cache") .. "/flemma.log",
+  },
+  keymaps = {
+    enabled = true,
+    normal = {
+      send = "<C-]>",                        -- Hybrid: execute pending tools or send
+      cancel = "<C-c>",
+      tool_execute = "<M-CR>",               -- Execute tool at cursor
+      next_message = "]m",
+      prev_message = "[m",
+    },
+    insert = {
+      send = "<C-]>",                        -- Same hybrid behaviour, re-enters insert after
+    },
+  },
+})
+```
+
+## Option details
+
+This section explains options that benefit from more context than an inline comment provides. For UI-related options (highlights, line highlights, signs, ruler, spinner, notifications), see [docs/ui.md](ui.md) for detailed explanations and examples.
+
+### Thinking parameter priority
+
+Provider-specific parameters take priority over the unified `thinking` value when both are set:
+
+1. `parameters.anthropic.thinking_budget` overrides `thinking` for Anthropic (clamped to min 1,024 tokens).
+2. `parameters.openai.reasoning` overrides `thinking` for OpenAI (accepts `"low"`, `"medium"`, `"high"`).
+3. `parameters.vertex.thinking_budget` overrides `thinking` for Vertex AI (min 1 token).
+
+This lets you set `thinking = "high"` as a cross-provider default and fine-tune specific providers when needed.
+
+### Editing behaviour
+
+| Key                         | Default | Effect                                                                                                                                                                                                                |
+| --------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `editing.disable_textwidth` | `true`  | Sets `textwidth = 0` in chat buffers to prevent hard wrapping.                                                                                                                                                        |
+| `editing.auto_write`        | `false` | When `true`, automatically writes the buffer to disk after each completed request.                                                                                                                                    |
+| `editing.manage_updatetime` | `true`  | Lowers `updatetime` to 100ms while a chat buffer is focused (enables responsive `CursorHold` events for UI updates). The original value is restored on `BufLeave`, with reference counting for multiple chat buffers. |
+| `editing.foldlevel`         | `1`     | Initial fold level: `0` = all folds closed, `1` = thinking blocks and frontmatter collapsed, `99` = all folds open.                                                                                                   |
+
+### Notification options
+
+The `notify` key accepts a table with these fields (defaults shown from `lua/flemma/notify.lua`):
+
+| Key         | Default     | Effect                                                  |
+| ----------- | ----------- | ------------------------------------------------------- |
+| `enabled`   | `true`      | Set `false` to suppress all floating notifications.     |
+| `timeout`   | `8000`      | Milliseconds before auto-dismiss.                       |
+| `max_width` | `60`        | Character width cap; longer lines are word-wrapped.     |
+| `padding`   | `1`         | Spaces around content inside the floating window.       |
+| `border`    | `"rounded"` | Any Neovim border style (`"single"`, `"double"`, etc.). |
+| `title`     | `nil`       | Optional window title string.                           |
+
+### Keymaps and hybrid dispatch
+
+The `send` keymap (<kbd>Ctrl-]</kbd>) is a hybrid dispatch with a three-phase cycle:
+
+1. **Inject:** If the response contains `**Tool Use:**` blocks without corresponding results, insert empty `**Tool Result:**` placeholders for review.
+2. **Execute:** If there are pending tool result placeholders (marked with `` `flemma:pending` ``), execute all approved tools.
+3. **Send:** If no tools are pending, send the conversation to the provider.
+
+Each press of <kbd>Ctrl-]</kbd> advances to the next applicable phase. In insert mode, <kbd>Ctrl-]</kbd> behaves identically but re-enters insert mode when the operation finishes.
+
+Set `keymaps.enabled = false` to disable all built-in mappings. For send-only behaviour (skipping the tool dispatch phases), bind directly to `require("flemma.core").send_to_provider()`.
+
+### Command callbacks
+
+`:Flemma send` accepts optional callback parameters that run Neovim commands at request boundaries:
+
+```vim
+:Flemma send on_request_start=stopinsert on_request_complete=startinsert!
+```
+
+| Callback              | When it runs                    | Example use case                    |
+| --------------------- | ------------------------------- | ----------------------------------- |
+| `on_request_start`    | Just before the request is sent | Exit insert mode during streaming   |
+| `on_request_complete` | After the response finishes     | Re-enter insert mode for your reply |
+
+Values are passed to `vim.cmd()`, so any Ex command works.
+
+### Presets
+
+Presets accept two formats:
+
+**String form** — parsed like `:Flemma switch` arguments. Compact and good for simple overrides:
+
+```lua
+presets = {
+  ["$fast"] = "vertex gemini-2.5-flash temperature=0.2",
+}
+```
+
+**Table form** — explicit keys for full control:
+
+```lua
+presets = {
+  ["$review"] = {
+    provider = "anthropic",
+    model = "claude-sonnet-4-5",
+    max_tokens = 6000,
+  },
+}
+```
+
+Preset names must begin with `$`. Switch using `:Flemma switch $fast` and override individual values with additional `key=value` arguments: `:Flemma switch $review temperature=0.1`.
+
+### Per-buffer overrides
+
+Beyond global configuration, individual buffers can override parameters, tool selection, and approval policies through `flemma.opt` in Lua frontmatter. See [docs/templates.md](templates.md#per-buffer-overrides-with-flemmaopt) for the full reference.
