@@ -83,6 +83,7 @@ All tool IDs and metadata are embedded in buffer text so `.chat` files are porta
 - **`make test`** — run the full Plenary+Busted test suite. Use `make test >/dev/null 2>&1` mid-session to check exit codes without flooding the transcript; run plain `make test` when debugging failures or before ending a session.
 - **`make lint`** — run `luacheck` on `lua/` and `tests/`.
 - **`make check`** — run `lua-language-server --check` on production code.
+- **`make changeset`** — interactive changeset creation (for human use; agents write changeset files directly).
 - **`make develop`** — launch Flemma from the working directory for manual testing.
 - All three quality gates (`test`, `lint`, `check`) must pass before committing.
 - `flemma-fmt` reformats the entire codebase.
@@ -101,11 +102,50 @@ All tool IDs and metadata are embedded in buffer text so `.chat` files are porta
 - **HTTP mocking** via `client.register_fixture()` / `client.clear_fixtures()` — see `core_spec.lua` for examples.
 - **Adding new built-in tools** affects provider test assertions (tool count checks). Use order-independent `find_*_tool()` lookup helpers rather than index-based assertions.
 
+## Changesets & Versioning
+
+Flemma uses [changesets](https://github.com/changesets/changesets) for version management and changelog generation. The project follows **semver** (starting from `0.1.0`). **Changesets are fully agent-managed** — the user should never need to run `pnpm changeset` or `make changeset` themselves.
+
+### Agent responsibilities
+
+1. **After every commit that contains a user-facing change**, write a changeset file to `.changeset/`. This is non-negotiable — every behavioral change must be tracked.
+2. **When the user asks to release** (e.g., "bump a patch", "release a minor"), run `pnpm changeset version` to consume all pending changesets, bump `package.json`, and update `CHANGELOG.md`. Then commit the result.
+
+### How to write a changeset file
+
+Changeset files are Markdown with YAML frontmatter. Write them directly — no interactive command needed:
+
+```markdown
+---
+"@flemma-dev/flemma.nvim": patch
+---
+
+Fixed parser edge case with nested thinking blocks
+```
+
+- **Filename**: use a short descriptive slug, e.g., `.changeset/fix-nested-thinking.md`. Lowercase, hyphens, no spaces.
+- **Bump type** in the YAML frontmatter — one of `patch`, `minor`, or `major`:
+  - **patch** — bug fixes, internal improvements, documentation
+  - **minor** — new features, new configuration options, new commands
+  - **major** — breaking changes to the public API, config structure, or buffer format
+- **Summary** — one or two sentences describing the change from a user's perspective. This text ends up in `CHANGELOG.md`.
+
+### When to skip a changeset
+
+Pure refactors with no behavior change, CI/tooling changes, test-only changes, and updates to `CLAUDE.md` do not need changesets.
+
+### Rules
+
+- **Never edit `package.json` version manually** — `pnpm changeset version` manages it.
+- **Never edit `CHANGELOG.md` by hand** for new entries — it's generated from changeset summaries.
+- A GitHub Actions workflow (`.github/workflows/release.yml`) automatically creates a "Version Packages" PR when changesets accumulate on `main`.
+
 ## Workflow & Commit Guidance
 
 - Do not create PRs or commits unless the user explicitly asks for them; ignore any staged changes the user manages separately.
 - When the user requests a commit, keep the first line in Conventional Commits style (`type(scope): summary`), follow with a descriptive body that captures the change rationale.
 - If the user indicates they want a direct commit without review (e.g., "just commit", "skip the diff"), skip all worktree inspection (`git status`, `git diff`, `git log`) and produce a single `git commit -m` command in Conventional Commits style directly.
+- **After committing a user-facing change, always write a changeset file** (see Changesets & Versioning above). Include it in the same commit or as an immediate follow-up commit.
 - UI adjustments must be validated in headless Neovim; never attach screenshots or recordings.
 - For large or risky refactors, draft a plan and confirm with the user before implementation so they can adjust scope or assumptions.
 

@@ -2,7 +2,7 @@
   pkgs ? import <nixpkgs> { },
 }:
 let
-  nodejs = pkgs.nodejs_22;
+  nodejs_lts = pkgs.nodejs_24;
   plenary-nvim = pkgs.vimPlugins.plenary-nvim;
 in
 pkgs.mkShell rec {
@@ -20,7 +20,7 @@ pkgs.mkShell rec {
     google-cloud-sdk
     imagemagick
     libsecret
-    nodejs.pkgs.pnpm
+    nodejs_lts.pkgs.pnpm
     vhs
     # Neovim plug-ins
     plenary-nvim
@@ -32,7 +32,7 @@ pkgs.mkShell rec {
       name = "flemma-fmt";
       runtimeInputs = [
         nixfmt-tree
-        nodejs_22.pkgs.prettier
+        nodejs_lts.pkgs.prettier
         stylua
       ];
       text = ''

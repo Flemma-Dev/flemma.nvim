@@ -1,8 +1,12 @@
-.PHONY: default test lint check
+.PHONY: default changeset test lint check
 
 default:
 	@echo "Usage: make [$(shell cat ${MAKEFILE_LIST} | grep -E '^[a-zA-Z_-]+:' | sed 's/:.*//g' | grep -v '^default' | tr '\n' '|' | sed 's/|$$//')]"
 	@cat ${MAKEFILE_LIST} | grep -B1 -E '^[a-zA-Z_-]+:' | sed 's/:.*//' | sed 's/^# *//' | tac | grep -v '^--' | sed 'N;s/\n/ - /' | grep -v '^default' | tac | sed 's/^/  /'
+
+# Create a new changeset
+changeset:
+	pnpm changeset
 
 # Run the test suite
 test:
@@ -19,13 +23,13 @@ check:
 	VIMRUNTIME=$(shell dirname $(shell dirname $(shell readlink -f $(shell which nvim))))/share/nvim/runtime \
 		lua-language-server --check lua/ --configpath ../.luarc-check.lua
 
-# Update models and pricing using Amp (AI agent)
 .PHONY: update-models
+# Update models and pricing using Amp (AI agent)
 update-models:
 	cat contrib/amp/prompt-update-models-and-pricing.txt | sed 's@{{date}}@'"$(shell date +%Y-%m-%d)"'@g' | flemma-amp
 
-# Launch Flemma.nvim from local directory
 .PHONY: develop
+# Launch Flemma.nvim from local directory
 develop:
 	@-rm ~/.cache/nvim/flemma.log
 	@nvim --cmd "set runtimepath^=`pwd`"												\
@@ -42,6 +46,7 @@ develop:
 		-c ":tabedit example.chat"
 
 .PHONY: screencast
+# Create a VHS screencast demonstrating Flemma's capabilities
 screencast: .vapor/dracula-vim
 	@-rm -R .vapor/cache/ .vapor/state/ .vapor/scratch.chat .vapor/math.png assets/flemma_cast.mp4
 	@mkdir -p .vapor/cache/ .vapor/state/
