@@ -11,7 +11,12 @@ local registry = require("flemma.provider.registry")
 ---@param key string
 ---@return boolean
 local function is_general_parameter(key)
-  return key == "max_tokens" or key == "temperature" or key == "timeout" or key == "connect_timeout"
+  return key == "max_tokens"
+    or key == "temperature"
+    or key == "timeout"
+    or key == "connect_timeout"
+    or key == "cache_retention"
+    or key == "thinking"
 end
 
 --------------------------------------------------------------------------------

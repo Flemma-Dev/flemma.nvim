@@ -76,17 +76,26 @@ flemma.opt.tools = flemma.opt.tools + "read"    -- operator overloads work too
 
 Each evaluation starts from defaults (all enabled tools). Misspelled tool names produce an error with a "did you mean" suggestion.
 
-### Per-buffer provider parameter overrides
+### Per-buffer parameter overrides
 
-Provider-specific parameters can also be overridden per-buffer:
+General and provider-specific parameters can be overridden per-buffer using `flemma.opt` in Lua frontmatter:
 
 ````lua
 ```lua
+-- General parameters (work across all providers)
+flemma.opt.thinking = "medium"          -- override the unified thinking level
+flemma.opt.cache_retention = "long"     -- override prompt caching strategy
+flemma.opt.max_tokens = 8000            -- override max output tokens
+flemma.opt.temperature = 0.3            -- override sampling temperature
+
+-- Provider-specific overrides (take priority over general)
 flemma.opt.anthropic.thinking_budget = 20000
 flemma.opt.openai.reasoning = "high"
 flemma.opt.vertex.thinking_budget = 4096
 ```
 ````
+
+When both general and provider-specific parameters are set, provider-specific values win. For example, setting both `flemma.opt.thinking = "low"` and `flemma.opt.anthropic.thinking_budget = 20000` will use 20,000 tokens on Anthropic.
 
 ---
 

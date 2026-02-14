@@ -11,7 +11,7 @@ https://github.com/user-attachments/assets/2c688830-baef-4d1d-98ef-ae560faacf61
 
 - **Multi-provider chat** – Anthropic, OpenAI, and Vertex AI through one command tree.
 - **Tool calling** – calculator, bash, file read/edit/write, with approval flow and parallel execution.
-- **Extended thinking** – Anthropic thinking traces, OpenAI reasoning effort, and Vertex thinking budgets.
+- **Extended thinking** – unified `thinking` parameter across all providers, with automatic mapping to Anthropic budgets, OpenAI reasoning effort, and Vertex thinking budgets.
 - **Template system** – Lua/JSON frontmatter, inline `{{ expressions }}`, `include()` helpers.
 - **Context attachments** – reference local files with `@./path`; MIME detection and provider-aware formatting.
 - **Usage reporting** – per-request and session token totals, costs, and cache metrics.
@@ -164,7 +164,7 @@ Model thoughts stream here and auto-fold.
 
 - **Frontmatter** sits on the first line and must be fenced with triple backticks. Lua and JSON parsers ship with Flemma; you can register more via `flemma.frontmatter.parsers.register("yaml", parser_fn)`. Lua frontmatter also exposes `flemma.opt` for [per-buffer tool selection, approval, and provider parameter overrides](docs/tools.md#per-buffer-tool-selection).
 - **Messages** begin with `@System:`, `@You:`, or `@Assistant:`. The parser is whitespace-tolerant and handles blank lines between messages.
-- **Thinking blocks** appear only in assistant messages. Anthropic and Vertex AI models stream `<thinking>` sections; Flemma folds them automatically and keeps dedicated highlights for the tags and body.
+- **Thinking blocks** appear only in assistant messages. When thinking is enabled (default `"high"`), Anthropic and Vertex AI models stream `<thinking>` sections; Flemma folds them automatically and keeps dedicated highlights for the tags and body.
 
 > [!NOTE]
 > **Cross-provider thinking.** When you switch providers mid-conversation, thinking blocks from the previous provider are visible in the buffer but are **not forwarded** to the new provider's API. The visible text inside `<thinking>` tags is a summary for your reference; the actual reasoning data lives in provider-specific signature attributes on the tag. Only matching-provider signatures are replayed.
@@ -218,7 +218,7 @@ Use the single entry point `:Flemma {command}`. Autocompletion lists every avail
 
 - `:Flemma switch` (no arguments) opens two `vim.ui.select` pickers: first provider, then model.
 - `:Flemma switch openai gpt-5 temperature=0.3` changes provider, model, and overrides parameters in one go.
-- `:Flemma switch vertex project_id=my-project location=us-central1 thinking_budget=4096` demonstrates long-form overrides. Anything that looks like `key=value` is accepted; unknown keys are passed to the provider for validation.
+- `:Flemma switch vertex project_id=my-project location=us-central1 thinking=medium` demonstrates long-form overrides. Anything that looks like `key=value` is accepted; unknown keys are passed to the provider for validation.
 
 ### Named presets
 
@@ -243,13 +243,41 @@ Switch using `:Flemma switch $fast` or `:Flemma switch $review temperature=0.1` 
 
 ## Providers
 
+### Unified thinking
+
+All three providers support extended thinking/reasoning. Flemma provides a single `thinking` parameter that maps automatically to each provider's native format:
+
+| `thinking` value       | Anthropic (budget) | OpenAI (effort)      | Vertex AI (budget) |
+| ---------------------- | ------------------ | -------------------- | ------------------ |
+| `"high"` **(default)** | 32,768 tokens      | `"high"` effort      | 32,768 tokens      |
+| `"medium"`             | 8,192 tokens       | `"medium"` effort    | 8,192 tokens       |
+| `"low"`                | 1,024 tokens       | `"low"` effort       | 1,024 tokens       |
+| number (e.g. `4096`)   | 4,096 tokens       | closest effort level | 4,096 tokens       |
+| `false` or `0`         | disabled           | disabled             | disabled           |
+
+Set it once in your config and it works everywhere:
+
+```lua
+require("flemma").setup({
+  parameters = {
+    thinking = "high",     -- default: all providers think at maximum
+  },
+})
+```
+
+Or override per-request with `:Flemma switch anthropic claude-sonnet-4-5 thinking=medium`.
+
+**Priority order:** Provider-specific parameters (`thinking_budget` for Anthropic/Vertex, `reasoning` for OpenAI) take priority over the unified `thinking` parameter when both are set. This lets you use `thinking` as the default and override with provider-native syntax when needed.
+
+When thinking is active, the Lualine component shows the resolved level — e.g., `claude-sonnet-4-5 (high)` or `o3 (medium)`.
+
 ### Provider-specific capabilities
 
-| Provider  | Defaults            | Extra parameters                                                                                                                        | Notes                                                                                 |
-| --------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Anthropic | `claude-sonnet-4-5` | `thinking_budget` enables extended thinking (>= 1024). `cache_retention` controls prompt caching (`"short"`, `"long"`, or `"none"`).    | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer.    |
-| OpenAI    | `gpt-5`             | `reasoning=<low\|medium\|high>` toggles reasoning effort. `cache_retention` controls prompt caching (`"short"`, `"long"`, or `"none"`). | Cost notifications include reasoning tokens. Lualine shows the reasoning level.       |
-| Vertex AI | `gemini-2.5-pro`    | `project_id` (required), `location` (default `global`), `thinking_budget` (>= 1 to activate).                                           | `thinking_budget` activates Google's thinking output; set to `0` or `nil` to disable. |
+| Provider  | Defaults            | Extra parameters                                                                                                        | Notes                                                                              |
+| --------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Anthropic | `claude-sonnet-4-5` | `thinking_budget` overrides the unified `thinking` parameter with an exact token budget (clamped to min 1,024).         | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer. |
+| OpenAI    | `gpt-5`             | `reasoning` overrides the unified `thinking` parameter with an explicit effort level (`"low"`, `"medium"`, `"high"`).   | Cost notifications include reasoning tokens. Lualine shows the reasoning level.    |
+| Vertex AI | `gemini-2.5-pro`    | `project_id` (required), `location` (default `global`), `thinking_budget` overrides with an exact token budget (min 1). | `thinking_budget` overrides the unified `thinking` parameter for Vertex.           |
 
 The full model catalogue (including pricing) is in `lua/flemma/models.lua`. You can access it from Neovim with:
 
@@ -509,7 +537,7 @@ When the model is in a thinking/reasoning phase, the spinner animation is replac
 
 ### Lualine integration
 
-Add the bundled component to show the active model (and reasoning effort or thinking status when set):
+Add the bundled component to show the active model and thinking level:
 
 ```lua
 require("lualine").setup({
@@ -523,7 +551,7 @@ require("lualine").setup({
 })
 ```
 
-The component only renders in `chat` buffers. The display format is configurable via `statusline.thinking_format` and `statusline.reasoning_format` in the [Configuration Reference](#configuration-reference).
+The component only renders in `chat` buffers. When thinking is active it shows `model (level)` — e.g., `claude-sonnet-4-5 (high)` or `o3 (medium)`. The format string is configurable via `statusline.thinking_format` in the [Configuration Reference](#configuration-reference).
 
 ---
 
@@ -540,18 +568,18 @@ require("flemma").setup({
     temperature = 0.7,
     timeout = 120,                           -- Response timeout (seconds)
     connect_timeout = 10,                    -- Connection timeout (seconds)
+    thinking = "high",                       -- "low" | "medium" | "high" | number | false
+    cache_retention = "short",               -- "none" | "short" | "long"
     anthropic = {
-      thinking_budget = nil,                 -- Extended thinking (>= 1024, or nil to disable)
-      cache_retention = "short",             -- Prompt caching: "none" | "short" (5-min) | "long" (1h TTL)
+      thinking_budget = nil,                 -- Override thinking with exact budget (>= 1024)
     },
     vertex = {
       project_id = nil,                      -- Google Cloud project ID (required for Vertex)
       location = "global",                   -- Google Cloud region
-      thinking_budget = nil,                 -- Thinking output (>= 1 to enable, nil/0 to disable)
+      thinking_budget = nil,                 -- Override thinking with exact budget (>= 1)
     },
     openai = {
-      reasoning = nil,                       -- "low" | "medium" | "high" (nil to disable)
-      cache_retention = "short",             -- Prompt caching: "none" | "short" (in_memory) | "long" (24h)
+      reasoning = nil,                       -- Override thinking with explicit effort level
     },
   },
   presets = {},                              -- Named presets: ["$name"] = "provider model key=val"
@@ -610,8 +638,7 @@ require("flemma").setup({
   notify = require("flemma.notify").default_opts,
   pricing = { enabled = true },
   statusline = {
-    thinking_format = "{model}  ✓ thinking",
-    reasoning_format = "{model} ({level})",
+    thinking_format = "{model} ({level})",   -- Format when thinking is active
   },
   text_object = "m",                         -- "m" or false to disable
   editing = {
@@ -737,6 +764,7 @@ On a personal level, I've used Flemma to generate bedtime stories with recurring
 - **Nothing happens when I send:** confirm the buffer name ends with `.chat` and the first message starts with `@You:` or `@System:`.
 - **Frontmatter errors:** notifications list the exact line and file. Fix the error and resend; Flemma will not contact the provider until the frontmatter parses cleanly.
 - **Attachments ignored:** ensure the file exists relative to the `.chat` file and that the provider supports its MIME type. Use `;type=` to override when necessary.
+- **Temperature ignored:** when thinking is enabled (default `"high"`), Anthropic and OpenAI disable temperature. Set `thinking = false` if you need temperature control.
 - **Vertex refuses requests:** double-check `parameters.vertex.project_id` and authentication. Run `gcloud auth application-default print-access-token` manually to ensure credentials are valid.
 - **Tool execution doesn't respond:** make sure the cursor is on or near the `**Tool Use:**` block. Only tools with registered executors can be run – check `:lua print(vim.inspect(require("flemma.tools").get_all()))`.
 - **Keymaps clash:** disable built-in mappings via `keymaps.enabled = false` and register your own `:Flemma` commands.

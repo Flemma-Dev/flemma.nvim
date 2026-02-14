@@ -34,16 +34,12 @@ M.metadata = {
     supports_reasoning = true,
     supports_thinking_budget = false,
     outputs_thinking = true,
+    output_has_thoughts = true,
   },
   default_parameters = {
-    cache_retention = "short",
     reasoning_summary = "auto",
   },
 }
-
--- OpenAI's output_tokens already includes reasoning_tokens,
--- so we should NOT add thoughts_tokens separately for cost calculation.
-M.output_has_thoughts = true
 
 ---@param merged_config flemma.provider.Parameters
 ---@return flemma.provider.OpenAI
@@ -312,10 +308,13 @@ function M.build_request(self, prompt, context)
     log.debug("openai.build_request: Added " .. #tools_array .. " tools to request")
   end
 
-  if self.parameters.reasoning and self.parameters.reasoning ~= "" then
+  -- Add reasoning configuration using unified resolution
+  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities)
+
+  if thinking.enabled and thinking.effort then
     local reasoning_summary = self.parameters.reasoning_summary or "auto"
     request_body.reasoning = {
-      effort = self.parameters.reasoning,
+      effort = thinking.effort,
       summary = reasoning_summary,
     }
     request_body.include = { "reasoning.encrypted_content" }
@@ -323,7 +322,7 @@ function M.build_request(self, prompt, context)
       "openai.build_request: Using max_output_tokens: "
         .. tostring(self.parameters.max_tokens)
         .. " and reasoning.effort: "
-        .. self.parameters.reasoning
+        .. thinking.effort
     )
   else
     request_body.temperature = self.parameters.temperature
@@ -632,8 +631,16 @@ end
 ---@param parameters table<string, any> The parameters to validate
 ---@return boolean success True if validation passes (warnings don't fail)
 function M.validate_parameters(model_name, parameters)
-  -- Check for reasoning parameter support
+  -- Resolve effective reasoning: provider-specific `reasoning` > unified `thinking`
   local reasoning_value = parameters.reasoning
+  if (reasoning_value == nil or reasoning_value == "") and parameters.thinking ~= nil then
+    local thinking = parameters.thinking
+    if thinking ~= false and thinking ~= 0 then
+      reasoning_value = type(thinking) == "string" and thinking or "medium"
+    end
+  end
+
+  -- Check for reasoning parameter support
   if reasoning_value ~= nil and reasoning_value ~= "" then
     local model_info = models.providers.openai
       and models.providers.openai.models

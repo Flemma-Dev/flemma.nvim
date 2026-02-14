@@ -482,9 +482,27 @@ function M.send_to_provider(opts)
   log.debug("send_to_provider(): Prompt history for provider: " .. log.inspect(prompt.history))
   log.debug("send_to_provider(): System instruction: " .. log.inspect(prompt.system))
 
-  -- Apply frontmatter parameter overrides so that get_endpoint / get_api_key see them
+  -- Apply frontmatter parameter overrides so that get_endpoint / get_api_key see them.
+  -- Merge general parameters (flemma.opt.cache_retention) with provider-specific ones
+  -- (flemma.opt.anthropic.thinking_budget). Provider-specific wins on conflict.
   local provider_key = state.get_config().provider
-  current_provider:set_parameter_overrides(prompt.opts and prompt.opts[provider_key])
+  local general_overrides = prompt.opts and prompt.opts.parameters
+  local provider_specific_overrides = prompt.opts and prompt.opts[provider_key]
+  local merged_overrides = nil
+  if general_overrides or provider_specific_overrides then
+    merged_overrides = {}
+    if general_overrides then
+      for k, v in pairs(general_overrides) do
+        merged_overrides[k] = v
+      end
+    end
+    if provider_specific_overrides then
+      for k, v in pairs(provider_specific_overrides) do
+        merged_overrides[k] = v
+      end
+    end
+  end
+  current_provider:set_parameter_overrides(merged_overrides)
 
   -- Validate provider (endpoint, API key, headers) and build request body.
   -- Wrapped in pcall so any provider error unlocks the buffer cleanly.
@@ -545,11 +563,12 @@ function M.send_to_provider(opts)
 
   -- Reset in-flight usage tracking for this buffer
   -- Include the provider's output_has_thoughts flag so usage.lua can display correctly
+  local provider_capabilities = registry.get_capabilities(state.get_config().provider)
   buffer_state.inflight_usage = {
     input_tokens = 0,
     output_tokens = 0,
     thoughts_tokens = 0,
-    output_has_thoughts = current_provider.output_has_thoughts,
+    output_has_thoughts = provider_capabilities and provider_capabilities.output_has_thoughts or false,
     cache_read_input_tokens = 0,
     cache_creation_input_tokens = 0,
   }
@@ -657,7 +676,7 @@ function M.send_to_provider(opts)
             bufnr = bufnr,
             started_at = request_started_at,
             completed_at = require("flemma.session").now(),
-            output_has_thoughts = current_provider.output_has_thoughts,
+            output_has_thoughts = provider_capabilities and provider_capabilities.output_has_thoughts or false,
             cache_read_input_tokens = buffer_state.inflight_usage.cache_read_input_tokens,
             cache_creation_input_tokens = buffer_state.inflight_usage.cache_creation_input_tokens,
             cache_write_multiplier = cache_write_multiplier,

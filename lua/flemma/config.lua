@@ -44,16 +44,18 @@
 ---@field enabled boolean
 
 ---@class flemma.config.Statusline
----@field thinking_format string
----@field reasoning_format string
+---@field thinking_format string Format string when thinking is active. {model} = model name, {level} = thinking level
+---@field reasoning_format? string Deprecated: alias for thinking_format (kept for backward compat)
 
 ---@class flemma.config.Parameters
 ---@field max_tokens? integer
 ---@field temperature? number
 ---@field timeout? integer
 ---@field connect_timeout? integer
----@field reasoning? string
----@field thinking_budget? number
+---@field cache_retention? string Prompt caching: "short", "long", or "none"
+---@field thinking? false|string|number Unified thinking: "low"/"medium"/"high", numeric budget, or false to disable
+---@field reasoning? string Provider-specific (OpenAI): reasoning effort level
+---@field thinking_budget? number Provider-specific (Anthropic/Vertex): explicit token budget
 ---@field [string] table<string, any>|nil Provider-specific parameter overrides
 
 ---@class flemma.config.BashToolConfig
@@ -199,8 +201,7 @@ return {
     enabled = true, -- Whether to show pricing information in notifications
   },
   statusline = {
-    thinking_format = "{model}  ✓ thinking", -- Format string when thinking is enabled. {model} is replaced with the model name.
-    reasoning_format = "{model} ({level})", -- Format string when reasoning is enabled. {model} is model name, {level} is reasoning level.
+    thinking_format = "{model} ({level})", -- Format string when thinking is active. {model} = model name, {level} = low/medium/high.
   },
   provider = "anthropic", -- Default provider: "anthropic", "openai", or "vertex"
   model = nil, -- Will use provider-specific default if nil
@@ -209,6 +210,8 @@ return {
     temperature = 0.7, -- Default temperature for all providers
     timeout = 120, -- Default response timeout for cURL requests
     connect_timeout = 10, -- Default connection timeout for cURL requests
+    cache_retention = "short", -- Default prompt caching: "short", "long", or "none"
+    thinking = "high", -- Default thinking level: "low", "medium", "high", numeric budget, or false to disable
   },
   tools = {
     require_approval = true, -- Require user approval before executing tool calls (two-step <C-]> flow)

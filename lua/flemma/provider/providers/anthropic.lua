@@ -17,17 +17,13 @@ M.metadata = {
     supports_reasoning = false,
     supports_thinking_budget = true,
     outputs_thinking = true,
+    output_has_thoughts = true,
     min_thinking_budget = 1024,
   },
   default_parameters = {
     thinking_budget = nil,
-    cache_retention = "short",
   },
 }
-
--- Anthropic's output_tokens already includes thinking tokens in the usage response,
--- so we should NOT add thoughts_tokens separately for cost calculation.
-M.output_has_thoughts = true
 
 ---@param merged_config flemma.provider.Parameters
 ---@return flemma.provider.Anthropic
@@ -307,29 +303,23 @@ function M.build_request(self, prompt, _context)
     log.debug("anthropic.build_request: Added " .. #tools_array .. " tools to request")
   end
 
-  -- Add thinking configuration if enabled
-  local thinking_budget = self.parameters.thinking_budget
+  -- Add thinking configuration using unified resolution
+  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities)
 
-  if type(thinking_budget) == "number" and thinking_budget >= 1024 then
+  if thinking.enabled and thinking.budget then
     request_body.thinking = {
       type = "enabled",
-      budget_tokens = math.floor(thinking_budget),
+      budget_tokens = thinking.budget,
     }
     -- Remove temperature when thinking is enabled (Anthropic API requirement)
     request_body.temperature = nil
     log.debug(
       "anthropic.build_request: Thinking enabled with budget: "
-        .. thinking_budget
+        .. thinking.budget
         .. ". Temperature removed from request."
     )
-  elseif thinking_budget == 0 or thinking_budget == nil then
-    log.debug("anthropic.build_request: Thinking disabled (budget is " .. tostring(thinking_budget) .. ")")
   else
-    log.warn(
-      "anthropic.build_request: Invalid thinking_budget value: "
-        .. tostring(thinking_budget)
-        .. ". Must be nil, 0, or >= 1024. Thinking disabled."
-    )
+    log.debug("anthropic.build_request: Thinking disabled")
   end
 
   return request_body

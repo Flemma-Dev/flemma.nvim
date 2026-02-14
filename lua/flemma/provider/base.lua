@@ -45,9 +45,6 @@ Methods are grouped into three categories:
 
 Required class-level fields
 ---------------------------
-- `output_has_thoughts` (boolean) — whether `output_tokens` already includes
-  thinking tokens for cost calculation.  Default `false` (thinking is reported
-  separately); set `true` if the provider bundles them together.
 - `endpoint` (string) — base API URL.
 - `api_version` (string|nil) — optional API version identifier.
 
@@ -65,6 +62,8 @@ Capabilities contract (registered via `registry.register`)
 - `supports_reasoning` — provider accepts a reasoning effort level.
 - `supports_thinking_budget` — provider accepts a token budget for thinking.
 - `outputs_thinking` — provider streams thinking content into the buffer.
+- `output_has_thoughts` — whether `output_tokens` already includes thinking
+  tokens for cost calculation (default `false`).
 - `min_thinking_budget` — minimum valid thinking budget value (omit if N/A).
 
 Missing boolean capabilities default to `false` at registration time.
@@ -107,7 +106,6 @@ local log = require("flemma.logging")
 ---@field content string
 
 ---@class flemma.provider.Base
----@field output_has_thoughts boolean
 ---@field parameters flemma.provider.Parameters
 ---@field state flemma.provider.ProviderState
 ---@field endpoint? string
@@ -139,11 +137,6 @@ local M = {}
 ---@field type "data"|"event"|"done"
 ---@field content? string Present when type="data"
 ---@field event_type? string Present when type="event"
-
---- Whether output_tokens already includes thoughts_tokens for this provider.
---- - true: thoughts already counted in output (OpenAI, Anthropic) - don't add for cost
---- - false: thoughts are separate (Vertex) - add to output for cost
-M.output_has_thoughts = false
 
 -- ============================================================================
 -- Abstract — providers MUST override these (base raises an error)
@@ -650,6 +643,110 @@ end
 function M._content_ends_with_newline(self)
   local content = self._response_buffer.content or ""
   return content:sub(-1) == "\n"
+end
+
+-- ============================================================================
+-- Shared parameter resolution helpers
+-- ============================================================================
+
+---@class flemma.provider.ThinkingResolution
+---@field enabled boolean Whether thinking/reasoning is active
+---@field budget? integer Token budget for budget-based providers (Anthropic, Vertex)
+---@field effort? string Effort level for effort-based providers (OpenAI): "low"|"medium"|"high"
+---@field level? string Display level: "low"|"medium"|"high" (always set when enabled)
+
+--- Map a numeric budget to the closest OpenAI reasoning effort level
+---@param budget number
+---@return string effort "low"|"medium"|"high"
+local function budget_to_effort(budget)
+  if budget <= 2048 then
+    return "low"
+  elseif budget <= 16384 then
+    return "medium"
+  else
+    return "high"
+  end
+end
+
+--- Map a named effort level to a thinking budget
+---@param level string "low"|"medium"|"high"
+---@return integer budget
+local function effort_to_budget(level)
+  if level == "low" then
+    return 1024
+  elseif level == "medium" then
+    return 8192
+  else -- "high"
+    return 32768
+  end
+end
+
+--- Resolve the unified `thinking` parameter into provider-appropriate values.
+---
+--- Priority: provider-specific param > thinking > provider defaults.
+--- For budget-based providers (Anthropic, Vertex), resolves to a token budget.
+--- For effort-based providers (OpenAI), resolves to an effort level string.
+---
+---@param params flemma.provider.Parameters The parameter proxy
+---@param caps flemma.provider.Capabilities The provider's capabilities
+---@return flemma.provider.ThinkingResolution
+function M.resolve_thinking(params, caps)
+  -- For budget-based providers (Anthropic, Vertex)
+  if caps.supports_thinking_budget then
+    -- Priority: provider-specific thinking_budget > unified thinking
+    local raw_budget = params.thinking_budget
+    if raw_budget ~= nil then
+      if type(raw_budget) == "number" and raw_budget > 0 then
+        local min = caps.min_thinking_budget or 1
+        local budget = math.max(math.floor(raw_budget), min)
+        return { enabled = true, budget = budget, level = budget_to_effort(budget) }
+      else
+        return { enabled = false }
+      end
+    end
+
+    -- Fall back to unified `thinking` parameter
+    local thinking = params.thinking
+    if thinking == nil or thinking == false or thinking == 0 then
+      return { enabled = false }
+    end
+    if type(thinking) == "string" then
+      local budget = math.max(effort_to_budget(thinking), caps.min_thinking_budget or 1)
+      return { enabled = true, budget = budget, level = budget_to_effort(budget) }
+    end
+    if type(thinking) == "number" and thinking > 0 then
+      local min = caps.min_thinking_budget or 1
+      local budget = math.max(math.floor(thinking), min)
+      return { enabled = true, budget = budget, level = budget_to_effort(budget) }
+    end
+    return { enabled = false }
+  end
+
+  -- For effort-based providers (OpenAI)
+  if caps.supports_reasoning then
+    -- Priority: provider-specific reasoning > unified thinking
+    local raw_reasoning = params.reasoning
+    if raw_reasoning ~= nil and raw_reasoning ~= "" then
+      return { enabled = true, effort = raw_reasoning, level = raw_reasoning }
+    end
+
+    -- Fall back to unified `thinking` parameter
+    local thinking = params.thinking
+    if thinking == nil or thinking == false or thinking == 0 then
+      return { enabled = false }
+    end
+    if type(thinking) == "string" then
+      return { enabled = true, effort = thinking, level = thinking }
+    end
+    if type(thinking) == "number" and thinking > 0 then
+      local effort = budget_to_effort(thinking)
+      return { enabled = true, effort = effort, level = effort }
+    end
+    return { enabled = false }
+  end
+
+  -- Provider supports neither
+  return { enabled = false }
 end
 
 return M

@@ -6,6 +6,7 @@ local M = {}
 ---@class flemma.opt.ResolvedOpts
 ---@field tools string[]|nil List of allowed tool names
 ---@field auto_approve flemma.config.AutoApprove|nil Per-buffer auto-approve policy
+---@field parameters table<string, any>|nil General parameter overrides (provider-agnostic)
 ---@field anthropic table<string, any>|nil Per-buffer Anthropic parameter overrides
 ---@field openai table<string, any>|nil Per-buffer OpenAI parameter overrides
 ---@field vertex table<string, any>|nil Per-buffer Vertex parameter overrides
@@ -290,16 +291,23 @@ function M.create()
     __pow = ListOption.__pow,
   })
 
-  -- Per-provider parameter overrides (e.g., { anthropic = { cache_retention = "long" } })
+  -- Per-provider parameter overrides (e.g., { anthropic = { thinking_budget = 4096 } })
   ---@type table<string, table<string, any>>
   local provider_params = {}
   ---@type table<string, table>
   local provider_proxies = {}
 
+  -- General parameter overrides (provider-agnostic, e.g., thinking = "high")
+  -- Uses is_general_parameter from config manager plus thinking (added in Phase 5)
+  ---@type table<string, any>
+  local general_params = {}
+
+  local config_manager = require("flemma.core.config.manager")
+
   local opt_proxy = setmetatable({}, {
     ---@param _ table
     ---@param key string
-    ---@return flemma.opt.ListOption|table|nil
+    ---@return flemma.opt.ListOption|table|any
     __index = function(_, key)
       if option_defs[key] then
         touched[key] = true
@@ -319,6 +327,9 @@ function M.create()
           })
         end
         return provider_proxies[key]
+      end
+      if config_manager.is_general_parameter(key) then
+        return general_params[key]
       end
       error(string.format("flemma.opt: unknown option '%s'", key))
     end,
@@ -348,6 +359,10 @@ function M.create()
         provider_proxies[key] = nil -- invalidate cached proxy
         return
       end
+      if config_manager.is_general_parameter(key) then
+        general_params[key] = value
+        return
+      end
       error(string.format("flemma.opt: unknown option '%s'", key))
     end,
   })
@@ -362,6 +377,11 @@ function M.create()
     if raw_options.auto_approve ~= nil then
       result.auto_approve = raw_options.auto_approve
     end
+    -- Add general parameter overrides
+    if next(general_params) then
+      result.parameters = vim.deepcopy(general_params)
+    end
+    -- Add provider-specific overrides
     for pname, params in pairs(provider_params) do
       if next(params) then
         result[pname] = vim.deepcopy(params)

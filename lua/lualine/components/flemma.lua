@@ -2,80 +2,49 @@
 local lualine_component = require("lualine.component")
 local state = require("flemma.state")
 local registry = require("flemma.provider.registry")
-local models = require("flemma.models")
 
 -- Create a new component for displaying the Flemma model
 local flemma_model_component = lualine_component:extend()
 
----Get the current reasoning setting if the provider and model support it.
+---Get the current thinking/reasoning level (unified across providers).
 ---Reads from the provider's parameter proxy which includes frontmatter overrides.
----@return string|nil reasoning "low"|"medium"|"high" or nil
-local function get_current_reasoning_setting()
-  local current_config = state.get_config()
-  if not current_config or not current_config.provider or not current_config.model then
-    return nil
-  end
-
-  -- Check if provider supports reasoning via registry
-  local capabilities = registry.get_capabilities(current_config.provider)
-  if not capabilities or not capabilities.supports_reasoning then
-    return nil
-  end
-
-  -- Check if the specific model supports reasoning
-  local model_info = models.providers[current_config.provider]
-    and models.providers[current_config.provider].models
-    and models.providers[current_config.provider].models[current_config.model]
-
-  if not model_info or not model_info.supports_reasoning_effort then
-    return nil
-  end
-
-  -- Read from the provider's parameter proxy (includes frontmatter overrides)
-  local provider = state.get_provider()
-  local params = provider and provider.parameters or current_config.parameters
-  if params and params.reasoning then
-    local reasoning = params.reasoning
-    if reasoning == "low" or reasoning == "medium" or reasoning == "high" then
-      return reasoning
-    end
-  end
-
-  return nil
-end
-
----Get the current thinking budget setting if the provider supports it.
----Reads from the provider's parameter proxy which includes frontmatter overrides.
----@return number|nil budget
-local function get_current_thinking_budget()
+---@return string|nil level "low"|"medium"|"high" or nil if thinking is not active
+local function get_current_thinking_level()
   local current_config = state.get_config()
   if not current_config or not current_config.provider then
     return nil
   end
 
-  -- Check if provider supports thinking budget via registry
   local capabilities = registry.get_capabilities(current_config.provider)
-  if not capabilities or not capabilities.supports_thinking_budget then
+  if not capabilities then
     return nil
+  end
+
+  -- For effort-based providers (OpenAI), check per-model reasoning support
+  if capabilities.supports_reasoning and current_config.model then
+    local models = require("flemma.models")
+    local model_info = models.providers[current_config.provider]
+      and models.providers[current_config.provider].models
+      and models.providers[current_config.provider].models[current_config.model]
+    if not model_info or not model_info.supports_reasoning_effort then
+      return nil
+    end
   end
 
   -- Read from the provider's parameter proxy (includes frontmatter overrides)
   local provider = state.get_provider()
   local params = provider and provider.parameters or current_config.parameters
-  if params and params.thinking_budget then
-    local budget = params.thinking_budget
-    if type(budget) ~= "number" then
-      return nil
-    end
-
-    -- Capability-based minimum budget check
-    local caps = capabilities
-    if caps.min_thinking_budget and budget >= caps.min_thinking_budget then
-      return budget
-    end
+  if not params then
+    return nil
   end
 
-  return nil
+  local base = require("flemma.provider.base")
+  local thinking = base.resolve_thinking(params --[[@as flemma.provider.Parameters]], capabilities)
+  if not thinking.enabled then
+    return nil
+  end
+
+  return thinking.level
 end
 
 ---Updates the status of the component.
@@ -91,23 +60,14 @@ function flemma_model_component:update_status()
         return "" -- No model, show nothing
       end
 
-      -- Get format strings from config
+      -- Get format string from config
       local full_config = state.get_config() or {}
       local statusline_config = full_config.statusline or {}
-      local reasoning_format = statusline_config.reasoning_format or "{model} ({level})"
-      local thinking_format = statusline_config.thinking_format or "{model}  ✓ thinking"
+      local thinking_format = statusline_config.thinking_format or "{model} ({level})"
 
-      -- Check for reasoning setting (OpenAI o-series)
-      local reasoning_setting = get_current_reasoning_setting()
-      if reasoning_setting then
-        local result = reasoning_format:gsub("{model}", model_name):gsub("{level}", reasoning_setting)
-        return result
-      end
-
-      -- Check for thinking budget (Anthropic, Vertex)
-      local thinking_budget = get_current_thinking_budget()
-      if thinking_budget then
-        local result = thinking_format:gsub("{model}", model_name)
+      local level = get_current_thinking_level()
+      if level then
+        local result = thinking_format:gsub("{model}", model_name):gsub("{level}", level)
         return result
       end
 

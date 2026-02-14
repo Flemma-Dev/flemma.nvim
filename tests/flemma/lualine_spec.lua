@@ -54,9 +54,20 @@ describe("Lualine component", function()
     assert.are.equal("o3 (high)", status)
   end)
 
-  it("should display only the model name when reasoning is not set for an o-series model", function()
+  it("should display thinking level from default for o-series model", function()
+    -- Arrange: No explicit reasoning, but default thinking="high" applies
+    core.switch_provider("openai", "o4-mini", {})
+
+    -- Act
+    local status = flemma_component:update_status()
+
+    -- Assert: Default thinking="high" is active
+    assert.are.equal("o4-mini (high)", status)
+  end)
+
+  it("should display only model name when thinking is explicitly disabled", function()
     -- Arrange
-    core.switch_provider("openai", "o4-mini", {}) -- No reasoning parameter
+    core.switch_provider("openai", "o4-mini", { thinking = false })
 
     -- Act
     local status = flemma_component:update_status()
@@ -76,9 +87,20 @@ describe("Lualine component", function()
     assert.are.equal("gpt-4o", status)
   end)
 
-  it("should display only the model name for non-openai providers without thinking", function()
-    -- Arrange
+  it("should display thinking level from default for Anthropic", function()
+    -- Arrange: No explicit thinking_budget, but default thinking="high" applies
     core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+
+    -- Act
+    local status = flemma_component:update_status()
+
+    -- Assert: Default thinking="high" maps to budget 32768 → level "high"
+    assert.are.equal("claude-sonnet-4-5 (high)", status)
+  end)
+
+  it("should display only model name for Anthropic when thinking is disabled", function()
+    -- Arrange
+    core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
 
     -- Act
     local status = flemma_component:update_status()
@@ -87,37 +109,37 @@ describe("Lualine component", function()
     assert.are.equal("claude-sonnet-4-5", status)
   end)
 
-  it("should display model with thinking indicator for Anthropic with valid thinking_budget", function()
-    -- Arrange
+  it("should display model with thinking level for Anthropic with valid thinking_budget", function()
+    -- Arrange: 2048 maps to "low" level
     core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking_budget = 2048 })
 
     -- Act
     local status = flemma_component:update_status()
 
     -- Assert
-    assert.are.equal("claude-sonnet-4-5  ✓ thinking", status)
+    assert.are.equal("claude-sonnet-4-5 (low)", status)
   end)
 
-  it("should not display thinking indicator for Anthropic with thinking_budget below 1024", function()
-    -- Arrange
+  it("should display thinking indicator for Anthropic with thinking_budget below 1024 (clamped)", function()
+    -- Arrange: budget 500 is clamped to 1024, which maps to "low"
     core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking_budget = 500 })
 
     -- Act
     local status = flemma_component:update_status()
 
     -- Assert
-    assert.are.equal("claude-sonnet-4-5", status)
+    assert.are.equal("claude-sonnet-4-5 (low)", status)
   end)
 
-  it("should display model with thinking indicator for Vertex with valid thinking_budget", function()
-    -- Arrange
+  it("should display model with thinking level for Vertex with valid thinking_budget", function()
+    -- Arrange: 1000 maps to "low" level
     core.switch_provider("vertex", "gemini-2.5-pro", { thinking_budget = 1000, project_id = "test-project" })
 
     -- Act
     local status = flemma_component:update_status()
 
     -- Assert
-    assert.are.equal("gemini-2.5-pro  ✓ thinking", status)
+    assert.are.equal("gemini-2.5-pro (low)", status)
   end)
 
   it("should return an empty string if filetype is not 'chat'", function()
@@ -152,29 +174,29 @@ describe("Lualine component", function()
     local state = require("flemma.state")
 
     it("should reflect reasoning override from frontmatter", function()
-      -- Start with base config: no reasoning
+      -- Start with base config: default thinking="high" applies
       core.switch_provider("openai", "o3", { temperature = 1 })
-      assert.are.equal("o3", flemma_component:update_status())
+      assert.are.equal("o3 (high)", flemma_component:update_status())
 
-      -- Simulate frontmatter override (as core.lua does during a request)
+      -- Simulate frontmatter override lowering reasoning
       local provider = state.get_provider()
-      provider:set_parameter_overrides({ reasoning = "high" })
+      provider:set_parameter_overrides({ reasoning = "low" })
 
       -- Lualine should now show the overridden reasoning level
-      assert.are.equal("o3 (high)", flemma_component:update_status())
+      assert.are.equal("o3 (low)", flemma_component:update_status())
     end)
 
     it("should reflect thinking_budget override from frontmatter", function()
-      -- Start with base config: no thinking_budget
+      -- Start with base config: default thinking="high" → budget 32768 → "high"
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
-      assert.are.equal("claude-sonnet-4-5", flemma_component:update_status())
+      assert.are.equal("claude-sonnet-4-5 (high)", flemma_component:update_status())
 
-      -- Simulate frontmatter override
+      -- Simulate frontmatter override lowering budget
       local provider = state.get_provider()
       provider:set_parameter_overrides({ thinking_budget = 2048 })
 
-      -- Lualine should now show the thinking indicator
-      assert.are.equal("claude-sonnet-4-5  ✓ thinking", flemma_component:update_status())
+      -- Lualine should now show the overridden thinking level (2048 maps to "low")
+      assert.are.equal("claude-sonnet-4-5 (low)", flemma_component:update_status())
     end)
 
     it("should let frontmatter override win over base config", function()
