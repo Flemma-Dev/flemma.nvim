@@ -93,9 +93,17 @@ end
 ```
 ````
 
+**Per-buffer autopilot:** Disable (or force-enable) autopilot for a specific buffer:
+
+````lua
+```lua
+flemma.opt.tools.autopilot = false  -- manual three-phase Ctrl-] for this buffer
+```
+````
+
 If you misspell a tool name, Flemma suggests the closest match: `"flemma.opt: unknown value 'calulator'. Did you mean 'calculator'?"`.
 
-Only options you actually touch appear in the resolved overrides — unmodified settings fall through to your global config. See [docs/tools.md](tools.md) for more on tool approval and the resolver API.
+Only options you actually touch appear in the resolved overrides – unmodified settings fall through to your global config. See [docs/tools.md](tools.md) for more on tool approval and the resolver API.
 
 ## Inline expressions
 
@@ -123,7 +131,7 @@ Key built-ins:
 
 Call `include("relative/or/absolute/path")` inside frontmatter or an expression to inline another template fragment. Includes support two modes:
 
-**Text mode** (default) – the included file is parsed for `{{ }}` expressions and `@./` file references, which are evaluated recursively. The result is inlined as text. Each included file gets its own `__filename` and `__dirname`, isolated from the parent's variables — the parent's frontmatter variables are not inherited.
+**Text mode** (default) – the included file is parsed for `{{ }}` expressions and `@./` file references, which are evaluated recursively. The result is inlined as text. Each included file gets its own `__filename` and `__dirname`, isolated from the parent's variables – the parent's frontmatter variables are not inherited.
 
 ```markdown
 @System: {{ include("system-prompt.md") }}

@@ -378,6 +378,37 @@ local function setup_commands()
     },
   }
 
+  command_tree.children.autopilot = {
+    children = {
+      enable = {
+        action = function()
+          local autopilot = require("flemma.autopilot")
+          autopilot.set_enabled(true)
+          vim.notify("Flemma: Autopilot enabled", vim.log.levels.INFO)
+        end,
+      },
+      disable = {
+        action = function()
+          local autopilot = require("flemma.autopilot")
+          autopilot.set_enabled(false)
+          vim.notify("Flemma: Autopilot disabled", vim.log.levels.INFO)
+        end,
+      },
+      status = {
+        action = function()
+          local autopilot = require("flemma.autopilot")
+          local bufnr = vim.api.nvim_get_current_buf()
+          local enabled = autopilot.is_enabled(bufnr)
+          local buffer_state = autopilot.get_state(bufnr)
+          vim.notify(
+            string.format("Flemma: Autopilot %s (buffer state: %s)", enabled and "enabled" or "disabled", buffer_state),
+            vim.log.levels.INFO
+          )
+        end,
+      },
+    },
+  }
+
   command_tree.children.tool = {
     children = {
       execute = {

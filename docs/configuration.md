@@ -1,6 +1,6 @@
 # Configuration Reference
 
-Flemma works without arguments — `require("flemma").setup({})` uses sensible defaults (Anthropic provider, `thinking = "high"`, prompt caching enabled). Every option is documented with inline comments below.
+Flemma works without arguments – `require("flemma").setup({})` uses sensible defaults (Anthropic provider, `thinking = "high"`, prompt caching enabled). Every option is documented with inline comments below.
 
 ```lua
 require("flemma").setup({
@@ -32,6 +32,10 @@ require("flemma").setup({
     default_timeout = 30,                    -- Async tool timeout (seconds)
     show_spinner = true,                     -- Animated spinner during execution
     cursor_after_result = "result",          -- "result" | "stay" | "next"
+    autopilot = {
+      enabled = true,                        -- Auto-execute approved tools and re-send
+      max_turns = 100,                       -- Safety limit on consecutive autonomous turns
+    },
     bash = {
       shell = nil,                           -- Shell binary (default: bash)
       cwd = nil,                             -- Working directory (nil = buffer dir)
@@ -158,6 +162,27 @@ Each press of <kbd>Ctrl-]</kbd> advances to the next applicable phase. In insert
 
 Set `keymaps.enabled = false` to disable all built-in mappings. For send-only behaviour (skipping the tool dispatch phases), bind directly to `require("flemma.core").send_to_provider()`.
 
+### Autopilot
+
+Autopilot turns Flemma into an autonomous agent. After each LLM response containing tool calls, it executes approved tools (as determined by `auto_approve` and any registered approval resolvers), collects all results, and re-sends the conversation. This loop repeats until the model stops calling tools or a tool requires manual approval. A single <kbd>Ctrl-]</kbd> can trigger dozens of autonomous tool calls – the model reads files, writes code, runs tests, and iterates, all without further input.
+
+| Key                         | Default | Effect                                                                                                                                                                |
+| --------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tools.autopilot.enabled`   | `true`  | Enable the autonomous execute-and-resend loop. Set `false` to restore the manual three-phase <kbd>Ctrl-]</kbd> cycle.                                                 |
+| `tools.autopilot.max_turns` | `100`   | Maximum consecutive LLM turns before autopilot stops and emits a warning. Prevents runaway loops when a model repeatedly calls tools without converging on an answer. |
+
+When a tool requires user approval, autopilot injects a `flemma:pending` placeholder and pauses the loop. The buffer is unlocked at this point, so you can review the tool call and even edit the content inside the pending block. Press <kbd>Ctrl-]</kbd> to approve and resume. If you have edited the content of a pending block, Flemma detects your changes and will not overwrite them – it warns and stays paused so you can review.
+
+Press <kbd>Ctrl-C</kbd> at any point to cancel the active request or tool execution. Cancellation fully disarms autopilot, so pressing <kbd>Ctrl-]</kbd> afterwards starts a fresh send rather than resuming the interrupted loop.
+
+Toggle autopilot at runtime without changing your config:
+
+- `:Flemma autopilot:enable` – activate for the current session.
+- `:Flemma autopilot:disable` – deactivate for the current session.
+- `:Flemma autopilot:status` – print whether autopilot is currently active and the buffer's loop state.
+
+Individual buffers can override the global setting via frontmatter: `flemma.opt.tools.autopilot = false`. See [docs/templates.md](templates.md#per-buffer-overrides-with-flemmaopt) for details.
+
 ### Command callbacks
 
 `:Flemma send` accepts optional callback parameters that run Neovim commands at request boundaries:
@@ -177,7 +202,7 @@ Values are passed to `vim.cmd()`, so any Ex command works.
 
 Presets accept two formats:
 
-**String form** — parsed like `:Flemma switch` arguments. Compact and good for simple overrides:
+**String form** – parsed like `:Flemma switch` arguments. Compact and good for simple overrides:
 
 ```lua
 presets = {
@@ -185,7 +210,7 @@ presets = {
 }
 ```
 
-**Table form** — explicit keys for full control:
+**Table form** – explicit keys for full control:
 
 ```lua
 presets = {

@@ -54,6 +54,8 @@ end
 local function maybe_unlock_buffer(bufnr)
   if count_pending(bufnr) == 0 then
     state.unlock_buffer(bufnr)
+    -- Notify autopilot that all tool executions have completed
+    require("flemma.autopilot").on_tools_complete(bufnr)
   end
 end
 
@@ -356,6 +358,9 @@ function M.cancel_all(bufnr)
   for _, tool_id in ipairs(to_cancel) do
     M.cancel(tool_id)
   end
+
+  -- Disarm autopilot after cancelling all tools
+  require("flemma.autopilot").disarm(bufnr)
 end
 
 ---Get pending executions for a buffer
@@ -390,6 +395,7 @@ function M.cancel_for_buffer(bufnr)
     table.sort(pending, function(a, b)
       return a.started_at < b.started_at
     end)
+    require("flemma.autopilot").disarm(bufnr)
     M.cancel(pending[1].tool_id)
     return true
   end
@@ -400,10 +406,12 @@ end
 ---@param bufnr integer
 ---@return boolean cancelled
 function M.cancel_at_cursor(bufnr)
+  local autopilot = require("flemma.autopilot")
   local cursor = vim.api.nvim_win_get_cursor(0)
   local tool_context = require("flemma.tools.context")
   local ctx, _ = tool_context.resolve(bufnr, { row = cursor[1], col = cursor[2] })
   if ctx then
+    autopilot.disarm(bufnr)
     return M.cancel(ctx.tool_id)
   end
   local pending = M.get_pending(bufnr)
@@ -411,6 +419,7 @@ function M.cancel_at_cursor(bufnr)
     table.sort(pending, function(a, b)
       return a.started_at < b.started_at
     end)
+    autopilot.disarm(bufnr)
     return M.cancel(pending[1].tool_id)
   end
   return false

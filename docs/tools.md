@@ -1,6 +1,6 @@
 # Tools
 
-Flemma's tool system lets models request actions — run a calculation, execute a shell command, read or modify files — and receive structured results, all within the `.chat` buffer. This document covers approval, per-buffer configuration, custom tool registration, and the resolver API.
+Flemma's tool system lets models request actions – run a calculation, execute a shell command, read or modify files – and receive structured results, all within the `.chat` buffer. This document covers approval, per-buffer configuration, custom tool registration, and the resolver API.
 
 For a quick overview of built-in tools and the basic workflow, see the [Tool Calling](../README.md#tool-calling) section in the README.
 
@@ -29,7 +29,7 @@ tools = {
 
 ### Per-buffer approval
 
-Override approval on a per-buffer basis using `flemma.opt.tools.auto_approve` in Lua frontmatter. This works alongside the global `tools.auto_approve` config — global config is checked first (priority 100), then per-buffer frontmatter (priority 90):
+Override approval on a per-buffer basis using `flemma.opt.tools.auto_approve` in Lua frontmatter. This works alongside the global `tools.auto_approve` config – global config is checked first (priority 100), then per-buffer frontmatter (priority 90):
 
 ````lua
 ```lua

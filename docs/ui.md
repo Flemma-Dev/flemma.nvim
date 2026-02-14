@@ -118,7 +118,7 @@ When `hl = true`, the sign colour is derived from the corresponding `highlights.
 
 While a request is in flight, Flemma appends `@Assistant: Thinking...` with an animated braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`) rendered as end-of-line virtual text. The spinner animates at 100ms intervals and is removed once streaming starts.
 
-When the model enters a thinking/reasoning phase, the spinner animation is replaced with a live character count — e.g., `❖ (3.2k characters)` — so you can gauge progress. The symbol is configurable via `spinner.thinking_char` (default: `"❖"`).
+When the model enters a thinking/reasoning phase, the spinner animation is replaced with a live character count – e.g., `❖ (3.2k characters)` – so you can gauge progress. The symbol is configurable via `spinner.thinking_char` (default: `"❖"`).
 
 ### Tool execution indicators
 
@@ -140,7 +140,7 @@ The initial fold level is controlled by `editing.foldlevel` (default: `1`, which
 Collapsed folds show a preview of their content: the first 10 lines, each capped at 72 characters, joined with `⤶`. The format varies by content type:
 
 - **Messages:** `@Role: preview... (N lines)`
-- **Thinking blocks:** `<thinking preview...> (N lines)` — shows `<thinking redacted>` for redacted blocks, or `<thinking provider>` for blocks with a provider signature.
+- **Thinking blocks:** `<thinking preview...> (N lines)` – shows `<thinking redacted>` for redacted blocks, or `<thinking provider>` for blocks with a provider signature.
 - **Frontmatter:** ` ```language preview... ``` (N lines) `
 
 ## Notifications
@@ -160,7 +160,7 @@ notify = {
 
 See `lua/flemma/notify.lua` for the full default options.
 
-Notifications stack vertically when multiple are active. Each `.chat` buffer has its own notification stack — notifications for hidden buffers are queued and shown when the buffer becomes visible. Recall the most recent notification with `:Flemma notification:recall`.
+Notifications stack vertically when multiple are active. Each `.chat` buffer has its own notification stack – notifications for hidden buffers are queued and shown when the buffer becomes visible. Recall the most recent notification with `:Flemma notification:recall`.
 
 ## Extmark priority
 
@@ -203,4 +203,4 @@ The display format when thinking is active is configurable via `statusline.think
 | `{model}` | `claude-sonnet-4-5`     |
 | `{level}` | `high`, `medium`, `low` |
 
-When thinking is disabled or the model doesn't support it, only the model name is shown. The component respects per-buffer overrides from `flemma.opt` — if frontmatter changes the thinking level, the statusline reflects it.
+When thinking is disabled or the model doesn't support it, only the model name is shown. The component respects per-buffer overrides from `flemma.opt` – if frontmatter changes the thinking level, the statusline reflects it.

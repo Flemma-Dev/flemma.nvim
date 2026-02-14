@@ -106,6 +106,7 @@ local M = {}
 ---@field content string
 ---@field is_error boolean
 ---@field pending? boolean
+---@field has_content? boolean
 
 ---@alias flemma.ast.GenericPart flemma.ast.GenericTextPart|flemma.ast.GenericImagePart|flemma.ast.GenericPdfPart|flemma.ast.GenericTextFilePart|flemma.ast.GenericUnsupportedFilePart|flemma.ast.GenericThinkingPart|flemma.ast.GenericToolUsePart|flemma.ast.GenericToolResultPart
 
@@ -188,7 +189,7 @@ end
 
 ---@param tool_use_id string
 ---@param content string
----@param opts? { is_error?: boolean, pending?: boolean, start_line?: integer, end_line?: integer }
+---@param opts? { is_error?: boolean, pending?: boolean, has_content?: boolean, start_line?: integer, end_line?: integer }
 ---@return flemma.ast.ToolResultSegment
 function M.tool_result(tool_use_id, content, opts)
   opts = opts or {}
@@ -198,6 +199,7 @@ function M.tool_result(tool_use_id, content, opts)
     content = content,
     is_error = opts.is_error or false,
     pending = opts.pending or nil,
+    has_content = opts.has_content or nil,
     position = { start_line = opts.start_line, end_line = opts.end_line },
   }
 end

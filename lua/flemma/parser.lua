@@ -187,11 +187,15 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
       if block then
         local result_content
         local is_pending = false
+        local has_content = false
 
         if block.language == "flemma:pending" then
-          -- Pending approval placeholder — no content to parse
+          -- Pending approval placeholder — detect user-edited content
           result_content = ""
           is_pending = true
+          if block.content ~= "" then
+            has_content = true
+          end
         elseif block.language then
           -- Parse the content based on language
           local content, parse_err = codeblock.parse(block.language, block.content)
@@ -223,6 +227,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
           ast.tool_result(tool_use_id, result_content, {
             is_error = is_error,
             pending = is_pending or nil,
+            has_content = has_content or nil,
             start_line = result_start_line,
             end_line = base_line_num + block_end - 1,
           })

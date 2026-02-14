@@ -172,6 +172,9 @@ function M.cancel_request()
 
       state.unlock_buffer(bufnr)
 
+      -- Disarm autopilot on cancellation
+      require("flemma.autopilot").disarm(bufnr)
+
       local msg = "Flemma: Request cancelled"
       if log.is_enabled() then
         msg = msg .. ". See " .. log.get_path() .. " for details"
@@ -194,16 +197,19 @@ end
 ---When require_approval is enabled, pending tools get empty placeholder results injected
 ---so the user can review before execution. On the next invocation, tools with empty
 ---placeholders are executed. When all tools have results, the request is sent.
----@param opts? { on_request_complete?: fun() }
+---@param opts? { on_request_complete?: fun(), bufnr?: integer }
 function M.send_or_execute(opts)
   opts = opts or {}
-  local bufnr = vim.api.nvim_get_current_buf()
+  local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
   local tool_context = require("flemma.tools.context")
   local config = state.get_config()
   local require_approval = config.tools and config.tools.require_approval
   if require_approval == nil then
     require_approval = true
   end
+
+  local autopilot = require("flemma.autopilot")
+  local autopilot_active = autopilot.is_enabled(bufnr)
 
   -- Phase 1: Handle tool_use blocks that have no tool_result at all
   local pending = tool_context.resolve_all_pending(bufnr)
@@ -250,6 +256,22 @@ function M.send_or_execute(opts)
         end
       end
 
+      if autopilot_active then
+        if #to_execute > 0 then
+          -- Arm autopilot: tools were dispatched for execution
+          autopilot.arm(bufnr)
+        elseif not first_placeholder_line then
+          -- All denied, nothing executing: no executor callbacks will fire,
+          -- so we must notify autopilot directly
+          autopilot.arm(bufnr)
+          vim.schedule(function()
+            if vim.api.nvim_buf_is_valid(bufnr) then
+              autopilot.on_tools_complete(bufnr)
+            end
+          end)
+        end
+      end
+
       if opts.on_request_complete then
         opts.on_request_complete()
       end
@@ -259,6 +281,9 @@ function M.send_or_execute(opts)
       local ok, err = executor.execute_all_pending(bufnr)
       if not ok then
         vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+      end
+      if autopilot_active then
+        autopilot.arm(bufnr)
       end
       return
     end
@@ -275,6 +300,9 @@ function M.send_or_execute(opts)
           vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
         end
       end
+      if autopilot_active then
+        autopilot.arm(bufnr)
+      end
       if opts.on_request_complete then
         opts.on_request_complete()
       end
@@ -287,10 +315,10 @@ function M.send_or_execute(opts)
 end
 
 ---Handle the AI provider interaction
----@param opts? { on_request_complete?: fun() }
+---@param opts? { on_request_complete?: fun(), bufnr?: integer }
 function M.send_to_provider(opts)
   opts = opts or {}
-  local bufnr = vim.api.nvim_get_current_buf()
+  local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
   local buffer_state = state.get_buffer_state(bufnr)
 
   -- Check if there's already a request in progress
@@ -894,6 +922,10 @@ function M.send_to_provider(opts)
           if opts.on_request_complete then -- For FlemmaSendAndInsert
             opts.on_request_complete()
           end
+
+          -- Hook autopilot: check if assistant response contains tool_use
+          local autopilot = require("flemma.autopilot")
+          autopilot.on_response_complete(bufnr)
         else
           -- cURL request failed (exit code ~= 0)
           -- Buffer is already set to modifiable = true

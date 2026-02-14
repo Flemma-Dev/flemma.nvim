@@ -1,6 +1,6 @@
 # Prompt Caching
 
-Flemma supports prompt caching across all three providers. Each provider implements caching differently, but the general `cache_retention` parameter provides a consistent interface — set it once and it applies to whichever provider you use.
+Flemma supports prompt caching across all three providers. Each provider implements caching differently, but the general `cache_retention` parameter provides a consistent interface – set it once and it applies to whichever provider you use.
 
 ## Quick Comparison
 

@@ -6,6 +6,7 @@ local M = {}
 ---@class flemma.opt.ResolvedOpts
 ---@field tools string[]|nil List of allowed tool names
 ---@field auto_approve flemma.config.AutoApprove|nil Per-buffer auto-approve policy
+---@field autopilot boolean|nil Per-buffer autopilot override (true/false)
 ---@field parameters table<string, any>|nil General parameter overrides (provider-agnostic)
 ---@field anthropic table<string, any>|nil Per-buffer Anthropic parameter overrides
 ---@field openai table<string, any>|nil Per-buffer OpenAI parameter overrides
@@ -274,6 +275,9 @@ function M.create()
       if key == "auto_approve" then
         return raw_options.auto_approve
       end
+      if key == "autopilot" then
+        return raw_options.autopilot
+      end
       return ListOption[key]
     end,
     __newindex = function(_, key, value)
@@ -282,6 +286,13 @@ function M.create()
           error(string.format("flemma.opt.tools.auto_approve: expected table or function, got %s", type(value)))
         end
         raw_options.auto_approve = value
+        return
+      end
+      if key == "autopilot" then
+        if type(value) ~= "boolean" then
+          error(string.format("flemma.opt.tools.autopilot: expected boolean, got %s", type(value)))
+        end
+        raw_options.autopilot = value
         return
       end
       rawset(tools_option, key, value)
@@ -376,6 +387,9 @@ function M.create()
     end
     if raw_options.auto_approve ~= nil then
       result.auto_approve = raw_options.auto_approve
+    end
+    if raw_options.autopilot ~= nil then
+      result.autopilot = raw_options.autopilot
     end
     -- Add general parameter overrides
     if next(general_params) then

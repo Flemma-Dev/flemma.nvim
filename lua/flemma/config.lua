@@ -73,9 +73,14 @@
 
 ---@alias flemma.config.AutoApprove string[]|flemma.config.AutoApproveFunction
 
+---@class flemma.config.AutopilotConfig
+---@field enabled boolean
+---@field max_turns integer
+
 ---@class flemma.config.ToolsConfig
 ---@field require_approval boolean
 ---@field auto_approve? flemma.config.AutoApprove
+---@field autopilot flemma.config.AutopilotConfig
 ---@field default_timeout integer
 ---@field show_spinner boolean
 ---@field cursor_after_result "result"|"stay"|"next"
@@ -216,6 +221,10 @@ return {
   tools = {
     require_approval = true, -- Require user approval before executing tool calls (two-step <C-]> flow)
     auto_approve = nil, -- Tools that bypass approval: string[] of tool names, or function(tool_name, input, context) → true|false|"deny"
+    autopilot = {
+      enabled = true, -- Auto-execute approved tools and re-send when resolved
+      max_turns = 100, -- Safety limit on consecutive autonomous LLM turns
+    },
     default_timeout = 30, -- Default timeout for async tools (seconds)
     show_spinner = true, -- Show spinner animation during execution
     cursor_after_result = "result", -- Cursor behavior after result injection: "result", "stay", or "next"
