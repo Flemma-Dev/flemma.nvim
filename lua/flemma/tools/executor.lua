@@ -32,7 +32,9 @@ local function get_buffer_pending(bufnr)
   return pending_by_buffer[bufnr]
 end
 
----Count pending (non-completed) executions for a buffer
+---Count executions that have not been cleaned up yet for a buffer.
+---Uses table presence (removed by cleanup_pending) rather than the completed
+---flag, so that simultaneous async completions don't cause premature unlock.
 ---@param bufnr integer
 ---@return integer
 local function count_pending(bufnr)
@@ -41,10 +43,8 @@ local function count_pending(bufnr)
     return 0
   end
   local n = 0
-  for _, entry in pairs(pending) do
-    if not entry.completed then
-      n = n + 1
-    end
+  for _ in pairs(pending) do
+    n = n + 1
   end
   return n
 end
@@ -158,7 +158,7 @@ local function do_completion(bufnr, tool_id, result, opts)
   -- is editable and the on_lines listener can detect user edits.
   maybe_unlock_buffer(bufnr)
 
-  -- Auto-dismiss indicator after delay (or immediately on buffer edit)
+  -- Auto-dismiss indicator after delay (or immediately on user edit)
   ui.schedule_tool_indicator_clear(bufnr, tool_id, 1500)
 
   ui.update_ui(bufnr)
