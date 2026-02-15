@@ -86,5 +86,5 @@ if [ ! -d "$PLENARY_DIR" ]; then
 fi
 
 # ---- Environment variables (persisted for the session) -----------
-grep -q '^export PROJECT_ROOT=' "$CLAUDE_ENV_FILE" 2>/dev/null || echo "export PROJECT_ROOT=\"${CLAUDE_PROJECT_DIR}\"" >> "$CLAUDE_ENV_FILE"
-grep -q '^export PLENARY_PATH=' "$CLAUDE_ENV_FILE" 2>/dev/null || echo "export PLENARY_PATH=\"${PLENARY_DIR}\"" >> "$CLAUDE_ENV_FILE"
+grep -q '^export PROJECT_ROOT=' "$CLAUDE_ENV_FILE" 2>/dev/null || echo "export PROJECT_ROOT=\"${CLAUDE_PROJECT_DIR}\"" >>"$CLAUDE_ENV_FILE"
+grep -q '^export PLENARY_PATH=' "$CLAUDE_ENV_FILE" 2>/dev/null || echo "export PLENARY_PATH=\"${PLENARY_DIR}\"" >>"$CLAUDE_ENV_FILE"
