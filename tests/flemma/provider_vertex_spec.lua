@@ -474,6 +474,54 @@ describe("Vertex AI Provider", function()
       assert.equals("LOW", req.generationConfig.thinkingConfig.thinkingLevel)
     end)
 
+    it("should use thinkingLevel MINIMAL for Gemini 3 Flash with thinking=minimal", function()
+      local provider = vertex.new({
+        model = "gemini-3-flash",
+        max_tokens = 4000,
+        project_id = "test-project",
+        location = "us-central1",
+        thinking = "minimal",
+      })
+
+      local lines = { "@You: Hello" }
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local req = provider:build_request(prompt, {})
+
+      assert.equals("MINIMAL", req.generationConfig.thinkingConfig.thinkingLevel)
+    end)
+
+    it("should clamp thinking='max' to HIGH for Gemini 3 Flash", function()
+      local provider = vertex.new({
+        model = "gemini-3-flash",
+        max_tokens = 4000,
+        project_id = "test-project",
+        location = "us-central1",
+        thinking = "max",
+      })
+
+      local lines = { "@You: Hello" }
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local req = provider:build_request(prompt, {})
+
+      assert.equals("HIGH", req.generationConfig.thinkingConfig.thinkingLevel)
+    end)
+
+    it("should map thinking='minimal' to LOW for Gemini 3 Pro", function()
+      local provider = vertex.new({
+        model = "gemini-3-pro",
+        max_tokens = 4000,
+        project_id = "test-project",
+        location = "us-central1",
+        thinking = "minimal",
+      })
+
+      local lines = { "@You: Hello" }
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local req = provider:build_request(prompt, {})
+
+      assert.equals("LOW", req.generationConfig.thinkingConfig.thinkingLevel)
+    end)
+
     it("should use thinkingBudget for numeric thinking value on Gemini 2.5", function()
       local provider = vertex.new({
         model = "gemini-2.5-pro",

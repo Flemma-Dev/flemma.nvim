@@ -312,9 +312,13 @@ function M.build_request(self, prompt, _context)
     local use_adaptive = model:match("opus%-4%-6") ~= nil or model:match("opus%-4%.6") ~= nil
 
     if use_adaptive then
+      -- Anthropic effort values: low, medium, high, max (Opus 4.6 only for max)
+      -- Flemma's "minimal" has no Anthropic equivalent, map to "low"
+      local effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" }
+      local effort = effort_map[thinking.level] or "high"
       request_body.thinking = { type = "adaptive" }
-      request_body.output_config = { effort = thinking.level or "high" }
-      log.debug("anthropic.build_request: Adaptive thinking enabled with effort: " .. (thinking.level or "high"))
+      request_body.output_config = { effort = effort }
+      log.debug("anthropic.build_request: Adaptive thinking enabled with effort: " .. effort)
     elseif thinking.budget then
       request_body.thinking = {
         type = "enabled",

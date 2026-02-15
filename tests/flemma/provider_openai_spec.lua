@@ -113,6 +113,60 @@ describe("OpenAI Provider", function()
       assert.same({ "reasoning.encrypted_content" }, request_body.include)
     end)
 
+    it("should map thinking='max' to reasoning.effort='high' for non-xhigh models", function()
+      local provider = openai.new({
+        model = "o3",
+        max_tokens = 4000,
+        thinking = "max",
+      })
+
+      local messages = {
+        { type = "You", content = "Hello" },
+      }
+
+      local prompt = provider:prepare_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.is_not_nil(request_body.reasoning)
+      assert.equals("high", request_body.reasoning.effort)
+    end)
+
+    it("should map thinking='max' to reasoning.effort='xhigh' for gpt-5.2", function()
+      local provider = openai.new({
+        model = "gpt-5.2",
+        max_tokens = 4000,
+        thinking = "max",
+      })
+
+      local messages = {
+        { type = "You", content = "Hello" },
+      }
+
+      local prompt = provider:prepare_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.is_not_nil(request_body.reasoning)
+      assert.equals("xhigh", request_body.reasoning.effort)
+    end)
+
+    it("should pass through thinking='minimal' as reasoning.effort='minimal'", function()
+      local provider = openai.new({
+        model = "o3",
+        max_tokens = 4000,
+        thinking = "minimal",
+      })
+
+      local messages = {
+        { type = "You", content = "Hello" },
+      }
+
+      local prompt = provider:prepare_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.is_not_nil(request_body.reasoning)
+      assert.equals("minimal", request_body.reasoning.effort)
+    end)
+
     it("should use custom reasoning_summary when configured", function()
       local provider = openai.new({
         model = "o3",

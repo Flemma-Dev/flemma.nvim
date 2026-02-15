@@ -18,17 +18,21 @@ local FINISH_REASON_MAP = {
 --- Gemini 3 Pro only supports LOW and HIGH, so gets a separate mapping below.
 ---@type table<string, string>
 local THINKING_LEVEL_MAP = {
+  minimal = "MINIMAL",
   low = "LOW",
   medium = "MEDIUM",
   high = "HIGH",
+  max = "HIGH", -- no max equivalent in Google API, clamp to HIGH
 }
 
 --- Maps Flemma effort levels to Vertex AI ThinkingLevel for Gemini 3 Pro (only LOW/HIGH).
 ---@type table<string, string>
 local THINKING_LEVEL_MAP_PRO = {
+  minimal = "LOW", -- Pro has no MINIMAL
   low = "LOW",
-  medium = "HIGH",
+  medium = "HIGH", -- Pro has no MEDIUM
   high = "HIGH",
+  max = "HIGH", -- no max equivalent
 }
 
 ---@class flemma.provider.Vertex : flemma.provider.Base

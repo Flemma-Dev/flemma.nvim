@@ -53,7 +53,7 @@
 ---@field timeout? integer
 ---@field connect_timeout? integer
 ---@field cache_retention? string Prompt caching: "short", "long", or "none"
----@field thinking? false|string|number Unified thinking: "low"/"medium"/"high", numeric budget, or false to disable
+---@field thinking? false|string|number Unified thinking: "minimal"/"low"/"medium"/"high"/"max", numeric budget, or false to disable
 ---@field reasoning? string Provider-specific (OpenAI): reasoning effort level
 ---@field thinking_budget? number Provider-specific (Anthropic/Vertex): explicit token budget
 ---@field [string] table<string, any>|nil Provider-specific parameter overrides

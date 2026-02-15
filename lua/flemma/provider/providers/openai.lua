@@ -312,9 +312,16 @@ function M.build_request(self, prompt, context)
   local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities)
 
   if thinking.enabled and thinking.effort then
+    -- Map Flemma's canonical "max" to OpenAI's "xhigh" for models that support it
+    local effort = thinking.effort
+    if effort == "max" then
+      local model = self.parameters.model or ""
+      local supports_xhigh = model:match("gpt%-5%.2") ~= nil or model:match("gpt%-5%.3") ~= nil
+      effort = supports_xhigh and "xhigh" or "high"
+    end
     local reasoning_summary = self.parameters.reasoning_summary or "auto"
     request_body.reasoning = {
-      effort = thinking.effort,
+      effort = effort,
       summary = reasoning_summary,
     }
     request_body.include = { "reasoning.encrypted_content" }

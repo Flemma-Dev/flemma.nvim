@@ -452,5 +452,27 @@ describe("Anthropic Provider", function()
       assert.are.same({ type = "adaptive" }, req.thinking)
       assert.are.same({ effort = "low" }, req.output_config)
     end)
+
+    it("should map thinking='max' to effort='max' on opus-4-6", function()
+      local p = anthropic.new({ model = "claude-opus-4-6-20260101", max_tokens = 4000, thinking = "max" })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      assert.are.same({ type = "adaptive" }, req.thinking)
+      assert.are.same({ effort = "max" }, req.output_config)
+    end)
+
+    it("should map thinking='minimal' to effort='low' on opus-4-6", function()
+      local p = anthropic.new({ model = "claude-opus-4-6-20260101", max_tokens = 4000, thinking = "minimal" })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      assert.are.same({ type = "adaptive" }, req.thinking)
+      assert.are.same({ effort = "low" }, req.output_config)
+    end)
   end)
 end)

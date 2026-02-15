@@ -652,31 +652,39 @@ end
 ---@class flemma.provider.ThinkingResolution
 ---@field enabled boolean Whether thinking/reasoning is active
 ---@field budget? integer Token budget for budget-based providers (Anthropic, Vertex)
----@field effort? string Effort level for effort-based providers (OpenAI): "low"|"medium"|"high"
----@field level? string Display level: "low"|"medium"|"high" (always set when enabled)
+---@field effort? string Effort level for effort-based providers (OpenAI): "minimal"|"low"|"medium"|"high"|"max"
+---@field level? string Display level: "minimal"|"low"|"medium"|"high"|"max" (always set when enabled)
 
---- Map a numeric budget to the closest OpenAI reasoning effort level
+--- Map a numeric budget to the closest named effort level
 ---@param budget number
----@return string effort "low"|"medium"|"high"
+---@return string effort "minimal"|"low"|"medium"|"high"|"max"
 local function budget_to_effort(budget)
-  if budget <= 2048 then
+  if budget <= 256 then
+    return "minimal"
+  elseif budget <= 4096 then
     return "low"
-  elseif budget <= 16384 then
+  elseif budget <= 12288 then
     return "medium"
-  else
+  elseif budget <= 24576 then
     return "high"
+  else
+    return "max"
   end
 end
 
 --- Map a named effort level to a thinking budget
----@param level string "low"|"medium"|"high"
+---@param level string "minimal"|"low"|"medium"|"high"|"max"
 ---@return integer budget
 local function effort_to_budget(level)
-  if level == "low" then
-    return 1024
+  if level == "minimal" then
+    return 128
+  elseif level == "low" then
+    return 2048
   elseif level == "medium" then
     return 8192
-  else -- "high"
+  elseif level == "high" then
+    return 16384
+  else -- "max"
     return 32768
   end
 end
