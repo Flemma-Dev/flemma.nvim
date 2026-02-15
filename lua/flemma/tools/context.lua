@@ -147,7 +147,7 @@ function M.resolve_all_awaiting_execution(bufnr)
     vim.notify(
       "Flemma: "
         .. conflict_count
-        .. " tool result(s) have edited content inside flemma:pending — "
+        .. " tool result(s) have edited content inside flemma:pending – "
         .. "skipping execution, your content will be sent as-is.",
       vim.log.levels.WARN
     )

@@ -746,7 +746,7 @@ function M.process_response_line(self, line, callbacks)
       -- MAX_TOKENS: complete normally but warn user
       log.warn("vertex.process_response_line(): Response truncated (MAX_TOKENS)")
       vim.schedule(function()
-        vim.notify("Flemma: Response truncated — model reached max output tokens", vim.log.levels.WARN)
+        vim.notify("Flemma: Response truncated – model reached max output tokens", vim.log.levels.WARN)
       end)
       if callbacks.on_response_complete then
         callbacks.on_response_complete()
