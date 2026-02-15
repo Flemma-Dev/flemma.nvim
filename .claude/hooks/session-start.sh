@@ -82,7 +82,8 @@ fi
 
 # ---- plenary.nvim (test framework dependency) --------------------
 if [ ! -d "$PLENARY_DIR" ]; then
-  sudo git clone --depth 1 -q https://github.com/nvim-lua/plenary.nvim.git "$PLENARY_DIR"
+  git clone --depth 1 -q https://github.com/nvim-lua/plenary.nvim.git /tmp/plenary.nvim
+  sudo mv /tmp/plenary.nvim "$PLENARY_DIR"
 fi
 
 # ---- Environment variables (persisted for the session) -----------
