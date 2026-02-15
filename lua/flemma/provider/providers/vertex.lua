@@ -14,6 +14,23 @@ local FINISH_REASON_MAP = {
   MAX_TOKENS = "length",
 }
 
+--- Maps Flemma effort levels to Vertex AI ThinkingLevel enum values for Gemini 3 Flash.
+--- Gemini 3 Pro only supports LOW and HIGH, so gets a separate mapping below.
+---@type table<string, string>
+local THINKING_LEVEL_MAP = {
+  low = "LOW",
+  medium = "MEDIUM",
+  high = "HIGH",
+}
+
+--- Maps Flemma effort levels to Vertex AI ThinkingLevel for Gemini 3 Pro (only LOW/HIGH).
+---@type table<string, string>
+local THINKING_LEVEL_MAP_PRO = {
+  low = "LOW",
+  medium = "HIGH",
+  high = "HIGH",
+}
+
 ---@class flemma.provider.Vertex : flemma.provider.Base
 ---@field _token_generated_at integer|nil os.time() when the gcloud token was generated
 ---@field _token_from "gcloud"|"env"|"direct"|nil Source of the cached token
@@ -456,13 +473,26 @@ function M.build_request(self, prompt, _context)
   -- Add thinking configuration using unified resolution
   local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities)
 
-  if thinking.enabled and thinking.budget then
+  if thinking.enabled then
+    local thinking_config = { includeThoughts = true }
+    local model = self.parameters.model or ""
+
+    if model:match("gemini%-3") then
+      -- Gemini 3 models use thinkingLevel (discrete enum) instead of thinkingBudget
+      local level_map = model:match("3%-pro") and THINKING_LEVEL_MAP_PRO or THINKING_LEVEL_MAP
+      local level = thinking.level and level_map[thinking.level]
+      if level then
+        thinking_config.thinkingLevel = level
+        log.debug("build_request: Vertex AI thinkingConfig included with thinkingLevel: " .. level)
+      end
+    elseif thinking.budget then
+      -- Gemini 2.5 and earlier: use thinkingBudget (numeric token count)
+      thinking_config.thinkingBudget = thinking.budget
+      log.debug("build_request: Vertex AI thinkingConfig included with thinkingBudget: " .. thinking.budget)
+    end
+
     request_body.generationConfig = request_body.generationConfig or {}
-    request_body.generationConfig.thinkingConfig = {
-      thinkingBudget = thinking.budget,
-      includeThoughts = true,
-    }
-    log.debug("build_request: Vertex AI thinkingConfig included with thinkingBudget: " .. thinking.budget)
+    request_body.generationConfig.thinkingConfig = thinking_config
   else
     log.debug("build_request: Vertex AI thinkingConfig not included in the request.")
   end

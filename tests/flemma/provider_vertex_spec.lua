@@ -367,6 +367,149 @@ describe("Vertex AI Provider", function()
     end)
   end)
 
+  describe("thinkingConfig in build_request", function()
+    local parser = require("flemma.parser")
+    local pipeline = require("flemma.pipeline")
+    local ctx = require("flemma.context")
+
+    it("should use thinkingBudget for Gemini 2.5 models", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-flash",
+        max_tokens = 4000,
+        project_id = "test-project",
+        location = "us-central1",
+        thinking = "high",
+      })
+
+      local lines = { "@You: Hello" }
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local req = provider:build_request(prompt, {})
+
+      assert.is_not_nil(req.generationConfig.thinkingConfig)
+      assert.is_not_nil(req.generationConfig.thinkingConfig.thinkingBudget, "Gemini 2.5 should use thinkingBudget")
+      assert.is_nil(req.generationConfig.thinkingConfig.thinkingLevel, "Gemini 2.5 should not use thinkingLevel")
+      assert.is_true(req.generationConfig.thinkingConfig.includeThoughts)
+    end)
+
+    it("should use thinkingLevel HIGH for Gemini 3 Flash with thinking=high", function()
+      local provider = vertex.new({
+        model = "gemini-3-flash-preview",
+        max_tokens = 4000,
+        project_id = "test-project",
+        location = "us-central1",
+        thinking = "high",
+      })
+
+      local lines = { "@You: Hello" }
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local req = provider:build_request(prompt, {})
+
+      assert.is_not_nil(req.generationConfig.thinkingConfig)
+      assert.equals("HIGH", req.generationConfig.thinkingConfig.thinkingLevel)
+      assert.is_nil(req.generationConfig.thinkingConfig.thinkingBudget, "Gemini 3 should not use thinkingBudget")
+      assert.is_true(req.generationConfig.thinkingConfig.includeThoughts)
+    end)
+
+    it("should use thinkingLevel LOW for Gemini 3 Flash with thinking=low", function()
+      local provider = vertex.new({
+        model = "gemini-3-flash",
+        max_tokens = 4000,
+        project_id = "test-project",
+        location = "us-central1",
+        thinking = "low",
+      })
+
+      local lines = { "@You: Hello" }
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local req = provider:build_request(prompt, {})
+
+      assert.equals("LOW", req.generationConfig.thinkingConfig.thinkingLevel)
+    end)
+
+    it("should use thinkingLevel MEDIUM for Gemini 3 Flash with thinking=medium", function()
+      local provider = vertex.new({
+        model = "gemini-3-flash",
+        max_tokens = 4000,
+        project_id = "test-project",
+        location = "us-central1",
+        thinking = "medium",
+      })
+
+      local lines = { "@You: Hello" }
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local req = provider:build_request(prompt, {})
+
+      assert.equals("MEDIUM", req.generationConfig.thinkingConfig.thinkingLevel)
+    end)
+
+    it("should collapse medium to HIGH for Gemini 3 Pro (only LOW/HIGH supported)", function()
+      local provider = vertex.new({
+        model = "gemini-3-pro-preview",
+        max_tokens = 4000,
+        project_id = "test-project",
+        location = "us-central1",
+        thinking = "medium",
+      })
+
+      local lines = { "@You: Hello" }
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local req = provider:build_request(prompt, {})
+
+      assert.equals("HIGH", req.generationConfig.thinkingConfig.thinkingLevel)
+    end)
+
+    it("should use thinkingLevel LOW for Gemini 3 Pro with thinking=low", function()
+      local provider = vertex.new({
+        model = "gemini-3-pro",
+        max_tokens = 4000,
+        project_id = "test-project",
+        location = "us-central1",
+        thinking = "low",
+      })
+
+      local lines = { "@You: Hello" }
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local req = provider:build_request(prompt, {})
+
+      assert.equals("LOW", req.generationConfig.thinkingConfig.thinkingLevel)
+    end)
+
+    it("should use thinkingBudget for numeric thinking value on Gemini 2.5", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        max_tokens = 4000,
+        project_id = "test-project",
+        location = "us-central1",
+        thinking = 4096,
+      })
+
+      local lines = { "@You: Hello" }
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local req = provider:build_request(prompt, {})
+
+      assert.equals(4096, req.generationConfig.thinkingConfig.thinkingBudget)
+      assert.is_nil(req.generationConfig.thinkingConfig.thinkingLevel)
+    end)
+
+    it("should still resolve numeric thinking to thinkingLevel for Gemini 3", function()
+      -- A numeric budget like 4096 resolves to level="medium" via budget_to_effort()
+      local provider = vertex.new({
+        model = "gemini-3-flash",
+        max_tokens = 4000,
+        project_id = "test-project",
+        location = "us-central1",
+        thinking = 4096,
+      })
+
+      local lines = { "@You: Hello" }
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local req = provider:build_request(prompt, {})
+
+      assert.is_not_nil(req.generationConfig.thinkingConfig.thinkingLevel, "Gemini 3 should use thinkingLevel even with numeric input")
+      assert.is_nil(req.generationConfig.thinkingConfig.thinkingBudget, "Gemini 3 should not use thinkingBudget")
+    end)
+  end)
+
   describe("is_auth_error", function()
     it("should detect UNAUTHENTICATED status in error message", function()
       local provider = vertex.new({
