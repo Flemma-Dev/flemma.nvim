@@ -11,6 +11,7 @@ local M = {}
 ---@field anthropic table<string, any>|nil Per-buffer Anthropic parameter overrides
 ---@field openai table<string, any>|nil Per-buffer OpenAI parameter overrides
 ---@field vertex table<string, any>|nil Per-buffer Vertex parameter overrides
+---@field sandbox table|nil Per-buffer sandbox config overrides
 
 ---@class flemma.opt.Entry
 ---@field name string
@@ -324,6 +325,9 @@ function M.create()
         touched[key] = true
         return options[key]
       end
+      if key == "sandbox" then
+        return raw_options.sandbox
+      end
       local provider_reg = require("flemma.provider.registry")
       if provider_reg.has(key) then
         if not provider_proxies[key] then
@@ -361,6 +365,15 @@ function M.create()
         options[key]:set(value)
         return
       end
+      if key == "sandbox" then
+        if type(value) == "boolean" then
+          value = { enabled = value }
+        elseif type(value) ~= "table" then
+          error("flemma.opt.sandbox: expected boolean or table, got " .. type(value))
+        end
+        raw_options.sandbox = vim.tbl_deep_extend("force", raw_options.sandbox or {}, value)
+        return
+      end
       local provider_reg = require("flemma.provider.registry")
       if provider_reg.has(key) then
         if type(value) ~= "table" then
@@ -390,6 +403,9 @@ function M.create()
     end
     if raw_options.autopilot ~= nil then
       result.autopilot = raw_options.autopilot
+    end
+    if raw_options.sandbox ~= nil then
+      result.sandbox = vim.deepcopy(raw_options.sandbox)
     end
     -- Add general parameter overrides
     if next(general_params) then

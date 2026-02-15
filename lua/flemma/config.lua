@@ -63,6 +63,21 @@
 ---@field cwd? string
 ---@field env? table<string, string>
 
+---@class flemma.config.SandboxPolicy
+---@field rw_paths? string[] Read-write paths; supports $CWD and $FLEMMA_BUFFER_PATH (default: {"$CWD", "$FLEMMA_BUFFER_PATH", "/tmp"})
+---@field network? boolean Allow network access (default: true)
+---@field allow_privileged? boolean Allow sudo/capabilities (default: false, enables --unshare-user)
+
+---@class flemma.config.BwrapBackendConfig
+---@field path? string Path to bwrap binary (default: "bwrap")
+---@field extra_args? string[] Raw extra bwrap arguments
+
+---@class flemma.config.SandboxConfig
+---@field enabled boolean Master switch (default: true)
+---@field backend? string "auto" = detect quietly, "required" = detect and warn if none, or explicit name (default: "auto")
+---@field policy? flemma.config.SandboxPolicy
+---@field backends? table<string, table> Per-backend config
+
 ---@class flemma.config.AutoApproveContext
 ---@field bufnr integer
 ---@field tool_id string
@@ -128,6 +143,7 @@
 ---@field editing? flemma.config.Editing
 ---@field logging? flemma.logging.Config
 ---@field keymaps? flemma.config.Keymaps
+---@field sandbox? flemma.config.SandboxConfig
 
 ---Full resolved config (all fields present after merging with defaults).
 ---@class flemma.Config : flemma.Config.Opts
@@ -149,6 +165,7 @@
 ---@field editing flemma.config.Editing
 ---@field logging flemma.logging.Config
 ---@field keymaps flemma.config.Keymaps
+---@field sandbox flemma.config.SandboxConfig
 
 ---@type flemma.Config
 return {
@@ -258,5 +275,20 @@ return {
       send = "<C-]>",
     },
     enabled = true, -- Set to false to disable all keymaps
+  },
+  sandbox = {
+    enabled = true, -- Enable filesystem sandboxing
+    backend = "auto", -- "auto" detects the best available backend; set explicitly to force one
+    policy = {
+      rw_paths = { "$CWD", "$FLEMMA_BUFFER_PATH", "/tmp" }, -- Read-write paths (all others are read-only)
+      network = true, -- Allow network access inside the sandbox
+      allow_privileged = false, -- Allow sudo/capabilities (false = safer, drops privileges)
+    },
+    backends = {
+      bwrap = {
+        path = "bwrap", -- Path to bubblewrap binary
+        extra_args = {}, -- Additional bwrap arguments for advanced use
+      },
+    },
   },
 }

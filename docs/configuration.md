@@ -98,6 +98,25 @@ require("flemma").setup({
     enabled = false,
     path = vim.fn.stdpath("cache") .. "/flemma.log",
   },
+  sandbox = {
+    enabled = true,                          -- Enable filesystem sandboxing
+    backend = "auto",                        -- "auto" | "required" | explicit name
+    policy = {
+      rw_paths = {                           -- Read-write paths (all others read-only)
+        "$CWD",                              --   Vim working directory
+        "$FLEMMA_BUFFER_PATH",               --   Directory of the .chat file
+        "/tmp",                              --   System temp directory
+      },
+      network = true,                        -- Allow network access
+      allow_privileged = false,              -- Allow sudo/capabilities
+    },
+    backends = {
+      bwrap = {
+        path = "bwrap",                      -- Bubblewrap binary path
+        extra_args = {},                     -- Additional bwrap arguments
+      },
+    },
+  },
   keymaps = {
     enabled = true,
     normal = {
@@ -224,6 +243,22 @@ presets = {
 
 Preset names must begin with `$`. Switch using `:Flemma switch $fast` and override individual values with additional `key=value` arguments: `:Flemma switch $review temperature=0.1`.
 
+### Sandbox
+
+Sandboxing constrains tool execution so that shell commands run inside a read-only filesystem with write access limited to an explicit allowlist. It is enabled by default and auto-detects a compatible backend (currently Bubblewrap on Linux). On platforms without a backend, Flemma silently degrades to unsandboxed execution.
+
+| Key                               | Default                                     | Effect                                                                                |
+| --------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `sandbox.enabled`                 | `true`                                      | Master switch for sandboxing.                                                         |
+| `sandbox.backend`                 | `"auto"`                                    | `"auto"` = detect silently, `"required"` = detect and warn, or explicit backend name. |
+| `sandbox.policy.rw_paths`         | `{ "$CWD", "$FLEMMA_BUFFER_PATH", "/tmp" }` | Paths with read-write access. Supports path variables.                                |
+| `sandbox.policy.network`          | `true`                                      | Allow network access inside the sandbox.                                              |
+| `sandbox.policy.allow_privileged` | `false`                                     | Allow `sudo` and capabilities inside the sandbox.                                     |
+
+Override per-buffer via `flemma.opt.sandbox` in frontmatter (boolean shorthand `true`/`false` supported). Toggle at runtime with `:Flemma sandbox:enable/disable/status`.
+
+See [docs/sandbox.md](sandbox.md) for the full reference on policy options, path variables, custom backends, and security considerations.
+
 ### Per-buffer overrides
 
-Beyond global configuration, individual buffers can override parameters, tool selection, and approval policies through `flemma.opt` in Lua frontmatter. See [docs/templates.md](templates.md#per-buffer-overrides-with-flemmaopt) for the full reference.
+Beyond global configuration, individual buffers can override parameters, tool selection, approval policies, and sandbox settings through `flemma.opt` in Lua frontmatter. See [docs/templates.md](templates.md#per-buffer-overrides-with-flemmaopt) for the full reference.

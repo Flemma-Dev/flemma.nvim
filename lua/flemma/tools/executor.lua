@@ -268,6 +268,18 @@ function M.execute(bufnr, context)
   -- Update UI to reflect changes
   ui.update_ui(bufnr)
 
+  -- Build execution context for tools that need buffer/sandbox info
+  ---@type flemma.tools.ExecutionContext
+  local exec_context = {
+    bufnr = bufnr,
+    cwd = (config.tools and config.tools.bash and config.tools.bash.cwd) or vim.fn.getcwd(),
+  }
+  -- Resolve per-buffer opts if available (for sandbox per-buffer overrides)
+  local opts_ok, resolved_opts = pcall(require("flemma.processor").resolve_buffer_opts, bufnr)
+  if opts_ok and resolved_opts then
+    exec_context.opts = resolved_opts
+  end
+
   -- Execute the tool
   if is_async then
     -- Async execution with callback
@@ -281,7 +293,7 @@ function M.execute(bufnr, context)
       handle_completion(bufnr, tool_id, result, { async = true })
     end
 
-    local ok, cancel_or_err = pcall(executor_fn, context.input, callback)
+    local ok, cancel_or_err = pcall(executor_fn, context.input, callback, exec_context)
     if not ok then
       -- Executor threw before starting async work
       handle_completion(bufnr, tool_id, {
@@ -297,7 +309,7 @@ function M.execute(bufnr, context)
     end
   else
     -- Sync execution — complete inline for reliable undojoin
-    local ok, result = pcall(executor_fn, context.input)
+    local ok, result = pcall(executor_fn, context.input, nil, exec_context)
     if not ok then
       handle_completion(bufnr, tool_id, {
         success = false,

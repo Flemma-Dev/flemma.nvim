@@ -19,6 +19,7 @@ https://github.com/user-attachments/assets/2c688830-baef-4d1d-98ef-ae560faacf61
 - **Template system** – Lua/JSON frontmatter, inline `{{ expressions }}`, `include()` helpers.
 - **Context attachments** – reference local files with `@./path`; MIME detection and provider-aware formatting.
 - **Usage reporting** – per-request and session token totals, costs, and cache metrics.
+- **Filesystem sandboxing** – shell commands run inside a read-only rootfs with write access limited to your project directory. Limits the blast radius of common accidents. Auto-detects the best available backend; silently degrades on platforms without one.
 - **Theme-aware UI** – line highlights, rulers, signs, and folding that adapt to your colour scheme.
 
 ## Table of Contents
@@ -32,6 +33,7 @@ https://github.com/user-attachments/assets/2c688830-baef-4d1d-98ef-ae560faacf61
 - [Providers](#providers)
 - [Tool Calling](#tool-calling)
 - [Autopilot](#autopilot)
+- [Sandboxing](#sandboxing)
 - [Template System](#template-system)
 - [Usage, Pricing, and Notifications](#usage-pricing-and-notifications)
 - [UI Customisation](#ui-customisation)
@@ -66,6 +68,7 @@ For managers that do not wire `opts`, call `require("flemma").setup({})` yoursel
 | [`curl`](https://curl.se/)                                               | Streaming is handled by spawning `curl` with Server-Sent Events enabled.                                        |
 | Markdown Tree-sitter grammar                                             | Flemma registers `.chat` buffers to reuse the Markdown parser for syntax highlighting and folding.              |
 | [`file`](https://www.darwinsys.com/file/) CLI (optional but recommended) | Provides reliable MIME detection for `@./path` attachments. When missing, extensions are used as a best effort. |
+| [`bwrap`](https://github.com/containers/bubblewrap) (optional, Linux)    | Enables filesystem sandboxing for tool execution. Without it, tools run unsandboxed.                            |
 
 ### Provider credentials
 
@@ -213,6 +216,7 @@ Use the single entry point `:Flemma {command}`. Autocompletion lists every avail
 | `:Flemma tool:cancel-all`                                   | Cancel all pending tool executions in the buffer.                                        |                                                                             |
 | `:Flemma tool:list`                                         | List pending tool executions with IDs and elapsed time.                                  |                                                                             |
 | `:Flemma autopilot:enable` / `:...:disable` / `:...:status` | Toggle autopilot or check its current state.                                             |                                                                             |
+| `:Flemma sandbox:enable` / `:...:disable` / `:...:status`   | Toggle sandboxing or check backend availability.                                         |                                                                             |
 | `:Flemma logging:enable` / `:...:disable` / `:...:open`     | Toggle structured logging and open the log file.                                         |                                                                             |
 | `:Flemma notification:recall`                               | Reopen the last usage/cost notification.                                                 |                                                                             |
 
@@ -362,6 +366,29 @@ To disable autopilot globally, set `tools.autopilot.enabled = false`. See [docs/
 
 ---
 
+## Sandboxing
+
+When sandboxing is enabled (the default), shell commands run inside a read-only filesystem with write access limited to your project directory, the `.chat` file directory, and `/tmp`. This prevents a misbehaving model from overwriting dotfiles, deleting system files, or writing outside the project. The sandbox is damage control, not a security boundary – it limits the blast radius of common accidents, not deliberate attacks.
+
+Flemma auto-detects the best available backend. The built-in [Bubblewrap](https://github.com/containers/bubblewrap) backend works on Linux with the `bwrap` package installed. On platforms without a compatible backend, Flemma silently degrades to unsandboxed execution – no configuration changes needed.
+
+```lua
+-- The defaults work out of the box on Linux with bwrap installed.
+-- Customise the policy to tighten or loosen restrictions:
+require("flemma").setup({
+  sandbox = {
+    policy = {
+      rw_paths = { "$CWD" },    -- only the project directory is writable
+      network = false,          -- no network access
+    },
+  },
+})
+```
+
+Override per-buffer via `flemma.opt.sandbox` in frontmatter, or toggle at runtime with `:Flemma sandbox:enable/disable`. See [docs/sandbox.md](docs/sandbox.md) for the full reference on policy options, path variables, custom backends, and security considerations.
+
+---
+
 ## Template System
 
 Flemma's prompt pipeline supports Lua/JSON frontmatter, inline `{{ expressions }}`, and an `include()` helper for composable prompts. Errors surface as diagnostics before the request leaves your editor. Embed local files with `@./path` syntax – Flemma detects MIME types and formats attachments per-provider. See [docs/templates.md](docs/templates.md) for the full reference.
@@ -499,6 +526,7 @@ On a personal level, I've used Flemma to generate bedtime stories with recurring
 - **Vertex refuses requests:** double-check `parameters.vertex.project_id` and authentication. Run `gcloud auth application-default print-access-token` manually to ensure credentials are valid.
 - **Tool execution doesn't respond:** make sure the cursor is on or near the `**Tool Use:**` block. Only tools with registered executors can be run – check `:lua print(vim.inspect(require("flemma.tools").get_all()))`.
 - **Keymaps clash:** disable built-in mappings via `keymaps.enabled = false` and register your own `:Flemma` commands.
+- **Sandbox blocks writes:** If a tool reports "permission denied" on a path you expect to be writable, check `:Flemma sandbox:status` and verify the path is inside `rw_paths`. Add it to `sandbox.policy.rw_paths` or disable sandboxing to troubleshoot.
 - **Cross-buffer issues:** Flemma manages state per-buffer. If something feels off after switching between multiple `.chat` buffers, ensure each buffer has been saved (unsaved buffers lack `__dirname` for path resolution).
 
 ## License

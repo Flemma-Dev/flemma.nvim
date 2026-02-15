@@ -724,4 +724,90 @@ describe("flemma.opt", function()
       end, "flemma.opt: unknown option 'unknown_thing'")
     end)
   end)
+
+  describe("sandbox", function()
+    it("boolean true sets { enabled = true }", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.sandbox = true
+      local resolved = resolve()
+      assert.are.same({ enabled = true }, resolved.sandbox)
+    end)
+
+    it("boolean false sets { enabled = false }", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.sandbox = false
+      local resolved = resolve()
+      assert.are.same({ enabled = false }, resolved.sandbox)
+    end)
+
+    it("table value works as before", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.sandbox = { enabled = true, policy = { network = false } }
+      local resolved = resolve()
+      assert.are.same({ enabled = true, policy = { network = false } }, resolved.sandbox)
+    end)
+
+    it("boolean after table deep-merges", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.sandbox = { policy = { network = false } }
+      opt_proxy.sandbox = false
+      local resolved = resolve()
+      assert.are.same({ enabled = false, policy = { network = false } }, resolved.sandbox)
+    end)
+
+    it("not touching sandbox results in nil in resolved opts", function()
+      local _, resolve = opt.create()
+      local resolved = resolve()
+      assert.is_nil(resolved.sandbox)
+    end)
+
+    it("reading unset sandbox returns nil", function()
+      local opt_proxy = opt.create()
+      assert.is_nil(opt_proxy.sandbox)
+    end)
+
+    it("errors on number value", function()
+      local opt_proxy = opt.create()
+      assert.has_error(function()
+        opt_proxy.sandbox = 42
+      end, "flemma.opt.sandbox: expected boolean or table, got number")
+    end)
+
+    it("errors on string value", function()
+      local opt_proxy = opt.create()
+      assert.has_error(function()
+        opt_proxy.sandbox = "yes"
+      end, "flemma.opt.sandbox: expected boolean or table, got string")
+    end)
+
+    it("flows through frontmatter pipeline", function()
+      local lines = {
+        "```lua",
+        "flemma.opt.sandbox = true",
+        "```",
+        "@You: test",
+      }
+      local context = ctx.from_file("test.chat")
+      local prompt = pipeline.run(parser.parse_lines(lines), context)
+
+      assert.is_not_nil(prompt.opts)
+      assert.are.same({ enabled = true }, prompt.opts.sandbox)
+    end)
+
+    it("table flows through frontmatter pipeline", function()
+      local lines = {
+        "```lua",
+        'flemma.opt.sandbox = { enabled = true, policy = { rw_paths = { "$CWD" } } }',
+        "```",
+        "@You: test",
+      }
+      local context = ctx.from_file("test.chat")
+      local prompt = pipeline.run(parser.parse_lines(lines), context)
+
+      assert.is_not_nil(prompt.opts)
+      assert.is_not_nil(prompt.opts.sandbox)
+      assert.is_true(prompt.opts.sandbox.enabled)
+      assert.are.same({ "$CWD" }, prompt.opts.sandbox.policy.rw_paths)
+    end)
+  end)
 end)

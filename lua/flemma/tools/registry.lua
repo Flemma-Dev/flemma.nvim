@@ -10,6 +10,12 @@ local M = {}
 ---@field required? string[] Required property names
 ---@field additionalProperties? boolean Whether to allow extra properties (set false for strict mode)
 
+--- Context passed to tool execute functions as an optional third argument
+---@class flemma.tools.ExecutionContext
+---@field bufnr integer Buffer number for the current execution
+---@field opts? flemma.opt.ResolvedOpts Per-buffer resolved options
+---@field cwd string Absolute, normalized working directory
+
 ---@class flemma.tools.ToolDefinition
 ---@field name string Tool name (must match registry key)
 ---@field description string Human-readable description
@@ -19,7 +25,7 @@ local M = {}
 ---@field async? boolean True if execute takes a callback (default false)
 ---@field enabled? boolean Set to false to exclude from API requests by default (still executable, can be enabled via flemma.opt.tools)
 ---@field executable? boolean Set to false to disable execution
----@field execute? fun(input: table<string, any>, callback?: fun(result: flemma.tools.ExecutionResult)): any Executor function (sync returns ExecutionResult, async returns cancel fn or nil)
+---@field execute? fun(input: table<string, any>, callback?: fun(result: flemma.tools.ExecutionResult), context?: flemma.tools.ExecutionContext): any Executor function (sync returns ExecutionResult, async returns cancel fn or nil)
 
 ---@class flemma.tools.ExecutionResult
 ---@field success boolean Whether execution succeeded

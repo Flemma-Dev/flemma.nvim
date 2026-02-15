@@ -17,6 +17,7 @@ pkgs.mkShell rec {
   '';
 
   buildInputs = with pkgs; [
+    bubblewrap
     google-cloud-sdk
     imagemagick
     libsecret
