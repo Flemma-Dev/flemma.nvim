@@ -14,6 +14,14 @@ fi
 #
 # Idempotent: skips steps whose artefacts already exist.
 # Pass --force to reinstall everything regardless.
+#
+# Why source builds instead of apt?
+#   The sandbox has apt mirrors, so `apt-get install lua5.4 lua-check`
+#   would work. We build from source deliberately for full control over
+#   exact versions — Neovim ≥ 0.11 (apt ships 0.9.5), Lua 5.4.7,
+#   luacheck 1.2.0 (apt ships 1.1.2), and lua-language-server latest
+#   (not in apt at all). Pinning versions here means the CI environment
+#   is reproducible regardless of what the base image ships.
 # ------------------------------------------------------------------
 
 FORCE=false
