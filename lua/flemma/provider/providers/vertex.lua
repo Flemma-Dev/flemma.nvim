@@ -627,9 +627,10 @@ function M.process_response_line(self, line, callbacks)
   -- Process content parts (thoughts, text, or functionCall)
   if data.candidates and data.candidates[1] and data.candidates[1].content and data.candidates[1].content.parts then
     for _, part in ipairs(data.candidates[1].content.parts) do
-      -- Capture thoughtSignature if present on ANY part (for state preservation with thinking mode)
-      -- This is a generic solution - Vertex can return thoughtSignature on any part type
-      if part.thoughtSignature then
+      -- Retain thoughtSignature for state preservation with thinking mode.
+      -- Only overwrite when incoming is a non-empty string to prevent empty chunks
+      -- from clobbering a valid signature (matches Pi's retainThoughtSignature logic).
+      if type(part.thoughtSignature) == "string" and #part.thoughtSignature > 0 then
         self._response_buffer.extra.thought_signature = part.thoughtSignature
         log.debug("vertex.process_response_line(): Captured thoughtSignature from part")
       end

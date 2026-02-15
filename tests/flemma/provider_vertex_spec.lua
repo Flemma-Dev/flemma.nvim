@@ -505,7 +505,10 @@ describe("Vertex AI Provider", function()
       local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
       local req = provider:build_request(prompt, {})
 
-      assert.is_not_nil(req.generationConfig.thinkingConfig.thinkingLevel, "Gemini 3 should use thinkingLevel even with numeric input")
+      assert.is_not_nil(
+        req.generationConfig.thinkingConfig.thinkingLevel,
+        "Gemini 3 should use thinkingLevel even with numeric input"
+      )
       assert.is_nil(req.generationConfig.thinkingConfig.thinkingBudget, "Gemini 3 should not use thinkingBudget")
     end)
   end)
@@ -768,6 +771,69 @@ describe("Vertex AI Provider", function()
       -- Should pick up the current env token (re-read on every call)
       assert.equals("ya29.current-env-token", token)
       assert.equals("env", provider._token_from)
+    end)
+  end)
+
+  describe("signature retention during streaming", function()
+    local provider, callbacks
+
+    before_each(function()
+      provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+        max_tokens = 4000,
+      })
+
+      callbacks = {
+        on_content = function() end,
+        on_thinking = function() end,
+        on_usage = function() end,
+        on_response_complete = function() end,
+        on_error = function() end,
+      }
+    end)
+
+    it("should retain valid signature when subsequent chunk has empty string", function()
+      -- Chunk 1: thinking with valid signature
+      provider:process_response_line(
+        'data: {"candidates":[{"content":{"parts":[{"thought":true,"text":"Thinking...","thoughtSignature":"dGVzdF9zaWduYXR1cmU="}],"role":"model"}}]}',
+        callbacks
+      )
+      assert.equals("dGVzdF9zaWduYXR1cmU=", provider._response_buffer.extra.thought_signature)
+
+      -- Chunk 2: part with empty string thoughtSignature
+      provider:process_response_line(
+        'data: {"candidates":[{"content":{"parts":[{"text":"Hello","thoughtSignature":""}],"role":"model"}}]}',
+        callbacks
+      )
+      -- Should NOT have been overwritten
+      assert.equals("dGVzdF9zaWduYXR1cmU=", provider._response_buffer.extra.thought_signature)
+    end)
+
+    it("should not capture non-string thoughtSignature values", function()
+      -- Part with boolean thoughtSignature (edge case)
+      provider:process_response_line(
+        'data: {"candidates":[{"content":{"parts":[{"text":"Hello","thoughtSignature":true}],"role":"model"}}]}',
+        callbacks
+      )
+      assert.is_nil(provider._response_buffer.extra.thought_signature)
+    end)
+
+    it("should update signature when a new valid one arrives", function()
+      -- Chunk 1: first signature
+      provider:process_response_line(
+        'data: {"candidates":[{"content":{"parts":[{"thought":true,"text":"Think1","thoughtSignature":"c2lnMQ=="}],"role":"model"}}]}',
+        callbacks
+      )
+      assert.equals("c2lnMQ==", provider._response_buffer.extra.thought_signature)
+
+      -- Chunk 2: new valid signature
+      provider:process_response_line(
+        'data: {"candidates":[{"content":{"parts":[{"thought":true,"text":"Think2","thoughtSignature":"c2lnMg=="}],"role":"model"}}]}',
+        callbacks
+      )
+      assert.equals("c2lnMg==", provider._response_buffer.extra.thought_signature)
     end)
   end)
 end)
