@@ -3,9 +3,12 @@
 package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.registry"] = nil
 package.loaded["flemma.tools.definitions.write"] = nil
+package.loaded["flemma.sandbox"] = nil
+package.loaded["flemma.sandbox.backends.bwrap"] = nil
 
 local tools = require("flemma.tools")
 local registry = require("flemma.tools.registry")
+local state = require("flemma.state")
 
 describe("Write Tool", function()
   local write_def
@@ -129,6 +132,157 @@ describe("Write Tool", function()
       local result = write_def.execute({ label = "test", path = test_dir .. "/test.txt" })
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("No content"))
+    end)
+  end)
+
+  describe("sandbox enforcement", function()
+    local sandbox
+    local bufnr
+
+    before_each(function()
+      package.loaded["flemma.sandbox"] = nil
+      package.loaded["flemma.sandbox.backends.bwrap"] = nil
+      sandbox = require("flemma.sandbox")
+      sandbox.reset_enabled()
+      sandbox.clear()
+
+      -- Register a mock backend so sandbox can be fully enabled
+      sandbox.register("mock", {
+        available = function()
+          return true, nil
+        end,
+        wrap = function(_, _, inner)
+          return inner, nil
+        end,
+        priority = 50,
+      })
+
+      bufnr = vim.api.nvim_create_buf(false, true)
+    end)
+
+    after_each(function()
+      sandbox.reset_enabled()
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("allows writes inside rw_paths", function()
+      state.set_config({
+        sandbox = {
+          enabled = true,
+          backend = "mock",
+          policy = { rw_paths = { test_dir } },
+        },
+      })
+      local path = test_dir .. "/sandbox_allowed.txt"
+      ---@type flemma.tools.ExecutionContext
+      local context = { bufnr = bufnr, cwd = vim.fn.getcwd() }
+
+      local result = write_def.execute({
+        label = "test",
+        path = path,
+        content = "sandbox ok",
+      }, nil, context)
+
+      assert.is_true(result.success)
+      local content = table.concat(vim.fn.readfile(path), "\n")
+      assert.equals("sandbox ok", content)
+    end)
+
+    it("denies writes outside rw_paths", function()
+      state.set_config({
+        sandbox = {
+          enabled = true,
+          backend = "mock",
+          policy = { rw_paths = { "/nonexistent/allowed" } },
+        },
+      })
+      local path = test_dir .. "/sandbox_denied.txt"
+      ---@type flemma.tools.ExecutionContext
+      local context = { bufnr = bufnr, cwd = vim.fn.getcwd() }
+
+      local result = write_def.execute({
+        label = "test",
+        path = path,
+        content = "should not write",
+      }, nil, context)
+
+      assert.is_false(result.success)
+      assert.is_truthy(result.error:match("Sandbox"))
+      assert.is_truthy(result.error:match("write denied"))
+      -- File should not exist
+      assert.equals(0, vim.fn.filereadable(path))
+    end)
+
+    it("allows all writes when sandbox is disabled", function()
+      state.set_config({
+        sandbox = {
+          enabled = false,
+          policy = { rw_paths = {} },
+        },
+      })
+      local path = test_dir .. "/sandbox_disabled.txt"
+      ---@type flemma.tools.ExecutionContext
+      local context = { bufnr = bufnr, cwd = vim.fn.getcwd() }
+
+      local result = write_def.execute({
+        label = "test",
+        path = path,
+        content = "no sandbox",
+      }, nil, context)
+
+      assert.is_true(result.success)
+    end)
+
+    it("respects per-buffer sandbox overrides via context.opts", function()
+      -- Global config: sandbox disabled
+      state.set_config({
+        sandbox = {
+          enabled = false,
+          backend = "mock",
+          policy = { rw_paths = { "/nonexistent/allowed" } },
+        },
+      })
+      local path = test_dir .. "/buffer_override.txt"
+      ---@type flemma.tools.ExecutionContext
+      local context = {
+        bufnr = bufnr,
+        cwd = vim.fn.getcwd(),
+        opts = {
+          sandbox = {
+            enabled = true,
+            policy = { rw_paths = { "/nonexistent/allowed" } },
+          },
+        },
+      }
+
+      local result = write_def.execute({
+        label = "test",
+        path = path,
+        content = "denied by buffer override",
+      }, nil, context)
+
+      assert.is_false(result.success)
+      assert.is_truthy(result.error:match("Sandbox"))
+    end)
+
+    it("works without context (no sandbox enforcement)", function()
+      -- When no context is provided, falls back to get_current_buf
+      -- and no opts — sandbox enforcement depends on global config
+      state.set_config({
+        sandbox = {
+          enabled = false,
+          policy = { rw_paths = {} },
+        },
+      })
+      local path = test_dir .. "/no_context.txt"
+
+      local result = write_def.execute({
+        label = "test",
+        path = path,
+        content = "no context",
+      })
+
+      assert.is_true(result.success)
     end)
   end)
 end)

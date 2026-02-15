@@ -348,7 +348,7 @@ The sandbox limits the blast radius of tool execution. It is effective against t
 
 **Signal propagation is best-effort.** When a sandboxed command times out, Flemma kills the `bwrap` parent. Child processes are terminated via `--die-with-parent` and PID namespace teardown. In practice this is reliable, but a process that has deliberately escaped its session may survive briefly before kernel cleanup catches it.
 
-**Lua-level tools are not sandboxed yet.** The sandbox currently wraps shell commands (`bash` tool). The `read`, `write`, and `edit` tools operate at the Lua level and are not sandboxed. The policy API (`sandbox.is_path_writable()`) is ready for this – it will be wired up in a future release.
+**Lua-level enforcement covers writes, not reads.** The `write` and `edit` tools check `sandbox.is_path_writable()` before modifying files and refuse operations outside `rw_paths`. The `read` tool is **not** sandboxed and cannot be – the sandbox policy has no read-deny list. The entire rootfs is readable by design (mirroring bwrap's `--ro-bind / /`). This is intentional: restricting reads would break tool functionality broadly, and the real risk from unrestricted reads is data exfiltration, which is better addressed by `network = false` (see above). Note that Lua-level write enforcement works independently of the backend – even on platforms without `bwrap`, the `write` and `edit` tools will enforce the policy when `enabled = true`.
 
 ---
 
