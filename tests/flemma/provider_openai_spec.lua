@@ -1102,6 +1102,58 @@ describe("OpenAI Provider", function()
     end)
   end)
 
+  describe("error event handling", function()
+    it("should surface top-level error event with code and message", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 4000,
+        temperature = 0.7,
+      })
+
+      local errors = {}
+      local callbacks = {
+        on_content = function() end,
+        on_usage = function() end,
+        on_response_complete = function() end,
+        on_error = function(msg)
+          table.insert(errors, msg)
+        end,
+      }
+
+      provider:process_response_line(
+        'data: {"type":"error","code":"rate_limit_exceeded","message":"Rate limit reached"}',
+        callbacks
+      )
+
+      assert.are.equal(1, #errors)
+      assert.truthy(errors[1]:match("rate_limit_exceeded"))
+      assert.truthy(errors[1]:match("Rate limit reached"))
+    end)
+
+    it("should handle error event without code or message", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 4000,
+        temperature = 0.7,
+      })
+
+      local errors = {}
+      local callbacks = {
+        on_content = function() end,
+        on_usage = function() end,
+        on_response_complete = function() end,
+        on_error = function(msg)
+          table.insert(errors, msg)
+        end,
+      }
+
+      provider:process_response_line('data: {"type":"error"}', callbacks)
+
+      assert.are.equal(1, #errors)
+      assert.truthy(errors[1]:match("OpenAI stream error"))
+    end)
+  end)
+
   describe("metadata", function()
     it("should report outputs_thinking as true", function()
       assert.is_true(openai.metadata.capabilities.outputs_thinking)

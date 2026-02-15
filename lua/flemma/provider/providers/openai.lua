@@ -604,6 +604,22 @@ function M.process_response_line(self, line, callbacks)
     return
   end
 
+  -- Handle top-level stream error event (distinct from response.failed)
+  if event_type == "error" then
+    local error_message = "OpenAI stream error"
+    if data.code then
+      error_message = error_message .. " (code: " .. tostring(data.code) .. ")"
+    end
+    if data.message then
+      error_message = error_message .. ": " .. data.message
+    end
+    log.error("openai.process_response_line(): " .. error_message)
+    if callbacks.on_error then
+      callbacks.on_error(error_message)
+    end
+    return
+  end
+
   -- Handle response failure
   if event_type == "response.failed" then
     local error_message = "Response failed"

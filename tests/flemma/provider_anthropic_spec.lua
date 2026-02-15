@@ -302,4 +302,155 @@ describe("Anthropic Provider", function()
       assert.is_nil(req.system)
     end)
   end)
+
+  describe("stop reason handling", function()
+    local provider, callbacks, completed, errors
+
+    before_each(function()
+      provider = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 4000 })
+      completed = false
+      errors = {}
+      callbacks = {
+        on_content = function() end,
+        on_thinking = function() end,
+        on_usage = function() end,
+        on_response_complete = function()
+          completed = true
+        end,
+        on_error = function(msg)
+          table.insert(errors, msg)
+        end,
+      }
+    end)
+
+    it("should complete normally on end_turn", function()
+      -- message_delta with stop_reason
+      provider:process_response_line(
+        'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":10}}',
+        callbacks
+      )
+      -- message_stop triggers completion
+      provider:process_response_line('data: {"type":"message_stop"}', callbacks)
+
+      assert.is_true(completed)
+      assert.are.equal(0, #errors)
+    end)
+
+    it("should complete normally on tool_use", function()
+      provider:process_response_line(
+        'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":10}}',
+        callbacks
+      )
+      provider:process_response_line('data: {"type":"message_stop"}', callbacks)
+
+      assert.is_true(completed)
+      assert.are.equal(0, #errors)
+    end)
+
+    it("should complete with warning on max_tokens", function()
+      provider:process_response_line(
+        'data: {"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":10}}',
+        callbacks
+      )
+      provider:process_response_line('data: {"type":"message_stop"}', callbacks)
+
+      assert.is_true(completed)
+      assert.are.equal(0, #errors)
+    end)
+
+    it("should error on refusal", function()
+      provider:process_response_line(
+        'data: {"type":"message_delta","delta":{"stop_reason":"refusal"},"usage":{"output_tokens":10}}',
+        callbacks
+      )
+      provider:process_response_line('data: {"type":"message_stop"}', callbacks)
+
+      assert.is_false(completed)
+      assert.are.equal(1, #errors)
+      assert.truthy(errors[1]:match("refusal"))
+    end)
+
+    it("should error on sensitive", function()
+      provider:process_response_line(
+        'data: {"type":"message_delta","delta":{"stop_reason":"sensitive"},"usage":{"output_tokens":10}}',
+        callbacks
+      )
+      provider:process_response_line('data: {"type":"message_stop"}', callbacks)
+
+      assert.is_false(completed)
+      assert.are.equal(1, #errors)
+      assert.truthy(errors[1]:match("sensitive"))
+    end)
+
+    it("should preserve thinking blocks before error stop reason", function()
+      -- Accumulate some thinking
+      provider:process_response_line(
+        'data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking"}}',
+        callbacks
+      )
+      provider:process_response_line(
+        'data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Deep thought"}}',
+        callbacks
+      )
+      provider:process_response_line('data: {"type":"content_block_stop","index":0}', callbacks)
+
+      -- Then refusal
+      provider:process_response_line(
+        'data: {"type":"message_delta","delta":{"stop_reason":"refusal"},"usage":{"output_tokens":5}}',
+        callbacks
+      )
+
+      local content_emitted = {}
+      callbacks.on_content = function(text)
+        table.insert(content_emitted, text)
+      end
+      provider:process_response_line('data: {"type":"message_stop"}', callbacks)
+
+      -- Thinking block should still be emitted
+      local all_content = table.concat(content_emitted, "")
+      assert.truthy(all_content:match("<thinking>"))
+      assert.truthy(all_content:match("Deep thought"))
+
+      -- But should error, not complete
+      assert.is_false(completed)
+      assert.are.equal(1, #errors)
+    end)
+  end)
+
+  describe("adaptive thinking", function()
+    it("should use adaptive thinking for opus-4-6 models", function()
+      local p = anthropic.new({ model = "claude-opus-4-6-20260101", max_tokens = 4000, thinking = "high" })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      assert.are.same({ type = "adaptive" }, req.thinking)
+      assert.are.same({ effort = "high" }, req.output_config)
+      assert.is_nil(req.temperature)
+    end)
+
+    it("should use budget_tokens for non-opus models", function()
+      local p = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 4000, thinking = "high" })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      assert.are.equal("enabled", req.thinking.type)
+      assert.is_not_nil(req.thinking.budget_tokens)
+      assert.is_nil(req.output_config)
+    end)
+
+    it("should map effort level from thinking parameter", function()
+      local p = anthropic.new({ model = "claude-opus-4-6-20260101", max_tokens = 4000, thinking = "low" })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      assert.are.same({ type = "adaptive" }, req.thinking)
+      assert.are.same({ effort = "low" }, req.output_config)
+    end)
+  end)
 end)
