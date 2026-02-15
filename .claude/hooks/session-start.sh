@@ -9,7 +9,7 @@ fi
 # ------------------------------------------------------------------
 # Flemma.nvim bootstrap — installs everything needed for:
 #   make test   (Neovim + plenary.nvim)
-#   make lint   (luacheck + Lua 5.4 + luarocks)
+#   make lint   (luacheck + Lua 5.4)
 #   make check  (lua-language-server + Neovim runtime stubs)
 #
 # Idempotent: skips steps whose artefacts already exist.
@@ -35,6 +35,10 @@ PLENARY_DIR="/opt/plenary.nvim"
 # ---- Neovim >= 0.11 (prebuilt) -----------------------------------
 if $FORCE || ! command -v nvim &>/dev/null; then
   NVIM_VER=$(curl -sI https://github.com/neovim/neovim/releases/latest | grep -i '^location:' | grep -oP 'v\K[0-9.]+')
+  if [ -z "$NVIM_VER" ]; then
+    echo "ERROR: could not determine latest Neovim version" >&2
+    exit 1
+  fi
   curl -sL "https://github.com/neovim/neovim/releases/download/v${NVIM_VER}/nvim-linux-x86_64.tar.gz" | tar xz -C /tmp
   cp -r /tmp/nvim-linux-x86_64/* /usr/local/
   rm -rf /tmp/nvim-linux-x86_64
@@ -44,20 +48,12 @@ fi
 if $FORCE || ! command -v lua &>/dev/null; then
   LUA_VER="5.4.7"
   curl -sL "https://www.lua.org/ftp/lua-${LUA_VER}.tar.gz" | tar xz -C /tmp
-  make -C "/tmp/lua-${LUA_VER}" linux -j"$(nproc)" >/dev/null 2>&1
-  make -C "/tmp/lua-${LUA_VER}" install >/dev/null 2>&1
+  make -C "/tmp/lua-${LUA_VER}" linux -j"$(nproc)" >/dev/null
+  make -C "/tmp/lua-${LUA_VER}" install >/dev/null
   rm -rf "/tmp/lua-${LUA_VER}"
 fi
 
-# ---- luarocks (compiled from source) -----------------------------
-if $FORCE || ! command -v luarocks &>/dev/null; then
-  ROCKS_VER="3.11.1"
-  curl -sL "https://luarocks.org/releases/luarocks-${ROCKS_VER}.tar.gz" | tar xz -C /tmp
-  (cd "/tmp/luarocks-${ROCKS_VER}" && ./configure --with-lua=/usr/local >/dev/null 2>&1 && make >/dev/null 2>&1 && make install >/dev/null 2>&1)
-  rm -rf "/tmp/luarocks-${ROCKS_VER}"
-fi
-
-# ---- luacheck (manual install — luarocks mirrors are unreliable) -
+# ---- luacheck (from source — version-pinned) ---------------------
 if $FORCE || ! command -v luacheck &>/dev/null; then
   # argparse (pure Lua, single file)
   if $FORCE || [ ! -f /usr/local/share/lua/5.4/argparse.lua ]; then
@@ -71,22 +67,28 @@ if $FORCE || ! command -v luacheck &>/dev/null; then
   if $FORCE || [ ! -f /usr/local/lib/lua/5.4/lfs.so ]; then
     rm -rf /tmp/luafilesystem
     git clone --depth 1 -q https://github.com/lunarmodules/luafilesystem.git /tmp/luafilesystem
-    make -C /tmp/luafilesystem LUA_VERSION=5.4 LUA_INC=/usr/local/include >/dev/null 2>&1
+    make -C /tmp/luafilesystem LUA_VERSION=5.4 LUA_INC=/usr/local/include >/dev/null
     cp /tmp/luafilesystem/src/lfs.so /usr/local/lib/lua/5.4/
     rm -rf /tmp/luafilesystem
   fi
 
   # luacheck itself (pure Lua)
-  rm -rf /tmp/luacheck
-  git clone --depth 1 -q https://github.com/lunarmodules/luacheck.git /tmp/luacheck
-  cp -r /tmp/luacheck/src/luacheck /usr/local/share/lua/5.4/
-  install -m 0755 /tmp/luacheck/bin/luacheck.lua /usr/local/bin/luacheck
-  rm -rf /tmp/luacheck
+  if $FORCE || [ ! -d /usr/local/share/lua/5.4/luacheck ]; then
+    rm -rf /tmp/luacheck
+    git clone --depth 1 -q https://github.com/lunarmodules/luacheck.git /tmp/luacheck
+    cp -r /tmp/luacheck/src/luacheck /usr/local/share/lua/5.4/
+    install -m 0755 /tmp/luacheck/bin/luacheck.lua /usr/local/bin/luacheck
+    rm -rf /tmp/luacheck
+  fi
 fi
 
 # ---- lua-language-server (prebuilt) -------------------------------
 if $FORCE || ! command -v lua-language-server &>/dev/null; then
   LUA_LS_VER=$(curl -sI https://github.com/LuaLS/lua-language-server/releases/latest | grep -i '^location:' | grep -oP '/(\d+\.\d+\.\d+)' | tr -d '/')
+  if [ -z "$LUA_LS_VER" ]; then
+    echo "ERROR: could not determine latest lua-language-server version" >&2
+    exit 1
+  fi
   rm -rf "$LUA_LS_DIR"
   mkdir -p "$LUA_LS_DIR"
   curl -sL "https://github.com/LuaLS/lua-language-server/releases/download/${LUA_LS_VER}/lua-language-server-${LUA_LS_VER}-linux-x64.tar.gz" | tar xz -C "$LUA_LS_DIR"
@@ -105,5 +107,7 @@ if $FORCE || [ ! -d "$PLENARY_DIR" ]; then
 fi
 
 # ---- Environment variables (persisted for the session) -----------
-grep -q '^export PROJECT_ROOT=' "$CLAUDE_ENV_FILE" 2>/dev/null || echo "export PROJECT_ROOT=\"${CLAUDE_PROJECT_DIR}\"" >>"$CLAUDE_ENV_FILE"
-grep -q '^export PLENARY_PATH=' "$CLAUDE_ENV_FILE" 2>/dev/null || echo "export PLENARY_PATH=\"${PLENARY_DIR}\"" >>"$CLAUDE_ENV_FILE"
+if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+  grep -q '^export PROJECT_ROOT=' "$CLAUDE_ENV_FILE" 2>/dev/null || echo "export PROJECT_ROOT=\"${CLAUDE_PROJECT_DIR}\"" >>"$CLAUDE_ENV_FILE"
+  grep -q '^export PLENARY_PATH=' "$CLAUDE_ENV_FILE" 2>/dev/null || echo "export PLENARY_PATH=\"${PLENARY_DIR}\"" >>"$CLAUDE_ENV_FILE"
+fi
