@@ -6,6 +6,14 @@ local log = require("flemma.logging")
 local TOKEN_TTL_SECONDS = 3600
 local TOKEN_REFRESH_BUFFER_SECONDS = 300
 
+--- Maps Vertex AI finish reasons to normalized stop outcomes.
+--- Only STOP and MAX_TOKENS are non-error; everything else (SAFETY, RECITATION, etc.) is an error.
+---@type table<string, "stop"|"length">
+local FINISH_REASON_MAP = {
+  STOP = "stop",
+  MAX_TOKENS = "length",
+}
+
 ---@class flemma.provider.Vertex : flemma.provider.Base
 ---@field _token_generated_at integer|nil os.time() when the gcloud token was generated
 ---@field _token_from "gcloud"|"env"|"direct"|nil Source of the cached token
@@ -280,18 +288,13 @@ function M.build_request(self, prompt, _context)
           -- Extract function name from the synthetic ID
           local function_name = extract_function_name_from_id(part.tool_use_id)
 
-          -- Build response object: wrap string in {result: ...}, pass JSON through
+          -- Build response object: use { output: ... } for success, { error: ... } for errors
+          -- (matches the official Google SDK convention that Pi/Gemini models expect)
           local response_obj
           if part.is_error then
-            response_obj = { error = part.content, success = false }
+            response_obj = { error = part.content }
           else
-            -- Try to parse as JSON first
-            local ok, parsed = pcall(vim.fn.json_decode, part.content)
-            if ok and type(parsed) == "table" then
-              response_obj = parsed
-            else
-              response_obj = { result = part.content }
-            end
+            response_obj = { output = part.content }
           end
 
           table.insert(parts, {
@@ -735,9 +738,31 @@ function M.process_response_line(self, line, callbacks)
       self._response_buffer.extra.thought_signature = nil
     end
 
-    -- Signal response completion (after all content, including thoughts, has been sent)
-    if callbacks.on_response_complete then
-      callbacks.on_response_complete()
+    -- Map the finish reason to a normalized outcome
+    local raw_reason = data.candidates[1].finishReason
+    local mapped = FINISH_REASON_MAP[raw_reason] -- nil → error (anything not STOP or MAX_TOKENS)
+
+    if mapped == "length" then
+      -- MAX_TOKENS: complete normally but warn user
+      log.warn("vertex.process_response_line(): Response truncated (MAX_TOKENS)")
+      vim.schedule(function()
+        vim.notify("Flemma: Response truncated — model reached max output tokens", vim.log.levels.WARN)
+      end)
+      if callbacks.on_response_complete then
+        callbacks.on_response_complete()
+      end
+    elseif mapped == "stop" then
+      -- STOP: normal completion
+      if callbacks.on_response_complete then
+        callbacks.on_response_complete()
+      end
+    else
+      -- Safety filter, recitation, or other error finish reason
+      local error_message = "Response blocked by Vertex AI (" .. tostring(raw_reason) .. ")"
+      log.error("vertex.process_response_line(): " .. error_message)
+      if callbacks.on_error then
+        callbacks.on_error(error_message)
+      end
     end
 
     return -- Important to return after handling finishReason

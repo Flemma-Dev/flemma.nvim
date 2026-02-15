@@ -29,7 +29,7 @@
           "functionResponse": {
             "name": "calculator",
             "response": {
-              "result": "105"
+              "output": "105"
             }
           }
         }

@@ -184,6 +184,187 @@ describe("Vertex AI Provider", function()
       assert.is_true(found_thoughts, "Expected thoughts usage event")
       assert.is_true(found_cache_read, "Expected cache_read usage event")
     end)
+
+    it("should complete normally on STOP finish reason", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+        max_tokens = 4000,
+      })
+
+      local completed = false
+      local error_message = nil
+      local callbacks = {
+        on_content = function() end,
+        on_usage = function() end,
+        on_response_complete = function()
+          completed = true
+        end,
+        on_error = function(msg)
+          error_message = msg
+        end,
+      }
+
+      local line = 'data: {"candidates":[{"content":{"parts":[{"text":"Done"}],"role":"model"},"finishReason":"STOP"}]}'
+      provider:process_response_line(line, callbacks)
+
+      assert.is_true(completed, "STOP should trigger on_response_complete")
+      assert.is_nil(error_message, "STOP should not trigger on_error")
+    end)
+
+    it("should complete with warning on MAX_TOKENS finish reason", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+        max_tokens = 4000,
+      })
+
+      local completed = false
+      local error_message = nil
+      local callbacks = {
+        on_content = function() end,
+        on_usage = function() end,
+        on_response_complete = function()
+          completed = true
+        end,
+        on_error = function(msg)
+          error_message = msg
+        end,
+      }
+
+      local line =
+        'data: {"candidates":[{"content":{"parts":[{"text":"trunca"}],"role":"model"},"finishReason":"MAX_TOKENS"}]}'
+      provider:process_response_line(line, callbacks)
+
+      assert.is_true(completed, "MAX_TOKENS should trigger on_response_complete")
+      assert.is_nil(error_message, "MAX_TOKENS should not trigger on_error")
+    end)
+
+    it("should trigger error on SAFETY finish reason", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+        max_tokens = 4000,
+      })
+
+      local completed = false
+      local error_message = nil
+      local callbacks = {
+        on_content = function() end,
+        on_usage = function() end,
+        on_response_complete = function()
+          completed = true
+        end,
+        on_error = function(msg)
+          error_message = msg
+        end,
+      }
+
+      local line = 'data: {"candidates":[{"content":{"parts":[]},"finishReason":"SAFETY"}]}'
+      provider:process_response_line(line, callbacks)
+
+      assert.is_false(completed, "SAFETY should not trigger on_response_complete")
+      assert.is_not_nil(error_message, "SAFETY should trigger on_error")
+      assert.truthy(error_message:match("SAFETY"), "Error message should contain the raw reason")
+    end)
+
+    it("should trigger error on RECITATION finish reason", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+        max_tokens = 4000,
+      })
+
+      local completed = false
+      local error_message = nil
+      local callbacks = {
+        on_content = function() end,
+        on_usage = function() end,
+        on_response_complete = function()
+          completed = true
+        end,
+        on_error = function(msg)
+          error_message = msg
+        end,
+      }
+
+      local line = 'data: {"candidates":[{"content":{"parts":[]},"finishReason":"RECITATION"}]}'
+      provider:process_response_line(line, callbacks)
+
+      assert.is_false(completed, "RECITATION should not trigger on_response_complete")
+      assert.is_not_nil(error_message, "RECITATION should trigger on_error")
+      assert.truthy(error_message:match("RECITATION"), "Error message should contain the raw reason")
+    end)
+
+    it("should trigger error on unknown finish reasons", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+        max_tokens = 4000,
+      })
+
+      local completed = false
+      local error_message = nil
+      local callbacks = {
+        on_content = function() end,
+        on_usage = function() end,
+        on_response_complete = function()
+          completed = true
+        end,
+        on_error = function(msg)
+          error_message = msg
+        end,
+      }
+
+      local line = 'data: {"candidates":[{"content":{"parts":[]},"finishReason":"BLOCKLIST"}]}'
+      provider:process_response_line(line, callbacks)
+
+      assert.is_false(completed, "BLOCKLIST should not trigger on_response_complete")
+      assert.is_not_nil(error_message, "BLOCKLIST should trigger on_error")
+      assert.truthy(error_message:match("BLOCKLIST"), "Error message should contain the raw reason")
+    end)
+
+    it("should preserve thinking blocks before signaling safety error", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+        max_tokens = 4000,
+      })
+
+      -- First, simulate streaming a thought part
+      local accumulated_content = ""
+      local error_message = nil
+      local callbacks = {
+        on_content = function(text)
+          accumulated_content = accumulated_content .. text
+        end,
+        on_usage = function() end,
+        on_response_complete = function() end,
+        on_error = function(msg)
+          error_message = msg
+        end,
+      }
+
+      -- Chunk with thinking content
+      local thought_line =
+        'data: {"candidates":[{"content":{"parts":[{"thought":true,"text":"Let me think..."}],"role":"model"}}]}'
+      provider:process_response_line(thought_line, callbacks)
+
+      -- Chunk with SAFETY finish reason
+      local finish_line = 'data: {"candidates":[{"finishReason":"SAFETY"}]}'
+      provider:process_response_line(finish_line, callbacks)
+
+      -- Thinking block should have been emitted BEFORE the error
+      assert.truthy(accumulated_content:match("<thinking>"), "Thinking block should be preserved")
+      assert.truthy(accumulated_content:match("Let me think"), "Thinking content should be preserved")
+      assert.is_not_nil(error_message, "SAFETY error should still fire after thinking emission")
+    end)
   end)
 
   describe("is_auth_error", function()

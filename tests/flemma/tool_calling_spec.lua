@@ -1090,7 +1090,7 @@ describe("Vertex AI Provider Request Building with Tools", function()
             has_function_response = true
             assert.equals("calculator", part.functionResponse.name)
             assert.is_not_nil(part.functionResponse.response)
-            assert.equals("105", part.functionResponse.response.result)
+            assert.equals("105", part.functionResponse.response.output)
           end
         end
       end
@@ -1124,8 +1124,6 @@ describe("Vertex AI Provider Request Building with Tools", function()
             assert.equals("calculator", part.functionResponse.name)
             -- Verify error content
             assert.is_true(part.functionResponse.response.error:match("Division by zero") ~= nil)
-            -- Verify success = false is included
-            assert.equals(false, part.functionResponse.response.success)
           end
         end
       end
@@ -1654,7 +1652,7 @@ describe("Vertex AI Request Body Validation with Tools", function()
         if part.functionResponse then
           user_has_fr = true
           assert.equals("calculator", part.functionResponse.name)
-          assert.equals("105", part.functionResponse.response.result)
+          assert.equals("105", part.functionResponse.response.output)
         end
       end
     end
