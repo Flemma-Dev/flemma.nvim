@@ -13,13 +13,19 @@ fi
 #   make check  (lua-language-server + Neovim runtime stubs)
 #
 # Idempotent: skips steps whose artefacts already exist.
+# Pass --force to reinstall everything regardless.
 # ------------------------------------------------------------------
+
+FORCE=false
+if [ "${1:-}" = "--force" ]; then
+  FORCE=true
+fi
 
 LUA_LS_DIR="/opt/lua-language-server"
 PLENARY_DIR="/opt/plenary.nvim"
 
 # ---- Neovim >= 0.11 (prebuilt) -----------------------------------
-if ! command -v nvim &>/dev/null; then
+if $FORCE || ! command -v nvim &>/dev/null; then
   NVIM_VER=$(curl -sI https://github.com/neovim/neovim/releases/latest | grep -i '^location:' | grep -oP 'v\K[0-9.]+')
   curl -sL "https://github.com/neovim/neovim/releases/download/v${NVIM_VER}/nvim-linux-x86_64.tar.gz" | tar xz -C /tmp
   cp -r /tmp/nvim-linux-x86_64/* /usr/local/
@@ -27,7 +33,7 @@ if ! command -v nvim &>/dev/null; then
 fi
 
 # ---- Lua 5.4 (compiled from source — luacheck host) --------------
-if ! command -v lua &>/dev/null; then
+if $FORCE || ! command -v lua &>/dev/null; then
   LUA_VER="5.4.7"
   curl -sL "https://www.lua.org/ftp/lua-${LUA_VER}.tar.gz" | tar xz -C /tmp
   make -C "/tmp/lua-${LUA_VER}" linux -j"$(nproc)" >/dev/null 2>&1
@@ -36,7 +42,7 @@ if ! command -v lua &>/dev/null; then
 fi
 
 # ---- luarocks (compiled from source) -----------------------------
-if ! command -v luarocks &>/dev/null; then
+if $FORCE || ! command -v luarocks &>/dev/null; then
   ROCKS_VER="3.11.1"
   curl -sL "https://luarocks.org/releases/luarocks-${ROCKS_VER}.tar.gz" | tar xz -C /tmp
   (cd "/tmp/luarocks-${ROCKS_VER}" && ./configure --with-lua=/usr/local >/dev/null 2>&1 && make >/dev/null 2>&1 && make install >/dev/null 2>&1)
@@ -44,16 +50,18 @@ if ! command -v luarocks &>/dev/null; then
 fi
 
 # ---- luacheck (manual install — luarocks mirrors are unreliable) -
-if ! command -v luacheck &>/dev/null; then
+if $FORCE || ! command -v luacheck &>/dev/null; then
   # argparse (pure Lua, single file)
-  if [ ! -f /usr/local/share/lua/5.4/argparse.lua ]; then
+  if $FORCE || [ ! -f /usr/local/share/lua/5.4/argparse.lua ]; then
+    rm -rf /tmp/argparse
     git clone --depth 1 -q https://github.com/mpeterv/argparse.git /tmp/argparse
     cp /tmp/argparse/src/argparse.lua /usr/local/share/lua/5.4/
     rm -rf /tmp/argparse
   fi
 
   # luafilesystem (C module)
-  if [ ! -f /usr/local/lib/lua/5.4/lfs.so ]; then
+  if $FORCE || [ ! -f /usr/local/lib/lua/5.4/lfs.so ]; then
+    rm -rf /tmp/luafilesystem
     git clone --depth 1 -q https://github.com/lunarmodules/luafilesystem.git /tmp/luafilesystem
     make -C /tmp/luafilesystem LUA_VERSION=5.4 LUA_INC=/usr/local/include >/dev/null 2>&1
     cp /tmp/luafilesystem/src/lfs.so /usr/local/lib/lua/5.4/
@@ -61,6 +69,7 @@ if ! command -v luacheck &>/dev/null; then
   fi
 
   # luacheck itself (pure Lua)
+  rm -rf /tmp/luacheck
   git clone --depth 1 -q https://github.com/lunarmodules/luacheck.git /tmp/luacheck
   cp -r /tmp/luacheck/src/luacheck /usr/local/share/lua/5.4/
   install -m 0755 /tmp/luacheck/bin/luacheck.lua /usr/local/bin/luacheck
@@ -68,8 +77,9 @@ if ! command -v luacheck &>/dev/null; then
 fi
 
 # ---- lua-language-server (prebuilt) -------------------------------
-if ! command -v lua-language-server &>/dev/null; then
+if $FORCE || ! command -v lua-language-server &>/dev/null; then
   LUA_LS_VER=$(curl -sI https://github.com/LuaLS/lua-language-server/releases/latest | grep -i '^location:' | grep -oP '/(\d+\.\d+\.\d+)' | tr -d '/')
+  rm -rf "$LUA_LS_DIR"
   mkdir -p "$LUA_LS_DIR"
   curl -sL "https://github.com/LuaLS/lua-language-server/releases/download/${LUA_LS_VER}/lua-language-server-${LUA_LS_VER}-linux-x64.tar.gz" | tar xz -C "$LUA_LS_DIR"
   ln -sf "$LUA_LS_DIR/bin/lua-language-server" /usr/local/bin/lua-language-server
@@ -81,7 +91,8 @@ if ! command -v lua-language-server &>/dev/null; then
 fi
 
 # ---- plenary.nvim (test framework dependency) --------------------
-if [ ! -d "$PLENARY_DIR" ]; then
+if $FORCE || [ ! -d "$PLENARY_DIR" ]; then
+  rm -rf "$PLENARY_DIR"
   git clone --depth 1 -q https://github.com/nvim-lua/plenary.nvim.git "$PLENARY_DIR"
 fi
 
