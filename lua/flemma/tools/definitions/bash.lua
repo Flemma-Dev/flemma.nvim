@@ -166,8 +166,8 @@ M.definitions = {
       end
 
       local shell = (config.tools and config.tools.bash and config.tools.bash.shell) or "bash"
-      -- Wrap in group command so stderr redirect covers all pipeline stages
-      local inner_cmd = { shell, "-c", "{ " .. cmd .. "; } 2>&1" }
+      -- Redirect stderr to stdout for the entire shell so output is interleaved
+      local inner_cmd = { shell, "-c", "exec 2>&1\n" .. cmd }
 
       -- Sandbox wrapping (if enabled)
       local sandbox = require("flemma.sandbox")
