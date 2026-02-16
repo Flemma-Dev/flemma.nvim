@@ -7,7 +7,7 @@ local M = {}
 ---@param code string The JSON code to parse
 ---@param _context? table<string, any> Optional context (not used for JSON but kept for interface consistency)
 ---@return table<string, any> variables Table of variables from JSON
-function M.parse(code, _context) ---@diagnostic disable-line: unused-local
+function M.parse(code, _context)
   local ok, result = pcall(vim.fn.json_decode, code)
 
   if not ok then

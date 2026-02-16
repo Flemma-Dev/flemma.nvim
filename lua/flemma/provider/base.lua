@@ -40,12 +40,11 @@ Methods are grouped into three categories:
     external formats.
   - `is_context_overflow(self, message)` — detect context window overflow
     from error messages.
+  - `is_auth_error(self, message)` — detect authentication failures
+    (default `false`; override for providers with expiring tokens).
 
 Required class-level fields
 ---------------------------
-- `output_has_thoughts` (boolean) — whether `output_tokens` already includes
-  thinking tokens for cost calculation.  Default `false` (thinking is reported
-  separately); set `true` if the provider bundles them together.
 - `endpoint` (string) — base API URL.
 - `api_version` (string|nil) — optional API version identifier.
 
@@ -63,6 +62,8 @@ Capabilities contract (registered via `registry.register`)
 - `supports_reasoning` — provider accepts a reasoning effort level.
 - `supports_thinking_budget` — provider accepts a token budget for thinking.
 - `outputs_thinking` — provider streams thinking content into the buffer.
+- `output_has_thoughts` — whether `output_tokens` already includes thinking
+  tokens for cost calculation (default `false`).
 - `min_thinking_budget` — minimum valid thinking budget value (omit if N/A).
 
 Missing boolean capabilities default to `false` at registration time.
@@ -105,7 +106,6 @@ local log = require("flemma.logging")
 ---@field content string
 
 ---@class flemma.provider.Base
----@field output_has_thoughts boolean
 ---@field parameters flemma.provider.Parameters
 ---@field state flemma.provider.ProviderState
 ---@field endpoint? string
@@ -130,15 +130,13 @@ local M = {}
 ---@field keyring_key_name? string
 ---@field keyring_project_id? string
 
+---@class flemma.provider.ResetOpts
+---@field auth? boolean If true, reset authentication state only
+
 ---@class flemma.provider.SSELine
 ---@field type "data"|"event"|"done"
 ---@field content? string Present when type="data"
 ---@field event_type? string Present when type="event"
-
---- Whether output_tokens already includes thoughts_tokens for this provider.
---- - true: thoughts already counted in output (OpenAI, Anthropic) - don't add for cost
---- - false: thoughts are separate (Vertex) - add to output for cost
-M.output_has_thoughts = false
 
 -- ============================================================================
 -- Abstract — providers MUST override these (base raises an error)
@@ -153,7 +151,7 @@ M.output_has_thoughts = false
 ---@param prompt flemma.provider.Prompt The prepared prompt with history and system
 ---@param context? flemma.Context The shared context object for resolving file paths
 ---@return table<string, any> request_body The request body for the API
-function M.build_request(self, prompt, context) ---@diagnostic disable-line: unused-local
+function M.build_request(self, prompt, context)
   error("build_request() must be implemented by provider")
 end
 
@@ -161,7 +159,7 @@ end
 --- Return HTTP headers for the provider's API
 ---@param self flemma.provider.Base
 ---@return string[]|nil
-function M.get_request_headers(self) ---@diagnostic disable-line: unused-local
+function M.get_request_headers(self)
   error("get_request_headers() must be implemented by provider")
 end
 
@@ -173,7 +171,7 @@ end
 ---@param self flemma.provider.Base The provider instance
 ---@param line string A single line from the API response stream
 ---@param callbacks flemma.provider.Callbacks Table of callback functions to handle parsed data
-function M.process_response_line(self, line, callbacks) ---@diagnostic disable-line: unused-local
+function M.process_response_line(self, line, callbacks)
   error("process_response_line() must be implemented by provider")
 end
 
@@ -215,7 +213,6 @@ function M.new(opts)
     overrides = new_overrides
   end
 
-  ---@diagnostic disable-next-line: return-type-mismatch
   return provider
 end
 
@@ -300,10 +297,19 @@ function M.get_api_key(self, opts)
 end
 
 --- Reset provider state before a new request.
+--- When called without opts, performs a full reset (response buffer, etc.).
+--- When called with opts, performs a selective reset (only the specified fields).
 --- Providers must call `base.reset(self)` plus any provider-specific state initialization.
 ---@param self flemma.provider.Base
-function M.reset(self)
-  -- Create response buffer for all providers
+---@param opts? flemma.provider.ResetOpts
+function M.reset(self, opts)
+  if opts then
+    if opts.auth then
+      self.state.api_key = nil
+    end
+    return
+  end
+  -- Full reset: create response buffer for all providers
   self:_new_response_buffer()
 end
 
@@ -326,7 +332,7 @@ end
 --- the pipeline instead.
 ---@param messages { type: string, content: string }[] The raw messages to prepare
 ---@return flemma.provider.Prompt prompt The prepared prompt with history and system (canonical roles)
-function M.prepare_prompt(self, messages) ---@diagnostic disable-line: unused-local
+function M.prepare_prompt(self, messages)
   local history = {}
   local system = nil
 
@@ -362,7 +368,7 @@ end
 ---@param model_name string The model name
 ---@param parameters table<string, any> The parameters to validate
 ---@return boolean success True if validation passes (warnings don't fail)
-function M.validate_parameters(model_name, parameters) ---@diagnostic disable-line: unused-local
+function M.validate_parameters(model_name, parameters)
   return true
 end
 
@@ -371,7 +377,7 @@ end
 ---@param self flemma.provider.Base The provider instance
 ---@param exit_code number The HTTP request exit code (0 for success, non-zero for failure)
 ---@param callbacks flemma.provider.Callbacks Table of callback functions for any remaining data processing
-function M.finalize_response(self, exit_code, callbacks) ---@diagnostic disable-line: unused-local
+function M.finalize_response(self, exit_code, callbacks)
   -- Check buffered response if we haven't processed content successfully
   if self._response_buffer and not self._response_buffer.successful then
     self:_check_buffered_response(callbacks)
@@ -384,7 +390,7 @@ end
 ---@param self flemma.provider.Base
 ---@param data table<string, any>
 ---@return string|nil
-function M.extract_json_response_error(self, data) ---@diagnostic disable-line: unused-local
+function M.extract_json_response_error(self, data)
   if type(data) ~= "table" then
     return nil
   end
@@ -424,7 +430,7 @@ end
 ---@param self flemma.provider.Base
 ---@param lines string[]
 ---@return string|nil
-function M.try_import_from_buffer(self, lines) ---@diagnostic disable-line: unused-local
+function M.try_import_from_buffer(self, lines)
   return nil
 end
 
@@ -462,6 +468,15 @@ function M:is_context_overflow(message)
   if lower:match("token limit exceeded") then
     return true
   end
+  return false
+end
+
+--- Detect whether an error message indicates an authentication failure.
+--- Override to add provider-specific patterns (e.g. Vertex UNAUTHENTICATED).
+--- Default returns false (most providers don't need reactive auth recovery).
+---@param message string|nil The error message to check
+---@return boolean
+function M:is_auth_error(message)
   return false
 end
 
@@ -628,6 +643,118 @@ end
 function M._content_ends_with_newline(self)
   local content = self._response_buffer.content or ""
   return content:sub(-1) == "\n"
+end
+
+-- ============================================================================
+-- Shared parameter resolution helpers
+-- ============================================================================
+
+---@class flemma.provider.ThinkingResolution
+---@field enabled boolean Whether thinking/reasoning is active
+---@field budget? integer Token budget for budget-based providers (Anthropic, Vertex)
+---@field effort? string Effort level for effort-based providers (OpenAI): "minimal"|"low"|"medium"|"high"|"max"
+---@field level? string Display level: "minimal"|"low"|"medium"|"high"|"max" (always set when enabled)
+
+--- Map a numeric budget to the closest named effort level
+---@param budget number
+---@return string effort "minimal"|"low"|"medium"|"high"|"max"
+local function budget_to_effort(budget)
+  if budget <= 256 then
+    return "minimal"
+  elseif budget <= 4096 then
+    return "low"
+  elseif budget <= 12288 then
+    return "medium"
+  elseif budget <= 24576 then
+    return "high"
+  else
+    return "max"
+  end
+end
+
+--- Map a named effort level to a thinking budget
+---@param level string "minimal"|"low"|"medium"|"high"|"max"
+---@return integer budget
+local function effort_to_budget(level)
+  if level == "minimal" then
+    return 128
+  elseif level == "low" then
+    return 2048
+  elseif level == "medium" then
+    return 8192
+  elseif level == "high" then
+    return 16384
+  else -- "max"
+    return 32768
+  end
+end
+
+--- Resolve the unified `thinking` parameter into provider-appropriate values.
+---
+--- Priority: provider-specific param > thinking > provider defaults.
+--- For budget-based providers (Anthropic, Vertex), resolves to a token budget.
+--- For effort-based providers (OpenAI), resolves to an effort level string.
+---
+---@param params flemma.provider.Parameters The parameter proxy
+---@param caps flemma.provider.Capabilities The provider's capabilities
+---@return flemma.provider.ThinkingResolution
+function M.resolve_thinking(params, caps)
+  -- For budget-based providers (Anthropic, Vertex)
+  if caps.supports_thinking_budget then
+    -- Priority: provider-specific thinking_budget > unified thinking
+    local raw_budget = params.thinking_budget
+    if raw_budget ~= nil then
+      if type(raw_budget) == "number" and raw_budget > 0 then
+        local min = caps.min_thinking_budget or 1
+        local budget = math.max(math.floor(raw_budget), min)
+        return { enabled = true, budget = budget, level = budget_to_effort(budget) }
+      else
+        return { enabled = false }
+      end
+    end
+
+    -- Fall back to unified `thinking` parameter
+    local thinking = params.thinking
+    if thinking == nil or thinking == false or thinking == 0 then
+      return { enabled = false }
+    end
+    if type(thinking) == "string" then
+      local budget = math.max(effort_to_budget(thinking), caps.min_thinking_budget or 1)
+      return { enabled = true, budget = budget, level = budget_to_effort(budget) }
+    end
+    if type(thinking) == "number" and thinking > 0 then
+      local min = caps.min_thinking_budget or 1
+      local budget = math.max(math.floor(thinking), min)
+      return { enabled = true, budget = budget, level = budget_to_effort(budget) }
+    end
+    return { enabled = false }
+  end
+
+  -- For effort-based providers (OpenAI)
+  if caps.supports_reasoning then
+    -- Priority: provider-specific reasoning > unified thinking
+    local raw_reasoning = params.reasoning
+    if raw_reasoning ~= nil and raw_reasoning ~= "" then
+      return { enabled = true, effort = raw_reasoning, level = raw_reasoning }
+    end
+
+    -- Fall back to unified `thinking` parameter
+    local thinking = params.thinking
+    if thinking == nil or thinking == false or thinking == 0 then
+      return { enabled = false }
+    end
+    if type(thinking) == "string" then
+      return { enabled = true, effort = thinking, level = thinking }
+    end
+    if type(thinking) == "number" and thinking > 0 then
+      local effort = budget_to_effort(thinking)
+      return { enabled = true, effort = effort, level = effort }
+    end
+    return { enabled = false }
+  end
+
+  -- Provider supports neither
+  return { enabled = false }
 end
 
 return M

@@ -18,8 +18,9 @@ describe(":FlemmaSend command", function()
     core = require("flemma.core")
     registry = require("flemma.provider.registry")
 
-    -- Setup with default configuration. Specific tests can override this.
-    flemma.setup({})
+    -- Setup with default configuration. Disable thinking so request-format tests
+    -- get predictable temperature values. Specific tests can override this.
+    flemma.setup({ parameters = { thinking = false } })
   end)
 
   after_each(function()

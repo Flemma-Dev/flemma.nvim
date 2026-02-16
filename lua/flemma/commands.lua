@@ -378,6 +378,96 @@ local function setup_commands()
     },
   }
 
+  command_tree.children.autopilot = {
+    children = {
+      enable = {
+        action = function()
+          local autopilot = require("flemma.autopilot")
+          autopilot.set_enabled(true)
+          vim.notify("Flemma: Autopilot enabled", vim.log.levels.INFO)
+        end,
+      },
+      disable = {
+        action = function()
+          local autopilot = require("flemma.autopilot")
+          autopilot.set_enabled(false)
+          vim.notify("Flemma: Autopilot disabled", vim.log.levels.INFO)
+        end,
+      },
+      status = {
+        action = function()
+          local autopilot = require("flemma.autopilot")
+          local bufnr = vim.api.nvim_get_current_buf()
+          local enabled = autopilot.is_enabled(bufnr)
+          local buffer_state = autopilot.get_state(bufnr)
+          vim.notify(
+            string.format("Flemma: Autopilot %s (buffer state: %s)", enabled and "enabled" or "disabled", buffer_state),
+            vim.log.levels.INFO
+          )
+        end,
+      },
+    },
+  }
+
+  command_tree.children.sandbox = {
+    children = {
+      enable = {
+        action = function()
+          local sandbox = require("flemma.sandbox")
+          local ok, err = sandbox.validate_backend()
+          if not ok then
+            vim.notify("Flemma: Cannot enable sandbox: " .. err, vim.log.levels.ERROR)
+            return
+          end
+          sandbox.set_enabled(true)
+          vim.notify("Flemma: Sandbox enabled", vim.log.levels.INFO)
+        end,
+      },
+      disable = {
+        action = function()
+          local sandbox = require("flemma.sandbox")
+          sandbox.set_enabled(false)
+          vim.notify("Flemma: Sandbox disabled", vim.log.levels.INFO)
+        end,
+      },
+      status = {
+        action = function()
+          local sandbox = require("flemma.sandbox")
+          local cfg = sandbox.resolve_config()
+          local override = sandbox.get_override()
+          local effective = sandbox.is_enabled()
+
+          local parts = {}
+          table.insert(parts, string.format("Sandbox %s", effective and "enabled" or "disabled"))
+          table.insert(parts, string.format("  config: %s", cfg.enabled and "enabled" or "disabled"))
+          if override ~= nil then
+            table.insert(parts, string.format("  runtime override: %s", override and "enabled" or "disabled"))
+          end
+
+          if cfg.backend == "auto" or cfg.backend == "required" then
+            local detected, detect_err = sandbox.detect_available_backend()
+            if detected then
+              table.insert(parts, string.format("  backend: %s (%s)", detected, cfg.backend))
+            else
+              table.insert(parts, string.format("  backend: none (%s)", detect_err or "no backends available"))
+            end
+          else
+            table.insert(parts, string.format("  backend: %s (explicit)", cfg.backend))
+          end
+
+          local ok, err = sandbox.validate_backend()
+          if ok then
+            table.insert(parts, "  backend available: yes")
+          else
+            table.insert(parts, string.format("  backend available: no (%s)", err))
+          end
+
+          vim.notify("Flemma:\n" .. table.concat(parts, "\n"), vim.log.levels.INFO)
+        end,
+      },
+    },
+  }
+
   command_tree.children.tool = {
     children = {
       execute = {
@@ -510,10 +600,11 @@ local function setup_commands()
     local current = command_tree
 
     for _, segment in ipairs(segments) do
-      current = find_child(current, segment) ---@diagnostic disable-line: cast-local-type
-      if not current then
+      local child = find_child(current, segment)
+      if not child then
         return nil
       end
+      current = child
     end
 
     return current

@@ -90,6 +90,44 @@ M.setup = function(user_opts)
 
   -- Initialize tool registry with built-in tools
   require("flemma.tools").setup()
+
+  -- Initialize approval resolver chain from config
+  require("flemma.tools.approval").setup()
+
+  -- Register built-in sandbox backends and validate availability
+  local sandbox = require("flemma.sandbox")
+  sandbox.setup()
+
+  -- Defer sandbox backend check until the user enters a .chat buffer.
+  -- By that time, other plugins may have registered additional backends.
+  if config.sandbox and config.sandbox.enabled then
+    local sandbox_ok = sandbox.validate_backend()
+    if not sandbox_ok then
+      local backend_mode = config.sandbox.backend
+      local augroup = vim.api.nvim_create_augroup("FlemmaSandbox", { clear = true })
+      vim.api.nvim_create_autocmd("BufEnter", {
+        group = augroup,
+        pattern = "*.chat",
+        once = true,
+        callback = function()
+          -- Re-check — a backend may have been registered since init
+          local ok, err = sandbox.validate_backend()
+          if not ok then
+            if backend_mode == "required" then
+              vim.notify(
+                "Flemma: Tool execution is not sandboxed -- no compatible backend found. "
+                  .. "Run :Flemma sandbox:status for details, or set sandbox.enabled = false to disable.",
+                vim.log.levels.WARN
+              )
+            else
+              -- "auto" mode: log quietly, don't bother the user
+              log.info("Sandbox: no compatible backend found, running unsandboxed. " .. (err or ""))
+            end
+          end
+        end,
+      })
+    end
+  end
 end
 
 ---Get the current model name

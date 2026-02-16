@@ -119,22 +119,38 @@ end
 
 ---Find all tool_use blocks whose tool_result has the `flemma:pending` marker (awaiting execution).
 ---These are placeholders injected by the approval flow that the user has not manually overridden.
+---Results with user-edited content inside the `flemma:pending` block are excluded and warned about.
 ---@param bufnr integer Buffer number
 ---@return flemma.tools.ToolContext[] awaiting_contexts
 function M.resolve_all_awaiting_execution(bufnr)
   local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
 
-  -- Find tool_result segments marked as pending
+  -- Find tool_result segments marked as pending, excluding those with user-edited content
   local pending_result_ids = {}
+  local conflict_count = 0
   for _, msg in ipairs(doc.messages) do
     if msg.role == "You" then
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "tool_result" and seg.pending and not seg.is_error then
-          pending_result_ids[seg.tool_use_id] = true
+          if seg.has_content then
+            conflict_count = conflict_count + 1
+          else
+            pending_result_ids[seg.tool_use_id] = true
+          end
         end
       end
     end
+  end
+
+  if conflict_count > 0 then
+    vim.notify(
+      "Flemma: "
+        .. conflict_count
+        .. " tool result(s) have edited content inside flemma:pending – "
+        .. "skipping execution, your content will be sent as-is.",
+      vim.log.levels.WARN
+    )
   end
 
   if vim.tbl_isempty(pending_result_ids) then

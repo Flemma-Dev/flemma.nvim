@@ -11,7 +11,12 @@ local registry = require("flemma.provider.registry")
 ---@param key string
 ---@return boolean
 local function is_general_parameter(key)
-  return key == "max_tokens" or key == "temperature" or key == "timeout" or key == "connect_timeout"
+  return key == "max_tokens"
+    or key == "temperature"
+    or key == "timeout"
+    or key == "connect_timeout"
+    or key == "cache_retention"
+    or key == "thinking"
 end
 
 --------------------------------------------------------------------------------
@@ -49,7 +54,7 @@ function M.validate_and_get_model(model_name, provider_name)
       tostring(provider_name),
       tostring(validated_model)
     )
-    vim.notify(warn_msg, vim.log.levels.WARN, { title = "Flemma Configuration" }) ---@diagnostic disable-line: redundant-parameter
+    vim.notify(warn_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
     log.warn(warn_msg)
 
     log.info(

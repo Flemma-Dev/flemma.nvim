@@ -135,6 +135,8 @@ function M.cleanup_buffer_state(bufnr)
   if ok then
     executor.cleanup_buffer(bufnr)
   end
+  -- Clean up autopilot state
+  require("flemma.autopilot").cleanup_buffer(bufnr)
   -- Clean up any notifications associated with this buffer
   require("flemma.notify").cleanup_buffer(bufnr)
 end

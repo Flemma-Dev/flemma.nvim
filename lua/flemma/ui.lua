@@ -867,6 +867,38 @@ local function get_extmark_line(bufnr, extmark_id)
   return nil
 end
 
+--- Show pending-approval indicator for a tool
+--- Creates a static extmark (no spinner) at the tool result header line.
+--- Automatically replaced when `show_tool_indicator` starts the execution spinner.
+---@param bufnr integer
+---@param tool_id string
+---@param header_line integer 1-based line number of the tool result header
+function M.show_pending_tool_indicator(bufnr, tool_id, header_line)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  M.clear_tool_indicator(bufnr, tool_id)
+
+  local key = indicator_key(bufnr, tool_id)
+  local line_idx = header_line - 1
+
+  local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
+    virt_text = { { " ● Pending", "FlemmaToolPending" } },
+    virt_text_pos = "eol",
+    hl_mode = "combine",
+    priority = PRIORITY.TOOL_EXECUTION,
+    spell = false,
+  })
+
+  tool_indicators[key] = {
+    extmark_id = extmark_id,
+    timer = nil,
+    bufnr = bufnr,
+    tool_id = tool_id,
+  }
+end
+
 --- Show execution indicator for a tool
 --- Creates extmark with animated spinner at the tool result header line
 ---@param bufnr integer
@@ -1054,8 +1086,11 @@ function M.reposition_tool_indicators(bufnr)
   end
 end
 
---- Schedule indicator clear after a delay, or immediately on buffer edit
---- Uses extmark_id guard to avoid clearing a newer indicator if tool is re-executed
+--- Schedule indicator clear after a delay, or immediately on user edit
+--- Uses extmark_id guard to avoid clearing a newer indicator if tool is re-executed.
+--- The on_lines listener only fires when the buffer is idle (not locked by tool
+--- execution and no active API request), so programmatic edits from other tool
+--- completions or streaming responses won't prematurely dismiss the indicator.
 ---@param bufnr integer
 ---@param tool_id string
 ---@param delay_ms integer Milliseconds to wait before clearing
@@ -1088,10 +1123,16 @@ function M.schedule_tool_indicator_clear(bufnr, tool_id, delay_ms)
   if vim.api.nvim_buf_is_valid(bufnr) then
     vim.api.nvim_buf_attach(bufnr, false, {
       on_lines = function()
+        -- Ignore programmatic edits: tool result injection (buffer locked) and
+        -- streaming responses (active API request). Only dismiss on user edits.
+        local buffer_state = state.get_buffer_state(bufnr)
+        if buffer_state.locked or buffer_state.current_request then
+          return
+        end
         vim.schedule(function()
           do_clear()
         end)
-        return true -- detach after first trigger
+        return true -- detach after first user edit
       end,
     })
   end

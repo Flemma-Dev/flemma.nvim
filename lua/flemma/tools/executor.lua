@@ -32,7 +32,9 @@ local function get_buffer_pending(bufnr)
   return pending_by_buffer[bufnr]
 end
 
----Count pending (non-completed) executions for a buffer
+---Count executions that have not been cleaned up yet for a buffer.
+---Uses table presence (removed by cleanup_pending) rather than the completed
+---flag, so that simultaneous async completions don't cause premature unlock.
 ---@param bufnr integer
 ---@return integer
 local function count_pending(bufnr)
@@ -41,10 +43,8 @@ local function count_pending(bufnr)
     return 0
   end
   local n = 0
-  for _, entry in pairs(pending) do
-    if not entry.completed then
-      n = n + 1
-    end
+  for _ in pairs(pending) do
+    n = n + 1
   end
   return n
 end
@@ -54,6 +54,8 @@ end
 local function maybe_unlock_buffer(bufnr)
   if count_pending(bufnr) == 0 then
     state.unlock_buffer(bufnr)
+    -- Notify autopilot that all tool executions have completed
+    require("flemma.autopilot").on_tools_complete(bufnr)
   end
 end
 
@@ -156,7 +158,7 @@ local function do_completion(bufnr, tool_id, result, opts)
   -- is editable and the on_lines listener can detect user edits.
   maybe_unlock_buffer(bufnr)
 
-  -- Auto-dismiss indicator after delay (or immediately on buffer edit)
+  -- Auto-dismiss indicator after delay (or immediately on user edit)
   ui.schedule_tool_indicator_clear(bufnr, tool_id, 1500)
 
   ui.update_ui(bufnr)
@@ -266,6 +268,18 @@ function M.execute(bufnr, context)
   -- Update UI to reflect changes
   ui.update_ui(bufnr)
 
+  -- Build execution context for tools that need buffer/sandbox info
+  ---@type flemma.tools.ExecutionContext
+  local exec_context = {
+    bufnr = bufnr,
+    cwd = (config.tools and config.tools.bash and config.tools.bash.cwd) or vim.fn.getcwd(),
+  }
+  -- Resolve per-buffer opts if available (for sandbox per-buffer overrides)
+  local opts_ok, resolved_opts = pcall(require("flemma.processor").resolve_buffer_opts, bufnr)
+  if opts_ok and resolved_opts then
+    exec_context.opts = resolved_opts
+  end
+
   -- Execute the tool
   if is_async then
     -- Async execution with callback
@@ -279,7 +293,7 @@ function M.execute(bufnr, context)
       handle_completion(bufnr, tool_id, result, { async = true })
     end
 
-    local ok, cancel_or_err = pcall(executor_fn, context.input, callback)
+    local ok, cancel_or_err = pcall(executor_fn, context.input, callback, exec_context)
     if not ok then
       -- Executor threw before starting async work
       handle_completion(bufnr, tool_id, {
@@ -295,7 +309,7 @@ function M.execute(bufnr, context)
     end
   else
     -- Sync execution — complete inline for reliable undojoin
-    local ok, result = pcall(executor_fn, context.input)
+    local ok, result = pcall(executor_fn, context.input, nil, exec_context)
     if not ok then
       handle_completion(bufnr, tool_id, {
         success = false,
@@ -356,6 +370,9 @@ function M.cancel_all(bufnr)
   for _, tool_id in ipairs(to_cancel) do
     M.cancel(tool_id)
   end
+
+  -- Disarm autopilot after cancelling all tools
+  require("flemma.autopilot").disarm(bufnr)
 end
 
 ---Get pending executions for a buffer
@@ -390,6 +407,7 @@ function M.cancel_for_buffer(bufnr)
     table.sort(pending, function(a, b)
       return a.started_at < b.started_at
     end)
+    require("flemma.autopilot").disarm(bufnr)
     M.cancel(pending[1].tool_id)
     return true
   end
@@ -400,10 +418,12 @@ end
 ---@param bufnr integer
 ---@return boolean cancelled
 function M.cancel_at_cursor(bufnr)
+  local autopilot = require("flemma.autopilot")
   local cursor = vim.api.nvim_win_get_cursor(0)
   local tool_context = require("flemma.tools.context")
   local ctx, _ = tool_context.resolve(bufnr, { row = cursor[1], col = cursor[2] })
   if ctx then
+    autopilot.disarm(bufnr)
     return M.cancel(ctx.tool_id)
   end
   local pending = M.get_pending(bufnr)
@@ -411,6 +431,7 @@ function M.cancel_at_cursor(bufnr)
     table.sort(pending, function(a, b)
       return a.started_at < b.started_at
     end)
+    autopilot.disarm(bufnr)
     return M.cancel(pending[1].tool_id)
   end
   return false

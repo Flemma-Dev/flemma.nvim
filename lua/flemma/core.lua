@@ -113,9 +113,7 @@ function M.switch_provider(provider_name, model_name, parameters)
   local updated_config = state.get_config()
 
   -- Force the new provider to clear its API key cache
-  if new_provider and new_provider.state then
-    new_provider.state.api_key = nil
-  end
+  new_provider:reset({ auth = true })
 
   -- Notify the user
   local model_info = updated_config.model and (" with model '" .. updated_config.model .. "'") or ""
@@ -174,6 +172,9 @@ function M.cancel_request()
 
       state.unlock_buffer(bufnr)
 
+      -- Disarm autopilot on cancellation
+      require("flemma.autopilot").disarm(bufnr)
+
       local msg = "Flemma: Request cancelled"
       if log.is_enabled() then
         msg = msg .. ". See " .. log.get_path() .. " for details"
@@ -196,16 +197,19 @@ end
 ---When require_approval is enabled, pending tools get empty placeholder results injected
 ---so the user can review before execution. On the next invocation, tools with empty
 ---placeholders are executed. When all tools have results, the request is sent.
----@param opts? { on_request_complete?: fun() }
+---@param opts? { on_request_complete?: fun(), bufnr?: integer }
 function M.send_or_execute(opts)
   opts = opts or {}
-  local bufnr = vim.api.nvim_get_current_buf()
+  local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
   local tool_context = require("flemma.tools.context")
   local config = state.get_config()
   local require_approval = config.tools and config.tools.require_approval
   if require_approval == nil then
     require_approval = true
   end
+
+  local autopilot = require("flemma.autopilot")
+  local autopilot_active = autopilot.is_enabled(bufnr)
 
   -- Phase 1: Handle tool_use blocks that have no tool_result at all
   local pending = tool_context.resolve_all_pending(bufnr)
@@ -217,6 +221,7 @@ function M.send_or_execute(opts)
       local executor = require("flemma.tools.executor")
       local to_execute = {}
       local first_placeholder_line = nil
+      local pending_indicators = {}
 
       for _, ctx in ipairs(pending) do
         local decision = approval.resolve(ctx.tool_name, ctx.input, { bufnr = bufnr, tool_id = ctx.tool_id })
@@ -231,10 +236,23 @@ function M.send_or_execute(opts)
           })
         else
           local header_line = injector.inject_placeholder(bufnr, ctx.tool_id, { pending = true })
-          if header_line and (not first_placeholder_line or header_line < first_placeholder_line) then
-            first_placeholder_line = header_line
+          if header_line then
+            table.insert(pending_indicators, { tool_id = ctx.tool_id, header_line = header_line })
+            if not first_placeholder_line or header_line < first_placeholder_line then
+              first_placeholder_line = header_line
+            end
           end
         end
+      end
+
+      -- Flash pending-approval indicators (after all placeholders are injected so
+      -- reposition can correct any displaced extmarks)
+      for _, ind in ipairs(pending_indicators) do
+        ui.show_pending_tool_indicator(bufnr, ind.tool_id, ind.header_line)
+        ui.schedule_tool_indicator_clear(bufnr, ind.tool_id, 1500)
+      end
+      if #pending_indicators > 0 then
+        ui.reposition_tool_indicators(bufnr)
       end
 
       -- Move cursor to first injected placeholder so the user can review
@@ -252,6 +270,22 @@ function M.send_or_execute(opts)
         end
       end
 
+      if autopilot_active then
+        if #to_execute > 0 then
+          -- Arm autopilot: tools were dispatched for execution
+          autopilot.arm(bufnr)
+        elseif not first_placeholder_line then
+          -- All denied, nothing executing: no executor callbacks will fire,
+          -- so we must notify autopilot directly
+          autopilot.arm(bufnr)
+          vim.schedule(function()
+            if vim.api.nvim_buf_is_valid(bufnr) then
+              autopilot.on_tools_complete(bufnr)
+            end
+          end)
+        end
+      end
+
       if opts.on_request_complete then
         opts.on_request_complete()
       end
@@ -261,6 +295,9 @@ function M.send_or_execute(opts)
       local ok, err = executor.execute_all_pending(bufnr)
       if not ok then
         vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+      end
+      if autopilot_active then
+        autopilot.arm(bufnr)
       end
       return
     end
@@ -277,6 +314,9 @@ function M.send_or_execute(opts)
           vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
         end
       end
+      if autopilot_active then
+        autopilot.arm(bufnr)
+      end
       if opts.on_request_complete then
         opts.on_request_complete()
       end
@@ -289,10 +329,10 @@ function M.send_or_execute(opts)
 end
 
 ---Handle the AI provider interaction
----@param opts? { on_request_complete?: fun() }
+---@param opts? { on_request_complete?: fun(), bufnr?: integer }
 function M.send_to_provider(opts)
   opts = opts or {}
-  local bufnr = vim.api.nvim_get_current_buf()
+  local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
   local buffer_state = state.get_buffer_state(bufnr)
 
   -- Check if there's already a request in progress
@@ -484,9 +524,27 @@ function M.send_to_provider(opts)
   log.debug("send_to_provider(): Prompt history for provider: " .. log.inspect(prompt.history))
   log.debug("send_to_provider(): System instruction: " .. log.inspect(prompt.system))
 
-  -- Apply frontmatter parameter overrides so that get_endpoint / get_api_key see them
+  -- Apply frontmatter parameter overrides so that get_endpoint / get_api_key see them.
+  -- Merge general parameters (flemma.opt.cache_retention) with provider-specific ones
+  -- (flemma.opt.anthropic.thinking_budget). Provider-specific wins on conflict.
   local provider_key = state.get_config().provider
-  current_provider:set_parameter_overrides(prompt.opts and prompt.opts[provider_key])
+  local general_overrides = prompt.opts and prompt.opts.parameters
+  local provider_specific_overrides = prompt.opts and prompt.opts[provider_key]
+  local merged_overrides = nil
+  if general_overrides or provider_specific_overrides then
+    merged_overrides = {}
+    if general_overrides then
+      for k, v in pairs(general_overrides) do
+        merged_overrides[k] = v
+      end
+    end
+    if provider_specific_overrides then
+      for k, v in pairs(provider_specific_overrides) do
+        merged_overrides[k] = v
+      end
+    end
+  end
+  current_provider:set_parameter_overrides(merged_overrides)
 
   -- Validate provider (endpoint, API key, headers) and build request body.
   -- Wrapped in pcall so any provider error unlocks the buffer cleanly.
@@ -547,11 +605,12 @@ function M.send_to_provider(opts)
 
   -- Reset in-flight usage tracking for this buffer
   -- Include the provider's output_has_thoughts flag so usage.lua can display correctly
+  local provider_capabilities = registry.get_capabilities(state.get_config().provider)
   buffer_state.inflight_usage = {
     input_tokens = 0,
     output_tokens = 0,
     thoughts_tokens = 0,
-    output_has_thoughts = current_provider.output_has_thoughts,
+    output_has_thoughts = provider_capabilities and provider_capabilities.output_has_thoughts or false,
     cache_read_input_tokens = 0,
     cache_creation_input_tokens = 0,
   }
@@ -580,6 +639,9 @@ function M.send_to_provider(opts)
           notify_msg = notify_msg
             .. "\n\nYour conversation is too long for this model."
             .. " Remove earlier messages or start a new conversation."
+        elseif current_provider:is_auth_error(msg) then
+          current_provider:reset({ auth = true })
+          notify_msg = notify_msg .. "\n\nAuthentication expired. Send again to generate a fresh token."
         end
         if log.is_enabled() then
           notify_msg = notify_msg .. "\nSee " .. log.get_path() .. " for details"
@@ -656,7 +718,7 @@ function M.send_to_provider(opts)
             bufnr = bufnr,
             started_at = request_started_at,
             completed_at = require("flemma.session").now(),
-            output_has_thoughts = current_provider.output_has_thoughts,
+            output_has_thoughts = provider_capabilities and provider_capabilities.output_has_thoughts or false,
             cache_read_input_tokens = buffer_state.inflight_usage.cache_read_input_tokens,
             cache_creation_input_tokens = buffer_state.inflight_usage.cache_creation_input_tokens,
             cache_write_multiplier = cache_write_multiplier,
@@ -874,6 +936,10 @@ function M.send_to_provider(opts)
           if opts.on_request_complete then -- For FlemmaSendAndInsert
             opts.on_request_complete()
           end
+
+          -- Hook autopilot: check if assistant response contains tool_use
+          local autopilot = require("flemma.autopilot")
+          autopilot.on_response_complete(bufnr)
         else
           -- cURL request failed (exit code ~= 0)
           -- Buffer is already set to modifiable = true

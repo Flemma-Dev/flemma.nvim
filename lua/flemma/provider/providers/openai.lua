@@ -34,16 +34,12 @@ M.metadata = {
     supports_reasoning = true,
     supports_thinking_budget = false,
     outputs_thinking = true,
+    output_has_thoughts = true,
   },
   default_parameters = {
-    cache_retention = "short",
     reasoning_summary = "auto",
   },
 }
-
--- OpenAI's output_tokens already includes reasoning_tokens,
--- so we should NOT add thoughts_tokens separately for cost calculation.
-M.output_has_thoughts = true
 
 ---@param merged_config flemma.provider.Parameters
 ---@return flemma.provider.OpenAI
@@ -57,8 +53,7 @@ function M.new(merged_config)
   setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
   provider:reset()
 
-  ---@diagnostic disable-next-line: return-type-mismatch
-  return provider
+  return provider --[[@as flemma.provider.OpenAI]]
 end
 
 ---@param self flemma.provider.OpenAI
@@ -313,10 +308,20 @@ function M.build_request(self, prompt, context)
     log.debug("openai.build_request: Added " .. #tools_array .. " tools to request")
   end
 
-  if self.parameters.reasoning and self.parameters.reasoning ~= "" then
+  -- Add reasoning configuration using unified resolution
+  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities)
+
+  if thinking.enabled and thinking.effort then
+    -- Map Flemma's canonical "max" to OpenAI's "xhigh" for models that support it
+    local effort = thinking.effort
+    if effort == "max" then
+      local model = self.parameters.model or ""
+      local supports_xhigh = model:match("gpt%-5%.2") ~= nil or model:match("gpt%-5%.3") ~= nil
+      effort = supports_xhigh and "xhigh" or "high"
+    end
     local reasoning_summary = self.parameters.reasoning_summary or "auto"
     request_body.reasoning = {
-      effort = self.parameters.reasoning,
+      effort = effort,
       summary = reasoning_summary,
     }
     request_body.include = { "reasoning.encrypted_content" }
@@ -324,7 +329,7 @@ function M.build_request(self, prompt, context)
       "openai.build_request: Using max_output_tokens: "
         .. tostring(self.parameters.max_tokens)
         .. " and reasoning.effort: "
-        .. self.parameters.reasoning
+        .. thinking.effort
     )
   else
     request_body.temperature = self.parameters.temperature
@@ -396,7 +401,7 @@ end
 ---@param self flemma.provider.OpenAI
 ---@param data table<string, any>
 ---@param callbacks flemma.provider.Callbacks
-function M._extract_usage(self, data, callbacks) ---@diagnostic disable-line: unused-local
+function M._extract_usage(self, data, callbacks)
   if not (data.response and data.response.usage and type(data.response.usage) == "table") then
     return
   end
@@ -595,14 +600,29 @@ function M.process_response_line(self, line, callbacks)
       "Flemma: OpenAI response was truncated (reason: " .. reason .. ")",
       vim.log.levels.WARN,
       { title = "Flemma" }
-    ) ---@diagnostic disable-line: redundant-parameter
-
+    )
     -- Emit any accumulated reasoning before completing
     self:_emit_reasoning_block(callbacks)
 
     self:_extract_usage(data, callbacks)
     if callbacks.on_response_complete then
       callbacks.on_response_complete()
+    end
+    return
+  end
+
+  -- Handle top-level stream error event (distinct from response.failed)
+  if event_type == "error" then
+    local error_message = "OpenAI stream error"
+    if data.code then
+      error_message = error_message .. " (code: " .. tostring(data.code) .. ")"
+    end
+    if data.message then
+      error_message = error_message .. ": " .. data.message
+    end
+    log.error("openai.process_response_line(): " .. error_message)
+    if callbacks.on_error then
+      callbacks.on_error(error_message)
     end
     return
   end
@@ -634,8 +654,16 @@ end
 ---@param parameters table<string, any> The parameters to validate
 ---@return boolean success True if validation passes (warnings don't fail)
 function M.validate_parameters(model_name, parameters)
-  -- Check for reasoning parameter support
+  -- Resolve effective reasoning: provider-specific `reasoning` > unified `thinking`
   local reasoning_value = parameters.reasoning
+  if (reasoning_value == nil or reasoning_value == "") and parameters.thinking ~= nil then
+    local thinking = parameters.thinking
+    if thinking ~= false and thinking ~= 0 then
+      reasoning_value = type(thinking) == "string" and thinking or "medium"
+    end
+  end
+
+  -- Check for reasoning parameter support
   if reasoning_value ~= nil and reasoning_value ~= "" then
     local model_info = models.providers.openai
       and models.providers.openai.models
@@ -647,7 +675,7 @@ function M.validate_parameters(model_name, parameters)
         "Flemma: The 'reasoning' parameter is not supported by the selected OpenAI model '%s'. It may be ignored or cause an API error.",
         model_name
       )
-      vim.notify(warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" }) ---@diagnostic disable-line: redundant-parameter
+      vim.notify(warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
       log.warn(warning_msg)
     end
   end
@@ -672,7 +700,7 @@ function M.validate_parameters(model_name, parameters)
       "Flemma: For OpenAI o-series models with 'reasoning' active, 'temperature' must be 1 or omitted. Current value is '%s'. The API will likely reject this.",
       tostring(temp_value)
     )
-    vim.notify(temp_warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" }) ---@diagnostic disable-line: redundant-parameter
+    vim.notify(temp_warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
     log.warn(temp_warning_msg)
   end
 

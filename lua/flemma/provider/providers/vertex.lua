@@ -3,7 +3,41 @@
 local base = require("flemma.provider.base")
 local log = require("flemma.logging")
 
+local TOKEN_TTL_SECONDS = 3600
+local TOKEN_REFRESH_BUFFER_SECONDS = 300
+
+--- Maps Vertex AI finish reasons to normalized stop outcomes.
+--- Only STOP and MAX_TOKENS are non-error; everything else (SAFETY, RECITATION, etc.) is an error.
+---@type table<string, "stop"|"length">
+local FINISH_REASON_MAP = {
+  STOP = "stop",
+  MAX_TOKENS = "length",
+}
+
+--- Maps Flemma effort levels to Vertex AI ThinkingLevel enum values for Gemini 3 Flash.
+--- Gemini 3 Pro only supports LOW and HIGH, so gets a separate mapping below.
+---@type table<string, string>
+local THINKING_LEVEL_MAP = {
+  minimal = "MINIMAL",
+  low = "LOW",
+  medium = "MEDIUM",
+  high = "HIGH",
+  max = "HIGH", -- no max equivalent in Google API, clamp to HIGH
+}
+
+--- Maps Flemma effort levels to Vertex AI ThinkingLevel for Gemini 3 Pro (only LOW/HIGH).
+---@type table<string, string>
+local THINKING_LEVEL_MAP_PRO = {
+  minimal = "LOW", -- Pro has no MINIMAL
+  low = "LOW",
+  medium = "HIGH", -- Pro has no MEDIUM
+  high = "HIGH",
+  max = "HIGH", -- no max equivalent
+}
+
 ---@class flemma.provider.Vertex : flemma.provider.Base
+---@field _token_generated_at integer|nil os.time() when the gcloud token was generated
+---@field _token_from "gcloud"|"env"|"direct"|nil Source of the cached token
 local M = {}
 
 -- Inherit from base provider
@@ -17,6 +51,7 @@ M.metadata = {
     supports_reasoning = false,
     supports_thinking_budget = true,
     outputs_thinking = true,
+    output_has_thoughts = false,
     min_thinking_budget = 1,
   },
   default_parameters = {
@@ -132,18 +167,27 @@ function M.new(provider_config)
   -- self.parameters.model is set via base.new
 
   -- Set the API version
-  provider.api_version = "v1" -- Or potentially make this configurable in future
+  provider.api_version = "v1beta1" -- v1beta1 supports parametersJsonSchema for full JSON Schema compatibility
 
   -- Set metatable BEFORE reset so M.reset (not base.reset) initializes provider-specific state
   setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
   provider:reset()
 
-  ---@diagnostic disable-next-line: return-type-mismatch
-  return provider
+  return provider --[[@as flemma.provider.Vertex]]
 end
 
 ---@param self flemma.provider.Vertex
-function M.reset(self)
+---@param opts? flemma.provider.ResetOpts
+function M.reset(self, opts)
+  if opts then
+    if opts.auth then
+      base.reset(self, opts)
+      self._token_generated_at = nil
+      self._token_from = nil
+    end
+    return
+  end
+  -- Full reset
   base.reset(self)
   -- Add Vertex-specific extension
   self._response_buffer.extra.accumulated_thoughts = ""
@@ -158,25 +202,48 @@ function M.get_api_key(self)
   -- Validate required configuration first
   _validate_config(self)
 
-  -- Access project_id directly from self.parameters (needed for keyring lookup)
-  local project_id = self.parameters.project_id
-
-  -- First try to get token from environment variable
+  -- 1. Check environment variable on every call (allows external rotation)
   local env_token = os.getenv("VERTEX_AI_ACCESS_TOKEN")
   if env_token and #env_token > 0 then
     self.state.api_key = env_token
+    self._token_from = "env"
     return env_token
   end
 
-  -- Try to get service account JSON from keyring
+  -- 2. Proactive staleness check for gcloud-generated tokens
+  if self._token_from == "gcloud" and self._token_generated_at then
+    local age = os.time() - self._token_generated_at
+    if age >= (TOKEN_TTL_SECONDS - TOKEN_REFRESH_BUFFER_SECONDS) then
+      log.debug(
+        "vertex.get_api_key(): gcloud token is "
+          .. tostring(age)
+          .. "s old (threshold "
+          .. tostring(TOKEN_TTL_SECONDS - TOKEN_REFRESH_BUFFER_SECONDS)
+          .. "s), clearing for refresh"
+      )
+      self.state.api_key = nil
+      self._token_generated_at = nil
+    end
+  end
+
+  -- 3. Return cached token if still valid
+  if self.state.api_key and self.state.api_key ~= "" then
+    return self.state.api_key
+  end
+
+  -- 4. Fetch service account JSON from env/keyring (re-fetched on each refresh)
+  local project_id = self.parameters.project_id
+
+  -- Clear cached api_key in base before calling get_api_key to force re-read
+  self.state.api_key = nil
   local service_account_json = base.get_api_key(self, {
     env_var_name = "VERTEX_SERVICE_ACCOUNT",
     keyring_service_name = "vertex",
     keyring_key_name = "api",
-    keyring_project_id = project_id, -- Use project_id from parameters
+    keyring_project_id = project_id,
   })
 
-  -- If we have service account JSON, try to generate an access token
+  -- 5. If we have service account JSON, generate a gcloud token
   if service_account_json and service_account_json:match("service_account") then
     log.debug("vertex.get_api_key(): Found service account JSON, attempting to generate access token")
 
@@ -184,29 +251,24 @@ function M.get_api_key(self)
     if generated_token then
       log.debug("vertex.get_api_key(): Successfully generated access token from service account")
       self.state.api_key = generated_token
+      self._token_generated_at = os.time()
+      self._token_from = "gcloud"
       return generated_token
     else
       log.error("vertex.get_api_key(): Failed to generate access token: " .. (err or "unknown error"))
-      if err then
-        error(
-          err
-            .. "\n\n---\n\nVertex AI requires the Google Cloud CLI (gcloud) to generate access tokens from service accounts.\n"
-            .. "Please install gcloud or set VERTEX_AI_ACCESS_TOKEN environment variable.",
-          0
-        )
-      else
-        error(
-          "Vertex AI requires the Google Cloud CLI (gcloud) to generate access tokens from service accounts.\n"
-            .. "Please install gcloud or set VERTEX_AI_ACCESS_TOKEN environment variable.",
-          0
-        )
-      end
+      error(
+        (err or "Unknown error generating access token")
+          .. "\n\n---\n\nVertex AI requires the Google Cloud CLI (gcloud) to generate access tokens from service accounts.\n"
+          .. "Please install gcloud or set VERTEX_AI_ACCESS_TOKEN environment variable.",
+        0
+      )
     end
   end
 
-  -- If we have something but it's not a service account JSON, it might be a direct token
+  -- 6. Fallback: treat as direct token
   if service_account_json and #service_account_json > 0 then
     self.state.api_key = service_account_json
+    self._token_from = "direct"
     return service_account_json
   end
 
@@ -231,7 +293,7 @@ end
 ---@param prompt flemma.provider.Prompt The prepared prompt with history and system
 ---@param _context? flemma.Context The shared context object for resolving file paths
 ---@return table<string, any> request_body The request body for the API
-function M.build_request(self, prompt, _context) ---@diagnostic disable-line: unused-local
+function M.build_request(self, prompt, _context)
   -- Convert prompt.history to Vertex AI format
   local contents = {}
 
@@ -247,18 +309,13 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
           -- Extract function name from the synthetic ID
           local function_name = extract_function_name_from_id(part.tool_use_id)
 
-          -- Build response object: wrap string in {result: ...}, pass JSON through
+          -- Build response object: use { output: ... } for success, { error: ... } for errors
+          -- (matches the official Google SDK convention that Pi/Gemini models expect)
           local response_obj
           if part.is_error then
-            response_obj = { error = part.content, success = false }
+            response_obj = { error = part.content }
           else
-            -- Try to parse as JSON first
-            local ok, parsed = pcall(vim.fn.json_decode, part.content)
-            if ok and type(parsed) == "table" then
-              response_obj = parsed
-            else
-              response_obj = { result = part.content }
-            end
+            response_obj = { output = part.content }
           end
 
           table.insert(parts, {
@@ -417,52 +474,29 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
     },
   }
 
-  -- Add thinking budget if configured
-  local configured_budget = self.parameters.thinking_budget
-  local add_thinking_config = false -- Default to false, only set true if budget >= 1
-  local api_budget_value
+  -- Add thinking configuration using unified resolution
+  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities)
 
-  if type(configured_budget) == "number" and configured_budget >= 1 then
-    -- Thinking is enabled and budget is specified
-    api_budget_value = math.floor(configured_budget)
-    add_thinking_config = true -- Set to true as budget is valid for thinking
-    log.debug(
-      "build_request: Vertex AI thinking_budget is "
-        .. tostring(configured_budget)
-        .. ". Enabling thinking and setting API thinkingBudget to: "
-        .. api_budget_value
-        .. "."
-    )
-  elseif configured_budget == 0 then
-    -- Thinking is explicitly disabled by setting budget to 0
-    log.debug("build_request: Vertex AI thinking_budget is 0. Thinking is disabled. Not sending thinkingConfig.")
-    -- add_thinking_config remains false
-  elseif configured_budget == nil then
-    -- Thinking budget is not set (nil), so default behavior (no thinkingConfig)
-    log.debug("build_request: Vertex AI thinking_budget is nil. Not sending thinkingConfig.")
-    -- add_thinking_config remains false
-  else
-    -- Handles negative numbers or other invalid types if they somehow get here.
-    log.warn(
-      "build_request: Vertex AI thinking_budget ("
-        .. log.inspect(configured_budget)
-        .. ") is invalid. Not sending thinkingConfig."
-    )
-    -- add_thinking_config remains false
-  end
+  if thinking.enabled then
+    local thinking_config = { includeThoughts = true }
+    local model = self.parameters.model or ""
 
-  if add_thinking_config then
-    -- This block now only executes if configured_budget is a number and >= 1
+    if model:match("gemini%-3") then
+      -- Gemini 3 models use thinkingLevel (discrete enum) instead of thinkingBudget
+      local level_map = model:match("3%-pro") and THINKING_LEVEL_MAP_PRO or THINKING_LEVEL_MAP
+      local level = thinking.level and level_map[thinking.level]
+      if level then
+        thinking_config.thinkingLevel = level
+        log.debug("build_request: Vertex AI thinkingConfig included with thinkingLevel: " .. level)
+      end
+    elseif thinking.budget then
+      -- Gemini 2.5 and earlier: use thinkingBudget (numeric token count)
+      thinking_config.thinkingBudget = thinking.budget
+      log.debug("build_request: Vertex AI thinkingConfig included with thinkingBudget: " .. thinking.budget)
+    end
+
     request_body.generationConfig = request_body.generationConfig or {}
-    request_body.generationConfig.thinkingConfig = {
-      thinkingBudget = api_budget_value,
-      includeThoughts = true, -- If thinkingConfig is sent, includeThoughts should be true
-    }
-    log.debug(
-      "build_request: Vertex AI thinkingConfig included with thinkingBudget: "
-        .. api_budget_value
-        .. " and includeThoughts: true."
-    )
+    request_body.generationConfig.thinkingConfig = thinking_config
   else
     log.debug("build_request: Vertex AI thinkingConfig not included in the request.")
   end
@@ -485,7 +519,7 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
     table.insert(function_declarations, {
       name = def.name,
       description = tools_module.build_description(def),
-      parameters = def.input_schema,
+      parametersJsonSchema = def.input_schema,
     })
   end
 
@@ -597,9 +631,10 @@ function M.process_response_line(self, line, callbacks)
   -- Process content parts (thoughts, text, or functionCall)
   if data.candidates and data.candidates[1] and data.candidates[1].content and data.candidates[1].content.parts then
     for _, part in ipairs(data.candidates[1].content.parts) do
-      -- Capture thoughtSignature if present on ANY part (for state preservation with thinking mode)
-      -- This is a generic solution - Vertex can return thoughtSignature on any part type
-      if part.thoughtSignature then
+      -- Retain thoughtSignature for state preservation with thinking mode.
+      -- Only overwrite when incoming is a non-empty string to prevent empty chunks
+      -- from clobbering a valid signature (matches Pi's retainThoughtSignature logic).
+      if type(part.thoughtSignature) == "string" and #part.thoughtSignature > 0 then
         self._response_buffer.extra.thought_signature = part.thoughtSignature
         log.debug("vertex.process_response_line(): Captured thoughtSignature from part")
       end
@@ -738,9 +773,31 @@ function M.process_response_line(self, line, callbacks)
       self._response_buffer.extra.thought_signature = nil
     end
 
-    -- Signal response completion (after all content, including thoughts, has been sent)
-    if callbacks.on_response_complete then
-      callbacks.on_response_complete()
+    -- Map the finish reason to a normalized outcome
+    local raw_reason = data.candidates[1].finishReason
+    local mapped = FINISH_REASON_MAP[raw_reason] -- nil → error (anything not STOP or MAX_TOKENS)
+
+    if mapped == "length" then
+      -- MAX_TOKENS: complete normally but warn user
+      log.warn("vertex.process_response_line(): Response truncated (MAX_TOKENS)")
+      vim.schedule(function()
+        vim.notify("Flemma: Response truncated – model reached max output tokens", vim.log.levels.WARN)
+      end)
+      if callbacks.on_response_complete then
+        callbacks.on_response_complete()
+      end
+    elseif mapped == "stop" then
+      -- STOP: normal completion
+      if callbacks.on_response_complete then
+        callbacks.on_response_complete()
+      end
+    else
+      -- Safety filter, recitation, or other error finish reason
+      local error_message = "Response blocked by Vertex AI (" .. tostring(raw_reason) .. ")"
+      log.error("vertex.process_response_line(): " .. error_message)
+      if callbacks.on_error then
+        callbacks.on_error(error_message)
+      end
     end
 
     return -- Important to return after handling finishReason
@@ -784,8 +841,47 @@ function M.extract_json_response_error(self, data)
     return msg
   end
 
+  -- Pattern 2: Non-array object response { error: { message, status, details } }
+  if not vim.islist(data) and type(data.error) == "table" and data.error.message then
+    local msg = data.error.message
+    if data.error.status then
+      msg = msg .. " (Status: " .. data.error.status .. ")"
+    end
+    if data.error.details and type(data.error.details) == "table" and #data.error.details > 0 then
+      for _, detail in ipairs(data.error.details) do
+        if detail["@type"] and detail["@type"]:match("BadRequest") and detail.fieldViolations then
+          for _, violation in ipairs(detail.fieldViolations) do
+            if violation.description then
+              msg = msg .. "\n" .. violation.description
+            end
+          end
+        end
+      end
+    end
+    return msg
+  end
+
   -- If Vertex-specific patterns don't match, fall back to base class patterns
   return base.extract_json_response_error(self, data)
+end
+
+--- Detect whether an error message indicates an authentication failure.
+--- Overrides base virtual to match Vertex-specific UNAUTHENTICATED patterns.
+---@param self flemma.provider.Vertex
+---@param message string|nil The error message to check
+---@return boolean
+function M.is_auth_error(self, message)
+  if not message or type(message) ~= "string" then
+    return false
+  end
+  local lower = message:lower()
+  if lower:match("unauthenticated") then
+    return true
+  end
+  if lower:match("invalid authentication credentials") then
+    return true
+  end
+  return false
 end
 
 return M

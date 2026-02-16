@@ -75,7 +75,7 @@ describe("Anthropic Provider Extended Thinking", function()
       assert.are.equal(0.7, request.temperature, "Temperature should be preserved when thinking is disabled")
     end)
 
-    it("should not include thinking config when thinking_budget is below 1024", function()
+    it("should clamp thinking_budget below 1024 to minimum", function()
       local provider = anthropic.new({
         model = "claude-sonnet-4-5-20250929",
         thinking_budget = 500,
@@ -92,8 +92,9 @@ describe("Anthropic Provider Extended Thinking", function()
 
       local request = provider:build_request(prompt, {})
 
-      assert.is_nil(request.thinking, "Request should not include thinking config when budget < 1024")
-      assert.are.equal(0.7, request.temperature, "Temperature should be preserved when thinking is invalid")
+      assert.is_not_nil(request.thinking, "Request should include thinking config (budget clamped to 1024)")
+      assert.are.equal(1024, request.thinking.budget_tokens, "Budget should be clamped to minimum 1024")
+      assert.is_nil(request.temperature, "Temperature should be removed when thinking is enabled")
     end)
 
     it("should floor thinking_budget to integer", function()

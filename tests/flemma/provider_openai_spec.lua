@@ -113,6 +113,60 @@ describe("OpenAI Provider", function()
       assert.same({ "reasoning.encrypted_content" }, request_body.include)
     end)
 
+    it("should map thinking='max' to reasoning.effort='high' for non-xhigh models", function()
+      local provider = openai.new({
+        model = "o3",
+        max_tokens = 4000,
+        thinking = "max",
+      })
+
+      local messages = {
+        { type = "You", content = "Hello" },
+      }
+
+      local prompt = provider:prepare_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.is_not_nil(request_body.reasoning)
+      assert.equals("high", request_body.reasoning.effort)
+    end)
+
+    it("should map thinking='max' to reasoning.effort='xhigh' for gpt-5.2", function()
+      local provider = openai.new({
+        model = "gpt-5.2",
+        max_tokens = 4000,
+        thinking = "max",
+      })
+
+      local messages = {
+        { type = "You", content = "Hello" },
+      }
+
+      local prompt = provider:prepare_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.is_not_nil(request_body.reasoning)
+      assert.equals("xhigh", request_body.reasoning.effort)
+    end)
+
+    it("should pass through thinking='minimal' as reasoning.effort='minimal'", function()
+      local provider = openai.new({
+        model = "o3",
+        max_tokens = 4000,
+        thinking = "minimal",
+      })
+
+      local messages = {
+        { type = "You", content = "Hello" },
+      }
+
+      local prompt = provider:prepare_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.is_not_nil(request_body.reasoning)
+      assert.equals("minimal", request_body.reasoning.effort)
+    end)
+
     it("should use custom reasoning_summary when configured", function()
       local provider = openai.new({
         model = "o3",
@@ -1099,6 +1153,58 @@ describe("OpenAI Provider", function()
       )
 
       assert.is_true(completed, "Should call on_response_complete")
+    end)
+  end)
+
+  describe("error event handling", function()
+    it("should surface top-level error event with code and message", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 4000,
+        temperature = 0.7,
+      })
+
+      local errors = {}
+      local callbacks = {
+        on_content = function() end,
+        on_usage = function() end,
+        on_response_complete = function() end,
+        on_error = function(msg)
+          table.insert(errors, msg)
+        end,
+      }
+
+      provider:process_response_line(
+        'data: {"type":"error","code":"rate_limit_exceeded","message":"Rate limit reached"}',
+        callbacks
+      )
+
+      assert.are.equal(1, #errors)
+      assert.truthy(errors[1]:match("rate_limit_exceeded"))
+      assert.truthy(errors[1]:match("Rate limit reached"))
+    end)
+
+    it("should handle error event without code or message", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 4000,
+        temperature = 0.7,
+      })
+
+      local errors = {}
+      local callbacks = {
+        on_content = function() end,
+        on_usage = function() end,
+        on_response_complete = function() end,
+        on_error = function(msg)
+          table.insert(errors, msg)
+        end,
+      }
+
+      provider:process_response_line('data: {"type":"error"}', callbacks)
+
+      assert.are.equal(1, #errors)
+      assert.truthy(errors[1]:match("OpenAI stream error"))
     end)
   end)
 

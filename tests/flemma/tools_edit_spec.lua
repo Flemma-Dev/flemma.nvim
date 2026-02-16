@@ -3,9 +3,12 @@
 package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.registry"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
+package.loaded["flemma.sandbox"] = nil
+package.loaded["flemma.sandbox.backends.bwrap"] = nil
 
 local tools = require("flemma.tools")
 local registry = require("flemma.tools.registry")
+local state = require("flemma.state")
 
 describe("Edit Tool", function()
   local edit_def
@@ -205,6 +208,108 @@ describe("Edit Tool", function()
       -- File should be unchanged
       local content = table.concat(vim.fn.readfile(test_file), "\n")
       assert.equals("foo bar foo", content)
+    end)
+  end)
+
+  describe("sandbox enforcement", function()
+    local sandbox
+    local bufnr
+
+    before_each(function()
+      package.loaded["flemma.sandbox"] = nil
+      package.loaded["flemma.sandbox.backends.bwrap"] = nil
+      sandbox = require("flemma.sandbox")
+      sandbox.reset_enabled()
+      sandbox.clear()
+
+      sandbox.register("mock", {
+        available = function()
+          return true, nil
+        end,
+        wrap = function(_, _, inner)
+          return inner, nil
+        end,
+        priority = 50,
+      })
+
+      bufnr = vim.api.nvim_create_buf(false, true)
+    end)
+
+    after_each(function()
+      sandbox.reset_enabled()
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("allows edits inside rw_paths", function()
+      state.set_config({
+        sandbox = {
+          enabled = true,
+          backend = "mock",
+          policy = { rw_paths = { test_dir } },
+        },
+      })
+      vim.fn.writefile({ "hello world" }, test_file)
+      ---@type flemma.tools.ExecutionContext
+      local context = { bufnr = bufnr, cwd = vim.fn.getcwd() }
+
+      local result = edit_def.execute({
+        label = "test",
+        path = test_file,
+        oldText = "hello",
+        newText = "goodbye",
+      }, nil, context)
+
+      assert.is_true(result.success)
+      local content = table.concat(vim.fn.readfile(test_file), "\n")
+      assert.equals("goodbye world", content)
+    end)
+
+    it("denies edits outside rw_paths", function()
+      state.set_config({
+        sandbox = {
+          enabled = true,
+          backend = "mock",
+          policy = { rw_paths = { "/nonexistent/allowed" } },
+        },
+      })
+      vim.fn.writefile({ "hello world" }, test_file)
+      ---@type flemma.tools.ExecutionContext
+      local context = { bufnr = bufnr, cwd = vim.fn.getcwd() }
+
+      local result = edit_def.execute({
+        label = "test",
+        path = test_file,
+        oldText = "hello",
+        newText = "goodbye",
+      }, nil, context)
+
+      assert.is_false(result.success)
+      assert.is_truthy(result.error:match("Sandbox"))
+      assert.is_truthy(result.error:match("edit denied"))
+      -- File should be unchanged
+      local content = table.concat(vim.fn.readfile(test_file), "\n")
+      assert.equals("hello world", content)
+    end)
+
+    it("allows all edits when sandbox is disabled", function()
+      state.set_config({
+        sandbox = {
+          enabled = false,
+          policy = { rw_paths = {} },
+        },
+      })
+      vim.fn.writefile({ "hello world" }, test_file)
+      ---@type flemma.tools.ExecutionContext
+      local context = { bufnr = bufnr, cwd = vim.fn.getcwd() }
+
+      local result = edit_def.execute({
+        label = "test",
+        path = test_file,
+        oldText = "hello",
+        newText = "goodbye",
+      }, nil, context)
+
+      assert.is_true(result.success)
     end)
   end)
 end)

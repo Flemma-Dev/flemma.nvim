@@ -17,6 +17,7 @@ local models_data = require("flemma.models")
 ---@field supports_reasoning boolean
 ---@field supports_thinking_budget boolean
 ---@field outputs_thinking boolean
+---@field output_has_thoughts boolean Whether output_tokens already includes thinking tokens for cost calculation
 ---@field min_thinking_budget? integer Minimum thinking budget value for this provider
 
 ---@class flemma.provider.ProviderEntry
@@ -115,6 +116,7 @@ function M.register(source, entry)
     supports_reasoning = false,
     supports_thinking_budget = false,
     outputs_thinking = false,
+    output_has_thoughts = false,
   })
 
   providers[name] = {

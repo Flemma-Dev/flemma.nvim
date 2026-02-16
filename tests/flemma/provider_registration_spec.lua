@@ -140,13 +140,16 @@ describe("provider registration", function()
     it("returns registered default parameters", function()
       local defaults = registry.get_default_parameters("anthropic")
       assert.is_not_nil(defaults)
-      assert.are.equal("short", defaults.cache_retention)
+      -- cache_retention is now a global parameter, not a provider default
+      assert.is_nil(defaults.cache_retention)
     end)
 
     it("returns registered default parameters for openai", function()
       local defaults = registry.get_default_parameters("openai")
       assert.is_not_nil(defaults)
-      assert.are.equal("short", defaults.cache_retention)
+      -- cache_retention is now a global parameter, not a provider default
+      assert.is_nil(defaults.cache_retention)
+      assert.are.equal("auto", defaults.reasoning_summary)
     end)
 
     it("returns custom provider defaults", function()
@@ -227,13 +230,14 @@ end)
 describe("merge_parameters with registered defaults", function()
   it("uses registered defaults as fallback", function()
     local merged = config_manager.merge_parameters({}, "anthropic")
-    assert.are.equal("short", merged.cache_retention)
+    -- thinking_budget is a registered default (nil value)
+    assert.is_nil(merged.thinking_budget)
   end)
 
   it("general base params override registered defaults", function()
-    local merged = config_manager.merge_parameters({ max_tokens = 8000 }, "anthropic")
+    local merged = config_manager.merge_parameters({ max_tokens = 8000, cache_retention = "long" }, "anthropic")
     assert.are.equal(8000, merged.max_tokens)
-    assert.are.equal("short", merged.cache_retention)
+    assert.are.equal("long", merged.cache_retention)
   end)
 
   it("provider-specific overrides take highest priority", function()
@@ -245,16 +249,20 @@ describe("merge_parameters with registered defaults", function()
 
   it("explicit provider_overrides argument takes highest priority", function()
     local merged = config_manager.merge_parameters(
-      { anthropic = { cache_retention = "none" } },
+      { cache_retention = "short", anthropic = { cache_retention = "none" } },
       "anthropic",
       { cache_retention = "long" }
     )
     assert.are.equal("long", merged.cache_retention)
   end)
 
+  it("cache_retention flows as general parameter to any provider", function()
+    local merged = config_manager.merge_parameters({ cache_retention = "long" }, "openai")
+    assert.are.equal("long", merged.cache_retention)
+  end)
+
   it("includes openai registered defaults when no user params given", function()
     local merged = config_manager.merge_parameters({}, "openai")
-    -- OpenAI now has cache_retention = "short" as a registered default
-    assert.are.equal("short", merged.cache_retention)
+    assert.are.equal("auto", merged.reasoning_summary)
   end)
 end)

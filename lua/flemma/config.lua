@@ -44,22 +44,39 @@
 ---@field enabled boolean
 
 ---@class flemma.config.Statusline
----@field thinking_format string
----@field reasoning_format string
+---@field thinking_format string Format string when thinking is active. {model} = model name, {level} = thinking level
+---@field reasoning_format? string Deprecated: alias for thinking_format (kept for backward compat)
 
 ---@class flemma.config.Parameters
 ---@field max_tokens? integer
 ---@field temperature? number
 ---@field timeout? integer
 ---@field connect_timeout? integer
----@field reasoning? string
----@field thinking_budget? number
+---@field cache_retention? string Prompt caching: "short", "long", or "none"
+---@field thinking? false|string|number Unified thinking: "minimal"/"low"/"medium"/"high"/"max", numeric budget, or false to disable
+---@field reasoning? string Provider-specific (OpenAI): reasoning effort level
+---@field thinking_budget? number Provider-specific (Anthropic/Vertex): explicit token budget
 ---@field [string] table<string, any>|nil Provider-specific parameter overrides
 
 ---@class flemma.config.BashToolConfig
 ---@field shell? string
 ---@field cwd? string
 ---@field env? table<string, string>
+
+---@class flemma.config.SandboxPolicy
+---@field rw_paths? string[] Read-write paths; supports $CWD and $FLEMMA_BUFFER_PATH (default: {"$CWD", "$FLEMMA_BUFFER_PATH", "/tmp"})
+---@field network? boolean Allow network access (default: true)
+---@field allow_privileged? boolean Allow sudo/capabilities (default: false, enables --unshare-user)
+
+---@class flemma.config.BwrapBackendConfig
+---@field path? string Path to bwrap binary (default: "bwrap")
+---@field extra_args? string[] Raw extra bwrap arguments
+
+---@class flemma.config.SandboxConfig
+---@field enabled boolean Master switch (default: true)
+---@field backend? string "auto" = detect quietly, "required" = detect and warn if none, or explicit name (default: "auto")
+---@field policy? flemma.config.SandboxPolicy
+---@field backends? table<string, table> Per-backend config
 
 ---@class flemma.config.AutoApproveContext
 ---@field bufnr integer
@@ -71,9 +88,14 @@
 
 ---@alias flemma.config.AutoApprove string[]|flemma.config.AutoApproveFunction
 
+---@class flemma.config.AutopilotConfig
+---@field enabled boolean
+---@field max_turns integer
+
 ---@class flemma.config.ToolsConfig
 ---@field require_approval boolean
 ---@field auto_approve? flemma.config.AutoApprove
+---@field autopilot flemma.config.AutopilotConfig
 ---@field default_timeout integer
 ---@field show_spinner boolean
 ---@field cursor_after_result "result"|"stay"|"next"
@@ -121,6 +143,7 @@
 ---@field editing? flemma.config.Editing
 ---@field logging? flemma.logging.Config
 ---@field keymaps? flemma.config.Keymaps
+---@field sandbox? flemma.config.SandboxConfig
 
 ---Full resolved config (all fields present after merging with defaults).
 ---@class flemma.Config : flemma.Config.Opts
@@ -142,6 +165,7 @@
 ---@field editing flemma.config.Editing
 ---@field logging flemma.logging.Config
 ---@field keymaps flemma.config.Keymaps
+---@field sandbox flemma.config.SandboxConfig
 
 ---@type flemma.Config
 return {
@@ -199,8 +223,7 @@ return {
     enabled = true, -- Whether to show pricing information in notifications
   },
   statusline = {
-    thinking_format = "{model}  ✓ thinking", -- Format string when thinking is enabled. {model} is replaced with the model name.
-    reasoning_format = "{model} ({level})", -- Format string when reasoning is enabled. {model} is model name, {level} is reasoning level.
+    thinking_format = "{model} ({level})", -- Format string when thinking is active. {model} = model name, {level} = low/medium/high.
   },
   provider = "anthropic", -- Default provider: "anthropic", "openai", or "vertex"
   model = nil, -- Will use provider-specific default if nil
@@ -209,10 +232,16 @@ return {
     temperature = 0.7, -- Default temperature for all providers
     timeout = 120, -- Default response timeout for cURL requests
     connect_timeout = 10, -- Default connection timeout for cURL requests
+    cache_retention = "short", -- Default prompt caching: "short", "long", or "none"
+    thinking = "high", -- Default thinking level: "low", "medium", "high", numeric budget, or false to disable
   },
   tools = {
     require_approval = true, -- Require user approval before executing tool calls (two-step <C-]> flow)
     auto_approve = nil, -- Tools that bypass approval: string[] of tool names, or function(tool_name, input, context) → true|false|"deny"
+    autopilot = {
+      enabled = true, -- Auto-execute approved tools and re-send when resolved
+      max_turns = 100, -- Safety limit on consecutive autonomous LLM turns
+    },
     default_timeout = 30, -- Default timeout for async tools (seconds)
     show_spinner = true, -- Show spinner animation during execution
     cursor_after_result = "result", -- Cursor behavior after result injection: "result", "stay", or "next"
@@ -246,5 +275,20 @@ return {
       send = "<C-]>",
     },
     enabled = true, -- Set to false to disable all keymaps
+  },
+  sandbox = {
+    enabled = true, -- Enable filesystem sandboxing
+    backend = "auto", -- "auto" detects the best available backend; set explicitly to force one
+    policy = {
+      rw_paths = { "$CWD", "$FLEMMA_BUFFER_PATH", "/tmp" }, -- Read-write paths (all others are read-only)
+      network = true, -- Allow network access inside the sandbox
+      allow_privileged = false, -- Allow sudo/capabilities (false = safer, drops privileges)
+    },
+    backends = {
+      bwrap = {
+        path = "bwrap", -- Path to bubblewrap binary
+        extra_args = {}, -- Additional bwrap arguments for advanced use
+      },
+    },
   },
 }

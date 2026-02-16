@@ -17,17 +17,13 @@ M.metadata = {
     supports_reasoning = false,
     supports_thinking_budget = true,
     outputs_thinking = true,
+    output_has_thoughts = true,
     min_thinking_budget = 1024,
   },
   default_parameters = {
     thinking_budget = nil,
-    cache_retention = "short",
   },
 }
-
--- Anthropic's output_tokens already includes thinking tokens in the usage response,
--- so we should NOT add thoughts_tokens separately for cost calculation.
-M.output_has_thoughts = true
 
 ---@param merged_config flemma.provider.Parameters
 ---@return flemma.provider.Anthropic
@@ -42,8 +38,7 @@ function M.new(merged_config)
   setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
   provider:reset()
 
-  ---@diagnostic disable-next-line: return-type-mismatch
-  return provider
+  return provider --[[@as flemma.provider.Anthropic]]
 end
 
 ---@param self flemma.provider.Anthropic
@@ -74,7 +69,7 @@ end
 ---@param prompt flemma.provider.Prompt The prepared prompt with history and system (from pipeline)
 ---@param _context? flemma.Context The shared context object (not used, parts already resolved)
 ---@return table<string, any> request_body The request body for the API
-function M.build_request(self, prompt, _context) ---@diagnostic disable-line: unused-local
+function M.build_request(self, prompt, _context)
   local api_messages = {}
 
   for _, msg in ipairs(prompt.history) do
@@ -308,29 +303,33 @@ function M.build_request(self, prompt, _context) ---@diagnostic disable-line: un
     log.debug("anthropic.build_request: Added " .. #tools_array .. " tools to request")
   end
 
-  -- Add thinking configuration if enabled
-  local thinking_budget = self.parameters.thinking_budget
+  -- Add thinking configuration using unified resolution
+  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities)
 
-  if type(thinking_budget) == "number" and thinking_budget >= 1024 then
-    request_body.thinking = {
-      type = "enabled",
-      budget_tokens = math.floor(thinking_budget),
-    }
+  if thinking.enabled then
+    -- Opus 4.6+ uses adaptive thinking (effort level) instead of budget_tokens
+    local model = self.parameters.model or ""
+    local use_adaptive = model:match("opus%-4%-6") ~= nil or model:match("opus%-4%.6") ~= nil
+
+    if use_adaptive then
+      -- Anthropic effort values: low, medium, high, max (Opus 4.6 only for max)
+      -- Flemma's "minimal" has no Anthropic equivalent, map to "low"
+      local effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" }
+      local effort = effort_map[thinking.level] or "high"
+      request_body.thinking = { type = "adaptive" }
+      request_body.output_config = { effort = effort }
+      log.debug("anthropic.build_request: Adaptive thinking enabled with effort: " .. effort)
+    elseif thinking.budget then
+      request_body.thinking = {
+        type = "enabled",
+        budget_tokens = thinking.budget,
+      }
+      log.debug("anthropic.build_request: Thinking enabled with budget: " .. thinking.budget)
+    end
     -- Remove temperature when thinking is enabled (Anthropic API requirement)
     request_body.temperature = nil
-    log.debug(
-      "anthropic.build_request: Thinking enabled with budget: "
-        .. thinking_budget
-        .. ". Temperature removed from request."
-    )
-  elseif thinking_budget == 0 or thinking_budget == nil then
-    log.debug("anthropic.build_request: Thinking disabled (budget is " .. tostring(thinking_budget) .. ")")
   else
-    log.warn(
-      "anthropic.build_request: Invalid thinking_budget value: "
-        .. tostring(thinking_budget)
-        .. ". Must be nil, 0, or >= 1024. Thinking disabled."
-    )
+    log.debug("anthropic.build_request: Thinking disabled")
   end
 
   return request_body
@@ -440,10 +439,13 @@ function M.process_response_line(self, line, callbacks)
     end
   end
 
-  -- Handle message_delta event (mostly for logging the event type now)
+  -- Handle message_delta event — capture stop_reason for completion branching
   if data.type == "message_delta" then
     log.debug("anthropic.process_response_line(): Received message_delta event")
-    -- Usage is handled above
+    if data.delta and data.delta.stop_reason then
+      self._response_buffer.extra.stop_reason = data.delta.stop_reason
+      log.debug("anthropic.process_response_line(): Captured stop_reason: " .. data.delta.stop_reason)
+    end
   end
 
   -- Handle message_stop event
@@ -488,8 +490,30 @@ function M.process_response_line(self, line, callbacks)
     self._response_buffer.extra.accumulated_signature = ""
     self._response_buffer.extra.redacted_thinking_blocks = {}
 
-    if callbacks.on_response_complete then
-      callbacks.on_response_complete()
+    -- Branch on captured stop_reason (from message_delta)
+    local stop_reason = self._response_buffer.extra.stop_reason
+
+    if stop_reason == "max_tokens" then
+      -- Truncated: complete normally but warn user
+      log.warn("anthropic.process_response_line(): Response truncated (max_tokens)")
+      vim.schedule(function()
+        vim.notify("Flemma: Response truncated – model reached max output tokens", vim.log.levels.WARN)
+      end)
+      if callbacks.on_response_complete then
+        callbacks.on_response_complete()
+      end
+    elseif stop_reason == "refusal" or stop_reason == "sensitive" then
+      -- Content policy: surface as error
+      local error_message = "Response blocked by Anthropic (" .. stop_reason .. ")"
+      log.error("anthropic.process_response_line(): " .. error_message)
+      if callbacks.on_error then
+        callbacks.on_error(error_message)
+      end
+    else
+      -- end_turn, tool_use, stop_sequence, pause_turn, nil — normal completion
+      if callbacks.on_response_complete then
+        callbacks.on_response_complete()
+      end
     end
   end
 
@@ -711,7 +735,7 @@ local function import_generate_chat(data)
 end
 
 -- Try to import from buffer lines (Claude Workbench format)
-function M.try_import_from_buffer(self, lines) ---@diagnostic disable-line: unused-local
+function M.try_import_from_buffer(self, lines)
   -- Extract and prepare content
   local content = import_extract_content(lines)
   if #content == 0 then

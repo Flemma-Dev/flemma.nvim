@@ -2,12 +2,7 @@
   pkgs ? import <nixpkgs> { },
 }:
 let
-  nodejs = pkgs.nodejs_22;
-  packageOverrides = pkgs.callPackage ./python-packages.nix { };
-  python = pkgs.python312.override { inherit packageOverrides; };
-  pythonWithPackages = python.withPackages (p: [
-    p.google-cloud-aiplatform
-  ]);
+  nodejs_lts = pkgs.nodejs_24;
   plenary-nvim = pkgs.vimPlugins.plenary-nvim;
 in
 pkgs.mkShell rec {
@@ -19,88 +14,26 @@ pkgs.mkShell rec {
 
     PLENARY_PATH=${plenary-nvim}
     export PLENARY_PATH
-
-    if [ -z "''${OPENAI_API_KEY-}" ]; then
-      if command -v secret-tool >/dev/null 2>&1; then
-        OPENAI_API_KEY=$(secret-tool lookup service openai key api 2>/dev/null)
-        if [ -n "''${OPENAI_API_KEY-}" ]; then
-          export OPENAI_API_KEY
-          echo -e "\033[0;36m[${name}] Retrieved OpenAI credentials from system keyring.\033[0m"
-        else
-          echo -e "\033[0;33m[${name}] Warning: \$OPENAI_API_KEY was not set and not found in system keyring.\033[0m"
-        fi
-      else
-        echo -e "\033[0;33m[${name}] Warning: \$OPENAI_API_KEY was not set and libsecret tools not available.\033[0m"
-      fi
-    fi
   '';
 
   buildInputs = with pkgs; [
-    nodejs.pkgs.pnpm
+    bubblewrap
     google-cloud-sdk
+    imagemagick
     libsecret
-    pythonWithPackages
+    nodejs_lts.pkgs.pnpm
+    vhs
     # Neovim plug-ins
     plenary-nvim
     # Lua tools
     lua-language-server
     lua54Packages.luacheck
 
-    (pkgs.aider-chat.withOptional {
-      withBrowser = true;
-      withPlaywright = true;
-    })
-
-    (writeShellApplication rec {
-      name = "flemma-aider";
-      text = ''
-        set +e
-
-        if [ -z "''${VERTEXAI_PROJECT-}" ]; then
-          if [ -f "$PROJECT_ROOT/.env" ]; then
-            VERTEXAI_PROJECT=$(grep -oP '(?<=^VERTEXAI_PROJECT=).*' "$PROJECT_ROOT/.env")
-            if [ -n "''${VERTEXAI_PROJECT-}" ]; then
-              export VERTEXAI_PROJECT
-              echo -e "\033[0;36m[${name}] Loaded Vertex project name from .env file: $VERTEXAI_PROJECT\033[0m"
-            else
-              echo -e "\033[0;33m[${name}] Warning: \$VERTEXAI_PROJECT was not set in .env file.\033[0m"
-            fi
-          else
-            echo -e "\033[0;33m[${name}] Warning: \$VERTEXAI_PROJECT was not set and no .env file found.\033[0m"
-          fi
-        fi
-
-        if [ -z "''${GOOGLE_APPLICATION_CREDENTIALS-}" ]; then
-          if command -v secret-tool >/dev/null 2>&1; then
-            CREDENTIALS=$(secret-tool lookup service vertex key api project_id "''${VERTEXAI_PROJECT-}" 2>/dev/null)
-            if [ -n "''${CREDENTIALS-}" ]; then
-              existing=$(trap -p EXIT | awk -F"'" '{print $2}')
-              # shellcheck disable=SC2064
-              trap "( rm -f '$PROJECT_ROOT/.aider-credentials.json'; $existing )" EXIT
-              echo "$CREDENTIALS" >"$PROJECT_ROOT/.aider-credentials.json"
-              GOOGLE_APPLICATION_CREDENTIALS="$PROJECT_ROOT/.aider-credentials.json"
-              export GOOGLE_APPLICATION_CREDENTIALS
-              echo -e "\033[0;36m[${name}] Retrieved Google credentials from system keyring.\033[0m"
-            else
-              echo -e "\033[0;33m[${name}] Warning: \$GOOGLE_APPLICATION_CREDENTIALS was not set and not found in system keyring.\033[0m"
-            fi
-          else
-            echo -e "\033[0;33m[${name}] Warning: \$GOOGLE_APPLICATION_CREDENTIALS was not set and libsecret tools not available.\033[0m"
-          fi
-        fi
-
-        # shellcheck disable=SC2046
-        aider $( find . -name "*.lua" -or -name README.md -or -path "*/syntax/*" ) "$@"
-
-        rm -f .aider-credentials.json || true
-      '';
-    })
-
     (writeShellApplication {
       name = "flemma-fmt";
       runtimeInputs = [
         nixfmt-tree
-        nodejs_22.pkgs.prettier
+        nodejs_lts.pkgs.prettier
         stylua
       ];
       text = ''
@@ -109,7 +42,7 @@ pkgs.mkShell rec {
         find . -name "*.lua" -print0 | xargs -0 \
         stylua
 
-        find . -name "*.md" -print0 | xargs -0 \
+        find . -name "*.md" -not -path '*/.claude/*' -print0 | xargs -0 \
         prettier --write
       '';
     })

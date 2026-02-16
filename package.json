@@ -1,0 +1,14 @@
+{
+  "name": "@flemma-dev/flemma.nvim",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=24",
+    "pnpm": ">=10"
+  },
+  "devDependencies": {
+    "@changesets/changelog-github": "^0.5.1",
+    "@changesets/cli": "^2.29.0"
+  }
+}

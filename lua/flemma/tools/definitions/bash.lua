@@ -40,7 +40,7 @@ M.definitions = {
       additionalProperties = false,
     },
     async = true,
-    execute = function(input, callback)
+    execute = function(input, callback, ctx)
       local cmd = input.command
       if not cmd or cmd == "" then
         callback({ success = false, error = "No command provided" })
@@ -167,7 +167,19 @@ M.definitions = {
 
       local shell = (config.tools and config.tools.bash and config.tools.bash.shell) or "bash"
       -- Wrap in group command so stderr redirect covers all pipeline stages
-      local job_id = vim.fn.jobstart({ shell, "-c", "{ " .. cmd .. "; } 2>&1" }, job_opts)
+      local inner_cmd = { shell, "-c", "{ " .. cmd .. "; } 2>&1" }
+
+      -- Sandbox wrapping (if enabled)
+      local sandbox = require("flemma.sandbox")
+      local sandbox_bufnr = ctx and ctx.bufnr or vim.api.nvim_get_current_buf()
+      local sandbox_opts = ctx and ctx.opts or nil
+      local wrapped_cmd, sandbox_err = sandbox.wrap_command(inner_cmd, sandbox_bufnr, sandbox_opts)
+      if not wrapped_cmd then
+        callback({ success = false, error = "Sandbox error: " .. sandbox_err })
+        return nil
+      end
+
+      local job_id = vim.fn.jobstart(wrapped_cmd, job_opts)
 
       if job_id <= 0 then
         callback({ success = false, error = "Failed to start job" })

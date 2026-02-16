@@ -5,9 +5,13 @@ local M = {}
 
 ---@class flemma.opt.ResolvedOpts
 ---@field tools string[]|nil List of allowed tool names
+---@field auto_approve flemma.config.AutoApprove|nil Per-buffer auto-approve policy
+---@field autopilot boolean|nil Per-buffer autopilot override (true/false)
+---@field parameters table<string, any>|nil General parameter overrides (provider-agnostic)
 ---@field anthropic table<string, any>|nil Per-buffer Anthropic parameter overrides
 ---@field openai table<string, any>|nil Per-buffer OpenAI parameter overrides
 ---@field vertex table<string, any>|nil Per-buffer Vertex parameter overrides
+---@field sandbox table|nil Per-buffer sandbox config overrides
 
 ---@class flemma.opt.Entry
 ---@field name string
@@ -198,11 +202,19 @@ function ListOption:__pow(value)
   return self:prepend(value)
 end
 
---- Check if a value is a ListOption instance
+--- Marker used by is_list_option to identify ListOption instances across metatables.
+---@type boolean
+ListOption._is_list_option = true
+
+--- Check if a value is a ListOption instance (supports custom per-instance metatables)
 ---@param v any
 ---@return boolean
 local function is_list_option(v)
-  return type(v) == "table" and getmetatable(v) == ListOption
+  if type(v) ~= "table" then
+    return false
+  end
+  local mt = getmetatable(v)
+  return type(mt) == "table" and mt._is_list_option == true
 end
 
 -- Option definitions: each returns an array of {name, enabled} entries
@@ -251,20 +263,70 @@ function M.create()
   ---@type table<string, boolean>
   local touched = {}
 
-  -- Per-provider parameter overrides (e.g., { anthropic = { cache_retention = "long" } })
+  -- Raw options that are sub-properties of ListOption instances (e.g., tools.auto_approve)
+  ---@type table<string, any>
+  local raw_options = {}
+
+  -- Give the tools ListOption a custom metatable so flemma.opt.tools.auto_approve works
+  -- while list operations (:remove, :append, +, -, ^) continue to function normally.
+  local tools_option = options["tools"]
+  setmetatable(tools_option, {
+    _is_list_option = true,
+    __index = function(_, key)
+      if key == "auto_approve" then
+        return raw_options.auto_approve
+      end
+      if key == "autopilot" then
+        return raw_options.autopilot
+      end
+      return ListOption[key]
+    end,
+    __newindex = function(_, key, value)
+      if key == "auto_approve" then
+        if type(value) ~= "table" and type(value) ~= "function" then
+          error(string.format("flemma.opt.tools.auto_approve: expected table or function, got %s", type(value)))
+        end
+        raw_options.auto_approve = value
+        return
+      end
+      if key == "autopilot" then
+        if type(value) ~= "boolean" then
+          error(string.format("flemma.opt.tools.autopilot: expected boolean, got %s", type(value)))
+        end
+        raw_options.autopilot = value
+        return
+      end
+      rawset(tools_option, key, value)
+    end,
+    __add = ListOption.__add,
+    __sub = ListOption.__sub,
+    __pow = ListOption.__pow,
+  })
+
+  -- Per-provider parameter overrides (e.g., { anthropic = { thinking_budget = 4096 } })
   ---@type table<string, table<string, any>>
   local provider_params = {}
   ---@type table<string, table>
   local provider_proxies = {}
 
+  -- General parameter overrides (provider-agnostic, e.g., thinking = "high")
+  -- Uses is_general_parameter from config manager plus thinking (added in Phase 5)
+  ---@type table<string, any>
+  local general_params = {}
+
+  local config_manager = require("flemma.core.config.manager")
+
   local opt_proxy = setmetatable({}, {
     ---@param _ table
     ---@param key string
-    ---@return flemma.opt.ListOption|table
+    ---@return flemma.opt.ListOption|table|any
     __index = function(_, key)
       if option_defs[key] then
         touched[key] = true
         return options[key]
+      end
+      if key == "sandbox" then
+        return raw_options.sandbox
       end
       local provider_reg = require("flemma.provider.registry")
       if provider_reg.has(key) then
@@ -280,6 +342,9 @@ function M.create()
           })
         end
         return provider_proxies[key]
+      end
+      if config_manager.is_general_parameter(key) then
+        return general_params[key]
       end
       error(string.format("flemma.opt: unknown option '%s'", key))
     end,
@@ -300,6 +365,15 @@ function M.create()
         options[key]:set(value)
         return
       end
+      if key == "sandbox" then
+        if type(value) == "boolean" then
+          value = { enabled = value }
+        elseif type(value) ~= "table" then
+          error("flemma.opt.sandbox: expected boolean or table, got " .. type(value))
+        end
+        raw_options.sandbox = vim.tbl_deep_extend("force", raw_options.sandbox or {}, value)
+        return
+      end
       local provider_reg = require("flemma.provider.registry")
       if provider_reg.has(key) then
         if type(value) ~= "table" then
@@ -307,6 +381,10 @@ function M.create()
         end
         provider_params[key] = value
         provider_proxies[key] = nil -- invalidate cached proxy
+        return
+      end
+      if config_manager.is_general_parameter(key) then
+        general_params[key] = value
         return
       end
       error(string.format("flemma.opt: unknown option '%s'", key))
@@ -320,6 +398,20 @@ function M.create()
     for name in pairs(touched) do
       result[name] = options[name]:get()
     end
+    if raw_options.auto_approve ~= nil then
+      result.auto_approve = raw_options.auto_approve
+    end
+    if raw_options.autopilot ~= nil then
+      result.autopilot = raw_options.autopilot
+    end
+    if raw_options.sandbox ~= nil then
+      result.sandbox = vim.deepcopy(raw_options.sandbox)
+    end
+    -- Add general parameter overrides
+    if next(general_params) then
+      result.parameters = vim.deepcopy(general_params)
+    end
+    -- Add provider-specific overrides
     for pname, params in pairs(provider_params) do
       if next(params) then
         result[pname] = vim.deepcopy(params)
