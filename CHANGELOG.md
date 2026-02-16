@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.0
+
+### Minor Changes
+
+- 7cccfc6: Adopted semantic versioning (semver) and changesets for automated version management and changelog generation. The project transitions from the previous CalVer (`vYY.MM-N`) scheme to standard semver, starting at `0.1.0`.
+- c22dd05: Added Anthropic stop reason handling (max_tokens warns, refusal/sensitive surface as errors) and adaptive thinking for Opus 4.6+ models (auto-detected, sends effort level instead of deprecated budget_tokens)
+- 4471a07: Added autopilot: an autonomous tool execution loop that transforms Flemma into a fully autonomous agent. After each LLM response containing tool calls, autopilot executes approved tools, collects results, and re-sends the conversation automatically – repeating until the model stops calling tools or a tool requires manual approval. Includes per-buffer frontmatter override (`flemma.opt.tools.autopilot`), runtime toggle commands (`:Flemma autopilot:enable/disable/status`), configurable turn limits, conflict detection for user-edited pending blocks, and full cancellation safety via Ctrl-C.
+- 05809d5: Added `minimal` and `max` thinking levels, expanding from 3 to 5 gradations (`minimal | low | medium | high | max`). Budget values for `low` (1024 → 2048) and `high` (32768 → 16384) were adjusted to align with upstream defaults and make room for the new levels. Each provider maps the canonical levels to its API: Anthropic maps `minimal` → `low` and passes `max` on Opus 4.6; OpenAI maps `max` → `xhigh` for GPT-5.2+; Vertex maps `minimal` → `MINIMAL` (Flash) or `LOW` (Pro) and clamps `max` to `HIGH`.
+- 907b787: Added filesystem sandboxing for tool execution. Shell commands now run inside a read-only rootfs with write access limited to configurable paths (project directory, .chat file directory, /tmp by default). Enabled by default with auto-detection of available backends; silently degrades on platforms without one. Includes Bubblewrap backend (Linux), pluggable backend registry for custom/future backends, per-buffer overrides via frontmatter, runtime toggle via :Flemma sandbox:enable/disable/status, and comprehensive documentation.
+- 76c635e: Added Gemini 3 model support: uses `thinkingLevel` enum (LOW/MEDIUM/HIGH) instead of numeric `thinkingBudget` for gemini-3-pro and gemini-3-flash models
+- e6b53e2: Added approval resolver registry and per-buffer approval via frontmatter. Tool approval is now driven by a priority-based chain of named resolvers – global config, per-buffer frontmatter (`flemma.opt.tools.auto_approve`), and custom plugin resolvers are all evaluated in order. Consolidated tool documentation into `docs/tools.md`.
+- 629dfda: Sandbox enforcement for write and edit tools – both now check `sandbox.is_path_writable()` before modifying files and refuse operations outside `rw_paths`
+- dcaa5be: Add unified `thinking` parameter that works across all providers – set `thinking = "high"` once instead of provider-specific `thinking_budget` or `reasoning`. The default is `"high"` so all providers use maximum thinking out of the box. Provider-specific parameters still take priority when set. Also promotes `cache_retention` to a general parameter, consolidates `output_has_thoughts` into the capabilities registry, clamps sub-minimum thinking budgets instead of disabling, and supports `flemma.opt.thinking` in frontmatter for provider-agnostic overrides.
+- 93f4b68: Added proactive token refresh and reactive auth-error recovery for Vertex AI provider, eliminating the need to manually run `:Flemma switch` when OAuth2 tokens expire
+
+### Patch Changes
+
+- c22dd05: Fixed OpenAI top-level stream error events being silently discarded; they now properly surface as errors
+- a59da49: Fixed tool completion indicators being prematurely dismissed during concurrent execution and autopilot
+- 784fe5a: Fixed Vertex AI safety-filtered responses silently appearing as successful completions; SAFETY, RECITATION, and other error finish reasons now properly surface as errors
+- 5b6b5af: Fixed Vertex AI thinking signature retention during streaming; empty or non-string `thoughtSignature` chunks no longer overwrite a valid cached signature
+- 784fe5a: Fixed Vertex AI tool response format to use `output` key instead of `result`, matching the Google SDK convention
+- 7bf8d64: Fixed Vertex AI tool declarations rejecting nullable types by switching to `parametersJsonSchema` on v1beta1 API
+- 9995605: Flash a brief "● Pending" indicator on tool result headers awaiting user approval
+
 <!-- Entries above this line are managed by @changesets/cli -->
 
 ---
@@ -154,17 +179,20 @@ This release marks a major transition for Claudius, evolving from a Claude-speci
 This version introduces significant internal refactoring and configuration changes. Please review the following and update your configuration if necessary:
 
 1.  **Configuration Option Renames:**
+
     - The `prefix_style` option within `setup({})` has been renamed to `role_style`.
       - **Migration:** Rename `prefix_style` to `role_style` in your `require("claudius").setup({...})` call.
     - The `ruler.style` option within `setup({})` has been renamed to `ruler.hl`.
       - **Migration:** Rename `ruler.style` to `ruler.hl` in your `setup({})` call.
 
 2.  **Highlight Group Renames (Affects Manual Linking Only):**
+
     - Internal syntax highlight groups used by `syntax/chat.vim` have been renamed from `Chat*` to `Claudius*` (e.g., `ChatSystem` ⇒ `ClaudiusSystem`, `ChatSystemPrefix` ⇒ `ClaudiusRoleSystem`).
     - **Migration:** This **only** affects users who were manually linking these highlight groups in their Neovim configuration (e.g., using `vim.cmd("highlight link ChatSystem MyCustomGroup")`). If you were doing this, update the source group name (e.g., `vim.cmd("highlight link ClaudiusSystem MyCustomGroup")`).
     - **Users configuring highlights _only_ via the `highlights` table in `setup()` are _not_ affected by this change.**
 
 3.  **Configuration Structure (`model`, `provider`, `parameters`):**
+
     - A new top-level `provider` option specifies the AI provider (`"claude"`, `"openai"`, `"vertex"`). It defaults to `"claude"` for backward compatibility.
     - The `model` option now defaults based on the selected `provider` if set to `nil`. If you specify a `model`, ensure it's valid for the selected provider.
     - Provider-specific parameters (currently only for Vertex AI) are now nested (e.g., `parameters = { vertex = { project_id = "..." } }`).
