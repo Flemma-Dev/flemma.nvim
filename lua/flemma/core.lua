@@ -193,139 +193,184 @@ function M.cancel_request()
   end
 end
 
----Hybrid dispatch: execute pending tools, awaiting tools, or send to provider.
----When require_approval is enabled, pending tools get empty placeholder results injected
----so the user can review before execution. On the next invocation, tools with empty
----placeholders are executed. When all tools have results, the request is sent.
+---Phase 2 (Execute): Process flemma:tool blocks by status.
+---Called from Phase 1 via vim.schedule (undo boundary) or directly when Phase 1 has nothing.
+---@param opts { on_request_complete?: fun(), bufnr: integer }
+local function advance_phase2(opts)
+  local bufnr = opts.bufnr
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  -- Guard: if a provider request is already in flight (e.g., the user pressed
+  -- <C-]> between the scheduled Phase 1 and this Phase 2), bail out to avoid
+  -- a double-send race.
+  local buffer_state = state.get_buffer_state(bufnr)
+  if buffer_state.current_request then
+    return
+  end
+
+  local tool_context = require("flemma.tools.context")
+  local autopilot = require("flemma.autopilot")
+  local autopilot_active = autopilot.is_enabled(bufnr)
+  local executor = require("flemma.tools.executor")
+  local injector = require("flemma.tools.injector")
+
+  local tool_blocks = tool_context.resolve_all_tool_blocks(bufnr)
+
+  -- Process denied → replace with error
+  local denied = tool_blocks["denied"] or {}
+  for _, ctx in ipairs(denied) do
+    injector.inject_result(bufnr, ctx.tool_id, {
+      success = false,
+      error = injector.resolve_error_message("denied"),
+    })
+  end
+
+  -- Process rejected → replace with user content or default error
+  local rejected = tool_blocks["rejected"] or {}
+  for _, ctx in ipairs(rejected) do
+    injector.inject_result(bufnr, ctx.tool_id, {
+      success = false,
+      error = injector.resolve_error_message("rejected", ctx.content),
+    })
+  end
+
+  -- Process approved → execute tool
+  local approved = tool_blocks["approved"] or {}
+  for _, ctx in ipairs(approved) do
+    local ok, err = executor.execute(bufnr, ctx)
+    if not ok then
+      vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+    end
+  end
+
+  -- Re-resolve pending positions if other blocks were processed (their injections
+  -- shift line numbers). Approved sync tools also replace placeholders inline.
+  local pending_blocks = tool_blocks["pending"] or {}
+  if (#denied > 0 or #rejected > 0 or #approved > 0) and #pending_blocks > 0 then
+    local fresh = tool_context.resolve_all_tool_blocks(bufnr)
+    pending_blocks = fresh["pending"] or {}
+  end
+
+  if #approved > 0 then
+    -- Tools were dispatched for execution — arm autopilot
+    if autopilot_active then
+      autopilot.arm(bufnr)
+      -- Sync tools complete inline during the loop above, calling on_tools_complete
+      -- before arm() — those calls are ignored (state wasn't "armed" yet).
+      -- If all tools were sync, nothing will trigger on_tools_complete again, so
+      -- we fire it manually. For async tools still running, their completion will
+      -- trigger on_tools_complete normally (state is now "armed").
+      if not executor.has_pending(bufnr) then
+        vim.schedule(function()
+          if vim.api.nvim_buf_is_valid(bufnr) then
+            autopilot.on_tools_complete(bufnr)
+          end
+        end)
+      end
+    end
+    if opts.on_request_complete then
+      opts.on_request_complete()
+    end
+    return
+  end
+
+  if #pending_blocks > 0 then
+    -- Pending blocks remain — move cursor to the first one so the user can act
+    local first = pending_blocks[1]
+    local winid = vim.fn.bufwinid(bufnr)
+    if winid ~= -1 then
+      vim.api.nvim_win_set_cursor(winid, { first.tool_result.start_line, 0 })
+    end
+    if opts.on_request_complete then
+      opts.on_request_complete()
+    end
+    return
+  end
+
+  -- All denied/rejected were processed synchronously, no approved, no pending
+  if #denied > 0 or #rejected > 0 then
+    -- Non-empty tool blocks were processed — re-check if we should continue
+    if autopilot_active then
+      autopilot.arm(bufnr)
+      vim.schedule(function()
+        if vim.api.nvim_buf_is_valid(bufnr) then
+          autopilot.on_tools_complete(bufnr)
+        end
+      end)
+    end
+    if opts.on_request_complete then
+      opts.on_request_complete()
+    end
+    return
+  end
+
+  -- Phase 3: No flemma:tool blocks remain and no unmatched tool_uses → send to provider
+  M.send_to_provider(opts)
+end
+
+---Unified dispatch: three-phase advance algorithm.
+---Phase 1 (Categorize): Find unmatched tool_use blocks → run approval → inject flemma:tool placeholders.
+---Phase 2 (Execute): Process flemma:tool blocks by status (approved/denied/rejected/pending).
+---Phase 3 (Continue): No tool blocks remain → send to provider.
+---Both <C-]> and autopilot call this same function.
 ---@param opts? { on_request_complete?: fun(), bufnr?: integer }
 function M.send_or_execute(opts)
   opts = opts or {}
   local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
   local tool_context = require("flemma.tools.context")
-  local config = state.get_config()
-  local require_approval = config.tools and config.tools.require_approval
-  if require_approval == nil then
-    require_approval = true
-  end
 
-  local autopilot = require("flemma.autopilot")
-  local autopilot_active = autopilot.is_enabled(bufnr)
-
-  -- Phase 1: Handle tool_use blocks that have no tool_result at all
+  -- Phase 1: Categorize — find tool_use blocks without matching tool_result
   local pending = tool_context.resolve_all_pending(bufnr)
 
   if #pending > 0 then
-    if require_approval then
-      local approval = require("flemma.tools.approval")
-      local injector = require("flemma.tools.injector")
-      local executor = require("flemma.tools.executor")
-      local to_execute = {}
-      local first_placeholder_line = nil
-      local pending_indicators = {}
+    local approval = require("flemma.tools.approval")
+    local injector = require("flemma.tools.injector")
+    local first_placeholder_line = nil
 
-      for _, ctx in ipairs(pending) do
-        local decision = approval.resolve(ctx.tool_name, ctx.input, { bufnr = bufnr, tool_id = ctx.tool_id })
+    for _, ctx in ipairs(pending) do
+      local decision = approval.resolve(ctx.tool_name, ctx.input, { bufnr = bufnr, tool_id = ctx.tool_id })
 
-        if decision == "approve" then
-          table.insert(to_execute, ctx)
-        elseif decision == "deny" then
-          injector.inject_placeholder(bufnr, ctx.tool_id)
-          injector.inject_result(bufnr, ctx.tool_id, {
-            success = false,
-            error = "Denied by auto_approve policy",
-          })
-        else
-          local header_line = injector.inject_placeholder(bufnr, ctx.tool_id, { pending = true })
-          if header_line then
-            table.insert(pending_indicators, { tool_id = ctx.tool_id, header_line = header_line })
-            if not first_placeholder_line or header_line < first_placeholder_line then
-              first_placeholder_line = header_line
-            end
-          end
+      ---@type flemma.ast.ToolStatus
+      local status
+      if decision == "approve" then
+        status = "approved"
+      elseif decision == "deny" then
+        status = "denied"
+      else
+        status = "pending"
+      end
+
+      local header_line = injector.inject_placeholder(bufnr, ctx.tool_id, { status = status })
+      if header_line and status == "pending" then
+        if not first_placeholder_line or header_line < first_placeholder_line then
+          first_placeholder_line = header_line
         end
       end
-
-      -- Flash pending-approval indicators (after all placeholders are injected so
-      -- reposition can correct any displaced extmarks)
-      for _, ind in ipairs(pending_indicators) do
-        ui.show_pending_tool_indicator(bufnr, ind.tool_id, ind.header_line)
-        ui.schedule_tool_indicator_clear(bufnr, ind.tool_id, 1500)
-      end
-      if #pending_indicators > 0 then
-        ui.reposition_tool_indicators(bufnr)
-      end
-
-      -- Move cursor to first injected placeholder so the user can review
-      if first_placeholder_line then
-        local winid = vim.fn.bufwinid(bufnr)
-        if winid ~= -1 then
-          vim.api.nvim_win_set_cursor(winid, { first_placeholder_line, 0 })
-        end
-      end
-
-      for _, ctx in ipairs(to_execute) do
-        local ok, err = executor.execute(bufnr, ctx)
-        if not ok then
-          vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
-        end
-      end
-
-      if autopilot_active then
-        if #to_execute > 0 then
-          -- Arm autopilot: tools were dispatched for execution
-          autopilot.arm(bufnr)
-        elseif not first_placeholder_line then
-          -- All denied, nothing executing: no executor callbacks will fire,
-          -- so we must notify autopilot directly
-          autopilot.arm(bufnr)
-          vim.schedule(function()
-            if vim.api.nvim_buf_is_valid(bufnr) then
-              autopilot.on_tools_complete(bufnr)
-            end
-          end)
-        end
-      end
-
-      if opts.on_request_complete then
-        opts.on_request_complete()
-      end
-      return
-    else
-      local executor = require("flemma.tools.executor")
-      local ok, err = executor.execute_all_pending(bufnr)
-      if not ok then
-        vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
-      end
-      if autopilot_active then
-        autopilot.arm(bufnr)
-      end
-      return
     end
+
+    -- Move cursor to first pending placeholder so the user can review
+    if first_placeholder_line then
+      local winid = vim.fn.bufwinid(bufnr)
+      if winid ~= -1 then
+        vim.api.nvim_win_set_cursor(winid, { first_placeholder_line, 0 })
+      end
+    end
+
+    -- Schedule Phase 2 via vim.schedule for undo boundary separation.
+    -- Autopilot is NOT armed here — Phase 1 is purely categorization.
+    -- Phase 2 arms autopilot after dispatching approved tools.
+    local phase2_opts = { on_request_complete = opts.on_request_complete, bufnr = bufnr }
+    vim.schedule(function()
+      advance_phase2(phase2_opts)
+    end)
+    return
   end
 
-  -- Phase 2: Handle tool_result blocks with empty content (awaiting execution)
-  if require_approval then
-    local awaiting = tool_context.resolve_all_awaiting_execution(bufnr)
-    if #awaiting > 0 then
-      local executor = require("flemma.tools.executor")
-      for _, ctx in ipairs(awaiting) do
-        local ok, err = executor.execute(bufnr, ctx)
-        if not ok then
-          vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
-        end
-      end
-      if autopilot_active then
-        autopilot.arm(bufnr)
-      end
-      if opts.on_request_complete then
-        opts.on_request_complete()
-      end
-      return
-    end
-  end
-
-  -- Phase 3: No pending tools, no awaiting execution → send to provider
-  M.send_to_provider(opts)
+  -- Phase 1 had nothing to categorize — run Phase 2 directly
+  -- (handles existing flemma:tool blocks from a previous Phase 1)
+  advance_phase2({ on_request_complete = opts.on_request_complete, bufnr = bufnr })
 end
 
 ---Handle the AI provider interaction

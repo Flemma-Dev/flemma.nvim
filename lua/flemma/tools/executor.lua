@@ -59,6 +59,13 @@ local function maybe_unlock_buffer(bufnr)
   end
 end
 
+---Check whether any tool executions are still in-flight for a buffer
+---@param bufnr integer
+---@return boolean
+function M.has_pending(bufnr)
+  return count_pending(bufnr) > 0
+end
+
 ---Clean up a pending execution entry
 ---@param bufnr integer
 ---@param tool_id string
@@ -135,8 +142,8 @@ local function do_completion(bufnr, tool_id, result, opts)
     log.warn("executor: Failed to inject result for " .. tool_id .. ": " .. (err or "unknown"))
   end
 
-  -- Move cursor based on config
-  if ok then
+  -- Move cursor based on config (skip when autopilot is armed — it owns cursor positioning)
+  if ok and require("flemma.autopilot").get_state(bufnr) ~= "armed" then
     local config = state.get_config()
     local cursor_mode = config.tools and config.tools.cursor_after_result or "result"
     if cursor_mode ~= "stay" then
@@ -437,38 +444,8 @@ function M.cancel_at_cursor(bufnr)
   return false
 end
 
----Execute all pending tool calls (tool_use blocks without tool_result) in the buffer
----@param bufnr integer
----@return boolean any_executed true if at least one tool was executed
----@return string|nil error first error encountered, if any
-function M.execute_all_pending(bufnr)
-  local tool_context = require("flemma.tools.context")
-  local contexts = tool_context.resolve_all_pending(bufnr)
-
-  if #contexts == 0 then
-    return false, "No pending tool calls"
-  end
-
-  local any_executed = false
-  local first_error = nil
-
-  for _, ctx in ipairs(contexts) do
-    local ok, err = M.execute(bufnr, ctx)
-    if ok then
-      any_executed = true
-    elseif not first_error then
-      first_error = err
-    end
-  end
-
-  if not any_executed and first_error then
-    return false, first_error
-  end
-
-  return any_executed, nil
-end
-
----Resolve and execute the tool at cursor position
+---Resolve and execute the tool at cursor position.
+---For rejected/denied tools, injects the appropriate error result instead of executing.
 ---@param bufnr integer
 ---@return boolean success
 ---@return string|nil error
@@ -479,6 +456,47 @@ function M.execute_at_cursor(bufnr)
   if not ctx then
     return false, err or "No tool call found"
   end
+
+  -- Check if matching tool_result has a status that prevents execution
+  local parser = require("flemma.parser")
+  local doc = parser.get_parsed_document(bufnr)
+  for _, msg in ipairs(doc.messages) do
+    if msg.role == "You" then
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "tool_result" and seg.tool_use_id == ctx.tool_id and seg.status then
+          if seg.status == "rejected" or seg.status == "denied" then
+            -- Resolve the block by injecting the appropriate error result
+            injector.inject_result(bufnr, ctx.tool_id, {
+              success = false,
+              error = injector.resolve_error_message(seg.status --[[@as "rejected"|"denied"]], seg.content),
+            })
+            -- Re-arm autopilot if it was paused (same logic as the pending/approved
+            -- path below) so that on_tools_complete can resume the loop.
+            local autopilot = require("flemma.autopilot")
+            if autopilot.get_state(bufnr) == "paused" then
+              autopilot.arm(bufnr)
+            end
+            -- Notify autopilot so it can resume the loop
+            vim.schedule(function()
+              if vim.api.nvim_buf_is_valid(bufnr) then
+                require("flemma.autopilot").on_tools_complete(bufnr)
+              end
+            end)
+            return true, nil
+          end
+        end
+      end
+    end
+  end
+
+  -- Re-arm autopilot only if it was paused (i.e., actively in a loop that
+  -- stopped on this pending tool). Don't arm from idle — the user may be
+  -- manually executing tools without an autopilot loop running.
+  local autopilot = require("flemma.autopilot")
+  if autopilot.get_state(bufnr) == "paused" then
+    autopilot.arm(bufnr)
+  end
+
   return M.execute(bufnr, ctx)
 end
 

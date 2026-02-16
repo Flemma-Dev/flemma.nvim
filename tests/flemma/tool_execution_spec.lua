@@ -1448,6 +1448,12 @@ describe("Tool Executor", function()
     end)
   end)
 
+  describe("has_pending", function()
+    it("returns false for buffer with no executions", function()
+      assert.is_false(executor.has_pending(999))
+    end)
+  end)
+
   describe("execute validation", function()
     it("rejects execution of unknown tool", function()
       local bufnr = create_buffer({
@@ -1607,6 +1613,239 @@ describe("Tool Executor", function()
     it("returns false for non-existent tool_id", function()
       local result = executor.cancel("nonexistent_id")
       assert.is_false(result)
+    end)
+  end)
+
+  describe("execute_at_cursor arms autopilot for pending tools", function()
+    -- Regression: execute_at_cursor (Alt+Enter) on a pending tool must arm
+    -- autopilot before executing, so that on_tools_complete can resume the
+    -- loop when the tool finishes. Without arming, the state remains "paused"
+    -- and on_tools_complete is ignored.
+
+    it("arms autopilot before executing pending tool", function()
+      local ap = require("flemma.autopilot")
+      local ap_state = require("flemma.state")
+      ap_state.set_config({ tools = { autopilot = { enabled = true } } })
+
+      local bufnr = create_buffer({
+        "@Assistant: Computing:",
+        "",
+        "**Tool Use:** `calculator` (`toolu_arm_test`)",
+        "```json",
+        '{ "expression": "2+2" }',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_arm_test`",
+        "",
+        "```flemma:tool status=pending",
+        "```",
+      })
+
+      -- Open a window for the buffer (execute_at_cursor needs a cursor)
+      local winid = vim.api.nvim_open_win(bufnr, true, {
+        relative = "editor",
+        width = 80,
+        height = 20,
+        row = 0,
+        col = 0,
+      })
+      -- Position cursor on the flemma:tool line
+      vim.api.nvim_win_set_cursor(winid, { 10, 0 })
+
+      -- Simulate paused state (as advance_phase2 would set)
+      ap.arm(bufnr)
+      -- Force paused via on_tools_complete seeing pending block
+      ap.on_tools_complete(bufnr)
+      assert.equals("paused", ap.get_state(bufnr))
+
+      -- Execute at cursor — should arm before executing
+      executor.execute_at_cursor(bufnr)
+
+      -- After sync tool completes, autopilot should have been armed
+      -- then on_tools_complete should have advanced state
+      -- (either to "sending" or stayed "armed" then advanced)
+      local final_state = ap.get_state(bufnr)
+      -- The tool completed synchronously, so on_tools_complete fired,
+      -- saw no more flemma:tool blocks, and set state to "sending"
+      assert.equals("sending", final_state)
+
+      vim.api.nvim_win_close(winid, true)
+      ap.cleanup_buffer(bufnr)
+      ap_state.set_config({})
+    end)
+
+    it("does not arm autopilot when idle (no active loop)", function()
+      -- Regression: if autopilot is enabled but not in a loop (state=idle),
+      -- Alt+Enter should execute the tool without arming autopilot. Only
+      -- re-arm when autopilot was paused (actively in a loop).
+      local ap = require("flemma.autopilot")
+      local ap_state = require("flemma.state")
+      ap_state.set_config({ tools = { autopilot = { enabled = true } } })
+
+      local bufnr = create_buffer({
+        "@Assistant: Computing:",
+        "",
+        "**Tool Use:** `calculator` (`toolu_no_arm`)",
+        "```json",
+        '{ "expression": "2+2" }',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_no_arm`",
+        "",
+        "```flemma:tool status=pending",
+        "```",
+      })
+
+      local winid = vim.api.nvim_open_win(bufnr, true, {
+        relative = "editor",
+        width = 80,
+        height = 20,
+        row = 0,
+        col = 0,
+      })
+      vim.api.nvim_win_set_cursor(winid, { 10, 0 })
+
+      -- Autopilot enabled but idle (user manually navigated here, not in a loop)
+      assert.equals("idle", ap.get_state(bufnr))
+      executor.execute_at_cursor(bufnr)
+      -- Should stay idle — not start an autopilot loop
+      assert.equals("idle", ap.get_state(bufnr))
+
+      vim.api.nvim_win_close(winid, true)
+      ap.cleanup_buffer(bufnr)
+      ap_state.set_config({})
+    end)
+
+    it("arms autopilot before resolving rejected tool", function()
+      -- Regression: execute_at_cursor on a rejected tool returned early
+      -- (after injecting the error) without arming autopilot. This meant
+      -- the scheduled on_tools_complete saw "paused" state and was ignored,
+      -- breaking the autopilot loop.
+      local ap = require("flemma.autopilot")
+      local ap_state = require("flemma.state")
+      ap_state.set_config({ tools = { autopilot = { enabled = true } } })
+
+      -- Start with pending block to get autopilot into paused state
+      local bufnr = create_buffer({
+        "@Assistant: Doing something:",
+        "",
+        "**Tool Use:** `calculator` (`toolu_reject_arm`)",
+        "```json",
+        '{ "expression": "2+2" }',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_reject_arm`",
+        "",
+        "```flemma:tool status=pending",
+        "```",
+      })
+
+      local winid = vim.api.nvim_open_win(bufnr, true, {
+        relative = "editor",
+        width = 80,
+        height = 20,
+        row = 0,
+        col = 0,
+      })
+
+      -- Simulate paused autopilot (as advance_phase2 would leave it)
+      ap.arm(bufnr)
+      ap.on_tools_complete(bufnr)
+      assert.equals("paused", ap.get_state(bufnr))
+
+      -- Now swap to rejected status (user changed it in buffer)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant: Doing something:",
+        "",
+        "**Tool Use:** `calculator` (`toolu_reject_arm`)",
+        "```json",
+        '{ "expression": "2+2" }',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_reject_arm`",
+        "",
+        "```flemma:tool status=rejected",
+        "User does not want this.",
+        "```",
+      })
+      vim.api.nvim_win_set_cursor(winid, { 10, 0 })
+
+      -- Execute at cursor on the rejected tool
+      local ok, err = executor.execute_at_cursor(bufnr)
+      assert.is_true(ok)
+      assert.is_nil(err)
+
+      -- Autopilot should have been armed before the early return,
+      -- so on_tools_complete (via vim.schedule) can advance the loop.
+      -- Since we're in sync test context, check that state was armed
+      -- (the vim.schedule callback hasn't run yet).
+      assert.equals("armed", ap.get_state(bufnr))
+
+      vim.api.nvim_win_close(winid, true)
+      ap.cleanup_buffer(bufnr)
+      ap_state.set_config({})
+    end)
+
+    it("arms autopilot before resolving denied tool", function()
+      -- Same regression as rejected, but for denied status.
+      local ap = require("flemma.autopilot")
+      local ap_state = require("flemma.state")
+      ap_state.set_config({ tools = { autopilot = { enabled = true } } })
+
+      -- Start with pending block to get autopilot into paused state
+      local bufnr = create_buffer({
+        "@Assistant: Doing something:",
+        "",
+        "**Tool Use:** `calculator` (`toolu_deny_arm`)",
+        "```json",
+        '{ "expression": "2+2" }',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_deny_arm`",
+        "",
+        "```flemma:tool status=pending",
+        "```",
+      })
+
+      local winid = vim.api.nvim_open_win(bufnr, true, {
+        relative = "editor",
+        width = 80,
+        height = 20,
+        row = 0,
+        col = 0,
+      })
+
+      -- Simulate paused autopilot
+      ap.arm(bufnr)
+      ap.on_tools_complete(bufnr)
+      assert.equals("paused", ap.get_state(bufnr))
+
+      -- Now swap to denied status
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant: Doing something:",
+        "",
+        "**Tool Use:** `calculator` (`toolu_deny_arm`)",
+        "```json",
+        '{ "expression": "2+2" }',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_deny_arm`",
+        "",
+        "```flemma:tool status=denied",
+        "```",
+      })
+      vim.api.nvim_win_set_cursor(winid, { 10, 0 })
+
+      local ok, err = executor.execute_at_cursor(bufnr)
+      assert.is_true(ok)
+      assert.is_nil(err)
+
+      -- Should be armed, ready for on_tools_complete to advance
+      assert.equals("armed", ap.get_state(bufnr))
+
+      vim.api.nvim_win_close(winid, true)
+      ap.cleanup_buffer(bufnr)
+      ap_state.set_config({})
     end)
   end)
 

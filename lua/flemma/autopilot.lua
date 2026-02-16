@@ -165,7 +165,7 @@ function M.on_response_complete(bufnr)
 end
 
 ---Called from executor when all pending tool executions complete (count_pending == 0).
----Checks for remaining flemma:pending or unprocessed tool_uses. If clear,
+---Checks for remaining flemma:tool blocks or unprocessed tool_uses. If clear,
 ---sets sending and schedules send_or_execute. If pending remain, sets paused.
 ---@param bufnr integer
 function M.on_tools_complete(bufnr)
@@ -180,17 +180,42 @@ function M.on_tools_complete(bufnr)
   local tool_context = require("flemma.tools.context")
 
   -- Check if there are still unprocessed tool_use blocks (Phase 1 for-loop mid-iteration)
-  local pending = tool_context.resolve_all_pending(bufnr)
-  if #pending > 0 then
-    log.debug("autopilot: " .. #pending .. " unprocessed tool_use blocks remain, waiting")
+  local unmatched = tool_context.resolve_all_pending(bufnr)
+  if #unmatched > 0 then
+    log.debug("autopilot: " .. #unmatched .. " unprocessed tool_use blocks remain, waiting")
     return
   end
 
-  -- Check if there are flemma:pending placeholders awaiting user action
-  local awaiting = tool_context.resolve_all_awaiting_execution(bufnr)
-  if #awaiting > 0 then
+  -- Check for flemma:tool blocks by status
+  local tool_blocks = tool_context.resolve_all_tool_blocks(bufnr)
+  local has_pending = tool_blocks["pending"] and #tool_blocks["pending"] > 0
+  local has_actionable = (tool_blocks["approved"] and #tool_blocks["approved"] > 0)
+    or (tool_blocks["denied"] and #tool_blocks["denied"] > 0)
+    or (tool_blocks["rejected"] and #tool_blocks["rejected"] > 0)
+
+  if has_pending then
     bs.state = "paused"
-    log.debug("autopilot: " .. #awaiting .. " flemma:pending placeholders remain, pausing")
+    log.debug("autopilot: flemma:tool status=pending blocks remain, pausing")
+    -- Move cursor to the first pending block so the user can act
+    local first = tool_blocks["pending"][1]
+    local winid = vim.fn.bufwinid(bufnr)
+    if winid ~= -1 then
+      vim.api.nvim_win_set_cursor(winid, { first.tool_result.start_line, 0 })
+    end
+    return
+  end
+
+  if has_actionable then
+    -- Approved/denied/rejected blocks remain — schedule send_or_execute to process them
+    bs.state = "sending"
+    log.debug("autopilot: actionable flemma:tool blocks remain, scheduling send for buffer " .. bufnr)
+    vim.schedule(function()
+      if not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+      end
+      local core = require("flemma.core")
+      core.send_or_execute({ bufnr = bufnr })
+    end)
     return
   end
 

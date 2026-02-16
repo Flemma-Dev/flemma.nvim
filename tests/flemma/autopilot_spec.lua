@@ -285,7 +285,7 @@ describe("Autopilot on_tools_complete", function()
     autopilot.cleanup_buffer(bufnr)
   end)
 
-  it("pauses when flemma:pending placeholders remain", function()
+  it("pauses when flemma:tool status=pending blocks remain", function()
     state.set_config({ tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You: Run the calculator",
@@ -299,13 +299,37 @@ describe("Autopilot on_tools_complete", function()
       "",
       "@You: **Tool Result:** `toolu_01`",
       "",
-      "```flemma:pending",
+      "```flemma:tool status=pending",
       "```",
     })
 
     autopilot.arm(bufnr)
     autopilot.on_tools_complete(bufnr)
     assert.equals("paused", autopilot.get_state(bufnr))
+    autopilot.cleanup_buffer(bufnr)
+  end)
+
+  it("schedules send when flemma:tool status=approved blocks remain", function()
+    state.set_config({ tools = { autopilot = { enabled = true } } })
+    local bufnr = create_buffer({
+      "@You: Run the calculator",
+      "",
+      "@Assistant: Sure.",
+      "",
+      "**Tool Use:** `calculator` (`toolu_01`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=approved",
+      "```",
+    })
+
+    autopilot.arm(bufnr)
+    autopilot.on_tools_complete(bufnr)
+    assert.equals("sending", autopilot.get_state(bufnr))
     autopilot.cleanup_buffer(bufnr)
   end)
 
@@ -377,7 +401,7 @@ describe("Autopilot conflict detection", function()
     state.set_config({})
   end)
 
-  it("parser sets has_content on flemma:pending with content", function()
+  it("parser sets content on flemma:tool with user-edited content", function()
     local bufnr = create_buffer({
       "@Assistant: Tool call.",
       "",
@@ -388,7 +412,7 @@ describe("Autopilot conflict detection", function()
       "",
       "@You: **Tool Result:** `toolu_01`",
       "",
-      "```flemma:pending",
+      "```flemma:tool status=pending",
       "User typed something here",
       "```",
     })
@@ -398,11 +422,11 @@ describe("Autopilot conflict detection", function()
     assert.equals("You", you_msg.role)
     local seg = you_msg.segments[1]
     assert.equals("tool_result", seg.kind)
-    assert.is_true(seg.pending)
-    assert.is_true(seg.has_content)
+    assert.equals("pending", seg.status)
+    assert.equals("User typed something here", seg.content)
   end)
 
-  it("parser does not set has_content on empty flemma:pending", function()
+  it("parser sets empty content on empty flemma:tool", function()
     local bufnr = create_buffer({
       "@Assistant: Tool call.",
       "",
@@ -413,7 +437,7 @@ describe("Autopilot conflict detection", function()
       "",
       "@You: **Tool Result:** `toolu_01`",
       "",
-      "```flemma:pending",
+      "```flemma:tool status=approved",
       "```",
     })
 
@@ -421,8 +445,8 @@ describe("Autopilot conflict detection", function()
     local you_msg = doc.messages[2]
     local seg = you_msg.segments[1]
     assert.equals("tool_result", seg.kind)
-    assert.is_true(seg.pending)
-    assert.is_nil(seg.has_content)
+    assert.equals("approved", seg.status)
+    assert.equals("", seg.content)
   end)
 
   it("resolve_all_awaiting_execution excludes results with user content", function()
@@ -441,13 +465,13 @@ describe("Autopilot conflict detection", function()
       "",
       "@You: **Tool Result:** `toolu_01`",
       "",
-      "```flemma:pending",
+      "```flemma:tool status=pending",
       "I edited this one",
       "```",
       "",
       "**Tool Result:** `toolu_02`",
       "",
-      "```flemma:pending",
+      "```flemma:tool status=pending",
       "```",
     })
 
@@ -468,7 +492,7 @@ describe("Autopilot conflict detection", function()
       "",
       "@You: **Tool Result:** `toolu_01`",
       "",
-      "```flemma:pending",
+      "```flemma:tool status=pending",
       "Edited content",
       "```",
     })
@@ -496,7 +520,7 @@ describe("Autopilot all-denied edge case", function()
   it("on_tools_complete continues after all tools denied (results injected, no pending)", function()
     state.set_config({ tools = { autopilot = { enabled = true } } })
     -- Simulate buffer state after all tools were denied: tool_results are present
-    -- with error content, no flemma:pending markers
+    -- with error content, no flemma:tool markers
     local bufnr = create_buffer({
       "@You: Run the calculator",
       "",
@@ -510,7 +534,7 @@ describe("Autopilot all-denied edge case", function()
       "@You: **Tool Result:** `toolu_01` (error)",
       "",
       "```",
-      "Denied by auto_approve policy",
+      "The tool was denied by a policy.",
       "```",
     })
 
@@ -519,5 +543,182 @@ describe("Autopilot all-denied edge case", function()
     -- Should set sending since there are no pending or awaiting results
     assert.equals("sending", autopilot.get_state(bufnr))
     autopilot.cleanup_buffer(bufnr)
+  end)
+end)
+
+-- ============================================================================
+-- Regression: on_tools_complete ignored when not armed
+-- ============================================================================
+
+describe("Autopilot on_tools_complete ignored when not armed", function()
+  before_each(function()
+    package.loaded["flemma.autopilot"] = nil
+    autopilot = require("flemma.autopilot")
+  end)
+
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+    state.set_config({})
+  end)
+
+  it("on_tools_complete does not advance from paused state", function()
+    -- Regression: if autopilot is paused (e.g., pending tools shown to user)
+    -- and a tool completion fires, it should not advance the state.
+    state.set_config({ tools = { autopilot = { enabled = true } } })
+    local bufnr = create_buffer({
+      "@You: Run",
+      "",
+      "@Assistant: Sure.",
+      "",
+      "**Tool Use:** `calculator` (`toolu_01`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```",
+      "4",
+      "```",
+    })
+
+    -- Manually set paused state (as advance_phase2 would for pending blocks)
+    autopilot.arm(bufnr)
+    -- Simulate: on_tools_complete fires from a pending block, pauses
+    -- Then we verify it stays paused
+    -- First, create a scenario where on_tools_complete would be called from
+    -- paused state (e.g., a lingering callback)
+    -- Force paused via on_tools_complete seeing pending blocks
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@You: Run",
+      "",
+      "@Assistant: Sure.",
+      "",
+      "**Tool Use:** `calculator` (`toolu_01`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "```",
+    })
+    autopilot.on_tools_complete(bufnr)
+    assert.equals("paused", autopilot.get_state(bufnr))
+
+    -- Now replace the buffer to have the tool resolved
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@You: Run",
+      "",
+      "@Assistant: Sure.",
+      "",
+      "**Tool Use:** `calculator` (`toolu_01`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```",
+      "4",
+      "```",
+    })
+
+    -- on_tools_complete from paused state should be a no-op
+    autopilot.on_tools_complete(bufnr)
+    assert.equals("paused", autopilot.get_state(bufnr))
+    autopilot.cleanup_buffer(bufnr)
+  end)
+
+  it("on_tools_complete advances from armed state after re-arm", function()
+    -- Regression: after pausing on pending, user interacts (e.g., Alt+Enter),
+    -- which re-arms autopilot. Now on_tools_complete should advance.
+    state.set_config({ tools = { autopilot = { enabled = true } } })
+    local bufnr = create_buffer({
+      "@You: Run",
+      "",
+      "@Assistant: Sure.",
+      "",
+      "**Tool Use:** `calculator` (`toolu_01`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```",
+      "4",
+      "```",
+    })
+
+    -- Simulate: was paused, then re-armed by execute_at_cursor
+    autopilot.arm(bufnr)
+    autopilot.on_tools_complete(bufnr)
+    -- All tools resolved → should set sending
+    assert.equals("sending", autopilot.get_state(bufnr))
+    autopilot.cleanup_buffer(bufnr)
+  end)
+end)
+
+-- ============================================================================
+-- Regression: all-sync tools leave autopilot stuck at armed (Bug 2)
+-- ============================================================================
+
+describe("Autopilot all-sync tool completion", function()
+  -- Bug 2: When all approved tools are synchronous, they complete inline
+  -- during the advance_phase2 loop. on_tools_complete fires before arm(),
+  -- so it's ignored. After the loop, arm() sets state to "armed" but nothing
+  -- ever calls on_tools_complete again → stuck.
+  --
+  -- Fix: advance_phase2 checks executor.has_pending() after arming. If false
+  -- (all sync completed), it schedules on_tools_complete manually.
+
+  before_each(function()
+    package.loaded["flemma.autopilot"] = nil
+    autopilot = require("flemma.autopilot")
+  end)
+
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+    state.set_config({})
+  end)
+
+  it("on_tools_complete called before arm is ignored", function()
+    state.set_config({ tools = { autopilot = { enabled = true } } })
+    local bufnr = create_buffer({
+      "@You: Run",
+      "",
+      "@Assistant: Sure.",
+      "",
+      "**Tool Use:** `calculator` (`toolu_01`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```",
+      "4",
+      "```",
+    })
+
+    -- State is idle (not armed) — on_tools_complete should be ignored
+    autopilot.on_tools_complete(bufnr)
+    assert.equals("idle", autopilot.get_state(bufnr))
+
+    -- Now arm and verify on_tools_complete works
+    autopilot.arm(bufnr)
+    autopilot.on_tools_complete(bufnr)
+    assert.equals("sending", autopilot.get_state(bufnr))
+    autopilot.cleanup_buffer(bufnr)
+  end)
+
+  it("executor.has_pending returns false when no tools executing", function()
+    package.loaded["flemma.tools.executor"] = nil
+    local executor = require("flemma.tools.executor")
+    local bufnr = create_buffer({ "@You: test" })
+    -- No tools dispatched → has_pending should be false
+    assert.is_false(executor.has_pending(bufnr))
   end)
 end)

@@ -9,6 +9,16 @@ local TOOL_USE_PATTERN = "^%*%*Tool Use:%*%*%s*`([^`]+)`%s*%(`([^)]+)`%)"
 local TOOL_RESULT_PATTERN = "^%*%*Tool Result:%*%*%s*`([^`]+)`"
 local TOOL_RESULT_ERROR_PATTERN = "%s*%(error%)%s*$"
 
+---@type table<string, flemma.ast.ToolStatus>
+local TOOL_STATUS_MAP = {
+  pending = "pending",
+  approved = "approved",
+  rejected = "rejected",
+  denied = "denied",
+  reject = "rejected",
+  deny = "denied",
+}
+
 ---@param str string|nil
 ---@return string|nil
 local function url_decode(str)
@@ -186,54 +196,61 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
       local block, block_end = codeblock.parse_fenced_block(lines, content_start)
 
       if block then
-        local result_content
-        local is_pending = false
-        local has_content = false
+        if block.language == "flemma:tool" then
+          -- Tool status placeholder — parse info string for status
+          local modeline = require("flemma.modeline")
+          local parsed = modeline.parse(block.info or "")
+          local tool_status = TOOL_STATUS_MAP[parsed.status] or "pending"
 
-        if block.language == "flemma:pending" then
-          -- Pending approval placeholder — detect user-edited content
-          result_content = ""
-          is_pending = true
-          if block.content ~= "" then
-            has_content = true
-          end
-        elseif block.language then
-          -- Parse the content based on language
-          local content, parse_err = codeblock.parse(block.language, block.content)
-
-          if parse_err then
-            table.insert(diagnostics, {
-              type = "tool_result",
-              severity = "warning",
-              error = "Failed to parse tool result: " .. parse_err,
-              position = { start_line = result_start_line },
+          table.insert(
+            segments,
+            ast.tool_result(tool_use_id, block.content, {
+              is_error = is_error,
+              status = tool_status,
+              start_line = result_start_line,
+              end_line = base_line_num + block_end - 1,
             })
-            -- Treat as plain text result
-            result_content = block.content
-          else
-            -- If parsed to a simple value, convert to string for API
-            if type(content) == "table" then
-              result_content = json.encode(content)
-            else
-              result_content = tostring(content)
-            end
-          end
+          )
+          i = block_end + 1
         else
-          -- No language specified - treat as plain text
-          result_content = block.content
-        end
+          -- Regular fenced block: parse content by language or treat as plain text
+          local result_content
 
-        table.insert(
-          segments,
-          ast.tool_result(tool_use_id, result_content, {
-            is_error = is_error,
-            pending = is_pending or nil,
-            has_content = has_content or nil,
-            start_line = result_start_line,
-            end_line = base_line_num + block_end - 1,
-          })
-        )
-        i = block_end + 1
+          if block.language then
+            local content, parse_err = codeblock.parse(block.language, block.content)
+
+            if parse_err then
+              table.insert(diagnostics, {
+                type = "tool_result",
+                severity = "warning",
+                error = "Failed to parse tool result: " .. parse_err,
+                position = { start_line = result_start_line },
+              })
+              -- Treat as plain text result
+              result_content = block.content
+            else
+              -- If parsed to a simple value, convert to string for API
+              if type(content) == "table" then
+                result_content = json.encode(content)
+              else
+                result_content = tostring(content)
+              end
+            end
+          else
+            -- No language specified - treat as plain text
+            result_content = block.content
+          end
+
+          table.insert(
+            segments,
+            ast.tool_result(tool_use_id, result_content, {
+              is_error = is_error,
+              start_line = result_start_line,
+              end_line = base_line_num + block_end - 1,
+            })
+          )
+          i = block_end + 1
+        end
       elseif has_fence_opener then
         -- Started a fence but didn't close it properly - this is an error
         table.insert(diagnostics, {

@@ -76,7 +76,7 @@ See `init.lua` for the `vim.tbl_deep_extend` merge and `state.get_config()` for 
 - **Tool Use** (`@Assistant` messages): ``**Tool Use:** `tool_name` (`tool_id`)`` followed by a fenced JSON code block with the tool input
 - **Tool Result** (`@You` messages): `` **Tool Result:** `tool_id` `` with optional ` (error)` suffix, followed by a fenced code block with the result
 - **Thinking blocks** (`@Assistant` messages): `<thinking>` / `</thinking>` tags, optionally with `provider:signature="base64"` attribute or `redacted` flag
-- **Pending marker**: ` ``flemma:pending ` fence tag on tool_result placeholders awaiting approval/execution
+- **Tool status blocks**: `` `flemma:tool status=<status>` `` fence tag on tool_result placeholders (`pending`, `approved`, `denied`, `rejected`)
 - **Expressions**: `{{ lua_expression }}` in `@System`/`@You` messages (sandboxed environment with `math`, `string`, `table`, `utf8`, select `vim.fn`/`vim.fs` functions, and essential globals)
 - **File references**: `@./path/to/file` or `@./file;type=mime/type` in `@You` messages
 

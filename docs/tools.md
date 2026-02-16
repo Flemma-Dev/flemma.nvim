@@ -8,17 +8,67 @@ For a quick overview of built-in tools and the basic workflow, see the [Tool Cal
 
 ## Tool approval
 
-By default, Flemma requires you to review tool calls before execution (<kbd>Ctrl-]</kbd> enters a three-phase cycle):
+By default, Flemma requires you to review tool calls before execution. A single keypress (<kbd>Ctrl-]</kbd>) drives the entire flow through three phases:
 
-1. **Inject placeholders** – empty `**Tool Result:**` blocks are added, fenced with `` `flemma:pending ``. The cursor moves to the first placeholder.
-2. **Execute** – press <kbd>Ctrl-]</kbd> again. Pending placeholders are executed; any you edited are treated as manual overrides.
-3. **Send** – once every tool has a result, the next <kbd>Ctrl-]</kbd> sends the conversation.
+### The three-phase cycle
 
-Disable approval entirely with `tools.require_approval = false`. Use `tools.auto_approve` to whitelist specific tools or write a custom policy function:
+**Phase 1 – Categorize.** When the model responds with `**Tool Use:**` blocks, pressing <kbd>Ctrl-]</kbd> checks each tool call against your approval settings and injects a `**Tool Result:**` placeholder with a status:
+
+| Status     | Meaning                                              |
+| ---------- | ---------------------------------------------------- |
+| `approved` | Auto-approved by policy; will execute immediately    |
+| `pending`  | Requires your review; blocks the cycle until you act |
+| `denied`   | Blocked by policy; an error result is injected       |
+
+The cursor moves to the first `pending` placeholder so you can review it.
+
+**Phase 2 – Execute.** On the next <kbd>Ctrl-]</kbd> (or automatically via `vim.schedule` when Phase 1 produced only `approved`/`denied` tools), Flemma processes each placeholder by status:
+
+- **`approved`** → the tool executes and its output replaces the placeholder.
+- **`denied`** → an error result is injected (the model sees the tool was blocked).
+- **`rejected`** → an error result is injected, using any content you wrote inside the block as the error message.
+- **`pending`** → blocks the cycle. The cursor moves here and Flemma waits for you to act.
+
+**Phase 3 – Send.** When no `flemma:tool` placeholders remain (every tool has a real result), the next <kbd>Ctrl-]</kbd> sends the conversation to the provider.
+
+With [autopilot](configuration.md#autopilot) enabled (the default), Phases 1–3 chain automatically for approved tools. You only interact when a tool lands on `pending`.
+
+### Tool status blocks
+
+Each placeholder is a fenced code block with a `flemma:tool` language tag and a status in its info string:
+
+````
+**Tool Result:** `toolu_01`
+
+```flemma:tool status=pending
+```
+````
+
+You can **edit the status directly** in the buffer. This is the primary way to interact with pending tools:
+
+- **Approve:** change `status=pending` to `status=approved`, then press <kbd>Ctrl-]</kbd>.
+- **Reject:** change `status=pending` to `status=rejected`, then press <kbd>Ctrl-]</kbd>. Flemma injects an error result telling the model the tool was rejected.
+- **Reject with a message:** change the status to `rejected` and type your reason inside the block – the model sees your text as the error:
+
+  ````
+  ```flemma:tool status=rejected
+  I don't want to run rm -rf on my home directory.
+  ```
+  ````
+
+- **Execute one tool:** press <kbd>Alt-Enter</kbd> on any tool block to execute or resolve it immediately (works for `approved`, `pending`, `rejected`, and `denied`).
+
+### Content-overwrite protection
+
+If you type content inside an `approved` or `pending` block, Flemma treats it as a manual override: execution is skipped, the cycle pauses, and your content is sent to the model as-is. A warning is shown so you know what happened.
+
+### Configuring approval
+
+Disable approval entirely with `tools.require_approval = false` – this registers a catch-all resolver at priority 0 that auto-approves every tool call. Use `tools.auto_approve` to whitelist specific tools or write a custom policy function:
 
 ```lua
 tools = {
-  auto_approve = { "calculator", "read" },       -- list form
+  auto_approve = { "calculator", "read" },        -- list form
   auto_approve = function(tool_name, input, ctx)  -- function form
     if tool_name == "calculator" then return true end
     if tool_name == "bash" and input.command:match("rm %-rf") then return "deny" end

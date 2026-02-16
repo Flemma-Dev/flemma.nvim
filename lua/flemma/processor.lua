@@ -202,12 +202,15 @@ function M.evaluate(doc, base_context)
           input = seg.input,
         })
       elseif seg.kind == "tool_result" then
-        table.insert(parts, {
-          kind = "tool_result",
-          tool_use_id = seg.tool_use_id,
-          content = seg.content,
-          is_error = seg.is_error,
-        })
+        -- Skip flemma:tool placeholder blocks (they are not resolved results)
+        if not seg.status then
+          table.insert(parts, {
+            kind = "tool_result",
+            tool_use_id = seg.tool_use_id,
+            content = seg.content,
+            is_error = seg.is_error,
+          })
+        end
       end
     end
 

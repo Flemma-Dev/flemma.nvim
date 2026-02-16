@@ -1,5 +1,5 @@
 --- Tests for tool execution approval flow
---- Covers: approval resolver registry, priority chain, flemma:pending marker,
+--- Covers: approval resolver registry, priority chain, flemma:tool status blocks,
 --- awaiting execution detection
 
 -- Clear module caches for clean state
@@ -681,43 +681,15 @@ describe("Approval Third-Party Composition", function()
 end)
 
 -- ============================================================================
--- Parser: flemma:pending Marker Tests
+-- Parser: tool_result without flemma:tool (plain fenced blocks)
 -- ============================================================================
 
-describe("Parser flemma:pending support", function()
+describe("Parser plain tool_result support", function()
   after_each(function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("sets pending=true on tool_result with flemma:pending fence", function()
-    local bufnr = create_buffer({
-      "@Assistant: Running tool",
-      "",
-      "**Tool Use:** `calculator` (`toolu_01`)",
-      "```json",
-      '{ "expression": "2+2" }',
-      "```",
-      "",
-      "@You: **Tool Result:** `toolu_01`",
-      "",
-      "```flemma:pending",
-      "```",
-    })
-
-    local doc = parser.get_parsed_document(bufnr)
-    local you_msg = doc.messages[2]
-    assert.equals("You", you_msg.role)
-    assert.equals(1, #you_msg.segments)
-
-    local seg = you_msg.segments[1]
-    assert.equals("tool_result", seg.kind)
-    assert.equals("toolu_01", seg.tool_use_id)
-    assert.equals("", seg.content)
-    assert.is_true(seg.pending)
-    assert.is_false(seg.is_error)
-  end)
-
-  it("does not set pending on tool_result with plain empty fence", function()
+  it("does not set status on tool_result with plain empty fence", function()
     local bufnr = create_buffer({
       "@Assistant: Running tool",
       "",
@@ -737,10 +709,10 @@ describe("Parser flemma:pending support", function()
     local seg = you_msg.segments[1]
     assert.equals("tool_result", seg.kind)
     assert.equals("", seg.content)
-    assert.is_nil(seg.pending)
+    assert.is_nil(seg.status)
   end)
 
-  it("does not set pending on tool_result with content", function()
+  it("does not set status on tool_result with content", function()
     local bufnr = create_buffer({
       "@Assistant: Running tool",
       "",
@@ -761,7 +733,7 @@ describe("Parser flemma:pending support", function()
     local seg = you_msg.segments[1]
     assert.equals("tool_result", seg.kind)
     assert.equals("4", seg.content)
-    assert.is_nil(seg.pending)
+    assert.is_nil(seg.status)
   end)
 end)
 
@@ -774,7 +746,7 @@ describe("Awaiting Execution Resolver", function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("finds tool_use with flemma:pending tool_result", function()
+  it("finds tool_use with flemma:tool status=pending tool_result", function()
     local bufnr = create_buffer({
       "@Assistant: Running tool",
       "",
@@ -785,7 +757,7 @@ describe("Awaiting Execution Resolver", function()
       "",
       "@You: **Tool Result:** `toolu_01`",
       "",
-      "```flemma:pending",
+      "```flemma:tool status=pending",
       "```",
     })
 
@@ -846,7 +818,7 @@ describe("Awaiting Execution Resolver", function()
       "",
       "@You: **Tool Result:** `toolu_01` (error)",
       "",
-      "```flemma:pending",
+      "```flemma:tool status=pending",
       "```",
     })
 
@@ -870,7 +842,7 @@ describe("Awaiting Execution Resolver", function()
       "",
       "@You: **Tool Result:** `toolu_01`",
       "",
-      "```flemma:pending",
+      "```flemma:tool status=pending",
       "```",
       "",
       "**Tool Result:** `toolu_02`",
@@ -927,12 +899,12 @@ describe("Awaiting Execution Resolver", function()
       "",
       "@You: **Tool Result:** `toolu_01`",
       "",
-      "```flemma:pending",
+      "```flemma:tool status=pending",
       "```",
       "",
       "**Tool Result:** `toolu_02`",
       "",
-      "```flemma:pending",
+      "```flemma:tool status=pending",
       "```",
     })
 
@@ -952,7 +924,7 @@ describe("Approval Placeholder Injection", function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("inject_placeholder with pending=true uses flemma:pending fence", function()
+  it("inject_placeholder with status=pending uses flemma:tool fence", function()
     local bufnr = create_buffer({
       "@Assistant: Here is the tool:",
       "",
@@ -962,33 +934,33 @@ describe("Approval Placeholder Injection", function()
       "```",
     })
 
-    local header_line, err = injector.inject_placeholder(bufnr, "toolu_approval", { pending = true })
+    local header_line, err = injector.inject_placeholder(bufnr, "toolu_approval", { status = "pending" })
     assert.is_nil(err)
     assert.is_not_nil(header_line)
 
-    -- Verify the flemma:pending fence marker is in the buffer
+    -- Verify the flemma:tool fence marker is in the buffer
     local lines = get_lines(bufnr)
-    local found_pending = false
+    local found_tool = false
     for _, line in ipairs(lines) do
-      if line == "```flemma:pending" then
-        found_pending = true
+      if line == "```flemma:tool status=pending" then
+        found_tool = true
         break
       end
     end
-    assert.is_true(found_pending, "Expected ```flemma:pending in buffer")
+    assert.is_true(found_tool, "Expected ```flemma:tool status=pending in buffer")
 
     -- Verify resolve_all_pending no longer finds it (it has a tool_result now)
     local pending = context.resolve_all_pending(bufnr)
     assert.equals(0, #pending)
 
-    -- Verify resolve_all_awaiting_execution finds it (pending marker)
+    -- Verify resolve_all_awaiting_execution finds it (pending status)
     local awaiting = context.resolve_all_awaiting_execution(bufnr)
     assert.equals(1, #awaiting)
     assert.equals("toolu_approval", awaiting[1].tool_id)
     assert.equals("calculator", awaiting[1].tool_name)
   end)
 
-  it("inject_placeholder without pending option uses plain fence", function()
+  it("inject_placeholder without status option uses plain fence", function()
     local bufnr = create_buffer({
       "@Assistant: Here is the tool:",
       "",
@@ -1000,18 +972,18 @@ describe("Approval Placeholder Injection", function()
 
     injector.inject_placeholder(bufnr, "toolu_plain")
 
-    -- Verify no flemma:pending fence marker
+    -- Verify no flemma:tool fence marker
     local lines = get_lines(bufnr)
     for _, line in ipairs(lines) do
-      assert.is_not.equals("```flemma:pending", line)
+      assert.is_falsy(line:match("^```flemma:"))
     end
 
-    -- Should NOT be detected as awaiting (no pending marker)
+    -- Should NOT be detected as awaiting (no status marker)
     local awaiting = context.resolve_all_awaiting_execution(bufnr)
     assert.equals(0, #awaiting)
   end)
 
-  it("user overriding flemma:pending by editing the fence removes pending detection", function()
+  it("user overriding flemma:tool by editing the fence removes pending detection", function()
     local bufnr = create_buffer({
       "@Assistant: Here is the tool:",
       "",
@@ -1022,17 +994,17 @@ describe("Approval Placeholder Injection", function()
     })
 
     -- Inject pending placeholder
-    injector.inject_placeholder(bufnr, "toolu_manual", { pending = true })
+    injector.inject_placeholder(bufnr, "toolu_manual", { status = "pending" })
 
     -- Verify it's awaiting execution
     local awaiting = context.resolve_all_awaiting_execution(bufnr)
     assert.equals(1, #awaiting)
 
-    -- Simulate user replacing the flemma:pending fence with content
+    -- Simulate user replacing the flemma:tool fence with plain content
     local lines = get_lines(bufnr)
     for i, line in ipairs(lines) do
-      if line == "```flemma:pending" then
-        -- Replace the pending fence + closing fence with user content
+      if line:match("^```flemma:tool") then
+        -- Replace the tool fence + closing fence with user content
         vim.api.nvim_buf_set_lines(bufnr, i - 1, i + 1, false, { "```", "I refused to run this", "```" })
         break
       end
@@ -1043,7 +1015,7 @@ describe("Approval Placeholder Injection", function()
     assert.equals(0, #awaiting)
   end)
 
-  it("inject_result replaces flemma:pending marker with actual content", function()
+  it("inject_result replaces flemma:tool marker with actual content", function()
     local bufnr = create_buffer({
       "@Assistant: Here is the tool:",
       "",
@@ -1054,26 +1026,26 @@ describe("Approval Placeholder Injection", function()
     })
 
     -- Inject pending placeholder
-    injector.inject_placeholder(bufnr, "toolu_exec", { pending = true })
+    injector.inject_placeholder(bufnr, "toolu_exec", { status = "pending" })
 
-    -- Verify flemma:pending is present
+    -- Verify flemma:tool is present
     local lines = get_lines(bufnr)
-    local found_pending = false
+    local found_tool = false
     for _, line in ipairs(lines) do
-      if line == "```flemma:pending" then
-        found_pending = true
+      if line:match("^```flemma:tool") then
+        found_tool = true
         break
       end
     end
-    assert.is_true(found_pending)
+    assert.is_true(found_tool)
 
     -- Inject actual result (simulating what executor does after tool runs)
     injector.inject_result(bufnr, "toolu_exec", { success = true, output = "25" })
 
-    -- Verify flemma:pending is gone
+    -- Verify flemma:tool is gone
     lines = get_lines(bufnr)
     for _, line in ipairs(lines) do
-      assert.is_not.equals("```flemma:pending", line)
+      assert.is_falsy(line:match("^```flemma:tool"))
     end
 
     -- Verify result content is present
@@ -1105,7 +1077,7 @@ describe("Approval Placeholder Injection", function()
     injector.inject_placeholder(bufnr, "toolu_deny")
     injector.inject_result(bufnr, "toolu_deny", {
       success = false,
-      error = "Denied by auto_approve policy",
+      error = "The tool was denied by a policy.",
     })
 
     -- Should not be pending
@@ -1310,5 +1282,769 @@ describe("Frontmatter Approval Resolver", function()
       -- Config at 100 handles bash itself
       assert.equals("approve", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t2" }))
     end)
+  end)
+end)
+
+-- ============================================================================
+-- Parser: flemma:tool Marker Tests
+-- ============================================================================
+
+describe("Parser flemma:tool support", function()
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("parses status=pending from flemma:tool info string", function()
+    local bufnr = create_buffer({
+      "@Assistant: Running tool",
+      "",
+      "**Tool Use:** `calculator` (`toolu_01`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "```",
+    })
+
+    local doc = parser.get_parsed_document(bufnr)
+    local you_msg = doc.messages[2]
+    assert.equals("You", you_msg.role)
+    assert.equals(1, #you_msg.segments)
+
+    local seg = you_msg.segments[1]
+    assert.equals("tool_result", seg.kind)
+    assert.equals("toolu_01", seg.tool_use_id)
+    assert.equals("", seg.content)
+    assert.equals("pending", seg.status)
+    assert.equals("", seg.content)
+    assert.is_false(seg.is_error)
+  end)
+
+  it("parses status=approved from flemma:tool info string", function()
+    local bufnr = create_buffer({
+      "@Assistant: Running tool",
+      "",
+      "**Tool Use:** `calculator` (`toolu_01`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=approved",
+      "```",
+    })
+
+    local doc = parser.get_parsed_document(bufnr)
+    local you_msg = doc.messages[2]
+    local seg = you_msg.segments[1]
+    assert.equals("tool_result", seg.kind)
+    assert.equals("approved", seg.status)
+    assert.equals("", seg.content)
+  end)
+
+  it("parses status=rejected with user content", function()
+    local bufnr = create_buffer({
+      "@Assistant: Running tool",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "rm -rf /" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=rejected",
+      "I don't want to run this dangerous command.",
+      "```",
+    })
+
+    local doc = parser.get_parsed_document(bufnr)
+    local you_msg = doc.messages[2]
+    local seg = you_msg.segments[1]
+    assert.equals("tool_result", seg.kind)
+    assert.equals("rejected", seg.status)
+    assert.equals("I don't want to run this dangerous command.", seg.content)
+  end)
+
+  it("parses status=denied", function()
+    local bufnr = create_buffer({
+      "@Assistant: Running tool",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "rm -rf /" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=denied",
+      "```",
+    })
+
+    local doc = parser.get_parsed_document(bufnr)
+    local you_msg = doc.messages[2]
+    local seg = you_msg.segments[1]
+    assert.equals("tool_result", seg.kind)
+    assert.equals("denied", seg.status)
+    assert.equals("", seg.content)
+  end)
+
+  it("defaults to status=pending when no info string", function()
+    local bufnr = create_buffer({
+      "@Assistant: Running tool",
+      "",
+      "**Tool Use:** `calculator` (`toolu_01`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool",
+      "```",
+    })
+
+    local doc = parser.get_parsed_document(bufnr)
+    local you_msg = doc.messages[2]
+    local seg = you_msg.segments[1]
+    assert.equals("tool_result", seg.kind)
+    assert.equals("pending", seg.status)
+  end)
+
+  it("falls back to pending for invalid status values", function()
+    local bufnr = create_buffer({
+      "@Assistant: Running tool",
+      "",
+      "**Tool Use:** `calculator` (`toolu_01`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=xyz",
+      "```",
+    })
+
+    local doc = parser.get_parsed_document(bufnr)
+    local you_msg = doc.messages[2]
+    local seg = you_msg.segments[1]
+    assert.equals("tool_result", seg.kind)
+    assert.equals("pending", seg.status)
+  end)
+
+  it("coerces 'reject' to 'rejected'", function()
+    local bufnr = create_buffer({
+      "@Assistant: Running tool",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "rm -rf /" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=reject",
+      "```",
+    })
+
+    local doc = parser.get_parsed_document(bufnr)
+    local seg = doc.messages[2].segments[1]
+    assert.equals("rejected", seg.status)
+  end)
+
+  it("coerces 'deny' to 'denied'", function()
+    local bufnr = create_buffer({
+      "@Assistant: Running tool",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "rm -rf /" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=deny",
+      "```",
+    })
+
+    local doc = parser.get_parsed_document(bufnr)
+    local seg = doc.messages[2].segments[1]
+    assert.equals("denied", seg.status)
+  end)
+end)
+
+-- ============================================================================
+-- Pipeline: flemma:tool blocks not counted as resolved
+-- ============================================================================
+
+describe("Pipeline flemma:tool exclusion", function()
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("flemma:tool blocks do not clear pending_tool_uses in validation", function()
+    local lines = {
+      "@Assistant: Running tool",
+      "",
+      "**Tool Use:** `calculator` (`toolu_01`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "```",
+    }
+    local doc = parser.parse_lines(lines)
+    local pipeline = require("flemma.pipeline")
+    local ctx = require("flemma.context")
+    local prompt = pipeline.run(doc, ctx.from_file("test.chat"))
+
+    -- The tool should still be in pending_tool_calls because flemma:tool is a placeholder
+    assert.equals(1, #prompt.pending_tool_calls)
+    assert.equals("toolu_01", prompt.pending_tool_calls[1].id)
+  end)
+
+  it("resolved tool_result clears pending_tool_calls", function()
+    local lines = {
+      "@Assistant: Running tool",
+      "",
+      "**Tool Use:** `calculator` (`toolu_01`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```",
+      "4",
+      "```",
+    }
+    local doc = parser.parse_lines(lines)
+    local pipeline = require("flemma.pipeline")
+    local ctx = require("flemma.context")
+    local prompt = pipeline.run(doc, ctx.from_file("test.chat"))
+
+    assert.equals(0, #prompt.pending_tool_calls)
+  end)
+end)
+
+-- ============================================================================
+-- Processor: flemma:tool blocks excluded from API parts
+-- ============================================================================
+
+describe("Processor flemma:tool exclusion", function()
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("flemma:tool blocks are not included in evaluated parts", function()
+    local lines = {
+      "@Assistant: Running tool",
+      "",
+      "**Tool Use:** `calculator` (`toolu_01`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=approved",
+      "```",
+    }
+    local doc = parser.parse_lines(lines)
+    local processor = require("flemma.processor")
+    local ctx = require("flemma.context")
+    local evaluated = processor.evaluate(doc, ctx.from_file("test.chat"))
+
+    -- Find the user message
+    local you_msg = nil
+    for _, msg in ipairs(evaluated.messages) do
+      if msg.role == "You" then
+        you_msg = msg
+        break
+      end
+    end
+
+    -- The flemma:tool block should not produce any tool_result parts
+    assert.is_not_nil(you_msg)
+    local tool_result_count = 0
+    for _, part in ipairs(you_msg.parts) do
+      if part.kind == "tool_result" then
+        tool_result_count = tool_result_count + 1
+      end
+    end
+    assert.equals(0, tool_result_count)
+  end)
+end)
+
+-- ============================================================================
+-- Context: resolve_all_tool_blocks() Tests
+-- ============================================================================
+
+describe("Context resolve_all_tool_blocks", function()
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("groups tool blocks by status", function()
+    local bufnr = create_buffer({
+      "@Assistant: Three tools",
+      "",
+      "**Tool Use:** `calculator` (`toolu_01`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "**Tool Use:** `bash` (`toolu_02`)",
+      "```json",
+      '{ "command": "echo hi" }',
+      "```",
+      "",
+      "**Tool Use:** `read` (`toolu_03`)",
+      "```json",
+      '{ "path": "/tmp/x" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=approved",
+      "```",
+      "",
+      "**Tool Result:** `toolu_02`",
+      "",
+      "```flemma:tool status=denied",
+      "```",
+      "",
+      "**Tool Result:** `toolu_03`",
+      "",
+      "```flemma:tool status=pending",
+      "```",
+    })
+
+    local groups = context.resolve_all_tool_blocks(bufnr)
+    assert.equals(1, #(groups["approved"] or {}))
+    assert.equals(1, #(groups["denied"] or {}))
+    assert.equals(1, #(groups["pending"] or {}))
+    assert.equals("toolu_01", groups["approved"][1].tool_id)
+    assert.equals("toolu_02", groups["denied"][1].tool_id)
+    assert.equals("toolu_03", groups["pending"][1].tool_id)
+  end)
+
+  it("returns empty table when no tool blocks exist", function()
+    local bufnr = create_buffer({
+      "@You: Hello",
+      "",
+      "@Assistant: Hi there!",
+    })
+
+    local groups = context.resolve_all_tool_blocks(bufnr)
+    assert.same({}, groups)
+  end)
+
+  it("excludes approved blocks with user-edited content (content-overwrite protection)", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `calculator` (`toolu_01`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=approved",
+      "User edited this content",
+      "```",
+    })
+
+    local groups = context.resolve_all_tool_blocks(bufnr)
+    -- Should be excluded from approved group due to content-overwrite protection
+    assert.equals(0, #(groups["approved"] or {}))
+  end)
+
+  it("includes rejected blocks with user content (content for error message)", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "rm -rf /" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=rejected",
+      "I refuse to run this command.",
+      "```",
+    })
+
+    local groups = context.resolve_all_tool_blocks(bufnr)
+    assert.equals(1, #(groups["rejected"] or {}))
+    assert.equals("I refuse to run this command.", groups["rejected"][1].content)
+  end)
+
+  it("tool_result.start_line reflects current buffer positions after re-resolve", function()
+    -- Regression (Edge Case 1): When denied/rejected blocks above pending blocks
+    -- are resolved (injecting error results that change line count), the pending
+    -- block positions from the initial resolve_all_tool_blocks call become stale.
+    -- advance_phase2 must re-resolve after injections to get fresh positions.
+    --
+    -- This test verifies that resolve_all_tool_blocks returns accurate positions
+    -- for a pending block both before and after a denied block above it is replaced.
+    local bufnr = create_buffer({
+      "@Assistant: Two tools",
+      "",
+      "**Tool Use:** `bash` (`toolu_denied`)",
+      "```json",
+      '{ "command": "rm -rf /" }',
+      "```",
+      "",
+      "**Tool Use:** `calculator` (`toolu_pending`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_denied`",
+      "",
+      "```flemma:tool status=denied",
+      "```",
+      "",
+      "**Tool Result:** `toolu_pending`",
+      "",
+      "```flemma:tool status=pending",
+      "```",
+    })
+
+    local groups = context.resolve_all_tool_blocks(bufnr)
+    local pending_start_before = groups["pending"][1].tool_result.start_line
+
+    -- tool_result.start_line points to the **Tool Result:** header line
+    local lines_before = get_lines(bufnr)
+    assert.is_truthy(
+      lines_before[pending_start_before]:match("Tool Result"),
+      "start_line should point to Tool Result header before injection"
+    )
+
+    -- Inject error result for denied tool (changes line count)
+    injector.inject_result(bufnr, "toolu_denied", {
+      success = false,
+      error = "The tool was denied by a policy.",
+    })
+
+    -- Re-resolve to get fresh positions
+    local fresh_groups = context.resolve_all_tool_blocks(bufnr)
+    local pending_after = fresh_groups["pending"]
+    assert.equals(1, #pending_after)
+
+    local pending_start_after = pending_after[1].tool_result.start_line
+
+    -- The re-resolved position should still point to a valid Tool Result header
+    local lines_after = get_lines(bufnr)
+    assert.is_truthy(
+      lines_after[pending_start_after]:match("Tool Result"),
+      "Re-resolved start_line should point to Tool Result header, got: " .. (lines_after[pending_start_after] or "nil")
+    )
+
+    -- Verify: if line count changed, the position must have shifted
+    local line_count_before = 21
+    local line_count_after = #lines_after
+    if line_count_before ~= line_count_after then
+      -- If line count changed, original position is stale — this is the bug
+      -- we're protecting against in advance_phase2
+      assert.is_not.equals(
+        pending_start_before,
+        pending_start_after,
+        "Line count changed but positions didn't update — stale position bug"
+      )
+    end
+  end)
+end)
+
+-- ============================================================================
+-- Placeholder Injection with flemma:tool Tests
+-- ============================================================================
+
+describe("Approval Placeholder Injection with flemma:tool", function()
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("inject_placeholder with status=pending uses flemma:tool fence", function()
+    local bufnr = create_buffer({
+      "@Assistant: Here is the tool:",
+      "",
+      "**Tool Use:** `calculator` (`toolu_approval`)",
+      "```json",
+      '{ "expression": "5*5" }',
+      "```",
+    })
+
+    local header_line, err = injector.inject_placeholder(bufnr, "toolu_approval", { status = "pending" })
+    assert.is_nil(err)
+    assert.is_not_nil(header_line)
+
+    -- Verify the flemma:tool fence marker is in the buffer
+    local lines = get_lines(bufnr)
+    local found_tool = false
+    for _, line in ipairs(lines) do
+      if line == "```flemma:tool status=pending" then
+        found_tool = true
+        break
+      end
+    end
+    assert.is_true(found_tool, "Expected ```flemma:tool status=pending in buffer")
+  end)
+
+  it("inject_placeholder with status=approved uses flemma:tool fence", function()
+    local bufnr = create_buffer({
+      "@Assistant: Here is the tool:",
+      "",
+      "**Tool Use:** `calculator` (`toolu_auto`)",
+      "```json",
+      '{ "expression": "5*5" }',
+      "```",
+    })
+
+    injector.inject_placeholder(bufnr, "toolu_auto", { status = "approved" })
+
+    local lines = get_lines(bufnr)
+    local found = false
+    for _, line in ipairs(lines) do
+      if line == "```flemma:tool status=approved" then
+        found = true
+        break
+      end
+    end
+    assert.is_true(found, "Expected ```flemma:tool status=approved in buffer")
+  end)
+
+  it("inject_placeholder with status=denied uses flemma:tool fence", function()
+    local bufnr = create_buffer({
+      "@Assistant: Here is the tool:",
+      "",
+      "**Tool Use:** `bash` (`toolu_deny`)",
+      "```json",
+      '{ "command": "rm -rf /" }',
+      "```",
+    })
+
+    injector.inject_placeholder(bufnr, "toolu_deny", { status = "denied" })
+
+    local lines = get_lines(bufnr)
+    local found = false
+    for _, line in ipairs(lines) do
+      if line == "```flemma:tool status=denied" then
+        found = true
+        break
+      end
+    end
+    assert.is_true(found, "Expected ```flemma:tool status=denied in buffer")
+  end)
+
+  it("inject_result replaces flemma:tool marker with actual content", function()
+    local bufnr = create_buffer({
+      "@Assistant: Here is the tool:",
+      "",
+      "**Tool Use:** `calculator` (`toolu_exec`)",
+      "```json",
+      '{ "expression": "5*5" }',
+      "```",
+    })
+
+    -- Inject approved placeholder
+    injector.inject_placeholder(bufnr, "toolu_exec", { status = "approved" })
+
+    -- Verify flemma:tool is present
+    local lines = get_lines(bufnr)
+    local found_tool = false
+    for _, line in ipairs(lines) do
+      if line:match("^```flemma:tool") then
+        found_tool = true
+        break
+      end
+    end
+    assert.is_true(found_tool)
+
+    -- Inject actual result
+    injector.inject_result(bufnr, "toolu_exec", { success = true, output = "25" })
+
+    -- Verify flemma:tool is gone
+    lines = get_lines(bufnr)
+    for _, line in ipairs(lines) do
+      assert.is_false(line:match("^```flemma:tool") ~= nil, "flemma:tool fence should be replaced")
+    end
+
+    -- Verify result content is present
+    local found_result = false
+    for _, line in ipairs(lines) do
+      if line == "25" then
+        found_result = true
+        break
+      end
+    end
+    assert.is_true(found_result, "Expected result '25' in buffer")
+  end)
+end)
+
+-- ============================================================================
+-- Codeblock parser: info string capture Tests
+-- ============================================================================
+
+describe("Codeblock info string parsing", function()
+  local codeblock = require("flemma.codeblock")
+
+  it("captures info string after language tag", function()
+    local lines = {
+      "```flemma:tool status=pending",
+      "```",
+    }
+    local block, _ = codeblock.parse_fenced_block(lines, 1)
+    assert.is_not_nil(block)
+    assert.equals("flemma:tool", block.language)
+    assert.equals("status=pending", block.info)
+    assert.equals("", block.content)
+  end)
+
+  it("captures info string with multiple key-value pairs", function()
+    local lines = {
+      "```flemma:tool status=approved timeout=30",
+      "```",
+    }
+    local block, _ = codeblock.parse_fenced_block(lines, 1)
+    assert.is_not_nil(block)
+    assert.equals("flemma:tool", block.language)
+    assert.equals("status=approved timeout=30", block.info)
+  end)
+
+  it("returns nil info when no info string present", function()
+    local lines = {
+      "```json",
+      '{ "x": 1 }',
+      "```",
+    }
+    local block, _ = codeblock.parse_fenced_block(lines, 1)
+    assert.is_not_nil(block)
+    assert.equals("json", block.language)
+    assert.is_nil(block.info)
+  end)
+
+  it("returns nil info for bare fence", function()
+    local lines = {
+      "```",
+      "content",
+      "```",
+    }
+    local block, _ = codeblock.parse_fenced_block(lines, 1)
+    assert.is_not_nil(block)
+    assert.is_nil(block.language)
+    assert.is_nil(block.info)
+  end)
+
+  it("captures content inside flemma:tool block", function()
+    local lines = {
+      "```flemma:tool status=rejected",
+      "User rejection message here",
+      "```",
+    }
+    local block, _ = codeblock.parse_fenced_block(lines, 1)
+    assert.is_not_nil(block)
+    assert.equals("flemma:tool", block.language)
+    assert.equals("status=rejected", block.info)
+    assert.equals("User rejection message here", block.content)
+  end)
+end)
+
+-- ============================================================================
+-- Injector: resolve_error_message
+-- ============================================================================
+
+describe("Injector resolve_error_message", function()
+  it("returns DENIED_MESSAGE for denied status", function()
+    assert.equals(injector.DENIED_MESSAGE, injector.resolve_error_message("denied"))
+  end)
+
+  it("returns DENIED_MESSAGE for denied status even with content", function()
+    assert.equals(injector.DENIED_MESSAGE, injector.resolve_error_message("denied", "user content"))
+  end)
+
+  it("returns REJECTED_MESSAGE for rejected status with no content", function()
+    assert.equals(injector.REJECTED_MESSAGE, injector.resolve_error_message("rejected"))
+  end)
+
+  it("returns REJECTED_MESSAGE for rejected status with empty content", function()
+    assert.equals(injector.REJECTED_MESSAGE, injector.resolve_error_message("rejected", ""))
+  end)
+
+  it("returns user content for rejected status with non-empty content", function()
+    assert.equals("Do not run this.", injector.resolve_error_message("rejected", "Do not run this."))
+  end)
+end)
+
+-- ============================================================================
+-- Regression: advance_phase2 bails out when current_request is set
+-- ============================================================================
+
+describe("advance_phase2 current_request guard", function()
+  -- Regression: If the user presses <C-]> between scheduled Phase 1 and the
+  -- deferred Phase 2, a new send_or_execute → send_to_provider chain may set
+  -- current_request. The original scheduled Phase 2 should bail out to avoid
+  -- a double-send race.
+
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+    local st = require("flemma.state")
+    st.set_config({})
+  end)
+
+  it("does not execute approved tools when current_request is set", function()
+    -- Clear core module so it picks up the same state module as the test
+    package.loaded["flemma.core"] = nil
+    package.loaded["flemma.core.config.manager"] = nil
+
+    local st = require("flemma.state")
+    st.set_config({ tools = { autopilot = { enabled = false } } })
+
+    local bufnr = create_buffer({
+      "@Assistant: Tool call.",
+      "",
+      "**Tool Use:** `calculator` (`toolu_race_guard`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_race_guard`",
+      "",
+      "```flemma:tool status=approved",
+      "```",
+    })
+
+    -- Simulate: a provider request is already in flight (set by a concurrent <C-]>)
+    st.set_buffer_state(bufnr, "current_request", { id = "concurrent_req" })
+
+    -- Call send_or_execute — Phase 1 has nothing to categorize (no unmatched tool_uses),
+    -- so it goes directly to advance_phase2, which should bail out due to current_request.
+    local core = require("flemma.core")
+    core.send_or_execute({ bufnr = bufnr })
+
+    -- The flemma:tool block should still be present — it was not executed.
+    local lines = get_lines(bufnr)
+    local found_tool_block = false
+    for _, line in ipairs(lines) do
+      if line:match("flemma:tool status=approved") then
+        found_tool_block = true
+        break
+      end
+    end
+    assert.is_true(found_tool_block, "flemma:tool block should survive when current_request is set")
+
+    -- Clean up
+    st.set_buffer_state(bufnr, "current_request", nil)
   end)
 end)

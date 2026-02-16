@@ -24,6 +24,7 @@ end
 
 ---@class flemma.codeblock.FencedBlock
 ---@field language? string Language identifier (nil if omitted)
+---@field info? string Info string remainder after the language tag (nil if omitted)
 ---@field content string Fenced block content lines joined by newline
 ---@field fence_length integer Backtick count of the opening fence
 
@@ -38,10 +39,14 @@ function M.parse_fenced_block(lines, start_idx)
     return nil, start_idx
   end
 
-  local fence, lang = line:match("^(`+)([%w:._%-]*)%s*$")
+  local fence, lang = line:match("^(`+)([%w:._%-]*)")
   if not fence then
     return nil, start_idx
   end
+
+  -- Capture optional info string (remainder after language tag, trimmed)
+  local rest = line:sub(#fence + #lang + 1)
+  local info = rest:match("^%s+(.+)%s*$")
 
   local fence_len = #fence
   local content_lines = {}
@@ -52,6 +57,7 @@ function M.parse_fenced_block(lines, start_idx)
     if close_fence and #close_fence >= fence_len then
       return {
         language = lang ~= "" and lang or nil,
+        info = info,
         content = table.concat(content_lines, "\n"),
         fence_length = fence_len,
       },

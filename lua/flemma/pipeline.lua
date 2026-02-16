@@ -26,7 +26,10 @@ local function validate_tool_results(doc)
           position = seg.position,
         }
       elseif seg.kind == "tool_result" then
-        pending_tool_uses[seg.tool_use_id] = nil
+        -- Only clear when this is a resolved result (no status), not a flemma:tool placeholder
+        if not seg.status then
+          pending_tool_uses[seg.tool_use_id] = nil
+        end
       end
     end
   end

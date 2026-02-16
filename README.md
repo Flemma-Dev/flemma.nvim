@@ -317,7 +317,7 @@ Flemma's tool system is what makes it an agent. Models can execute shell command
 1. When you send a message, Flemma includes definitions for available tools in the API request.
 2. If the model decides to use a tool, it emits a `**Tool Use:**` block in its response.
 3. With [autopilot](#autopilot) enabled (the default), approved tools execute automatically and the conversation re-sends until the model stops calling tools or a tool requires your approval.
-4. When a tool needs approval, Flemma injects a `flemma:pending` placeholder and pauses. Press <kbd>Ctrl-]</kbd> to approve and resume.
+4. When a tool needs approval, Flemma injects a `flemma:tool status=pending` placeholder and pauses. Press <kbd>Ctrl-]</kbd> to approve and resume.
 
 A single <kbd>Ctrl-]</kbd> can kick off a chain of dozens of tool calls – the model reads a codebase, plans changes, edits files, runs tests, and iterates on failures, all without further input. You watch it happen in real time in the buffer.
 
@@ -352,7 +352,7 @@ You are always in control. The entire conversation – every tool call, every re
 
 - **Turn limit:** A configurable safety cap (`tools.autopilot.max_turns`, default 100) stops the loop with a warning if exceeded, preventing runaway cost from models that loop without converging.
 - **Cancellation:** <kbd>Ctrl-C</kbd> cancels the active request or tool execution and fully disarms autopilot – no surprises when you next press <kbd>Ctrl-]</kbd>.
-- **Conflict detection:** If autopilot pauses for approval and you edit the content inside a `flemma:pending` block, Flemma detects your changes and will not overwrite them. It warns and stays paused so you can review.
+- **Conflict detection:** If autopilot pauses for approval and you edit the content inside a `flemma:tool` block, Flemma detects your changes and will not overwrite them. It warns and stays paused so you can review.
 
 ### Runtime control
 

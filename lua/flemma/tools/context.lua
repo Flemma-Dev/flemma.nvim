@@ -117,28 +117,84 @@ function M.resolve_all_pending(bufnr)
   return pending
 end
 
----Find all tool_use blocks whose tool_result has the `flemma:pending` marker (awaiting execution).
----These are placeholders injected by the approval flow that the user has not manually overridden.
----Results with user-edited content inside the `flemma:pending` block are excluded and warned about.
+---@class flemma.tools.ToolBlockContext : flemma.tools.ToolContext
+---@field status flemma.ast.ToolStatus
+---@field content string
+---@field is_error boolean
+---@field tool_result { start_line: integer } Position of the matching tool_result block
+
+---Find all tool_result segments with a `flemma:tool` status, grouped by status.
+---Each entry pairs the tool_result metadata with its matching tool_use context.
+---Results with status=approved or status=pending that have non-empty content are
+---excluded from the main groups (content-overwrite protection) and warned about.
 ---@param bufnr integer Buffer number
----@return flemma.tools.ToolContext[] awaiting_contexts
-function M.resolve_all_awaiting_execution(bufnr)
+---@return table<flemma.ast.ToolStatus, flemma.tools.ToolBlockContext[]>
+function M.resolve_all_tool_blocks(bufnr)
   local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
 
-  -- Find tool_result segments marked as pending, excluding those with user-edited content
-  local pending_result_ids = {}
-  local conflict_count = 0
+  -- Collect tool_result segments with status, keyed by tool_use_id
+  ---@type table<string, { status: flemma.ast.ToolStatus, content: string, is_error: boolean, tool_result_start_line: integer }>
+  local status_results = {}
   for _, msg in ipairs(doc.messages) do
     if msg.role == "You" then
       for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_result" and seg.pending and not seg.is_error then
-          if seg.has_content then
-            conflict_count = conflict_count + 1
-          else
-            pending_result_ids[seg.tool_use_id] = true
-          end
+        if seg.kind == "tool_result" and seg.status then
+          status_results[seg.tool_use_id] = {
+            status = seg.status,
+            content = seg.content,
+            is_error = seg.is_error,
+            tool_result_start_line = seg.position.start_line,
+          }
         end
+      end
+    end
+  end
+
+  if vim.tbl_isempty(status_results) then
+    return {}
+  end
+
+  -- Build tool_use lookup for matching
+  ---@type table<string, flemma.ast.ToolUseSegment>
+  local tool_use_map = {}
+  for _, msg in ipairs(doc.messages) do
+    if msg.role == "Assistant" then
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "tool_use" then
+          tool_use_map[seg.id] = seg --[[@as flemma.ast.ToolUseSegment]]
+        end
+      end
+    end
+  end
+
+  -- Group by status, applying content-overwrite protection
+  ---@type table<flemma.ast.ToolStatus, flemma.tools.ToolBlockContext[]>
+  local groups = {}
+  local conflict_count = 0
+
+  for tool_use_id, info in pairs(status_results) do
+    local tu = tool_use_map[tool_use_id]
+    if tu then
+      -- Content-overwrite protection: approved or pending with user-edited content
+      if (info.status == "approved" or info.status == "pending") and info.content ~= "" then
+        conflict_count = conflict_count + 1
+      else
+        if not groups[info.status] then
+          groups[info.status] = {}
+        end
+        table.insert(groups[info.status], {
+          tool_id = tu.id,
+          tool_name = tu.name,
+          input = tu.input or {},
+          node = tu,
+          start_line = tu.position.start_line,
+          end_line = tu.position.end_line,
+          status = info.status,
+          content = info.content,
+          is_error = info.is_error,
+          tool_result = { start_line = info.tool_result_start_line },
+        })
       end
     end
   end
@@ -147,32 +203,45 @@ function M.resolve_all_awaiting_execution(bufnr)
     vim.notify(
       "Flemma: "
         .. conflict_count
-        .. " tool result(s) have edited content inside flemma:pending – "
+        .. " tool result(s) have edited content inside flemma:tool – "
         .. "skipping execution, your content will be sent as-is.",
       vim.log.levels.WARN
     )
   end
 
-  if vim.tbl_isempty(pending_result_ids) then
-    return {}
+  -- Sort each group by start_line for deterministic document order
+  for _, group in pairs(groups) do
+    table.sort(group, function(a, b)
+      return a.start_line < b.start_line
+    end)
   end
 
-  -- Find matching tool_use segments
+  return groups
+end
+
+---Find all tool_use blocks whose tool_result has a pending status (awaiting execution).
+---Thin wrapper around resolve_all_tool_blocks() for backward compatibility.
+---Results with user-edited content inside the pending block are excluded.
+---Error tool_results (is_error=true) are excluded — they already have a result.
+---@param bufnr integer Buffer number
+---@return flemma.tools.ToolContext[] awaiting_contexts
+function M.resolve_all_awaiting_execution(bufnr)
+  local groups = M.resolve_all_tool_blocks(bufnr)
+  local pending = groups["pending"] or {}
+
+  -- Convert ToolBlockContext back to ToolContext (strip status/content/is_error)
+  -- Skip error results — they already have content and shouldn't be re-executed
   local awaiting = {}
-  for _, msg in ipairs(doc.messages) do
-    if msg.role == "Assistant" then
-      for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_use" and pending_result_ids[seg.id] then
-          table.insert(awaiting, {
-            tool_id = seg.id,
-            tool_name = seg.name,
-            input = seg.input or {},
-            node = seg,
-            start_line = seg.position.start_line,
-            end_line = seg.position.end_line,
-          })
-        end
-      end
+  for _, ctx in ipairs(pending) do
+    if not ctx.is_error then
+      table.insert(awaiting, {
+        tool_id = ctx.tool_id,
+        tool_name = ctx.tool_name,
+        input = ctx.input,
+        node = ctx.node,
+        start_line = ctx.start_line,
+        end_line = ctx.end_line,
+      })
     end
   end
 

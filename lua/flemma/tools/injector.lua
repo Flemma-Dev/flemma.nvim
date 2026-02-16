@@ -3,6 +3,23 @@
 ---@class flemma.tools.Injector
 local M = {}
 
+--- Error messages for tool status resolution
+M.DENIED_MESSAGE = "The tool was denied by a policy."
+M.REJECTED_MESSAGE = "This tool has been rejected by the user."
+
+---Resolve the error message for a denied or rejected tool status.
+---For rejected: uses user-provided content if non-empty, otherwise the default message.
+---For denied: always uses the policy message.
+---@param status "rejected"|"denied"
+---@param content? string user content from the tool block
+---@return string
+function M.resolve_error_message(status, content)
+  if status == "rejected" then
+    return (content and content ~= "") and content or M.REJECTED_MESSAGE
+  end
+  return M.DENIED_MESSAGE
+end
+
 local codeblock = require("flemma.codeblock")
 local json = require("flemma.json")
 
@@ -123,7 +140,7 @@ end
 --- which is required for correct multi-tool ordering on subsequent injections.
 --- @param bufnr integer
 --- @param tool_id string
---- @param inject_opts? { pending?: boolean } When pending=true, uses ```flemma:pending fence marker
+--- @param inject_opts? { status?: flemma.ast.ToolStatus } When status is set, uses ```flemma:tool status=X fence
 --- @return integer|nil header_line 1-based line number where header was inserted, or nil on error
 --- @return string|nil error message
 --- @return { modified: boolean }|nil opts Metadata about the injection (e.g., whether buffer was modified)
@@ -173,7 +190,12 @@ function M.inject_placeholder(bufnr, tool_id, inject_opts)
   local you_msg = find_you_message_after(doc, assistant_idx)
 
   local header_text = ("**Tool Result:** `%s`"):format(tool_id)
-  local fence_open = (inject_opts and inject_opts.pending) and "```flemma:pending" or "```"
+  local fence_open
+  if inject_opts and inject_opts.status then
+    fence_open = "```flemma:tool status=" .. inject_opts.status
+  else
+    fence_open = "```"
+  end
 
   if you_msg then
     -- @You: message exists - find where to insert our placeholder
