@@ -1,6 +1,7 @@
 --- OpenAI provider for Flemma
 --- Implements the OpenAI Responses API integration
 local base = require("flemma.provider.base")
+local json = require("flemma.json")
 local log = require("flemma.logging")
 local models = require("flemma.models")
 
@@ -187,7 +188,7 @@ function M.build_request(self, prompt, context)
       for _, p in ipairs(msg.parts or {}) do
         if p.kind == "thinking" and p.signature and p.signature.provider == "openai" then
           local json_str = vim.base64.decode(p.signature.value)
-          local decode_ok, reasoning_item = pcall(vim.fn.json_decode, json_str)
+          local decode_ok, reasoning_item = pcall(json.decode, json_str)
           if decode_ok and type(reasoning_item) == "table" then
             table.insert(input_items, reasoning_item)
             log.debug("openai.build_request: Added reasoning item from thinking block signature")
@@ -227,7 +228,7 @@ function M.build_request(self, prompt, context)
             type = "function_call",
             call_id = normalized_id,
             name = p.name,
-            arguments = vim.fn.json_encode(p.input),
+            arguments = json.encode(p.input),
             status = "completed",
           })
           log.debug("openai.build_request: Added function_call for " .. p.name .. " (" .. normalized_id .. ")")
@@ -378,7 +379,7 @@ function M._emit_reasoning_block(self, callbacks)
   local stripped = vim.trim(summary)
 
   -- Serialize the full reasoning item as base64 for the signature attribute
-  local signature = vim.base64.encode(vim.fn.json_encode(reasoning_item))
+  local signature = vim.base64.encode(json.encode(reasoning_item))
 
   local prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
   if #stripped > 0 then
@@ -459,7 +460,7 @@ function M.process_response_line(self, line, callbacks)
   end
 
   -- Parse JSON content
-  local ok, data = pcall(vim.fn.json_decode, parsed.content)
+  local ok, data = pcall(json.decode, parsed.content)
   if not ok then
     log.error("openai.process_response_line(): Failed to parse JSON from response: " .. parsed.content)
     return
@@ -523,7 +524,7 @@ function M.process_response_line(self, line, callbacks)
       -- Preserve the original JSON string from the API to avoid decode/re-encode
       -- roundtrips that alter formatting and hurt prompt caching hit rates.
       local arguments_json = data.item.arguments or ""
-      local parse_ok, _ = pcall(vim.fn.json_decode, arguments_json)
+      local parse_ok, _ = pcall(json.decode, arguments_json)
       if not parse_ok then
         log.warn("openai.process_response_line(): Failed to parse tool arguments JSON: " .. arguments_json)
         arguments_json = "{}"

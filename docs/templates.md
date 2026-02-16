@@ -30,7 +30,7 @@ require("flemma.codeblock.parsers").register("yaml", function(code, context)
   -- `code` is the raw fenced block content (string)
   -- `context` is an optional table with __filename, __dirname, and user variables
   -- Must return a table of variables; errors are caught and reported as diagnostics
-  return vim.fn.json_decode(vim.fn.system("yq -o json", code))
+  return require("flemma.json").decode(vim.fn.system("yq -o json", code))
 end)
 ```
 
@@ -124,7 +124,7 @@ Key built-ins:
 
 - Expressions without an explicit `return` are auto-wrapped: `{{ 1 + 1 }}` becomes `return 1 + 1` internally.
 - `nil` results produce no output (empty string).
-- Tables are automatically JSON-encoded via `vim.fn.json_encode()`.
+- Tables are automatically JSON-encoded via `flemma.json.encode()`.
 - Errors are downgraded to warnings. The request still sends, and the literal `{{ expression }}` remains in the prompt so you can see what failed.
 
 ## `include()` helper

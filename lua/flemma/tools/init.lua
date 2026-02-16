@@ -3,6 +3,7 @@
 ---@class flemma.Tools
 local M = {}
 
+local json = require("flemma.json")
 local registry = require("flemma.tools.registry")
 
 local builtin_tools = {
@@ -133,8 +134,8 @@ function M.build_description(tool)
     local schema_with_hint = vim.tbl_extend("keep", {
       ["$schema"] = "https://json-schema.org/draft/2020-12/schema",
     }, tool.output_schema)
-    local json = vim.fn.json_encode(schema_with_hint)
-    desc = desc .. "\n\nReturns (JSON Schema): " .. json
+    local schema_json = json.encode(schema_with_hint)
+    desc = desc .. "\n\nReturns (JSON Schema): " .. schema_json
   end
 
   return desc

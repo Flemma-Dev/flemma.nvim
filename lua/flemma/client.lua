@@ -1,5 +1,6 @@
 --- HTTP client for Flemma
 --- Handles all HTTP requests and transport mechanisms
+local json = require("flemma.json")
 local log = require("flemma.logging")
 
 ---@class flemma.Client
@@ -62,7 +63,7 @@ local function create_temp_file(request_body)
     return nil, "Failed to create temporary file"
   end
 
-  f:write(vim.fn.json_encode(request_body))
+  f:write(json.encode(request_body))
   f:close()
 
   return tmp_file
@@ -208,7 +209,7 @@ function M.send_request(opts)
     -- Replace the temporary file path with @request.json for easier reproduction
     curl_cmd_log = curl_cmd_log:gsub(vim.fn.escape(tmp_file, "%-%."), "request.json")
     log.debug("send_request(): ... $ " .. curl_cmd_log)
-    log.debug("send_request(): ... @request.json <<< " .. vim.fn.json_encode(opts.request_body))
+    log.debug("send_request(): ... @request.json <<< " .. json.encode(opts.request_body))
   end
 
   -- Buffers for partial lines split across on_stdout/on_stderr callbacks.

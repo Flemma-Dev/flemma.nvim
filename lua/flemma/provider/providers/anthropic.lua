@@ -1,6 +1,7 @@
 --- Anthropic provider for Flemma
 --- Implements the Anthropic (Claude) API integration
 local base = require("flemma.provider.base")
+local json = require("flemma.json")
 local log = require("flemma.logging")
 
 ---@class flemma.provider.Anthropic : flemma.provider.Base
@@ -375,7 +376,7 @@ function M.process_response_line(self, line, callbacks)
   end
 
   -- Parse JSON data
-  local ok, data = pcall(vim.fn.json_decode, parsed.content)
+  local ok, data = pcall(json.decode, parsed.content)
   if not ok then
     log.error("anthropic.process_response_line(): Failed to parse JSON: " .. parsed.content)
     return
@@ -561,14 +562,14 @@ function M.process_response_line(self, line, callbacks)
     local current_tool = self._response_buffer.extra.current_tool_use
     if current_tool then
       local input_json = self._response_buffer.extra.accumulated_tool_input or ""
-      local parse_ok, input = pcall(vim.fn.json_decode, input_json)
+      local parse_ok, input = pcall(json.decode, input_json)
       if not parse_ok then
         input = {}
         log.warn("anthropic.process_response_line(): Failed to parse tool input JSON: " .. input_json)
       end
 
       -- Pretty-print JSON for display
-      local json_str = vim.fn.json_encode(input)
+      local json_str = json.encode(input)
 
       -- Determine fence length based on content (dynamic fence sizing)
       local max_ticks = 0
@@ -746,7 +747,7 @@ function M.try_import_from_buffer(self, lines)
   local json_str = import_prepare_json(content)
 
   -- Parse JSON with better error handling
-  local ok, data = pcall(vim.fn.json_decode, json_str)
+  local ok, data = pcall(json.decode, json_str)
   if not ok then
     -- Log the problematic JSON string for debugging
     -- Get temp dir and path separator

@@ -1,6 +1,7 @@
 --- Google Vertex AI provider for Flemma
 --- Implements the Google Vertex AI API integration
 local base = require("flemma.provider.base")
+local json = require("flemma.json")
 local log = require("flemma.logging")
 
 local TOKEN_TTL_SECONDS = 3600
@@ -607,7 +608,7 @@ function M.process_response_line(self, line, callbacks)
   end
 
   -- Parse JSON data
-  local ok, data = pcall(vim.fn.json_decode, parsed.content)
+  local ok, data = pcall(json.decode, parsed.content)
   if not ok then
     log.error("vertex.process_response_line(): Failed to parse JSON: " .. parsed.content)
     return
@@ -655,7 +656,7 @@ function M.process_response_line(self, line, callbacks)
           local generated_id = string.format("urn:flemma:tool:%s:%s", fc.name, unique_suffix)
 
           -- Determine fence length for JSON content
-          local json_str = vim.fn.json_encode(fc.args or {})
+          local json_str = json.encode(fc.args or {})
           local max_ticks = 0
           for ticks in json_str:gmatch("`+") do
             max_ticks = math.max(max_ticks, #ticks)

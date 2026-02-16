@@ -204,7 +204,7 @@ describe(":FlemmaSend command", function()
     assert.is_not_nil(file, "Fixture file could not be opened")
     local fixture_content = file:read("*a")
     file:close()
-    local error_data = vim.fn.json_decode(fixture_content)
+    local error_data = vim.json.decode(fixture_content)
     local expected_error_message = "Flemma: " .. error_data.error.message
 
     vim.cmd("FlemmaSend")

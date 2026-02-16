@@ -45,6 +45,10 @@ Every module uses `local M = {}` / `return M`. Every module has a `---@class fle
 - Types/classes: `PascalCase` with dot-namespacing following file path (`flemma.ast.DocumentNode`)
 - Private functions: `local function name()` (not exported on `M`)
 
+### JSON handling
+
+- **Always use `require("flemma.json")` for all JSON operations.** Never use `vim.fn.json_decode`, `vim.fn.json_encode`, `vim.json.decode`, or `vim.json.encode` directly. The `flemma.json` module wraps `vim.json` with `luanil` options so JSON `null` becomes Lua `nil` (not `vim.NIL`). Using `vim.fn.json_decode` or bare `vim.json.decode` will reintroduce the `vim.NIL` bug where JSON `null` becomes a truthy userdata value that passes `if x then` guards and crashes on math/string operations.
+
 ### Error handling
 
 - `vim.notify()` for user-facing errors and warnings
@@ -178,6 +182,8 @@ When you resolve a non-obvious issue — something that required real investigat
 - **Tool header backtick format is critical.** The parser relies on exact backtick wrapping in ``**Tool Use:** `name` (`id`)`` and `` **Tool Result:** `id` `` headers. Missing or misplaced backticks will cause parsing failures.
 
 - **Don't abbreviate variable names.** Use full, descriptive names (`definition` not `def_entry`, `provider_name` not `prov_name`). The codebase consistently spells things out; cryptic abbreviations stand out and hurt readability.
+
+- **JSON `null` becomes `vim.NIL` (truthy userdata), not Lua `nil`.** `vim.fn.json_decode` and bare `vim.json.decode` map JSON `null` to `vim.NIL`, which passes `if x then` guards and crashes on `math.floor(x)`, `x * 1000`, `"str" .. x`, etc. The `flemma.json` module wraps `vim.json.decode` with `luanil = { object = true, array = true }` to convert `null` to real `nil`. Always use `require("flemma.json")` — never call `vim.fn.json_*` or `vim.json.*` directly.
 
 ## Session Closure Checklist
 

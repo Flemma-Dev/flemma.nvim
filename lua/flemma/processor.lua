@@ -1,6 +1,7 @@
 local ctxutil = require("flemma.context")
 local eval = require("flemma.eval")
 local emittable = require("flemma.emittable")
+local json = require("flemma.json")
 local codeblock_parsers = require("flemma.codeblock.parsers")
 
 ---@class flemma.Processor
@@ -13,9 +14,9 @@ local function to_text(v)
     return ""
   end
   if type(v) == "table" then
-    local ok, json = pcall(vim.fn.json_encode, v)
+    local ok, encoded = pcall(json.encode, v)
     if ok then
-      return json
+      return encoded
     end
   end
   return tostring(v)

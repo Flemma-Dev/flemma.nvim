@@ -191,6 +191,22 @@ describe("flemma.codeblock", function()
       assert.is_true(has_json_error)
     end)
 
+    it("should decode JSON null values as nil, not vim.NIL", function()
+      local json_parser = require("flemma.codeblock.parsers.json")
+      local result = json_parser.parse('{"offset": null, "limit": null, "name": "test"}')
+      assert.is_nil(result.offset)
+      assert.is_nil(result.limit)
+      assert.are.equal("test", result.name)
+    end)
+
+    it("should decode JSON null in arrays as nil", function()
+      local json_parser = require("flemma.codeblock.parsers.json")
+      local result = json_parser.parse('{"items": [1, null, 3]}')
+      assert.are.equal(1, result.items[1])
+      assert.is_nil(result.items[2])
+      assert.are.equal(3, result.items[3])
+    end)
+
     it("should report error on non-object JSON", function()
       local lines = {
         "```json",

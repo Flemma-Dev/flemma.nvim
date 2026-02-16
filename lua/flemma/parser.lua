@@ -1,5 +1,6 @@
 local ast = require("flemma.ast")
 local codeblock = require("flemma.codeblock")
+local json = require("flemma.json")
 
 ---@class flemma.Parser
 local M = {}
@@ -212,7 +213,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
           else
             -- If parsed to a simple value, convert to string for API
             if type(content) == "table" then
-              result_content = vim.fn.json_encode(content)
+              result_content = json.encode(content)
             else
               result_content = tostring(content)
             end

@@ -69,6 +69,7 @@ Capabilities contract (registered via `registry.register`)
 Missing boolean capabilities default to `false` at registration time.
 ]]
 
+local json = require("flemma.json")
 local log = require("flemma.logging")
 
 -- ============================================================================
@@ -580,7 +581,7 @@ function M._check_buffered_response(self, callbacks)
   end
 
   local body = table.concat(self._response_buffer.lines, "\n")
-  local ok, data = pcall(vim.fn.json_decode, body)
+  local ok, data = pcall(json.decode, body)
   if not ok then
     return false
   end
@@ -605,7 +606,7 @@ function M._handle_non_sse_line(self, line, callbacks)
   self:_buffer_response_line(line)
 
   -- Try parsing as a direct JSON error response (for single-line errors)
-  local ok, error_data = pcall(vim.fn.json_decode, line)
+  local ok, error_data = pcall(json.decode, line)
   if ok and error_data and type(error_data) == "table" then
     local msg = self:extract_json_response_error(error_data)
     if msg and callbacks.on_error then

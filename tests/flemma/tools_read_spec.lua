@@ -61,6 +61,16 @@ describe("Read Tool", function()
     assert.is_truthy(result.error:match("No path"))
   end)
 
+  describe("nil offset and limit", function()
+    it("reads full file when offset and limit are nil", function()
+      vim.fn.writefile({ "hello", "world" }, test_file)
+
+      local result = read_def.execute({ label = "test", path = test_file, offset = nil, limit = nil })
+      assert.is_true(result.success)
+      assert.equals("hello\nworld", result.output)
+    end)
+  end)
+
   describe("offset and limit", function()
     before_each(function()
       -- Write a 10-line file

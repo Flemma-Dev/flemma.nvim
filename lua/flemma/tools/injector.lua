@@ -4,6 +4,7 @@
 local M = {}
 
 local codeblock = require("flemma.codeblock")
+local json = require("flemma.json")
 
 --- Find the assistant message containing a tool_use with the given ID
 --- @param doc table Parsed document AST
@@ -80,7 +81,7 @@ local function format_result_lines(result)
     end
   else
     if type(result.output) == "table" then
-      content = vim.fn.json_encode(result.output)
+      content = json.encode(result.output)
     else
       content = tostring(result.output or "")
     end

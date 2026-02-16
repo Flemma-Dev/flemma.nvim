@@ -493,7 +493,7 @@ describe("OpenAI Provider", function()
         summary = { { type = "summary_text", text = "I thought about this." } },
         encrypted_content = "encrypted_data_here",
       }
-      local signature = vim.base64.encode(vim.fn.json_encode(reasoning_item))
+      local signature = vim.base64.encode(vim.json.encode(reasoning_item))
 
       local prompt = {
         system = nil,
@@ -1021,12 +1021,12 @@ describe("OpenAI Provider", function()
       }
 
       -- Encode
-      local json_str = vim.fn.json_encode(reasoning_item)
+      local json_str = vim.json.encode(reasoning_item)
       local signature = vim.base64.encode(json_str)
 
       -- Decode
       local decoded_json = vim.base64.decode(signature)
-      local ok, decoded = pcall(vim.fn.json_decode, decoded_json)
+      local ok, decoded = pcall(vim.json.decode, decoded_json)
 
       assert.is_true(ok, "Should decode successfully")
       assert.equals("reasoning", decoded.type)
