@@ -171,4 +171,117 @@ describe("flemma.status", function()
       assert.equals(0.5, data.parameters.merged.temperature)
     end)
   end)
+
+  describe("format", function()
+    it("returns lines with section headers", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
+        parameters = { merged = { max_tokens = 8192, temperature = 0.7 } },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+        },
+        tools = { enabled = { "bash", "read_file" }, disabled = {} },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local lines = status.format(data, false)
+      assert.is_table(lines)
+
+      local text = table.concat(lines, "\n")
+      assert.truthy(text:find("Provider"), "expected Provider header")
+      assert.truthy(text:find("Parameters"), "expected Parameters header")
+      assert.truthy(text:find("Autopilot"), "expected Autopilot header")
+      assert.truthy(text:find("Sandbox"), "expected Sandbox header")
+      assert.truthy(text:find("Tools"), "expected Tools header")
+    end)
+
+    it("includes full config dump when verbose is true", function()
+      local state = require("flemma.state")
+      ---@diagnostic disable-next-line: missing-fields
+      state.set_config({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5-20250929",
+        parameters = { max_tokens = 8192 },
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
+        parameters = { merged = { max_tokens = 8192 } },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+        },
+        tools = { enabled = { "bash" }, disabled = {} },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local lines = status.format(data, true)
+      local text = table.concat(lines, "\n")
+      assert.truthy(text:find("Config %(full%)"), "expected Config (full) header")
+    end)
+
+    it("shows frontmatter override annotations", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
+        parameters = {
+          merged = { max_tokens = 8192, thinking = "low" },
+          frontmatter_overrides = { thinking = "low" },
+        },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, frontmatter_override = false },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+        },
+        tools = { enabled = {}, disabled = {} },
+        buffer = { is_chat = true, bufnr = 1 },
+      }
+
+      local lines = status.format(data, false)
+      local text = table.concat(lines, "\n")
+      assert.truthy(text:find("frontmatter"), "expected frontmatter annotation")
+    end)
+
+    it("shows tools summary", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
+        parameters = { merged = {} },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+        },
+        tools = { enabled = { "bash", "read_file" }, disabled = { "execute_command" } },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local lines = status.format(data, false)
+      local text = table.concat(lines, "\n")
+      assert.truthy(text:find("✓"), "expected enabled tool marker")
+      assert.truthy(text:find("✗"), "expected disabled tool marker")
+      assert.truthy(text:find("bash"), "expected bash tool name")
+      assert.truthy(text:find("read_file"), "expected read_file tool name")
+      assert.truthy(text:find("execute_command"), "expected execute_command tool name")
+    end)
+  end)
 end)

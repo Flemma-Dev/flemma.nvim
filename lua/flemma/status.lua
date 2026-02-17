@@ -138,6 +138,110 @@ local function collect_tools()
   }
 end
 
+---Format a scalar or table value as a display string
+---@param value any
+---@return string
+local function format_value(value)
+  if type(value) == "table" then
+    return vim.inspect(value, { newline = " ", indent = "" })
+  end
+  return tostring(value)
+end
+
+---Format status data into display lines for a scratch buffer
+---@param data flemma.status.Data
+---@param verbose boolean Whether to include the full config dump
+---@return string[]
+function M.format(data, verbose)
+  local lines = {}
+
+  ---Append a line to the output
+  ---@param line string
+  local function add(line)
+    table.insert(lines, line)
+  end
+
+  -- Title
+  add("Flemma Status")
+  add(string.rep("═", 40))
+  add("")
+
+  -- Provider section
+  add("Provider")
+  add("  name: " .. data.provider.name)
+  add("  model: " .. (data.provider.model or "(none)"))
+  add("  initialized: " .. tostring(data.provider.initialized))
+  add("")
+
+  -- Parameters (merged) section
+  add("Parameters (merged)")
+  local sorted_keys = {}
+  for key, _ in pairs(data.parameters.merged) do
+    table.insert(sorted_keys, key)
+  end
+  table.sort(sorted_keys)
+  for _, key in ipairs(sorted_keys) do
+    local value = data.parameters.merged[key]
+    add("  " .. key .. ": " .. format_value(value))
+    if data.parameters.frontmatter_overrides and data.parameters.frontmatter_overrides[key] ~= nil then
+      add("  ⚑ frontmatter override: " .. key .. " = " .. format_value(data.parameters.frontmatter_overrides[key]))
+    end
+  end
+  add("")
+
+  -- Autopilot section
+  add("Autopilot")
+  local autopilot_status = data.autopilot.enabled and "enabled" or "disabled"
+  add("  status: " .. autopilot_status .. " (" .. data.autopilot.buffer_state .. ")")
+  add("  max_turns: " .. tostring(data.autopilot.max_turns))
+  if data.autopilot.frontmatter_override ~= nil then
+    add("  ⚑ frontmatter override: autopilot = " .. tostring(data.autopilot.frontmatter_override))
+  end
+  add("")
+
+  -- Sandbox section
+  add("Sandbox")
+  add("  status: " .. (data.sandbox.enabled and "enabled" or "disabled"))
+  add("  config setting: " .. (data.sandbox.config_enabled and "enabled" or "disabled"))
+  if data.sandbox.runtime_override ~= nil then
+    add("  runtime override: " .. tostring(data.sandbox.runtime_override))
+  end
+  add(
+    "  backend: "
+      .. (data.sandbox.backend or "(none)")
+      .. (data.sandbox.backend_mode and (" (" .. data.sandbox.backend_mode .. ")") or "")
+  )
+  add("  backend available: " .. tostring(data.sandbox.backend_available))
+  if data.sandbox.backend_error then
+    add("  backend error: " .. data.sandbox.backend_error)
+  end
+  add("")
+
+  -- Tools section
+  local enabled_count = #data.tools.enabled
+  local disabled_count = #data.tools.disabled
+  add("Tools (" .. enabled_count .. " enabled, " .. disabled_count .. " disabled)")
+  if enabled_count > 0 then
+    add("  ✓ " .. table.concat(data.tools.enabled, ", "))
+  end
+  if disabled_count > 0 then
+    add("  ✗ " .. table.concat(data.tools.disabled, ", "))
+  end
+
+  -- Verbose: full config dump
+  if verbose then
+    add("")
+    add("Config (full)")
+    add(string.rep("─", 40))
+    local config_text = vim.inspect(state.get_config())
+    for line in config_text:gmatch("[^\n]+") do
+      add(line)
+    end
+  end
+
+  return lines
+end
+
 ---Collect all runtime status data for a buffer
 ---@param bufnr integer Buffer number (0 for current)
 ---@return flemma.status.Data
