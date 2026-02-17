@@ -265,4 +265,38 @@ describe("merge_parameters with registered defaults", function()
     local merged = config_manager.merge_parameters({}, "openai")
     assert.are.equal("auto", merged.reasoning_summary)
   end)
+
+  it("explicit provider_overrides merges with provider sub-table", function()
+    -- Simulates: user config has vertex.project_id, preset provides only location
+    local merged = config_manager.merge_parameters(
+      { vertex = { project_id = "my-project", location = "us-central1" } },
+      "vertex",
+      { location = "europe-west1" }
+    )
+    -- Explicit override wins for location
+    assert.are.equal("europe-west1", merged.location)
+    -- project_id from sub-table survives (not dropped by the override)
+    assert.are.equal("my-project", merged.project_id)
+  end)
+
+  it("empty explicit overrides preserve provider sub-table", function()
+    -- Simulates: :Flemma switch vertex (no extra params)
+    local merged = config_manager.merge_parameters(
+      { vertex = { project_id = "my-project", location = "us-central1" } },
+      "vertex",
+      {}
+    )
+    assert.are.equal("my-project", merged.project_id)
+    assert.are.equal("us-central1", merged.location)
+  end)
+
+  it("explicit overrides win over sub-table on conflict", function()
+    local merged = config_manager.merge_parameters(
+      { vertex = { project_id = "old-project", location = "us-central1" } },
+      "vertex",
+      { project_id = "new-project" }
+    )
+    assert.are.equal("new-project", merged.project_id)
+    assert.are.equal("us-central1", merged.location)
+  end)
 end)

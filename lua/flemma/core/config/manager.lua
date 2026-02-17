@@ -117,7 +117,22 @@ end
 function M.merge_parameters(base_params, provider_name, provider_overrides)
   local merged_params = {}
   base_params = base_params or {}
-  provider_overrides = provider_overrides or base_params[provider_name] or {}
+  -- Merge provider sub-table from base_params with explicit overrides (explicit wins).
+  -- Previously, explicit overrides replaced the sub-table entirely, silently dropping
+  -- keys like project_id when switching providers via presets.
+  local provider_sub = type(base_params[provider_name]) == "table" and base_params[provider_name] or {}
+  if provider_overrides then
+    local merged_overrides = {}
+    for k, v in pairs(provider_sub) do
+      merged_overrides[k] = v
+    end
+    for k, v in pairs(provider_overrides) do
+      merged_overrides[k] = v
+    end
+    provider_overrides = merged_overrides
+  else
+    provider_overrides = provider_sub
+  end
 
   -- 1. Start with registered default parameters (lowest priority)
   local registered_defaults = registry.get_default_parameters(provider_name)
@@ -196,7 +211,10 @@ function M.apply_config(config)
   local updated_config = state.get_config()
   updated_config.provider = config.provider
   updated_config.model = config.model
-  updated_config.parameters = config.parameters
+  -- NOTE: Do NOT overwrite updated_config.parameters here. The provider instance
+  -- holds its own flattened parameters. The global config must preserve the original
+  -- nested structure (with provider sub-tables like parameters.vertex) so that
+  -- future switch_provider calls can correctly resolve provider-specific params.
   state.set_config(updated_config)
 
   log.debug(
