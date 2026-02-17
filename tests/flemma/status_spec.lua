@@ -284,4 +284,70 @@ describe("flemma.status", function()
       assert.truthy(text:find("execute_command"), "expected execute_command tool name")
     end)
   end)
+
+  describe("show", function()
+    before_each(function()
+      local state = require("flemma.state")
+      ---@diagnostic disable-next-line: missing-fields
+      state.set_config({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5-20250929",
+        parameters = { max_tokens = 8192 },
+        tools = { autopilot = { enabled = true, max_turns = 50 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+    end)
+
+    it("opens a vertical split with status content", function()
+      local original_win = vim.api.nvim_get_current_win()
+      status.show({})
+      local new_win = vim.api.nvim_get_current_win()
+      assert.is_not.equals(original_win, new_win)
+
+      local bufnr = vim.api.nvim_win_get_buf(new_win)
+      assert.equals("nofile", vim.bo[bufnr].buftype)
+      assert.equals("wipe", vim.bo[bufnr].bufhidden)
+      assert.is_false(vim.bo[bufnr].modifiable)
+      assert.is_false(vim.bo[bufnr].swapfile)
+      assert.equals("flemma-status", vim.bo[bufnr].filetype)
+
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      assert.is_truthy(table.concat(lines, "\n"):find("Flemma Status"))
+
+      -- Cleanup
+      vim.api.nvim_win_close(new_win, true)
+    end)
+
+    it("jumps cursor to named section when jump_to is specified", function()
+      status.show({ jump_to = "Sandbox" })
+      local new_win = vim.api.nvim_get_current_win()
+      local bufnr = vim.api.nvim_win_get_buf(new_win)
+
+      local cursor = vim.api.nvim_win_get_cursor(new_win)
+      local line = vim.api.nvim_buf_get_lines(bufnr, cursor[1] - 1, cursor[1], false)[1]
+      assert.is_truthy(line:find("Sandbox"))
+
+      vim.api.nvim_win_close(new_win, true)
+    end)
+
+    it("reuses existing status buffer if one is open", function()
+      status.show({})
+      local first_win = vim.api.nvim_get_current_win()
+      local first_buf = vim.api.nvim_win_get_buf(first_win)
+
+      -- Go back to original window
+      vim.cmd("wincmd p")
+
+      -- Show again
+      status.show({})
+      local second_win = vim.api.nvim_get_current_win()
+      local second_buf = vim.api.nvim_win_get_buf(second_win)
+
+      -- Should reuse the same window/buffer
+      assert.equals(first_win, second_win)
+      assert.equals(first_buf, second_buf)
+
+      vim.api.nvim_win_close(second_win, true)
+    end)
+  end)
 end)

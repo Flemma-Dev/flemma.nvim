@@ -9,6 +9,11 @@ local autopilot = require("flemma.autopilot")
 local sandbox = require("flemma.sandbox")
 local tools_registry = require("flemma.tools.registry")
 
+---@class flemma.status.ShowOptions
+---@field verbose? boolean Include full config dump
+---@field jump_to? string Section header to jump cursor to
+---@field source_bufnr? integer Buffer to collect status from (defaults to current)
+
 ---@class flemma.status.Data
 ---@field provider { name: string, model: string|nil, initialized: boolean }
 ---@field parameters { merged: table<string, any>, frontmatter_overrides: table<string, any>|nil }
@@ -269,6 +274,61 @@ function M.collect(bufnr)
       bufnr = bufnr,
     },
   }
+end
+
+---Open a vertical-split scratch buffer with formatted status output
+---@param opts flemma.status.ShowOptions
+function M.show(opts)
+  local source_bufnr = opts.source_bufnr or vim.api.nvim_get_current_buf()
+
+  local data = M.collect(source_bufnr)
+  local lines = M.format(data, opts.verbose or false)
+
+  -- Check if a status buffer already exists in the current tabpage
+  local existing_win = nil
+  local existing_bufnr = nil
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    local bufnr = vim.api.nvim_win_get_buf(win)
+    if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].filetype == "flemma-status" then
+      existing_win = win
+      existing_bufnr = bufnr
+      break
+    end
+  end
+
+  local bufnr
+  if existing_win then
+    vim.api.nvim_set_current_win(existing_win)
+    bufnr = existing_bufnr --[[@as integer]]
+  else
+    vim.cmd("vnew")
+    bufnr = vim.api.nvim_get_current_buf()
+  end
+
+  -- Set buffer options
+  vim.bo[bufnr].buftype = "nofile"
+  vim.bo[bufnr].bufhidden = "wipe"
+  vim.bo[bufnr].swapfile = false
+
+  -- Write content
+  vim.bo[bufnr].modifiable = true
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+  vim.bo[bufnr].modifiable = false
+  vim.bo[bufnr].filetype = "flemma-status"
+
+  -- Map q to close
+  vim.keymap.set("n", "q", "<cmd>close<cr>", { buffer = bufnr, nowait = true })
+
+  -- Jump to section if requested
+  if opts.jump_to then
+    local current_win = vim.api.nvim_get_current_win()
+    for index, line in ipairs(lines) do
+      if line:find(opts.jump_to, 1, true) == 1 then
+        vim.api.nvim_win_set_cursor(current_win, { index, 0 })
+        break
+      end
+    end
+  end
 end
 
 return M
