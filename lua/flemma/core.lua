@@ -823,6 +823,14 @@ function M.send_to_provider(opts)
 
     on_content = function(text)
       vim.schedule(function()
+        -- Skip whitespace-only content before the response has started.
+        -- Some models (e.g. Opus 4.6 with adaptive thinking) emit a text block
+        -- containing only newlines before the thinking block. Writing this would
+        -- prematurely clear the thinking preview extmark.
+        if not response_started and not text:match("%S") then
+          return
+        end
+
         local original_modifiable_for_on_content = vim.bo[bufnr].modifiable -- Expected to be false
         vim.bo[bufnr].modifiable = true -- Temporarily allow plugin modifications
 
