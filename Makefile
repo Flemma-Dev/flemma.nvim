@@ -34,13 +34,14 @@ develop:
 	@-rm ~/.cache/nvim/flemma.log
 	@nvim --cmd "set runtimepath^=`pwd`"												\
 		-c "lua require(\"flemma\").setup({												\
-			provider = \"anthropic\",													\
-			model = \"claude-haiku-4-5\",												\
-			parameters = { max_tokens = 8000, thinking_budget = 4000 },					\
-			presets = { [\"\$$gpt\"] = \"openai gpt-5.2 reasoning=low\" },				\
+			model = \"\$$haiku\",														\
+			parameters = { max_tokens = 8000, thinking = \"minimal\" },					\
+			presets = {																	\
+				[\"\$$haiku\"] = \"anthropic claude-haiku-4-5\",						\
+				[\"\$$gpt\"] = \"openai gpt-5.2\",										\
+			},																			\
 			logging = { enabled = true },												\
 			editing = { auto_write = true },											\
-			pricing = { enabled = true },												\
 		})"																				\
 		-c ":edit $$HOME/.cache/nvim/flemma.log"										\
 		-c ":tabedit example.chat"
