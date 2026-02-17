@@ -5,14 +5,33 @@ local M = {}
 
 -- Constants for preview text
 local MAX_CONTENT_PREVIEW_LINES = 10
-local MAX_CONTENT_PREVIEW_LENGTH = 72
+local DEFAULT_MAX_LENGTH = 80
 local CONTENT_PREVIEW_NEWLINE_CHAR = "⤶"
-local CONTENT_PREVIEW_TRUNCATION_MARKER = "..."
+local CONTENT_PREVIEW_TRUNCATION_MARKER = "…"
+
+---Get the available text area width for a window (total width minus signcolumn, numbercolumn, foldcolumn)
+---Returns DEFAULT_MAX_LENGTH when the window is invalid (e.g., buffer not displayed or test environment).
+---@param winid integer Window ID (-1 if buffer not in a window)
+---@return integer
+function M.get_text_area_width(winid)
+  if winid == -1 then
+    return DEFAULT_MAX_LENGTH
+  end
+  local total = vim.api.nvim_win_get_width(winid)
+  local info = vim.fn.getwininfo(winid)
+  if info and #info > 0 then
+    return total - (info[1].textoff or 0)
+  end
+  return total
+end
 
 ---Generate a truncated preview string from content
 ---@param content string
+---@param max_length? integer Maximum preview length (defaults to DEFAULT_MAX_LENGTH)
 ---@return string
-function M.format_content_preview(content)
+function M.format_content_preview(content, max_length)
+  max_length = max_length or DEFAULT_MAX_LENGTH
+
   local trimmed = vim.trim(content)
   if #trimmed == 0 then
     return ""
@@ -32,8 +51,8 @@ function M.format_content_preview(content)
   local preview = table.concat(lines, CONTENT_PREVIEW_NEWLINE_CHAR)
   preview = vim.trim(preview)
 
-  if #preview > MAX_CONTENT_PREVIEW_LENGTH then
-    local truncated_length = MAX_CONTENT_PREVIEW_LENGTH - #CONTENT_PREVIEW_TRUNCATION_MARKER
+  if #preview > max_length then
+    local truncated_length = max_length - #CONTENT_PREVIEW_TRUNCATION_MARKER
     if truncated_length < 0 then
       truncated_length = 0
     end
@@ -76,8 +95,11 @@ end
 ---alphabetically (original JSON key order is not preserved in Lua tables).
 ---@param tool_name string
 ---@param input table<string, any>
+---@param max_length? integer Maximum preview length (defaults to DEFAULT_MAX_LENGTH)
 ---@return string
-function M.format_tool_preview(tool_name, input)
+function M.format_tool_preview(tool_name, input, max_length)
+  max_length = max_length or DEFAULT_MAX_LENGTH
+
   local keys = vim.tbl_keys(input)
   if #keys == 0 then
     return tool_name
@@ -119,8 +141,8 @@ function M.format_tool_preview(tool_name, input)
 
   local preview = tool_name .. ": " .. table.concat(parts, ", ")
 
-  if #preview > MAX_CONTENT_PREVIEW_LENGTH then
-    local truncated_length = MAX_CONTENT_PREVIEW_LENGTH - #CONTENT_PREVIEW_TRUNCATION_MARKER
+  if #preview > max_length then
+    local truncated_length = max_length - #CONTENT_PREVIEW_TRUNCATION_MARKER
     if truncated_length < 0 then
       truncated_length = 0
     end
@@ -221,13 +243,17 @@ function M.get_fold_text()
   local foldend_lnum = vim.v.foldend
   local total_fold_lines = foldend_lnum - foldstart_lnum + 1
   local doc = get_document()
+  local text_width = M.get_text_area_width(vim.api.nvim_get_current_win())
 
   -- Check for frontmatter fold (level 2)
   local fm = doc.frontmatter
   if fm and fm.position.start_line == foldstart_lnum then
-    local preview = M.format_content_preview(fm.code)
+    -- Account for surrounding chrome: "```lang  ``` (N lines)"
+    local suffix = string.format(" ``` (%d lines)", total_fold_lines)
+    local prefix = "```" .. fm.language .. " "
+    local preview = M.format_content_preview(fm.code, text_width - #prefix - #suffix)
     if preview ~= "" then
-      return string.format("```%s %s ``` (%d lines)", fm.language, preview, total_fold_lines)
+      return prefix .. preview .. suffix
     else
       return string.format("```%s (%d lines)", fm.language, total_fold_lines)
     end
@@ -240,13 +266,15 @@ function M.get_fold_text()
       return string.format("<thinking redacted> (%d lines)", total_fold_lines)
     end
     local provider = thinking_seg.signature and thinking_seg.signature.provider
-    local preview = M.format_content_preview(thinking_seg.content)
+    -- Account for surrounding chrome: "<thinking [provider]>  </thinking> (N lines)"
+    local tag = provider and string.format("<thinking %s>", provider) or "<thinking>"
+    local suffix = string.format(" </thinking> (%d lines)", total_fold_lines)
+    local preview = M.format_content_preview(thinking_seg.content, text_width - #tag - #suffix - 1)
     if preview ~= "" then
-      local tag = provider and string.format("<thinking %s>", provider) or "<thinking>"
-      return string.format("%s %s </thinking> (%d lines)", tag, preview, total_fold_lines)
+      return tag .. " " .. preview .. suffix
     else
-      local tag = provider and string.format("<thinking %s/>", provider) or "<thinking/>"
-      return string.format("%s (%d lines)", tag, total_fold_lines)
+      local empty_tag = provider and string.format("<thinking %s/>", provider) or "<thinking/>"
+      return string.format("%s (%d lines)", empty_tag, total_fold_lines)
     end
   end
 
@@ -254,6 +282,8 @@ function M.get_fold_text()
   local msg = find_message_at_line(doc, foldstart_lnum)
   if msg then
     local role_prefix = "@" .. msg.role .. ":"
+    -- Account for surrounding chrome: "@Role:  (N lines)"
+    local suffix = string.format(" (%d lines)", total_fold_lines)
     -- Get preview from the first text segment
     local content = ""
     for _, seg in ipairs(msg.segments) do
@@ -262,8 +292,8 @@ function M.get_fold_text()
         break
       end
     end
-    local preview = M.format_content_preview(content)
-    return string.format("%s %s (%d lines)", role_prefix, preview, total_fold_lines)
+    local preview = M.format_content_preview(content, text_width - #role_prefix - #suffix - 1)
+    return role_prefix .. " " .. preview .. suffix
   end
 
   return vim.fn.getline(foldstart_lnum)

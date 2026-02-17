@@ -619,6 +619,10 @@ function M.add_tool_previews(bufnr, doc)
     end
   end
 
+  -- Compute available text width from the buffer's window
+  local winid = vim.fn.bufwinid(bufnr)
+  local max_length = preview.get_text_area_width(winid)
+
   local line_count = vim.api.nvim_buf_line_count(bufnr)
 
   -- Find tool_result segments with status and empty content
@@ -633,7 +637,7 @@ function M.add_tool_previews(bufnr, doc)
             local line_idx = opening_fence_line - 1 -- 0-indexed
 
             if line_idx >= 0 and line_idx < line_count then
-              local preview_text = preview.format_tool_preview(tool_use.name, tool_use.input)
+              local preview_text = preview.format_tool_preview(tool_use.name, tool_use.input, max_length)
               vim.api.nvim_buf_set_extmark(bufnr, tool_preview_ns, line_idx, 0, {
                 virt_lines = { { { preview_text, "Comment" } } },
               })
