@@ -44,9 +44,6 @@ M.definitions = {
       end
       return table.concat(parts, "  ")
     end,
-    ---@param input table<string, any>
-    ---@param _callback? fun(result: flemma.tools.ExecutionResult)
-    ---@param context? flemma.tools.ExecutionContext
     execute = function(input, _callback, context)
       local path = input.path
       if not path or path == "" then
