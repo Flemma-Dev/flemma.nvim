@@ -6,12 +6,7 @@ local M = {}
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local config = require("flemma.config")
-
--- Constants for fold text preview
-local MAX_CONTENT_PREVIEW_LINES = 10
-local MAX_CONTENT_PREVIEW_LENGTH = 72
-local CONTENT_PREVIEW_NEWLINE_CHAR = "⤶"
-local CONTENT_PREVIEW_TRUNCATION_MARKER = "..."
+local preview = require("flemma.ui.preview")
 
 -- Extmark priority constants
 -- Higher values take precedence when multiple extmarks overlap on the same line.
@@ -28,184 +23,12 @@ local PRIORITY = {
   SPINNER = 300,
 }
 
----Generate a truncated preview string from content
----@param content string
----@return string
-local function format_content_preview(content)
-  local trimmed = vim.trim(content)
-  if #trimmed == 0 then
-    return ""
-  end
-
-  -- Take up to MAX_CONTENT_PREVIEW_LINES lines, join with newline indicator
-  local lines = {}
-  local count = 0
-  for line in (trimmed .. "\n"):gmatch("([^\n]*)\n") do
-    count = count + 1
-    if count > MAX_CONTENT_PREVIEW_LINES then
-      break
-    end
-    table.insert(lines, vim.trim(line))
-  end
-
-  local preview = table.concat(lines, CONTENT_PREVIEW_NEWLINE_CHAR)
-  preview = vim.trim(preview)
-
-  if #preview > MAX_CONTENT_PREVIEW_LENGTH then
-    local truncated_length = MAX_CONTENT_PREVIEW_LENGTH - #CONTENT_PREVIEW_TRUNCATION_MARKER
-    if truncated_length < 0 then
-      truncated_length = 0
-    end
-    preview = preview:sub(1, truncated_length) .. CONTENT_PREVIEW_TRUNCATION_MARKER
-  end
-
-  return preview
-end
-
----Get the cached AST document for the current buffer
----@return flemma.ast.DocumentNode
-local function get_document()
-  local bufnr = vim.api.nvim_get_current_buf()
-  local parser = require("flemma.parser")
-  return parser.get_parsed_document(bufnr)
-end
-
----Find a thinking segment whose start or end line matches the given line number
----@param doc flemma.ast.DocumentNode
----@param lnum integer 1-indexed line number
----@return flemma.ast.ThinkingSegment|nil segment
----@return "start"|"end"|nil boundary Whether lnum is the start or end of the segment
-local function find_thinking_at_line(doc, lnum)
-  for _, msg in ipairs(doc.messages) do
-    for _, seg in ipairs(msg.segments) do
-      if seg.kind == "thinking" and seg.position then
-        ---@cast seg flemma.ast.ThinkingSegment
-        if seg.position.start_line == lnum then
-          return seg, "start"
-        elseif seg.position.end_line == lnum then
-          return seg, "end"
-        end
-      end
-    end
-  end
-  return nil, nil
-end
-
----Find a message whose start or end line matches the given line number
----@param doc flemma.ast.DocumentNode
----@param lnum integer 1-indexed line number
----@return flemma.ast.MessageNode|nil message
----@return "start"|"end"|nil boundary
-local function find_message_at_line(doc, lnum)
-  for _, msg in ipairs(doc.messages) do
-    if msg.position.start_line == lnum then
-      return msg, "start"
-    elseif msg.position.end_line == lnum then
-      return msg, "end"
-    end
-  end
-  return nil, nil
-end
-
----Get fold level for a line number
----@param lnum integer
----@return string
-function M.get_fold_level(lnum)
-  local doc = get_document()
-
-  -- Level 2 folds: frontmatter (same level as thinking; they never overlap in position)
-  local fm = doc.frontmatter
-  if fm then
-    if fm.position.start_line == lnum then
-      return ">2"
-    elseif fm.position.end_line == lnum then
-      return "<2"
-    end
-  end
-
-  -- Level 2 folds: <thinking>...</thinking>
-  local _, thinking_boundary = find_thinking_at_line(doc, lnum)
-  if thinking_boundary == "start" then
-    return ">2"
-  elseif thinking_boundary == "end" then
-    return "<2"
-  end
-
-  -- Level 1 folds: messages
-  -- Neovim's ">1" implicitly closes a previous level-1 fold, so single-line
-  -- messages (start_line == end_line) and adjacent messages work correctly
-  -- without explicit "<1" for every end_line.
-  for _, msg in ipairs(doc.messages) do
-    if msg.position.start_line == lnum then
-      return ">1"
-    elseif msg.position.end_line == lnum then
-      return "<1"
-    end
-  end
-
-  return "="
-end
-
----Get fold text for display
----@return string
-function M.get_fold_text()
-  local foldstart_lnum = vim.v.foldstart
-  local foldend_lnum = vim.v.foldend
-  local total_fold_lines = foldend_lnum - foldstart_lnum + 1
-  local doc = get_document()
-
-  -- Check for frontmatter fold (level 2)
-  local fm = doc.frontmatter
-  if fm and fm.position.start_line == foldstart_lnum then
-    local preview = format_content_preview(fm.code)
-    if preview ~= "" then
-      return string.format("```%s %s ``` (%d lines)", fm.language, preview, total_fold_lines)
-    else
-      return string.format("```%s (%d lines)", fm.language, total_fold_lines)
-    end
-  end
-
-  -- Check if this is a thinking fold (level 2)
-  local thinking_seg = find_thinking_at_line(doc, foldstart_lnum)
-  if thinking_seg then
-    if thinking_seg.redacted then
-      return string.format("<thinking redacted> (%d lines)", total_fold_lines)
-    end
-    local provider = thinking_seg.signature and thinking_seg.signature.provider
-    local preview = format_content_preview(thinking_seg.content)
-    if preview ~= "" then
-      local tag = provider and string.format("<thinking %s>", provider) or "<thinking>"
-      return string.format("%s %s </thinking> (%d lines)", tag, preview, total_fold_lines)
-    else
-      local tag = provider and string.format("<thinking %s/>", provider) or "<thinking/>"
-      return string.format("%s (%d lines)", tag, total_fold_lines)
-    end
-  end
-
-  -- Message folds (level 1)
-  local msg = find_message_at_line(doc, foldstart_lnum)
-  if msg then
-    local role_prefix = "@" .. msg.role .. ":"
-    -- Get preview from the first text segment
-    local content = ""
-    for _, seg in ipairs(msg.segments) do
-      if seg.kind == "text" then
-        content = seg.value
-        break
-      end
-    end
-    local preview = format_content_preview(content)
-    return string.format("%s %s (%d lines)", role_prefix, preview, total_fold_lines)
-  end
-
-  return vim.fn.getline(foldstart_lnum)
-end
-
 -- Define namespace for our extmarks
 local ns_id = vim.api.nvim_create_namespace("flemma")
 local spinner_ns = vim.api.nvim_create_namespace("flemma_spinner")
 local line_hl_ns = vim.api.nvim_create_namespace("flemma_line_highlights")
 local tool_exec_ns = vim.api.nvim_create_namespace("flemma_tool_execution")
+local tool_preview_ns = vim.api.nvim_create_namespace("flemma_tool_preview")
 
 --- Per-tool indicator state: key(bufnr, tool_id) -> { extmark_id, timer, bufnr, tool_id }
 local tool_indicators = {}
@@ -644,8 +467,8 @@ function M.setup_folding(bufnr)
 
   -- Set window-local options on the correct window
   vim.wo[winid].foldmethod = "expr"
-  vim.wo[winid].foldexpr = 'v:lua.require("flemma.ui").get_fold_level(v:lnum)'
-  vim.wo[winid].foldtext = 'v:lua.require("flemma.ui").get_fold_text()'
+  vim.wo[winid].foldexpr = 'v:lua.require("flemma.ui.preview").get_fold_level(v:lnum)'
+  vim.wo[winid].foldtext = 'v:lua.require("flemma.ui.preview").get_fold_text()'
   -- Set fold level from config (default 1 = thinking blocks collapsed)
   vim.wo[winid].foldlevel = config.editing.foldlevel
 end
@@ -775,6 +598,53 @@ function M.setup_chat_filetype_autocmds()
   end
 end
 
+---Add virtual line previews inside empty flemma:tool fenced blocks
+---Shows a compact summary of the tool call (name + input) so users can see
+---what they're approving/rejecting without the content being editable.
+---@param bufnr integer
+---@param doc flemma.ast.DocumentNode
+function M.add_tool_previews(bufnr, doc)
+  vim.api.nvim_buf_clear_namespace(bufnr, tool_preview_ns, 0, -1)
+
+  -- Build tool_use lookup: id -> ToolUseSegment
+  ---@type table<string, flemma.ast.ToolUseSegment>
+  local tool_use_map = {}
+  for _, msg in ipairs(doc.messages) do
+    if msg.role == "Assistant" then
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "tool_use" then
+          tool_use_map[seg.id] = seg --[[@as flemma.ast.ToolUseSegment]]
+        end
+      end
+    end
+  end
+
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+
+  -- Find tool_result segments with status and empty content
+  for _, msg in ipairs(doc.messages) do
+    if msg.role == "You" then
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "tool_result" and seg.status and seg.content == "" then
+          local tool_use = tool_use_map[seg.tool_use_id]
+          if tool_use then
+            -- Opening fence is one line before closing fence (empty content)
+            local opening_fence_line = seg.position.end_line - 1
+            local line_idx = opening_fence_line - 1 -- 0-indexed
+
+            if line_idx >= 0 and line_idx < line_count then
+              local preview_text = preview.format_tool_preview(tool_use.name, tool_use.input)
+              vim.api.nvim_buf_set_extmark(bufnr, tool_preview_ns, line_idx, 0, {
+                virt_lines = { { { preview_text, "Comment" } } },
+              })
+            end
+          end
+        end
+      end
+    end
+  end
+end
+
 ---Force UI update (rulers, signs, and line highlights)
 ---@param bufnr integer
 function M.update_ui(bufnr)
@@ -797,6 +667,7 @@ function M.update_ui(bufnr)
   M.add_rulers(bufnr, doc)
   M.highlight_thinking_tags(bufnr, doc)
   M.apply_line_highlights(bufnr, doc)
+  M.add_tool_previews(bufnr, doc)
   -- Note: spinner extmark (with suppression) is managed by start_loading_spinner and its timer
 
   -- Clear and reapply all signs

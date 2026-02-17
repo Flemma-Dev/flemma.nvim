@@ -1,0 +1,272 @@
+--- Preview and fold text generation for Flemma UI
+--- Houses all formatting, preview generation, and fold text/level computation.
+---@class flemma.ui.Preview
+local M = {}
+
+-- Constants for preview text
+local MAX_CONTENT_PREVIEW_LINES = 10
+local MAX_CONTENT_PREVIEW_LENGTH = 72
+local CONTENT_PREVIEW_NEWLINE_CHAR = "⤶"
+local CONTENT_PREVIEW_TRUNCATION_MARKER = "..."
+
+---Generate a truncated preview string from content
+---@param content string
+---@return string
+function M.format_content_preview(content)
+  local trimmed = vim.trim(content)
+  if #trimmed == 0 then
+    return ""
+  end
+
+  -- Take up to MAX_CONTENT_PREVIEW_LINES lines, join with newline indicator
+  local lines = {}
+  local count = 0
+  for line in (trimmed .. "\n"):gmatch("([^\n]*)\n") do
+    count = count + 1
+    if count > MAX_CONTENT_PREVIEW_LINES then
+      break
+    end
+    table.insert(lines, vim.trim(line))
+  end
+
+  local preview = table.concat(lines, CONTENT_PREVIEW_NEWLINE_CHAR)
+  preview = vim.trim(preview)
+
+  if #preview > MAX_CONTENT_PREVIEW_LENGTH then
+    local truncated_length = MAX_CONTENT_PREVIEW_LENGTH - #CONTENT_PREVIEW_TRUNCATION_MARKER
+    if truncated_length < 0 then
+      truncated_length = 0
+    end
+    preview = preview:sub(1, truncated_length) .. CONTENT_PREVIEW_TRUNCATION_MARKER
+  end
+
+  return preview
+end
+
+---Format a compact table value preview
+---Arrays: [N items] or [1 item]; Objects: {key1, key2} or {key1, key2, +N more}
+---@param value table
+---@return string
+local function format_table_value(value)
+  if vim.tbl_isempty(value) then
+    return "{}"
+  end
+
+  if vim.islist(value) then
+    local count = #value
+    return count == 1 and "[1 item]" or string.format("[%d items]", count)
+  end
+
+  local keys = vim.tbl_keys(value)
+  table.sort(keys)
+  local count = #keys
+
+  if count == 0 then
+    return "{}"
+  elseif count <= 2 then
+    return "{" .. table.concat(keys, ", ") .. "}"
+  else
+    return "{" .. keys[1] .. ", " .. keys[2] .. ", +" .. (count - 2) .. " more}"
+  end
+end
+
+---Format a compact preview string for a tool call
+---Produces: "tool_name: key1="val1", key2="val2"" (sorted keys, truncated)
+---Non-table values are listed first, then table values, each group sorted
+---alphabetically (original JSON key order is not preserved in Lua tables).
+---@param tool_name string
+---@param input table<string, any>
+---@return string
+function M.format_tool_preview(tool_name, input)
+  local keys = vim.tbl_keys(input)
+  if #keys == 0 then
+    return tool_name
+  end
+
+  -- Separate keys into scalar and table groups, sort each alphabetically
+  local scalar_keys = {}
+  local table_keys = {}
+  for _, key in ipairs(keys) do
+    if type(input[key]) == "table" then
+      table.insert(table_keys, key)
+    else
+      table.insert(scalar_keys, key)
+    end
+  end
+  table.sort(scalar_keys)
+  table.sort(table_keys)
+
+  -- Scalar keys first, then table keys
+  local ordered_keys = {}
+  vim.list_extend(ordered_keys, scalar_keys)
+  vim.list_extend(ordered_keys, table_keys)
+
+  local parts = {}
+  for _, key in ipairs(ordered_keys) do
+    local value = input[key]
+    local formatted
+    if type(value) == "string" then
+      -- Collapse newlines and escape quotes for single-line display
+      local display_value = value:gsub("\n", CONTENT_PREVIEW_NEWLINE_CHAR):gsub('"', '\\"')
+      formatted = key .. '="' .. display_value .. '"'
+    elseif type(value) == "table" then
+      formatted = key .. "=" .. format_table_value(value)
+    else
+      formatted = key .. "=" .. tostring(value)
+    end
+    table.insert(parts, formatted)
+  end
+
+  local preview = tool_name .. ": " .. table.concat(parts, ", ")
+
+  if #preview > MAX_CONTENT_PREVIEW_LENGTH then
+    local truncated_length = MAX_CONTENT_PREVIEW_LENGTH - #CONTENT_PREVIEW_TRUNCATION_MARKER
+    if truncated_length < 0 then
+      truncated_length = 0
+    end
+    preview = preview:sub(1, truncated_length) .. CONTENT_PREVIEW_TRUNCATION_MARKER
+  end
+
+  return preview
+end
+
+---Get the cached AST document for the current buffer
+---@return flemma.ast.DocumentNode
+local function get_document()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local parser = require("flemma.parser")
+  return parser.get_parsed_document(bufnr)
+end
+
+---Find a thinking segment whose start or end line matches the given line number
+---@param doc flemma.ast.DocumentNode
+---@param lnum integer 1-indexed line number
+---@return flemma.ast.ThinkingSegment|nil segment
+---@return "start"|"end"|nil boundary Whether lnum is the start or end of the segment
+local function find_thinking_at_line(doc, lnum)
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "thinking" and seg.position then
+        ---@cast seg flemma.ast.ThinkingSegment
+        if seg.position.start_line == lnum then
+          return seg, "start"
+        elseif seg.position.end_line == lnum then
+          return seg, "end"
+        end
+      end
+    end
+  end
+  return nil, nil
+end
+
+---Find a message whose start or end line matches the given line number
+---@param doc flemma.ast.DocumentNode
+---@param lnum integer 1-indexed line number
+---@return flemma.ast.MessageNode|nil message
+---@return "start"|"end"|nil boundary
+local function find_message_at_line(doc, lnum)
+  for _, msg in ipairs(doc.messages) do
+    if msg.position.start_line == lnum then
+      return msg, "start"
+    elseif msg.position.end_line == lnum then
+      return msg, "end"
+    end
+  end
+  return nil, nil
+end
+
+---Get fold level for a line number
+---@param lnum integer
+---@return string
+function M.get_fold_level(lnum)
+  local doc = get_document()
+
+  -- Level 2 folds: frontmatter (same level as thinking; they never overlap in position)
+  local fm = doc.frontmatter
+  if fm then
+    if fm.position.start_line == lnum then
+      return ">2"
+    elseif fm.position.end_line == lnum then
+      return "<2"
+    end
+  end
+
+  -- Level 2 folds: <thinking>...</thinking>
+  local _, thinking_boundary = find_thinking_at_line(doc, lnum)
+  if thinking_boundary == "start" then
+    return ">2"
+  elseif thinking_boundary == "end" then
+    return "<2"
+  end
+
+  -- Level 1 folds: messages
+  -- Neovim's ">1" implicitly closes a previous level-1 fold, so single-line
+  -- messages (start_line == end_line) and adjacent messages work correctly
+  -- without explicit "<1" for every end_line.
+  for _, msg in ipairs(doc.messages) do
+    if msg.position.start_line == lnum then
+      return ">1"
+    elseif msg.position.end_line == lnum then
+      return "<1"
+    end
+  end
+
+  return "="
+end
+
+---Get fold text for display
+---@return string
+function M.get_fold_text()
+  local foldstart_lnum = vim.v.foldstart
+  local foldend_lnum = vim.v.foldend
+  local total_fold_lines = foldend_lnum - foldstart_lnum + 1
+  local doc = get_document()
+
+  -- Check for frontmatter fold (level 2)
+  local fm = doc.frontmatter
+  if fm and fm.position.start_line == foldstart_lnum then
+    local preview = M.format_content_preview(fm.code)
+    if preview ~= "" then
+      return string.format("```%s %s ``` (%d lines)", fm.language, preview, total_fold_lines)
+    else
+      return string.format("```%s (%d lines)", fm.language, total_fold_lines)
+    end
+  end
+
+  -- Check if this is a thinking fold (level 2)
+  local thinking_seg = find_thinking_at_line(doc, foldstart_lnum)
+  if thinking_seg then
+    if thinking_seg.redacted then
+      return string.format("<thinking redacted> (%d lines)", total_fold_lines)
+    end
+    local provider = thinking_seg.signature and thinking_seg.signature.provider
+    local preview = M.format_content_preview(thinking_seg.content)
+    if preview ~= "" then
+      local tag = provider and string.format("<thinking %s>", provider) or "<thinking>"
+      return string.format("%s %s </thinking> (%d lines)", tag, preview, total_fold_lines)
+    else
+      local tag = provider and string.format("<thinking %s/>", provider) or "<thinking/>"
+      return string.format("%s (%d lines)", tag, total_fold_lines)
+    end
+  end
+
+  -- Message folds (level 1)
+  local msg = find_message_at_line(doc, foldstart_lnum)
+  if msg then
+    local role_prefix = "@" .. msg.role .. ":"
+    -- Get preview from the first text segment
+    local content = ""
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "text" then
+        content = seg.value
+        break
+      end
+    end
+    local preview = M.format_content_preview(content)
+    return string.format("%s %s (%d lines)", role_prefix, preview, total_fold_lines)
+  end
+
+  return vim.fn.getline(foldstart_lnum)
+end
+
+return M

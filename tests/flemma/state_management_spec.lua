@@ -166,7 +166,7 @@ describe("State Management", function()
       assert.equals("expr", vim.wo[win1].foldmethod)
 
       -- win2 should not have chat folding
-      assert.not_equals('v:lua.require("flemma.ui").get_fold_level(v:lnum)', vim.wo[win2].foldexpr)
+      assert.not_equals('v:lua.require("flemma.ui.preview").get_fold_level(v:lnum)', vim.wo[win2].foldexpr)
     end)
   end)
 

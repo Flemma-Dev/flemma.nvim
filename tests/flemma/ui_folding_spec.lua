@@ -1,16 +1,19 @@
 describe("UI Folding", function()
   local flemma
   local ui
+  local ui_preview
 
   before_each(function()
     -- Invalidate caches to ensure clean setup
     package.loaded["flemma"] = nil
     package.loaded["flemma.ui"] = nil
+    package.loaded["flemma.ui.preview"] = nil
     package.loaded["flemma.parser"] = nil
     package.loaded["flemma.config"] = nil
 
     flemma = require("flemma")
     ui = require("flemma.ui")
+    ui_preview = require("flemma.ui.preview")
 
     flemma.setup({})
 
@@ -38,7 +41,7 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- Line 2 is <thinking>
-      local fold_level = ui.get_fold_level(2)
+      local fold_level = ui_preview.get_fold_level(2)
       assert.are.equal(">2", fold_level)
     end)
 
@@ -56,7 +59,7 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- Line 2 is <thinking vertex:signature="...">
-      local fold_level = ui.get_fold_level(2)
+      local fold_level = ui_preview.get_fold_level(2)
       assert.are.equal(">2", fold_level)
     end)
 
@@ -74,7 +77,7 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- Line 2 is <thinking redacted>
-      local fold_level = ui.get_fold_level(2)
+      local fold_level = ui_preview.get_fold_level(2)
       assert.are.equal(">2", fold_level)
     end)
 
@@ -92,10 +95,10 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- Line 2 is opening tag, should start a fold
-      local fold_level = ui.get_fold_level(2)
+      local fold_level = ui_preview.get_fold_level(2)
       assert.are.equal(">2", fold_level)
       -- Line 3 is closing tag, should end the fold
-      fold_level = ui.get_fold_level(3)
+      fold_level = ui_preview.get_fold_level(3)
       assert.are.equal("<2", fold_level)
     end)
 
@@ -113,7 +116,7 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- Line 4 is </thinking>
-      local fold_level = ui.get_fold_level(4)
+      local fold_level = ui_preview.get_fold_level(4)
       assert.are.equal("<2", fold_level)
     end)
 
@@ -128,8 +131,8 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal(">1", ui.get_fold_level(1))
-      assert.are.equal(">1", ui.get_fold_level(2))
+      assert.are.equal(">1", ui_preview.get_fold_level(1))
+      assert.are.equal(">1", ui_preview.get_fold_level(2))
     end)
 
     it("should return <1 before next role marker", function()
@@ -145,7 +148,7 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- Line 2 should be <1 because line 3 starts a new message
-      local fold_level = ui.get_fold_level(2)
+      local fold_level = ui_preview.get_fold_level(2)
       assert.are.equal("<1", fold_level)
     end)
 
@@ -162,10 +165,10 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal(">1", ui.get_fold_level(1))
-      assert.are.equal("=", ui.get_fold_level(2))
-      assert.are.equal("<1", ui.get_fold_level(3))
-      assert.are.equal(">1", ui.get_fold_level(4))
+      assert.are.equal(">1", ui_preview.get_fold_level(1))
+      assert.are.equal("=", ui_preview.get_fold_level(2))
+      assert.are.equal("<1", ui_preview.get_fold_level(3))
+      assert.are.equal(">1", ui_preview.get_fold_level(4))
     end)
 
     it("should return >2 for frontmatter on line 1", function()
@@ -181,7 +184,7 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal(">2", ui.get_fold_level(1))
+      assert.are.equal(">2", ui_preview.get_fold_level(1))
     end)
 
     it("should return <2 for closing frontmatter fence", function()
@@ -197,7 +200,7 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal("<2", ui.get_fold_level(3))
+      assert.are.equal("<2", ui_preview.get_fold_level(3))
     end)
   end)
 
@@ -220,7 +223,7 @@ describe("UI Folding", function()
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require('flemma.ui').get_fold_level(v:lnum)"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
@@ -253,7 +256,7 @@ describe("UI Folding", function()
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require('flemma.ui').get_fold_level(v:lnum)"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
@@ -321,7 +324,7 @@ describe("UI Folding", function()
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require('flemma.ui').get_fold_level(v:lnum)"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
@@ -360,7 +363,7 @@ describe("UI Folding", function()
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require('flemma.ui').get_fold_level(v:lnum)"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
@@ -393,7 +396,7 @@ describe("UI Folding", function()
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require('flemma.ui').get_fold_level(v:lnum)"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
@@ -425,7 +428,7 @@ describe("UI Folding", function()
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require('flemma.ui').get_fold_level(v:lnum)"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
