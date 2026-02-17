@@ -2003,6 +2003,14 @@ describe("advance_phase2 current_request guard", function()
     st.set_config({})
   end)
 
+  -- NOTE: Race condition simulation test
+  --
+  -- This test simulates a race where <C-]> is pressed while a request is
+  -- already in flight. It manually sets current_request to fake an active
+  -- request because timing races cannot be reliably reproduced through the
+  -- normal fixture-driven flow. The manual state setup is the correct
+  -- approach here.
+
   it("does not execute approved tools when current_request is set", function()
     -- Clear core module so it picks up the same state module as the test
     package.loaded["flemma.core"] = nil

@@ -102,6 +102,10 @@ end)
 -- on_response_complete Tests
 -- ============================================================================
 
+-- State machine unit tests: validate autopilot state transitions by
+-- calling on_response_complete directly on static buffers. These test
+-- the state machine logic in isolation — see "Autopilot integration"
+-- for full-chain coverage via register_fixture + FlemmaSend.
 describe("Autopilot on_response_complete", function()
   before_each(function()
     package.loaded["flemma.autopilot"] = nil
@@ -168,6 +172,9 @@ describe("Autopilot on_response_complete", function()
     autopilot.cleanup_buffer(bufnr)
   end)
 
+  -- NOTE: Calls on_response_complete multiple times on a static buffer.
+  -- In production, each call is preceded by new assistant content. This
+  -- tests the iteration counter logic, not the full response cycle.
   it("increments iteration counter", function()
     state.set_config({ tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
@@ -192,6 +199,7 @@ describe("Autopilot on_response_complete", function()
     autopilot.cleanup_buffer(bufnr)
   end)
 
+  -- NOTE: Same caveat as above — static buffer, counter-only test.
   it("stops after exceeding max_turns", function()
     state.set_config({ tools = { autopilot = { enabled = true, max_turns = 2 } } })
     local bufnr = create_buffer({
@@ -219,6 +227,7 @@ describe("Autopilot on_response_complete", function()
     autopilot.cleanup_buffer(bufnr)
   end)
 
+  -- NOTE: Tests disarm's effect on iteration counter with static buffer.
   it("disarm resets iteration counter", function()
     state.set_config({ tools = { autopilot = { enabled = true, max_turns = 2 } } })
     local bufnr = create_buffer({
@@ -720,5 +729,72 @@ describe("Autopilot all-sync tool completion", function()
     local bufnr = create_buffer({ "@You: test" })
     -- No tools dispatched → has_pending should be false
     assert.is_false(executor.has_pending(bufnr))
+  end)
+end)
+
+-- ============================================================================
+-- Integration Tests (fixture-driven full chain)
+-- ============================================================================
+
+describe("Autopilot integration", function()
+  local client = require("flemma.client")
+  local flemma_mod
+
+  before_each(function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.core"] = nil
+    package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.provider.registry"] = nil
+    package.loaded["flemma.models"] = nil
+    package.loaded["flemma.autopilot"] = nil
+
+    flemma_mod = require("flemma")
+    require("flemma.core")
+    autopilot = require("flemma.autopilot")
+
+    flemma_mod.setup({
+      parameters = { thinking = false },
+      tools = { autopilot = { enabled = true } },
+    })
+  end)
+
+  after_each(function()
+    client.clear_fixtures()
+    vim.cmd("silent! %bdelete!")
+    state.set_config({})
+  end)
+
+  it("arms autopilot when LLM response contains tool_use via full chain", function()
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Calculate 15 * 7" })
+
+    client.register_fixture("api%.anthropic%.com", "tests/fixtures/tool_calling/anthropic_tool_use_streaming.txt")
+    vim.cmd("FlemmaSend")
+
+    -- Wait for response to complete (tool_use block appears + @You: prompt)
+    vim.wait(2000, function()
+      local buf_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      for _, line in ipairs(buf_lines) do
+        if line == "@You: " then
+          return true
+        end
+      end
+      return false
+    end)
+
+    local buf_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local content = table.concat(buf_lines, "\n")
+
+    -- Buffer should contain tool_use block
+    assert.truthy(content:match("%*%*Tool Use:%*%*"), "Should have tool_use in buffer")
+
+    -- Autopilot should have been armed by on_response_complete
+    local ap_state = autopilot.get_state(bufnr)
+    assert.truthy(
+      ap_state == "armed" or ap_state == "paused" or ap_state == "sending",
+      "Autopilot should have advanced past idle, got: " .. ap_state
+    )
   end)
 end)

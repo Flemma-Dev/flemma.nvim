@@ -1617,6 +1617,20 @@ describe("Tool Executor", function()
   end)
 
   describe("execute_at_cursor arms autopilot for pending tools", function()
+    -- NOTE: Manual autopilot orchestration tests
+    --
+    -- These tests validate the execute_at_cursor (Alt+Enter) entry point, which
+    -- is the user-initiated manual execution path during an autopilot pause.
+    -- They manually force autopilot into specific states (paused via arm +
+    -- on_tools_complete) because the test specifically covers "what happens when
+    -- the user presses Alt+Enter during an autopilot pause" — a scenario that
+    -- cannot be driven through register_fixture + FlemmaSend since it requires
+    -- user interaction mid-loop.
+    --
+    -- If advance_phase2's paused→armed transition logic changes, these tests
+    -- should be updated to reflect the new state machine, but the manual
+    -- orchestration pattern is inherent to what's being tested.
+
     -- Regression: execute_at_cursor (Alt+Enter) on a pending tool must arm
     -- autopilot before executing, so that on_tools_complete can resume the
     -- loop when the tool finishes. Without arming, the state remains "paused"

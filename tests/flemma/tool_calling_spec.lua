@@ -8,7 +8,9 @@ package.loaded["flemma.tools.definitions.write"] = nil
 package.loaded["flemma.tools.truncate"] = nil
 
 local ast = require("flemma.ast")
+local client = require("flemma.client")
 local ctx = require("flemma.context")
+local core = require("flemma.core")
 local parser = require("flemma.parser")
 local processor = require("flemma.processor")
 local pipeline = require("flemma.pipeline")
@@ -40,6 +42,24 @@ local function find_vertex_decl(declarations, name)
       return d
     end
   end
+end
+
+--- Helper: wait for FlemmaSend to complete (response + @You: prompt appended)
+---@param bufnr integer
+---@param timeout? integer
+---@return string[] lines
+local function wait_for_response(bufnr, timeout)
+  timeout = timeout or 2000
+  vim.wait(timeout, function()
+    local buf_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    for i = #buf_lines, 1, -1 do
+      if buf_lines[i] == "@You: " then
+        return true
+      end
+    end
+    return false
+  end)
+  return vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 end
 
 describe("Tool Registry", function()
@@ -543,6 +563,8 @@ describe("Anthropic Provider Tool Support", function()
 end)
 
 describe("Anthropic Streaming Tool Use Response", function()
+  -- Provider contract test: validates SSE parsing at the provider level.
+  -- See the "(integration)" describe block below for full-chain coverage.
   local anthropic = require("flemma.provider.providers.anthropic")
 
   before_each(function()
@@ -636,6 +658,71 @@ describe("Anthropic Streaming Tool Use Response", function()
     end
     assert.is_true(has_input, "Should report input tokens")
     assert.is_true(has_output, "Should report output tokens")
+  end)
+end)
+
+describe("Anthropic Streaming Tool Use Response (integration)", function()
+  local flemma
+
+  before_each(function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.core"] = nil
+    package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.provider.registry"] = nil
+    package.loaded["flemma.models"] = nil
+    flemma = require("flemma")
+    flemma.setup({ parameters = { thinking = false } })
+    tools.clear()
+    tools.setup()
+  end)
+
+  after_each(function()
+    client.clear_fixtures()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("streams tool_use block into buffer", function()
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Calculate 15 * 7" })
+
+    client.register_fixture("api%.anthropic%.com", "tests/fixtures/tool_calling/anthropic_tool_use_streaming.txt")
+    vim.cmd("FlemmaSend")
+    local result_lines = wait_for_response(bufnr)
+    local content = table.concat(result_lines, "\n")
+
+    assert.truthy(content:match("%*%*Tool Use:%*%*"), "Should contain tool_use header in buffer")
+    assert.truthy(content:match("calculator"), "Should contain tool name")
+    assert.truthy(content:match("toolu_01MiSdzFh4udQYmCHCVbtDHw"), "Should contain tool id")
+  end)
+
+  it("streams final text response into buffer", function()
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@You: Calculate 15 * 7",
+      "",
+      "@Assistant: Sure!",
+      "",
+      "**Tool Use:** `calculator` (`toolu_01`)",
+      "```json",
+      '{ "expression": "15 * 7" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```",
+      "105",
+      "```",
+    })
+
+    client.register_fixture("api%.anthropic%.com", "tests/fixtures/tool_calling/anthropic_final_response_streaming.txt")
+    vim.cmd("FlemmaSend")
+    local result_lines = wait_for_response(bufnr)
+    local content = table.concat(result_lines, "\n")
+
+    assert.truthy(content:match("105"), "Should contain the answer")
   end)
 end)
 
@@ -845,6 +932,8 @@ describe("OpenAI Provider Request Building with Tools", function()
 end)
 
 describe("OpenAI Streaming Tool Use Response", function()
+  -- Provider contract test: validates SSE parsing at the provider level.
+  -- See the "(integration)" describe block below for full-chain coverage.
   local openai = require("flemma.provider.providers.openai")
 
   before_each(function()
@@ -918,6 +1007,59 @@ describe("OpenAI Streaming Tool Use Response", function()
     assert.is_true(accumulated_content:match("15") ~= nil, "Should contain response text")
     assert.is_true(accumulated_content:match("multiplied") ~= nil, "Should contain response text")
     assert.is_true(accumulated_content:match("105") ~= nil, "Should contain answer")
+  end)
+end)
+
+describe("OpenAI Streaming Tool Use Response (integration)", function()
+  local flemma
+
+  before_each(function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.core"] = nil
+    package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.provider.registry"] = nil
+    package.loaded["flemma.models"] = nil
+    flemma = require("flemma")
+    flemma.setup({ parameters = { thinking = false } })
+    core = require("flemma.core")
+    tools.clear()
+    tools.setup()
+  end)
+
+  after_each(function()
+    client.clear_fixtures()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("streams tool_use block into buffer", function()
+    core.switch_provider("openai", "gpt-4o-mini", {})
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Calculate 15 * 7" })
+
+    client.register_fixture("api%.openai%.com", "tests/fixtures/tool_calling/openai_tool_use_streaming.txt")
+    vim.cmd("FlemmaSend")
+    local result_lines = wait_for_response(bufnr)
+    local content = table.concat(result_lines, "\n")
+
+    assert.truthy(content:match("%*%*Tool Use:%*%*"), "Should contain tool_use header")
+    assert.truthy(content:match("calculator"), "Should contain tool name")
+  end)
+
+  it("streams text before tool_use into buffer", function()
+    core.switch_provider("openai", "gpt-4o-mini", {})
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Calculate" })
+
+    client.register_fixture("api%.openai%.com", "tests/fixtures/tool_calling/openai_text_before_tool_streaming.txt")
+    vim.cmd("FlemmaSend")
+    local result_lines = wait_for_response(bufnr)
+    local content = table.concat(result_lines, "\n")
+
+    assert.truthy(content:match("I will calculate"), "Should have text before tool call")
+    assert.truthy(content:match("%*%*Tool Use:%*%*"), "Should contain tool_use header")
   end)
 end)
 
@@ -1133,6 +1275,8 @@ describe("Vertex AI Provider Request Building with Tools", function()
 end)
 
 describe("Vertex AI Streaming Tool Use Response", function()
+  -- Provider contract test: validates SSE parsing at the provider level.
+  -- See the "(integration)" describe block below for full-chain coverage.
   local vertex = require("flemma.provider.providers.vertex")
 
   before_each(function()
@@ -1227,6 +1371,65 @@ describe("Vertex AI Streaming Tool Use Response", function()
   end)
 end)
 
+describe("Vertex AI Streaming Function Call Response (integration)", function()
+  local flemma
+
+  before_each(function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.core"] = nil
+    package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.provider.registry"] = nil
+    package.loaded["flemma.models"] = nil
+    flemma = require("flemma")
+    flemma.setup({ parameters = { thinking = false } })
+    core = require("flemma.core")
+    tools.clear()
+    tools.setup()
+  end)
+
+  after_each(function()
+    client.clear_fixtures()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("streams function call into buffer", function()
+    core.switch_provider("vertex", "gemini-2.0-flash", { project_id = "test-project", location = "global" })
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Calculate 15 * 7" })
+
+    client.register_fixture(
+      "aiplatform%.googleapis%.com",
+      "tests/fixtures/tool_calling/vertex_function_call_streaming.txt"
+    )
+    vim.cmd("FlemmaSend")
+    local result_lines = wait_for_response(bufnr)
+    local content = table.concat(result_lines, "\n")
+
+    assert.truthy(content:match("%*%*Tool Use:%*%*"), "Should contain tool_use header")
+    assert.truthy(content:match("calculator"), "Should contain tool name")
+  end)
+
+  it("streams text before function call into buffer", function()
+    core.switch_provider("vertex", "gemini-2.0-flash", { project_id = "test-project", location = "global" })
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Calculate 23 + 45" })
+
+    client.register_fixture(
+      "aiplatform%.googleapis%.com",
+      "tests/fixtures/tool_calling/vertex_text_before_function_streaming.txt"
+    )
+    vim.cmd("FlemmaSend")
+    local result_lines = wait_for_response(bufnr)
+    local content = table.concat(result_lines, "\n")
+
+    assert.truthy(content:match("I will"), "Should have text before tool call")
+    assert.truthy(content:match("%*%*Tool Use:%*%*"), "Should contain tool_use header")
+  end)
+end)
+
 describe("Anthropic Thinking Signature and Redacted Thinking Round-Trip", function()
   local anthropic = require("flemma.provider.providers.anthropic")
 
@@ -1317,6 +1520,8 @@ describe("Anthropic Thinking Signature and Redacted Thinking Round-Trip", functi
 end)
 
 describe("Vertex AI Thought Signature Support", function()
+  -- Provider contract test: validates SSE parsing at the provider level.
+  -- See the "(integration)" describe block below for full-chain coverage.
   local vertex = require("flemma.provider.providers.vertex")
 
   before_each(function()
