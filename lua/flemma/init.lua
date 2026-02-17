@@ -56,9 +56,28 @@ M.setup = function(user_opts)
   -- Initialize provider registry with built-in providers
   require("flemma.provider.registry").setup()
 
+  -- Resolve preset reference in model field (e.g., model = "$gemini-3-pro")
+  local resolved_preset, preset_error = presets.resolve_default(config.model, user_opts.provider)
+  if preset_error then
+    vim.notify(preset_error, vim.log.levels.ERROR)
+    return
+  end
+  if resolved_preset then
+    config.provider = resolved_preset.provider
+    config.model = resolved_preset.model
+  end
+
   -- Initialize provider based on the merged config
   local current_config = state.get_config()
-  core.initialize_provider(current_config.provider, current_config.model, current_config.parameters)
+  if resolved_preset then
+    -- Merge preset parameters on top of config parameters (same pattern as switch_provider)
+    local config_manager = require("flemma.core.config.manager")
+    local merged_params =
+      config_manager.merge_parameters(current_config.parameters, resolved_preset.provider, resolved_preset.parameters)
+    core.initialize_provider(current_config.provider, current_config.model, merged_params)
+  else
+    core.initialize_provider(current_config.provider, current_config.model, current_config.parameters)
+  end
 
   -- Set up filetype detection for .chat files
   vim.filetype.add({

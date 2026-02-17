@@ -116,6 +116,41 @@ function M.get(name)
   }
 end
 
+---Resolve a preset reference from the model field at startup.
+---Returns the normalized preset if model is a "$name" reference, nil if not a
+---preset reference, or nil + error when lookup or conflict check fails.
+---@param model_field string|nil The config.model value to inspect
+---@param explicit_provider string|nil User-supplied provider (nil when not explicitly set)
+---@return flemma.presets.NormalizedPreset|nil preset, string|nil error
+function M.resolve_default(model_field, explicit_provider)
+  if type(model_field) ~= "string" or not vim.startswith(model_field, "$") then
+    return nil, nil
+  end
+
+  local preset = M.get(model_field)
+  if not preset then
+    return nil, "Flemma: Default preset '" .. model_field .. "' not found. Provider not initialized."
+  end
+
+  -- Conflict check: only when the user explicitly set a provider
+  if explicit_provider ~= nil then
+    local resolved_user = registry.resolve(explicit_provider)
+    local resolved_preset = registry.resolve(preset.provider)
+    if resolved_user ~= resolved_preset then
+      return nil,
+        "Flemma: Explicit provider '"
+          .. explicit_provider
+          .. "' conflicts with preset '"
+          .. model_field
+          .. "' (provider: '"
+          .. preset.provider
+          .. "'). Provider not initialized."
+    end
+  end
+
+  return preset, nil
+end
+
 ---List all registered preset names, sorted alphabetically
 ---@return string[]
 function M.list()

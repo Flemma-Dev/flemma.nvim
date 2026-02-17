@@ -151,6 +151,61 @@ describe("flemma.presets", function()
     local names = presets.list()
     assert.are.same({ "$alpha", "$beta" }, names)
   end)
+
+  describe("resolve_default", function()
+    it("returns nil for non-preset model fields", function()
+      local preset, err = presets.resolve_default("gpt-4o", nil)
+      assert.is_nil(preset)
+      assert.is_nil(err)
+    end)
+
+    it("returns nil for nil model field", function()
+      local preset, err = presets.resolve_default(nil, nil)
+      assert.is_nil(preset)
+      assert.is_nil(err)
+    end)
+
+    it("resolves a known preset", function()
+      presets.refresh({
+        ["$fast"] = { provider = "openai", model = "gpt-4o" },
+      })
+
+      local preset, err = presets.resolve_default("$fast", nil)
+      assert.is_nil(err)
+      assert.is_not_nil(preset)
+      assert.are.equal("openai", preset.provider)
+      assert.are.equal("gpt-4o", preset.model)
+    end)
+
+    it("returns error for unknown preset", function()
+      local preset, err = presets.resolve_default("$missing", nil)
+      assert.is_nil(preset)
+      assert.is_not_nil(err)
+      assert.truthy(err:find("not found"))
+    end)
+
+    it("returns error when explicit provider conflicts with preset", function()
+      presets.refresh({
+        ["$fast"] = { provider = "openai", model = "gpt-4o" },
+      })
+
+      local preset, err = presets.resolve_default("$fast", "anthropic")
+      assert.is_nil(preset)
+      assert.is_not_nil(err)
+      assert.truthy(err:find("conflicts"))
+    end)
+
+    it("succeeds when explicit provider matches preset", function()
+      presets.refresh({
+        ["$fast"] = { provider = "openai", model = "gpt-4o" },
+      })
+
+      local preset, err = presets.resolve_default("$fast", "openai")
+      assert.is_nil(err)
+      assert.is_not_nil(preset)
+      assert.are.equal("openai", preset.provider)
+    end)
+  end)
 end)
 
 describe(":Flemma switch completion ordering", function()
