@@ -241,7 +241,13 @@ describe("flemma.status", function()
           merged = { max_tokens = 8192, thinking = "low" },
           frontmatter_overrides = { thinking = "low" },
         },
-        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, frontmatter_override = false },
+        autopilot = {
+          enabled = false,
+          config_enabled = true,
+          buffer_state = "idle",
+          max_turns = 100,
+          frontmatter_override = false,
+        },
         sandbox = {
           enabled = false,
           config_enabled = false,

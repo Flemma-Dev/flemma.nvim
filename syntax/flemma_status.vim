@@ -24,7 +24,7 @@ syntax match FlemmaStatusConfigTitle "^Config (full)$" contained
 
 " Key labels (indented key: value pairs)
 syntax match FlemmaStatusKey "^\s\+\zs[^:]\+\ze:" contained
-syntax match FlemmaStatusKeyLine "^\s\+[^:]\+:.*$" contains=FlemmaStatusKey,FlemmaStatusEnabled,FlemmaStatusDisabled,FlemmaStatusNumber,FlemmaStatusParen
+syntax match FlemmaStatusKeyLine "^\s\+[^:]\+:.*$" contains=FlemmaStatusKey,FlemmaStatusEnabled,FlemmaStatusDisabled,FlemmaStatusNumber,FlemmaStatusParen,FlemmaStatusStrikethrough,FlemmaStatusComment
 
 " Boolean-like values
 syntax keyword FlemmaStatusEnabled enabled true yes contained
@@ -36,8 +36,11 @@ syntax match FlemmaStatusNumber "\<\d\+\(\.\d\+\)\?\>" contained
 " Parenthesized annotations
 syntax match FlemmaStatusParen "([^)]*)" contained
 
-" Frontmatter override annotations
-syntax match FlemmaStatusFrontmatter "^\s\+⚑ frontmatter override:.*$"
+" Strikethrough for overridden values (~~value~~)
+syntax region FlemmaStatusStrikethrough matchgroup=Conceal start=/\~\~/ end=/\~\~/ concealends contained
+
+" Frontmatter override comment (# frontmatter override)
+syntax match FlemmaStatusComment "#.*$" contained
 
 " Config dump region with embedded Lua highlighting
 syntax region FlemmaStatusConfigBlock start="^Config (full)$" end="\%$" keepend contains=FlemmaStatusConfigTitle,FlemmaStatusConfigSeparator,@FlemmaStatusLua
@@ -58,7 +61,8 @@ highlight default link FlemmaStatusEnabled DiagnosticOk
 highlight default link FlemmaStatusDisabled DiagnosticWarn
 highlight default link FlemmaStatusNumber Number
 highlight default link FlemmaStatusParen Comment
-highlight default link FlemmaStatusFrontmatter Special
+highlight default FlemmaStatusStrikethrough gui=strikethrough
+highlight default link FlemmaStatusComment Comment
 highlight default link FlemmaStatusToolEnabled DiagnosticOk
 highlight default link FlemmaStatusToolDisabled DiagnosticWarn
 

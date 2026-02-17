@@ -17,7 +17,7 @@ local tools_registry = require("flemma.tools.registry")
 ---@class flemma.status.Data
 ---@field provider { name: string, model: string|nil, initialized: boolean }
 ---@field parameters { merged: table<string, any>, frontmatter_overrides: table<string, any>|nil }
----@field autopilot { enabled: boolean, buffer_state: string, max_turns: integer, frontmatter_override: boolean|nil }
+---@field autopilot { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, frontmatter_override: boolean|nil }
 ---@field sandbox { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil }
 ---@field tools { enabled: string[], disabled: string[] }
 ---@field buffer { is_chat: boolean, bufnr: integer }
@@ -78,10 +78,14 @@ end
 ---@param bufnr integer
 ---@param config flemma.Config
 ---@param opts flemma.opt.ResolvedOpts|nil
----@return { enabled: boolean, buffer_state: string, max_turns: integer, frontmatter_override: boolean|nil }
+---@return { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, frontmatter_override: boolean|nil }
 local function collect_autopilot(bufnr, config, opts)
   local autopilot_config = config.tools and config.tools.autopilot
   local max_turns = (autopilot_config and autopilot_config.max_turns) or 100
+
+  -- Base config value (ignoring frontmatter): mirrors autopilot.is_enabled() without the opts check
+  local config_enabled = autopilot_config and (autopilot_config.enabled == nil or autopilot_config.enabled == true)
+    or false
 
   local frontmatter_override = nil
   if opts and opts.autopilot ~= nil then
@@ -90,6 +94,7 @@ local function collect_autopilot(bufnr, config, opts)
 
   return {
     enabled = autopilot.is_enabled(bufnr),
+    config_enabled = config_enabled,
     buffer_state = autopilot.get_state(bufnr),
     max_turns = max_turns,
     frontmatter_override = frontmatter_override,
@@ -203,9 +208,18 @@ function M.format(data, verbose)
   table.sort(sorted_keys)
   for _, key in ipairs(sorted_keys) do
     local value = data.parameters.merged[key]
-    add("  " .. key .. ": " .. format_value(value))
     if data.parameters.frontmatter_overrides and data.parameters.frontmatter_overrides[key] ~= nil then
-      add("  ⚑ frontmatter override: " .. key .. " = " .. format_value(data.parameters.frontmatter_overrides[key]))
+      add(
+        "  "
+          .. key
+          .. ": ~~"
+          .. format_value(value)
+          .. "~~ "
+          .. format_value(data.parameters.frontmatter_overrides[key])
+          .. "  # frontmatter override"
+      )
+    else
+      add("  " .. key .. ": " .. format_value(value))
     end
   end
   add("")
@@ -213,11 +227,21 @@ function M.format(data, verbose)
   -- Autopilot section
   add("Autopilot")
   local autopilot_status = data.autopilot.enabled and "enabled" or "disabled"
-  add("  status: " .. autopilot_status .. " (" .. data.autopilot.buffer_state .. ")")
-  add("  max_turns: " .. tostring(data.autopilot.max_turns))
   if data.autopilot.frontmatter_override ~= nil then
-    add("  ⚑ frontmatter override: autopilot = " .. tostring(data.autopilot.frontmatter_override))
+    local config_status = data.autopilot.config_enabled and "enabled" or "disabled"
+    add(
+      "  status: ~~"
+        .. config_status
+        .. "~~ "
+        .. autopilot_status
+        .. " ("
+        .. data.autopilot.buffer_state
+        .. ")  # frontmatter override"
+    )
+  else
+    add("  status: " .. autopilot_status .. " (" .. data.autopilot.buffer_state .. ")")
   end
+  add("  max_turns: " .. tostring(data.autopilot.max_turns))
   add("")
 
   -- Sandbox section
@@ -332,6 +356,10 @@ function M.show(opts)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
   vim.bo[bufnr].modifiable = false
   vim.bo[bufnr].filetype = "flemma_status"
+
+  -- Enable conceal for strikethrough on overridden values
+  local win = vim.api.nvim_get_current_win()
+  vim.wo[win].conceallevel = 2
 
   -- Map q to close
   vim.keymap.set("n", "q", "<cmd>close<cr>", { buffer = bufnr, nowait = true })
