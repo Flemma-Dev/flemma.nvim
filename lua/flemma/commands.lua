@@ -396,14 +396,8 @@ local function setup_commands()
       },
       status = {
         action = function()
-          local autopilot = require("flemma.autopilot")
-          local bufnr = vim.api.nvim_get_current_buf()
-          local enabled = autopilot.is_enabled(bufnr)
-          local buffer_state = autopilot.get_state(bufnr)
-          vim.notify(
-            string.format("Flemma: Autopilot %s (buffer state: %s)", enabled and "enabled" or "disabled", buffer_state),
-            vim.log.levels.INFO
-          )
+          local status_module = require("flemma.status")
+          status_module.show({ jump_to = "Autopilot" })
         end,
       },
     },
@@ -432,40 +426,30 @@ local function setup_commands()
       },
       status = {
         action = function()
-          local sandbox = require("flemma.sandbox")
-          local cfg = sandbox.resolve_config()
-          local override = sandbox.get_override()
-          local effective = sandbox.is_enabled()
-
-          local parts = {}
-          table.insert(parts, string.format("Sandbox %s", effective and "enabled" or "disabled"))
-          table.insert(parts, string.format("  config: %s", cfg.enabled and "enabled" or "disabled"))
-          if override ~= nil then
-            table.insert(parts, string.format("  runtime override: %s", override and "enabled" or "disabled"))
-          end
-
-          if cfg.backend == "auto" or cfg.backend == "required" then
-            local detected, detect_err = sandbox.detect_available_backend()
-            if detected then
-              table.insert(parts, string.format("  backend: %s (%s)", detected, cfg.backend))
-            else
-              table.insert(parts, string.format("  backend: none (%s)", detect_err or "no backends available"))
-            end
-          else
-            table.insert(parts, string.format("  backend: %s (explicit)", cfg.backend))
-          end
-
-          local ok, err = sandbox.validate_backend()
-          if ok then
-            table.insert(parts, "  backend available: yes")
-          else
-            table.insert(parts, string.format("  backend available: no (%s)", err))
-          end
-
-          vim.notify("Flemma:\n" .. table.concat(parts, "\n"), vim.log.levels.INFO)
+          local status_module = require("flemma.status")
+          status_module.show({ jump_to = "Sandbox" })
         end,
       },
     },
+  }
+
+  command_tree.children.status = {
+    action = function(context)
+      local status_module = require("flemma.status")
+      local verbose = false
+      for _, arg in ipairs(context.extra_args) do
+        if arg == "verbose" then
+          verbose = true
+        end
+      end
+      status_module.show({ verbose = verbose })
+    end,
+    complete = function(arglead)
+      local suggestions = { "verbose" }
+      return vim.tbl_filter(function(item)
+        return vim.startswith(item, arglead)
+      end, suggestions)
+    end,
   }
 
   command_tree.children.tool = {
