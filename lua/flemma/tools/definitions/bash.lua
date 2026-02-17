@@ -40,6 +40,13 @@ M.definitions = {
       additionalProperties = false,
     },
     async = true,
+    format_preview = function(input)
+      local parts = { "$ " .. input.command }
+      if input.label then
+        table.insert(parts, "# " .. input.label)
+      end
+      return table.concat(parts, "  ")
+    end,
     execute = function(input, callback, ctx)
       local cmd = input.command
       if not cmd or cmd == "" then

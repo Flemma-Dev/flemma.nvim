@@ -33,6 +33,20 @@ M.definitions = {
       additionalProperties = false,
     },
     async = false,
+    format_preview = function(input)
+      local size = #input.content
+      local display
+      if size < 1024 then
+        display = size .. " B"
+      else
+        display = string.format("%.1f KB", size / 1024)
+      end
+      local parts = { input.path, "(" .. display .. ")" }
+      if input.label then
+        table.insert(parts, "# " .. input.label)
+      end
+      return table.concat(parts, "  ")
+    end,
     ---@param input table<string, any>
     ---@param _callback? fun(result: flemma.tools.ExecutionResult)
     ---@param context? flemma.tools.ExecutionContext

@@ -37,6 +37,13 @@ M.definitions = {
       additionalProperties = false,
     },
     async = false,
+    format_preview = function(input)
+      local parts = { input.path }
+      if input.label then
+        table.insert(parts, "# " .. input.label)
+      end
+      return table.concat(parts, "  ")
+    end,
     ---@param input table<string, any>
     ---@param _callback? fun(result: flemma.tools.ExecutionResult)
     ---@param context? flemma.tools.ExecutionContext

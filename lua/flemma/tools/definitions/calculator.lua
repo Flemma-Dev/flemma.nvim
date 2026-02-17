@@ -33,6 +33,9 @@ M.definitions = {
       required = { "result" },
     },
     async = false,
+    format_preview = function(input)
+      return input.expression
+    end,
     execute = function(input)
       local expr = input.expression
       if not expr or expr == "" then
@@ -82,6 +85,13 @@ M.definitions = {
       required = { "result" },
     },
     async = true,
+    format_preview = function(input)
+      local parts = { input.expression }
+      if input.delay then
+        table.insert(parts, "# " .. input.delay .. "ms")
+      end
+      return table.concat(parts, "  ")
+    end,
     execute = function(input, callback)
       local expr = input.expression
       if not expr or expr == "" then

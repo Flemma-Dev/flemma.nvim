@@ -42,6 +42,23 @@ M.definitions = {
       additionalProperties = false,
     },
     async = false,
+    format_preview = function(input)
+      local parts = { input.path }
+      if input.offset or input.limit then
+        local range = "+"
+        if input.offset then
+          range = range .. input.offset
+        end
+        if input.limit then
+          range = range .. "," .. input.limit
+        end
+        table.insert(parts, range)
+      end
+      if input.label then
+        table.insert(parts, "# " .. input.label)
+      end
+      return table.concat(parts, "  ")
+    end,
     execute = function(input)
       local path = input.path
       if not path or path == "" then

@@ -10,8 +10,8 @@ local ui_preview = require("flemma.ui.preview")
 describe("Tool Preview", function()
   describe("format_tool_preview", function()
     it("formats single-key input as tool_name: key=value", function()
-      local result = ui_preview.format_tool_preview("bash", { command = "ls -la /tmp" })
-      assert.are.equal('bash: command="ls -la /tmp"', result)
+      local result = ui_preview.format_tool_preview("run_cmd", { command = "ls -la /tmp" })
+      assert.are.equal('run_cmd: command="ls -la /tmp"', result)
     end)
 
     it("formats multi-key input with sorted keys", function()
@@ -40,9 +40,9 @@ describe("Tool Preview", function()
     end)
 
     it("formats non-string values with tostring", function()
-      local result = ui_preview.format_tool_preview("calculator", { expression = "1+1", precision = 2 })
+      local result = ui_preview.format_tool_preview("math_eval", { expression = "1+1", precision = 2 })
       -- Keys sorted: expression, precision
-      assert.are.equal('calculator: expression="1+1", precision=2', result)
+      assert.are.equal('math_eval: expression="1+1", precision=2', result)
     end)
 
     it("formats boolean values without quotes", function()
@@ -81,13 +81,13 @@ describe("Tool Preview", function()
     end)
 
     it("escapes quotes in string values", function()
-      local result = ui_preview.format_tool_preview("bash", { command = 'echo "hello"' })
-      assert.are.equal('bash: command="echo \\"hello\\""', result)
+      local result = ui_preview.format_tool_preview("run_cmd", { command = 'echo "hello"' })
+      assert.are.equal('run_cmd: command="echo \\"hello\\""', result)
     end)
 
     it("collapses newlines in string values", function()
-      local result = ui_preview.format_tool_preview("bash", { command = "echo hello\necho world" })
-      assert.are.equal('bash: command="echo hello⤶echo world"', result)
+      local result = ui_preview.format_tool_preview("run_cmd", { command = "echo hello\necho world" })
+      assert.are.equal('run_cmd: command="echo hello⤶echo world"', result)
     end)
 
     it("uses custom format_preview from tool registry", function()
@@ -365,6 +365,103 @@ describe("Tool Preview", function()
 
       local all_marks = vim.api.nvim_buf_get_extmarks(bufnr, tool_preview_ns, 0, -1, {})
       assert.are.equal(0, #all_marks, "Should NOT place preview for resolved tool results")
+    end)
+  end)
+
+  describe("built-in tool format_preview", function()
+    before_each(function()
+      package.loaded["flemma"] = nil
+      package.loaded["flemma.ui.preview"] = nil
+      package.loaded["flemma.tools.registry"] = nil
+      package.loaded["flemma.tools"] = nil
+      package.loaded["flemma.tools.definitions.calculator"] = nil
+      package.loaded["flemma.tools.definitions.bash"] = nil
+      package.loaded["flemma.tools.definitions.read"] = nil
+      package.loaded["flemma.tools.definitions.edit"] = nil
+      package.loaded["flemma.tools.definitions.write"] = nil
+
+      require("flemma").setup({})
+      ui_preview = require("flemma.ui.preview")
+    end)
+
+    it("calculator shows expression", function()
+      local result = ui_preview.format_tool_preview("calculator", { expression = "2 + 2 * 3" })
+      assert.are.equal("calculator: 2 + 2 * 3", result)
+    end)
+
+    it("calculator_async shows expression and delay", function()
+      local result = ui_preview.format_tool_preview("calculator_async", { expression = "sqrt(16)", delay = 500 })
+      assert.are.equal("calculator_async: sqrt(16)  # 500ms", result)
+    end)
+
+    it("calculator_async omits delay when nil", function()
+      local result = ui_preview.format_tool_preview("calculator_async", { expression = "1+1" })
+      assert.are.equal("calculator_async: 1+1", result)
+    end)
+
+    it("bash shows $ command with label comment", function()
+      local result = ui_preview.format_tool_preview("bash", { command = "ls -la /tmp", label = "list files" })
+      assert.are.equal("bash: $ ls -la /tmp  # list files", result)
+    end)
+
+    it("bash omits label when not provided", function()
+      local result = ui_preview.format_tool_preview("bash", { command = "echo hello" })
+      assert.are.equal("bash: $ echo hello", result)
+    end)
+
+    it("read shows path with offset and limit", function()
+      local result = ui_preview.format_tool_preview(
+        "read",
+        { path = "./src/main.lua", offset = 10, limit = 50, label = "read config" }
+      )
+      assert.are.equal("read: ./src/main.lua  +10,50  # read config", result)
+    end)
+
+    it("read shows path with offset only", function()
+      local result = ui_preview.format_tool_preview("read", { path = "./src/main.lua", offset = 10 })
+      assert.are.equal("read: ./src/main.lua  +10", result)
+    end)
+
+    it("read shows path with limit only", function()
+      local result = ui_preview.format_tool_preview("read", { path = "./src/main.lua", limit = 50 })
+      assert.are.equal("read: ./src/main.lua  +,50", result)
+    end)
+
+    it("read shows plain path without offset or limit", function()
+      local result = ui_preview.format_tool_preview("read", { path = "./src/main.lua", label = "check file" })
+      assert.are.equal("read: ./src/main.lua  # check file", result)
+    end)
+
+    it("edit shows path with label", function()
+      local result = ui_preview.format_tool_preview(
+        "edit",
+        { path = "./src/main.lua", oldText = "foo", newText = "bar", label = "fix typo" }
+      )
+      assert.are.equal("edit: ./src/main.lua  # fix typo", result)
+    end)
+
+    it("edit shows plain path without label", function()
+      local result =
+        ui_preview.format_tool_preview("edit", { path = "./src/main.lua", oldText = "foo", newText = "bar" })
+      assert.are.equal("edit: ./src/main.lua", result)
+    end)
+
+    it("write shows path with byte size and label", function()
+      local content = string.rep("x", 1536)
+      local result =
+        ui_preview.format_tool_preview("write", { path = "./src/main.lua", content = content, label = "create module" })
+      assert.are.equal("write: ./src/main.lua  (1.5 KB)  # create module", result)
+    end)
+
+    it("write shows bytes for small content", function()
+      local result = ui_preview.format_tool_preview("write", { path = "./readme.txt", content = "hello" })
+      assert.are.equal("write: ./readme.txt  (5 B)", result)
+    end)
+
+    it("write shows label without content size when content is empty", function()
+      local result =
+        ui_preview.format_tool_preview("write", { path = "./empty.txt", content = "", label = "create empty" })
+      assert.are.equal("write: ./empty.txt  (0 B)  # create empty", result)
     end)
   end)
 end)
