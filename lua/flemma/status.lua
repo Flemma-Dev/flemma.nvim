@@ -118,19 +118,36 @@ local function collect_sandbox(opts)
   }
 end
 
----Collect tools section data
+---Collect tools section data, respecting per-buffer frontmatter overrides
+---@param opts flemma.opt.ResolvedOpts|nil
 ---@return { enabled: string[], disabled: string[] }
-local function collect_tools()
+local function collect_tools(opts)
   local all_tools = tools_registry.get_all({ include_disabled = true })
 
   local enabled = {}
   local disabled = {}
 
-  for name, definition in pairs(all_tools) do
-    if definition.enabled ~= false then
-      table.insert(enabled, name)
-    else
-      table.insert(disabled, name)
+  if opts and opts.tools then
+    -- Frontmatter overrides the tool list: opts.tools is the list of enabled names
+    local enabled_set = {}
+    for _, name in ipairs(opts.tools) do
+      enabled_set[name] = true
+    end
+    for name, _ in pairs(all_tools) do
+      if enabled_set[name] then
+        table.insert(enabled, name)
+      else
+        table.insert(disabled, name)
+      end
+    end
+  else
+    -- No frontmatter override: use global registry state
+    for name, definition in pairs(all_tools) do
+      if definition.enabled ~= false then
+        table.insert(enabled, name)
+      else
+        table.insert(disabled, name)
+      end
     end
   end
 
@@ -238,6 +255,7 @@ function M.format(data, verbose)
     add("")
     add("Config (full)")
     add(string.rep("─", 40))
+    add("")
     local config_text = vim.inspect(state.get_config())
     for line in config_text:gmatch("[^\n]+") do
       add(line)
@@ -268,7 +286,7 @@ function M.collect(bufnr)
     parameters = collect_parameters(config, opts),
     autopilot = collect_autopilot(bufnr, config, opts),
     sandbox = collect_sandbox(opts),
-    tools = collect_tools(),
+    tools = collect_tools(opts),
     buffer = {
       is_chat = is_chat,
       bufnr = bufnr,

@@ -206,6 +206,7 @@ Use the single entry point `:Flemma {command}`. Autocompletion lists every avail
 
 | Command                                                     | Purpose                                                                                  | Example                                                                     |
 | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `:Flemma status [verbose]`                                  | Show runtime status (provider, parameters, autopilot, sandbox, tools) in a scratch buffer. `verbose` appends the full config dump with Lua highlighting. | `:Flemma status verbose` |
 | `:Flemma send [key=value ...]`                              | Send the current buffer. Optional callbacks run before/after the request.                | `:Flemma send on_request_start=stopinsert on_request_complete=startinsert!` |
 | `:Flemma cancel`                                            | Abort the active request and clean up the spinner.                                       |                                                                             |
 | `:Flemma switch ...`                                        | Choose or override provider/model parameters.                                            | See below.                                                                  |
@@ -215,8 +216,8 @@ Use the single entry point `:Flemma {command}`. Autocompletion lists every avail
 | `:Flemma tool:cancel`                                       | Cancel the tool execution at the cursor.                                                 |                                                                             |
 | `:Flemma tool:cancel-all`                                   | Cancel all pending tool executions in the buffer.                                        |                                                                             |
 | `:Flemma tool:list`                                         | List pending tool executions with IDs and elapsed time.                                  |                                                                             |
-| `:Flemma autopilot:enable` / `:...:disable` / `:...:status` | Toggle autopilot or check its current state.                                             |                                                                             |
-| `:Flemma sandbox:enable` / `:...:disable` / `:...:status`   | Toggle sandboxing or check backend availability.                                         |                                                                             |
+| `:Flemma autopilot:enable` / `:...:disable` / `:...:status` | Toggle autopilot or view its state (status opens the full status buffer).                |                                                                             |
+| `:Flemma sandbox:enable` / `:...:disable` / `:...:status`   | Toggle sandboxing or view its state (status opens the full status buffer).               |                                                                             |
 | `:Flemma logging:enable` / `:...:disable` / `:...:open`     | Toggle structured logging and open the log file.                                         |                                                                             |
 | `:Flemma notification:recall`                               | Reopen the last usage/cost notification.                                                 |                                                                             |
 
@@ -360,7 +361,7 @@ Toggle autopilot at runtime without changing your config:
 
 - `:Flemma autopilot:enable` – activate for the current session.
 - `:Flemma autopilot:disable` – deactivate for the current session.
-- `:Flemma autopilot:status` – print whether autopilot is currently active and the buffer's loop state.
+- `:Flemma autopilot:status` – open the status buffer and jump to the Autopilot section (shows enabled state, buffer loop state, max turns, and any frontmatter overrides).
 
 To disable autopilot globally, set `tools.autopilot.enabled = false`. See [docs/configuration.md](docs/configuration.md) for the full option reference.
 
@@ -526,7 +527,7 @@ On a personal level, I've used Flemma to generate bedtime stories with recurring
 - **Vertex refuses requests:** double-check `parameters.vertex.project_id` and authentication. Run `gcloud auth application-default print-access-token` manually to ensure credentials are valid.
 - **Tool execution doesn't respond:** make sure the cursor is on or near the `**Tool Use:**` block. Only tools with registered executors can be run – check `:lua print(vim.inspect(require("flemma.tools").get_all()))`.
 - **Keymaps clash:** disable built-in mappings via `keymaps.enabled = false` and register your own `:Flemma` commands.
-- **Sandbox blocks writes:** If a tool reports "permission denied" on a path you expect to be writable, check `:Flemma sandbox:status` and verify the path is inside `rw_paths`. Add it to `sandbox.policy.rw_paths` or disable sandboxing to troubleshoot.
+- **Sandbox blocks writes:** If a tool reports "permission denied" on a path you expect to be writable, run `:Flemma status` (or `:Flemma sandbox:status`) and verify the path is inside `rw_paths`. Add it to `sandbox.policy.rw_paths` or disable sandboxing to troubleshoot.
 - **Cross-buffer issues:** Flemma manages state per-buffer. If something feels off after switching between multiple `.chat` buffers, ensure each buffer has been saved (unsaved buffers lack `__dirname` for path resolution).
 
 ## License
