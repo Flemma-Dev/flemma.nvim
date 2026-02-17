@@ -65,7 +65,6 @@ local function collect_parameters(config, opts)
     end
     if next(overrides) then
       frontmatter_overrides = overrides
-      base_merged = merged_with_frontmatter
     end
   end
 
