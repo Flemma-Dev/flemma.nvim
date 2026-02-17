@@ -289,7 +289,7 @@ function M.show(opts)
   local existing_bufnr = nil
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     local bufnr = vim.api.nvim_win_get_buf(win)
-    if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].filetype == "flemma-status" then
+    if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].filetype == "flemma_status" then
       existing_win = win
       existing_bufnr = bufnr
       break
@@ -314,7 +314,7 @@ function M.show(opts)
   vim.bo[bufnr].modifiable = true
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
   vim.bo[bufnr].modifiable = false
-  vim.bo[bufnr].filetype = "flemma-status"
+  vim.bo[bufnr].filetype = "flemma_status"
 
   -- Map q to close
   vim.keymap.set("n", "q", "<cmd>close<cr>", { buffer = bufnr, nowait = true })

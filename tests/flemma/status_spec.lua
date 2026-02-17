@@ -309,7 +309,7 @@ describe("flemma.status", function()
       assert.equals("wipe", vim.bo[bufnr].bufhidden)
       assert.is_false(vim.bo[bufnr].modifiable)
       assert.is_false(vim.bo[bufnr].swapfile)
-      assert.equals("flemma-status", vim.bo[bufnr].filetype)
+      assert.equals("flemma_status", vim.bo[bufnr].filetype)
 
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
       assert.is_truthy(table.concat(lines, "\n"):find("Flemma Status"))
