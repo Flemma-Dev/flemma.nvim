@@ -40,6 +40,14 @@ Each request stores raw data – tokens, per-million prices, cache multipliers, 
 
 Methods: `get_input_cost()`, `get_output_cost()`, `get_total_cost()`, `get_total_output_tokens()`.
 
+## Resetting the session
+
+`Session:reset()` clears all accumulated requests, zeroing token and cost counters without restarting Neovim:
+
+```lua
+require("flemma.session").get():reset()
+```
+
 ## Saving and restoring a session
 
 `Session:load()` accepts a list of option tables in the same format as `add_request()` and replaces the current session contents. Combined with reading `session.requests`, this enables crude persistence:

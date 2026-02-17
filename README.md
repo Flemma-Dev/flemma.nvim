@@ -398,7 +398,7 @@ Flemma's prompt pipeline supports Lua/JSON frontmatter, inline `{{ expressions }
 
 ## Usage, Pricing, and Notifications
 
-Each completed request emits a floating report that names the provider/model, lists input/output tokens (reasoning tokens are counted under `thoughts`), and – when pricing is enabled – shows the per-request and cumulative session cost derived from `lua/flemma/models.lua`. When prompt caching is active, a `Cache:` line shows read and write token counts. Token accounting persists for the lifetime of the Neovim instance; call `require("flemma.state").reset_session()` to zero the counters without restarting. `pricing.enabled = false` suppresses the dollar amounts while keeping token totals.
+Each completed request emits a floating report that names the provider/model, lists input/output tokens (reasoning tokens are counted under `thoughts`), and – when pricing is enabled – shows the per-request and cumulative session cost derived from `lua/flemma/models.lua`. When prompt caching is active, a `Cache:` line shows read and write token counts. Token accounting persists for the lifetime of the Neovim instance; call `require("flemma.session").get():reset()` to zero the counters without restarting. `pricing.enabled = false` suppresses the dollar amounts while keeping token totals.
 
 Notifications are buffer-local – each `.chat` buffer gets its own notification stack, positioned relative to its window. Notifications for hidden buffers are queued and shown when the buffer becomes visible. Recall the most recent notification with `:Flemma notification:recall`.
 

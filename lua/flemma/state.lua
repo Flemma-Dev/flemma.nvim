@@ -64,11 +64,6 @@ function M.get_session()
   return session
 end
 
----Reset the global session (clears all request history)
-function M.reset_session()
-  session = session_module.Session.new()
-end
-
 -- Buffer state management
 
 ---Initialize buffer state with default values
