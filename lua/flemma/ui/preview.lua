@@ -89,20 +89,17 @@ local function format_table_value(value)
   end
 end
 
----Format a compact preview string for a tool call
----Produces: "tool_name: key1="val1", key2="val2"" (sorted keys, truncated)
----Non-table values are listed first, then table values, each group sorted
----alphabetically (original JSON key order is not preserved in Lua tables).
----@param tool_name string
+---Format the generic key-value preview body for a tool call (no name prefix)
+---Produces: 'key1="val1", key2="val2"' (scalar keys first, sorted, truncated)
 ---@param input table<string, any>
----@param max_length? integer Maximum preview length (defaults to DEFAULT_MAX_LENGTH)
+---@param max_length? integer Maximum body length (defaults to DEFAULT_MAX_LENGTH)
 ---@return string
-function M.format_tool_preview(tool_name, input, max_length)
+local function format_tool_preview_body(input, max_length)
   max_length = max_length or DEFAULT_MAX_LENGTH
 
   local keys = vim.tbl_keys(input)
   if #keys == 0 then
-    return tool_name
+    return ""
   end
 
   -- Separate keys into scalar and table groups, sort each alphabetically
@@ -128,7 +125,6 @@ function M.format_tool_preview(tool_name, input, max_length)
     local value = input[key]
     local formatted
     if type(value) == "string" then
-      -- Collapse newlines and escape quotes for single-line display
       local display_value = value:gsub("\n", CONTENT_PREVIEW_NEWLINE_CHAR):gsub('"', '\\"')
       formatted = key .. '="' .. display_value .. '"'
     elseif type(value) == "table" then
@@ -139,7 +135,50 @@ function M.format_tool_preview(tool_name, input, max_length)
     table.insert(parts, formatted)
   end
 
-  local preview = tool_name .. ": " .. table.concat(parts, ", ")
+  local body = table.concat(parts, ", ")
+
+  if #body > max_length then
+    local truncated_length = max_length - #CONTENT_PREVIEW_TRUNCATION_MARKER
+    if truncated_length < 0 then
+      truncated_length = 0
+    end
+    body = body:sub(1, truncated_length) .. CONTENT_PREVIEW_TRUNCATION_MARKER
+  end
+
+  return body
+end
+
+---Format a compact preview string for a tool call
+---Checks the tool registry for a custom format_preview function; falls back
+---to the generic key-value body. Handles name prefix, newline collapsing,
+---and truncation uniformly.
+---@param tool_name string
+---@param input table<string, any>
+---@param max_length? integer Maximum total preview length (defaults to DEFAULT_MAX_LENGTH)
+---@return string
+function M.format_tool_preview(tool_name, input, max_length)
+  max_length = max_length or DEFAULT_MAX_LENGTH
+
+  local name_prefix = tool_name .. ": "
+  local available = max_length - #name_prefix
+
+  local registry = require("flemma.tools.registry")
+  local tool_def = registry.get(tool_name)
+
+  local body
+  if tool_def and tool_def.format_preview then
+    body = tool_def.format_preview(input, available)
+    -- Collapse newlines for single-line display
+    body = body:gsub("\n", CONTENT_PREVIEW_NEWLINE_CHAR)
+  else
+    local keys = vim.tbl_keys(input)
+    if #keys == 0 then
+      return tool_name
+    end
+    body = format_tool_preview_body(input, available)
+  end
+
+  local preview = name_prefix .. body
 
   if #preview > max_length then
     local truncated_length = max_length - #CONTENT_PREVIEW_TRUNCATION_MARKER
