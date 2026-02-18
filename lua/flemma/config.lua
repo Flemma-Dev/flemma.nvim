@@ -13,6 +13,7 @@
 ---@field tool_use flemma.config.HighlightValue
 ---@field tool_result flemma.config.HighlightValue
 ---@field tool_result_error flemma.config.HighlightValue
+---@field tool_preview flemma.config.HighlightValue
 
 ---@class flemma.config.Ruler
 ---@field enabled boolean
@@ -185,6 +186,7 @@ return {
     tool_use = "Function", -- Highlight group or hex color for **Tool Use:** title
     tool_result = "Function", -- Highlight group or hex color for **Tool Result:** title
     tool_result_error = "DiagnosticError", -- Highlight group or hex color for (error) marker in tool results
+    tool_preview = "Comment", -- Highlight group or hex color for tool preview virtual lines in pending tool blocks
   },
   role_style = "bold,underline", -- style applied to role markers like @You:
   ruler = {

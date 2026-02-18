@@ -639,7 +639,7 @@ function M.add_tool_previews(bufnr, doc)
             if line_idx >= 0 and line_idx < line_count then
               local preview_text = preview.format_tool_preview(tool_use.name, tool_use.input, max_length)
               vim.api.nvim_buf_set_extmark(bufnr, tool_preview_ns, line_idx, 0, {
-                virt_lines = { { { preview_text, "Comment" } } },
+                virt_lines = { { { preview_text, "FlemmaToolPreview" } } },
               })
             end
           end

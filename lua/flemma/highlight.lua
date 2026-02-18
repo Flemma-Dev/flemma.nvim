@@ -273,6 +273,7 @@ M.apply_syntax = function()
   set_highlight("FlemmaToolUseTitle", syntax_config.highlights.tool_use)
   set_highlight("FlemmaToolResultTitle", syntax_config.highlights.tool_result)
   set_highlight("FlemmaToolResultError", syntax_config.highlights.tool_result_error)
+  set_highlight("FlemmaToolPreview", syntax_config.highlights.tool_preview)
 
   -- Tool execution indicator highlights
   set_highlight("FlemmaToolPending", { link = "DiagnosticInfo", default = true })
