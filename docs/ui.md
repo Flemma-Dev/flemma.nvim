@@ -209,7 +209,7 @@ The display format when thinking is active is configurable via `statusline.think
 
 | Variable  | Example                 |
 | --------- | ----------------------- |
-| `{model}` | `claude-sonnet-4-5`     |
+| `{model}` | `claude-sonnet-4-6`     |
 | `{level}` | `high`, `medium`, `low` |
 
 When thinking is disabled or the model doesn't support it, only the model name is shown. The component respects per-buffer overrides from `flemma.opt` – if frontmatter changes the thinking level, the statusline reflects it.

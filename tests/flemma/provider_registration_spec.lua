@@ -132,7 +132,7 @@ describe("provider registration", function()
     end)
 
     it("returns the default for a registered built-in provider", function()
-      assert.are.equal("claude-sonnet-4-5", registry.get_model("anthropic"))
+      assert.are.equal("claude-sonnet-4-6", registry.get_model("anthropic"))
     end)
   end)
 

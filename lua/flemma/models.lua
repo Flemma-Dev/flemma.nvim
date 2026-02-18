@@ -25,7 +25,7 @@ return {
   providers = {
     -- Note: "claude" is a deprecated alias for "anthropic" (see provider/providers.lua)
     anthropic = {
-      default = "claude-sonnet-4-5",
+      default = "claude-sonnet-4-6",
       cache_read_multiplier = 0.1, -- Cache reads cost 10% of base input price
       cache_write_multipliers = {
         short = 1.25, -- 5-minute TTL: 1.25× base input price
@@ -40,7 +40,15 @@ return {
           },
         },
 
-        -- Claude Sonnet 4.5 (as of Sep 2025)
+        -- Claude Sonnet 4.6
+        ["claude-sonnet-4-6"] = {
+          pricing = {
+            input = 3.0,
+            output = 15.0,
+          },
+        },
+
+        -- Claude Sonnet 4.5
         ["claude-sonnet-4-5"] = {
           pricing = {
             input = 3.0,
@@ -218,7 +226,7 @@ return {
           },
         },
 
-        -- Gemini 2.0 Flash models (retiring Mar 2026)
+        -- Gemini 2.0 Flash models (retiring Jun 2026)
         ["gemini-2.0-flash"] = {
           pricing = {
             input = 0.15,
@@ -232,7 +240,7 @@ return {
           },
         },
 
-        -- Gemini 2.0 Flash Lite models (retiring Mar 2026)
+        -- Gemini 2.0 Flash Lite models (retiring Jun 2026)
         ["gemini-2.0-flash-lite"] = {
           pricing = {
             input = 0.075,
@@ -491,12 +499,6 @@ return {
             output = 0.60,
           },
         },
-        ["chatgpt-4o-latest"] = { -- (deprecated, retiring Feb 2026)
-          pricing = {
-            input = 5.0,
-            output = 15.0,
-          },
-        },
 
         -- o-series models
         ["o1"] = {
@@ -540,6 +542,12 @@ return {
           supports_reasoning_effort = true,
         },
         ["o3-pro"] = {
+          pricing = {
+            input = 20.0,
+            output = 80.0,
+          },
+        },
+        ["o3-pro-2025-06-10"] = {
           pricing = {
             input = 20.0,
             output = 80.0,
@@ -608,7 +616,7 @@ return {
           },
         },
 
-        -- GPT-4 Turbo models (deprecated, retiring Mar 2026)
+        -- GPT-4 Turbo models (legacy)
         ["gpt-4-turbo"] = {
           pricing = {
             input = 10.0,

@@ -236,7 +236,7 @@ presets = {
 presets = {
   ["$review"] = {
     provider = "anthropic",
-    model = "claude-sonnet-4-5",
+    model = "claude-sonnet-4-6",
     max_tokens = 6000,
   },
 }

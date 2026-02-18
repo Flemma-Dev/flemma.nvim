@@ -240,7 +240,7 @@ require("flemma").setup({
     ["$fast"] = "vertex gemini-2.5-flash temperature=0.2",
     ["$review"] = {
       provider = "anthropic",
-      model = "claude-sonnet-4-5",
+      model = "claude-sonnet-4-6",
       max_tokens = 6000,
     },
   },
@@ -277,17 +277,17 @@ require("flemma").setup({
 })
 ```
 
-Or override per-request with `:Flemma switch anthropic claude-sonnet-4-5 thinking=medium`.
+Or override per-request with `:Flemma switch anthropic claude-sonnet-4-6 thinking=medium`.
 
 **Priority order:** Provider-specific parameters (`thinking_budget` for Anthropic/Vertex, `reasoning` for OpenAI) take priority over the unified `thinking` parameter when both are set. This lets you use `thinking` as the default and override with provider-native syntax when needed.
 
-When thinking is active, the Lualine component shows the resolved level – e.g., `claude-sonnet-4-5 (high)` or `o3 (medium)`.
+When thinking is active, the Lualine component shows the resolved level – e.g., `claude-sonnet-4-6 (high)` or `o3 (medium)`.
 
 ### Provider-specific capabilities
 
 | Provider  | Defaults            | Extra parameters                                                                                                        | Notes                                                                              |
 | --------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Anthropic | `claude-sonnet-4-5` | `thinking_budget` overrides the unified `thinking` parameter with an exact token budget (clamped to min 1,024).         | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer. |
+| Anthropic | `claude-sonnet-4-6` | `thinking_budget` overrides the unified `thinking` parameter with an exact token budget (clamped to min 1,024).         | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer. |
 | OpenAI    | `gpt-5`             | `reasoning` overrides the unified `thinking` parameter with an explicit effort level (`"low"`, `"medium"`, `"high"`).   | Cost notifications include reasoning tokens. Lualine shows the reasoning level.    |
 | Vertex AI | `gemini-2.5-pro`    | `project_id` (required), `location` (default `global`), `thinking_budget` overrides with an exact token budget (min 1). | `thinking_budget` overrides the unified `thinking` parameter for Vertex.           |
 

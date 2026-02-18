@@ -49,7 +49,7 @@ Request.__index = Request
 
 ---@class flemma.session.RequestOpts
 ---@field provider string Provider name (e.g., "anthropic", "openai")
----@field model string Model name (e.g., "claude-sonnet-4-5")
+---@field model string Model name (e.g., "claude-sonnet-4-6")
 ---@field input_tokens number Number of input tokens
 ---@field output_tokens number Number of output tokens
 ---@field thoughts_tokens? number Number of thoughts/reasoning tokens
