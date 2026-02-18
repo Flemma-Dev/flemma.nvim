@@ -245,7 +245,7 @@ describe("Anthropic Provider", function()
     end)
 
     it("per-buffer thinking_budget override does not mutate self.parameters", function()
-      local p = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 100, cache_retention = "short" })
+      local p = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 4000, cache_retention = "short" })
       p:set_parameter_overrides({ thinking_budget = 2048 })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
@@ -473,6 +473,40 @@ describe("Anthropic Provider", function()
 
       assert.are.same({ type = "adaptive" }, req.thinking)
       assert.are.same({ effort = "low" }, req.output_config)
+    end)
+
+    it("should use adaptive thinking for sonnet-4-6 models", function()
+      local p = anthropic.new({ model = "claude-sonnet-4-6-20260201", max_tokens = 4000, thinking = "high" })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      assert.are.same({ type = "adaptive" }, req.thinking)
+      assert.are.same({ effort = "high" }, req.output_config)
+      assert.is_nil(req.temperature)
+    end)
+
+    it("should clamp 'max' effort to 'high' on sonnet-4-6", function()
+      local p = anthropic.new({ model = "claude-sonnet-4-6-20260201", max_tokens = 4000, thinking = "max" })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      assert.are.same({ type = "adaptive" }, req.thinking)
+      assert.are.same({ effort = "high" }, req.output_config)
+    end)
+
+    it("should clamp budget_tokens when budget >= max_tokens", function()
+      local p = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 4000, thinking = "max" })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      assert.are.equal("enabled", req.thinking.type)
+      assert.are.equal(3999, req.thinking.budget_tokens)
     end)
   end)
 end)

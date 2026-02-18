@@ -308,24 +308,45 @@ function M.build_request(self, prompt, _context)
   local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities)
 
   if thinking.enabled then
-    -- Opus 4.6+ uses adaptive thinking (effort level) instead of budget_tokens
+    -- 4.6 models use adaptive thinking (effort level) instead of budget_tokens
     local model = self.parameters.model or ""
-    local use_adaptive = model:match("opus%-4%-6") ~= nil or model:match("opus%-4%.6") ~= nil
+    local use_adaptive = model:match("%-4%-6") ~= nil or model:match("%-4%.6") ~= nil
 
     if use_adaptive then
-      -- Anthropic effort values: low, medium, high, max (Opus 4.6 only for max)
+      -- Anthropic effort values: low, medium, high, max (max is Opus-only)
       -- Flemma's "minimal" has no Anthropic equivalent, map to "low"
       local effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" }
       local effort = effort_map[thinking.level] or "high"
+      if effort == "max" and not model:match("opus") then
+        effort = "high"
+        log.debug("anthropic.build_request: Clamped 'max' effort to 'high' (max is Opus-only)")
+      end
       request_body.thinking = { type = "adaptive" }
       request_body.output_config = { effort = effort }
       log.debug("anthropic.build_request: Adaptive thinking enabled with effort: " .. effort)
     elseif thinking.budget then
+      local budget = thinking.budget
+      local max_tokens = self.parameters.max_tokens
+      if budget >= max_tokens then
+        budget = max_tokens - 1
+        local min_budget = M.metadata.capabilities.min_thinking_budget or 1024
+        if budget < min_budget then
+          budget = min_budget
+          log.debug("anthropic.build_request: max_tokens too low for thinking budget, clamped to min")
+        end
+        log.debug(
+          "anthropic.build_request: Clamped budget_tokens to "
+            .. budget
+            .. " (must be < max_tokens "
+            .. max_tokens
+            .. ")"
+        )
+      end
       request_body.thinking = {
         type = "enabled",
-        budget_tokens = thinking.budget,
+        budget_tokens = budget,
       }
-      log.debug("anthropic.build_request: Thinking enabled with budget: " .. thinking.budget)
+      log.debug("anthropic.build_request: Thinking enabled with budget: " .. budget)
     end
     -- Remove temperature when thinking is enabled (Anthropic API requirement)
     request_body.temperature = nil
