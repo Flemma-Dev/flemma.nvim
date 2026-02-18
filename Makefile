@@ -23,11 +23,6 @@ check:
 	VIMRUNTIME=$(shell dirname $(shell dirname $(shell readlink -f $(shell which nvim))))/share/nvim/runtime \
 		lua-language-server --check lua/ --configpath ../.luarc-check.lua
 
-.PHONY: update-models
-# Update models and pricing using Amp (AI agent)
-update-models:
-	cat contrib/amp/prompt-update-models-and-pricing.txt | sed 's@{{date}}@'"$(shell date +%Y-%m-%d)"'@g' | flemma-amp
-
 .PHONY: develop
 # Launch Flemma.nvim from local directory
 develop:

@@ -21,6 +21,7 @@ pkgs.mkShell rec {
     google-cloud-sdk
     imagemagick
     libsecret
+    links2
     nodejs_lts.pkgs.pnpm
     vhs
     # Neovim plug-ins
