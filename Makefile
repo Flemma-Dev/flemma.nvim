@@ -43,10 +43,10 @@ develop:
 
 .PHONY: screencast
 # Create a VHS screencast demonstrating Flemma's capabilities
-screencast: .vapor/dracula-vim
+screencast: .vapor/catppuccin-nvim
 	@-rm -R .vapor/cache/ .vapor/state/ .vapor/scratch.chat .vapor/math.png assets/flemma_cast.mp4
 	@mkdir -p .vapor/cache/ .vapor/state/
-	@echo -e "\`\`\`lua\nname = \"Flemma\"\n\nflemma.opt.anthropic.thinking_budget = 2000\n\nflemma.opt.tools = { \"bash\", \"calculator_async\" }\n\`\`\`\n@System: If asked by the user to do calculations, never do those yourself. Use tools that are available to you, such as a calculator or a code execution environment. To preserve resources, add a 1s delay to each computation.\n\n" > .vapor/scratch.chat
+	@echo -e "\`\`\`lua\nname = \"Flemma\"\n\nflemma.opt.thinking = \"medium\"\nflemma.opt.tools.auto_approve = { \"bash\" }\n\`\`\`\n@System: When deleting files use \`trash\` && \`sleep 2\`, never \`rm\`.\n" > .vapor/scratch.chat
 	magick \
 		-size 400x200 \
 		xc:white \
@@ -60,14 +60,15 @@ screencast: .vapor/dracula-vim
 		.vapor/math.png
 	env \
 		PS1='$$ ' \
+		XDG_DATA_HOME=`pwd`/.vapor \
 		XDG_CONFIG_HOME=`pwd`/contrib/vhs \
 		XDG_CACHE_HOME=`pwd`/.vapor/cache \
 		XDG_STATE_HOME=`pwd`/.vapor/state \
 	vhs contrib/vhs/flemma_cast.tape
 
-.vapor/dracula-vim:
+.vapor/catppuccin-nvim:
 	@mkdir -p .vapor
-	git clone --depth 1 https://github.com/dracula/vim.git .vapor/dracula-vim
+	git clone --depth 1 https://github.com/catppuccin/vim.git .vapor/catppuccin-nvim
 
 
 # vim: set ts=4 sts=4 sw=4 noet:
