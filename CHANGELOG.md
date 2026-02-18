@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.0
+
+### Minor Changes
+
+- e5a9b6f: Added `:Flemma status` command that displays comprehensive runtime status (provider, model, merged parameters, autopilot state, sandbox state, enabled tools) in a read-only scratch buffer. Use `:Flemma status verbose` for full config dump. `:Flemma autopilot:status` and `:Flemma sandbox:status` now open the same status view with cursor positioned at the relevant section.
+- 9fc147c: Tool definitions can now provide an optional `format_preview` function for custom preview text in tool status blocks. All built-in tools (calculator, bash, read, edit, write) include tailored previews showing the most relevant input at a glance.
+- 6f8b455: Added support for `model = "$preset-name"` in config to use a preset as the startup default, avoiding duplication of provider/model/parameters at the top level
+- f20492f: Added virtual line previews inside tool status blocks showing a compact summary of the tool call, so users can see what they are approving or rejecting
+- 9bd2785: Unified tool execution into a three-phase advance algorithm with explicit status semantics (`flemma:tool status=pending|approved|rejected|denied`), replacing the old `flemma:pending` marker and separate autopilot/manual flows
+- 299702f: Added Claude Sonnet 4.6 as the new default Anthropic model, removed retired chatgpt-4o-latest, added o3-pro snapshot, and updated Gemini 2.0 retirement dates
+
+### Patch Changes
+
+- 6a5cb12: Fixed Sonnet 4.6 to use adaptive thinking instead of deprecated budget_tokens, clamped `max` effort to `high` on non-Opus models, and added budget_tokens < max_tokens guard for budget-based models
+- e4933aa: Preview text for tool blocks and folded messages now sizes dynamically to the editor width instead of using a fixed 72-character limit
+- 41c130b: Fixed bash tool failing with heredoc commands by replacing `{ cmd; } 2>&1` group wrapping with `exec 2>&1` prefix
+- 1ca55b2: Fixed cross-provider parameter merge bug where provider-specific config keys (e.g., `project_id`) were silently dropped when switching providers via presets
+- e4ddd0b: Fixed JSON null values decoding as vim.NIL (truthy userdata) instead of Lua nil, causing crashes in tool definitions when LLMs send null for optional parameters like offset, limit, timeout, and delay
+- f88449f: Fixed thinking preview counter disappearing when models emit whitespace-only text before thinking blocks (e.g. Opus 4.6 with adaptive thinking)
+- 0af66ea: Moved session reset API from `require("flemma.state").reset_session()` to `require("flemma.session").get():reset()`
+
 ## 0.2.0
 
 ### Minor Changes
