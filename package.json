@@ -1,6 +1,6 @@
 {
   "name": "@flemma-dev/flemma.nvim",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "packageManager": "pnpm@10.28.0",
   "engines": {
