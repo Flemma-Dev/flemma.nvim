@@ -102,7 +102,7 @@ The function form returns `true` (approve), `false` (require approval), `"deny"`
 
 - **Async tools** (like `bash`) show an animated spinner while running and can be cancelled.
 - **Buffer locking** – the buffer is made non-modifiable during tool execution to prevent race conditions.
-- **Output truncation** – large outputs (> 4000 lines or 8 MB) are automatically truncated. The full output is saved to a temporary file.
+- **Output truncation** – large outputs (> 2000 lines or 50 KB) are automatically truncated. The full output is saved to a temporary file.
 - **Cursor positioning** – after injection, the cursor can move to the result (`"result"`), stay put (`"stay"`), or jump to the next `@You:` prompt (`"next"`). Controlled by `tools.cursor_after_result`.
 
 ### Parallel tool use
