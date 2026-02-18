@@ -58,6 +58,7 @@ require("flemma").setup({
     tool_use = "Function",
     tool_result = "Function",
     tool_result_error = "DiagnosticError",
+    tool_preview = "Comment",
   },
   role_style = "bold,underline",
   ruler = {

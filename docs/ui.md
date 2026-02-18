@@ -8,18 +8,19 @@ Flemma adapts to your colour scheme with theme-aware highlights, line background
 
 Configuration keys map to dedicated highlight groups:
 
-| Key                              | Applies to                             |
-| -------------------------------- | -------------------------------------- |
-| `highlights.system`              | System messages (`FlemmaSystem`)       |
-| `highlights.user`                | User messages (`FlemmaUser`)           |
-| `highlights.assistant`           | Assistant messages (`FlemmaAssistant`) |
-| `highlights.user_lua_expression` | `{{ expression }}` fragments           |
-| `highlights.user_file_reference` | `@./path` fragments                    |
-| `highlights.thinking_tag`        | `<thinking>` / `</thinking>` tags      |
-| `highlights.thinking_block`      | Content inside thinking blocks         |
-| `highlights.tool_use`            | `**Tool Use:**` title line             |
-| `highlights.tool_result`         | `**Tool Result:**` title line          |
-| `highlights.tool_result_error`   | `(error)` marker in tool results       |
+| Key                              | Applies to                                                               |
+| -------------------------------- | ------------------------------------------------------------------------ |
+| `highlights.system`              | System messages (`FlemmaSystem`)                                         |
+| `highlights.user`                | User messages (`FlemmaUser`)                                             |
+| `highlights.assistant`           | Assistant messages (`FlemmaAssistant`)                                   |
+| `highlights.user_lua_expression` | `{{ expression }}` fragments                                             |
+| `highlights.user_file_reference` | `@./path` fragments                                                      |
+| `highlights.thinking_tag`        | `<thinking>` / `</thinking>` tags                                        |
+| `highlights.thinking_block`      | Content inside thinking blocks                                           |
+| `highlights.tool_use`            | `**Tool Use:**` title line                                               |
+| `highlights.tool_result`         | `**Tool Result:**` title line                                            |
+| `highlights.tool_result_error`   | `(error)` marker in tool results                                         |
+| `highlights.tool_preview`        | Tool preview virtual lines in pending placeholders (`FlemmaToolPreview`) |
 
 Each value accepts a highlight name, a hex colour string, or a table of highlight attributes (`{ fg = "#ffcc00", bold = true }`).
 
@@ -124,6 +125,14 @@ When the model enters a thinking/reasoning phase, the spinner animation is repla
 
 During tool execution, a separate spinner appears next to the `**Tool Result:**` block using circular quarter characters (`◐◓◑◒`). When execution completes, the indicator changes to `✓ Complete` or `✗ Failed`. Indicators reposition automatically if the buffer is modified during execution and clear on the next buffer edit.
 
+### Tool previews
+
+When tool calls are pending approval, Flemma renders a virtual line inside each empty `flemma:tool` placeholder showing a compact summary of what the tool will do. This lets you review and approve tools without scrolling back to the `**Tool Use:**` block.
+
+Previews dynamically size to the editor's text area width (window width minus sign, number, and fold columns) and truncate with `…` when the content exceeds available space. Built-in tools use tailored formatters (e.g., `bash: $ make test`); custom tools can provide their own via `format_preview` on the tool definition. Tools without a custom formatter get a generic key-value summary.
+
+Preview lines use the `FlemmaToolPreview` highlight group (default: linked to `Comment`). See [docs/tools.md](tools.md#tool-previews) for the full reference on built-in formatters, the generic fallback, and writing custom preview functions.
+
 ## Folding
 
 Flemma uses a two-level fold hierarchy:
@@ -137,7 +146,7 @@ The initial fold level is controlled by `editing.foldlevel` (default: `1`, which
 
 ### Fold text
 
-Collapsed folds show a preview of their content: the first 10 lines, each capped at 72 characters, joined with `⤶`. The format varies by content type:
+Collapsed folds show a preview of their content: the first 10 lines, joined with `⤶` and dynamically sized to the editor's text area width. The format varies by content type:
 
 - **Messages:** `@Role: preview... (N lines)`
 - **Thinking blocks:** `<thinking preview...> (N lines)` – shows `<thinking redacted>` for redacted blocks, or `<thinking provider>` for blocks with a provider signature.
@@ -174,7 +183,7 @@ Flemma uses a priority hierarchy to layer visual elements correctly when they ov
 | 250      | Tool indicators | Execution spinners and status                 |
 | 300      | Spinner         | Highest priority; suppresses spell checking   |
 
-This hierarchy is defined in `lua/flemma/ui.lua` and is not user-configurable, but understanding it explains why certain elements visually override others.
+This hierarchy is defined in `lua/flemma/ui/init.lua` and is not user-configurable, but understanding it explains why certain elements visually override others. Tool preview virtual lines use `virt_lines` extmarks (not line-level highlights), so they don't participate in this priority hierarchy.
 
 ## Lualine integration
 

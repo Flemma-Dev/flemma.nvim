@@ -111,6 +111,79 @@ All three providers support parallel tool calls. Press <kbd>Ctrl-]</kbd> to exec
 
 ---
 
+## Tool previews
+
+When a tool call is pending approval, its `flemma:tool` placeholder block is empty – you'd normally need to scroll up to the `**Tool Use:**` block to see what the tool will do. Tool previews eliminate that: Flemma renders a virtual line inside each empty placeholder showing a compact summary of the tool call.
+
+For example, a pending `read` tool might show:
+
+```
+read: src/config.lua  +0,50  # reading config
+```
+
+And a pending `bash` tool:
+
+```
+bash: $ make test  # running tests
+```
+
+Previews are non-editable virtual text (extmarks) that disappear once the tool executes and its result replaces the placeholder. They adapt to the editor's text area width, truncating with `…` when necessary.
+
+### Built-in preview formatters
+
+Every built-in tool ships with a tailored `format_preview` function:
+
+| Tool               | Preview format                                     | Example                                     |
+| ------------------ | -------------------------------------------------- | ------------------------------------------- |
+| `calculator`       | The expression directly                            | `calculator: 2 + 2`                         |
+| `calculator_async` | Expression with optional delay                     | `calculator_async: sqrt(16)  # 500ms`       |
+| `bash`             | `$ command` with optional label                    | `bash: $ git status  # checking repo`       |
+| `read`             | Path with optional `+offset,limit` range and label | `read: config.lua  +100,50  # reading tail` |
+| `edit`             | Path with optional label                           | `edit: config.lua  # fixing typo`           |
+| `write`            | Path with content size and optional label          | `write: output.txt  (2.3 KB)  # saving log` |
+
+### Generic fallback
+
+Tools without a `format_preview` function get a generic key-value summary: `tool_name: key1="val1", key2="val2"`. Scalar values appear first (sorted alphabetically), followed by table values shown as `{key1, key2}` or `[N items]`.
+
+### Custom preview formatters
+
+Register a `format_preview` function on your tool definition to control how it appears in pending placeholders:
+
+```lua
+tools.register("my_search", {
+  name = "my_search",
+  description = "Search a knowledge base",
+  input_schema = {
+    type = "object",
+    properties = {
+      query = { type = "string", description = "Search query" },
+      limit = { type = { "number", "null" }, description = "Max results" },
+    },
+    required = { "query", "limit" },
+    additionalProperties = false,
+  },
+  format_preview = function(input, max_length)
+    -- input: the tool's input arguments table
+    -- max_length: available width after the "my_search: " prefix
+    local preview = '"' .. input.query .. '"'
+    if input.limit then
+      preview = preview .. " (limit " .. input.limit .. ")"
+    end
+    return preview
+  end,
+  execute = function(input) --[[ ... ]] end,
+})
+```
+
+The function receives the input table and the available character width (the total preview width minus the `"name: "` prefix). Return a single-line string; newlines are collapsed to `⤶` and the result is truncated to fit the editor width.
+
+### Styling
+
+Tool previews use the `FlemmaToolPreview` highlight group (default: linked to `Comment`). Customise via `highlights.tool_preview` in your config – see [docs/ui.md](ui.md#highlights-and-styles) for details.
+
+---
+
 ## Per-buffer tool selection
 
 Control which tools are available per-buffer using `flemma.opt` in Lua frontmatter:
@@ -167,6 +240,9 @@ tools.register("my_tool", {
     },
     required = { "query" },
   },
+  format_preview = function(input, max_length)
+    return '"' .. input.query:sub(1, max_length - 2) .. '"'
+  end,
   execute = function(input)
     return { success = true, output = "done: " .. input.query }
   end,

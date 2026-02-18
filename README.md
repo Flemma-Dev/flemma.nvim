@@ -12,15 +12,15 @@ Streaming conversations, reusable prompt templates, file attachments, cost track
 https://github.com/user-attachments/assets/2c688830-baef-4d1d-98ef-ae560faacf61
 
 - **Autonomous agent loop** – Flemma executes approved tool calls and re-sends results automatically, repeating until the task is done or your approval is needed. One keypress can kick off an entire multi-step workflow.
-- **Tool calling** – bash, file read/edit/write, with approval policies and parallel execution. Register your own tools and approval resolvers.
-- **User at the wheel** – every tool call is visible in the buffer. Require approval globally, per-tool, or per-buffer. Pause, inspect, edit, resume – or let autopilot handle everything.
+- **Tool calling** – bash, file read/edit/write, with approval policies, parallel execution, and inline previews that show what each tool will do before you approve it. Register your own tools, approval resolvers, and preview formatters.
+- **User at the wheel** – every tool call is visible in the buffer with a preview of what it will do. Approve tools one at a time with <kbd>Alt-Enter</kbd>, bulk-approve with <kbd>Ctrl-]</kbd>, or let autopilot handle everything. Pause, inspect, edit, resume at any point.
 - **Multi-provider** – Anthropic, OpenAI, and Vertex AI through one unified interface.
 - **Extended thinking** – unified `thinking` parameter across all providers, with automatic mapping to Anthropic budgets, OpenAI reasoning effort, and Vertex thinking budgets.
 - **Template system** – Lua/JSON frontmatter, inline `{{ expressions }}`, `include()` helpers.
 - **Context attachments** – reference local files with `@./path`; MIME detection and provider-aware formatting.
 - **Usage reporting** – per-request and session token totals, costs, and cache metrics.
 - **Filesystem sandboxing** – shell commands run inside a read-only rootfs with write access limited to your project directory. Limits the blast radius of common accidents. Auto-detects the best available backend; silently degrades on platforms without one.
-- **Theme-aware UI** – line highlights, rulers, signs, and folding that adapt to your colour scheme.
+- **Theme-aware UI** – line highlights, rulers, signs, tool previews, and folding that adapt to your colour scheme.
 
 ## Table of Contents
 
@@ -194,7 +194,7 @@ Inside `.chat` buffers Flemma defines:
 
 - `]m` / `[m` – jump to the next/previous message header.
 - `im` / `am` (configurable) – select the inside or entire message as a text object. `am` selects linewise and includes thinking blocks and trailing blank lines, making `dam` delete entire conversation turns. `im` skips `<thinking>` sections so yanking `im` never includes reasoning traces.
-- Buffer-local mappings for send/cancel default to `<C-]>` and `<C-c>` in normal mode. `<C-]>` is a hybrid key with three phases: inject approval placeholders, execute approved tools, send the conversation. Insert-mode `<C-]>` behaves identically but re-enters insert when the operation finishes.
+- Buffer-local mappings for send/cancel default to `<C-]>` and `<C-c>` in normal mode. `<C-]>` is a hybrid key with three phases: inject approval placeholders, execute approved tools, send the conversation. `<M-CR>` (Alt-Enter) executes the single tool under the cursor – useful for stepping through pending tools one at a time. Insert-mode `<C-]>` behaves identically to normal mode but re-enters insert when the operation finishes.
 
 Disable or remap these through the `keymaps` section (see [Configuration Reference](#configuration-reference)).
 
@@ -316,11 +316,12 @@ Flemma's tool system is what makes it an agent. Models can execute shell command
 ### How it works
 
 1. When you send a message, Flemma includes definitions for available tools in the API request.
-2. If the model decides to use a tool, it emits a `**Tool Use:**` block in its response.
-3. With [autopilot](#autopilot) enabled (the default), approved tools execute automatically and the conversation re-sends until the model stops calling tools or a tool requires your approval.
-4. When a tool needs approval, Flemma injects a `flemma:tool status=pending` placeholder and pauses. Press <kbd>Ctrl-]</kbd> to approve and resume.
+2. If the model decides to use tools, it emits `**Tool Use:**` blocks in its response.
+3. Flemma categorises each tool call against your approval settings: auto-approved tools execute immediately, while tools requiring review get `flemma:tool status=pending` placeholders with an inline preview showing what the tool will do.
+4. The cursor moves to the first pending tool. Press <kbd>Alt-Enter</kbd> to execute it – the cursor advances to the next pending tool automatically. Repeat until all tools are resolved.
+5. Once every tool has a result, [autopilot](#autopilot) re-sends the conversation and the cycle continues until the model is done or needs your input again.
 
-A single <kbd>Ctrl-]</kbd> can kick off a chain of dozens of tool calls – the model reads a codebase, plans changes, edits files, runs tests, and iterates on failures, all without further input. You watch it happen in real time in the buffer.
+The result is a fluid back-and-forth: the model proposes actions, you see exactly what each one does, approve them at your own pace, and autopilot picks up where you left off. One prompt can trigger an entire multi-step workflow without losing you in a wall of pending approvals.
 
 With autopilot disabled, the flow is manual: press <kbd>Ctrl-]</kbd> to inject review placeholders, again to execute, and again to re-send.
 
@@ -333,7 +334,9 @@ With autopilot disabled, the flow is manual: press <kbd>Ctrl-]</kbd> to inject r
 | `write` | sync  | Writes or creates files. Creates parent directories automatically.                                                  |
 | `edit`  | sync  | Find-and-replace with exact text matching. The old text must appear exactly once in the target file.                |
 
-By default, every tool call requires your approval before execution – <kbd>Ctrl-]</kbd> injects review placeholders first, then executes on a second press. Whitelist safe tools globally with `tools.auto_approve = { "read" }`, or per-buffer via `flemma.opt.tools.auto_approve` in frontmatter. Set `tools.require_approval = false` to skip approval entirely. You can also register your own tools with `require("flemma.tools").register()` and extend the approval chain with custom resolvers for plugin-level security policies. See [docs/tools.md](docs/tools.md) for the full reference on approval, per-buffer configuration, custom tool registration, and the resolver API.
+By default, every tool call requires your approval before execution. While a tool is pending, Flemma renders a virtual-line preview inside the placeholder showing the tool name and a formatted summary of its arguments – so you can see at a glance that `read` will open `config.lua +0,50` or that `bash` will run `$ make test`. Built-in tools ship with tailored preview formatters; custom tools can provide their own via `format_preview`.
+
+Whitelist safe tools globally with `tools.auto_approve = { "read" }`, or per-buffer via `flemma.opt.tools.auto_approve` in frontmatter. Set `tools.require_approval = false` to skip approval entirely. Register your own tools with `require("flemma.tools").register()` and extend the approval chain with custom resolvers for plugin-level security policies. See [docs/tools.md](docs/tools.md) for the full reference on approval, per-buffer configuration, custom tool registration, tool previews, and the resolver API.
 
 ---
 
@@ -343,10 +346,12 @@ Autopilot is what turns Flemma from a chat interface into an autonomous agent. I
 
 When the model responds with tool calls, autopilot takes over: it executes every approved tool, collects the results, and re-sends the conversation – automatically, in a loop, until the model is done or needs your input. One prompt can trigger an entire multi-step workflow: the model reads files to understand a codebase, plans its approach, writes code, runs tests, reads the failures, fixes them, and re-runs – all from a single <kbd>Ctrl-]</kbd>.
 
+When the model returns multiple tool calls and some require approval, autopilot pauses and places your cursor on the first pending tool. Each pending placeholder shows an inline preview of what the tool will do. Press <kbd>Alt-Enter</kbd> to approve and execute the tool under the cursor – the cursor then advances to the next pending tool. Once every tool has a result, autopilot resumes the loop automatically. This sequential flow keeps you in control without breaking your momentum: you review one tool at a time, at your own pace, and the conversation picks back up the moment you're done.
+
 You are always in control. The entire conversation – every tool call, every result, every decision the model makes – is visible in the buffer. You can:
 
 - **Let it run.** Auto-approve trusted tools (e.g., `read`) and let the model work autonomously.
-- **Supervise.** Keep `require_approval = true` (the default) so autopilot pauses before each tool executes. Review the call, press <kbd>Ctrl-]</kbd> to approve, and the loop resumes.
+- **Supervise.** Keep `require_approval = true` (the default) so autopilot pauses when a tool needs approval. Review the preview, press <kbd>Alt-Enter</kbd> to execute, and the loop resumes.
 - **Intervene.** Press <kbd>Ctrl-C</kbd> at any point to stop everything. Edit the buffer. Change the model's plan. Then press <kbd>Ctrl-]</kbd> to continue.
 
 ### Safety
