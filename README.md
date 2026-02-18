@@ -20,6 +20,7 @@ https://github.com/user-attachments/assets/2c688830-baef-4d1d-98ef-ae560faacf61
 - **Context attachments** – reference local files with `@./path`; MIME detection and provider-aware formatting.
 - **Usage reporting** – per-request and session token totals, costs, and cache metrics.
 - **Filesystem sandboxing** – shell commands run inside a read-only rootfs with write access limited to your project directory. Limits the blast radius of common accidents. Auto-detects the best available backend; silently degrades on platforms without one.
+- **Git-trackable conversations** – `.chat` files are plain text. Commit them, diff them, branch them, share them. No opaque database, no export step – your conversation history lives in version control the moment you save.
 - **Theme-aware UI** – line highlights, rulers, signs, tool previews, and folding that adapt to your colour scheme.
 
 ## Table of Contents
