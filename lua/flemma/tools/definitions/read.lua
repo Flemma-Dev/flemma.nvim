@@ -45,10 +45,8 @@ M.definitions = {
     format_preview = function(input)
       local parts = { input.path }
       if input.offset or input.limit then
-        local range = "+"
-        if input.offset then
-          range = range .. input.offset
-        end
+        local offset = input.offset or 0
+        local range = "+" .. offset
         if input.limit then
           range = range .. "," .. input.limit
         end

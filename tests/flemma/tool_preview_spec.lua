@@ -424,7 +424,7 @@ describe("Tool Preview", function()
 
     it("read shows path with limit only", function()
       local result = ui_preview.format_tool_preview("read", { path = "./src/main.lua", limit = 50 })
-      assert.are.equal("read: ./src/main.lua  +,50", result)
+      assert.are.equal("read: ./src/main.lua  +0,50", result)
     end)
 
     it("read shows plain path without offset or limit", function()
