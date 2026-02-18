@@ -259,9 +259,11 @@ All three providers support extended thinking/reasoning. Flemma provides a singl
 
 | `thinking` value       | Anthropic (budget) | OpenAI (effort)      | Vertex AI (budget) |
 | ---------------------- | ------------------ | -------------------- | ------------------ |
-| `"high"` **(default)** | 32,768 tokens      | `"high"` effort      | 32,768 tokens      |
+| `"max"`                | 32,768 tokens      | `"max"` effort       | 32,768 tokens      |
+| `"high"` **(default)** | 16,384 tokens      | `"high"` effort      | 16,384 tokens      |
 | `"medium"`             | 8,192 tokens       | `"medium"` effort    | 8,192 tokens       |
-| `"low"`                | 1,024 tokens       | `"low"` effort       | 1,024 tokens       |
+| `"low"`                | 2,048 tokens       | `"low"` effort       | 2,048 tokens       |
+| `"minimal"`            | 128 tokens         | `"minimal"` effort   | 128 tokens         |
 | number (e.g. `4096`)   | 4,096 tokens       | closest effort level | 4,096 tokens       |
 | `false` or `0`         | disabled           | disabled             | disabled           |
 
