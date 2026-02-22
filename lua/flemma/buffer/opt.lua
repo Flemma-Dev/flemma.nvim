@@ -23,6 +23,7 @@ local M = {}
 ---@field _entries flemma.opt.Entry[] Ordered entries with enabled flags (private)
 ---@field _universe table<string, boolean> Set of all valid names (private)
 ---@field _exclusions table<string, true> Names excluded via :remove() when not in _entries (private)
+---@field _dirty boolean True when any mutation method has been called (private)
 local ListOption = {}
 ListOption.__index = ListOption
 
@@ -86,6 +87,7 @@ end
 ---@param value string|string[]
 ---@return flemma.opt.ListOption
 function ListOption:remove(value)
+  self._dirty = true
   local to_remove = {}
   if type(value) == "string" then
     validate_name(self, value)
@@ -116,6 +118,7 @@ end
 ---@param value string|string[]
 ---@return flemma.opt.ListOption
 function ListOption:append(value)
+  self._dirty = true
   if type(value) == "table" then
     for _, v in ipairs(value) do
       self:append(v)
@@ -139,6 +142,7 @@ end
 ---@param value string|string[]
 ---@return flemma.opt.ListOption
 function ListOption:prepend(value)
+  self._dirty = true
   if type(value) == "table" then
     -- Prepend in reverse order so the final order matches the input
     for i = #value, 1, -1 do
@@ -186,6 +190,7 @@ end
 ---@param self flemma.opt.ListOption
 ---@param names string[]
 function ListOption:set(names)
+  self._dirty = true
   for _, name in ipairs(names) do
     validate_name(self, name)
   end
@@ -273,7 +278,7 @@ local function create_list_option(entries)
   for _, entry in ipairs(entries) do
     universe[entry.name] = true
   end
-  return setmetatable({ _entries = entries, _universe = universe, _exclusions = {} }, ListOption)
+  return setmetatable({ _entries = entries, _universe = universe, _exclusions = {}, _dirty = false }, ListOption)
 end
 
 --- Create a new opt proxy and resolve function
@@ -287,10 +292,6 @@ function M.create()
   for name, default_fn in pairs(option_defs) do
     options[name] = create_list_option(default_fn())
   end
-
-  -- Track which options were explicitly accessed
-  ---@type table<string, boolean>
-  local touched = {}
 
   -- Raw options that are sub-properties of ListOption instances (e.g., tools.autopilot)
   ---@type table<string, any>
@@ -337,7 +338,7 @@ function M.create()
       end
       table.insert(entries, { name = name, enabled = true })
     end
-    return setmetatable({ _entries = entries, _universe = auto_approve_universe, _exclusions = {} }, ListOption)
+    return setmetatable({ _entries = entries, _universe = auto_approve_universe, _exclusions = {}, _dirty = false }, ListOption)
   end
 
   -- auto_approve state: either a ListOption (from table assignment) or a function
@@ -392,6 +393,7 @@ function M.create()
         end
         if type(value) == "table" then
           auto_approve_option = create_auto_approve_option(value)
+          auto_approve_option._dirty = true
           auto_approve_fn = nil
           return
         end
@@ -430,7 +432,6 @@ function M.create()
     ---@return flemma.opt.ListOption|table|any
     __index = function(_, key)
       if option_defs[key] then
-        touched[key] = true
         return options[key]
       end
       if key == "sandbox" then
@@ -469,7 +470,6 @@ function M.create()
         if type(value) ~= "table" then
           error(string.format("flemma.opt.%s: expected table, got %s", key, type(value)))
         end
-        touched[key] = true
         options[key]:set(value)
         return
       end
@@ -503,10 +503,12 @@ function M.create()
   local function resolve()
     ---@type flemma.opt.FrontmatterOpts
     local result = {}
-    for name in pairs(touched) do
-      result[name] = options[name]:get()
+    for name, option in pairs(options) do
+      if option._dirty then
+        result[name] = option:get()
+      end
     end
-    if auto_approve_option then
+    if auto_approve_option and auto_approve_option._dirty then
       result.auto_approve = auto_approve_option:get()
       result.auto_approve_exclusions = auto_approve_option:get_exclusions()
     elseif auto_approve_fn then
