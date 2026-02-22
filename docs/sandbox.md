@@ -298,20 +298,20 @@ The built-in [Bubblewrap](https://github.com/containers/bubblewrap) backend is r
 
 ### What bwrap does
 
-| Flag                | Effect                                                    |
-| ------------------- | --------------------------------------------------------- |
-| `--ro-bind / /`     | Mount the entire rootfs read-only                         |
-| `--bind path path`  | Mount each `rw_paths` entry read-write                    |
-| `--dev /dev`        | Provide `/dev` (needed by most tools)                     |
-| `--proc /proc`      | Provide `/proc` (needed by Python, Node, etc.)            |
-| `--tmpfs /run`      | Writable `/run` for runtime files                         |
-| `--unshare-user`    | Drop privileges (when `allow_privileged = false`)         |
-| `--unshare-pid`     | Isolate PID namespace                                     |
-| `--unshare-uts`     | Isolate hostname                                          |
-| `--unshare-ipc`     | Isolate IPC namespace                                     |
-| `--share-net`       | Allow network (or `--unshare-net` when `network = false`) |
-| `--die-with-parent` | Kill child when parent dies                               |
-| `--new-session`     | Prevent keystroke injection                               |
+| Flag                | Effect                                                                 |
+| ------------------- | ---------------------------------------------------------------------- |
+| `--ro-bind / /`     | Mount the entire rootfs read-only                                      |
+| `--bind path path`  | Mount each `rw_paths` entry read-write                                 |
+| `--dev /dev`        | Provide `/dev` (needed by most tools)                                  |
+| `--proc /proc`      | Provide `/proc` (needed by Python, Node, etc.)                         |
+| `--tmpfs /run`      | Writable `/run` for runtime files (see [NixOS note](#nixos--gnu-guix)) |
+| `--unshare-user`    | Drop privileges (when `allow_privileged = false`)                      |
+| `--unshare-pid`     | Isolate PID namespace                                                  |
+| `--unshare-uts`     | Isolate hostname                                                       |
+| `--unshare-ipc`     | Isolate IPC namespace                                                  |
+| `--share-net`       | Allow network (or `--unshare-net` when `network = false`)              |
+| `--die-with-parent` | Kill child when parent dies                                            |
+| `--new-session`     | Prevent keystroke injection                                            |
 
 ### Process lifecycle
 
@@ -345,6 +345,24 @@ The sandbox limits the blast radius of tool execution. It is effective against t
 ### Known caveats
 
 **`/tmp` is writable by default.** Many tools need a writable temp directory, so `/tmp` is in the default `rw_paths`. Since `/tmp` is a shared namespace on the host, a sandboxed agent could interfere with other users' temp files. Remove it from `rw_paths` or use a private tmpfs (see [Examples](#examples)) if this concerns you.
+
+### NixOS / GNU Guix
+
+On NixOS and GNU Guix, system packages are exposed via symlinks under `/run/current-system/sw/bin/`. The bwrap backend automatically detects `/run/current-system` and re-binds it read-only after the `/run` tmpfs mount, so system commands like `free`, `which`, and `ls` remain available inside the sandbox.
+
+If your distribution places essential paths under `/run` that Flemma doesn't know about, use `extra_args` to bind them manually:
+
+```lua
+require("flemma").setup({
+  sandbox = {
+    backends = {
+      bwrap = {
+        extra_args = { "--ro-bind", "/run/my-distro-path", "/run/my-distro-path" },
+      },
+    },
+  },
+})
+```
 
 **Signal propagation is best-effort.** When a sandboxed command times out, Flemma kills the `bwrap` parent. Child processes are terminated via `--die-with-parent` and PID namespace teardown. In practice this is reliable, but a process that has deliberately escaped its session may survive briefly before kernel cleanup catches it.
 
