@@ -195,7 +195,7 @@ end
 
 ---Phase 2 (Execute): Process flemma:tool blocks by status.
 ---Called from Phase 1 via vim.schedule (undo boundary) or directly when Phase 1 has nothing.
----@param opts { on_request_complete?: fun(), bufnr: integer, frontmatter_result?: flemma.processor.FrontmatterResult, resolved_opts?: flemma.opt.ResolvedOpts }
+---@param opts { on_request_complete?: fun(), bufnr: integer, evaluated_frontmatter?: flemma.processor.EvaluatedFrontmatter, frontmatter_opts?: flemma.opt.FrontmatterOpts }
 local function advance_phase2(opts)
   local bufnr = opts.bufnr
   if not vim.api.nvim_buf_is_valid(bufnr) then
@@ -239,7 +239,7 @@ local function advance_phase2(opts)
   -- Process approved → execute tool (pass pre-evaluated opts to avoid re-evaluating frontmatter)
   local approved = tool_blocks["approved"] or {}
   for _, ctx in ipairs(approved) do
-    local ok, err = executor.execute(bufnr, ctx, opts.resolved_opts)
+    local ok, err = executor.execute(bufnr, ctx, opts.frontmatter_opts)
     if not ok then
       vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
     end
@@ -310,7 +310,7 @@ local function advance_phase2(opts)
   M.send_to_provider({
     on_request_complete = opts.on_request_complete,
     bufnr = opts.bufnr,
-    frontmatter_result = opts.frontmatter_result,
+    evaluated_frontmatter = opts.evaluated_frontmatter,
   })
 end
 
@@ -331,12 +331,12 @@ function M.send_or_execute(opts)
   local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
   local context = require("flemma.context").from_buffer(bufnr)
-  local frontmatter_result = processor.evaluate_frontmatter(doc, context)
-  local resolved_opts = frontmatter_result.context:get_opts()
+  local evaluated_frontmatter = processor.evaluate_frontmatter(doc, context)
+  local frontmatter_opts = evaluated_frontmatter.context:get_opts()
 
   -- Set per-buffer autopilot override unconditionally (nil clears a previous override)
   local buffer_state = state.get_buffer_state(bufnr)
-  buffer_state.autopilot_override = resolved_opts and resolved_opts.autopilot
+  buffer_state.autopilot_override = frontmatter_opts and frontmatter_opts.autopilot
 
   -- Phase 1: Categorize — find tool_use blocks without matching tool_result
   local pending = tool_context.resolve_all_pending(bufnr)
@@ -348,7 +348,7 @@ function M.send_or_execute(opts)
 
     for _, ctx in ipairs(pending) do
       local decision =
-        approval.resolve(ctx.tool_name, ctx.input, { bufnr = bufnr, tool_id = ctx.tool_id, opts = resolved_opts })
+        approval.resolve(ctx.tool_name, ctx.input, { bufnr = bufnr, tool_id = ctx.tool_id, opts = frontmatter_opts })
 
       ---@type flemma.ast.ToolStatus
       local status
@@ -382,8 +382,8 @@ function M.send_or_execute(opts)
     local phase2_opts = {
       on_request_complete = opts.on_request_complete,
       bufnr = bufnr,
-      frontmatter_result = frontmatter_result,
-      resolved_opts = resolved_opts,
+      evaluated_frontmatter = evaluated_frontmatter,
+      frontmatter_opts = frontmatter_opts,
     }
     vim.schedule(function()
       advance_phase2(phase2_opts)
@@ -396,13 +396,13 @@ function M.send_or_execute(opts)
   advance_phase2({
     on_request_complete = opts.on_request_complete,
     bufnr = bufnr,
-    frontmatter_result = frontmatter_result,
-    resolved_opts = resolved_opts,
+    evaluated_frontmatter = evaluated_frontmatter,
+    frontmatter_opts = frontmatter_opts,
   })
 end
 
 ---Handle the AI provider interaction
----@param opts? { on_request_complete?: fun(), bufnr?: integer, frontmatter_result?: flemma.processor.FrontmatterResult }
+---@param opts? { on_request_complete?: fun(), bufnr?: integer, evaluated_frontmatter?: flemma.processor.EvaluatedFrontmatter }
 function M.send_to_provider(opts)
   opts = opts or {}
   local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
@@ -475,7 +475,7 @@ function M.send_to_provider(opts)
   -- Run the pipeline with the pre-parsed document. If frontmatter was already
   -- evaluated by send_or_execute, reuse it to avoid re-executing frontmatter code.
   local pipeline = require("flemma.pipeline")
-  local prompt, evaluated = pipeline.run(doc, context, opts.frontmatter_result)
+  local prompt, evaluated = pipeline.run(doc, context, opts.evaluated_frontmatter)
 
   if #prompt.history == 0 then
     log.warn("send_to_provider(): No messages found in buffer")

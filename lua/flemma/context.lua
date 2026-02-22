@@ -7,7 +7,7 @@ local M = {}
 ---@class flemma.Context
 ---@field __filename string|nil The current file path (private)
 ---@field __variables table<string, any>|nil User-defined variables for execution contexts (private)
----@field __opts flemma.opt.ResolvedOpts|nil Resolved per-buffer options from frontmatter (private)
+---@field __opts flemma.opt.FrontmatterOpts|nil Per-buffer options from frontmatter evaluation (private)
 local Context = {}
 Context.__index = Context
 
@@ -32,8 +32,8 @@ function Context:get_variables()
   return vim.deepcopy(self.__variables or {})
 end
 
----Get the resolved per-buffer options
----@return flemma.opt.ResolvedOpts|nil opts The resolved options, or nil if none set
+---Get the per-buffer frontmatter options
+---@return flemma.opt.FrontmatterOpts|nil opts The frontmatter options, or nil if none set
 function Context:get_opts()
   return self.__opts
 end

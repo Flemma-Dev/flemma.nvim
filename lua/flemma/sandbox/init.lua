@@ -360,7 +360,7 @@ end
 -- ---------------------------------------------------------------------------
 
 --- Resolve the effective sandbox config (global + per-buffer overrides + runtime override)
----@param opts? flemma.opt.ResolvedOpts
+---@param opts? flemma.opt.FrontmatterOpts
 ---@return flemma.config.SandboxConfig
 function M.resolve_config(opts)
   local config = state.get_config()
@@ -379,7 +379,7 @@ function M.resolve_config(opts)
 end
 
 --- Is sandboxing currently enabled?
----@param opts? flemma.opt.ResolvedOpts
+---@param opts? flemma.opt.FrontmatterOpts
 ---@return boolean
 function M.is_enabled(opts)
   return M.resolve_config(opts).enabled == true
@@ -387,7 +387,7 @@ end
 
 --- Get the resolved policy (with path variables expanded)
 ---@param bufnr integer
----@param opts? flemma.opt.ResolvedOpts
+---@param opts? flemma.opt.FrontmatterOpts
 ---@return flemma.config.SandboxPolicy
 function M.get_policy(bufnr, opts)
   local cfg = M.resolve_config(opts)
@@ -397,7 +397,7 @@ end
 --- Validate that a suitable backend is available.
 --- When backend is "auto", tries to detect one. When explicit, checks that specific backend.
 --- Returns true immediately when sandboxing is disabled.
----@param opts? flemma.opt.ResolvedOpts
+---@param opts? flemma.opt.FrontmatterOpts
 ---@return boolean ok, string|nil error
 function M.validate_backend(opts)
   local cfg = M.resolve_config(opts)
@@ -420,7 +420,7 @@ end
 --- (a backend may be registered later, at which point wrapping activates).
 ---@param inner_cmd string[]
 ---@param bufnr integer
----@param opts? flemma.opt.ResolvedOpts
+---@param opts? flemma.opt.FrontmatterOpts
 ---@return string[]|nil wrapped_cmd, string|nil error
 function M.wrap_command(inner_cmd, bufnr, opts)
   local cfg = M.resolve_config(opts)
@@ -448,7 +448,7 @@ end
 --- For use by Lua-level tools (read/write/edit) in a future phase.
 ---@param path string
 ---@param bufnr integer
----@param opts? flemma.opt.ResolvedOpts
+---@param opts? flemma.opt.FrontmatterOpts
 ---@return boolean
 function M.is_path_writable(path, bufnr, opts)
   local cfg = M.resolve_config(opts)
@@ -469,7 +469,7 @@ function M.is_path_writable(path, bufnr, opts)
 end
 
 --- Detect the best available backend (public API for status/commands).
----@param opts? flemma.opt.ResolvedOpts
+---@param opts? flemma.opt.FrontmatterOpts
 ---@return string|nil backend_name, string|nil diagnostic
 function M.detect_available_backend(opts)
   local cfg = M.resolve_config(opts)

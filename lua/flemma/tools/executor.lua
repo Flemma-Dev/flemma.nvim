@@ -205,7 +205,7 @@ local DEFAULT_TIMEOUT = 30
 ---@field tool_name string Name of the tool being executed (for get_config lookup)
 ---@field __dirname? string Directory containing the .chat buffer
 ---@field __filename? string Full path of the .chat buffer
----@field opts? flemma.opt.ResolvedOpts Per-buffer resolved options (captured by sandbox closures)
+---@field opts? flemma.opt.FrontmatterOpts Per-buffer frontmatter options (captured by sandbox closures)
 
 ---Build an ExecutionContext with lazy-loaded sandbox/truncate/path namespaces.
 ---Sandbox, truncate, and path are loaded on first access via __index and then
@@ -284,10 +284,10 @@ end
 ---Execute a tool call
 ---@param bufnr integer
 ---@param context flemma.tools.ToolContext
----@param resolved_opts? flemma.opt.ResolvedOpts Pre-evaluated per-buffer opts (avoids re-evaluating frontmatter)
+---@param frontmatter_opts? flemma.opt.FrontmatterOpts Pre-evaluated per-buffer opts (avoids re-evaluating frontmatter)
 ---@return boolean success
 ---@return string|nil error
-function M.execute(bufnr, context, resolved_opts)
+function M.execute(bufnr, context, frontmatter_opts)
   local tool_id = context.tool_id
   local tool_name = context.tool_name
 
@@ -383,7 +383,7 @@ function M.execute(bufnr, context, resolved_opts)
     tool_name = tool_name,
     __dirname = dirname,
     __filename = buffer_context:get_filename(),
-    opts = resolved_opts,
+    opts = frontmatter_opts,
   })
 
   -- Execute the tool

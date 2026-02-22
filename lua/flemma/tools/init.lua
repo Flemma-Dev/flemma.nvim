@@ -197,7 +197,7 @@ end
 --- When opts.tools is present, only matching tools are returned (including disabled tools
 --- that were explicitly listed — this allows users to enable disabled tools via flemma.opt).
 --- When opts is nil or opts.tools is nil, all enabled tools are returned.
----@param opts flemma.opt.ResolvedOpts|nil
+---@param opts flemma.opt.FrontmatterOpts|nil
 ---@return table<string, flemma.tools.ToolDefinition>
 function M.get_for_prompt(opts)
   ensure_modules_loaded()

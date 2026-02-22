@@ -3,7 +3,7 @@
 ---@class flemma.buffer.Opt
 local M = {}
 
----@class flemma.opt.ResolvedOpts
+---@class flemma.opt.FrontmatterOpts
 ---@field tools string[]|nil List of allowed tool names
 ---@field auto_approve flemma.config.AutoApprove|nil Per-buffer auto-approve policy
 ---@field autopilot boolean|nil Per-buffer autopilot override (true/false)
@@ -259,7 +259,7 @@ end
 --- Create a new opt proxy and resolve function
 --- Each call starts fresh from defaults (stateless per evaluation)
 ---@return table opt_proxy The proxy object injected as flemma.opt
----@return fun(): flemma.opt.ResolvedOpts resolve Function to get resolved option values
+---@return fun(): flemma.opt.FrontmatterOpts resolve Function to get frontmatter option values
 function M.create()
   -- Create ListOption instances for each option, initialized from defaults
   ---@type table<string, flemma.opt.ListOption>
@@ -400,9 +400,9 @@ function M.create()
     end,
   })
 
-  ---@return flemma.opt.ResolvedOpts
+  ---@return flemma.opt.FrontmatterOpts
   local function resolve()
-    ---@type flemma.opt.ResolvedOpts
+    ---@type flemma.opt.FrontmatterOpts
     local result = {}
     for name in pairs(touched) do
       result[name] = options[name]:get()

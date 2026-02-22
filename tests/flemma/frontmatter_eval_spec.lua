@@ -335,7 +335,7 @@ describe("Frontmatter evaluation caching", function()
     local doc = parser.get_parsed_document(bufnr)
     local context = ctxutil.from_buffer(bufnr)
 
-    -- Call without frontmatter_result — should evaluate internally via the local function
+    -- Call without evaluated_frontmatter — should evaluate internally via the local function
     local eval_spy = spy.on(processor, "evaluate_frontmatter")
     local _, evaluated = pipeline.run(doc, context, nil)
 
@@ -349,7 +349,7 @@ describe("Frontmatter evaluation caching", function()
     eval_spy:revert()
   end)
 
-  it("pipeline.run reuses frontmatter_result when provided", function()
+  it("pipeline.run reuses evaluated_frontmatter when provided", function()
     local pipeline = require("flemma.pipeline")
     local parser = require("flemma.parser")
     local ctxutil = require("flemma.context")
@@ -368,11 +368,11 @@ describe("Frontmatter evaluation caching", function()
     local context = ctxutil.from_buffer(bufnr)
 
     -- Pre-evaluate frontmatter
-    local frontmatter_result = processor.evaluate_frontmatter(doc, context)
+    local evaluated_frontmatter = processor.evaluate_frontmatter(doc, context)
 
     -- Now call pipeline.run with the pre-resolved result
     local eval_spy = spy.on(processor, "evaluate_frontmatter")
-    local _, evaluated = pipeline.run(doc, context, frontmatter_result)
+    local _, evaluated = pipeline.run(doc, context, evaluated_frontmatter)
 
     -- The spy should not have been called — frontmatter was reused
     assert.spy(eval_spy).was_called(0)

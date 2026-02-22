@@ -36,7 +36,7 @@ end
 
 ---Collect parameters section data, including frontmatter overrides if present
 ---@param config flemma.Config
----@param opts flemma.opt.ResolvedOpts|nil
+---@param opts flemma.opt.FrontmatterOpts|nil
 ---@return { merged: table<string, any>, frontmatter_overrides: table<string, any>|nil }
 local function collect_parameters(config, opts)
   local base_merged = config_manager.merge_parameters(config.parameters or {}, config.provider)
@@ -77,7 +77,7 @@ end
 ---Collect autopilot section data
 ---@param bufnr integer
 ---@param config flemma.Config
----@param opts flemma.opt.ResolvedOpts|nil
+---@param opts flemma.opt.FrontmatterOpts|nil
 ---@return { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, frontmatter_override: boolean|nil }
 local function collect_autopilot(bufnr, config, opts)
   local autopilot_config = config.tools and config.tools.autopilot
@@ -102,7 +102,7 @@ local function collect_autopilot(bufnr, config, opts)
 end
 
 ---Collect sandbox section data
----@param opts flemma.opt.ResolvedOpts|nil
+---@param opts flemma.opt.FrontmatterOpts|nil
 ---@return { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil }
 local function collect_sandbox(opts)
   local sandbox_config = sandbox.resolve_config(opts)
@@ -123,7 +123,7 @@ local function collect_sandbox(opts)
 end
 
 ---Collect tools section data, respecting per-buffer frontmatter overrides
----@param opts flemma.opt.ResolvedOpts|nil
+---@param opts flemma.opt.FrontmatterOpts|nil
 ---@return { enabled: string[], disabled: string[] }
 local function collect_tools(opts)
   local all_tools = tools_registry.get_all({ include_disabled = true })

@@ -46,9 +46,9 @@ end
 ---@class flemma.processor.EvaluatedResult
 ---@field messages flemma.processor.EvaluatedMessage[]
 ---@field diagnostics flemma.ast.Diagnostic[]
----@field opts flemma.opt.ResolvedOpts|nil
+---@field opts flemma.opt.FrontmatterOpts|nil
 
----@class flemma.processor.FrontmatterResult
+---@class flemma.processor.EvaluatedFrontmatter
 ---@field context flemma.Context Evaluated context with __opts and user variables set
 ---@field diagnostics flemma.ast.Diagnostic[] Frontmatter-specific diagnostics
 
@@ -109,7 +109,7 @@ end
 ---Returns the evaluated context (with __opts and user variables) and any diagnostics.
 ---@param doc flemma.ast.DocumentNode
 ---@param base_context flemma.Context|nil
----@return flemma.processor.FrontmatterResult
+---@return flemma.processor.EvaluatedFrontmatter
 function M.evaluate_frontmatter(doc, base_context)
   local context, diagnostics = evaluate_frontmatter_internal(doc, base_context)
   return { context = context, diagnostics = diagnostics }
@@ -118,7 +118,7 @@ end
 ---Convenience: parse buffer + evaluate frontmatter in one call.
 ---For callers that start from a bufnr (e.g., status.lua).
 ---@param bufnr integer
----@return flemma.processor.FrontmatterResult
+---@return flemma.processor.EvaluatedFrontmatter
 function M.evaluate_buffer_frontmatter(bufnr)
   local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
@@ -131,13 +131,13 @@ end
 --- once and thread the result through multiple consumers.
 ---@param doc flemma.ast.DocumentNode
 ---@param base_context flemma.Context|nil
----@param frontmatter_result flemma.processor.FrontmatterResult|nil
+---@param evaluated_frontmatter flemma.processor.EvaluatedFrontmatter|nil
 ---@return flemma.processor.EvaluatedResult
-function M.evaluate(doc, base_context, frontmatter_result)
+function M.evaluate(doc, base_context, evaluated_frontmatter)
   local context, fm_diagnostics
-  if frontmatter_result then
-    context = frontmatter_result.context
-    fm_diagnostics = frontmatter_result.diagnostics
+  if evaluated_frontmatter then
+    context = evaluated_frontmatter.context
+    fm_diagnostics = evaluated_frontmatter.diagnostics
   else
     context, fm_diagnostics = evaluate_frontmatter_internal(doc, base_context)
   end

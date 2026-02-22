@@ -41,9 +41,9 @@ local function set_config_and_setup(config)
   approval.setup()
 end
 
---- Helper: evaluate frontmatter and return resolved opts for a buffer.
+--- Helper: evaluate frontmatter and return frontmatter opts for a buffer.
 --- @param bufnr integer
---- @return flemma.opt.ResolvedOpts|nil
+--- @return flemma.opt.FrontmatterOpts|nil
 local function evaluate_opts(bufnr)
   return processor.evaluate_buffer_frontmatter(bufnr).context:get_opts()
 end
