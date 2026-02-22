@@ -46,7 +46,7 @@ function M.define(name, definition)
   if loader.is_module_path(name) then
     error(string.format("flemma: tool name '%s' must not contain dots (dots indicate module paths)", name), 2)
   end
-  if tools[name] then
+  if tools[name] and tools[name] ~= definition then
     vim.notify(
       string.format("Flemma: tool '%s' redefined (previously registered, now overwritten)", name),
       vim.log.levels.WARN
