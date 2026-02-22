@@ -195,6 +195,38 @@ describe("sandbox bwrap backend", function()
       assert.is_truthy(vim.tbl_contains(args, "--unshare-ipc"))
     end)
 
+    it("re-binds /run/current-system read-only on NixOS", function()
+      local policy = {
+        rw_paths = {},
+        network = true,
+        allow_privileged = false,
+      }
+      local args = bwrap.wrap(policy, {}, { "echo" })
+
+      -- On NixOS (where /run/current-system exists), bwrap should
+      -- ro-bind it after the /run tmpfs so system packages stay visible.
+      if vim.uv.fs_stat("/run/current-system") then
+        local found = false
+        for i, arg in ipairs(args) do
+          if arg == "--ro-bind" and args[i + 1] == "/run/current-system" and args[i + 2] == "/run/current-system" then
+            found = true
+            break
+          end
+        end
+        assert.is_true(found, "expected --ro-bind /run/current-system on NixOS")
+      else
+        -- On non-NixOS, the bind should not be present
+        local found = false
+        for i, arg in ipairs(args) do
+          if arg == "--ro-bind" and args[i + 1] == "/run/current-system" then
+            found = true
+            break
+          end
+        end
+        assert.is_false(found, "should not bind /run/current-system on non-NixOS")
+      end
+    end)
+
     it("includes dev and proc mounts", function()
       local policy = {
         rw_paths = {},

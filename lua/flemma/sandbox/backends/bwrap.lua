@@ -50,6 +50,12 @@ function M.wrap(policy, backend_config, inner_cmd)
   vim.list_extend(args, { "--proc", "/proc" })
   vim.list_extend(args, { "--tmpfs", "/run" })
 
+  -- NixOS: /run/current-system holds symlinks to all system packages.
+  -- The tmpfs above hides it, so re-bind it read-only on top.
+  if vim.uv.fs_stat("/run/current-system") then
+    vim.list_extend(args, { "--ro-bind", "/run/current-system", "/run/current-system" })
+  end
+
   -- Capabilities / privilege isolation
   if policy.allow_privileged ~= true then
     table.insert(args, "--unshare-user")
