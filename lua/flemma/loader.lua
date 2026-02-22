@@ -10,12 +10,13 @@ function M.is_module_path(str)
   return str:find(".", 1, true) ~= nil
 end
 
---- Assert that a module can be found on package.path.
---- Throws with a descriptive error (including searched paths) on failure.
+--- Assert that a module can be found via require().
+--- Checks package.loaded, package.preload, and package.searchpath.
+--- Throws with a descriptive error on failure.
 ---@param path string Lua module path (e.g., "3rd.tools.todos")
 function M.assert_exists(path)
-  -- Check package.preload first (test fixtures and bundled modules)
-  if package.preload[path] then
+  -- Already loaded or preloaded — definitely exists
+  if package.loaded[path] or package.preload[path] then
     return
   end
   local found = package.searchpath(path, package.path)

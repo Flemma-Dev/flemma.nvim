@@ -197,7 +197,36 @@ function M.setup()
 
   local auto_approve = tools_config and tools_config.auto_approve
   if auto_approve ~= nil then
-    if type(auto_approve) ~= "table" and type(auto_approve) ~= "function" then
+    local loader = require("flemma.loader")
+    if type(auto_approve) == "string" and loader.is_module_path(auto_approve) then
+      -- Module path: validate now, load lazily on first resolve
+      loader.assert_exists(auto_approve)
+      local module_path = auto_approve
+      ---@type { resolve: fun(tool_name: string, input: table, context: flemma.config.AutoApproveContext): flemma.tools.ApprovalResult|nil }|nil
+      local loaded_resolver = nil
+      M.register("config:auto_approve", {
+        priority = 100,
+        description = "Built-in resolver from module " .. module_path,
+        resolve = function(tool_name, input, context)
+          if not loaded_resolver then
+            local mod = loader.load(module_path)
+            if type(mod.resolve) == "function" then
+              loaded_resolver = mod
+            elseif type(mod) == "function" then
+              loaded_resolver = { resolve = mod }
+            else
+              log.warn("approval: module '" .. module_path .. "' does not export 'resolve' function")
+              loaded_resolver = {
+                resolve = function()
+                  return nil
+                end,
+              }
+            end
+          end
+          return loaded_resolver.resolve(tool_name, input, context)
+        end,
+      })
+    elseif type(auto_approve) ~= "table" and type(auto_approve) ~= "function" then
       log.warn("approval: unexpected auto_approve type: " .. type(auto_approve))
     else
       M.register("config:auto_approve", {

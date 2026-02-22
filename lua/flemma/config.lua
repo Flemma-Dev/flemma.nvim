@@ -87,7 +87,7 @@
 
 ---@alias flemma.config.AutoApproveFunction fun(tool_name: string, input: table, context: flemma.config.AutoApproveContext): flemma.config.AutoApproveDecision|nil
 
----@alias flemma.config.AutoApprove string[]|flemma.config.AutoApproveFunction
+---@alias flemma.config.AutoApprove string[]|flemma.config.AutoApproveFunction|string
 
 ---@class flemma.config.AutopilotConfig
 ---@field enabled boolean

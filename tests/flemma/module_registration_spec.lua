@@ -124,3 +124,51 @@ describe("provider module resolution", function()
     assert.is_false(loader.is_module_path("anthropic"))
   end)
 end)
+
+describe("approval module resolution", function()
+  local approval
+  local state = require("flemma.state")
+
+  before_each(function()
+    package.loaded["flemma.tools.approval"] = nil
+    approval = require("flemma.tools.approval")
+
+    package.preload["test.fixture.approval"] = function()
+      return {
+        resolve = function(tool_name)
+          if tool_name == "bash" then
+            return "deny"
+          end
+          return nil
+        end,
+        priority = 80,
+        description = "Test approval resolver",
+      }
+    end
+
+    state.set_config({
+      tools = {
+        auto_approve = "test.fixture.approval",
+        require_approval = true,
+      },
+    })
+    approval.clear()
+    approval.setup()
+  end)
+
+  after_each(function()
+    approval.clear()
+    package.preload["test.fixture.approval"] = nil
+    package.loaded["test.fixture.approval"] = nil
+  end)
+
+  it("loads resolver from module path on first resolve", function()
+    local result = approval.resolve("bash", {}, { bufnr = 0, tool_id = "test" })
+    assert.equals("deny", result)
+  end)
+
+  it("passes through for tools the module doesn't handle", function()
+    local result = approval.resolve("calculator", {}, { bufnr = 0, tool_id = "test" })
+    assert.equals("require_approval", result)
+  end)
+end)
