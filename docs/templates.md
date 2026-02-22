@@ -78,12 +78,23 @@ flemma.opt.tools = flemma.opt.tools + "bash" - "write" ^ "calculator"
 ```
 ````
 
-**Per-buffer auto-approval:** Override the global approval policy for this buffer:
+**Per-buffer auto-approval:** Override the global approval policy for this buffer. Presets, tool names, and ListOption operations all work here:
 
 ````lua
 ```lua
+-- Preset form: read-only access for this buffer
+flemma.opt.tools.auto_approve = { "$readonly" }
+
 -- List form: auto-approve these tools, require approval for the rest
 flemma.opt.tools.auto_approve = { "calculator", "read" }
+
+-- ListOption operations: modify the default policy incrementally
+flemma.opt.tools.auto_approve = { "$default" }
+flemma.opt.tools.auto_approve:remove("write")       -- exclude write from $default
+flemma.opt.tools.auto_approve:append("bash")        -- add bash on top
+
+-- Operator shorthand: + (append), - (remove)
+flemma.opt.tools.auto_approve = flemma.opt.tools.auto_approve + "bash" - "write"
 
 -- Function form: full control over the decision
 flemma.opt.tools.auto_approve = function(tool_name, input, context)
@@ -92,6 +103,8 @@ flemma.opt.tools.auto_approve = function(tool_name, input, context)
 end
 ```
 ````
+
+Removing a tool that lives inside a preset (e.g., `"write"` from `{ "$default" }`) creates an exclusion – the tool is filtered out when the preset expands, without affecting other tools in the preset.
 
 **Per-buffer autopilot:** Disable (or force-enable) autopilot for a specific buffer:
 

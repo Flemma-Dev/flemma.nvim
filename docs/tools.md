@@ -64,12 +64,17 @@ If you type content inside an `approved` or `pending` block, Flemma treats it as
 
 ### Configuring approval
 
-Disable approval entirely with `tools.require_approval = false` – this registers a catch-all resolver at priority 0 that auto-approves every tool call. Use `tools.auto_approve` to whitelist specific tools or write a custom policy function:
+Out of the box, `auto_approve` is set to `{ "$default" }`, which auto-approves `read`, `write`, and `edit` while keeping `bash` gated behind manual approval. This gives you a working agent loop without opting out of safety for shell commands.
+
+Disable approval entirely with `tools.require_approval = false` – this registers a catch-all resolver at priority 0 that auto-approves every tool call. Alternatively, use `tools.auto_approve` to build a custom policy with presets, tool names, or a function:
 
 ```lua
 tools = {
-  auto_approve = { "calculator", "read" },        -- list form
-  auto_approve = function(tool_name, input, ctx)  -- function form
+  -- Preset references and tool names can be mixed freely
+  auto_approve = { "$readonly", "calculator" },
+
+  -- Function form for full control
+  auto_approve = function(tool_name, input, ctx)
     if tool_name == "calculator" then return true end
     if tool_name == "bash" and input.command:match("rm %-rf") then return "deny" end
     return false  -- require approval
@@ -77,14 +82,54 @@ tools = {
 }
 ```
 
+### Approval presets
+
+Presets are named collections of tool approval rules referenced with a `$` prefix in `auto_approve`. They keep common policies concise and composable.
+
+**Built-in presets:**
+
+| Preset      | Approves                | Description                                        |
+| ----------- | ----------------------- | -------------------------------------------------- |
+| `$readonly` | `read`                  | Read-only access – safe for exploration buffers    |
+| `$default`  | `read`, `write`, `edit` | File operations without shell access (the default) |
+
+**User-defined presets** override built-ins by name. Define them in `tools.presets`:
+
+```lua
+tools = {
+  presets = {
+    ["$yolo"]    = { approve = { "bash", "read", "write", "edit" } },
+    ["$no-bash"] = { deny = { "bash" } },
+  },
+  auto_approve = { "$yolo", "$no-bash" },
+}
+```
+
+Each preset is a table with optional `approve` and `deny` arrays:
+
+- **`approve`** – tool names to auto-approve.
+- **`deny`** – tool names to deny outright (an error result is injected).
+
+**Composition rules:**
+
+- **Union.** When multiple presets appear in `auto_approve`, their `approve` and `deny` sets are merged.
+- **Deny wins.** If a tool appears in both `approve` (from one preset) and `deny` (from another), the tool is denied. This lets you layer a restrictive preset on top of a permissive one.
+- **Plain tool names** mix freely with presets: `{ "$default", "calculator" }` approves everything in `$default` plus `calculator`.
+
 ### Per-buffer approval
 
 Override approval on a per-buffer basis using `flemma.opt.tools.auto_approve` in Lua frontmatter. This works alongside the global `tools.auto_approve` config – global config is checked first (priority 100), then per-buffer frontmatter (priority 90):
 
 ````lua
 ```lua
+-- Preset form: read-only access for this buffer
+flemma.opt.tools.auto_approve = { "$readonly" }
+
 -- List form: auto-approve these tools in this buffer
 flemma.opt.tools.auto_approve = { "calculator", "read" }
+
+-- Mix presets and tool names
+flemma.opt.tools.auto_approve = { "$default", "bash" }
 
 -- Function form: full control per-buffer
 flemma.opt.tools.auto_approve = function(tool_name, input, ctx)
@@ -95,6 +140,25 @@ end
 ````
 
 The function form returns `true` (approve), `false` (require approval), `"deny"` (block), or `nil` (pass to the next resolver in the chain).
+
+**ListOption operations** let you modify the default policy incrementally instead of replacing it:
+
+````lua
+```lua
+-- Start from default, but remove write access
+flemma.opt.tools.auto_approve = { "$default" }
+flemma.opt.tools.auto_approve:remove("write")
+
+-- Add bash to the default set
+flemma.opt.tools.auto_approve = { "$default" }
+flemma.opt.tools.auto_approve:append("bash")
+
+-- Operator shorthand: + (append), - (remove)
+flemma.opt.tools.auto_approve = flemma.opt.tools.auto_approve + "bash" - "write"
+```
+````
+
+When you `:remove()` a tool that lives inside a preset (e.g., removing `"write"` from `{ "$default" }`), the tool is excluded at expansion time – the preset itself stays in the list, but the named tool is filtered out when the resolver evaluates it.
 
 ---
 

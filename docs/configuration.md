@@ -28,7 +28,8 @@ require("flemma").setup({
   presets = {},                              -- Named presets: ["$name"] = "provider model key=val"
   tools = {
     require_approval = true,                 -- When false, auto-approves all tools
-    auto_approve = nil,                      -- string[] | function | nil
+    auto_approve = { "$default" },           -- $default approves read, write, edit
+    presets = {},                            -- User-defined presets: ["$name"] = { approve = {}, deny = {} }
     default_timeout = 30,                    -- Async tool timeout (seconds)
     show_spinner = true,                     -- Animated spinner during execution
     cursor_after_result = "result",          -- "result" | "stay" | "next"
