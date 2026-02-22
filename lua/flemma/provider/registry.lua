@@ -46,7 +46,7 @@ local models_data = require("flemma.models")
 local deprecated_warning_shown = {}
 
 -- Deprecated provider aliases (old_name -> new_name)
-local provider_aliases = {
+local PROVIDER_ALIASES = {
   claude = "anthropic",
 }
 
@@ -54,7 +54,7 @@ local provider_aliases = {
 local providers = {}
 
 -- Built-in provider module paths (each module exports M.metadata)
-local builtin_provider_modules = {
+local BUILTIN_PROVIDER_MODULES = {
   "flemma.provider.providers.openai",
   "flemma.provider.providers.anthropic",
   "flemma.provider.providers.vertex",
@@ -162,7 +162,7 @@ end
 
 ---Initialize built-in providers (called during setup)
 function M.setup()
-  for _, module_path in ipairs(builtin_provider_modules) do
+  for _, module_path in ipairs(BUILTIN_PROVIDER_MODULES) do
     local mod = require(module_path)
     if mod.metadata and not providers[mod.metadata.name] then
       M.register(module_path)
@@ -186,7 +186,7 @@ end
 ---@param provider_name string The provider identifier (may be an alias)
 ---@return string resolved_name The resolved provider name
 function M.resolve(provider_name)
-  local alias_target = provider_aliases[provider_name]
+  local alias_target = PROVIDER_ALIASES[provider_name]
   if alias_target then
     -- Show deprecation warning once per session per alias
     if not deprecated_warning_shown[provider_name] then

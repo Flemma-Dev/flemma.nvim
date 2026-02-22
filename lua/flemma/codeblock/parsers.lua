@@ -4,7 +4,7 @@
 local M = {}
 
 ---@type table<string, string>
-local parser_modules = {
+local PARSER_MODULES = {
   lua = "flemma.codeblock.parsers.lua",
   json = "flemma.codeblock.parsers.json",
 }
@@ -28,7 +28,7 @@ function M.get(language)
   end
   local lang_lower = language:lower()
   if not parsers[lang_lower] then
-    local module_path = parser_modules[lang_lower]
+    local module_path = PARSER_MODULES[lang_lower]
     if module_path then
       local parser_module = require(module_path)
       parsers[lang_lower] = parser_module.parse
@@ -45,7 +45,7 @@ function M.has(language)
     return false
   end
   local lang_lower = language:lower()
-  return parser_modules[lang_lower] ~= nil or parsers[lang_lower] ~= nil
+  return PARSER_MODULES[lang_lower] ~= nil or parsers[lang_lower] ~= nil
 end
 
 ---Parse content with the appropriate parser

@@ -7,7 +7,7 @@ local json = require("flemma.json")
 local loader = require("flemma.loader")
 local registry = require("flemma.tools.registry")
 
-local builtin_tools = {
+local BUILTIN_TOOLS = {
   "flemma.tools.definitions.bash",
   "flemma.tools.definitions.read",
   "flemma.tools.definitions.edit",
@@ -152,7 +152,7 @@ end
 
 ---Setup tool registry with built-in tools
 function M.setup()
-  for _, module_name in ipairs(builtin_tools) do
+  for _, module_name in ipairs(BUILTIN_TOOLS) do
     M.register(module_name)
   end
 

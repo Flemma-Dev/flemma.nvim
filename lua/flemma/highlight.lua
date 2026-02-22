@@ -110,7 +110,7 @@ local function get_default_color(attr)
 end
 
 -- Valid attribute names for highlight expressions
-local valid_attrs = {
+local VALID_ATTRIBUTES = {
   fg = true,
   bg = true,
   sp = true,
@@ -133,7 +133,7 @@ local function try_expression(expr, use_defaults)
 
   local result = {}
   for op, attr, color in expr:gmatch("([%+%-])([fbs][gp]):(#%x%x%x%x%x%x)") do
-    if valid_attrs[attr] then
+    if VALID_ATTRIBUTES[attr] then
       local base_hex = get_hl_color(base_group, attr)
       if not base_hex then
         if not use_defaults then
