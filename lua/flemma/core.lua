@@ -151,9 +151,9 @@ function M.cancel_request()
       local last_line = vim.api.nvim_buf_line_count(bufnr)
       local last_line_content = vim.api.nvim_buf_get_lines(bufnr, last_line - 1, last_line, false)[1]
 
-      if last_line_content == "@Assistant: Thinking..." then
+      if last_line_content == "@Assistant: Thinking…" then
         -- No content received — clean up spinner placeholder
-        log.debug("cancel_request(): ... Cleaning up 'Thinking...' message")
+        log.debug("cancel_request(): ... Cleaning up 'Thinking…' message")
         ui.cleanup_spinner(bufnr)
       else
         -- Content was received — mark the response as aborted
@@ -399,7 +399,7 @@ function M.send_to_provider(opts)
   -- Gate on async tool sources being ready
   local tools_module = require("flemma.tools")
   if not tools_module.is_ready() then
-    vim.notify("Flemma: Waiting for tool definitions to load...", vim.log.levels.WARN)
+    vim.notify("Flemma: Waiting for tool definitions to load…", vim.log.levels.WARN)
     if buffer_state.waiting_for_tools then
       return -- already queued
     end
@@ -496,7 +496,7 @@ function M.send_to_provider(opts)
           local loc = (d.source_file or "N/A") .. format_position(d.position)
           table.insert(diagnostic_lines, string.format("  [%s] %s", loc, d.error))
         elseif i == max_per_type + 1 then
-          table.insert(diagnostic_lines, string.format("  ... and %d more", #by_type.frontmatter - max_per_type))
+          table.insert(diagnostic_lines, string.format("  …and %d more", #by_type.frontmatter - max_per_type))
           break
         end
       end
@@ -512,7 +512,7 @@ function M.send_to_provider(opts)
           table.insert(diagnostic_lines, string.format("  [%s%s] %s", loc, role_info, d.error))
           table.insert(diagnostic_lines, string.format("    Expression: {{ %s }}", d.expression or ""))
         elseif i == max_per_type + 1 then
-          table.insert(diagnostic_lines, string.format("  ... and %d more", #by_type.expression - max_per_type))
+          table.insert(diagnostic_lines, string.format("  …and %d more", #by_type.expression - max_per_type))
           break
         end
       end
@@ -527,7 +527,7 @@ function M.send_to_provider(opts)
           local ref = d.filename or d.raw or "unknown"
           table.insert(diagnostic_lines, string.format("  [%s] %s: %s", loc, ref, d.error))
         elseif i == max_per_type + 1 then
-          table.insert(diagnostic_lines, string.format("  ... and %d more", #by_type.file - max_per_type))
+          table.insert(diagnostic_lines, string.format("  …and %d more", #by_type.file - max_per_type))
           break
         end
       end
@@ -548,7 +548,7 @@ function M.send_to_provider(opts)
           local loc = format_position(d.position)
           table.insert(diagnostic_lines, string.format("  [%s] %s", loc, d.error))
         elseif i == max_per_type + 1 then
-          table.insert(diagnostic_lines, string.format("  ... and %d more", #tool_diags - max_per_type))
+          table.insert(diagnostic_lines, string.format("  …and %d more", #tool_diags - max_per_type))
           break
         end
       end
@@ -1058,7 +1058,7 @@ function M.send_to_provider(opts)
       vim.fn.timer_stop(spinner_timer)
       buffer_state.spinner_timer = nil
     end
-    ui.cleanup_spinner(bufnr) -- Clean up any "Thinking..." message, handles its own modifiable toggles
+    ui.cleanup_spinner(bufnr) -- Clean up any "Thinking…" message, handles its own modifiable toggles
     state.unlock_buffer(bufnr)
     return
   end

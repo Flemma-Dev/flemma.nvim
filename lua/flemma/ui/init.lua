@@ -153,9 +153,9 @@ function M.start_loading_spinner(bufnr)
     local line_count = vim.api.nvim_buf_line_count(bufnr)
     local last_line = line_count > 0 and vim.api.nvim_buf_get_lines(bufnr, line_count - 1, line_count, false)[1] or ""
     if last_line:match("%S") then
-      vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "", "@Assistant: Thinking..." })
+      vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "", "@Assistant: Thinking…" })
     else
-      vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "@Assistant: Thinking..." })
+      vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "@Assistant: Thinking…" })
     end
 
     -- Track the spinner line position and create the animated extmark
@@ -237,10 +237,10 @@ function M.cleanup_spinner(bufnr)
   local last_line_content = vim.api.nvim_buf_get_lines(bufnr, line_count - 1, line_count, false)[1]
 
   -- Only modify lines if the last line is exactly the thinking message (spinner is now virtual text)
-  if last_line_content and last_line_content == "@Assistant: Thinking..." then
+  if last_line_content and last_line_content == "@Assistant: Thinking…" then
     M.buffer_cmd(bufnr, "undojoin") -- Group changes for undo
 
-    -- Get the line before the "Thinking..." message (if it exists)
+    -- Get the line before the "Thinking…" message (if it exists)
     local prev_line_actual_content = nil
     if line_count > 1 then
       prev_line_actual_content = vim.api.nvim_buf_get_lines(bufnr, line_count - 2, line_count - 1, false)[1]
@@ -255,7 +255,7 @@ function M.cleanup_spinner(bufnr)
       vim.api.nvim_buf_set_lines(bufnr, line_count - 1, line_count, false, {})
     end
   else
-    log.debug("cleanup_spinner(): Last line is not the 'Thinking...' message, not modifying lines.")
+    log.debug("cleanup_spinner(): Last line is not the 'Thinking…' message, not modifying lines.")
   end
 
   M.update_ui(bufnr) -- Force UI update after cleaning up spinner
@@ -792,7 +792,7 @@ function M.show_tool_indicator(bufnr, tool_id, header_line)
   local frame = 1
 
   local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
-    virt_text = { { " " .. TOOL_SPINNER_FRAMES[frame] .. " Executing...", "FlemmaToolPending" } },
+    virt_text = { { " " .. TOOL_SPINNER_FRAMES[frame] .. " Executing…", "FlemmaToolPending" } },
     virt_text_pos = "eol",
     hl_mode = "combine",
     priority = PRIORITY.TOOL_EXECUTION,
@@ -822,7 +822,7 @@ function M.show_tool_indicator(bufnr, tool_id, header_line)
     frame = (frame % #TOOL_SPINNER_FRAMES) + 1
     pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, current_line, 0, {
       id = ind.extmark_id,
-      virt_text = { { " " .. TOOL_SPINNER_FRAMES[frame] .. " Executing...", "FlemmaToolPending" } },
+      virt_text = { { " " .. TOOL_SPINNER_FRAMES[frame] .. " Executing…", "FlemmaToolPending" } },
       virt_text_pos = "eol",
       hl_mode = "combine",
       priority = PRIORITY.TOOL_EXECUTION,

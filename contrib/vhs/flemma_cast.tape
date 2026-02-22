@@ -88,7 +88,7 @@ Ctrl+]
 Sleep 1000ms
 Wait+Line /@You:/
 Sleep 100ms
-Wait+Line /@Assistant: Thinking.../
+Wait+Line /@Assistant: Thinking…/
 Sleep 100ms
 Wait+Line /@You:/
 Sleep 2000ms
