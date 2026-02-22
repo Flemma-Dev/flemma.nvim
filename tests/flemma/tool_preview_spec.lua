@@ -7,6 +7,32 @@ package.loaded["flemma.ui.preview"] = nil
 
 local ui_preview = require("flemma.ui.preview")
 
+describe("format_content_preview", function()
+  it("collapses runs of 2+ spaces to a single space", function()
+    local result = ui_preview.format_content_preview("hello    world   test")
+    assert.are.equal("hello world test", result)
+  end)
+
+  it("collapses tabs and mixed whitespace", function()
+    local result = ui_preview.format_content_preview("col1\t\tcol2   col3")
+    assert.are.equal("col1 col2 col3", result)
+  end)
+
+  it("preserves newline indicators when collapsing whitespace", function()
+    local result = ui_preview.format_content_preview("line1  extra\n  line2  extra")
+    -- Each line is trimmed, then joined with ⤶; interior spaces collapsed
+    assert.is_truthy(result:match("⤶"), "Should have newline indicator")
+    assert.is_falsy(result:match("  "), "Should not have consecutive spaces")
+  end)
+
+  it("preserves multiple consecutive newline indicators", function()
+    local result = ui_preview.format_content_preview("line1\n\n\nline2")
+    -- Empty lines become empty strings after trim, joined by ⤶
+    -- The ⤶ chars should NOT be collapsed
+    assert.is_truthy(result:match("⤶⤶"), "Should preserve multiple consecutive newline indicators")
+  end)
+end)
+
 describe("Tool Preview", function()
   describe("format_tool_preview", function()
     it("formats single-key input as tool_name: key=value", function()
@@ -463,5 +489,368 @@ describe("Tool Preview", function()
         ui_preview.format_tool_preview("write", { path = "./empty.txt", content = "", label = "create empty" })
       assert.are.equal("write: ./empty.txt  (0 B)  # create empty", result)
     end)
+  end)
+end)
+
+describe("format_message_fold_preview", function()
+  local ast = require("flemma.ast")
+  local preview
+
+  before_each(function()
+    package.loaded["flemma.ui.preview"] = nil
+    preview = require("flemma.ui.preview")
+  end)
+
+  ---Helper: build a message with the given segments
+  ---@param role "You"|"Assistant"|"System"
+  ---@param segments flemma.ast.Segment[]
+  ---@return flemma.ast.MessageNode
+  local function make_message(role, segments)
+    return ast.message(role, segments, { start_line = 1, end_line = 10 })
+  end
+
+  it("shows text-only preview for messages with only text", function()
+    local msg = make_message("Assistant", {
+      ast.text("Here is the answer to your question."),
+    })
+    local result = preview.format_message_fold_preview(msg, 80)
+    assert.are.equal("Here is the answer to your question.", result)
+  end)
+
+  it("shows tool preview for tool-use-only messages", function()
+    local msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "ls -la" }, { start_line = 2, end_line = 5 }),
+    })
+    local result = preview.format_message_fold_preview(msg, 80)
+    assert.is_truthy(result:match("^bash:"), "Should start with tool name")
+    assert.is_truthy(result:match("ls %-la"), "Should contain the command")
+  end)
+
+  it("joins multiple tool uses with pipe separator", function()
+    local msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "free -h" }, { start_line = 2, end_line = 5 }),
+      ast.text("\n\n"),
+      ast.tool_use("t2", "bash", { command = "cat /proc/meminfo" }, { start_line = 7, end_line = 10 }),
+    })
+    local result = preview.format_message_fold_preview(msg, 200)
+    assert.is_truthy(result:match("|"), "Should contain pipe separator")
+    assert.is_truthy(result:match("free %-h"), "Should contain first command")
+    assert.is_truthy(result:match("cat /proc/meminfo"), "Should contain second command")
+  end)
+
+  it("shows text then tool use in buffer order", function()
+    local msg = make_message("Assistant", {
+      ast.text("Let me check that."),
+      ast.tool_use("t1", "bash", { command = "free -h" }, { start_line = 3, end_line = 6 }),
+    })
+    local result = preview.format_message_fold_preview(msg, 200)
+    local text_pos = result:find("Let me check")
+    local tool_pos = result:find("bash:")
+    assert.is_not_nil(text_pos, "Should contain text preview")
+    assert.is_not_nil(tool_pos, "Should contain tool preview")
+    assert.is_truthy(text_pos < tool_pos, "Text should come before tool")
+  end)
+
+  it("skips whitespace-only text segments", function()
+    local msg = make_message("Assistant", {
+      ast.text("\n\n"),
+      ast.tool_use("t1", "bash", { command = "ls" }, { start_line = 2, end_line = 5 }),
+      ast.text("  \n  "),
+      ast.tool_use("t2", "bash", { command = "pwd" }, { start_line = 7, end_line = 10 }),
+    })
+    local result = preview.format_message_fold_preview(msg, 200)
+    -- Should only have tool previews, no empty text parts
+    local pipe_count = 0
+    for _ in result:gmatch(" | ") do
+      pipe_count = pipe_count + 1
+    end
+    assert.are.equal(1, pipe_count, "Should have exactly one separator between two tool previews")
+  end)
+
+  it("skips thinking segments", function()
+    local msg = make_message("Assistant", {
+      ast.thinking("some internal reasoning", { start_line = 2, end_line = 4 }),
+      ast.tool_use("t1", "bash", { command = "ls" }, { start_line = 5, end_line = 8 }),
+    })
+    local result = preview.format_message_fold_preview(msg, 200)
+    assert.is_falsy(result:match("reasoning"), "Should not include thinking content")
+    assert.is_truthy(result:match("bash:"), "Should include tool preview")
+  end)
+
+  it("returns empty string for messages with only whitespace text", function()
+    local msg = make_message("Assistant", {
+      ast.text("\n\n  \n"),
+    })
+    local result = preview.format_message_fold_preview(msg, 80)
+    assert.are.equal("", result)
+  end)
+
+  it("returns empty string for messages with no segments", function()
+    local msg = make_message("Assistant", {})
+    local result = preview.format_message_fold_preview(msg, 80)
+    assert.are.equal("", result)
+  end)
+
+  it("truncates and shows remainder count when width is limited", function()
+    local msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "free -h" }, { start_line = 2, end_line = 5 }),
+      ast.tool_use("t2", "bash", { command = "cat /proc/meminfo" }, { start_line = 6, end_line = 9 }),
+      ast.tool_use("t3", "bash", { command = "vm_stat" }, { start_line = 10, end_line = 13 }),
+    })
+    -- Use a very narrow width that can only fit the first tool
+    local result = preview.format_message_fold_preview(msg, 40)
+    assert.is_truthy(#result <= 40, "Should fit within max_length, got " .. #result .. ": " .. result)
+  end)
+
+  it("shows (+N more) when multiple tools overflow", function()
+    local msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "a" }, { start_line = 2, end_line = 3 }),
+      ast.tool_use("t2", "bash", { command = "b" }, { start_line = 4, end_line = 5 }),
+      ast.tool_use("t3", "bash", { command = "c" }, { start_line = 6, end_line = 7 }),
+      ast.tool_use("t4", "bash", { command = "d" }, { start_line = 8, end_line = 9 }),
+    })
+    -- Extremely narrow: no room for even one tool preview
+    local result = preview.format_message_fold_preview(msg, 12)
+    -- Should contain some overflow indicator
+    assert.is_truthy(
+      result:match("%+%d+ more") or result:match("%+1 tool"),
+      "Should show overflow indicator, got: " .. result
+    )
+  end)
+
+  it("shows (+N more) when later tools have insufficient width", function()
+    local msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "free -h" }, { start_line = 2, end_line = 5 }),
+      ast.tool_use("t2", "bash", { command = "cat /proc/meminfo" }, { start_line = 6, end_line = 9 }),
+      ast.tool_use("t3", "bash", { command = "vm_stat" }, { start_line = 10, end_line = 13 }),
+    })
+    -- Width fits first tool but not enough for a meaningful second tool preview
+    local result = preview.format_message_fold_preview(msg, 35)
+    assert.is_truthy(
+      result:match("%+%d+ more") or result:match("%+1 tool"),
+      "Should show overflow indicator for remaining tools, got: " .. result
+    )
+    assert.is_falsy(result:match("…$"), "Should not end with a truncated partial tool name")
+  end)
+
+  it("merges consecutive text segments into one preview", function()
+    -- Simulate how the parser emits multi-line text: separate segments per line
+    local msg = make_message("Assistant", {
+      ast.text("Here's a summary."),
+      ast.text("\n"),
+      ast.text("Total RAM is 32 GB."),
+      ast.text("\n"),
+      ast.text("Used RAM is 12 GB."),
+    })
+    local result = preview.format_message_fold_preview(msg, 200)
+    -- Should be one merged text preview with newline indicators, NOT multiple ' | ' entries
+    assert.is_truthy(result:match("summary"), "Should contain first line content")
+    assert.is_truthy(result:match("Total RAM"), "Should contain second line content")
+    -- The newline char ⤶ joins lines within a single text preview
+    assert.is_truthy(result:match("⤶"), "Should use newline indicator within merged text")
+    -- No segment separator should appear (all text merges into one entry)
+    -- Count occurrences of the exact segment separator " | "
+    -- Since content has no pipes, any " | " would be a segment separator
+    local separator_count = 0
+    for _ in result:gmatch(" | ") do
+      separator_count = separator_count + 1
+    end
+    assert.are.equal(0, separator_count, "Consecutive text should merge into one preview, got: " .. result)
+  end)
+
+  it("merges text but separates from tool_use with pipe", function()
+    -- Text lines followed by a tool use
+    local msg = make_message("Assistant", {
+      ast.text("Let me check."),
+      ast.text("\n"),
+      ast.text("Running a command now."),
+      ast.tool_use("t1", "bash", { command = "ls" }, { start_line = 4, end_line = 7 }),
+    })
+    local result = preview.format_message_fold_preview(msg, 200)
+    -- Text should merge into one block, separated from tool by ' | '
+    local separator_count = 0
+    for _ in result:gmatch(" | ") do
+      separator_count = separator_count + 1
+    end
+    assert.are.equal(1, separator_count, "One separator between merged text and tool, got: " .. result)
+    assert.is_truthy(result:match("Let me check"), "Should contain first text line")
+    assert.is_truthy(result:match("bash:"), "Should contain tool preview")
+  end)
+
+  it("includes expression segments merged with surrounding text", function()
+    local msg = make_message("You", {
+      ast.text("Today is "),
+      ast.expression("os.date('%Y-%m-%d')"),
+      ast.text(" and the weather is nice."),
+    })
+    local result = preview.format_message_fold_preview(msg, 200)
+    assert.is_truthy(result:match("Today is"), "Should contain text before expression")
+    assert.is_truthy(result:match("os%.date"), "Should contain expression code")
+    assert.is_truthy(result:match("weather is nice"), "Should contain text after expression")
+    -- All merged into one block, no separators
+    local separator_count = 0
+    for _ in result:gmatch(" | ") do
+      separator_count = separator_count + 1
+    end
+    assert.are.equal(0, separator_count, "Expression should merge with text, got: " .. result)
+  end)
+
+  it("shows expression with surrounding {{ }} markers", function()
+    local msg = make_message("You", {
+      ast.text("Value: "),
+      ast.expression("2 + 2"),
+    })
+    local result = preview.format_message_fold_preview(msg, 200)
+    assert.is_truthy(result:match("{{ 2 %+ 2 }}"), "Should show expression wrapped in {{ }}")
+  end)
+end)
+
+describe("format_tool_result_preview", function()
+  local preview_mod
+
+  before_each(function()
+    package.loaded["flemma.ui.preview"] = nil
+    preview_mod = require("flemma.ui.preview")
+  end)
+
+  it("formats result with tool name and content", function()
+    local result = preview_mod.format_tool_result_preview("calculator_async", "4", false)
+    assert.are.equal("calculator_async: 4", result)
+  end)
+
+  it("formats error result with error marker", function()
+    local result = preview_mod.format_tool_result_preview("bash", "command not found", true)
+    assert.are.equal("bash: (error) command not found", result)
+  end)
+
+  it("truncates long content", function()
+    local long_content = string.rep("x", 200)
+    local result = preview_mod.format_tool_result_preview("bash", long_content, false, 40)
+    assert.is_truthy(#result <= 40, "Should fit within max_length, got " .. #result)
+    assert.is_truthy(result:match("^bash: "), "Should start with tool name")
+    assert.is_truthy(result:match("…$"), "Should end with truncation marker")
+  end)
+
+  it("shows just tool name when content is empty", function()
+    local result = preview_mod.format_tool_result_preview("bash", "", false)
+    assert.are.equal("bash", result)
+  end)
+
+  it("shows tool name with error marker when content is empty and is_error", function()
+    local result = preview_mod.format_tool_result_preview("bash", "", true)
+    assert.are.equal("bash: (error)", result)
+  end)
+
+  it("collapses multiline content", function()
+    local result = preview_mod.format_tool_result_preview("bash", "line1\nline2\nline3", false)
+    assert.is_truthy(result:match("⤶"), "Should collapse newlines")
+    assert.is_truthy(result:match("^bash: "), "Should start with tool name")
+  end)
+end)
+
+describe("format_message_fold_preview with tool results", function()
+  local ast = require("flemma.ast")
+  local preview_mod
+
+  before_each(function()
+    package.loaded["flemma.ui.preview"] = nil
+    preview_mod = require("flemma.ui.preview")
+  end)
+
+  ---Helper: build a message with the given segments
+  ---@param role "You"|"Assistant"|"System"
+  ---@param segments flemma.ast.Segment[]
+  ---@return flemma.ast.MessageNode
+  local function make_message(role, segments)
+    return ast.message(role, segments, { start_line = 1, end_line = 20 })
+  end
+
+  ---Helper: build a document with the given messages
+  ---@param messages flemma.ast.MessageNode[]
+  ---@return flemma.ast.DocumentNode
+  local function make_doc(messages)
+    return ast.document(nil, messages, nil, { start_line = 1, end_line = 50 })
+  end
+
+  it("shows tool result previews for @You messages", function()
+    local assistant_msg = make_message("Assistant", {
+      ast.tool_use("t1", "calculator_async", { expression = "2+2" }, { start_line = 2, end_line = 5 }),
+    })
+    local you_msg = make_message("You", {
+      ast.tool_result("t1", "4", { start_line = 7, end_line = 12 }),
+    })
+    local doc = make_doc({ assistant_msg, you_msg })
+
+    local result = preview_mod.format_message_fold_preview(you_msg, 80, doc)
+    assert.are.equal("calculator_async: 4", result)
+  end)
+
+  it("shows multiple tool result previews joined with pipe", function()
+    local assistant_msg = make_message("Assistant", {
+      ast.tool_use("t1", "calculator_async", { expression = "2+2" }, { start_line = 2, end_line = 5 }),
+      ast.tool_use("t2", "calculator_async", { expression = "4+4" }, { start_line = 6, end_line = 9 }),
+    })
+    local you_msg = make_message("You", {
+      ast.tool_result("t1", "4", { start_line = 11, end_line = 15 }),
+      ast.tool_result("t2", "8", { start_line = 16, end_line = 20 }),
+    })
+    local doc = make_doc({ assistant_msg, you_msg })
+
+    local result = preview_mod.format_message_fold_preview(you_msg, 200, doc)
+    assert.is_truthy(result:match("calculator_async: 4"), "Should show first result")
+    assert.is_truthy(result:match("calculator_async: 8"), "Should show second result")
+    assert.is_truthy(result:match(" | "), "Should have pipe separator")
+  end)
+
+  it("falls back to 'result' when doc is not provided", function()
+    local you_msg = make_message("You", {
+      ast.tool_result("t1", "4", { start_line = 2, end_line = 6 }),
+    })
+
+    local result = preview_mod.format_message_fold_preview(you_msg, 80)
+    assert.are.equal("result: 4", result)
+  end)
+
+  it("falls back to 'result' when tool_use ID not found in doc", function()
+    local assistant_msg = make_message("Assistant", {
+      ast.text("No tools here"),
+    })
+    local you_msg = make_message("You", {
+      ast.tool_result("unknown_id", "some output", { start_line = 3, end_line = 7 }),
+    })
+    local doc = make_doc({ assistant_msg, you_msg })
+
+    local result = preview_mod.format_message_fold_preview(you_msg, 80, doc)
+    assert.are.equal("result: some output", result)
+  end)
+
+  it("shows error marker for error results", function()
+    local assistant_msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "bad_cmd" }, { start_line = 2, end_line = 5 }),
+    })
+    local you_msg = make_message("You", {
+      ast.tool_result("t1", "command not found", { is_error = true, start_line = 7, end_line = 12 }),
+    })
+    local doc = make_doc({ assistant_msg, you_msg })
+
+    local result = preview_mod.format_message_fold_preview(you_msg, 80, doc)
+    assert.are.equal("bash: (error) command not found", result)
+  end)
+
+  it("mixes text and tool results in @You messages", function()
+    local assistant_msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "ls" }, { start_line = 2, end_line = 5 }),
+    })
+    local you_msg = make_message("You", {
+      ast.tool_result("t1", "file1.txt", { start_line = 7, end_line = 12 }),
+      ast.text("\n"),
+      ast.text("Please continue."),
+    })
+    local doc = make_doc({ assistant_msg, you_msg })
+
+    local result = preview_mod.format_message_fold_preview(you_msg, 200, doc)
+    assert.is_truthy(result:match("bash: file1%.txt"), "Should show tool result")
+    assert.is_truthy(result:match("Please continue"), "Should show text")
+    assert.is_truthy(result:match(" | "), "Should have pipe separator")
   end)
 end)

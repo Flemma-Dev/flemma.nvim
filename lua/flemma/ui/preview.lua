@@ -50,6 +50,8 @@ function M.format_content_preview(content, max_length)
 
   local preview = table.concat(lines, CONTENT_PREVIEW_NEWLINE_CHAR)
   preview = vim.trim(preview)
+  -- Collapse runs of 2+ spaces/tabs to a single space (but preserve ⤶ sequences)
+  preview = preview:gsub("[ \t][ \t]+", " ")
 
   if #preview > max_length then
     local truncated_length = max_length - #CONTENT_PREVIEW_TRUNCATION_MARKER
@@ -220,6 +222,202 @@ local function find_thinking_at_line(doc, lnum)
   return nil, nil
 end
 
+local SEGMENT_SEPARATOR = " | "
+
+-- Minimum width (in characters) for a tool preview to be meaningful.
+-- Below this, we show an overflow indicator instead of a truncated preview.
+local MIN_TOOL_PREVIEW_WIDTH = 12
+
+---Format a compact preview string for a tool result.
+---Shows the tool name with a content preview: `tool_name: content_preview`
+---For errors: `tool_name: (error) content_preview`
+---@param tool_name string
+---@param content string
+---@param is_error boolean
+---@param max_length? integer Maximum total preview length (defaults to DEFAULT_MAX_LENGTH)
+---@return string
+function M.format_tool_result_preview(tool_name, content, is_error, max_length)
+  max_length = max_length or DEFAULT_MAX_LENGTH
+
+  local name_prefix = tool_name .. ": "
+  if is_error then
+    name_prefix = name_prefix .. "(error) "
+  end
+  local available = max_length - #name_prefix
+
+  local body = M.format_content_preview(content, available)
+
+  if body == "" then
+    -- Trim trailing ": " when there's no content to show
+    return tool_name .. (is_error and ": (error)" or "")
+  end
+
+  return name_prefix .. body
+end
+
+---Build a tool_use_id → tool_name lookup from all Assistant messages in a document.
+---@param doc flemma.ast.DocumentNode
+---@return table<string, string>
+local function build_tool_name_map(doc)
+  local map = {}
+  for _, msg in ipairs(doc.messages) do
+    if msg.role == "Assistant" then
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "tool_use" then
+          local tool_seg = seg --[[@as flemma.ast.ToolUseSegment]]
+          map[tool_seg.id] = tool_seg.name
+        end
+      end
+    end
+  end
+  return map
+end
+
+---@alias flemma.ui.preview.CoalescedEntry {kind: "text"|"tool_use"|"tool_result", value: string|nil, segment: flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|nil}
+
+---Coalesce raw AST segments into logical preview entries.
+---The parser emits each line as a separate text segment; this merges consecutive
+---text segments into a single entry so the fold preview treats them as one block.
+---@param segments flemma.ast.Segment[]
+---@return flemma.ui.preview.CoalescedEntry[]
+local function coalesce_segments(segments)
+  local entries = {}
+  local text_accumulator = {}
+
+  local function flush_text()
+    if #text_accumulator > 0 then
+      local merged = table.concat(text_accumulator)
+      if merged:find("%S") then
+        table.insert(entries, { kind = "text", value = merged })
+      end
+      text_accumulator = {}
+    end
+  end
+
+  for _, seg in ipairs(segments) do
+    if seg.kind == "text" then
+      ---@cast seg flemma.ast.TextSegment
+      table.insert(text_accumulator, seg.value)
+    elseif seg.kind == "expression" then
+      ---@cast seg flemma.ast.ExpressionSegment
+      table.insert(text_accumulator, "{{ " .. seg.code .. " }}")
+    elseif seg.kind == "tool_use" then
+      flush_text()
+      table.insert(entries, {
+        kind = "tool_use",
+        segment = seg --[[@as flemma.ast.ToolUseSegment]],
+      })
+    elseif seg.kind == "tool_result" then
+      flush_text()
+      table.insert(entries, {
+        kind = "tool_result",
+        segment = seg --[[@as flemma.ast.ToolResultSegment]],
+      })
+    end
+    -- Skip thinking segments (they have their own level-2 fold)
+  end
+
+  flush_text()
+  return entries
+end
+
+---Build a composite fold preview from a message's segments in buffer order.
+---Consecutive text segments are merged; tool_use and tool_result segments produce
+---tool previews. Entries are joined with ' | ' and truncated to fit max_length.
+---@param msg flemma.ast.MessageNode
+---@param max_length integer Available width for the preview body (excluding role prefix and suffix)
+---@param doc? flemma.ast.DocumentNode Document for resolving tool names from tool_result IDs
+---@return string
+function M.format_message_fold_preview(msg, max_length, doc)
+  local entries = coalesce_segments(msg.segments)
+
+  if #entries == 0 then
+    return ""
+  end
+
+  -- Build tool name lookup only when there are tool_result entries and a doc is available
+  ---@type table<string, string>|nil
+  local tool_name_map
+  if doc then
+    for _, entry in ipairs(entries) do
+      if entry.kind == "tool_result" then
+        tool_name_map = build_tool_name_map(doc)
+        break
+      end
+    end
+  end
+
+  local parts = {}
+  local used = 0
+
+  for i, entry in ipairs(entries) do
+    local remaining_entries = #entries - i
+    local separator_cost = used > 0 and #SEGMENT_SEPARATOR or 0
+    local available = max_length - used - separator_cost
+
+    if available <= 0 then
+      local overflow = #entries - i + 1
+      if overflow == 1 then
+        table.insert(parts, "(+1 tool)")
+      else
+        table.insert(parts, string.format("(+%d more)", overflow))
+      end
+      break
+    end
+
+    local remainder_reserve = 0
+    if remaining_entries > 0 then
+      remainder_reserve = #SEGMENT_SEPARATOR + #string.format("(+%d more)", remaining_entries)
+    end
+
+    local preview
+    if entry.kind == "tool_use" then
+      local tool_seg = entry.segment --[[@as flemma.ast.ToolUseSegment]]
+      local width_for_tool = available - remainder_reserve
+      if width_for_tool < MIN_TOOL_PREVIEW_WIDTH then
+        local overflow = #entries - i + 1
+        if overflow == 1 then
+          table.insert(parts, "(+1 tool)")
+        else
+          table.insert(parts, string.format("(+%d more)", overflow))
+        end
+        break
+      end
+      preview = M.format_tool_preview(tool_seg.name, tool_seg.input, width_for_tool)
+    elseif entry.kind == "tool_result" then
+      local result_seg = entry.segment --[[@as flemma.ast.ToolResultSegment]]
+      local tool_name = (tool_name_map and tool_name_map[result_seg.tool_use_id]) or "result"
+      local width_for_result = available - remainder_reserve
+      if width_for_result < MIN_TOOL_PREVIEW_WIDTH then
+        local overflow = #entries - i + 1
+        if overflow == 1 then
+          table.insert(parts, "(+1 tool)")
+        else
+          table.insert(parts, string.format("(+%d more)", overflow))
+        end
+        break
+      end
+      preview = M.format_tool_result_preview(tool_name, result_seg.content, result_seg.is_error, width_for_result)
+    else
+      preview = M.format_content_preview(entry.value --[[@as string]], available - remainder_reserve)
+    end
+
+    if preview == "" then
+      goto continue
+    end
+
+    if used > 0 then
+      used = used + #SEGMENT_SEPARATOR
+    end
+    used = used + #preview
+    table.insert(parts, preview)
+
+    ::continue::
+  end
+
+  return table.concat(parts, SEGMENT_SEPARATOR)
+end
+
 ---Find a message whose start or end line matches the given line number
 ---@param doc flemma.ast.DocumentNode
 ---@param lnum integer 1-indexed line number
@@ -323,15 +521,7 @@ function M.get_fold_text()
     local role_prefix = "@" .. msg.role .. ":"
     -- Account for surrounding chrome: "@Role:  (N lines)"
     local suffix = string.format(" (%d lines)", total_fold_lines)
-    -- Get preview from the first text segment
-    local content = ""
-    for _, seg in ipairs(msg.segments) do
-      if seg.kind == "text" then
-        content = seg.value
-        break
-      end
-    end
-    local preview = M.format_content_preview(content, text_width - #role_prefix - #suffix - 1)
+    local preview = M.format_message_fold_preview(msg, text_width - #role_prefix - #suffix - 1, doc)
     return role_prefix .. " " .. preview .. suffix
   end
 
