@@ -43,7 +43,7 @@ develop:
 
 .PHONY: screencast
 # Create a VHS screencast demonstrating Flemma's capabilities
-screencast: .vapor/catppuccin-nvim
+screencast: .vapor/catppuccin/nvim.git .vapor/NStefan002/screenkey.nvim.git
 	@-rm -R .vapor/cache/ .vapor/state/ .vapor/scratch.chat .vapor/math.png assets/flemma_cast.mp4
 	@mkdir -p .vapor/cache/ .vapor/state/
 	@echo -e "\`\`\`lua\nname = \"Flemma\"\n\nflemma.opt.thinking = \"medium\"\nflemma.opt.tools.auto_approve = { \"bash\" }\n\`\`\`\n@System: When deleting files use \`trash\` && \`sleep 2\`, never \`rm\`.\n" > .vapor/scratch.chat
@@ -66,9 +66,9 @@ screencast: .vapor/catppuccin-nvim
 		XDG_STATE_HOME=`pwd`/.vapor/state \
 	vhs contrib/vhs/flemma_cast.tape
 
-.vapor/catppuccin-nvim:
-	@mkdir -p .vapor
-	git clone --depth 1 https://github.com/catppuccin/vim.git .vapor/catppuccin-nvim
+.vapor/catppuccin/nvim.git .vapor/NStefan002/screenkey.nvim.git:
+	@mkdir -p $(dir $@)
+	git clone --depth 1 https://github.com/$(patsubst .vapor/%.git,%,$@) $@
 
 
 # vim: set ts=4 sts=4 sw=4 noet:

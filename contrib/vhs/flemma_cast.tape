@@ -83,6 +83,8 @@ Type ":nohlsearch"
 Enter
 Type ":call clearmatches()"
 Enter
+Ctrl+L
+Sleep 5000ms
 Show
 Ctrl+]
 Sleep 1000ms

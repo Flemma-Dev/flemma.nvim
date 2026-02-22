@@ -1,9 +1,10 @@
 local cwd = vim.fn.getcwd()
 vim.opt.runtimepath:prepend(cwd)
-vim.opt.runtimepath:prepend(cwd .. "/.vapor/catppuccin-nvim")
+vim.opt.runtimepath:prepend(cwd .. "/.vapor/catppuccin/nvim.git")
+vim.opt.runtimepath:prepend(cwd .. "/.vapor/NStefan002/screenkey.nvim.git")
 
 vim.opt.termguicolors = true
-vim.cmd.colorscheme("catppuccin_frappe")
+vim.cmd.colorscheme("catppuccin-frappe")
 
 vim.opt.updatetime = 100
 vim.opt.timeoutlen = 100
@@ -45,6 +46,17 @@ require("treesitter-context").setup({
   enable = false,
 })
 
+require("screenkey").setup({
+  disable = {
+    modes = { "i", "c" },
+  },
+  keys = {
+    ["<CR>"] = "Enter",
+  },
+})
+
+require("screenkey").toggle_statusline_component()
+
 require("flemma").setup({
   provider = "anthropic",
   model = "claude-haiku-4-5",
@@ -78,7 +90,14 @@ require("lualine").setup({
     lualine_b = {
       { "filename", path = 1, symbols = { modified = "∗" } },
     },
-    lualine_c = {},
+    lualine_c = {
+      {
+        function()
+          return require("screenkey").get_keys()
+        end,
+        icon = "⌨",
+      },
+    },
     lualine_x = {
       { "flemma", icon = "🧠" },
     },
