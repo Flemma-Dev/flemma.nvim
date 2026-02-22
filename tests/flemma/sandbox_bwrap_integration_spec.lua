@@ -50,6 +50,7 @@ local function execute_bash_tool(command, sbx_config, opts)
   opts = opts or {}
   local state = require("flemma.state")
   local registry = require("flemma.tools.registry")
+  local executor = require("flemma.tools.executor")
 
   local bufnr = opts.bufnr or vim.api.nvim_create_buf(false, true)
 
@@ -71,11 +72,12 @@ local function execute_bash_tool(command, sbx_config, opts)
   ---@type flemma.tools.ExecutionResult|nil
   local result = nil
 
-  ---@type flemma.tools.ExecutionContext
-  local ctx = {
+  local ctx = executor.build_execution_context({
     bufnr = bufnr,
     cwd = vim.fn.getcwd(),
-  }
+    timeout = full_config.tools.default_timeout or 30,
+    tool_name = "bash",
+  })
 
   tool.execute({ label = "test", command = command, timeout = opts.timeout or 10 }, function(r)
     result = r
@@ -445,6 +447,7 @@ describe("sandbox process lifecycle through bash tool", function()
 
     local state = require("flemma.state")
     local registry = require("flemma.tools.registry")
+    local executor = require("flemma.tools.executor")
 
     state.set_config({
       sandbox = sandbox_config({}),
@@ -463,8 +466,12 @@ describe("sandbox process lifecycle through bash tool", function()
     ---@type flemma.tools.ExecutionResult|nil
     local result = nil
 
-    ---@type flemma.tools.ExecutionContext
-    local ctx = { bufnr = bufnr, cwd = vim.fn.getcwd() }
+    local ctx = executor.build_execution_context({
+      bufnr = bufnr,
+      cwd = vim.fn.getcwd(),
+      timeout = 300,
+      tool_name = "bash",
+    })
 
     -- Execute returns the cancel function for async tools
     local cancel_fn = tool.execute({ label = "long sleep", command = "sleep 300", timeout = 300 }, function(r)

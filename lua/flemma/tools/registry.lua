@@ -10,13 +10,28 @@ local M = {}
 ---@field required? string[] Required property names
 ---@field additionalProperties? boolean Whether to allow extra properties (set false for strict mode)
 
---- Context passed to tool execute functions as an optional third argument
+--- Sandbox enforcement utilities exposed on the execution context
+---@class flemma.tools.SandboxContext
+---@field is_path_writable fun(path: string): boolean Check if path is writable under sandbox policy
+---@field wrap_command fun(cmd: string[]): string[]|nil, string|nil Wrap command for sandbox enforcement
+
+--- Path utilities exposed on the execution context
+---@class flemma.tools.PathContext
+---@field resolve fun(path: string): string Resolve relative path against __dirname or cwd; absolute paths pass through unchanged
+
+--- Context passed to tool execute functions as the third argument.
+--- Tools should code against this contract exclusively — never require() internal
+--- Flemma modules. Sandbox, truncate, and path namespaces are lazy-loaded on first access.
 ---@class flemma.tools.ExecutionContext
 ---@field bufnr integer Buffer number for the current execution
----@field opts? flemma.opt.ResolvedOpts Per-buffer resolved options
 ---@field cwd string Absolute, normalized working directory
+---@field timeout integer Default timeout in seconds (resolved from config.tools.default_timeout)
 ---@field __dirname? string Directory containing the .chat buffer (nil for unsaved buffers)
 ---@field __filename? string Full path of the .chat buffer (nil for unsaved buffers)
+---@field sandbox flemma.tools.SandboxContext Sandbox enforcement utilities (lazy-loaded)
+---@field truncate flemma.tools.Truncate Truncation utilities (lazy-loaded)
+---@field path flemma.tools.PathContext Path resolution utilities (lazy-loaded)
+---@field get_config fun(self: flemma.tools.ExecutionContext): table? Tool-specific config subtree (read-only copy of config.tools[tool_name])
 
 ---@class flemma.tools.ToolDefinition
 ---@field name string Tool name (must match registry key)
@@ -27,7 +42,7 @@ local M = {}
 ---@field async? boolean True if execute takes a callback (default false)
 ---@field enabled? boolean Set to false to exclude from API requests by default (still executable, can be enabled via flemma.opt.tools)
 ---@field executable? boolean Set to false to disable execution
----@field execute? fun(input: table<string, any>, callback?: fun(result: flemma.tools.ExecutionResult), context?: flemma.tools.ExecutionContext): any Executor function (sync returns ExecutionResult, async returns cancel fn or nil)
+---@field execute? fun(input: table<string, any>, callback: fun(result: flemma.tools.ExecutionResult)|nil, context: flemma.tools.ExecutionContext): any Executor function (sync returns ExecutionResult, async returns cancel fn or nil)
 ---@field format_preview? fun(input: table<string, any>, max_length: integer): string Custom preview body generator (receives input and available width after "name: " prefix)
 
 ---@class flemma.tools.ExecutionResult

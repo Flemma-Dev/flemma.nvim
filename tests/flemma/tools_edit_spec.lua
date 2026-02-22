@@ -2,18 +2,22 @@
 
 package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.registry"] = nil
+package.loaded["flemma.tools.executor"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
 package.loaded["flemma.sandbox"] = nil
 package.loaded["flemma.sandbox.backends.bwrap"] = nil
 
 local tools = require("flemma.tools")
 local registry = require("flemma.tools.registry")
+local executor = require("flemma.tools.executor")
 local state = require("flemma.state")
 
 describe("Edit Tool", function()
   local edit_def
   local test_dir
   local test_file
+  local bufnr
+  local ctx
 
   before_each(function()
     registry.clear()
@@ -24,10 +28,19 @@ describe("Edit Tool", function()
     test_dir = vim.fn.tempname()
     vim.fn.mkdir(test_dir, "p")
     test_file = test_dir .. "/test.txt"
+
+    bufnr = vim.api.nvim_create_buf(false, true)
+    ctx = executor.build_execution_context({
+      bufnr = bufnr,
+      cwd = vim.fn.getcwd(),
+      timeout = 30,
+      tool_name = "edit",
+    })
   end)
 
   after_each(function()
     vim.fn.delete(test_dir, "rf")
+    vim.api.nvim_buf_delete(bufnr, { force = true })
   end)
 
   it("is registered on setup", function()
@@ -45,7 +58,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "hello",
         newText = "goodbye",
-      })
+      }, nil, ctx)
       assert.is_true(result.success)
       assert.is_truthy(result.output:match("Successfully replaced"))
 
@@ -62,7 +75,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "line 1\nline 2",
         newText = "new line 1\nnew line 2",
-      })
+      }, nil, ctx)
       assert.is_true(result.success)
 
       local content = table.concat(vim.fn.readfile(test_file), "\n")
@@ -77,7 +90,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "$5.00 (USD)",
         newText = "$10.00 (EUR)",
-      })
+      }, nil, ctx)
       assert.is_true(result.success)
 
       local content = table.concat(vim.fn.readfile(test_file), "\n")
@@ -92,7 +105,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "[%w+]",
         newText = "[%d+]",
-      })
+      }, nil, ctx)
       assert.is_true(result.success)
 
       local content = table.concat(vim.fn.readfile(test_file), "\n")
@@ -107,7 +120,7 @@ describe("Edit Tool", function()
         path = test_dir .. "/nonexistent.txt",
         oldText = "hello",
         newText = "world",
-      })
+      }, nil, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("File not found"))
     end)
@@ -120,7 +133,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "nonexistent text",
         newText = "replacement",
-      })
+      }, nil, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("Could not find"))
     end)
@@ -133,7 +146,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "hello",
         newText = "world",
-      })
+      }, nil, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("3 occurrences"))
       assert.is_truthy(result.error:match("unique"))
@@ -147,7 +160,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "hello",
         newText = "hello",
-      })
+      }, nil, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("No changes made"))
     end)
@@ -160,7 +173,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "",
         newText = "world",
-      })
+      }, nil, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("No oldText"))
     end)
@@ -171,7 +184,7 @@ describe("Edit Tool", function()
         path = "",
         oldText = "hello",
         newText = "world",
-      })
+      }, nil, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("No path"))
     end)
@@ -186,7 +199,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = " world",
         newText = "",
-      })
+      }, nil, ctx)
       assert.is_true(result.success)
 
       local content = table.concat(vim.fn.readfile(test_file), "\n")
@@ -201,7 +214,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "foo",
         newText = "baz",
-      })
+      }, nil, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("2 occurrences"))
 
@@ -213,7 +226,7 @@ describe("Edit Tool", function()
 
   describe("sandbox enforcement", function()
     local sandbox
-    local bufnr
+    local sandbox_bufnr
 
     before_each(function()
       package.loaded["flemma.sandbox"] = nil
@@ -232,12 +245,12 @@ describe("Edit Tool", function()
         priority = 50,
       })
 
-      bufnr = vim.api.nvim_create_buf(false, true)
+      sandbox_bufnr = vim.api.nvim_create_buf(false, true)
     end)
 
     after_each(function()
       sandbox.reset_enabled()
-      vim.api.nvim_buf_delete(bufnr, { force = true })
+      vim.api.nvim_buf_delete(sandbox_bufnr, { force = true })
     end)
 
     it("allows edits inside rw_paths", function()
@@ -249,8 +262,12 @@ describe("Edit Tool", function()
         },
       })
       vim.fn.writefile({ "hello world" }, test_file)
-      ---@type flemma.tools.ExecutionContext
-      local context = { bufnr = bufnr, cwd = vim.fn.getcwd() }
+      local context = executor.build_execution_context({
+        bufnr = sandbox_bufnr,
+        cwd = vim.fn.getcwd(),
+        timeout = 30,
+        tool_name = "edit",
+      })
 
       local result = edit_def.execute({
         label = "test",
@@ -273,8 +290,12 @@ describe("Edit Tool", function()
         },
       })
       vim.fn.writefile({ "hello world" }, test_file)
-      ---@type flemma.tools.ExecutionContext
-      local context = { bufnr = bufnr, cwd = vim.fn.getcwd() }
+      local context = executor.build_execution_context({
+        bufnr = sandbox_bufnr,
+        cwd = vim.fn.getcwd(),
+        timeout = 30,
+        tool_name = "edit",
+      })
 
       local result = edit_def.execute({
         label = "test",
@@ -299,8 +320,12 @@ describe("Edit Tool", function()
         },
       })
       vim.fn.writefile({ "hello world" }, test_file)
-      ---@type flemma.tools.ExecutionContext
-      local context = { bufnr = bufnr, cwd = vim.fn.getcwd() }
+      local context = executor.build_execution_context({
+        bufnr = sandbox_bufnr,
+        cwd = vim.fn.getcwd(),
+        timeout = 30,
+        tool_name = "edit",
+      })
 
       local result = edit_def.execute({
         label = "test",

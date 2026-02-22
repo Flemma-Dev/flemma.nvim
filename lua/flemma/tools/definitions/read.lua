@@ -6,6 +6,8 @@
 ---@field definitions flemma.tools.ToolDefinition[]
 local M = {}
 
+-- Module-level require for description constants only (evaluated at load time).
+-- Runtime code inside execute() must use ctx.truncate instead.
 local truncate = require("flemma.tools.truncate")
 
 M.definitions = {
@@ -57,17 +59,14 @@ M.definitions = {
       end
       return table.concat(parts, "  ")
     end,
-    execute = function(input, _callback, context)
+    execute = function(input, _, ctx)
       local path = input.path
       if not path or path == "" then
         return { success = false, error = "No path provided" }
       end
 
       -- Resolve relative paths against buffer's directory, falling back to cwd
-      if not vim.startswith(path, "/") then
-        local base = (context and context.__dirname) or vim.fn.getcwd()
-        path = base .. "/" .. path
-      end
+      path = ctx.path.resolve(path)
 
       -- Check file exists and is readable
       if vim.fn.filereadable(path) ~= 1 then
@@ -106,21 +105,21 @@ M.definitions = {
       local selected_content = table.concat(selected_lines, "\n")
 
       -- Apply head truncation
-      local result = truncate.truncate_head(selected_content)
+      local result = ctx.truncate.truncate_head(selected_content)
 
       local output_text
 
       if result.first_line_exceeds_limit then
         -- First line at offset exceeds limit
-        local first_line_size = truncate.format_size(#all_lines[start_line])
+        local first_line_size = ctx.truncate.format_size(#all_lines[start_line])
         output_text = string.format(
           "[Line %d is %s, exceeds %s limit. Use bash: sed -n '%dp' %s | head -c %d]",
           start_line,
           first_line_size,
-          truncate.format_size(truncate.MAX_BYTES),
+          ctx.truncate.format_size(ctx.truncate.MAX_BYTES),
           start_line,
           input.path,
-          truncate.MAX_BYTES
+          ctx.truncate.MAX_BYTES
         )
       elseif result.truncated then
         local end_line_display = start_line + result.output_lines - 1
@@ -144,7 +143,7 @@ M.definitions = {
               start_line,
               end_line_display,
               total_file_lines,
-              truncate.format_size(truncate.MAX_BYTES),
+              ctx.truncate.format_size(ctx.truncate.MAX_BYTES),
               next_offset
             )
         end

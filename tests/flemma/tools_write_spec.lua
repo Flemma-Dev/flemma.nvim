@@ -2,17 +2,21 @@
 
 package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.registry"] = nil
+package.loaded["flemma.tools.executor"] = nil
 package.loaded["flemma.tools.definitions.write"] = nil
 package.loaded["flemma.sandbox"] = nil
 package.loaded["flemma.sandbox.backends.bwrap"] = nil
 
 local tools = require("flemma.tools")
 local registry = require("flemma.tools.registry")
+local executor = require("flemma.tools.executor")
 local state = require("flemma.state")
 
 describe("Write Tool", function()
   local write_def
   local test_dir
+  local bufnr
+  local ctx
 
   before_each(function()
     registry.clear()
@@ -22,10 +26,19 @@ describe("Write Tool", function()
     -- Create a temp directory
     test_dir = vim.fn.tempname()
     vim.fn.mkdir(test_dir, "p")
+
+    bufnr = vim.api.nvim_create_buf(false, true)
+    ctx = executor.build_execution_context({
+      bufnr = bufnr,
+      cwd = vim.fn.getcwd(),
+      timeout = 30,
+      tool_name = "write",
+    })
   end)
 
   after_each(function()
     vim.fn.delete(test_dir, "rf")
+    vim.api.nvim_buf_delete(bufnr, { force = true })
   end)
 
   it("is registered on setup", function()
@@ -42,7 +55,7 @@ describe("Write Tool", function()
         label = "test",
         path = path,
         content = "hello world",
-      })
+      }, nil, ctx)
       assert.is_true(result.success)
       assert.is_truthy(result.output:match("11 bytes"))
 
@@ -59,7 +72,7 @@ describe("Write Tool", function()
         label = "test",
         path = path,
         content = "new content",
-      })
+      }, nil, ctx)
       assert.is_true(result.success)
 
       local content = table.concat(vim.fn.readfile(path), "\n")
@@ -73,7 +86,7 @@ describe("Write Tool", function()
         label = "test",
         path = path,
         content = "nested content",
-      })
+      }, nil, ctx)
       assert.is_true(result.success)
 
       -- Verify file exists
@@ -89,7 +102,7 @@ describe("Write Tool", function()
         label = "test",
         path = path,
         content = "",
-      })
+      }, nil, ctx)
       assert.is_true(result.success)
       assert.is_truthy(result.output:match("0 bytes"))
     end)
@@ -101,7 +114,7 @@ describe("Write Tool", function()
         label = "test",
         path = path,
         content = "line 1\nline 2\nline 3",
-      })
+      }, nil, ctx)
       assert.is_true(result.success)
 
       local lines = vim.fn.readfile(path)
@@ -117,19 +130,19 @@ describe("Write Tool", function()
         label = "test",
         path = "",
         content = "hello",
-      })
+      }, nil, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("No path"))
     end)
 
     it("returns error for nil path", function()
-      local result = write_def.execute({ label = "test", content = "hello" })
+      local result = write_def.execute({ label = "test", content = "hello" }, nil, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("No path"))
     end)
 
     it("returns error for nil content", function()
-      local result = write_def.execute({ label = "test", path = test_dir .. "/test.txt" })
+      local result = write_def.execute({ label = "test", path = test_dir .. "/test.txt" }, nil, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("No content"))
     end)
@@ -137,7 +150,7 @@ describe("Write Tool", function()
 
   describe("sandbox enforcement", function()
     local sandbox
-    local bufnr
+    local sandbox_bufnr
 
     before_each(function()
       package.loaded["flemma.sandbox"] = nil
@@ -157,12 +170,12 @@ describe("Write Tool", function()
         priority = 50,
       })
 
-      bufnr = vim.api.nvim_create_buf(false, true)
+      sandbox_bufnr = vim.api.nvim_create_buf(false, true)
     end)
 
     after_each(function()
       sandbox.reset_enabled()
-      vim.api.nvim_buf_delete(bufnr, { force = true })
+      vim.api.nvim_buf_delete(sandbox_bufnr, { force = true })
     end)
 
     it("allows writes inside rw_paths", function()
@@ -174,8 +187,12 @@ describe("Write Tool", function()
         },
       })
       local path = test_dir .. "/sandbox_allowed.txt"
-      ---@type flemma.tools.ExecutionContext
-      local context = { bufnr = bufnr, cwd = vim.fn.getcwd() }
+      local context = executor.build_execution_context({
+        bufnr = sandbox_bufnr,
+        cwd = vim.fn.getcwd(),
+        timeout = 30,
+        tool_name = "write",
+      })
 
       local result = write_def.execute({
         label = "test",
@@ -197,8 +214,12 @@ describe("Write Tool", function()
         },
       })
       local path = test_dir .. "/sandbox_denied.txt"
-      ---@type flemma.tools.ExecutionContext
-      local context = { bufnr = bufnr, cwd = vim.fn.getcwd() }
+      local context = executor.build_execution_context({
+        bufnr = sandbox_bufnr,
+        cwd = vim.fn.getcwd(),
+        timeout = 30,
+        tool_name = "write",
+      })
 
       local result = write_def.execute({
         label = "test",
@@ -221,8 +242,12 @@ describe("Write Tool", function()
         },
       })
       local path = test_dir .. "/sandbox_disabled.txt"
-      ---@type flemma.tools.ExecutionContext
-      local context = { bufnr = bufnr, cwd = vim.fn.getcwd() }
+      local context = executor.build_execution_context({
+        bufnr = sandbox_bufnr,
+        cwd = vim.fn.getcwd(),
+        timeout = 30,
+        tool_name = "write",
+      })
 
       local result = write_def.execute({
         label = "test",
@@ -233,7 +258,7 @@ describe("Write Tool", function()
       assert.is_true(result.success)
     end)
 
-    it("respects per-buffer sandbox overrides via context.opts", function()
+    it("respects per-buffer sandbox overrides via opts", function()
       -- Global config: sandbox disabled
       state.set_config({
         sandbox = {
@@ -243,17 +268,18 @@ describe("Write Tool", function()
         },
       })
       local path = test_dir .. "/buffer_override.txt"
-      ---@type flemma.tools.ExecutionContext
-      local context = {
-        bufnr = bufnr,
+      local context = executor.build_execution_context({
+        bufnr = sandbox_bufnr,
         cwd = vim.fn.getcwd(),
+        timeout = 30,
+        tool_name = "write",
         opts = {
           sandbox = {
             enabled = true,
             policy = { rw_paths = { "/nonexistent/allowed" } },
           },
         },
-      }
+      })
 
       local result = write_def.execute({
         label = "test",
@@ -265,22 +291,26 @@ describe("Write Tool", function()
       assert.is_truthy(result.error:match("Sandbox"))
     end)
 
-    it("works without context (no sandbox enforcement)", function()
-      -- When no context is provided, falls back to get_current_buf
-      -- and no opts — sandbox enforcement depends on global config
+    it("allows writes when sandbox is disabled even with empty rw_paths", function()
       state.set_config({
         sandbox = {
           enabled = false,
           policy = { rw_paths = {} },
         },
       })
-      local path = test_dir .. "/no_context.txt"
+      local path = test_dir .. "/disabled_sandbox.txt"
+      local disabled_ctx = executor.build_execution_context({
+        bufnr = bufnr,
+        cwd = vim.fn.getcwd(),
+        timeout = 30,
+        tool_name = "write",
+      })
 
       local result = write_def.execute({
         label = "test",
         path = path,
-        content = "no context",
-      })
+        content = "disabled sandbox",
+      }, nil, disabled_ctx)
 
       assert.is_true(result.success)
     end)

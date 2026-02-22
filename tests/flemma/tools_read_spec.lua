@@ -2,16 +2,20 @@
 
 package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.registry"] = nil
+package.loaded["flemma.tools.executor"] = nil
 package.loaded["flemma.tools.definitions.read"] = nil
 package.loaded["flemma.tools.truncate"] = nil
 
 local tools = require("flemma.tools")
 local registry = require("flemma.tools.registry")
+local executor = require("flemma.tools.executor")
 
 describe("Read Tool", function()
   local read_def
   local test_dir
   local test_file
+  local bufnr
+  local ctx
 
   before_each(function()
     registry.clear()
@@ -22,11 +26,20 @@ describe("Read Tool", function()
     test_dir = vim.fn.tempname()
     vim.fn.mkdir(test_dir, "p")
     test_file = test_dir .. "/test.txt"
+
+    bufnr = vim.api.nvim_create_buf(false, true)
+    ctx = executor.build_execution_context({
+      bufnr = bufnr,
+      cwd = vim.fn.getcwd(),
+      timeout = 30,
+      tool_name = "read",
+    })
   end)
 
   after_each(function()
     -- Clean up
     vim.fn.delete(test_dir, "rf")
+    vim.api.nvim_buf_delete(bufnr, { force = true })
   end)
 
   it("is registered on setup", function()
@@ -38,25 +51,25 @@ describe("Read Tool", function()
   it("reads a simple file", function()
     vim.fn.writefile({ "hello", "world" }, test_file)
 
-    local result = read_def.execute({ label = "test", path = test_file })
+    local result = read_def.execute({ label = "test", path = test_file }, nil, ctx)
     assert.is_true(result.success)
     assert.equals("hello\nworld", result.output)
   end)
 
   it("returns error for missing file", function()
-    local result = read_def.execute({ label = "test", path = test_dir .. "/nonexistent.txt" })
+    local result = read_def.execute({ label = "test", path = test_dir .. "/nonexistent.txt" }, nil, ctx)
     assert.is_false(result.success)
     assert.is_truthy(result.error:match("File not found"))
   end)
 
   it("returns error for empty path", function()
-    local result = read_def.execute({ label = "test", path = "" })
+    local result = read_def.execute({ label = "test", path = "" }, nil, ctx)
     assert.is_false(result.success)
     assert.is_truthy(result.error:match("No path"))
   end)
 
   it("returns error for nil path", function()
-    local result = read_def.execute({ label = "test" })
+    local result = read_def.execute({ label = "test" }, nil, ctx)
     assert.is_false(result.success)
     assert.is_truthy(result.error:match("No path"))
   end)
@@ -65,7 +78,7 @@ describe("Read Tool", function()
     it("reads full file when offset and limit are nil", function()
       vim.fn.writefile({ "hello", "world" }, test_file)
 
-      local result = read_def.execute({ label = "test", path = test_file, offset = nil, limit = nil })
+      local result = read_def.execute({ label = "test", path = test_file, offset = nil, limit = nil }, nil, ctx)
       assert.is_true(result.success)
       assert.equals("hello\nworld", result.output)
     end)
@@ -82,7 +95,7 @@ describe("Read Tool", function()
     end)
 
     it("reads from offset", function()
-      local result = read_def.execute({ label = "test", path = test_file, offset = 3 })
+      local result = read_def.execute({ label = "test", path = test_file, offset = 3 }, nil, ctx)
       assert.is_true(result.success)
       -- Should start from line 3
       assert.is_truthy(result.output:match("^line 3"))
@@ -91,7 +104,7 @@ describe("Read Tool", function()
     end)
 
     it("reads with limit", function()
-      local result = read_def.execute({ label = "test", path = test_file, limit = 3 })
+      local result = read_def.execute({ label = "test", path = test_file, limit = 3 }, nil, ctx)
       assert.is_true(result.success)
       -- Should have only 3 lines
       assert.is_truthy(result.output:match("line 1"))
@@ -102,7 +115,7 @@ describe("Read Tool", function()
     end)
 
     it("reads with both offset and limit", function()
-      local result = read_def.execute({ label = "test", path = test_file, offset = 5, limit = 2 })
+      local result = read_def.execute({ label = "test", path = test_file, offset = 5, limit = 2 }, nil, ctx)
       assert.is_true(result.success)
       assert.is_truthy(result.output:match("line 5"))
       assert.is_truthy(result.output:match("line 6"))
@@ -110,13 +123,13 @@ describe("Read Tool", function()
     end)
 
     it("returns error for offset beyond file", function()
-      local result = read_def.execute({ label = "test", path = test_file, offset = 100 })
+      local result = read_def.execute({ label = "test", path = test_file, offset = 100 }, nil, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("beyond end of file"))
     end)
 
     it("handles offset at last line", function()
-      local result = read_def.execute({ label = "test", path = test_file, offset = 10 })
+      local result = read_def.execute({ label = "test", path = test_file, offset = 10 }, nil, ctx)
       assert.is_true(result.success)
       assert.equals("line 10", result.output)
     end)
@@ -132,7 +145,7 @@ describe("Read Tool", function()
       end
       vim.fn.writefile(lines, test_file)
 
-      local result = read_def.execute({ label = "test", path = test_file })
+      local result = read_def.execute({ label = "test", path = test_file }, nil, ctx)
       assert.is_true(result.success)
       -- Should have truncation notice
       assert.is_truthy(result.output:match("Showing lines"))

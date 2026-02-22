@@ -44,7 +44,7 @@ M.definitions = {
       end
       return table.concat(parts, "  ")
     end,
-    execute = function(input, _callback, context)
+    execute = function(input, _, ctx)
       local path = input.path
       if not path or path == "" then
         return { success = false, error = "No path provided" }
@@ -57,16 +57,10 @@ M.definitions = {
       end
 
       -- Resolve relative paths against buffer's directory, falling back to cwd
-      if not vim.startswith(path, "/") then
-        local base = (context and context.__dirname) or vim.fn.getcwd()
-        path = base .. "/" .. path
-      end
+      path = ctx.path.resolve(path)
 
       -- Sandbox: refuse edits to files outside writable paths
-      local sandbox = require("flemma.sandbox")
-      local bufnr = context and context.bufnr or vim.api.nvim_get_current_buf()
-      local opts = context and context.opts or nil
-      if not sandbox.is_path_writable(path, bufnr, opts) then
+      if not ctx.sandbox.is_path_writable(path) then
         return {
           success = false,
           error = "Sandbox: edit denied – path is outside writable directories: " .. input.path,

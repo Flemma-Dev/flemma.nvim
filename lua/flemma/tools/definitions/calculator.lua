@@ -93,6 +93,7 @@ M.definitions = {
       return table.concat(parts, "  ")
     end,
     execute = function(input, callback)
+      ---@cast callback -nil
       local expr = input.expression
       if not expr or expr == "" then
         callback({ success = false, error = "No expression provided" })

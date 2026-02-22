@@ -6,6 +6,8 @@
 ---@field definitions flemma.tools.ToolDefinition[]
 local M = {}
 
+-- Module-level require for description constants only (evaluated at load time).
+-- Runtime code inside execute() must use ctx.truncate instead.
 local truncate = require("flemma.tools.truncate")
 
 M.definitions = {
@@ -48,16 +50,14 @@ M.definitions = {
       return table.concat(parts, "  ")
     end,
     execute = function(input, callback, ctx)
+      ---@cast callback -nil
       local cmd = input.command
       if not cmd or cmd == "" then
         callback({ success = false, error = "No command provided" })
         return nil
       end
 
-      local state = require("flemma.state")
-      local config = state.get_config()
-      local default_timeout = (config.tools and config.tools.default_timeout) or 30
-      local timeout = input.timeout or default_timeout
+      local timeout = input.timeout or ctx.timeout
 
       local output_lines = {}
       local partial_line = "" -- buffer for incomplete line across chunks
@@ -98,7 +98,7 @@ M.definitions = {
             local full_output = table.concat(output_lines, "\n"):gsub("%s+$", "")
 
             -- Apply tail truncation
-            local result = truncate.truncate_tail(full_output)
+            local result = ctx.truncate.truncate_tail(full_output)
             local output_text = result.content ~= "" and result.content or "(no output)"
 
             if result.truncated then
@@ -115,11 +115,11 @@ M.definitions = {
               local end_line = result.total_lines
 
               if result.last_line_partial then
-                local last_line_size = truncate.format_size(#output_lines[#output_lines])
+                local last_line_size = ctx.truncate.format_size(#output_lines[#output_lines])
                 output_text = output_text
                   .. string.format(
                     "\n\n[Showing last %s of line %d (line is %s). Full output: %s]",
-                    truncate.format_size(result.output_bytes),
+                    ctx.truncate.format_size(result.output_bytes),
                     end_line,
                     last_line_size,
                     temp_path
@@ -140,7 +140,7 @@ M.definitions = {
                     start_line,
                     end_line,
                     result.total_lines,
-                    truncate.format_size(truncate.MAX_BYTES),
+                    ctx.truncate.format_size(ctx.truncate.MAX_BYTES),
                     temp_path
                   )
               end
@@ -164,22 +164,18 @@ M.definitions = {
 
       -- Apply bash-specific config
       -- cwd is already resolved by executor (config > $FLEMMA_BUFFER_PATH > Neovim cwd)
-      if ctx and ctx.cwd then
-        job_opts.cwd = ctx.cwd
-      end
-      if config.tools and config.tools.bash and config.tools.bash.env then
-        job_opts.env = config.tools.bash.env
+      job_opts.cwd = ctx.cwd
+      local tool_config = ctx:get_config()
+      if tool_config and tool_config.env then
+        job_opts.env = tool_config.env
       end
 
-      local shell = (config.tools and config.tools.bash and config.tools.bash.shell) or "bash"
+      local shell = (tool_config and tool_config.shell) or "bash"
       -- Redirect stderr to stdout for the entire shell so output is interleaved
       local inner_cmd = { shell, "-c", "exec 2>&1\n" .. cmd }
 
       -- Sandbox wrapping (if enabled)
-      local sandbox = require("flemma.sandbox")
-      local sandbox_bufnr = ctx and ctx.bufnr or vim.api.nvim_get_current_buf()
-      local sandbox_opts = ctx and ctx.opts or nil
-      local wrapped_cmd, sandbox_err = sandbox.wrap_command(inner_cmd, sandbox_bufnr, sandbox_opts)
+      local wrapped_cmd, sandbox_err = ctx.sandbox.wrap_command(inner_cmd)
       if not wrapped_cmd then
         callback({ success = false, error = "Sandbox error: " .. sandbox_err })
         return nil

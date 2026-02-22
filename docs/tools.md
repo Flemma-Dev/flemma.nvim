@@ -172,7 +172,7 @@ tools.register("my_search", {
     end
     return preview
   end,
-  execute = function(input) --[[ ... ]] end,
+  execute = function(input, callback, context) --[[ ... ]] end,
 })
 ```
 
@@ -261,6 +261,124 @@ tools.register("my_plugin.tools.search")
 tools.register({
   { name = "tool_a", description = "...", input_schema = { type = "object", properties = {} } },
   { name = "tool_b", description = "...", input_schema = { type = "object", properties = {} } },
+})
+```
+
+---
+
+## ExecutionContext
+
+Every tool's `execute` function receives three arguments: `input`, `callback`, and `context`. The context is an `ExecutionContext` object that provides the stable contract tools code against – tools should never `require()` internal Flemma modules directly.
+
+```lua
+execute = function(input, callback, ctx)
+  -- Sync tools: ignore callback, return an ExecutionResult
+  -- Async tools: call callback(result) when done, return a cancel function
+end
+```
+
+### Core fields
+
+| Field            | Type      | Description                                                      |
+| ---------------- | --------- | ---------------------------------------------------------------- |
+| `ctx.bufnr`      | `integer` | Buffer number for the current execution                          |
+| `ctx.cwd`        | `string`  | Absolute working directory (resolved from config or Neovim)      |
+| `ctx.timeout`    | `integer` | Default timeout in seconds (from `config.tools.default_timeout`) |
+| `ctx.__dirname`  | `string?` | Directory containing the `.chat` buffer (`nil` for unsaved)      |
+| `ctx.__filename` | `string?` | Full path of the `.chat` buffer (`nil` for unsaved)              |
+
+### Namespaces
+
+The following namespaces are lazy-loaded on first access (zero cost if unused):
+
+#### `ctx.path` – Path resolution
+
+```lua
+local absolute = ctx.path.resolve("relative/file.txt")
+-- Resolves against __dirname (or cwd if buffer is unsaved)
+-- Absolute paths pass through unchanged
+```
+
+#### `ctx.sandbox` – Sandbox enforcement
+
+```lua
+-- Check if a path is writable under the current sandbox policy
+if not ctx.sandbox.is_path_writable(path) then
+  return { success = false, error = "Sandbox: path not writable" }
+end
+
+-- Wrap a command for sandbox enforcement (returns nil + error on failure)
+local wrapped_cmd, err = ctx.sandbox.wrap_command({ "bash", "-c", "echo hello" })
+```
+
+#### `ctx.truncate` – Output truncation
+
+```lua
+-- Truncate from the end (keep last N lines/bytes) – use for streaming output
+local result = ctx.truncate.truncate_tail(full_output)
+-- result.content, result.truncated, result.total_lines, result.output_lines, ...
+
+-- Truncate from the start (keep first N lines/bytes) – use for file reads
+local result = ctx.truncate.truncate_head(content)
+
+-- Format byte counts for display
+local size_str = ctx.truncate.format_size(12345)  -- "12.1 KB"
+
+-- Constants
+ctx.truncate.MAX_LINES  -- 2000
+ctx.truncate.MAX_BYTES  -- 51200 (50 KB)
+```
+
+### `ctx:get_config()` – Tool-specific config
+
+Returns a read-only copy of `config.tools[tool_name]`, or `nil` if no config subtree exists for this tool. The returned table is a deep copy – modifications do not affect the global config.
+
+```lua
+local tool_config = ctx:get_config()
+if tool_config and tool_config.shell then
+  -- Use configured shell
+end
+```
+
+### Complete example
+
+```lua
+tools.register("export", {
+  name = "export",
+  description = "Save content to a file in the project",
+  input_schema = {
+    type = "object",
+    properties = {
+      path = { type = "string", description = "Output file path (relative or absolute)" },
+      content = { type = "string", description = "Content to write" },
+    },
+    required = { "path", "content" },
+    additionalProperties = false,
+  },
+  strict = true,
+  async = false,
+  execute = function(input, _, ctx)
+    local path = ctx.path.resolve(input.path)
+
+    if not ctx.sandbox.is_path_writable(path) then
+      return { success = false, error = "Sandbox: write denied for " .. input.path }
+    end
+
+    -- Use tool-specific config (e.g. config.tools.export = { max_size = 102400 })
+    local tool_config = ctx:get_config()
+    local max_size = (tool_config and tool_config.max_size) or ctx.truncate.MAX_BYTES
+
+    if #input.content > max_size then
+      return {
+        success = false,
+        error = "Content exceeds " .. ctx.truncate.format_size(max_size) .. " limit",
+      }
+    end
+
+    -- ... write logic ...
+
+    return { success = true, output = "Saved " .. #input.content .. " bytes to " .. input.path }
+  end,
 })
 ```
 

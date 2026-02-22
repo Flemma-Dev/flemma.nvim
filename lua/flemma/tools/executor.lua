@@ -196,6 +196,91 @@ local function handle_completion(bufnr, tool_id, result, opts)
   end
 end
 
+local DEFAULT_TIMEOUT = 30
+
+---@class flemma.tools.ExecutionContextParams
+---@field bufnr integer Buffer number
+---@field cwd string Resolved working directory
+---@field timeout? integer Default timeout in seconds (defaults to DEFAULT_TIMEOUT)
+---@field tool_name string Name of the tool being executed (for get_config lookup)
+---@field __dirname? string Directory containing the .chat buffer
+---@field __filename? string Full path of the .chat buffer
+---@field opts? flemma.opt.ResolvedOpts Per-buffer resolved options (captured by sandbox closures)
+
+---Build an ExecutionContext with lazy-loaded sandbox/truncate/path namespaces.
+---Sandbox, truncate, and path are loaded on first access via __index and then
+---cached via rawset so subsequent accesses bypass the metamethod.
+---@param params flemma.tools.ExecutionContextParams
+---@return flemma.tools.ExecutionContext
+function M.build_execution_context(params)
+  local bufnr = params.bufnr
+  local opts = params.opts
+  local tool_name = params.tool_name
+  local dirname = params.__dirname
+
+  -- Core data fields. Namespace fields (sandbox, truncate, path) are added via
+  -- __index metamethod; get_config is defined as a method below.
+  local context = {
+    bufnr = bufnr,
+    cwd = params.cwd,
+    timeout = params.timeout or DEFAULT_TIMEOUT,
+    __dirname = dirname,
+    __filename = params.__filename,
+  }
+
+  ---Get tool-specific config subtree (read-only copy).
+  ---Returns config.tools[tool_name] via vim.deepcopy, or nil if no subtree exists.
+  ---@return table|nil
+  function context:get_config()
+    local tool_config = state.get_config()
+    if not tool_config.tools then
+      return nil
+    end
+    local subtree = tool_config.tools[tool_name]
+    if subtree == nil then
+      return nil
+    end
+    return vim.deepcopy(subtree)
+  end
+
+  return setmetatable(context, {
+    __index = function(self, key)
+      if key == "sandbox" then
+        local sandbox_module = require("flemma.sandbox")
+        ---@type flemma.tools.SandboxContext
+        local sandbox_namespace = {
+          is_path_writable = function(path)
+            return sandbox_module.is_path_writable(path, bufnr, opts)
+          end,
+          wrap_command = function(cmd)
+            return sandbox_module.wrap_command(cmd, bufnr, opts)
+          end,
+        }
+        rawset(self, "sandbox", sandbox_namespace)
+        return sandbox_namespace
+      elseif key == "truncate" then
+        local truncate_module = require("flemma.tools.truncate")
+        rawset(self, "truncate", truncate_module)
+        return truncate_module
+      elseif key == "path" then
+        ---@type flemma.tools.PathContext
+        local path_namespace = {
+          resolve = function(path)
+            if vim.startswith(path, "/") then
+              return path
+            end
+            local base = dirname or vim.fn.getcwd()
+            return base .. "/" .. path
+          end,
+        }
+        rawset(self, "path", path_namespace)
+        return path_namespace
+      end
+      return nil
+    end,
+  })
+end
+
 ---Execute a tool call
 ---@param bufnr integer
 ---@param context flemma.tools.ToolContext
@@ -290,18 +375,22 @@ function M.execute(bufnr, context)
     resolved_cwd = vim.fn.getcwd()
   end
 
-  ---@type flemma.tools.ExecutionContext
-  local exec_context = {
+  -- Resolve per-buffer opts if available (for sandbox per-buffer overrides)
+  local resolved_opts = nil
+  local opts_ok, opts_result = pcall(require("flemma.processor").resolve_buffer_opts, bufnr)
+  if opts_ok and opts_result then
+    resolved_opts = opts_result
+  end
+
+  local exec_context = M.build_execution_context({
     bufnr = bufnr,
     cwd = resolved_cwd,
+    timeout = (config.tools and config.tools.default_timeout) or DEFAULT_TIMEOUT,
+    tool_name = tool_name,
     __dirname = dirname,
     __filename = buffer_context:get_filename(),
-  }
-  -- Resolve per-buffer opts if available (for sandbox per-buffer overrides)
-  local opts_ok, resolved_opts = pcall(require("flemma.processor").resolve_buffer_opts, bufnr)
-  if opts_ok and resolved_opts then
-    exec_context.opts = resolved_opts
-  end
+    opts = resolved_opts,
+  })
 
   -- Execute the tool
   if is_async then
