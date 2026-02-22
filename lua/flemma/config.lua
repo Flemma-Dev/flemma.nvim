@@ -97,6 +97,7 @@
 ---@class flemma.config.ToolsConfig
 ---@field require_approval boolean
 ---@field auto_approve? flemma.config.AutoApprove
+---@field presets? table<string, flemma.tools.PresetDefinition> Named approval presets
 ---@field autopilot flemma.config.AutopilotConfig
 ---@field default_timeout integer
 ---@field show_spinner boolean
@@ -241,7 +242,8 @@ return {
   },
   tools = {
     require_approval = true, -- Require user approval before executing tool calls (two-step <C-]> flow)
-    auto_approve = nil, -- Tools that bypass approval: string[] of tool names, or function(tool_name, input, context) → true|false|"deny"
+    auto_approve = { "$default" }, -- Tools that bypass approval: string[] of tool/preset names, or function(tool_name, input, context) → true|false|"deny"
+    presets = {}, -- Named approval presets (override built-ins or add new ones with "$name" keys)
     autopilot = {
       enabled = true, -- Auto-execute approved tools and re-send when resolved
       max_turns = 100, -- Safety limit on consecutive autonomous LLM turns

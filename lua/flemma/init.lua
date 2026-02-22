@@ -122,6 +122,9 @@ M.setup = function(user_opts)
   -- Initialize tool registry with built-in tools
   require("flemma.tools").setup()
 
+  -- Initialize tool approval presets (built-ins + user-defined)
+  require("flemma.tools.presets").setup(config.tools and config.tools.presets)
+
   -- Initialize approval resolver chain from config
   require("flemma.tools.approval").setup()
 
