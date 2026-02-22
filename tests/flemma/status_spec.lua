@@ -189,12 +189,10 @@ describe("flemma.status", function()
         },
         tools = { enabled = { "bash", "read_file" }, disabled = {} },
         approval = {
-          source = "$default",
           approved = { "read_file" },
           denied = {},
           pending = { "bash" },
           require_approval_disabled = false,
-          frontmatter_override = false,
         },
         buffer = { is_chat = false, bufnr = 0 },
       }
@@ -236,12 +234,10 @@ describe("flemma.status", function()
         },
         tools = { enabled = { "bash" }, disabled = {} },
         approval = {
-          source = "$default",
           approved = {},
           denied = {},
           pending = { "bash" },
           require_approval_disabled = false,
-          frontmatter_override = false,
         },
         buffer = { is_chat = false, bufnr = 0 },
       }
@@ -264,7 +260,6 @@ describe("flemma.status", function()
           config_enabled = true,
           buffer_state = "idle",
           max_turns = 100,
-          frontmatter_override = false,
         },
         sandbox = {
           enabled = false,
@@ -275,19 +270,17 @@ describe("flemma.status", function()
         },
         tools = { enabled = {}, disabled = {} },
         approval = {
-          source = "(none)",
           approved = {},
           denied = {},
           pending = {},
           require_approval_disabled = false,
-          frontmatter_override = false,
         },
         buffer = { is_chat = true, bufnr = 1 },
       }
 
       local lines = status.format(data, false)
       local text = table.concat(lines, "\n")
-      assert.truthy(text:find("frontmatter"), "expected frontmatter annotation")
+      assert.truthy(text:find("✲"), "expected frontmatter marker")
     end)
 
     it("shows tools summary", function()
@@ -305,12 +298,10 @@ describe("flemma.status", function()
         },
         tools = { enabled = { "bash", "read_file" }, disabled = { "execute_command" } },
         approval = {
-          source = "$default",
           approved = { "read_file" },
           denied = {},
           pending = { "bash" },
           require_approval_disabled = false,
-          frontmatter_override = false,
         },
         buffer = { is_chat = false, bufnr = 0 },
       }
@@ -344,7 +335,6 @@ describe("flemma.status", function()
           denied = {},
           pending = { "bash" },
           require_approval_disabled = false,
-          frontmatter_override = false,
         },
         buffer = { is_chat = false, bufnr = 0 },
       }
@@ -371,12 +361,10 @@ describe("flemma.status", function()
         },
         tools = { enabled = { "bash", "read" }, disabled = {} },
         approval = {
-          source = "$default",
           approved = { "read" },
           denied = {},
           pending = { "bash" },
           require_approval_disabled = true,
-          frontmatter_override = false,
         },
         buffer = { is_chat = false, bufnr = 0 },
       }
@@ -406,14 +394,185 @@ describe("flemma.status", function()
           denied = { "bash" },
           pending = {},
           require_approval_disabled = false,
-          frontmatter_override = false,
         },
         buffer = { is_chat = false, bufnr = 0 },
       }
 
       local lines = status.format(data, false)
       local text = table.concat(lines, "\n")
+      assert.truthy(text:find("Approval %($yolo, $no%-bash%)"), "expected Approval header with source")
       assert.truthy(text:find("deny: bash"), "expected denied tools")
+    end)
+  end)
+
+  describe("collect — approval logic", function()
+    before_each(function()
+      require("flemma.tools.presets").setup()
+    end)
+
+    it("expands $default preset and classifies tools", function()
+      local state = require("flemma.state")
+      ---@diagnostic disable-next-line: missing-fields
+      state.set_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = {
+          auto_approve = { "$default" },
+          autopilot = { enabled = false, max_turns = 100 },
+        },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local registry = require("flemma.tools.registry")
+      registry.clear()
+      registry.define("read", {
+        name = "read",
+        description = "Read tool",
+        input_schema = { type = "object" },
+      })
+      registry.define("bash", {
+        name = "bash",
+        description = "Bash tool",
+        input_schema = { type = "object" },
+      })
+      registry.define("edit", {
+        name = "edit",
+        description = "Edit tool",
+        input_schema = { type = "object" },
+      })
+
+      local data = status.collect(0)
+      assert.equals("$default", data.approval.source)
+      assert.are.same({ "edit", "read" }, data.approval.approved)
+      assert.are.same({ "bash" }, data.approval.pending)
+      assert.are.same({}, data.approval.denied)
+    end)
+
+    it("returns nil source when no auto_approve is configured", function()
+      local state = require("flemma.state")
+      ---@diagnostic disable-next-line: missing-fields
+      state.set_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local registry = require("flemma.tools.registry")
+      registry.clear()
+      registry.define("read", {
+        name = "read",
+        description = "Read tool",
+        input_schema = { type = "object" },
+      })
+
+      local data = status.collect(0)
+      assert.is_nil(data.approval.source)
+      assert.are.same({}, data.approval.approved)
+      assert.are.same({ "read" }, data.approval.pending)
+    end)
+
+    it("builds source from multiple policy entries", function()
+      local state = require("flemma.state")
+      ---@diagnostic disable-next-line: missing-fields
+      state.set_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = {
+          auto_approve = { "$default", "bash" },
+          autopilot = { enabled = false, max_turns = 100 },
+        },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local registry = require("flemma.tools.registry")
+      registry.clear()
+      registry.define("bash", {
+        name = "bash",
+        description = "Bash tool",
+        input_schema = { type = "object" },
+      })
+      registry.define("read", {
+        name = "read",
+        description = "Read tool",
+        input_schema = { type = "object" },
+      })
+
+      local data = status.collect(0)
+      assert.equals("$default, bash", data.approval.source)
+      assert.are.same({ "bash", "read" }, data.approval.approved)
+    end)
+
+    it("returns all tools as pending for function policy", function()
+      local state = require("flemma.state")
+      ---@diagnostic disable-next-line: missing-fields
+      state.set_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = {
+          auto_approve = function()
+            return true
+          end,
+          autopilot = { enabled = false, max_turns = 100 },
+        },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local registry = require("flemma.tools.registry")
+      registry.clear()
+      registry.define("read", {
+        name = "read",
+        description = "Read tool",
+        input_schema = { type = "object" },
+      })
+
+      local data = status.collect(0)
+      assert.equals("(function)", data.approval.source)
+      assert.are.same({}, data.approval.approved)
+      assert.are.same({ "read" }, data.approval.pending)
+    end)
+
+    it("detects require_approval = false", function()
+      local state = require("flemma.state")
+      ---@diagnostic disable-next-line: missing-fields
+      state.set_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = {
+          require_approval = false,
+          autopilot = { enabled = false, max_turns = 100 },
+        },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect(0)
+      assert.is_true(data.approval.require_approval_disabled)
+    end)
+
+    it("reports no frontmatter_items when opts is nil", function()
+      local state = require("flemma.state")
+      ---@diagnostic disable-next-line: missing-fields
+      state.set_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = {
+          auto_approve = { "$default" },
+          autopilot = { enabled = false, max_turns = 100 },
+        },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local registry = require("flemma.tools.registry")
+      registry.clear()
+      registry.define("read", {
+        name = "read",
+        description = "Read tool",
+        input_schema = { type = "object" },
+      })
+
+      local data = status.collect(0)
+      assert.is_nil(data.approval.frontmatter_items)
+      assert.is_nil(data.tools.frontmatter_items)
     end)
   end)
 

@@ -20,12 +20,12 @@ syntax match FlemmaStatusSection "^Parameters (merged)$"
 syntax match FlemmaStatusSection "^Autopilot$"
 syntax match FlemmaStatusSection "^Sandbox$"
 syntax match FlemmaStatusSection "^Tools .*$"
-syntax match FlemmaStatusSection "^Approval .*$"
+syntax match FlemmaStatusSection "^Approval\( .*\)\?$"
 syntax match FlemmaStatusConfigTitle "^Config (full)$" contained
 
 " Key labels (indented key: value pairs)
 syntax match FlemmaStatusKey "^\s\+\zs[^:]\+\ze:" contained
-syntax match FlemmaStatusKeyLine "^\s\+[^:]\+:.*$" contains=FlemmaStatusKey,FlemmaStatusEnabled,FlemmaStatusDisabled,FlemmaStatusNumber,FlemmaStatusParen,FlemmaStatusStrikethrough,FlemmaStatusComment
+syntax match FlemmaStatusKeyLine "^\s\+[^:]\+:.*$" contains=FlemmaStatusKey,FlemmaStatusEnabled,FlemmaStatusDisabled,FlemmaStatusNumber,FlemmaStatusParen,FlemmaStatusStrikethrough
 
 " Boolean-like values
 syntax keyword FlemmaStatusEnabled enabled true yes contained
@@ -40,8 +40,8 @@ syntax match FlemmaStatusParen "([^)]*)" contained
 " Strikethrough for overridden values (~~value~~)
 syntax region FlemmaStatusStrikethrough matchgroup=Conceal start=/\~\~/ end=/\~\~/ concealends contained
 
-" Frontmatter override comment (# frontmatter override)
-syntax match FlemmaStatusComment "#.*$" contained
+" Legend
+syntax match FlemmaStatusLegend "^✲.*$"
 
 " Config dump region with embedded Lua highlighting
 syntax region FlemmaStatusConfigBlock start="^Config (full)$" end="\%$" keepend contains=FlemmaStatusConfigTitle,FlemmaStatusConfigSeparator,@FlemmaStatusLua
@@ -64,7 +64,7 @@ highlight default link FlemmaStatusDisabled DiagnosticWarn
 highlight default link FlemmaStatusNumber Number
 highlight default link FlemmaStatusParen Comment
 highlight default FlemmaStatusStrikethrough gui=strikethrough
-highlight default link FlemmaStatusComment Comment
+highlight default link FlemmaStatusLegend Comment
 highlight default link FlemmaStatusToolEnabled DiagnosticOk
 highlight default link FlemmaStatusToolDisabled DiagnosticWarn
 highlight default link FlemmaStatusToolPending DiagnosticInfo

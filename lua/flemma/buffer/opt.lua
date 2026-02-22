@@ -338,7 +338,10 @@ function M.create()
       end
       table.insert(entries, { name = name, enabled = true })
     end
-    return setmetatable({ _entries = entries, _universe = auto_approve_universe, _exclusions = {}, _dirty = false }, ListOption)
+    return setmetatable(
+      { _entries = entries, _universe = auto_approve_universe, _exclusions = {}, _dirty = false },
+      ListOption
+    )
   end
 
   -- auto_approve state: either a ListOption (from table assignment) or a function
