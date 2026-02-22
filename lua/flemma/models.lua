@@ -132,35 +132,7 @@ return {
           },
         },
 
-        -- Claude Sonnet 3.7 (deprecated, retiring Feb 2026)
-        ["claude-3-7-sonnet-latest"] = {
-          pricing = {
-            input = 3.0,
-            output = 15.0,
-          },
-        },
-        ["claude-3-7-sonnet-20250219"] = {
-          pricing = {
-            input = 3.0,
-            output = 15.0,
-          },
-        },
-
-        -- Claude Haiku 3.5 (deprecated, retiring Feb 2026)
-        ["claude-3-5-haiku-latest"] = {
-          pricing = {
-            input = 0.80,
-            output = 4.0,
-          },
-        },
-        ["claude-3-5-haiku-20241022"] = {
-          pricing = {
-            input = 0.80,
-            output = 4.0,
-          },
-        },
-
-        -- Claude Haiku 3
+        -- Claude Haiku 3 (deprecated, retiring Apr 2026)
         ["claude-3-haiku-20240307"] = {
           pricing = {
             input = 0.25,
@@ -174,6 +146,14 @@ return {
       default = "gemini-2.5-pro",
       cache_read_multiplier = 0.1, -- Implicit cache reads cost 10% of base input price (Gemini 2.5+)
       models = {
+        -- Gemini 3.1 Pro Preview
+        ["gemini-3.1-pro-preview"] = {
+          pricing = {
+            input = 2.0,
+            output = 12.0,
+          },
+        },
+
         -- Gemini 3 Flash Preview
         ["gemini-3-flash-preview"] = {
           pricing = {
@@ -205,21 +185,9 @@ return {
             output = 2.50,
           },
         },
-        ["gemini-2.5-flash-preview-09-2025"] = {
-          pricing = {
-            input = 0.30,
-            output = 2.50,
-          },
-        },
 
         -- Gemini 2.5 Flash Lite models
         ["gemini-2.5-flash-lite"] = {
-          pricing = {
-            input = 0.10,
-            output = 0.40,
-          },
-        },
-        ["gemini-2.5-flash-lite-preview-09-2025"] = {
           pricing = {
             input = 0.10,
             output = 0.40,
