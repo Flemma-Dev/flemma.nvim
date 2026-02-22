@@ -58,7 +58,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "hello",
         newText = "goodbye",
-      }, nil, ctx)
+      }, ctx)
       assert.is_true(result.success)
       assert.is_truthy(result.output:match("Successfully replaced"))
 
@@ -75,7 +75,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "line 1\nline 2",
         newText = "new line 1\nnew line 2",
-      }, nil, ctx)
+      }, ctx)
       assert.is_true(result.success)
 
       local content = table.concat(vim.fn.readfile(test_file), "\n")
@@ -90,7 +90,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "$5.00 (USD)",
         newText = "$10.00 (EUR)",
-      }, nil, ctx)
+      }, ctx)
       assert.is_true(result.success)
 
       local content = table.concat(vim.fn.readfile(test_file), "\n")
@@ -105,7 +105,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "[%w+]",
         newText = "[%d+]",
-      }, nil, ctx)
+      }, ctx)
       assert.is_true(result.success)
 
       local content = table.concat(vim.fn.readfile(test_file), "\n")
@@ -120,7 +120,7 @@ describe("Edit Tool", function()
         path = test_dir .. "/nonexistent.txt",
         oldText = "hello",
         newText = "world",
-      }, nil, ctx)
+      }, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("File not found"))
     end)
@@ -133,7 +133,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "nonexistent text",
         newText = "replacement",
-      }, nil, ctx)
+      }, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("Could not find"))
     end)
@@ -146,7 +146,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "hello",
         newText = "world",
-      }, nil, ctx)
+      }, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("3 occurrences"))
       assert.is_truthy(result.error:match("unique"))
@@ -160,7 +160,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "hello",
         newText = "hello",
-      }, nil, ctx)
+      }, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("No changes made"))
     end)
@@ -173,7 +173,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "",
         newText = "world",
-      }, nil, ctx)
+      }, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("No oldText"))
     end)
@@ -184,7 +184,7 @@ describe("Edit Tool", function()
         path = "",
         oldText = "hello",
         newText = "world",
-      }, nil, ctx)
+      }, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("No path"))
     end)
@@ -199,7 +199,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = " world",
         newText = "",
-      }, nil, ctx)
+      }, ctx)
       assert.is_true(result.success)
 
       local content = table.concat(vim.fn.readfile(test_file), "\n")
@@ -214,7 +214,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "foo",
         newText = "baz",
-      }, nil, ctx)
+      }, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("2 occurrences"))
 
@@ -274,7 +274,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "hello",
         newText = "goodbye",
-      }, nil, context)
+      }, context)
 
       assert.is_true(result.success)
       local content = table.concat(vim.fn.readfile(test_file), "\n")
@@ -302,7 +302,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "hello",
         newText = "goodbye",
-      }, nil, context)
+      }, context)
 
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("Sandbox"))
@@ -332,7 +332,7 @@ describe("Edit Tool", function()
         path = test_file,
         oldText = "hello",
         newText = "goodbye",
-      }, nil, context)
+      }, context)
 
       assert.is_true(result.success)
     end)

@@ -172,7 +172,7 @@ tools.register("my_search", {
     end
     return preview
   end,
-  execute = function(input, callback, context) --[[ ... ]] end,
+  execute = function(input, context, callback) --[[ ... ]] end,
 })
 ```
 
@@ -268,12 +268,17 @@ tools.register({
 
 ## ExecutionContext
 
-Every tool's `execute` function receives three arguments: `input`, `callback`, and `context`. The context is an `ExecutionContext` object that provides the stable contract tools code against – tools should never `require()` internal Flemma modules directly.
+Every tool's `execute` function receives up to three arguments: `input`, `context`, and an optional `callback`. The context is an `ExecutionContext` object that provides the stable contract tools code against – tools should never `require()` internal Flemma modules directly.
 
 ```lua
-execute = function(input, callback, ctx)
-  -- Sync tools: ignore callback, return an ExecutionResult
-  -- Async tools: call callback(result) when done, return a cancel function
+-- Sync tools: return an ExecutionResult directly
+execute = function(input, ctx)
+  return { success = true, output = "done" }
+end
+
+-- Async tools: call callback(result) when done, return a cancel function
+execute = function(input, ctx, callback)
+  -- ...
 end
 ```
 
@@ -357,7 +362,7 @@ tools.register("export", {
   },
   strict = true,
   async = false,
-  execute = function(input, _, ctx)
+  execute = function(input, ctx)
     local path = ctx.path.resolve(input.path)
 
     if not ctx.sandbox.is_path_writable(path) then

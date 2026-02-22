@@ -49,7 +49,7 @@ M.definitions = {
       end
       return table.concat(parts, "  ")
     end,
-    execute = function(input, callback, ctx)
+    execute = function(input, ctx, callback)
       ---@cast callback -nil
       local cmd = input.command
       if not cmd or cmd == "" then

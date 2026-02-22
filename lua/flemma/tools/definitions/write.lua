@@ -47,7 +47,7 @@ M.definitions = {
       end
       return table.concat(parts, "  ")
     end,
-    execute = function(input, _, ctx)
+    execute = function(input, ctx)
       local path = input.path
       if not path or path == "" then
         return { success = false, error = "No path provided" }

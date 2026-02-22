@@ -40,7 +40,7 @@ local function sandbox_config(rw_paths, overrides)
 end
 
 --- Execute a command through our bash tool with a given sandbox config.
---- This is the real code path: state.set_config → tool.execute(input, cb, ctx).
+--- This is the real code path: state.set_config → tool.execute(input, ctx, cb).
 --- Validates that our bash.lua reads the sandbox config and wraps correctly.
 ---@param command string
 ---@param sbx_config table sandbox config
@@ -79,9 +79,9 @@ local function execute_bash_tool(command, sbx_config, opts)
     tool_name = "bash",
   })
 
-  tool.execute({ label = "test", command = command, timeout = opts.timeout or 10 }, function(r)
+  tool.execute({ label = "test", command = command, timeout = opts.timeout or 10 }, ctx, function(r)
     result = r
-  end, ctx)
+  end)
 
   vim.wait(15000, function()
     return result ~= nil
@@ -474,9 +474,9 @@ describe("sandbox process lifecycle through bash tool", function()
     })
 
     -- Execute returns the cancel function for async tools
-    local cancel_fn = tool.execute({ label = "long sleep", command = "sleep 300", timeout = 300 }, function(r)
+    local cancel_fn = tool.execute({ label = "long sleep", command = "sleep 300", timeout = 300 }, ctx, function(r)
       result = r
-    end, ctx)
+    end)
 
     -- Let it start
     vim.wait(300, function()

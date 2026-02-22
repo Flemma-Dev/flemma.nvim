@@ -405,7 +405,7 @@ function M.execute(bufnr, context)
       handle_completion(bufnr, tool_id, result, { async = true })
     end
 
-    local ok, cancel_or_err = pcall(executor_fn, context.input, callback, exec_context)
+    local ok, cancel_or_err = pcall(executor_fn, context.input, exec_context, callback)
     if not ok then
       -- Executor threw before starting async work
       handle_completion(bufnr, tool_id, {
@@ -421,7 +421,7 @@ function M.execute(bufnr, context)
     end
   else
     -- Sync execution — complete inline for reliable undojoin
-    local ok, result = pcall(executor_fn, context.input, nil, exec_context)
+    local ok, result = pcall(executor_fn, context.input, exec_context)
     if not ok then
       handle_completion(bufnr, tool_id, {
         success = false,

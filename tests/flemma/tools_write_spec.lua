@@ -55,7 +55,7 @@ describe("Write Tool", function()
         label = "test",
         path = path,
         content = "hello world",
-      }, nil, ctx)
+      }, ctx)
       assert.is_true(result.success)
       assert.is_truthy(result.output:match("11 bytes"))
 
@@ -72,7 +72,7 @@ describe("Write Tool", function()
         label = "test",
         path = path,
         content = "new content",
-      }, nil, ctx)
+      }, ctx)
       assert.is_true(result.success)
 
       local content = table.concat(vim.fn.readfile(path), "\n")
@@ -86,7 +86,7 @@ describe("Write Tool", function()
         label = "test",
         path = path,
         content = "nested content",
-      }, nil, ctx)
+      }, ctx)
       assert.is_true(result.success)
 
       -- Verify file exists
@@ -102,7 +102,7 @@ describe("Write Tool", function()
         label = "test",
         path = path,
         content = "",
-      }, nil, ctx)
+      }, ctx)
       assert.is_true(result.success)
       assert.is_truthy(result.output:match("0 bytes"))
     end)
@@ -114,7 +114,7 @@ describe("Write Tool", function()
         label = "test",
         path = path,
         content = "line 1\nline 2\nline 3",
-      }, nil, ctx)
+      }, ctx)
       assert.is_true(result.success)
 
       local lines = vim.fn.readfile(path)
@@ -130,19 +130,19 @@ describe("Write Tool", function()
         label = "test",
         path = "",
         content = "hello",
-      }, nil, ctx)
+      }, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("No path"))
     end)
 
     it("returns error for nil path", function()
-      local result = write_def.execute({ label = "test", content = "hello" }, nil, ctx)
+      local result = write_def.execute({ label = "test", content = "hello" }, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("No path"))
     end)
 
     it("returns error for nil content", function()
-      local result = write_def.execute({ label = "test", path = test_dir .. "/test.txt" }, nil, ctx)
+      local result = write_def.execute({ label = "test", path = test_dir .. "/test.txt" }, ctx)
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("No content"))
     end)
@@ -198,7 +198,7 @@ describe("Write Tool", function()
         label = "test",
         path = path,
         content = "sandbox ok",
-      }, nil, context)
+      }, context)
 
       assert.is_true(result.success)
       local content = table.concat(vim.fn.readfile(path), "\n")
@@ -225,7 +225,7 @@ describe("Write Tool", function()
         label = "test",
         path = path,
         content = "should not write",
-      }, nil, context)
+      }, context)
 
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("Sandbox"))
@@ -253,7 +253,7 @@ describe("Write Tool", function()
         label = "test",
         path = path,
         content = "no sandbox",
-      }, nil, context)
+      }, context)
 
       assert.is_true(result.success)
     end)
@@ -285,7 +285,7 @@ describe("Write Tool", function()
         label = "test",
         path = path,
         content = "denied by buffer override",
-      }, nil, context)
+      }, context)
 
       assert.is_false(result.success)
       assert.is_truthy(result.error:match("Sandbox"))
@@ -310,7 +310,7 @@ describe("Write Tool", function()
         label = "test",
         path = path,
         content = "disabled sandbox",
-      }, nil, disabled_ctx)
+      }, disabled_ctx)
 
       assert.is_true(result.success)
     end)
