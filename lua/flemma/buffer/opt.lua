@@ -346,6 +346,21 @@ function M.create()
   ---@type function|nil
   local auto_approve_fn = nil
 
+  --- Seed auto_approve_option from config defaults on first access.
+  --- This lets users call :append()/:remove() without first assigning a table.
+  local function ensure_auto_approve_seeded()
+    if auto_approve_option or auto_approve_fn then
+      return
+    end
+    local config = require("flemma.state").get_config()
+    local default_policy = config.tools and config.tools.auto_approve
+    if type(default_policy) == "table" then
+      auto_approve_option = create_auto_approve_option(default_policy --[[@as string[] ]])
+    elseif type(default_policy) == "function" then
+      auto_approve_fn = default_policy
+    end
+  end
+
   -- Give the tools ListOption a custom metatable so flemma.opt.tools.auto_approve works
   -- while list operations (:remove, :append, +, -, ^) continue to function normally.
   local tools_option = options["tools"]
@@ -353,6 +368,7 @@ function M.create()
     _is_list_option = true,
     __index = function(_, key)
       if key == "auto_approve" then
+        ensure_auto_approve_seeded()
         if auto_approve_option then
           return auto_approve_option
         end

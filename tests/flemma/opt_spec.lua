@@ -604,9 +604,11 @@ describe("flemma.opt", function()
       assert.is_nil(resolved.auto_approve)
     end)
 
-    it("reading unset auto_approve returns nil", function()
+    it("reading unset auto_approve seeds from config default", function()
       local opt_proxy = opt.create()
-      assert.is_nil(opt_proxy.tools.auto_approve)
+      local aa = opt_proxy.tools.auto_approve
+      assert.is_not_nil(aa)
+      assert.are.same({ "$default" }, aa:get())
     end)
 
     it("errors on number value", function()
