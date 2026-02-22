@@ -2,6 +2,7 @@ package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.registry"] = nil
 
 local tools = require("flemma.tools")
+local loader = require("flemma.loader")
 
 -- Register a fixture tool module via package.preload
 local function register_fixture_tool_module(module_path, tool_defs)
@@ -70,5 +71,56 @@ describe("tools.modules config", function()
     assert.equals(1, load_count)
 
     cleanup_fixture("test.fixture.counted")
+  end)
+end)
+
+describe("provider module resolution", function()
+  local provider_registry
+
+  before_each(function()
+    package.loaded["flemma.provider.registry"] = nil
+    provider_registry = require("flemma.provider.registry")
+    provider_registry.clear()
+    provider_registry.setup()
+  end)
+
+  it("registers a provider from a module path", function()
+    package.preload["test.fixture.provider"] = function()
+      local base = require("flemma.provider.base")
+      local P = setmetatable({}, { __index = base })
+      P.metadata = {
+        name = "test_provider",
+        display_name = "Test Provider",
+        capabilities = {
+          supports_reasoning = false,
+          supports_thinking_budget = false,
+          outputs_thinking = false,
+          output_has_thoughts = false,
+        },
+      }
+      function P.new(opts)
+        return base.new(opts)
+      end
+      function P.build_request()
+        return {}
+      end
+      function P.get_request_headers()
+        return {}
+      end
+      function P.process_response_line() end
+      return P
+    end
+
+    provider_registry.register("test.fixture.provider")
+    assert.is_true(provider_registry.has("test_provider"))
+    assert.equals("Test Provider", provider_registry.get_display_name("test_provider"))
+
+    package.preload["test.fixture.provider"] = nil
+    package.loaded["test.fixture.provider"] = nil
+  end)
+
+  it("is_module_path detects provider module paths in config", function()
+    assert.is_true(loader.is_module_path("3rd.provider.deepseek"))
+    assert.is_false(loader.is_module_path("anthropic"))
   end)
 end)

@@ -54,7 +54,19 @@ M.setup = function(user_opts)
   log.info("setup(): Flemma starting...")
 
   -- Initialize provider registry with built-in providers
-  require("flemma.provider.registry").setup()
+  local provider_registry = require("flemma.provider.registry")
+  provider_registry.setup()
+
+  -- If provider is a module path, validate and register it
+  local loader = require("flemma.loader")
+  if loader.is_module_path(config.provider) then
+    loader.assert_exists(config.provider)
+    provider_registry.register(config.provider)
+    -- Update config.provider to the registered name (from metadata.name)
+    local mod = require(config.provider)
+    config.provider = mod.metadata.name
+    state.set_config(config)
+  end
 
   -- Resolve preset reference in model field (e.g., model = "$gemini-3-pro")
   local resolved_preset, preset_error = presets.resolve_default(config.model, user_opts.provider)
