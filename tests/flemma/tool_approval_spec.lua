@@ -1322,6 +1322,80 @@ describe("Frontmatter Approval Resolver", function()
       assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t2", opts = opts }))
     end)
   end)
+
+  describe("frontmatter with presets", function()
+    before_each(function()
+      require("flemma.tools.presets").setup(nil)
+    end)
+
+    after_each(function()
+      require("flemma.tools.presets").clear()
+    end)
+
+    it("frontmatter can set auto_approve to a preset", function()
+      set_config_and_setup({ tools = { auto_approve = { "$default" } } })
+
+      local bufnr = create_buffer({
+        "```lua",
+        'flemma.opt.tools.auto_approve = { "$readonly" }',
+        "```",
+        "@You: test",
+      })
+      local opts = evaluate_opts(bufnr)
+
+      -- Frontmatter overrides config; only $readonly active
+      assert.equals("approve", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+      assert.equals("require_approval", approval.resolve("write", {}, { bufnr = bufnr, tool_id = "t2", opts = opts }))
+    end)
+
+    it("frontmatter can remove $default to disable auto-approval", function()
+      set_config_and_setup({ tools = { auto_approve = { "$default" } } })
+
+      local bufnr = create_buffer({
+        "```lua",
+        'flemma.opt.tools.auto_approve = { "$default" }',
+        'flemma.opt.tools.auto_approve:remove("$default")',
+        "```",
+        "@You: test",
+      })
+      local opts = evaluate_opts(bufnr)
+
+      assert.equals("require_approval", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+    end)
+
+    it("frontmatter can exclude a tool from a preset", function()
+      set_config_and_setup({ tools = { auto_approve = { "$default" } } })
+
+      local bufnr = create_buffer({
+        "```lua",
+        'flemma.opt.tools.auto_approve = { "$default" }',
+        'flemma.opt.tools.auto_approve:remove("write")',
+        "```",
+        "@You: test",
+      })
+      local opts = evaluate_opts(bufnr)
+
+      assert.equals("approve", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+      assert.equals("require_approval", approval.resolve("write", {}, { bufnr = bufnr, tool_id = "t2", opts = opts }))
+      assert.equals("approve", approval.resolve("edit", {}, { bufnr = bufnr, tool_id = "t3", opts = opts }))
+    end)
+
+    it("frontmatter can add bash on top of default", function()
+      set_config_and_setup({ tools = { auto_approve = { "$default" } } })
+
+      local bufnr = create_buffer({
+        "```lua",
+        'flemma.opt.tools.auto_approve = { "$default" }',
+        'flemma.opt.tools.auto_approve:append("bash")',
+        "```",
+        "@You: test",
+      })
+      local opts = evaluate_opts(bufnr)
+
+      assert.equals("approve", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+      assert.equals("approve", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t2", opts = opts }))
+    end)
+  end)
 end)
 
 -- ============================================================================
