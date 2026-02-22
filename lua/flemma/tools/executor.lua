@@ -284,9 +284,10 @@ end
 ---Execute a tool call
 ---@param bufnr integer
 ---@param context flemma.tools.ToolContext
+---@param resolved_opts? flemma.opt.ResolvedOpts Pre-evaluated per-buffer opts (avoids re-evaluating frontmatter)
 ---@return boolean success
 ---@return string|nil error
-function M.execute(bufnr, context)
+function M.execute(bufnr, context, resolved_opts)
   local tool_id = context.tool_id
   local tool_name = context.tool_name
 
@@ -373,13 +374,6 @@ function M.execute(bufnr, context)
     resolved_cwd = raw_cwd
   else
     resolved_cwd = vim.fn.getcwd()
-  end
-
-  -- Resolve per-buffer opts if available (for sandbox per-buffer overrides)
-  local resolved_opts = nil
-  local opts_ok, opts_result = pcall(require("flemma.processor").resolve_buffer_opts, bufnr)
-  if opts_ok and opts_result then
-    resolved_opts = opts_result
   end
 
   local exec_context = M.build_execution_context({

@@ -25,20 +25,17 @@ local function get_state(bufnr)
 end
 
 ---Check whether autopilot is enabled, with per-buffer frontmatter override.
----Priority: frontmatter flemma.opt.tools.autopilot > global config > default (true).
+---Priority: buffer_state.autopilot_override (set from frontmatter) > global config > default (true).
 ---@param bufnr integer
 ---@return boolean
 function M.is_enabled(bufnr)
-  -- Check per-buffer frontmatter override first
-  local ok, processor = pcall(require, "flemma.processor")
-  if ok then
-    local opts = processor.resolve_buffer_opts(bufnr)
-    if opts and opts.autopilot ~= nil then
-      return opts.autopilot
-    end
+  -- Check per-buffer override first (set by core.lua from frontmatter evaluation)
+  local state = require("flemma.state")
+  local buffer_state = state.get_buffer_state(bufnr)
+  if buffer_state.autopilot_override ~= nil then
+    return buffer_state.autopilot_override
   end
 
-  local state = require("flemma.state")
   local config = state.get_config()
   if not config.tools then
     return false

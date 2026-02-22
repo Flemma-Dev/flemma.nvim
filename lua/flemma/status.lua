@@ -300,7 +300,8 @@ function M.collect(bufnr)
   if is_chat then
     local ok, processor = pcall(require, "flemma.processor")
     if ok then
-      opts = processor.resolve_buffer_opts(bufnr)
+      local fm_result = processor.evaluate_buffer_frontmatter(bufnr)
+      opts = fm_result.context:get_opts()
     end
   end
 

@@ -14,6 +14,7 @@ local context = require("flemma.tools.context")
 local injector = require("flemma.tools.injector")
 local state = require("flemma.state")
 local parser = require("flemma.parser")
+local processor = require("flemma.processor")
 
 --- Helper: create a scratch buffer with given lines
 --- @param lines string[]
@@ -38,6 +39,13 @@ local function set_config_and_setup(config)
   state.set_config(config)
   approval.clear()
   approval.setup()
+end
+
+--- Helper: evaluate frontmatter and return resolved opts for a buffer.
+--- @param bufnr integer
+--- @return flemma.opt.ResolvedOpts|nil
+local function evaluate_opts(bufnr)
+  return processor.evaluate_buffer_frontmatter(bufnr).context:get_opts()
 end
 
 -- ============================================================================
@@ -1122,9 +1130,10 @@ describe("Frontmatter Approval Resolver", function()
         "```",
         "@You: test",
       })
+      local opts = evaluate_opts(bufnr)
 
-      assert.equals("approve", approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1" }))
-      assert.equals("approve", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t2" }))
+      assert.equals("approve", approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+      assert.equals("approve", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t2", opts = opts }))
     end)
 
     it("passes on unlisted tools", function()
@@ -1136,8 +1145,9 @@ describe("Frontmatter Approval Resolver", function()
         "```",
         "@You: test",
       })
+      local opts = evaluate_opts(bufnr)
 
-      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" }))
+      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
     end)
 
     it("empty list passes on everything", function()
@@ -1149,8 +1159,12 @@ describe("Frontmatter Approval Resolver", function()
         "```",
         "@You: test",
       })
+      local opts = evaluate_opts(bufnr)
 
-      assert.equals("require_approval", approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1" }))
+      assert.equals(
+        "require_approval",
+        approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1", opts = opts })
+      )
     end)
   end)
 
@@ -1168,10 +1182,11 @@ describe("Frontmatter Approval Resolver", function()
         "```",
         "@You: test",
       })
+      local opts = evaluate_opts(bufnr)
 
-      assert.equals("approve", approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1" }))
-      assert.equals("deny", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t2" }))
-      assert.equals("require_approval", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t3" }))
+      assert.equals("approve", approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+      assert.equals("deny", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t2", opts = opts }))
+      assert.equals("require_approval", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t3", opts = opts }))
     end)
 
     it("maps nil return to pass-through", function()
@@ -1183,8 +1198,9 @@ describe("Frontmatter Approval Resolver", function()
         "```",
         "@You: test",
       })
+      local opts = evaluate_opts(bufnr)
 
-      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" }))
+      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
     end)
 
     it("skips on error and continues chain", function()
@@ -1196,8 +1212,9 @@ describe("Frontmatter Approval Resolver", function()
         "```",
         "@You: test",
       })
+      local opts = evaluate_opts(bufnr)
 
-      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" }))
+      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
     end)
   end)
 
@@ -1208,8 +1225,9 @@ describe("Frontmatter Approval Resolver", function()
       local bufnr = create_buffer({
         "@You: test",
       })
+      local opts = evaluate_opts(bufnr)
 
-      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" }))
+      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
     end)
 
     it("passes when frontmatter does not set auto_approve", function()
@@ -1221,8 +1239,9 @@ describe("Frontmatter Approval Resolver", function()
         "```",
         "@You: test",
       })
+      local opts = evaluate_opts(bufnr)
 
-      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" }))
+      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
     end)
   end)
 
@@ -1253,9 +1272,10 @@ describe("Frontmatter Approval Resolver", function()
         "```",
         "@You: test",
       })
+      local opts = evaluate_opts(bufnr)
 
       -- Config at 100 returns "deny" before frontmatter at 90 gets a chance
-      assert.equals("deny", approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1" }))
+      assert.equals("deny", approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
     end)
 
     it("frontmatter (90) applies when config passes", function()
@@ -1276,11 +1296,12 @@ describe("Frontmatter Approval Resolver", function()
         "```",
         "@You: test",
       })
+      local opts = evaluate_opts(bufnr)
 
       -- Config at 100 returns nil for calculator, frontmatter at 90 approves
-      assert.equals("approve", approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1" }))
+      assert.equals("approve", approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
       -- Config at 100 handles bash itself
-      assert.equals("approve", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t2" }))
+      assert.equals("approve", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t2", opts = opts }))
     end)
   end)
 end)
@@ -1559,7 +1580,6 @@ describe("Processor flemma:tool exclusion", function()
       "```",
     }
     local doc = parser.parse_lines(lines)
-    local processor = require("flemma.processor")
     local ctx = require("flemma.context")
     local evaluated = processor.evaluate(doc, ctx.from_file("test.chat"))
 

@@ -242,14 +242,13 @@ function M.setup()
     end
   end
 
-  -- Frontmatter resolver: evaluates buffer frontmatter to get per-buffer auto_approve.
-  -- Always registered; no-op when frontmatter doesn't set auto_approve.
+  -- Frontmatter resolver: reads pre-evaluated opts from context.opts.
+  -- Always registered; no-op when opts are not provided or don't set auto_approve.
   M.register("frontmatter:auto_approve", {
     priority = 90,
     description = "Per-buffer approval from frontmatter flemma.opt.tools.auto_approve",
     resolve = function(tool_name, input, context)
-      local processor = require("flemma.processor")
-      local opts = processor.resolve_buffer_opts(context.bufnr)
+      local opts = context.opts
       if not opts or not opts.auto_approve then
         return nil
       end

@@ -48,12 +48,16 @@ end
 ---@field diagnostics flemma.ast.Diagnostic[]
 ---@field opts flemma.opt.ResolvedOpts|nil
 
+---@class flemma.processor.FrontmatterResult
+---@field context flemma.Context Evaluated context with __opts and user variables set
+---@field diagnostics flemma.ast.Diagnostic[] Frontmatter-specific diagnostics
+
 ---Evaluate frontmatter and return the resulting context (with __opts and user variables set).
 ---@param doc flemma.ast.DocumentNode
 ---@param base_context flemma.Context|nil
 ---@return flemma.Context context
 ---@return flemma.ast.Diagnostic[] diagnostics Frontmatter-specific diagnostics
-local function evaluate_frontmatter(doc, base_context)
+local function evaluate_frontmatter_internal(doc, base_context)
   local context = ctxutil.clone(base_context)
   local diagnostics = {}
 
@@ -101,12 +105,42 @@ local function evaluate_frontmatter(doc, base_context)
   return context, diagnostics
 end
 
---- Evaluate a document AST.
+---Evaluate frontmatter from a parsed document.
+---Returns the evaluated context (with __opts and user variables) and any diagnostics.
 ---@param doc flemma.ast.DocumentNode
 ---@param base_context flemma.Context|nil
+---@return flemma.processor.FrontmatterResult
+function M.evaluate_frontmatter(doc, base_context)
+  local context, diagnostics = evaluate_frontmatter_internal(doc, base_context)
+  return { context = context, diagnostics = diagnostics }
+end
+
+---Convenience: parse buffer + evaluate frontmatter in one call.
+---For callers that start from a bufnr (e.g., status.lua).
+---@param bufnr integer
+---@return flemma.processor.FrontmatterResult
+function M.evaluate_buffer_frontmatter(bufnr)
+  local parser = require("flemma.parser")
+  local doc = parser.get_parsed_document(bufnr)
+  return M.evaluate_frontmatter(doc, ctxutil.from_buffer(bufnr))
+end
+
+--- Evaluate a document AST.
+--- If a pre-evaluated frontmatter result is provided, it is reused instead of
+--- re-evaluating frontmatter code. This allows callers to evaluate frontmatter
+--- once and thread the result through multiple consumers.
+---@param doc flemma.ast.DocumentNode
+---@param base_context flemma.Context|nil
+---@param frontmatter_result flemma.processor.FrontmatterResult|nil
 ---@return flemma.processor.EvaluatedResult
-function M.evaluate(doc, base_context)
-  local context, fm_diagnostics = evaluate_frontmatter(doc, base_context)
+function M.evaluate(doc, base_context, frontmatter_result)
+  local context, fm_diagnostics
+  if frontmatter_result then
+    context = frontmatter_result.context
+    fm_diagnostics = frontmatter_result.diagnostics
+  else
+    context, fm_diagnostics = evaluate_frontmatter_internal(doc, base_context)
+  end
 
   -- Merge parser errors with frontmatter diagnostics
   local diagnostics = doc.errors or {}
@@ -226,17 +260,6 @@ function M.evaluate(doc, base_context)
     diagnostics = diagnostics,
     opts = context:get_opts(),
   }
-end
-
----Evaluate buffer frontmatter and return resolved per-buffer opts.
----Returns nil silently on any error (broken frontmatter should not block callers).
----@param bufnr integer
----@return flemma.opt.ResolvedOpts|nil
-function M.resolve_buffer_opts(bufnr)
-  local parser = require("flemma.parser")
-  local doc = parser.get_parsed_document(bufnr)
-  local context = evaluate_frontmatter(doc, ctxutil.from_buffer(bufnr))
-  return context:get_opts()
 end
 
 return M

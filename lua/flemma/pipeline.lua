@@ -45,13 +45,16 @@ end
 ---@field pending_tool_calls flemma.pipeline.UnresolvedTool[]
 ---@field opts flemma.opt.ResolvedOpts|nil
 
---- Run full pipeline from a pre-parsed document and context
+--- Run full pipeline from a pre-parsed document and context.
+--- If a pre-evaluated frontmatter result is provided, it is reused instead of
+--- re-evaluating frontmatter code.
 ---@param doc flemma.ast.DocumentNode
 ---@param context flemma.Context|nil
+---@param frontmatter_result flemma.processor.FrontmatterResult|nil
 ---@return flemma.pipeline.Prompt prompt
 ---@return flemma.processor.EvaluatedResult evaluated
-function M.run(doc, context)
-  local evaluated = processor.evaluate(doc, context)
+function M.run(doc, context, frontmatter_result)
+  local evaluated = processor.evaluate(doc, context, frontmatter_result)
 
   local history = {}
   local system = nil
