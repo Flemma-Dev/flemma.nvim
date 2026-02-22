@@ -57,15 +57,16 @@ M.definitions = {
       end
       return table.concat(parts, "  ")
     end,
-    execute = function(input)
+    execute = function(input, _callback, context)
       local path = input.path
       if not path or path == "" then
         return { success = false, error = "No path provided" }
       end
 
-      -- Resolve relative paths against cwd
+      -- Resolve relative paths against buffer's directory, falling back to cwd
       if not vim.startswith(path, "/") then
-        path = vim.fn.getcwd() .. "/" .. path
+        local base = (context and context.__dirname) or vim.fn.getcwd()
+        path = base .. "/" .. path
       end
 
       -- Check file exists and is readable

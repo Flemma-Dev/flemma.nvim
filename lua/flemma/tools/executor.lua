@@ -276,10 +276,26 @@ function M.execute(bufnr, context)
   ui.update_ui(bufnr)
 
   -- Build execution context for tools that need buffer/sandbox info
+  local buffer_context = require("flemma.context").from_buffer(bufnr)
+  local dirname = buffer_context:get_dirname()
+
+  -- Resolve cwd: config value may contain $FLEMMA_BUFFER_PATH pseudo-variable
+  local raw_cwd = config.tools and config.tools.bash and config.tools.bash.cwd
+  local resolved_cwd
+  if raw_cwd == "$FLEMMA_BUFFER_PATH" then
+    resolved_cwd = dirname or vim.fn.getcwd()
+  elseif raw_cwd then
+    resolved_cwd = raw_cwd
+  else
+    resolved_cwd = vim.fn.getcwd()
+  end
+
   ---@type flemma.tools.ExecutionContext
   local exec_context = {
     bufnr = bufnr,
-    cwd = (config.tools and config.tools.bash and config.tools.bash.cwd) or vim.fn.getcwd(),
+    cwd = resolved_cwd,
+    __dirname = dirname,
+    __filename = buffer_context:get_filename(),
   }
   -- Resolve per-buffer opts if available (for sandbox per-buffer overrides)
   local opts_ok, resolved_opts = pcall(require("flemma.processor").resolve_buffer_opts, bufnr)

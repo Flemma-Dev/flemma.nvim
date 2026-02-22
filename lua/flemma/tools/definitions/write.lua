@@ -56,9 +56,10 @@ M.definitions = {
         return { success = false, error = "No content provided" }
       end
 
-      -- Resolve relative paths against cwd
+      -- Resolve relative paths against buffer's directory, falling back to cwd
       if not vim.startswith(path, "/") then
-        path = vim.fn.getcwd() .. "/" .. path
+        local base = (context and context.__dirname) or vim.fn.getcwd()
+        path = base .. "/" .. path
       end
 
       -- Sandbox: refuse writes outside writable paths

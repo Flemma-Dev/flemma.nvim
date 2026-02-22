@@ -15,6 +15,8 @@ local M = {}
 ---@field bufnr integer Buffer number for the current execution
 ---@field opts? flemma.opt.ResolvedOpts Per-buffer resolved options
 ---@field cwd string Absolute, normalized working directory
+---@field __dirname? string Directory containing the .chat buffer (nil for unsaved buffers)
+---@field __filename? string Full path of the .chat buffer (nil for unsaved buffers)
 
 ---@class flemma.tools.ToolDefinition
 ---@field name string Tool name (must match registry key)

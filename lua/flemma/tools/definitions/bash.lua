@@ -163,13 +163,12 @@ M.definitions = {
       }
 
       -- Apply bash-specific config
-      if config.tools and config.tools.bash then
-        if config.tools.bash.cwd then
-          job_opts.cwd = config.tools.bash.cwd
-        end
-        if config.tools.bash.env then
-          job_opts.env = config.tools.bash.env
-        end
+      -- cwd is already resolved by executor (config > $FLEMMA_BUFFER_PATH > Neovim cwd)
+      if ctx and ctx.cwd then
+        job_opts.cwd = ctx.cwd
+      end
+      if config.tools and config.tools.bash and config.tools.bash.env then
+        job_opts.env = config.tools.bash.env
       end
 
       local shell = (config.tools and config.tools.bash and config.tools.bash.shell) or "bash"

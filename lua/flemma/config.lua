@@ -61,7 +61,7 @@
 
 ---@class flemma.config.BashToolConfig
 ---@field shell? string
----@field cwd? string
+---@field cwd? string Working directory; supports "$FLEMMA_BUFFER_PATH" pseudo-variable (default: "$FLEMMA_BUFFER_PATH")
 ---@field env? table<string, string>
 
 ---@class flemma.config.SandboxPolicy
@@ -249,7 +249,7 @@ return {
     cursor_after_result = "result", -- Cursor behavior after result injection: "result", "stay", or "next"
     bash = {
       shell = nil, -- Shell to use (default: bash)
-      cwd = nil, -- Working directory (nil = buffer's directory or cwd)
+      cwd = "$FLEMMA_BUFFER_PATH", -- Working directory; resolves to .chat file's directory (set nil for Neovim cwd)
       env = nil, -- Environment variables to add
     },
   },
