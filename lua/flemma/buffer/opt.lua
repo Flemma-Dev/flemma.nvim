@@ -6,6 +6,7 @@ local M = {}
 ---@class flemma.opt.FrontmatterOpts
 ---@field tools string[]|nil List of allowed tool names
 ---@field auto_approve flemma.config.AutoApprove|nil Per-buffer auto-approve policy
+---@field auto_approve_exclusions table<string, boolean>|nil Tools to exclude from preset expansion
 ---@field autopilot boolean|nil Per-buffer autopilot override (true/false)
 ---@field parameters table<string, any>|nil General parameter overrides (provider-agnostic)
 ---@field anthropic table<string, any>|nil Per-buffer Anthropic parameter overrides

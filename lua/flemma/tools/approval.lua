@@ -165,16 +165,49 @@ end
 ---@return flemma.tools.ApprovalResult|nil
 local function resolve_auto_approve_policy(policy, tool_name, input, context, error_result)
   if type(policy) == "table" then
-    for _, name in
+    local tool_presets = require("flemma.tools.presets")
+    local approved = {}
+    local denied = {}
+
+    for _, entry in
       ipairs(policy --[[@as string[] ]])
     do
-      if name == tool_name then
-        return "approve"
+      if vim.startswith(entry, "$") then
+        local preset = tool_presets.get(entry)
+        if preset then
+          if preset.approve then
+            for _, name in ipairs(preset.approve) do
+              approved[name] = true
+            end
+          end
+          if preset.deny then
+            for _, name in ipairs(preset.deny) do
+              denied[name] = true
+            end
+          end
+        end
+      else
+        approved[entry] = true
       end
+    end
+
+    local exclusions = context.opts and context.opts.auto_approve_exclusions
+    if exclusions then
+      for name in pairs(exclusions) do
+        approved[name] = nil
+      end
+    end
+
+    if denied[tool_name] then
+      return "deny"
+    end
+    if approved[tool_name] then
+      return "approve"
     end
     return nil
   end
 
+  -- Function path unchanged from current code
   if type(policy) == "function" then
     local fn = policy --[[@as flemma.config.AutoApproveFunction]]
     local ok, decision = pcall(fn, tool_name, input, context)
@@ -239,13 +272,19 @@ function M.setup()
     if type(auto_approve) == "string" and loader.is_module_path(auto_approve) then
       -- Single module path: validate now, load lazily on first resolve
       -- Registered under the module path so users can get()/unregister() by path
+      local module_resolve = build_module_resolver(auto_approve)
       register_entry(auto_approve, {
         priority = 100,
         description = "Built-in resolver from module " .. auto_approve,
-        resolve = build_module_resolver(auto_approve),
+        resolve = function(tool_name, input, context)
+          if context.opts and context.opts.auto_approve then
+            return nil -- defer to frontmatter resolver
+          end
+          return module_resolve(tool_name, input, context)
+        end,
       })
     elseif type(auto_approve) == "table" then
-      -- String array: partition into module paths and plain tool names
+      -- String array: partition into module paths, preset refs, and plain tool names
       ---@type string[]
       local tool_names = {}
       ---@type string[]
@@ -256,23 +295,33 @@ function M.setup()
         if loader.is_module_path(entry) then
           table.insert(module_paths, entry)
         else
+          -- Both $-prefixed preset refs and plain tool names stay in tool_names
           table.insert(tool_names, entry)
         end
       end
       -- Register a resolver per module path, addressable by path
       for _, module_path in ipairs(module_paths) do
+        local module_resolve = build_module_resolver(module_path)
         register_entry(module_path, {
           priority = 100,
           description = "Built-in resolver from module " .. module_path,
-          resolve = build_module_resolver(module_path),
+          resolve = function(tool_name, input, context)
+            if context.opts and context.opts.auto_approve then
+              return nil -- defer to frontmatter resolver
+            end
+            return module_resolve(tool_name, input, context)
+          end,
         })
       end
-      -- Register a tool-name list resolver if any plain names remain
+      -- Register a tool-name list resolver if any plain names or preset refs remain
       if #tool_names > 0 then
         register_entry("urn:flemma:approval:config", {
           priority = 100,
           description = "Built-in resolver from config.tools.auto_approve",
           resolve = function(tool_name, input, context)
+            if context.opts and context.opts.auto_approve then
+              return nil -- defer to frontmatter resolver
+            end
             return resolve_auto_approve_policy(tool_names, tool_name, input, context, "require_approval")
           end,
         })
@@ -282,6 +331,9 @@ function M.setup()
         priority = 100,
         description = "Built-in resolver from config.tools.auto_approve",
         resolve = function(tool_name, input, context)
+          if context.opts and context.opts.auto_approve then
+            return nil -- defer to frontmatter resolver
+          end
           return resolve_auto_approve_policy(auto_approve, tool_name, input, context, "require_approval")
         end,
       })
