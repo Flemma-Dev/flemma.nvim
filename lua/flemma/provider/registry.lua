@@ -96,6 +96,10 @@ function M.register(source, entry)
   if entry then
     -- Two-arg form: register("name", entry)
     name = source
+    local loader = require("flemma.loader")
+    if loader.is_module_path(name) then
+      error(string.format("flemma: provider name '%s' must not contain dots (dots indicate module paths)", name), 2)
+    end
     definition = entry
   else
     -- Single-arg form: register("module.path") — load module and read metadata

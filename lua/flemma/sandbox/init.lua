@@ -55,6 +55,10 @@ end
 ---@param name string Unique backend name
 ---@param definition flemma.sandbox.BackendDefinition
 function M.register(name, definition)
+  local loader = require("flemma.loader")
+  if loader.is_module_path(name) then
+    error(string.format("flemma: sandbox backend name '%s' must not contain dots (dots indicate module paths)", name), 2)
+  end
   for i, entry in ipairs(backends) do
     if entry.name == name then
       table.remove(backends, i)

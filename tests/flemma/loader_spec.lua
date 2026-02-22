@@ -78,4 +78,42 @@ describe("flemma.loader", function()
       package.loaded["test.no_field"] = nil
     end)
   end)
+
+  describe("registry name validation", function()
+    it("tools registry rejects names with dots", function()
+      local registry = require("flemma.tools.registry")
+      assert.has_error(function()
+        registry.define("my.tool", {
+          name = "my.tool",
+          description = "test",
+          input_schema = { type = "object" },
+        })
+      end, "flemma: tool name 'my.tool' must not contain dots (dots indicate module paths)")
+    end)
+
+    it("approval registry rejects names with dots", function()
+      local approval = require("flemma.tools.approval")
+      assert.has_error(function()
+        approval.register("my.resolver", {
+          resolve = function()
+            return nil
+          end,
+        })
+      end, "flemma: approval resolver name 'my.resolver' must not contain dots (dots indicate module paths)")
+    end)
+
+    it("sandbox registry rejects names with dots", function()
+      local sandbox = require("flemma.sandbox")
+      assert.has_error(function()
+        sandbox.register("my.backend", {
+          available = function()
+            return true
+          end,
+          wrap = function(_, _, cmd)
+            return cmd
+          end,
+        })
+      end, "flemma: sandbox backend name 'my.backend' must not contain dots (dots indicate module paths)")
+    end)
+  end)
 end)
