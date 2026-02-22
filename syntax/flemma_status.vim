@@ -20,6 +20,7 @@ syntax match FlemmaStatusSection "^Parameters (merged)$"
 syntax match FlemmaStatusSection "^Autopilot$"
 syntax match FlemmaStatusSection "^Sandbox$"
 syntax match FlemmaStatusSection "^Tools .*$"
+syntax match FlemmaStatusSection "^Approval .*$"
 syntax match FlemmaStatusConfigTitle "^Config (full)$" contained
 
 " Key labels (indented key: value pairs)
@@ -45,9 +46,10 @@ syntax match FlemmaStatusComment "#.*$" contained
 " Config dump region with embedded Lua highlighting
 syntax region FlemmaStatusConfigBlock start="^Config (full)$" end="\%$" keepend contains=FlemmaStatusConfigTitle,FlemmaStatusConfigSeparator,@FlemmaStatusLua
 
-" Tool markers
+" Tool and approval markers
 syntax match FlemmaStatusToolEnabled "^\s\+✓ .*$"
 syntax match FlemmaStatusToolDisabled "^\s\+✗ .*$"
+syntax match FlemmaStatusToolPending "^\s\+⋯ .*$"
 
 " Highlight groups
 highlight default link FlemmaStatusTitle Title
@@ -65,5 +67,6 @@ highlight default FlemmaStatusStrikethrough gui=strikethrough
 highlight default link FlemmaStatusComment Comment
 highlight default link FlemmaStatusToolEnabled DiagnosticOk
 highlight default link FlemmaStatusToolDisabled DiagnosticWarn
+highlight default link FlemmaStatusToolPending DiagnosticInfo
 
 let b:current_syntax = "flemma_status"

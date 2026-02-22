@@ -8,6 +8,7 @@ local config_manager = require("flemma.core.config.manager")
 local autopilot = require("flemma.autopilot")
 local sandbox = require("flemma.sandbox")
 local tools_registry = require("flemma.tools.registry")
+local tool_presets = require("flemma.tools.presets")
 
 ---@class flemma.status.ShowOptions
 ---@field verbose? boolean Include full config dump
@@ -20,6 +21,7 @@ local tools_registry = require("flemma.tools.registry")
 ---@field autopilot { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, frontmatter_override: boolean|nil }
 ---@field sandbox { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil }
 ---@field tools { enabled: string[], disabled: string[] }
+---@field approval { source: string, approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_override: boolean }
 ---@field buffer { is_chat: boolean, bufnr: integer }
 
 ---Collect provider section data
@@ -164,6 +166,110 @@ local function collect_tools(opts)
   }
 end
 
+---Collect tool approval section data by expanding presets and classifying each enabled tool
+---@param config flemma.Config
+---@param opts flemma.opt.FrontmatterOpts|nil
+---@param enabled_tools string[] Sorted list of enabled tool names
+---@return { source: string, approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_override: boolean }
+local function collect_approval(config, opts, enabled_tools)
+  local tools_config = config.tools
+
+  -- Determine effective auto_approve policy and whether it comes from frontmatter
+  local policy = tools_config and tools_config.auto_approve
+  local frontmatter_override = false
+  if opts and opts.auto_approve then
+    policy = opts.auto_approve
+    frontmatter_override = true
+  end
+
+  local require_approval_disabled = tools_config and tools_config.require_approval == false or false
+
+  -- Function policies can't be statically expanded — report the source
+  if type(policy) == "function" then
+    return {
+      source = frontmatter_override and "function (frontmatter)" or "function (config)",
+      approved = {},
+      denied = {},
+      pending = enabled_tools,
+      require_approval_disabled = require_approval_disabled,
+      frontmatter_override = frontmatter_override,
+    }
+  end
+
+  -- Expand preset references and plain names into approve/deny sets
+  local approved_set = {}
+  local denied_set = {}
+  ---@type string[]
+  local source_parts = {}
+
+  if type(policy) == "table" then
+    for _, entry in
+      ipairs(policy --[[@as string[] ]])
+    do
+      if vim.startswith(entry, "$") then
+        table.insert(source_parts, entry)
+        local preset = tool_presets.get(entry)
+        if preset then
+          if preset.approve then
+            for _, name in ipairs(preset.approve) do
+              approved_set[name] = true
+            end
+          end
+          if preset.deny then
+            for _, name in ipairs(preset.deny) do
+              denied_set[name] = true
+            end
+          end
+        end
+      else
+        table.insert(source_parts, entry)
+        approved_set[entry] = true
+      end
+    end
+
+    -- Apply exclusions from ListOption :remove() operations
+    local exclusions = opts and opts.auto_approve_exclusions
+    if exclusions then
+      for name in pairs(exclusions) do
+        approved_set[name] = nil
+      end
+    end
+  end
+
+  -- Deny wins over approve
+  for name in pairs(denied_set) do
+    approved_set[name] = nil
+  end
+
+  -- Classify each enabled tool
+  local approved = {}
+  local denied = {}
+  local pending = {}
+  for _, name in ipairs(enabled_tools) do
+    if denied_set[name] then
+      table.insert(denied, name)
+    elseif approved_set[name] then
+      table.insert(approved, name)
+    else
+      table.insert(pending, name)
+    end
+  end
+
+  local source = #source_parts > 0 and table.concat(source_parts, ", ") or "(none)"
+  if frontmatter_override then
+    source = source .. " (frontmatter)"
+  end
+
+  return {
+    source = source,
+    approved = approved,
+    denied = denied,
+    pending = pending,
+    require_approval_disabled = require_approval_disabled,
+    frontmatter_override = frontmatter_override,
+  }
+end
+
 ---Format a scalar or table value as a display string
 ---@param value any
 ---@return string
@@ -272,6 +378,23 @@ function M.format(data, verbose)
   if disabled_count > 0 then
     add("  ✗ " .. table.concat(data.tools.disabled, ", "))
   end
+  add("")
+
+  -- Approval section
+  add("Approval (" .. data.approval.source .. ")")
+  if data.approval.require_approval_disabled then
+    add("  ✓ all tools auto-approved (require_approval = false)")
+  else
+    if #data.approval.approved > 0 then
+      add("  ✓ auto-approve: " .. table.concat(data.approval.approved, ", "))
+    end
+    if #data.approval.denied > 0 then
+      add("  ✗ deny: " .. table.concat(data.approval.denied, ", "))
+    end
+    if #data.approval.pending > 0 then
+      add("  ⋯ require approval: " .. table.concat(data.approval.pending, ", "))
+    end
+  end
 
   -- Verbose: full config dump
   if verbose then
@@ -305,12 +428,15 @@ function M.collect(bufnr)
     end
   end
 
+  local tools_data = collect_tools(opts)
+
   return {
     provider = collect_provider(config),
     parameters = collect_parameters(config, opts),
     autopilot = collect_autopilot(bufnr, config, opts),
     sandbox = collect_sandbox(opts),
-    tools = collect_tools(opts),
+    tools = tools_data,
+    approval = collect_approval(config, opts, tools_data.enabled),
     buffer = {
       is_chat = is_chat,
       bufnr = bufnr,

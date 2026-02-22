@@ -9,6 +9,7 @@ describe("flemma.status", function()
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
     package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.tools.presets"] = nil
     status = require("flemma.status")
   end)
 
@@ -187,6 +188,14 @@ describe("flemma.status", function()
           backend_available = true,
         },
         tools = { enabled = { "bash", "read_file" }, disabled = {} },
+        approval = {
+          source = "$default",
+          approved = { "read_file" },
+          denied = {},
+          pending = { "bash" },
+          require_approval_disabled = false,
+          frontmatter_override = false,
+        },
         buffer = { is_chat = false, bufnr = 0 },
       }
 
@@ -199,6 +208,7 @@ describe("flemma.status", function()
       assert.truthy(text:find("Autopilot"), "expected Autopilot header")
       assert.truthy(text:find("Sandbox"), "expected Sandbox header")
       assert.truthy(text:find("Tools"), "expected Tools header")
+      assert.truthy(text:find("Approval"), "expected Approval header")
     end)
 
     it("includes full config dump when verbose is true", function()
@@ -225,6 +235,14 @@ describe("flemma.status", function()
           backend_available = true,
         },
         tools = { enabled = { "bash" }, disabled = {} },
+        approval = {
+          source = "$default",
+          approved = {},
+          denied = {},
+          pending = { "bash" },
+          require_approval_disabled = false,
+          frontmatter_override = false,
+        },
         buffer = { is_chat = false, bufnr = 0 },
       }
 
@@ -256,6 +274,14 @@ describe("flemma.status", function()
           backend_available = true,
         },
         tools = { enabled = {}, disabled = {} },
+        approval = {
+          source = "(none)",
+          approved = {},
+          denied = {},
+          pending = {},
+          require_approval_disabled = false,
+          frontmatter_override = false,
+        },
         buffer = { is_chat = true, bufnr = 1 },
       }
 
@@ -278,6 +304,14 @@ describe("flemma.status", function()
           backend_available = true,
         },
         tools = { enabled = { "bash", "read_file" }, disabled = { "execute_command" } },
+        approval = {
+          source = "$default",
+          approved = { "read_file" },
+          denied = {},
+          pending = { "bash" },
+          require_approval_disabled = false,
+          frontmatter_override = false,
+        },
         buffer = { is_chat = false, bufnr = 0 },
       }
 
@@ -288,6 +322,98 @@ describe("flemma.status", function()
       assert.truthy(text:find("bash"), "expected bash tool name")
       assert.truthy(text:find("read_file"), "expected read_file tool name")
       assert.truthy(text:find("execute_command"), "expected execute_command tool name")
+    end)
+
+    it("shows approval digest with auto-approved and pending tools", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
+        parameters = { merged = {} },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+        },
+        tools = { enabled = { "bash", "edit", "read", "write" }, disabled = {} },
+        approval = {
+          source = "$default",
+          approved = { "edit", "read", "write" },
+          denied = {},
+          pending = { "bash" },
+          require_approval_disabled = false,
+          frontmatter_override = false,
+        },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local lines = status.format(data, false)
+      local text = table.concat(lines, "\n")
+      assert.truthy(text:find("Approval %($default%)"), "expected Approval header with source")
+      assert.truthy(text:find("auto%-approve: edit, read, write"), "expected auto-approved tools")
+      assert.truthy(text:find("require approval: bash"), "expected pending tools")
+    end)
+
+    it("shows require_approval = false override", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
+        parameters = { merged = {} },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+        },
+        tools = { enabled = { "bash", "read" }, disabled = {} },
+        approval = {
+          source = "$default",
+          approved = { "read" },
+          denied = {},
+          pending = { "bash" },
+          require_approval_disabled = true,
+          frontmatter_override = false,
+        },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local lines = status.format(data, false)
+      local text = table.concat(lines, "\n")
+      assert.truthy(text:find("all tools auto%-approved"), "expected catch-all message")
+    end)
+
+    it("shows denied tools in approval digest", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
+        parameters = { merged = {} },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+        },
+        tools = { enabled = { "bash", "read" }, disabled = {} },
+        approval = {
+          source = "$yolo, $no-bash",
+          approved = { "read" },
+          denied = { "bash" },
+          pending = {},
+          require_approval_disabled = false,
+          frontmatter_override = false,
+        },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local lines = status.format(data, false)
+      local text = table.concat(lines, "\n")
+      assert.truthy(text:find("deny: bash"), "expected denied tools")
     end)
   end)
 
