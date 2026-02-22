@@ -48,7 +48,7 @@ function M.define(name, definition)
   end
   if tools[name] then
     vim.notify(
-      string.format("flemma: tool '%s' redefined (previously registered, now overwritten)", name),
+      string.format("Flemma: tool '%s' redefined (previously registered, now overwritten)", name),
       vim.log.levels.WARN
     )
   end
