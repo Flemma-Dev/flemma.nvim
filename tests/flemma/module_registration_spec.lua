@@ -225,3 +225,56 @@ describe("sandbox module resolution", function()
     package.loaded["test.fixture.bad_sandbox"] = nil
   end)
 end)
+
+describe("end-to-end integration", function()
+  local original_path
+
+  before_each(function()
+    original_path = package.path
+    -- Add fixtures/modules to package.path so require() can find them
+    local fixture_dir = vim.fn.fnamemodify("tests/fixtures/modules", ":p")
+    package.path = fixture_dir .. "?.lua;" .. package.path
+
+    tools.clear()
+    tools.setup()
+  end)
+
+  after_each(function()
+    package.path = original_path
+    package.loaded["test_tools"] = nil
+    package.loaded["bad_contract"] = nil
+    tools.clear()
+  end)
+
+  it("loads fixture tool module via register_module", function()
+    tools.register_module("test_tools")
+    local all = tools.get_all()
+    assert.is_not_nil(all["fixture_search"])
+    assert.equals("Search fixture tool", all["fixture_search"].description)
+  end)
+
+  it("handles module with no definitions gracefully", function()
+    -- bad_contract has no definitions or resolve, so register() should handle gracefully
+    -- The module loads but produces no tools (no crash)
+    tools.register("bad_contract")
+    -- No tools should be registered from this module
+    local tool = tools.get("something_else")
+    assert.is_nil(tool)
+  end)
+
+  it("name with dot is rejected at define() time", function()
+    assert.has_error(function()
+      require("flemma.tools.registry").define("dotted.name", {
+        name = "dotted.name",
+        description = "test",
+        input_schema = { type = "object" },
+      })
+    end)
+  end)
+
+  it("missing module fails fast at register_module time", function()
+    assert.has_error(function()
+      tools.register_module("completely.nonexistent.module")
+    end)
+  end)
+end)
