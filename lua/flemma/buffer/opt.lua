@@ -22,6 +22,7 @@ local M = {}
 ---@class flemma.opt.ListOption
 ---@field _entries flemma.opt.Entry[] Ordered entries with enabled flags (private)
 ---@field _universe table<string, boolean> Set of all valid names (private)
+---@field _exclusions table<string, true> Names excluded via :remove() when not in _entries (private)
 local ListOption = {}
 ListOption.__index = ListOption
 
@@ -95,9 +96,17 @@ function ListOption:remove(value)
       to_remove[v] = true
     end
   end
-  for _, entry in ipairs(self._entries) do
-    if to_remove[entry.name] then
-      entry.enabled = false
+  for name in pairs(to_remove) do
+    local found = false
+    for _, entry in ipairs(self._entries) do
+      if entry.name == name then
+        entry.enabled = false
+        found = true
+        break
+      end
+    end
+    if not found then
+      self._exclusions[name] = true
     end
   end
   return self
@@ -160,6 +169,16 @@ function ListOption:get()
     end
   end
   return result
+end
+
+--- Get the exclusion set (names removed that weren't directly in entries)
+---@param self flemma.opt.ListOption
+---@return table<string, true>|nil exclusions Non-empty exclusion set, or nil
+function ListOption:get_exclusions()
+  if next(self._exclusions) then
+    return vim.deepcopy(self._exclusions)
+  end
+  return nil
 end
 
 --- Set: enable only the listed names, disable all others
@@ -254,7 +273,7 @@ local function create_list_option(entries)
   for _, entry in ipairs(entries) do
     universe[entry.name] = true
   end
-  return setmetatable({ _entries = entries, _universe = universe }, ListOption)
+  return setmetatable({ _entries = entries, _universe = universe, _exclusions = {} }, ListOption)
 end
 
 --- Create a new opt proxy and resolve function
@@ -273,9 +292,59 @@ function M.create()
   ---@type table<string, boolean>
   local touched = {}
 
-  -- Raw options that are sub-properties of ListOption instances (e.g., tools.auto_approve)
+  -- Raw options that are sub-properties of ListOption instances (e.g., tools.autopilot)
   ---@type table<string, any>
   local raw_options = {}
+
+  -- Build auto_approve universe: all tool names + all preset names
+  local tool_presets = require("flemma.tools.presets")
+  ---@type table<string, boolean>
+  local auto_approve_universe = {}
+  local all_tools_for_universe = require("flemma.tools").get_all({ include_disabled = true })
+  for name in pairs(all_tools_for_universe) do
+    auto_approve_universe[name] = true
+  end
+  for _, preset_name in ipairs(tool_presets.names()) do
+    auto_approve_universe[preset_name] = true
+  end
+
+  --- Create a ListOption for auto_approve from a string[] of names
+  ---@param names string[]
+  ---@return flemma.opt.ListOption
+  local function create_auto_approve_option(names)
+    local entries = {}
+    for _, name in ipairs(names) do
+      -- Validate against auto_approve_universe (module paths bypass via validate_name logic)
+      local loader = require("flemma.loader")
+      if not auto_approve_universe[name] then
+        if loader.is_module_path(name) then
+          loader.assert_exists(name)
+          auto_approve_universe[name] = true
+        else
+          local best, best_dist = nil, math.huge
+          for candidate in pairs(auto_approve_universe) do
+            local dist = levenshtein(name, candidate)
+            if dist < best_dist then
+              best, best_dist = candidate, dist
+            end
+          end
+          local msg = string.format("flemma.opt: unknown value '%s'", name)
+          if best and best_dist <= 3 then
+            msg = msg .. string.format(". Did you mean '%s'?", best)
+          end
+          error(msg)
+        end
+      end
+      table.insert(entries, { name = name, enabled = true })
+    end
+    return setmetatable({ _entries = entries, _universe = auto_approve_universe, _exclusions = {} }, ListOption)
+  end
+
+  -- auto_approve state: either a ListOption (from table assignment) or a function
+  ---@type flemma.opt.ListOption|nil
+  local auto_approve_option = nil
+  ---@type function|nil
+  local auto_approve_fn = nil
 
   -- Give the tools ListOption a custom metatable so flemma.opt.tools.auto_approve works
   -- while list operations (:remove, :append, +, -, ^) continue to function normally.
@@ -284,7 +353,10 @@ function M.create()
     _is_list_option = true,
     __index = function(_, key)
       if key == "auto_approve" then
-        return raw_options.auto_approve
+        if auto_approve_option then
+          return auto_approve_option
+        end
+        return auto_approve_fn
       end
       if key == "autopilot" then
         return raw_options.autopilot
@@ -293,11 +365,21 @@ function M.create()
     end,
     __newindex = function(_, key, value)
       if key == "auto_approve" then
-        if type(value) ~= "table" and type(value) ~= "function" then
-          error(string.format("flemma.opt.tools.auto_approve: expected table or function, got %s", type(value)))
+        -- Operator chains already mutated the ListOption in place
+        if is_list_option(value) then
+          return
         end
-        raw_options.auto_approve = value
-        return
+        if type(value) == "function" then
+          auto_approve_fn = value
+          auto_approve_option = nil
+          return
+        end
+        if type(value) == "table" then
+          auto_approve_option = create_auto_approve_option(value)
+          auto_approve_fn = nil
+          return
+        end
+        error(string.format("flemma.opt.tools.auto_approve: expected table or function, got %s", type(value)))
       end
       if key == "autopilot" then
         if type(value) ~= "boolean" then
@@ -408,8 +490,11 @@ function M.create()
     for name in pairs(touched) do
       result[name] = options[name]:get()
     end
-    if raw_options.auto_approve ~= nil then
-      result.auto_approve = raw_options.auto_approve
+    if auto_approve_option then
+      result.auto_approve = auto_approve_option:get()
+      result.auto_approve_exclusions = auto_approve_option:get_exclusions()
+    elseif auto_approve_fn then
+      result.auto_approve = auto_approve_fn
     end
     if raw_options.autopilot ~= nil then
       result.autopilot = raw_options.autopilot

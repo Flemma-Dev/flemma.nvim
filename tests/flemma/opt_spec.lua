@@ -1,5 +1,6 @@
 package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.registry"] = nil
+package.loaded["flemma.tools.presets"] = nil
 package.loaded["flemma.tools.definitions.calculator"] = nil
 package.loaded["flemma.tools.definitions.bash"] = nil
 package.loaded["flemma.tools.definitions.read"] = nil
@@ -22,10 +23,17 @@ local function find_anthropic_tool(tools_array, name)
   end
 end
 
+local presets = require("flemma.tools.presets")
+
 describe("flemma.opt", function()
   before_each(function()
     tools.clear()
     tools.setup()
+    presets.setup(nil)
+  end)
+
+  after_each(function()
+    presets.clear()
   end)
 
   describe("create()", function()
@@ -581,11 +589,12 @@ describe("flemma.opt", function()
       assert.equals(fn, resolved.auto_approve)
     end)
 
-    it("reading auto_approve back returns the set value", function()
+    it("reading auto_approve back returns a ListOption with the set value", function()
       local opt_proxy = opt.create()
-      local policy = { "calculator" }
-      opt_proxy.tools.auto_approve = policy
-      assert.same(policy, opt_proxy.tools.auto_approve)
+      opt_proxy.tools.auto_approve = { "calculator" }
+      local auto_approve = opt_proxy.tools.auto_approve
+      assert.is_not_nil(auto_approve)
+      assert.are.same({ "calculator" }, auto_approve:get())
     end)
 
     it("not touching auto_approve results in nil in frontmatter opts", function()
@@ -876,6 +885,118 @@ describe("flemma.opt", function()
       assert.has_error(function()
         opt_proxy.tools:append("calculater")
       end, "flemma.opt: unknown value 'calculater'. Did you mean 'calculator'?")
+    end)
+  end)
+
+  describe("auto_approve as ListOption", function()
+    it("supports :remove() on a preset entry", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.tools.auto_approve = { "$default" }
+      opt_proxy.tools.auto_approve:remove("$default")
+      local resolved = resolve()
+      assert.are.same({}, resolved.auto_approve)
+    end)
+
+    it("supports :remove() on a tool inside a preset (exclusion)", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.tools.auto_approve = { "$default" }
+      opt_proxy.tools.auto_approve:remove("read")
+      local resolved = resolve()
+      assert.are.same({ "$default" }, resolved.auto_approve)
+      assert.are.same({ read = true }, resolved.auto_approve_exclusions)
+    end)
+
+    it("supports :append() to add a preset", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.tools.auto_approve = { "$readonly" }
+      opt_proxy.tools.auto_approve:append("$default")
+      local resolved = resolve()
+      assert.are.same({ "$readonly", "$default" }, resolved.auto_approve)
+    end)
+
+    it("supports :append() to add a plain tool name", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.tools.auto_approve = { "$readonly" }
+      opt_proxy.tools.auto_approve:append("bash")
+      local resolved = resolve()
+      assert.are.same({ "$readonly", "bash" }, resolved.auto_approve)
+    end)
+
+    it("supports chained :remove() and :append()", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.tools.auto_approve = { "$default" }
+      opt_proxy.tools.auto_approve:remove("$default"):append("$readonly"):remove("read")
+      local resolved = resolve()
+      assert.are.same({ "$readonly" }, resolved.auto_approve)
+      assert.are.same({ read = true }, resolved.auto_approve_exclusions)
+    end)
+
+    it("supports direct table assignment", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.tools.auto_approve = { "$readonly", "bash" }
+      local resolved = resolve()
+      assert.are.same({ "$readonly", "bash" }, resolved.auto_approve)
+    end)
+
+    it("function assignment still works", function()
+      local opt_proxy, resolve = opt.create()
+      local fn = function()
+        return true
+      end
+      opt_proxy.tools.auto_approve = fn
+      local resolved = resolve()
+      assert.equals(fn, resolved.auto_approve)
+    end)
+
+    it("not touching auto_approve results in nil", function()
+      local _, resolve = opt.create()
+      local resolved = resolve()
+      assert.is_nil(resolved.auto_approve)
+      assert.is_nil(resolved.auto_approve_exclusions)
+    end)
+
+    it("exclusions are nil when none set", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.tools.auto_approve = { "$default" }
+      local resolved = resolve()
+      assert.is_nil(resolved.auto_approve_exclusions)
+    end)
+
+    it("function assignment clears prior ListOption", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.tools.auto_approve = { "$default" }
+      opt_proxy.tools.auto_approve = function()
+        return true
+      end
+      local resolved = resolve()
+      assert.equals("function", type(resolved.auto_approve))
+      assert.is_nil(resolved.auto_approve_exclusions)
+    end)
+
+    it("table assignment clears prior function", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.tools.auto_approve = function()
+        return true
+      end
+      opt_proxy.tools.auto_approve = { "$readonly" }
+      local resolved = resolve()
+      assert.are.same({ "$readonly" }, resolved.auto_approve)
+    end)
+
+    it("operator - (remove) works on auto_approve", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.tools.auto_approve = { "$default", "$readonly" }
+      opt_proxy.tools.auto_approve = opt_proxy.tools.auto_approve - "$readonly"
+      local resolved = resolve()
+      assert.are.same({ "$default" }, resolved.auto_approve)
+    end)
+
+    it("operator + (append) works on auto_approve", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.tools.auto_approve = { "$readonly" }
+      opt_proxy.tools.auto_approve = opt_proxy.tools.auto_approve + "bash"
+      local resolved = resolve()
+      assert.are.same({ "$readonly", "bash" }, resolved.auto_approve)
     end)
   end)
 end)

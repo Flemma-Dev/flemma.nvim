@@ -47,7 +47,9 @@ describe("flemma.tools.presets", function()
       local warned = false
       local orig_notify = vim.notify
       vim.notify = function(msg)
-        if msg:match("must start with") then warned = true end
+        if msg:match("must start with") then
+          warned = true
+        end
       end
       presets.setup({ bad = { approve = { "read" } } })
       vim.notify = orig_notify
@@ -59,7 +61,9 @@ describe("flemma.tools.presets", function()
       local warned = false
       local orig_notify = vim.notify
       vim.notify = function(msg)
-        if msg:match("approve") then warned = true end
+        if msg:match("approve") then
+          warned = true
+        end
       end
       presets.setup({ ["$bad"] = { approve = "read" } })
       vim.notify = orig_notify
@@ -70,7 +74,9 @@ describe("flemma.tools.presets", function()
       local warned = false
       local orig_notify = vim.notify
       vim.notify = function(msg)
-        if msg:match("deny") then warned = true end
+        if msg:match("deny") then
+          warned = true
+        end
       end
       presets.setup({ ["$bad"] = { deny = "bash" } })
       vim.notify = orig_notify
