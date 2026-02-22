@@ -44,7 +44,7 @@ local function find_vertex_decl(declarations, name)
   end
 end
 
---- Helper: wait for FlemmaSend to complete (response + @You: prompt appended)
+--- Helper: wait for Flemma send to complete (response + @You: prompt appended)
 ---@param bufnr integer
 ---@param timeout? integer
 ---@return string[] lines
@@ -692,7 +692,7 @@ describe("Anthropic Streaming Tool Use Response (integration)", function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Calculate 15 * 7" })
 
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/tool_calling/anthropic_tool_use_streaming.txt")
-    vim.cmd("FlemmaSend")
+    vim.cmd("Flemma send")
     local result_lines = wait_for_response(bufnr)
     local content = table.concat(result_lines, "\n")
 
@@ -722,7 +722,7 @@ describe("Anthropic Streaming Tool Use Response (integration)", function()
     })
 
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/tool_calling/anthropic_final_response_streaming.txt")
-    vim.cmd("FlemmaSend")
+    vim.cmd("Flemma send")
     local result_lines = wait_for_response(bufnr)
     local content = table.concat(result_lines, "\n")
 
@@ -1047,7 +1047,7 @@ describe("OpenAI Streaming Tool Use Response (integration)", function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Calculate 15 * 7" })
 
     client.register_fixture("api%.openai%.com", "tests/fixtures/tool_calling/openai_tool_use_streaming.txt")
-    vim.cmd("FlemmaSend")
+    vim.cmd("Flemma send")
     local result_lines = wait_for_response(bufnr)
     local content = table.concat(result_lines, "\n")
 
@@ -1062,7 +1062,7 @@ describe("OpenAI Streaming Tool Use Response (integration)", function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Calculate" })
 
     client.register_fixture("api%.openai%.com", "tests/fixtures/tool_calling/openai_text_before_tool_streaming.txt")
-    vim.cmd("FlemmaSend")
+    vim.cmd("Flemma send")
     local result_lines = wait_for_response(bufnr)
     local content = table.concat(result_lines, "\n")
 
@@ -1415,7 +1415,7 @@ describe("Vertex AI Streaming Function Call Response (integration)", function()
       "aiplatform%.googleapis%.com",
       "tests/fixtures/tool_calling/vertex_function_call_streaming.txt"
     )
-    vim.cmd("FlemmaSend")
+    vim.cmd("Flemma send")
     local result_lines = wait_for_response(bufnr)
     local content = table.concat(result_lines, "\n")
 
@@ -1433,7 +1433,7 @@ describe("Vertex AI Streaming Function Call Response (integration)", function()
       "aiplatform%.googleapis%.com",
       "tests/fixtures/tool_calling/vertex_text_before_function_streaming.txt"
     )
-    vim.cmd("FlemmaSend")
+    vim.cmd("Flemma send")
     local result_lines = wait_for_response(bufnr)
     local content = table.concat(result_lines, "\n")
 

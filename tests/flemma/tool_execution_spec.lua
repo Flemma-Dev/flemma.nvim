@@ -1627,7 +1627,7 @@ describe("Tool Executor", function()
     -- They manually force autopilot into specific states (paused via arm +
     -- on_tools_complete) because the test specifically covers "what happens when
     -- the user presses Alt+Enter during an autopilot pause" — a scenario that
-    -- cannot be driven through register_fixture + FlemmaSend since it requires
+    -- cannot be driven through register_fixture + Flemma send since it requires
     -- user interaction mid-loop.
     --
     -- If advance_phase2's paused→armed transition logic changes, these tests

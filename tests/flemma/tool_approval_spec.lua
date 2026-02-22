@@ -17,6 +17,21 @@ local state = require("flemma.state")
 local parser = require("flemma.parser")
 local processor = require("flemma.processor")
 
+--- Helper: get pending non-error tool blocks awaiting execution
+---@param bufnr integer
+---@return flemma.tools.ToolBlockContext[]
+local function get_awaiting_execution(bufnr)
+  local groups = context.resolve_all_tool_blocks(bufnr)
+  local pending = groups["pending"] or {}
+  local awaiting = {}
+  for _, ctx in ipairs(pending) do
+    if not ctx.is_error then
+      table.insert(awaiting, ctx)
+    end
+  end
+  return awaiting
+end
+
 --- Helper: create a scratch buffer with given lines
 --- @param lines string[]
 --- @return integer bufnr
@@ -770,7 +785,7 @@ describe("Awaiting Execution Resolver", function()
       "```",
     })
 
-    local awaiting = context.resolve_all_awaiting_execution(bufnr)
+    local awaiting = get_awaiting_execution(bufnr)
     assert.equals(1, #awaiting)
     assert.equals("toolu_01", awaiting[1].tool_id)
     assert.equals("calculator", awaiting[1].tool_name)
@@ -792,7 +807,7 @@ describe("Awaiting Execution Resolver", function()
       "```",
     })
 
-    local awaiting = context.resolve_all_awaiting_execution(bufnr)
+    local awaiting = get_awaiting_execution(bufnr)
     assert.equals(0, #awaiting)
   end)
 
@@ -812,7 +827,7 @@ describe("Awaiting Execution Resolver", function()
       "```",
     })
 
-    local awaiting = context.resolve_all_awaiting_execution(bufnr)
+    local awaiting = get_awaiting_execution(bufnr)
     assert.equals(0, #awaiting)
   end)
 
@@ -831,7 +846,7 @@ describe("Awaiting Execution Resolver", function()
       "```",
     })
 
-    local awaiting = context.resolve_all_awaiting_execution(bufnr)
+    local awaiting = get_awaiting_execution(bufnr)
     assert.equals(0, #awaiting)
   end)
 
@@ -861,7 +876,7 @@ describe("Awaiting Execution Resolver", function()
       "```",
     })
 
-    local awaiting = context.resolve_all_awaiting_execution(bufnr)
+    local awaiting = get_awaiting_execution(bufnr)
     assert.equals(1, #awaiting)
     assert.equals("toolu_01", awaiting[1].tool_id)
     assert.equals("calculator", awaiting[1].tool_name)
@@ -877,7 +892,7 @@ describe("Awaiting Execution Resolver", function()
       "```",
     })
 
-    local awaiting = context.resolve_all_awaiting_execution(bufnr)
+    local awaiting = get_awaiting_execution(bufnr)
     assert.equals(0, #awaiting)
   end)
 
@@ -888,7 +903,7 @@ describe("Awaiting Execution Resolver", function()
       "@Assistant: Hi there!",
     })
 
-    local awaiting = context.resolve_all_awaiting_execution(bufnr)
+    local awaiting = get_awaiting_execution(bufnr)
     assert.equals(0, #awaiting)
   end)
 
@@ -917,7 +932,7 @@ describe("Awaiting Execution Resolver", function()
       "```",
     })
 
-    local awaiting = context.resolve_all_awaiting_execution(bufnr)
+    local awaiting = get_awaiting_execution(bufnr)
     assert.equals(2, #awaiting)
     assert.equals("toolu_01", awaiting[1].tool_id)
     assert.equals("toolu_02", awaiting[2].tool_id)
@@ -962,8 +977,8 @@ describe("Approval Placeholder Injection", function()
     local pending = context.resolve_all_pending(bufnr)
     assert.equals(0, #pending)
 
-    -- Verify resolve_all_awaiting_execution finds it (pending status)
-    local awaiting = context.resolve_all_awaiting_execution(bufnr)
+    -- Verify get_awaiting_execution finds it (pending status)
+    local awaiting = get_awaiting_execution(bufnr)
     assert.equals(1, #awaiting)
     assert.equals("toolu_approval", awaiting[1].tool_id)
     assert.equals("calculator", awaiting[1].tool_name)
@@ -988,7 +1003,7 @@ describe("Approval Placeholder Injection", function()
     end
 
     -- Should NOT be detected as awaiting (no status marker)
-    local awaiting = context.resolve_all_awaiting_execution(bufnr)
+    local awaiting = get_awaiting_execution(bufnr)
     assert.equals(0, #awaiting)
   end)
 
@@ -1006,7 +1021,7 @@ describe("Approval Placeholder Injection", function()
     injector.inject_placeholder(bufnr, "toolu_manual", { status = "pending" })
 
     -- Verify it's awaiting execution
-    local awaiting = context.resolve_all_awaiting_execution(bufnr)
+    local awaiting = get_awaiting_execution(bufnr)
     assert.equals(1, #awaiting)
 
     -- Simulate user replacing the flemma:tool fence with plain content
@@ -1020,7 +1035,7 @@ describe("Approval Placeholder Injection", function()
     end
 
     -- Now it should no longer be awaiting
-    awaiting = context.resolve_all_awaiting_execution(bufnr)
+    awaiting = get_awaiting_execution(bufnr)
     assert.equals(0, #awaiting)
   end)
 
@@ -1068,7 +1083,7 @@ describe("Approval Placeholder Injection", function()
     assert.is_true(found_result, "Expected result '25' in buffer")
 
     -- No longer awaiting
-    local awaiting = context.resolve_all_awaiting_execution(bufnr)
+    local awaiting = get_awaiting_execution(bufnr)
     assert.equals(0, #awaiting)
   end)
 
@@ -1094,7 +1109,7 @@ describe("Approval Placeholder Injection", function()
     assert.equals(0, #pending)
 
     -- Should not be awaiting (has error content)
-    local awaiting = context.resolve_all_awaiting_execution(bufnr)
+    local awaiting = get_awaiting_execution(bufnr)
     assert.equals(0, #awaiting)
 
     -- Verify the error marker is present in the buffer

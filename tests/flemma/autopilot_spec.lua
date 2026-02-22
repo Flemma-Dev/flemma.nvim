@@ -11,6 +11,21 @@ local context = require("flemma.tools.context")
 local state = require("flemma.state")
 local parser = require("flemma.parser")
 
+--- Helper: get pending non-error tool blocks awaiting execution
+---@param bufnr integer
+---@return flemma.tools.ToolBlockContext[]
+local function get_awaiting_execution(bufnr)
+  local groups = context.resolve_all_tool_blocks(bufnr)
+  local pending = groups["pending"] or {}
+  local awaiting = {}
+  for _, ctx in ipairs(pending) do
+    if not ctx.is_error then
+      table.insert(awaiting, ctx)
+    end
+  end
+  return awaiting
+end
+
 --- Helper: create a scratch buffer with given lines
 ---@param lines string[]
 ---@return integer bufnr
@@ -105,7 +120,7 @@ end)
 -- State machine unit tests: validate autopilot state transitions by
 -- calling on_response_complete directly on static buffers. These test
 -- the state machine logic in isolation — see "Autopilot integration"
--- for full-chain coverage via register_fixture + FlemmaSend.
+-- for full-chain coverage via register_fixture + Flemma send.
 describe("Autopilot on_response_complete", function()
   before_each(function()
     package.loaded["flemma.autopilot"] = nil
@@ -458,7 +473,7 @@ describe("Autopilot conflict detection", function()
     assert.equals("", seg.content)
   end)
 
-  it("resolve_all_awaiting_execution excludes results with user content", function()
+  it("get_awaiting_execution excludes results with user content", function()
     local bufnr = create_buffer({
       "@Assistant: Two tools.",
       "",
@@ -484,13 +499,13 @@ describe("Autopilot conflict detection", function()
       "```",
     })
 
-    local awaiting = context.resolve_all_awaiting_execution(bufnr)
+    local awaiting = get_awaiting_execution(bufnr)
     -- Only toolu_02 should be returned (toolu_01 has user content)
     assert.equals(1, #awaiting)
     assert.equals("toolu_02", awaiting[1].tool_id)
   end)
 
-  it("resolve_all_awaiting_execution returns empty when all have user content", function()
+  it("get_awaiting_execution returns empty when all have user content", function()
     local bufnr = create_buffer({
       "@Assistant: Tool call.",
       "",
@@ -506,7 +521,7 @@ describe("Autopilot conflict detection", function()
       "```",
     })
 
-    local awaiting = context.resolve_all_awaiting_execution(bufnr)
+    local awaiting = get_awaiting_execution(bufnr)
     assert.equals(0, #awaiting)
   end)
 end)
@@ -771,7 +786,7 @@ describe("Autopilot integration", function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Calculate 15 * 7" })
 
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/tool_calling/anthropic_tool_use_streaming.txt")
-    vim.cmd("FlemmaSend")
+    vim.cmd("Flemma send")
 
     -- Wait for response to complete (tool_use block appears + @You: prompt)
     vim.wait(2000, function()

@@ -46,7 +46,6 @@
 
 ---@class flemma.config.Statusline
 ---@field thinking_format string Format string when thinking is active. {model} = model name, {level} = thinking level
----@field reasoning_format? string Deprecated: alias for thinking_format (kept for backward compat)
 
 ---@class flemma.config.Parameters
 ---@field max_tokens? integer

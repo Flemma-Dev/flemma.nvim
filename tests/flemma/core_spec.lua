@@ -1,6 +1,6 @@
 local stub = require("luassert.stub")
 
-describe(":FlemmaSend command", function()
+describe(":Flemma send command", function()
   local client = require("flemma.client")
   local flemma, state, core, registry
 
@@ -43,8 +43,8 @@ describe(":FlemmaSend command", function()
     local default_anthropic_model = registry.get_model("anthropic")
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
 
-    -- Act: Execute the FlemmaSend command
-    vim.cmd("FlemmaSend")
+    -- Act: Execute the Flemma send command
+    vim.cmd("Flemma send")
 
     -- Assert: Check that the captured request body matches the expected format for Anthropic
     local captured_request_body = core._get_last_request_body()
@@ -78,8 +78,8 @@ describe(":FlemmaSend command", function()
     vim.api.nvim_set_current_buf(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Hello" })
 
-    -- Act: Execute the FlemmaSend command
-    vim.cmd("FlemmaSend")
+    -- Act: Execute the Flemma send command
+    vim.cmd("Flemma send")
 
     -- Assert: Check that the captured request body matches the expected format for OpenAI
     local captured_request_body = core._get_last_request_body()
@@ -121,7 +121,7 @@ describe(":FlemmaSend command", function()
     vim.api.nvim_buf_set_name(named_bufnr, vim.fn.tempname() .. ".chat")
     vim.api.nvim_buf_set_lines(named_bufnr, 0, -1, false, { "@You: Hello" })
 
-    vim.cmd("FlemmaSend")
+    vim.cmd("Flemma send")
     vim.wait(1000, function()
       local lines = vim.api.nvim_buf_get_lines(named_bufnr, 0, -1, false)
       return #lines >= 5 and lines[5] == "@You: "
@@ -139,7 +139,7 @@ describe(":FlemmaSend command", function()
     vim.api.nvim_set_current_buf(unnamed_bufnr)
     vim.api.nvim_buf_set_lines(unnamed_bufnr, 0, -1, false, { "@You: Hello" })
 
-    vim.cmd("FlemmaSend")
+    vim.cmd("Flemma send")
     vim.wait(1000, function()
       local lines = vim.api.nvim_buf_get_lines(unnamed_bufnr, 0, -1, false)
       return #lines >= 5 and lines[5] == "@You: "
@@ -164,7 +164,7 @@ describe(":FlemmaSend command", function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Hello" })
 
     -- Act: Execute the command
-    vim.cmd("FlemmaSend")
+    vim.cmd("Flemma send")
 
     -- Wait for the response to be processed and the new prompt to be added
     vim.wait(1000, function()
@@ -207,7 +207,7 @@ describe(":FlemmaSend command", function()
     local error_data = vim.json.decode(fixture_content)
     local expected_error_message = "Flemma: " .. error_data.error.message
 
-    vim.cmd("FlemmaSend")
+    vim.cmd("Flemma send")
 
     -- Wait for the expected error notification instead of the first notify call
     vim.wait(2000, function()
@@ -219,21 +219,16 @@ describe(":FlemmaSend command", function()
       return false
     end, 10, false)
 
-    local expected_warning = ":FlemmaSend has moved to :Flemma send"
-    local warning_seen = false
     local error_seen = false
     local error_level = nil
 
     for _, call in ipairs(notify_spy.calls) do
-      if call.refs[1] == expected_warning then
-        warning_seen = true
-      elseif call.refs[1] == expected_error_message then
+      if call.refs[1] == expected_error_message then
         error_seen = true
         error_level = call.refs[2]
       end
     end
 
-    assert.is_true(warning_seen, "Legacy :FlemmaSend warning should be emitted")
     assert.is_true(error_seen, "Expected error notification was not emitted")
     assert.equals(vim.log.levels.ERROR, error_level)
 

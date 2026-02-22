@@ -222,9 +222,6 @@ Use the single entry point `:Flemma {command}`. Autocompletion lists every avail
 | `:Flemma logging:enable` / `:...:disable` / `:...:open`     | Toggle structured logging and open the log file.                                                                                                         |                                                                             |
 | `:Flemma notification:recall`                               | Reopen the last usage/cost notification.                                                                                                                 |                                                                             |
 
-> [!TIP]
-> Legacy commands (`:FlemmaSend`, `:FlemmaCancel`, ...) still work but forward to the new command tree with a deprecation notice.
-
 ### Switching providers and models
 
 - `:Flemma switch` (no arguments) opens two `vim.ui.select` pickers: first provider, then model.

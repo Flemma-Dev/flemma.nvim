@@ -1015,7 +1015,7 @@ function M.send_to_provider(opts)
           ui.update_ui(bufnr)
           ui.fold_last_thinking_block(bufnr) -- Attempt to fold the last thinking block
 
-          if opts.on_request_complete then -- For FlemmaSendAndInsert
+          if opts.on_request_complete then
             opts.on_request_complete()
           end
 

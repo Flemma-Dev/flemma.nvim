@@ -23,7 +23,6 @@
 ---@type flemma.models.Data
 return {
   providers = {
-    -- Note: "claude" is a deprecated alias for "anthropic" (see provider/providers.lua)
     anthropic = {
       default = "claude-sonnet-4-6",
       cache_read_multiplier = 0.1, -- Cache reads cost 10% of base input price

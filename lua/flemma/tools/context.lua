@@ -219,35 +219,6 @@ function M.resolve_all_tool_blocks(bufnr)
   return groups
 end
 
----Find all tool_use blocks whose tool_result has a pending status (awaiting execution).
----Thin wrapper around resolve_all_tool_blocks() for backward compatibility.
----Results with user-edited content inside the pending block are excluded.
----Error tool_results (is_error=true) are excluded — they already have a result.
----@param bufnr integer Buffer number
----@return flemma.tools.ToolContext[] awaiting_contexts
-function M.resolve_all_awaiting_execution(bufnr)
-  local groups = M.resolve_all_tool_blocks(bufnr)
-  local pending = groups["pending"] or {}
-
-  -- Convert ToolBlockContext back to ToolContext (strip status/content/is_error)
-  -- Skip error results — they already have content and shouldn't be re-executed
-  local awaiting = {}
-  for _, ctx in ipairs(pending) do
-    if not ctx.is_error then
-      table.insert(awaiting, {
-        tool_id = ctx.tool_id,
-        tool_name = ctx.tool_name,
-        input = ctx.input,
-        node = ctx.node,
-        start_line = ctx.start_line,
-        end_line = ctx.end_line,
-      })
-    end
-  end
-
-  return awaiting
-end
-
 ---Resolve tool context from cursor position
 ---@param bufnr integer Buffer number
 ---@param cursor_pos {row: integer, col: integer} 1-based cursor position

@@ -30,7 +30,7 @@ describe("thinking preview with leading whitespace content", function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Hello" })
 
     -- Act
-    vim.cmd("FlemmaSend")
+    vim.cmd("Flemma send")
 
     -- Wait for the full response to be processed
     vim.wait(2000, function()

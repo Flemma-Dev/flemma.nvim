@@ -42,14 +42,6 @@ local models_data = require("flemma.models")
 ---@field cache_read_multiplier? number
 ---@field cache_write_multipliers? table<string, number>
 
----@type table<string, boolean>
-local deprecated_warning_shown = {}
-
--- Deprecated provider aliases (old_name -> new_name)
-local PROVIDER_ALIASES = {
-  claude = "anthropic",
-}
-
 ---@type table<string, flemma.provider.ProviderEntry>
 local providers = {}
 
@@ -181,27 +173,10 @@ end
 -- Provider queries
 --------------------------------------------------------------------------------
 
----Resolve a provider name, handling deprecated aliases
----Shows a deprecation warning once per session for deprecated names
----@param provider_name string The provider identifier (may be an alias)
+---Resolve a provider name
+---@param provider_name string The provider identifier
 ---@return string resolved_name The resolved provider name
 function M.resolve(provider_name)
-  local alias_target = PROVIDER_ALIASES[provider_name]
-  if alias_target then
-    -- Show deprecation warning once per session per alias
-    if not deprecated_warning_shown[provider_name] then
-      deprecated_warning_shown[provider_name] = true
-      vim.notify(
-        string.format(
-          "Flemma: The '%s' provider has been renamed to '%s'. Update your configuration.",
-          provider_name,
-          alias_target
-        ),
-        vim.log.levels.WARN
-      )
-    end
-    return alias_target
-  end
   return provider_name
 end
 
@@ -264,7 +239,6 @@ end
 -- Model configuration
 --------------------------------------------------------------------------------
 
--- Legacy compatibility - expose defaults and models from models.lua
 M.defaults = {}
 M.models = {}
 
