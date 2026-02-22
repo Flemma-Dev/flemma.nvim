@@ -172,3 +172,56 @@ describe("approval module resolution", function()
     assert.equals("require_approval", result)
   end)
 end)
+
+describe("sandbox module resolution", function()
+  local sandbox
+
+  before_each(function()
+    package.loaded["flemma.sandbox"] = nil
+    sandbox = require("flemma.sandbox")
+    sandbox.clear()
+
+    package.preload["test.fixture.sandbox"] = function()
+      return {
+        name = "test_sandbox",
+        available = function()
+          return true
+        end,
+        wrap = function(_, _, inner_cmd)
+          local wrapped = { "test-sandbox" }
+          for _, v in ipairs(inner_cmd) do
+            table.insert(wrapped, v)
+          end
+          return wrapped
+        end,
+        priority = 90,
+        description = "Test sandbox backend",
+      }
+    end
+  end)
+
+  after_each(function()
+    sandbox.clear()
+    package.preload["test.fixture.sandbox"] = nil
+    package.loaded["test.fixture.sandbox"] = nil
+  end)
+
+  it("loads and registers backend from module path", function()
+    sandbox.register_module("test.fixture.sandbox")
+    local entry = sandbox.get("test_sandbox")
+    assert.is_not_nil(entry)
+    assert.equals("test_sandbox", entry.name)
+    assert.is_true(entry.available({}))
+  end)
+
+  it("rejects module with missing contract functions", function()
+    package.preload["test.fixture.bad_sandbox"] = function()
+      return { something = true }
+    end
+    assert.has_error(function()
+      sandbox.register_module("test.fixture.bad_sandbox")
+    end)
+    package.preload["test.fixture.bad_sandbox"] = nil
+    package.loaded["test.fixture.bad_sandbox"] = nil
+  end)
+end)

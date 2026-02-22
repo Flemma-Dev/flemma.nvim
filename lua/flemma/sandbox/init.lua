@@ -123,6 +123,24 @@ function M.count()
   return #backends
 end
 
+---Register a sandbox backend from a module path.
+---Validates existence immediately, loads and registers immediately.
+---@param module_path string Lua module path (must contain a dot)
+function M.register_module(module_path)
+  local loader = require("flemma.loader")
+  loader.assert_exists(module_path)
+  local mod = loader.load(module_path)
+  if type(mod.available) ~= "function" or type(mod.wrap) ~= "function" then
+    error(
+      string.format("flemma: module '%s' must export 'available' and 'wrap' functions (expected sandbox backend)", module_path),
+      2
+    )
+  end
+  -- Derive backend name from module metadata or last path segment
+  local name = mod.name or module_path:match("([^.]+)$")
+  M.register(name, mod)
+end
+
 -- ---------------------------------------------------------------------------
 -- Cached auto-detection
 -- ---------------------------------------------------------------------------
@@ -181,6 +199,16 @@ local function resolve_backend(cfg)
     if not backend_name then
       return nil, "No sandbox backend configured"
     end
+    -- If it's a module path, load and register it first
+    local loader = require("flemma.loader")
+    if loader.is_module_path(backend_name) then
+      local load_ok, load_err = pcall(M.register_module, backend_name)
+      if not load_ok then
+        return nil, tostring(load_err)
+      end
+      local mod = require(backend_name)
+      backend_name = mod.name or backend_name:match("([^.]+)$")
+    end
     local entry = M.get(backend_name)
     if not entry then
       return nil, "Unknown sandbox backend: " .. backend_name
@@ -238,6 +266,13 @@ function M.setup()
       priority = 100,
       description = "Bubblewrap (Linux)",
     })
+  end
+
+  -- Validate module-path backend early (fail fast at startup)
+  local loader = require("flemma.loader")
+  local config = state.get_config()
+  if config.sandbox and config.sandbox.backend and loader.is_module_path(config.sandbox.backend) then
+    loader.assert_exists(config.sandbox.backend)
   end
 end
 
