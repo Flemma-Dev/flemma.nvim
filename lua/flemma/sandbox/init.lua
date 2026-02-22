@@ -57,7 +57,10 @@ end
 function M.register(name, definition)
   local loader = require("flemma.loader")
   if loader.is_module_path(name) then
-    error(string.format("flemma: sandbox backend name '%s' must not contain dots (dots indicate module paths)", name), 2)
+    error(
+      string.format("flemma: sandbox backend name '%s' must not contain dots (dots indicate module paths)", name),
+      2
+    )
   end
   for i, entry in ipairs(backends) do
     if entry.name == name then
@@ -132,7 +135,10 @@ function M.register_module(module_path)
   local mod = loader.load(module_path)
   if type(mod.available) ~= "function" or type(mod.wrap) ~= "function" then
     error(
-      string.format("flemma: module '%s' must export 'available' and 'wrap' functions (expected sandbox backend)", module_path),
+      string.format(
+        "flemma: module '%s' must export 'available' and 'wrap' functions (expected sandbox backend)",
+        module_path
+      ),
       2
     )
   end

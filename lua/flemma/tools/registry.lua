@@ -47,7 +47,10 @@ function M.define(name, definition)
     error(string.format("flemma: tool name '%s' must not contain dots (dots indicate module paths)", name), 2)
   end
   if tools[name] then
-    vim.notify(string.format("flemma: tool '%s' redefined (previously registered, now overwritten)", name), vim.log.levels.WARN)
+    vim.notify(
+      string.format("flemma: tool '%s' redefined (previously registered, now overwritten)", name),
+      vim.log.levels.WARN
+    )
   end
   tools[name] = definition
 end

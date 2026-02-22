@@ -58,7 +58,10 @@ end
 function M.register(name, definition)
   local loader = require("flemma.loader")
   if loader.is_module_path(name) then
-    error(string.format("flemma: approval resolver name '%s' must not contain dots (dots indicate module paths)", name), 2)
+    error(
+      string.format("flemma: approval resolver name '%s' must not contain dots (dots indicate module paths)", name),
+      2
+    )
   end
   -- Remove existing resolver with same name
   for i, entry in ipairs(resolvers) do
