@@ -810,4 +810,72 @@ describe("flemma.opt", function()
       assert.are.same({ "$CWD" }, prompt.opts.sandbox.policy.rw_paths)
     end)
   end)
+
+  describe("module path support", function()
+    before_each(function()
+      tools.clear()
+      tools.setup()
+
+      package.preload["test.opt.tools"] = function()
+        return {
+          definitions = {
+            {
+              name = "opt_test_tool",
+              description = "Tool from module",
+              input_schema = { type = "object" },
+            },
+          },
+        }
+      end
+    end)
+
+    after_each(function()
+      package.preload["test.opt.tools"] = nil
+      package.loaded["test.opt.tools"] = nil
+    end)
+
+    it("append accepts a module path", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.tools:append("test.opt.tools")
+      local resolved = resolve()
+      assert.is_not_nil(resolved.tools)
+      local found = false
+      for _, name in ipairs(resolved.tools) do
+        if name == "test.opt.tools" then
+          found = true
+        end
+      end
+      assert.is_true(found)
+    end)
+
+    it("remove accepts a module path that was appended", function()
+      local opt_proxy, resolve = opt.create()
+      opt_proxy.tools:append("test.opt.tools")
+      opt_proxy.tools:remove("test.opt.tools")
+      local resolved = resolve()
+      local found = false
+      if resolved.tools then
+        for _, name in ipairs(resolved.tools) do
+          if name == "test.opt.tools" then
+            found = true
+          end
+        end
+      end
+      assert.is_false(found)
+    end)
+
+    it("errors on nonexistent module path", function()
+      local opt_proxy = opt.create()
+      assert.has_error(function()
+        opt_proxy.tools:append("nonexistent.module.path")
+      end)
+    end)
+
+    it("plain names still use Levenshtein validation", function()
+      local opt_proxy = opt.create()
+      assert.has_error(function()
+        opt_proxy.tools:append("calculater")
+      end, "flemma.opt: unknown value 'calculater'. Did you mean 'calculator'?")
+    end)
+  end)
 end)

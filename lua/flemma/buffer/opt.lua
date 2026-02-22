@@ -51,10 +51,19 @@ local function levenshtein(a, b)
   return prev[lb]
 end
 
---- Validate that a name exists in the universe; errors with suggestion if not
+--- Validate that a name exists in the universe; errors with suggestion if not.
+--- Module paths (containing dots) bypass the universe check and are validated via loader instead.
 ---@param self flemma.opt.ListOption
 ---@param name string
 local function validate_name(self, name)
+  local loader = require("flemma.loader")
+  -- Module paths bypass the universe check — validated via loader instead
+  if loader.is_module_path(name) then
+    loader.assert_exists(name)
+    -- Add to universe so subsequent operations recognize this name
+    self._universe[name] = true
+    return
+  end
   if not self._universe[name] then
     local best, best_dist = nil, math.huge
     for candidate in pairs(self._universe) do
