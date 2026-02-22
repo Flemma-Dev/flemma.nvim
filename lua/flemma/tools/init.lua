@@ -4,6 +4,7 @@
 local M = {}
 
 local json = require("flemma.json")
+local loader = require("flemma.loader")
 local registry = require("flemma.tools.registry")
 
 local builtin_tools = {
@@ -112,6 +113,41 @@ function M.on_ready(callback)
 end
 
 --------------------------------------------------------------------------------
+-- Third-party module tracking
+--------------------------------------------------------------------------------
+
+---@type string[]
+local pending_modules = {}
+
+---@type table<string, boolean>
+local loaded_modules = {}
+
+---Register a module path for lazy loading.
+---Validates that the module exists immediately; defers actual require() until needed.
+---@param module_path string Lua module path (must contain a dot)
+function M.register_module(module_path)
+  loader.assert_exists(module_path)
+  if not loaded_modules[module_path] then
+    table.insert(pending_modules, module_path)
+  end
+end
+
+---Load all pending modules. Called before get_all/get_for_prompt.
+local function ensure_modules_loaded()
+  if #pending_modules == 0 then
+    return
+  end
+  local to_load = pending_modules
+  pending_modules = {}
+  for _, module_path in ipairs(to_load) do
+    if not loaded_modules[module_path] then
+      loaded_modules[module_path] = true
+      M.register(module_path)
+    end
+  end
+end
+
+--------------------------------------------------------------------------------
 -- Public API
 --------------------------------------------------------------------------------
 
@@ -119,6 +155,13 @@ end
 function M.setup()
   for _, module_name in ipairs(builtin_tools) do
     M.register(module_name)
+  end
+
+  local config = require("flemma.state").get_config()
+  if config.tools and config.tools.modules then
+    for _, module_path in ipairs(config.tools.modules) do
+      M.register_module(module_path)
+    end
   end
 end
 
@@ -141,6 +184,15 @@ function M.build_description(tool)
   return desc
 end
 
+---Get all registered tools (excludes disabled tools by default).
+---Loads any pending third-party modules before returning.
+---@param opts? { include_disabled: boolean }
+---@return table<string, flemma.tools.ToolDefinition>
+function M.get_all(opts)
+  ensure_modules_loaded()
+  return registry.get_all(opts)
+end
+
 --- Get tools filtered by resolved per-buffer opts
 --- When opts.tools is present, only matching tools are returned (including disabled tools
 --- that were explicitly listed — this allows users to enable disabled tools via flemma.opt).
@@ -148,6 +200,7 @@ end
 ---@param opts flemma.opt.ResolvedOpts|nil
 ---@return table<string, flemma.tools.ToolDefinition>
 function M.get_for_prompt(opts)
+  ensure_modules_loaded()
   if opts and opts.tools then
     -- Include disabled tools so users can explicitly enable them
     local all_tools = M.get_all({ include_disabled = true })
@@ -218,10 +271,11 @@ function M.clear()
     close_fn()
   end
   active_timers = {}
+  pending_modules = {}
+  loaded_modules = {}
 end
 
 M.get = registry.get
-M.get_all = registry.get_all
 M.count = registry.count
 M.is_executable = registry.is_executable
 M.get_executor = registry.get_executor

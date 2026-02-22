@@ -101,6 +101,7 @@
 ---@field show_spinner boolean
 ---@field cursor_after_result "result"|"stay"|"next"
 ---@field bash flemma.config.BashToolConfig
+---@field modules? string[] Lua module paths for third-party tool sources
 
 ---@class flemma.config.Editing
 ---@field disable_textwidth boolean
@@ -252,6 +253,7 @@ return {
       cwd = "$FLEMMA_BUFFER_PATH", -- Working directory; resolves to .chat file's directory (set nil for Neovim cwd)
       env = nil, -- Environment variables to add
     },
+    modules = {}, -- Lua module paths for third-party tool sources (e.g., "3rd.tools.todos")
   },
   presets = {}, -- Named presets for :Flemma switch (use ["$name"] key syntax)
   text_object = "m", -- Default text object key, set to false to disable
