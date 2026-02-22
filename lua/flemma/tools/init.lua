@@ -8,7 +8,6 @@ local loader = require("flemma.loader")
 local registry = require("flemma.tools.registry")
 
 local builtin_tools = {
-  "flemma.tools.definitions.calculator",
   "flemma.tools.definitions.bash",
   "flemma.tools.definitions.read",
   "flemma.tools.definitions.edit",

@@ -37,6 +37,7 @@ develop:
 			},																			\
 			logging = { enabled = true },												\
 			editing = { auto_write = true },											\
+			tools = { modules = { \"extras.flemma.tools.calculator\" } },				\
 		})"																				\
 		-c ":edit $$HOME/.cache/nvim/flemma.log"										\
 		-c ":tabedit example.chat"

@@ -1,6 +1,6 @@
 --- Calculator tool definition
 --- Provides basic arithmetic calculation capability
----@class flemma.tools.definitions.Calculator
+---@class extras.flemma.tools.Calculator
 ---@field definitions flemma.tools.ToolDefinition[]
 local M = {}
 

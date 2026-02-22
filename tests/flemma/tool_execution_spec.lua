@@ -7,7 +7,7 @@ package.loaded["flemma.tools.registry"] = nil
 package.loaded["flemma.tools.executor"] = nil
 package.loaded["flemma.tools.injector"] = nil
 package.loaded["flemma.tools.context"] = nil
-package.loaded["flemma.tools.definitions.calculator"] = nil
+package.loaded["extras.flemma.tools.calculator"] = nil
 package.loaded["flemma.tools.definitions.bash"] = nil
 package.loaded["flemma.tools.definitions.read"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
@@ -171,6 +171,7 @@ describe("Calculator Executor", function()
   before_each(function()
     registry.clear()
     tools.setup()
+    tools.register("extras.flemma.tools.calculator")
     calc_def = registry.get("calculator")
   end)
 
@@ -1315,6 +1316,7 @@ describe("Cancel Priority Logic", function()
     executor = require("flemma.tools.executor")
     registry.clear()
     tools.setup()
+    tools.register("extras.flemma.tools.calculator")
   end)
 
   after_each(function()
@@ -1435,6 +1437,7 @@ describe("Tool Executor", function()
 
     registry.clear()
     tools.setup()
+    tools.register("extras.flemma.tools.calculator")
   end)
 
   after_each(function()

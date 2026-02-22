@@ -17,7 +17,8 @@ function M.is_module_path(str)
 end
 
 --- Assert that a module can be found via require().
---- Checks package.loaded, package.preload, and package.searchpath.
+--- Checks package.loaded, package.preload, package.searchpath, and Neovim's
+--- runtime path (lua/ directories), which package.searchpath alone does not cover.
 --- Throws with a descriptive error on failure.
 ---@param path string Lua module path (e.g., "3rd.tools.todos")
 function M.assert_exists(path)
@@ -25,10 +26,16 @@ function M.assert_exists(path)
   if package.loaded[path] or package.preload[path] then
     return
   end
-  local found = package.searchpath(path, package.path)
-  if not found then
-    error(string.format("flemma: module '%s' not found on package.path", path), 2)
+  -- Standard Lua package.path
+  if package.searchpath(path, package.path) then
+    return
   end
+  -- Neovim rtp: lua/<module_path>.lua
+  local rtp_relpath = "lua/" .. path:gsub("%.", "/") .. ".lua"
+  if vim.api.nvim_get_runtime_file(rtp_relpath, false)[1] then
+    return
+  end
+  error(string.format("flemma: module '%s' not found on package.path", path), 2)
 end
 
 --- Load a module via require() with clear error attribution.

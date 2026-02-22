@@ -1,7 +1,7 @@
 package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.registry"] = nil
 package.loaded["flemma.tools.presets"] = nil
-package.loaded["flemma.tools.definitions.calculator"] = nil
+package.loaded["extras.flemma.tools.calculator"] = nil
 package.loaded["flemma.tools.definitions.bash"] = nil
 package.loaded["flemma.tools.definitions.read"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
@@ -29,6 +29,7 @@ describe("flemma.opt", function()
   before_each(function()
     tools.clear()
     tools.setup()
+    tools.register("extras.flemma.tools.calculator")
     presets.setup(nil)
   end)
 
@@ -824,6 +825,7 @@ describe("flemma.opt", function()
     before_each(function()
       tools.clear()
       tools.setup()
+      tools.register("extras.flemma.tools.calculator")
 
       package.preload["test.opt.tools"] = function()
         return {

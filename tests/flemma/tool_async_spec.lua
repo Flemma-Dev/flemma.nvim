@@ -248,9 +248,9 @@ describe("Async tool sources", function()
       assert.is_not_nil(all.resolved_tool)
     end)
 
-    it("handles a module name with .definitions (sync)", function()
+    it("handles a module name (sync)", function()
       -- Use an existing builtin module
-      tools.register("flemma.tools.definitions.calculator")
+      tools.register("extras.flemma.tools.calculator")
 
       assert.is_true(tools.is_ready())
       assert.is_true(tools.count() > 0)

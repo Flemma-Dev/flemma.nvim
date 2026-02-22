@@ -30,6 +30,7 @@ describe("Frontmatter evaluation caching", function()
       parameters = { thinking = false },
       tools = { autopilot = { enabled = true } },
     })
+    require("flemma.tools").register("extras.flemma.tools.calculator")
   end)
 
   after_each(function()

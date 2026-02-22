@@ -1115,6 +1115,10 @@ end)
 -- ============================================================================
 
 describe("Frontmatter Approval Resolver", function()
+  before_each(function()
+    require("flemma.tools").register("extras.flemma.tools.calculator")
+  end)
+
   after_each(function()
     approval.clear()
     state.set_config({})
