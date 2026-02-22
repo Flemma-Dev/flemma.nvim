@@ -358,10 +358,10 @@ describe("Approval Setup", function()
   end)
 
   describe("with string list auto_approve", function()
-    it("registers config:auto_approve resolver at priority 100", function()
+    it("registers urn:flemma:approval:config resolver at priority 100", function()
       set_config_and_setup({ tools = { auto_approve = { "calculator", "read" } } })
 
-      local entry = approval.get("config:auto_approve")
+      local entry = approval.get("urn:flemma:approval:config")
       assert.is_not_nil(entry)
       assert.equals(100, entry.priority)
     end)
@@ -391,7 +391,7 @@ describe("Approval Setup", function()
   end)
 
   describe("with function auto_approve", function()
-    it("registers config:auto_approve resolver at priority 100", function()
+    it("registers urn:flemma:approval:config resolver at priority 100", function()
       set_config_and_setup({
         tools = {
           auto_approve = function()
@@ -400,7 +400,7 @@ describe("Approval Setup", function()
         },
       })
 
-      local entry = approval.get("config:auto_approve")
+      local entry = approval.get("urn:flemma:approval:config")
       assert.is_not_nil(entry)
       assert.equals(100, entry.priority)
     end)
@@ -565,7 +565,7 @@ describe("Approval Setup", function()
     it("registers catch-all approve resolver at priority 0", function()
       set_config_and_setup({ tools = { require_approval = false } })
 
-      local entry = approval.get("config:catch_all_approve")
+      local entry = approval.get("urn:flemma:approval:catch-all")
       assert.is_not_nil(entry)
       assert.equals(0, entry.priority)
     end)
@@ -1249,7 +1249,7 @@ describe("Frontmatter Approval Resolver", function()
     it("frontmatter resolver is at priority 90", function()
       set_config_and_setup({})
 
-      local entry = approval.get("frontmatter:auto_approve")
+      local entry = approval.get("urn:flemma:approval:frontmatter")
       assert.is_not_nil(entry)
       assert.equals(90, entry.priority)
     end)

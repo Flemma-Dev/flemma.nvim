@@ -51,19 +51,10 @@ local function ensure_sorted()
   sorted = true
 end
 
----Register a named approval resolver.
----If a resolver with the same name already exists, it is replaced.
+---Insert or replace a resolver entry. Shared by public register() and internal setup().
 ---@param name string Unique resolver name
 ---@param definition flemma.tools.ApprovalResolverDefinition
-function M.register(name, definition)
-  local loader = require("flemma.loader")
-  if loader.is_module_path(name) then
-    error(
-      string.format("flemma: approval resolver name '%s' must not contain dots (dots indicate module paths)", name),
-      2
-    )
-  end
-  -- Remove existing resolver with same name
+local function register_entry(name, definition)
   for i, entry in ipairs(resolvers) do
     if entry.name == name then
       table.remove(resolvers, i)
@@ -78,6 +69,21 @@ function M.register(name, definition)
     description = definition.description,
   })
   sorted = false
+end
+
+---Register a named approval resolver.
+---If a resolver with the same name already exists, it is replaced.
+---@param name string Unique resolver name
+---@param definition flemma.tools.ApprovalResolverDefinition
+function M.register(name, definition)
+  local loader = require("flemma.loader")
+  if loader.is_module_path(name) then
+    error(
+      string.format("flemma: approval resolver name '%s' must not contain dots (dots indicate module paths)", name),
+      2
+    )
+  end
+  register_entry(name, definition)
 end
 
 ---Unregister a resolver by name.
@@ -191,6 +197,35 @@ local function resolve_auto_approve_policy(policy, tool_name, input, context, er
   return nil
 end
 
+---Build a lazy-loading resolve function for a single module path.
+---Validates existence eagerly but defers require() until first call.
+---@param module_path string Dot-notation Lua module path
+---@return fun(tool_name: string, input: table, context: flemma.config.AutoApproveContext): flemma.tools.ApprovalResult|nil
+local function build_module_resolver(module_path)
+  local loader = require("flemma.loader")
+  loader.assert_exists(module_path)
+  ---@type { resolve: fun(tool_name: string, input: table, context: flemma.config.AutoApproveContext): flemma.tools.ApprovalResult|nil }|nil
+  local loaded_resolver = nil
+  return function(tool_name, input, context)
+    if not loaded_resolver then
+      local mod = loader.load(module_path)
+      if type(mod.resolve) == "function" then
+        loaded_resolver = mod
+      elseif type(mod) == "function" then
+        loaded_resolver = { resolve = mod }
+      else
+        log.warn("approval: module '" .. module_path .. "' does not export 'resolve' function")
+        loaded_resolver = {
+          resolve = function()
+            return nil
+          end,
+        }
+      end
+    end
+    return loaded_resolver.resolve(tool_name, input, context)
+  end
+end
+
 ---Register built-in resolvers derived from the user's config.
 ---Converts `config.tools.auto_approve` and `config.tools.require_approval` into
 ---resolver chain entries. Called during plugin setup after config is stored in state.
@@ -202,49 +237,62 @@ function M.setup()
   if auto_approve ~= nil then
     local loader = require("flemma.loader")
     if type(auto_approve) == "string" and loader.is_module_path(auto_approve) then
-      -- Module path: validate now, load lazily on first resolve
-      loader.assert_exists(auto_approve)
-      local module_path = auto_approve
-      ---@type { resolve: fun(tool_name: string, input: table, context: flemma.config.AutoApproveContext): flemma.tools.ApprovalResult|nil }|nil
-      local loaded_resolver = nil
-      M.register("config:auto_approve", {
+      -- Single module path: validate now, load lazily on first resolve
+      -- Registered under the module path so users can get()/unregister() by path
+      register_entry(auto_approve, {
         priority = 100,
-        description = "Built-in resolver from module " .. module_path,
-        resolve = function(tool_name, input, context)
-          if not loaded_resolver then
-            local mod = loader.load(module_path)
-            if type(mod.resolve) == "function" then
-              loaded_resolver = mod
-            elseif type(mod) == "function" then
-              loaded_resolver = { resolve = mod }
-            else
-              log.warn("approval: module '" .. module_path .. "' does not export 'resolve' function")
-              loaded_resolver = {
-                resolve = function()
-                  return nil
-                end,
-              }
-            end
-          end
-          return loaded_resolver.resolve(tool_name, input, context)
-        end,
+        description = "Built-in resolver from module " .. auto_approve,
+        resolve = build_module_resolver(auto_approve),
       })
-    elseif type(auto_approve) ~= "table" and type(auto_approve) ~= "function" then
-      log.warn("approval: unexpected auto_approve type: " .. type(auto_approve))
-    else
-      M.register("config:auto_approve", {
+    elseif type(auto_approve) == "table" then
+      -- String array: partition into module paths and plain tool names
+      ---@type string[]
+      local tool_names = {}
+      ---@type string[]
+      local module_paths = {}
+      for _, entry in
+        ipairs(auto_approve --[[@as string[] ]])
+      do
+        if loader.is_module_path(entry) then
+          table.insert(module_paths, entry)
+        else
+          table.insert(tool_names, entry)
+        end
+      end
+      -- Register a resolver per module path, addressable by path
+      for _, module_path in ipairs(module_paths) do
+        register_entry(module_path, {
+          priority = 100,
+          description = "Built-in resolver from module " .. module_path,
+          resolve = build_module_resolver(module_path),
+        })
+      end
+      -- Register a tool-name list resolver if any plain names remain
+      if #tool_names > 0 then
+        register_entry("urn:flemma:approval:config", {
+          priority = 100,
+          description = "Built-in resolver from config.tools.auto_approve",
+          resolve = function(tool_name, input, context)
+            return resolve_auto_approve_policy(tool_names, tool_name, input, context, "require_approval")
+          end,
+        })
+      end
+    elseif type(auto_approve) == "function" then
+      register_entry("urn:flemma:approval:config", {
         priority = 100,
         description = "Built-in resolver from config.tools.auto_approve",
         resolve = function(tool_name, input, context)
           return resolve_auto_approve_policy(auto_approve, tool_name, input, context, "require_approval")
         end,
       })
+    else
+      log.warn("approval: unexpected auto_approve type: " .. type(auto_approve))
     end
   end
 
   -- Frontmatter resolver: reads pre-evaluated opts from context.opts.
   -- Always registered; no-op when opts are not provided or don't set auto_approve.
-  M.register("frontmatter:auto_approve", {
+  register_entry("urn:flemma:approval:frontmatter", {
     priority = 90,
     description = "Per-buffer approval from frontmatter flemma.opt.tools.auto_approve",
     resolve = function(tool_name, input, context)
@@ -258,7 +306,7 @@ function M.setup()
 
   local require_approval = tools_config and tools_config.require_approval
   if require_approval == false then
-    M.register("config:catch_all_approve", {
+    register_entry("urn:flemma:approval:catch-all", {
       priority = 0,
       description = "Built-in catch-all from config.tools.require_approval = false",
       resolve = function()

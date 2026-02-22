@@ -12,6 +12,11 @@ describe("flemma.loader", function()
       assert.is_false(loader.is_module_path("calculator"))
       assert.is_false(loader.is_module_path(""))
     end)
+
+    it("returns false for urn:flemma: URNs even with embedded dots", function()
+      assert.is_false(loader.is_module_path("urn:flemma:approval:module:test.fixture.approval"))
+      assert.is_false(loader.is_module_path("urn:flemma:approval:config"))
+    end)
   end)
 
   describe("assert_exists()", function()

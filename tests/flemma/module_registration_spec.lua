@@ -171,6 +171,109 @@ describe("approval module resolution", function()
     local result = approval.resolve("calculator", {}, { bufnr = 0, tool_id = "test" })
     assert.equals("require_approval", result)
   end)
+
+  it("is addressable by module path via get() and unregister()", function()
+    local entry = approval.get("test.fixture.approval")
+    assert.is_not_nil(entry)
+    assert.equals(100, entry.priority)
+
+    assert.is_true(approval.unregister("test.fixture.approval"))
+    assert.is_nil(approval.get("test.fixture.approval"))
+  end)
+end)
+
+describe("approval module resolution with string[]", function()
+  local approval
+  local state = require("flemma.state")
+
+  before_each(function()
+    package.loaded["flemma.tools.approval"] = nil
+    approval = require("flemma.tools.approval")
+
+    package.preload["test.fixture.approval"] = function()
+      return {
+        resolve = function(tool_name)
+          if tool_name == "bash" then
+            return "deny"
+          end
+          return nil
+        end,
+      }
+    end
+
+    package.preload["test.fixture.approval2"] = function()
+      return {
+        resolve = function(tool_name)
+          if tool_name == "read_file" then
+            return "approve"
+          end
+          return nil
+        end,
+      }
+    end
+  end)
+
+  after_each(function()
+    approval.clear()
+    package.preload["test.fixture.approval"] = nil
+    package.loaded["test.fixture.approval"] = nil
+    package.preload["test.fixture.approval2"] = nil
+    package.loaded["test.fixture.approval2"] = nil
+  end)
+
+  it("loads multiple module resolvers from string[]", function()
+    state.set_config({
+      tools = {
+        auto_approve = { "test.fixture.approval", "test.fixture.approval2" },
+        require_approval = true,
+      },
+    })
+    approval.clear()
+    approval.setup()
+
+    local result = approval.resolve("bash", {}, { bufnr = 0, tool_id = "test" })
+    assert.equals("deny", result)
+
+    result = approval.resolve("read_file", {}, { bufnr = 0, tool_id = "test" })
+    assert.equals("approve", result)
+  end)
+
+  it("mixes module paths and plain tool names in string[]", function()
+    state.set_config({
+      tools = {
+        auto_approve = { "test.fixture.approval", "calculator" },
+        require_approval = true,
+      },
+    })
+    approval.clear()
+    approval.setup()
+
+    -- Module resolver handles bash
+    local result = approval.resolve("bash", {}, { bufnr = 0, tool_id = "test" })
+    assert.equals("deny", result)
+
+    -- Plain tool name match
+    result = approval.resolve("calculator", {}, { bufnr = 0, tool_id = "test" })
+    assert.equals("approve", result)
+
+    -- Neither module nor tool name list handles this
+    result = approval.resolve("unknown", {}, { bufnr = 0, tool_id = "test" })
+    assert.equals("require_approval", result)
+  end)
+
+  it("passes through when no module handles the tool", function()
+    state.set_config({
+      tools = {
+        auto_approve = { "test.fixture.approval", "test.fixture.approval2" },
+        require_approval = true,
+      },
+    })
+    approval.clear()
+    approval.setup()
+
+    local result = approval.resolve("unknown_tool", {}, { bufnr = 0, tool_id = "test" })
+    assert.equals("require_approval", result)
+  end)
 end)
 
 describe("sandbox module resolution", function()

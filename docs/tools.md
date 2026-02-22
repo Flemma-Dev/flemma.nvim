@@ -491,11 +491,12 @@ Flemma uses a priority-based resolver chain to decide whether a tool call should
 
 Built-in resolvers are registered during `setup()`:
 
-| Priority | Name                       | Source                                                      |
-| -------- | -------------------------- | ----------------------------------------------------------- |
-| 100      | `config:auto_approve`      | Global `tools.auto_approve` from config                     |
-| 90       | `frontmatter:auto_approve` | Per-buffer `flemma.opt.tools.auto_approve` from frontmatter |
-| 0        | `config:catch_all_approve` | Only when `tools.require_approval = false`                  |
+| Priority | Name                              | Source                                                      |
+| -------- | --------------------------------- | ----------------------------------------------------------- |
+| 100      | `urn:flemma:approval:config`      | Global `tools.auto_approve` from config (list or function)  |
+| 100      | `<module.path>`                   | Per-module resolver from `tools.auto_approve` module path   |
+| 90       | `urn:flemma:approval:frontmatter` | Per-buffer `flemma.opt.tools.auto_approve` from frontmatter |
+| 0        | `urn:flemma:approval:catch-all`   | Only when `tools.require_approval = false`                  |
 
 Third-party plugins register at the default priority of 50. Set `priority` higher to run before built-in resolvers (e.g., 200 to override config), or lower to act as a fallback.
 
@@ -543,7 +544,7 @@ Re-registering with the same name replaces the existing resolver.
 ### Introspection
 
 ```lua
-approval.get("config:auto_approve")   -- returns the resolver entry or nil
+approval.get("urn:flemma:approval:config")  -- returns the resolver entry or nil
 approval.get_all()                    -- all resolvers sorted by priority (deep copy)
 approval.count()                      -- number of registered resolvers
 ```

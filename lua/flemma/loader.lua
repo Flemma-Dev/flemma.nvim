@@ -3,10 +3,16 @@
 ---@class flemma.Loader
 local M = {}
 
+local URN_PREFIX = "urn:flemma:"
+
 --- Check whether a string looks like a Lua module path (contains a dot).
+--- Flemma URNs (urn:flemma:...) are never module paths, even when they embed dotted segments.
 ---@param str string
 ---@return boolean
 function M.is_module_path(str)
+  if str:sub(1, #URN_PREFIX) == URN_PREFIX then
+    return false
+  end
   return str:find(".", 1, true) ~= nil
 end
 
