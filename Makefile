@@ -43,9 +43,12 @@ develop:
 		-c ":tabedit example.chat"
 
 .PHONY: screencast
-# Create a VHS screencast demonstrating Flemma's capabilities
+# Create a VHS screencast demonstrating Flemma's capabilities, with a poster frame prepended
 screencast: .vapor/catppuccin/nvim.git .vapor/NStefan002/screenkey.nvim.git
-	@-rm -R .vapor/cache/ .vapor/state/ .vapor/scratch.chat .vapor/math.png assets/flemma_cast.mp4
+	@-rm -R \
+		.vapor/cache/ .vapor/state/ .vapor/scratch.chat .vapor/math.png \
+		.vapor/poster.jpg .vapor/poster.mp4 .vapor/concat_list.txt \
+		.vapor/flemma_cast_with_poster.mp4 assets/flemma_cast.mp4
 	@mkdir -p .vapor/cache/ .vapor/state/
 	@echo -e "\`\`\`lua\nname = \"Flemma\"\n\nflemma.opt.thinking = \"medium\"\nflemma.opt.tools.auto_approve = { \"bash\" }\n\`\`\`\n@System: When deleting files use \`trash\` && \`sleep 2\`, never \`rm\`.\n" > .vapor/scratch.chat
 	magick \
@@ -66,6 +69,25 @@ screencast: .vapor/catppuccin/nvim.git .vapor/NStefan002/screenkey.nvim.git
 		XDG_CACHE_HOME=`pwd`/.vapor/cache \
 		XDG_STATE_HOME=`pwd`/.vapor/state \
 	vhs contrib/vhs/flemma_cast.tape
+	ffmpeg -hide_banner -y \
+		-ss 00:00:13 \
+		-i assets/flemma_cast.mp4 \
+		-vframes 1 -q:v 2 \
+		.vapor/poster.jpg
+	ffmpeg -hide_banner -y \
+		-loop 1 \
+		-i .vapor/poster.jpg \
+		-vframes 1 -r 25 \
+		-c:v libx264 -pix_fmt yuv420p \
+		.vapor/poster.mp4
+	printf 'file $(CURDIR)/.vapor/poster.mp4\nfile $(CURDIR)/assets/flemma_cast.mp4\n' \
+		> .vapor/concat_list.txt
+	ffmpeg -hide_banner -y \
+		-f concat -safe 0 \
+		-i .vapor/concat_list.txt \
+		-c copy \
+		.vapor/flemma_cast_with_poster.mp4
+	mv .vapor/flemma_cast_with_poster.mp4 assets/flemma_cast.mp4
 
 .vapor/catppuccin/nvim.git .vapor/NStefan002/screenkey.nvim.git:
 	@mkdir -p $(dir $@)
