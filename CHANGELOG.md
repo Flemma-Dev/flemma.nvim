@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.4.0
+
+### Minor Changes
+
+- ffe72b3: `tools.auto_approve` now accepts a `string[]` of module paths (and mixed module paths + tool names). Internal approval resolver names use `urn:flemma:approval:*` convention; module-sourced resolvers are addressable by their module path directly.
+- fae1e16: Added dynamic module resolution for third-party extensions. Lua module paths (dot-notation strings like "3rd.tools.todos") can now be used in config.provider, config.tools.modules, config.tools.auto_approve, config.sandbox.backend, and flemma.opt.tools to reference third-party modules without explicit require() calls. Modules are validated at setup time and lazily loaded on first use.
+- 3cf9fe3: Refactor tool definitions to use ExecutionContext SDK — tools now code against `ctx.path`, `ctx.sandbox`, `ctx.truncate`, and `ctx:get_config()` instead of requiring internal Flemma modules directly
+- 75e34c8: Moved calculator and calculator_async tools from built-in definitions to lua/extras (dev-only); production builds no longer ship calculator tools
+- 974eac1: Auto-approve policy now expands $-prefixed preset references, allowing `auto_approve = { "$default", "$readonly" }` to union approve/deny lists from the preset registry. Config-level resolvers defer to frontmatter when it sets auto_approve, enabling per-buffer override of global presets.
+- ef6a932: Removed all backwards-compatibility layers from the Claudius-to-Flemma migration. This is a breaking change for users who still rely on any of the following:
+
+  **Removed: `require("claudius")` module fallback.** The `lua/claudius/` shim that forwarded to `require("flemma")` has been deleted. Update your config to `require("flemma")`.
+
+  **Removed: legacy `:Flemma*` commands.** The individual commands `:FlemmaSend`, `:FlemmaCancel`, `:FlemmaImport`, `:FlemmaSendAndInsert`, `:FlemmaSwitch`, `:FlemmaNextMessage`, `:FlemmaPrevMessage`, `:FlemmaEnableLogging`, `:FlemmaDisableLogging`, `:FlemmaOpenLog`, and `:FlemmaRecallNotification` have been removed. Use the unified `:Flemma <subcommand>` tree instead (e.g., `:Flemma send`, `:Flemma cancel`, `:Flemma message:next`).
+
+  **Removed: `"claude"` provider alias.** Configs specifying `provider = "claude"` will no longer resolve to `"anthropic"`. Update your configuration to use `"anthropic"` directly.
+
+  **Removed: `reasoning_format` config field.** The deprecated `reasoning_format` type annotation (alias for `thinking_format`) has been removed from `flemma.config.Statusline`.
+
+  **Removed: `resolve_all_awaiting_execution()` internal API.** This backwards-compatibility wrapper in `flemma.tools.context` has been removed. Use `resolve_all_tool_blocks()` and filter for the `"pending"` status group instead.
+
+- 50eea2b: Rich fold text previews for message blocks. Folded `@Assistant` messages now show tool use previews (e.g. `bash: $ free -h | bash: $ cat /proc/meminfo (+1 tool)`), and folded `@You` messages show tool result previews with resolved tool names (e.g. `calculator_async: 4 | calculator_async: 8`). Expression segments are included in fold previews, consecutive text segments are merged, and runs of whitespace are collapsed to keep previews compact.
+- 5b637d2: Added an Approval section to `:Flemma status` showing auto-approve, deny, and require-approval classification per tool with preset expansion. Frontmatter overrides are marked with ✲ on individual items across Tools, Approval, Parameters, and Autopilot sections, with a conditional legend at the bottom.
+- cd97ff5: Added tool approval presets for zero-config agent loops. Flemma now ships with `$readonly` and `$default` presets. The default `auto_approve` is `{ "$default" }`, which auto-approves `read`, `write`, and `edit` while keeping `bash` gated behind manual approval. Users can define custom presets in `tools.presets` and reference them in `auto_approve`. Frontmatter supports `flemma.opt.tools.auto_approve:remove("$default")` and `:remove("read")` for per-buffer overrides.
+- 0617d2c: Changed tool execute function signature from `(input, callback, ctx)` to `(input, ctx, callback?)` — sync tools no longer need a placeholder `_` argument, and callback-last ordering matches Node.js conventions
+- 5de4f32: Tools now resolve relative paths against the .chat buffer's directory (`__dirname`) instead of Neovim's working directory, matching the behavior of `@./file` references and `{{ include() }}` expressions. The `tools.bash.cwd` config defaults to `"$FLEMMA_BUFFER_PATH"` (set to `nil` to restore the previous cwd behavior).
+- ff794c4: Added tool approval presets configuration field and wired preset registry into plugin initialization with `{ "$default" }` as the default auto_approve policy
+
+### Patch Changes
+
+- 5035b41: Fixed `flemma.opt.tools.auto_approve:append()` failing when auto_approve was not explicitly assigned first in frontmatter
+- 4062653: Fixed bwrap sandbox hiding NixOS system packages by re-binding `/run/current-system` read-only after the `/run` tmpfs mount
+- 93b79e8: Frontmatter is now evaluated exactly once per dispatch cycle instead of 2N+2 times (where N = number of tool calls), reducing redundant sandbox executions and preventing potential side-effects from repeated evaluation.
+- ec0072b: Updated model definitions with latest pricing and availability data from all three providers.
+
+  **Anthropic:** Removed retired Claude Sonnet 3.7 and Claude Haiku 3.5 models (retired Feb 19, 2026). Updated Claude Haiku 3 deprecation comment to reflect April 2026 retirement date.
+
+  **Vertex AI:** Added Gemini 3.1 Pro Preview (`gemini-3.1-pro-preview`). Removed superseded preview-dated aliases `gemini-2.5-flash-preview-09-2025` and `gemini-2.5-flash-lite-preview-09-2025`.
+
+  **OpenAI:** No changes — all existing models and pricing confirmed current against official documentation.
+
 ## 0.3.0
 
 ### Minor Changes
