@@ -54,7 +54,8 @@ describe(":Flemma send command", function()
     -- With cache_retention="short" (default), system is an array with cache_control
     assert.equals(1, #captured_request_body.system)
     assert.equals("Be brief.", captured_request_body.system[1].text)
-    assert.equals(config.parameters.max_tokens, captured_request_body.max_tokens)
+    -- max_tokens resolves from "50%" of claude-sonnet-4-6's 64K max_output → 32000
+    assert.equals(32000, captured_request_body.max_tokens)
     assert.equals(config.parameters.temperature, captured_request_body.temperature)
     assert.equals(true, captured_request_body.stream)
     assert.equals(1, #captured_request_body.messages)
@@ -98,7 +99,8 @@ describe(":Flemma send command", function()
     assert.equals(true, captured_request_body.stream)
     assert.equals(false, captured_request_body.store)
     assert.is_nil(captured_request_body.stream_options, "Responses API does not use stream_options")
-    assert.equals(config.parameters.max_tokens, captured_request_body.max_output_tokens)
+    -- max_tokens resolves from "50%" of o3's 100K max_output → 50000
+    assert.equals(50000, captured_request_body.max_output_tokens)
     assert.equals(config.parameters.temperature, captured_request_body.temperature)
 
     -- Tools are now included by default (parallel tool use enabled)

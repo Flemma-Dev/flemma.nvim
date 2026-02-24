@@ -48,7 +48,7 @@
 ---@field thinking_format string Format string when thinking is active. {model} = model name, {level} = thinking level
 
 ---@class flemma.config.Parameters
----@field max_tokens? integer
+---@field max_tokens? integer|string Integer token count or percentage string (e.g. "50%") of model's max_output_tokens
 ---@field temperature? number
 ---@field timeout? integer
 ---@field connect_timeout? integer
@@ -232,7 +232,7 @@ return {
   provider = "anthropic", -- Default provider: "anthropic", "openai", or "vertex"
   model = nil, -- Will use provider-specific default if nil
   parameters = {
-    max_tokens = 4000, -- Default max tokens for all providers
+    max_tokens = "50%", -- Default max tokens: percentage of model's max_output_tokens, or integer
     temperature = 0.7, -- Default temperature for all providers
     timeout = 120, -- Default response timeout for cURL requests
     connect_timeout = 10, -- Default connection timeout for cURL requests

@@ -30,7 +30,7 @@ develop:
 	@nvim --cmd "set runtimepath^=`pwd`"												\
 		-c "lua require(\"flemma\").setup({												\
 			model = \"\$$haiku\",														\
-			parameters = { max_tokens = 8000, thinking = \"minimal\" },					\
+			parameters = { thinking = \"minimal\" },									\
 			presets = {																	\
 				[\"\$$haiku\"] = \"anthropic claude-haiku-4-5\",						\
 				[\"\$$gpt\"] = \"openai gpt-5.2\",										\

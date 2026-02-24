@@ -19,7 +19,7 @@ local MARKER_FRONTMATTER = "✲"
 
 ---@class flemma.status.Data
 ---@field provider { name: string, model: string|nil, initialized: boolean }
----@field parameters { merged: table<string, any>, frontmatter_overrides: table<string, any>|nil }
+---@field parameters { merged: table<string, any>, frontmatter_overrides: table<string, any>|nil, resolved_max_tokens: integer|nil }
 ---@field autopilot { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, frontmatter_override: boolean|nil }
 ---@field sandbox { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil }
 ---@field tools { enabled: string[], disabled: string[], frontmatter_items: table<string, true>|nil }
@@ -41,9 +41,17 @@ end
 ---Collect parameters section data, including frontmatter overrides if present
 ---@param config flemma.Config
 ---@param opts flemma.opt.FrontmatterOpts|nil
----@return { merged: table<string, any>, frontmatter_overrides: table<string, any>|nil }
+---@return { merged: table<string, any>, frontmatter_overrides: table<string, any>|nil, resolved_max_tokens: integer|nil }
 local function collect_parameters(config, opts)
   local base_merged = config_manager.merge_parameters(config.parameters or {}, config.provider)
+
+  -- Resolve max_tokens on a copy to show the resolved integer alongside the original
+  local resolved_max_tokens = nil
+  if type(base_merged.max_tokens) == "string" then
+    local resolve_copy = { max_tokens = base_merged.max_tokens }
+    config_manager.resolve_max_tokens(config.provider, config.model or "", resolve_copy)
+    resolved_max_tokens = resolve_copy.max_tokens
+  end
 
   -- If we have frontmatter opts with parameter overrides, compute the diff
   local frontmatter_overrides = nil
@@ -75,6 +83,7 @@ local function collect_parameters(config, opts)
   return {
     merged = base_merged,
     frontmatter_overrides = frontmatter_overrides,
+    resolved_max_tokens = resolved_max_tokens,
   }
 end
 
@@ -391,19 +400,24 @@ function M.format(data, verbose)
   table.sort(sorted_keys)
   for _, key in ipairs(sorted_keys) do
     local value = data.parameters.merged[key]
+    local resolved_suffix = ""
+    if key == "max_tokens" and data.parameters.resolved_max_tokens then
+      resolved_suffix = " → " .. tostring(data.parameters.resolved_max_tokens)
+    end
     if data.parameters.frontmatter_overrides and data.parameters.frontmatter_overrides[key] ~= nil then
       add(
         "  "
           .. key
           .. ": ~~"
           .. format_value(value)
+          .. resolved_suffix
           .. "~~ "
           .. format_value(data.parameters.frontmatter_overrides[key])
           .. "  "
           .. MARKER_FRONTMATTER
       )
     else
-      add("  " .. key .. ": " .. format_value(value))
+      add("  " .. key .. ": " .. format_value(value) .. resolved_suffix)
     end
   end
   add("")

@@ -651,6 +651,10 @@ function M.send_to_provider(opts)
       end
     end
   end
+  if merged_overrides and merged_overrides.max_tokens ~= nil then
+    local config = state.get_config()
+    config_manager.resolve_max_tokens(config.provider, config.model, merged_overrides)
+  end
   current_provider:set_parameter_overrides(merged_overrides)
 
   -- Validate provider (endpoint, API key, headers) and build request body.

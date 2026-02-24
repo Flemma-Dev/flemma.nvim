@@ -282,6 +282,18 @@ function M.get_appropriate_model(model_name, provider_name)
   return M.get_model(provider_name)
 end
 
+---Look up model information (pricing, token limits) for a provider+model pair
+---@param provider_name string
+---@param model_name string
+---@return flemma.models.ModelInfo|nil
+function M.get_model_info(provider_name, model_name)
+  local provider_data = models_data.providers[provider_name]
+  if not provider_data or not provider_data.models then
+    return nil
+  end
+  return provider_data.models[model_name]
+end
+
 ---@class flemma.provider.SwitchArgs
 ---@field provider string|nil
 ---@field model string|nil
