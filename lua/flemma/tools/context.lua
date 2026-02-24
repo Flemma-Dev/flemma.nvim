@@ -10,6 +10,8 @@ local M = {}
 ---@field node flemma.ast.ToolUseSegment The AST segment reference (from parser)
 ---@field start_line integer 1-based start line of the tool_use block
 ---@field end_line integer 1-based end line of the tool_use block
+---@field aborted? boolean True when the tool_use is in an aborted assistant message
+---@field aborted_message? string The message from the abort marker
 
 ---Find the message containing a given line number
 ---@param doc flemma.ast.DocumentNode Parsed document AST
@@ -76,6 +78,23 @@ local function find_nearest_tool_use(tool_uses, cursor_line)
   return best
 end
 
+---Check whether an assistant message ends with an abort marker.
+---Scans segments backwards, skipping trailing whitespace-only text.
+---@param msg flemma.ast.MessageNode
+---@return string|nil message The abort message, or nil if not aborted
+local function get_abort_message(msg)
+  for i = #msg.segments, 1, -1 do
+    local seg = msg.segments[i]
+    if seg.kind == "aborted" then
+      return seg.message
+    elseif seg.kind ~= "text" or not seg.value:match("^%s*$") then
+      return nil
+    end
+    -- whitespace-only text segment — continue scanning backwards
+  end
+  return nil
+end
+
 ---Find all tool_use blocks in the buffer that lack a corresponding tool_result
 ---@param bufnr integer Buffer number
 ---@return flemma.tools.ToolContext[] pending_contexts
@@ -99,6 +118,7 @@ function M.resolve_all_pending(bufnr)
   local pending = {}
   for _, msg in ipairs(doc.messages) do
     if msg.role == "Assistant" then
+      local aborted_message = get_abort_message(msg)
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "tool_use" and not result_ids[seg.id] then
           table.insert(pending, {
@@ -108,6 +128,8 @@ function M.resolve_all_pending(bufnr)
             node = seg,
             start_line = seg.position.start_line,
             end_line = seg.position.end_line,
+            aborted = aborted_message and true or nil,
+            aborted_message = aborted_message,
           })
         end
       end
@@ -122,6 +144,7 @@ end
 ---@field content string
 ---@field is_error boolean
 ---@field tool_result { start_line: integer } Position of the matching tool_result block
+---@field aborted_message? string The message from the abort marker (for aborted blocks)
 
 ---Find all tool_result segments with a `flemma:tool` status, grouped by status.
 ---Each entry pairs the tool_result metadata with its matching tool_use context.
@@ -155,14 +178,20 @@ function M.resolve_all_tool_blocks(bufnr)
     return {}
   end
 
-  -- Build tool_use lookup for matching
+  -- Build tool_use lookup and abort message map for matching
   ---@type table<string, flemma.ast.ToolUseSegment>
   local tool_use_map = {}
+  ---@type table<string, string>
+  local abort_message_map = {}
   for _, msg in ipairs(doc.messages) do
     if msg.role == "Assistant" then
+      local aborted_message = get_abort_message(msg)
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "tool_use" then
           tool_use_map[seg.id] = seg --[[@as flemma.ast.ToolUseSegment]]
+          if aborted_message then
+            abort_message_map[seg.id] = aborted_message
+          end
         end
       end
     end
@@ -194,6 +223,7 @@ function M.resolve_all_tool_blocks(bufnr)
           content = info.content,
           is_error = info.is_error,
           tool_result = { start_line = info.tool_result_start_line },
+          aborted_message = abort_message_map[tu.id],
         })
       end
     end

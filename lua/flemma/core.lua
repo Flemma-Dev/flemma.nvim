@@ -11,6 +11,8 @@ local writequeue = require("flemma.buffer.writequeue")
 local ui = require("flemma.ui")
 local registry = require("flemma.provider.registry")
 
+local ABORT_MESSAGE = "Response interrupted by the user."
+
 -- For testing purposes
 local last_request_body_for_testing = nil
 
@@ -160,11 +162,16 @@ function M.cancel_request()
         local original_modifiable = vim.bo[bufnr].modifiable
         vim.bo[bufnr].modifiable = true
         local line_count = vim.api.nvim_buf_line_count(bufnr)
+        local last_content = vim.api.nvim_buf_get_lines(bufnr, line_count - 1, line_count, false)[1]
+        local separator = (last_content == "") and {} or { "" }
         ui.buffer_cmd(bufnr, "undojoin")
-        vim.api.nvim_buf_set_lines(bufnr, line_count, line_count, false, {
-          "",
-          "<!-- response aborted by user -->",
-        })
+        vim.api.nvim_buf_set_lines(
+          bufnr,
+          line_count,
+          line_count,
+          false,
+          vim.list_extend(separator, { "<!-- flemma:aborted: " .. ABORT_MESSAGE .. " -->" })
+        )
         vim.bo[bufnr].modifiable = original_modifiable
         editing.auto_write(bufnr)
       end
@@ -235,6 +242,15 @@ local function advance_phase2(opts)
     })
   end
 
+  -- Process aborted → replace with abort message from the marker
+  local aborted = tool_blocks["aborted"] or {}
+  for _, ctx in ipairs(aborted) do
+    injector.inject_result(bufnr, ctx.tool_id, {
+      success = false,
+      error = ctx.aborted_message or ABORT_MESSAGE,
+    })
+  end
+
   -- Process approved → execute tool (pass pre-evaluated opts to avoid re-evaluating frontmatter)
   local approved = tool_blocks["approved"] or {}
   for _, ctx in ipairs(approved) do
@@ -247,7 +263,7 @@ local function advance_phase2(opts)
   -- Re-resolve pending positions if other blocks were processed (their injections
   -- shift line numbers). Approved sync tools also replace placeholders inline.
   local pending_blocks = tool_blocks["pending"] or {}
-  if (#denied > 0 or #rejected > 0 or #approved > 0) and #pending_blocks > 0 then
+  if (#denied > 0 or #rejected > 0 or #aborted > 0 or #approved > 0) and #pending_blocks > 0 then
     local fresh = tool_context.resolve_all_tool_blocks(bufnr)
     pending_blocks = fresh["pending"] or {}
   end
@@ -288,8 +304,8 @@ local function advance_phase2(opts)
     return
   end
 
-  -- All denied/rejected were processed synchronously, no approved, no pending
-  if #denied > 0 or #rejected > 0 then
+  -- All denied/rejected/aborted were processed synchronously, no approved, no pending
+  if #denied > 0 or #rejected > 0 or #aborted > 0 then
     editing.auto_write(bufnr)
     -- Non-empty tool blocks were processed — re-check if we should continue
     if autopilot_active then
@@ -346,7 +362,24 @@ function M.send_or_execute(opts)
     local injector = require("flemma.tools.injector")
     local first_placeholder_line = nil
 
+    -- Partition into aborted (skip approval) and normal (run approval)
+    local aborted_pending = {}
+    local normal_pending = {}
     for _, ctx in ipairs(pending) do
+      if ctx.aborted then
+        table.insert(aborted_pending, ctx)
+      else
+        table.insert(normal_pending, ctx)
+      end
+    end
+
+    -- Aborted tools: inject placeholder with status=aborted directly (no approval)
+    for _, ctx in ipairs(aborted_pending) do
+      injector.inject_placeholder(bufnr, ctx.tool_id, { status = "aborted" })
+    end
+
+    -- Normal tools: run through approval flow
+    for _, ctx in ipairs(normal_pending) do
       local decision =
         approval.resolve(ctx.tool_name, ctx.input, { bufnr = bufnr, tool_id = ctx.tool_id, opts = frontmatter_opts })
 

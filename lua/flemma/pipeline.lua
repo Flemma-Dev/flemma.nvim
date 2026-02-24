@@ -41,6 +41,36 @@ local function validate_tool_results(doc)
   return unresolved
 end
 
+--- Process aborted parts in evaluated message parts.
+--- When keep is true, converts aborted parts to text (for the LLM to see).
+--- When keep is false, drops aborted parts entirely.
+--- Also strips trailing whitespace-only text parts left behind after removal.
+---@param parts flemma.processor.EvaluatedPart[]
+---@param keep boolean Whether to convert aborted parts to text (true) or drop them (false)
+---@return flemma.processor.EvaluatedPart[]
+local function resolve_aborted_parts(parts, keep)
+  local result = {}
+  for _, part in ipairs(parts) do
+    if part.kind == "aborted" then
+      if keep then
+        table.insert(result, { kind = "text", text = "<!-- " .. part.message .. " -->" })
+      end
+    else
+      table.insert(result, part)
+    end
+  end
+  -- Strip trailing whitespace-only text parts left behind after removal
+  while #result > 0 do
+    local last = result[#result]
+    if last.kind == "text" and last.text:match("^%s*$") then
+      result[#result] = nil
+    else
+      break
+    end
+  end
+  return result
+end
+
 ---@class flemma.pipeline.Prompt : flemma.provider.Prompt
 ---@field pending_tool_calls flemma.pipeline.UnresolvedTool[]
 ---@field opts flemma.opt.FrontmatterOpts|nil
@@ -61,15 +91,21 @@ function M.run(doc, context, evaluated_frontmatter)
   local all_diagnostics = evaluated.diagnostics or {}
   local source_file = (context and type(context.get_filename) == "function" and context:get_filename()) or "N/A"
 
+  -- First pass: collect messages and identify the last assistant index.
+  -- Abort handling operates on evaluated parts (before to_generic_parts) because
+  -- aborted parts are a processor-stage concept that to_generic_parts ignores.
+  ---@type { role: string, evaluated_parts: flemma.processor.EvaluatedPart[] }[]
+  local collected = {}
+  local last_assistant_idx = nil
+
   for _, msg in ipairs(evaluated.messages) do
-    local role = nil
     if msg.role == "You" then
-      role = "user"
+      table.insert(collected, { role = "user", evaluated_parts = msg.parts })
     elseif msg.role == "Assistant" then
-      role = "assistant"
+      table.insert(collected, { role = "assistant", evaluated_parts = msg.parts })
+      last_assistant_idx = #collected
     elseif msg.role == "System" then
       local parts, diags = ast.to_generic_parts(msg.parts, source_file)
-      -- Merge diagnostics from to_generic_parts
       for _, d in ipairs(diags) do
         table.insert(all_diagnostics, d)
       end
@@ -81,18 +117,34 @@ function M.run(doc, context, evaluated_frontmatter)
       end
       system = vim.trim(table.concat(sys_text, "\n"))
     end
+  end
 
-    if role then
-      local parts, diags = ast.to_generic_parts(msg.parts, source_file)
-      -- Merge diagnostics from to_generic_parts
-      for _, d in ipairs(diags) do
-        table.insert(all_diagnostics, d)
+  -- Second pass: resolve aborted parts, then convert to generic parts.
+  -- Historical assistant messages: always strip (LLM doesn't need old abort context).
+  -- Last assistant message: strip when tool_use parts are present (the abort info is
+  -- already in the tool_result errors, and trailing text after tool_use blocks violates
+  -- Anthropic's API constraint). Preserve only for text-only messages so the LLM knows
+  -- the response was truncated and can continue.
+  for i, entry in ipairs(collected) do
+    if entry.role == "assistant" then
+      local keep_aborted = (i == last_assistant_idx)
+      if keep_aborted then
+        -- Last assistant: strip if message contains tool_use parts
+        for _, part in ipairs(entry.evaluated_parts) do
+          if part.kind == "tool_use" then
+            keep_aborted = false
+            break
+          end
+        end
       end
-      table.insert(history, {
-        role = role,
-        parts = parts,
-      })
+      entry.evaluated_parts = resolve_aborted_parts(entry.evaluated_parts, keep_aborted)
     end
+
+    local parts, diags = ast.to_generic_parts(entry.evaluated_parts, source_file)
+    for _, d in ipairs(diags) do
+      table.insert(all_diagnostics, d)
+    end
+    table.insert(history, { role = entry.role, parts = parts })
   end
 
   -- Validate tool_use/tool_result matching
