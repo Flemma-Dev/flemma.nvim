@@ -524,6 +524,11 @@ function M.build_request(self, prompt, _context)
     })
   end
 
+  -- Stable alphabetical ordering for implicit cache efficiency
+  table.sort(function_declarations, function(a, b)
+    return a.name < b.name
+  end)
+
   -- Add tools if any are registered
   if #function_declarations > 0 then
     request_body.tools = {
