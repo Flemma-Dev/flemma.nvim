@@ -265,19 +265,6 @@ function M.build_request(self, prompt, _context)
     tools_array[#tools_array].cache_control = cache_control
   end
 
-  -- Breakpoint 3: last user message's last content block
-  if cache_control then
-    for i = #api_messages, 1, -1 do
-      if api_messages[i].role == "user" then
-        local content = api_messages[i].content
-        if #content > 0 then
-          content[#content].cache_control = cache_control
-        end
-        break
-      end
-    end
-  end
-
   local request_body = {
     model = self.parameters.model,
     messages = api_messages,
@@ -285,6 +272,14 @@ function M.build_request(self, prompt, _context)
     temperature = self.parameters.temperature,
     stream = true,
   }
+
+  -- Auto-caching: top-level cache_control auto-advances a breakpoint to the last
+  -- cacheable block (the conversation tail). Combined with the explicit breakpoints on
+  -- tools and system prompt above, this gives a 3-breakpoint hybrid: stable prefixes are
+  -- cached independently while the conversation tail is tracked automatically.
+  if cache_control then
+    request_body.cache_control = cache_control
+  end
 
   -- Breakpoint 2: system prompt
   if prompt.system and #prompt.system > 0 then
