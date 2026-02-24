@@ -180,11 +180,8 @@ describe("Anthropic Provider", function()
       assert.are.equal("Be helpful", req.system[1].text)
       assert.are.same({ type = "ephemeral" }, req.system[1].cache_control)
 
-      -- Breakpoint 3: last user message's last content block has cache_control
-      local last_user_msg = req.messages[#req.messages]
-      assert.are.equal("user", last_user_msg.role)
-      local last_block = last_user_msg.content[#last_user_msg.content]
-      assert.are.same({ type = "ephemeral" }, last_block.cache_control)
+      -- Auto-caching: top-level cache_control auto-advances to conversation tail
+      assert.are.same({ type = "ephemeral" }, req.cache_control)
     end)
 
     it("cache_retention=long adds ephemeral with 1h TTL", function()
@@ -204,9 +201,8 @@ describe("Anthropic Provider", function()
       -- Check system breakpoint
       assert.are.same(expected_cc, req.system[1].cache_control)
 
-      -- Check user message breakpoint
-      local last_block = req.messages[1].content[#req.messages[1].content]
-      assert.are.same(expected_cc, last_block.cache_control)
+      -- Auto-caching: top-level cache_control auto-advances to conversation tail
+      assert.are.same(expected_cc, req.cache_control)
     end)
 
     it("cache_retention=none adds no cache_control, system is string", function()
@@ -229,6 +225,9 @@ describe("Anthropic Provider", function()
       for _, block in ipairs(req.messages[1].content) do
         assert.is_nil(block.cache_control)
       end
+
+      -- No top-level auto-caching
+      assert.is_nil(req.cache_control)
     end)
 
     it("no crash when no tools present with caching enabled", function()
@@ -242,6 +241,8 @@ describe("Anthropic Provider", function()
       assert.is_nil(req.tools)
       -- System still gets cache_control
       assert.are.same({ type = "ephemeral" }, req.system[1].cache_control)
+      -- Top-level auto-caching still active
+      assert.are.same({ type = "ephemeral" }, req.cache_control)
     end)
 
     it("per-buffer thinking_budget override does not mutate self.parameters", function()
@@ -269,6 +270,8 @@ describe("Anthropic Provider", function()
       local req = p:build_request(prompt)
       -- System should be plain string (no caching)
       assert.are.equal("Be helpful", req.system)
+      -- No top-level auto-caching
+      assert.is_nil(req.cache_control)
     end)
 
     it("system uses array format only when caching enabled", function()
