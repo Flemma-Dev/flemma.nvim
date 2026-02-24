@@ -844,12 +844,12 @@ function M.send_to_provider(opts)
 
           -- Use the just-created Request for the notification
           local latest_request = session:get_latest_request()
-          local usage_str = usage.format_notification(latest_request, session)
-          if usage_str ~= "" then
+          local usage_result = usage.format_notification(latest_request, session)
+          if usage_result.text ~= "" then
             local notify_opts = vim.tbl_deep_extend("force", config.notify, {
               title = "Usage",
             })
-            require("flemma.notify").show(usage_str, notify_opts, bufnr)
+            require("flemma.notify").show(usage_result.text, notify_opts, bufnr, usage_result.highlights)
           end
         end
 

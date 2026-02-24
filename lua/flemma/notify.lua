@@ -2,6 +2,8 @@
 ---@class flemma.Notify
 local M = {}
 
+local ns_id = vim.api.nvim_create_namespace("flemma_notify_hl")
+
 ---@class flemma.notify.Notification
 ---@field win_id integer
 ---@field bufnr integer
@@ -14,7 +16,7 @@ local M = {}
 
 ---@class flemma.notify.BufferNotifications
 ---@field notifications flemma.notify.Notification[]
----@field last? { message: string, options: flemma.notify.Options, ref: flemma.notify.Notification|nil }
+---@field last? { message: string, options: flemma.notify.Options, highlights: flemma.usage.Highlight[]|nil, ref: flemma.notify.Notification|nil }
 
 ---@class flemma.notify.Options
 ---@field enabled boolean
@@ -29,7 +31,7 @@ local M = {}
 local buffer_notifications = {}
 
 ---Pending notifications for buffers not currently visible
----@type table<integer, { msg: string, opts: flemma.notify.Options }[]>
+---@type table<integer, { msg: string, opts: flemma.notify.Options, highlights: flemma.usage.Highlight[]|nil }[]>
 local pending_notifications = {}
 
 -- Default notification options
@@ -89,8 +91,9 @@ end
 ---@param msg string
 ---@param opts flemma.notify.Options
 ---@param target_bufnr integer|nil
+---@param highlights? flemma.usage.Highlight[]
 ---@return flemma.notify.Notification
-local function create_notification(msg, opts, target_bufnr)
+local function create_notification(msg, opts, target_bufnr, highlights)
   -- Get the window for the target buffer
   local winid = get_window_for_buffer(target_bufnr)
   if not winid then
@@ -155,6 +158,17 @@ local function create_notification(msg, opts, target_bufnr)
   -- Create buffer for the notification
   local notify_bufnr = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(notify_bufnr, 0, -1, false, padded_lines)
+
+  -- Apply highlight extmarks (offsets adjusted for padding)
+  if highlights then
+    local padding_bytes = opts.padding
+    for _, hl in ipairs(highlights) do
+      vim.api.nvim_buf_set_extmark(notify_bufnr, ns_id, hl.line, hl.col_start + padding_bytes, {
+        end_col = hl.col_end + padding_bytes,
+        hl_group = hl.group,
+      })
+    end
+  end
 
   -- Set buffer options
   vim.bo[notify_bufnr].modifiable = false
@@ -253,7 +267,7 @@ local function show_pending_for_buffer(bufnr)
 
   -- Show each pending notification
   for _, notif in ipairs(pending) do
-    create_notification(notif.msg, notif.opts, bufnr)
+    create_notification(notif.msg, notif.opts, bufnr, notif.highlights)
   end
 end
 
@@ -261,7 +275,8 @@ end
 ---@param msg string The message to display
 ---@param opts? flemma.notify.Options Options (merged with default_opts)
 ---@param bufnr? integer Buffer number to anchor notification to (nil = editor-relative)
-function M.show(msg, opts, bufnr)
+---@param highlights? flemma.usage.Highlight[]
+function M.show(msg, opts, bufnr, highlights)
   -- Merge with default options
   local final_opts = vim.tbl_deep_extend("force", M.default_opts, opts or {})
 
@@ -276,23 +291,23 @@ function M.show(msg, opts, bufnr)
       if not pending_notifications[bufnr] then
         pending_notifications[bufnr] = {}
       end
-      table.insert(pending_notifications[bufnr], { msg = msg, opts = final_opts })
+      table.insert(pending_notifications[bufnr], { msg = msg, opts = final_opts, highlights = highlights })
       -- Store as last for this buffer (for recall)
       if not buffer_notifications[bufnr] then
         buffer_notifications[bufnr] = { notifications = {} }
       end
-      buffer_notifications[bufnr].last = { message = msg, options = final_opts, ref = nil }
+      buffer_notifications[bufnr].last = { message = msg, options = final_opts, highlights = highlights, ref = nil }
       return
     end
 
-    local notif = create_notification(msg, final_opts, bufnr)
+    local notif = create_notification(msg, final_opts, bufnr, highlights)
 
     -- Store as last notification for this buffer (for recall)
     if bufnr then
       if not buffer_notifications[bufnr] then
         buffer_notifications[bufnr] = { notifications = {} }
       end
-      buffer_notifications[bufnr].last = { message = msg, options = final_opts, ref = notif }
+      buffer_notifications[bufnr].last = { message = msg, options = final_opts, highlights = highlights, ref = notif }
     end
   end)
 end
@@ -324,7 +339,7 @@ function M.recall_last()
     return
   end
 
-  M.show(last.message, last.options, current_bufnr)
+  M.show(last.message, last.options, current_bufnr, last.highlights)
 end
 
 ---Cleanup notifications for a specific buffer
