@@ -134,22 +134,22 @@ end
 ---@param bufnr integer
 ---@return integer timer_id
 function M.start_loading_spinner(bufnr)
-  local original_modifiable_initial = vim.bo[bufnr].modifiable
-  vim.bo[bufnr].modifiable = true -- Allow plugin modifications for initial message
-
   local buffer_state = state.get_buffer_state(bufnr)
   local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
   local frame = 1
   local spinner_line_idx0 = nil
   local spinner_extmark_id = nil
 
-  vim.schedule(function()
+  local writequeue = require("flemma.buffer.writequeue")
+  writequeue.schedule(bufnr, function()
+    local original_modifiable = vim.bo[bufnr].modifiable
+    vim.bo[bufnr].modifiable = true
+
     -- Clear any existing virtual text
     vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
     vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)
 
     -- Check if we need to add a blank line before the spinner
-    vim.bo[bufnr].modifiable = true
     local line_count = vim.api.nvim_buf_line_count(bufnr)
     local last_line = line_count > 0 and vim.api.nvim_buf_get_lines(bufnr, line_count - 1, line_count, false)[1] or ""
     if last_line:match("%S") then
@@ -178,7 +178,7 @@ function M.start_loading_spinner(bufnr)
     -- Move to bottom and center the line so user sees the message
     M.move_to_bottom(bufnr)
     M.center_cursor(bufnr)
-    vim.bo[bufnr].modifiable = original_modifiable_initial
+    vim.bo[bufnr].modifiable = original_modifiable
   end)
 
   local timer = vim.fn.timer_start(100, function()
