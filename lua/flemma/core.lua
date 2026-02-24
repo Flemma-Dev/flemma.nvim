@@ -379,7 +379,7 @@ function M.send_or_execute(opts)
       evaluated_frontmatter = evaluated_frontmatter,
       frontmatter_opts = frontmatter_opts,
     }
-    vim.schedule(function()
+    writequeue.schedule(bufnr, function()
       advance_phase2(phase2_opts)
     end)
     return
