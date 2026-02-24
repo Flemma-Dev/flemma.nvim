@@ -932,7 +932,7 @@ function M.send_to_provider(opts)
     end,
 
     on_request_complete = function(code)
-      vim.schedule(function()
+      writequeue.schedule(bufnr, function()
         -- If the request was cancelled, M.cancel_request() handles cleanup including modifiable.
         if buffer_state.request_cancelled then
           -- M.cancel_request should have already set modifiable = true
