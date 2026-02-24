@@ -128,7 +128,7 @@ function M.drain(bufnr)
         -- the textlock so the retry on the next event loop tick succeeds.
         vim.api.nvim_input("\27")
         -- Stop draining and re-schedule
-        draining[bufnr] = false
+        draining[bufnr] = nil
         M.schedule_drain(bufnr)
         return
       end
@@ -140,7 +140,7 @@ function M.drain(bufnr)
     end
   end
 
-  draining[bufnr] = false
+  draining[bufnr] = nil
   maybe_compact(queue_state)
 
   -- Check if there are still items pending (deferred items from this cycle
