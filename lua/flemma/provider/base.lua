@@ -112,6 +112,7 @@ local log = require("flemma.logging")
 ---@field endpoint? string
 ---@field api_version? string
 ---@field _response_buffer? flemma.provider.ResponseBuffer
+---@field _response_headers? table<string, string[]>
 ---@field set_parameter_overrides fun(self, overrides: table<string, any>|nil)
 local M = {}
 
@@ -312,6 +313,7 @@ function M.reset(self, opts)
   end
   -- Full reset: create response buffer for all providers
   self:_new_response_buffer()
+  self._response_headers = nil
 end
 
 -- ============================================================================
@@ -479,6 +481,73 @@ end
 ---@return boolean
 function M:is_auth_error(message)
   return false
+end
+
+--- Store parsed HTTP response headers from the current request.
+---@param self flemma.provider.Base
+---@param headers table<string, string[]>
+function M:set_response_headers(headers)
+  self._response_headers = headers
+end
+
+--- Detect whether an error message indicates a rate limit error.
+--- Covers Anthropic ("rate limit"), OpenAI ("rate_limit_exceeded"),
+--- Vertex ("resource exhausted"), and generic patterns.
+---@param message string|nil The error message to check
+---@return boolean
+function M:is_rate_limit_error(message)
+  if not message or type(message) ~= "string" then
+    return false
+  end
+  local lower = message:lower()
+  if lower:match("rate limit") then
+    return true
+  end
+  if lower:match("rate_limit_exceeded") then
+    return true
+  end
+  if lower:match("resource exhausted") then
+    return true
+  end
+  if lower:match("too many requests") then
+    return true
+  end
+  if lower:match("quota exceeded") then
+    return true
+  end
+  if lower:match("overloaded") then
+    return true
+  end
+  return false
+end
+
+---@param name string Lowercase header name
+---@return boolean
+local function is_rate_limit_header(name)
+  return name == "retry-after" or name:match("ratelimit") ~= nil
+end
+
+--- Format rate limit details from HTTP response headers.
+--- Returns a sorted, newline-separated string of relevant headers, or nil if none found.
+---@param self flemma.provider.Base
+---@return string|nil
+function M:format_rate_limit_details()
+  if not self._response_headers then
+    return nil
+  end
+  local details = {}
+  for name, values in pairs(self._response_headers) do
+    if is_rate_limit_header(name) then
+      for _, value in ipairs(values) do
+        table.insert(details, name .. ": " .. value)
+      end
+    end
+  end
+  if #details > 0 then
+    table.sort(details)
+    return table.concat(details, "\n")
+  end
+  return nil
 end
 
 -- ============================================================================

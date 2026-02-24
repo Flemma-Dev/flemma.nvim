@@ -709,6 +709,12 @@ function M.send_to_provider(opts)
         elseif current_provider:is_auth_error(msg) then
           current_provider:reset({ auth = true })
           notify_msg = notify_msg .. "\n\nAuthentication expired. Send again to generate a fresh token."
+        elseif current_provider:is_rate_limit_error(msg) then
+          local details = current_provider:format_rate_limit_details()
+          if details then
+            notify_msg = notify_msg .. "\n\n" .. details
+          end
+          notify_msg = notify_msg .. "\n\nTry again in a moment."
         end
         if log.is_enabled() then
           notify_msg = notify_msg .. "\nSee " .. log.get_path() .. " for details"
@@ -1069,6 +1075,9 @@ function M.send_to_provider(opts)
     end,
     reset_fn = function()
       return current_provider:reset()
+    end,
+    on_response_headers_fn = function(response_headers)
+      current_provider:set_response_headers(response_headers)
     end,
   })
 

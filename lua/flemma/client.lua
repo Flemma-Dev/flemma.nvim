@@ -128,6 +128,7 @@ function M.prepare_curl_command(tmp_file, headers, endpoint, parameters)
     "curl",
     "-N", -- disable buffering
     "-s", -- silent mode
+    "-i", -- include HTTP response headers in output
     "--connect-timeout",
     tostring(connect_timeout), -- connection timeout
     "--max-time",
@@ -168,6 +169,7 @@ end
 ---@field process_response_line_fn? fun(line: string, callbacks: flemma.client.RequestCallbacks) Function to process each response line
 ---@field finalize_response_fn? fun(code: number, callbacks: flemma.client.RequestCallbacks) Function to finalize provider response processing
 ---@field reset_fn? fun() Optional function to reset provider state
+---@field on_response_headers_fn? fun(headers: table<string, string[]>) Called with parsed HTTP response headers (lowercase keys)
 
 -- Send request to API using curl or a test fixture
 ---@param opts flemma.client.RequestOptions Request configuration
@@ -219,6 +221,38 @@ function M.send_request(opts)
   local stdout_buffer = ""
   local stderr_buffer = ""
 
+  -- Header parsing state: when using curl -i, HTTP response headers precede
+  -- the body and are separated by a blank line. Skip header parsing for test
+  -- fixtures (cat), which have no HTTP headers.
+  local parsing_headers = not fixture_path
+  local response_headers = {} ---@type table<string, string[]>
+
+  ---Process a single complete stdout line, dispatching to header parsing or body processing
+  ---@param line string
+  local function process_stdout_line(line)
+    if parsing_headers then
+      local stripped = line:gsub("\r$", "")
+      if stripped == "" then
+        parsing_headers = false
+        if opts.on_response_headers_fn then
+          opts.on_response_headers_fn(response_headers)
+        end
+      else
+        local name, value = stripped:match("^([%w%-]+):%s*(.+)$")
+        if name then
+          local lower_name = name:lower()
+          response_headers[lower_name] = response_headers[lower_name] or {}
+          table.insert(response_headers[lower_name], vim.trim(value))
+        end
+      end
+    else
+      log.debug("send_request(): on_stdout: " .. line)
+      if opts.process_response_line_fn then
+        opts.process_response_line_fn(line, opts.callbacks)
+      end
+    end
+  end
+
   -- Start job
   local job_id = vim.fn.jobstart(cmd, {
     detach = true, -- Put process in its own group
@@ -241,11 +275,7 @@ function M.send_request(opts)
       for i = 1, #data - 1 do
         local line = data[i]
         if line and #line > 0 then
-          log.debug("send_request(): on_stdout: " .. line)
-
-          if opts.process_response_line_fn then
-            opts.process_response_line_fn(line, opts.callbacks)
-          end
+          process_stdout_line(line)
         end
       end
 
@@ -253,11 +283,7 @@ function M.send_request(opts)
       if is_eof and #stdout_buffer > 0 then
         local line = stdout_buffer
         stdout_buffer = ""
-        log.debug("send_request(): on_stdout: " .. line)
-
-        if opts.process_response_line_fn then
-          opts.process_response_line_fn(line, opts.callbacks)
-        end
+        process_stdout_line(line)
       end
     end,
     on_stderr = function(_, data)
