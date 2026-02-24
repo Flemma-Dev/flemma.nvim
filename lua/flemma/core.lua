@@ -689,7 +689,7 @@ function M.send_to_provider(opts)
   -- Set up callbacks for the provider
   local callbacks = {
     on_error = function(msg)
-      vim.schedule(function()
+      writequeue.schedule(bufnr, function()
         if spinner_timer then
           vim.fn.timer_stop(spinner_timer)
         end
