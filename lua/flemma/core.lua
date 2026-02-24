@@ -805,7 +805,9 @@ function M.send_to_provider(opts)
         end
 
         -- Auto-write when response is complete
-        editing.auto_write(bufnr)
+        writequeue.enqueue(bufnr, function()
+          editing.auto_write(bufnr)
+        end)
 
         -- Reset in-flight usage for next request
         -- Note: output_has_thoughts will be set again when the next request starts
