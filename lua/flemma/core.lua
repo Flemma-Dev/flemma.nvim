@@ -6,6 +6,7 @@ local M = {}
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local config_manager = require("flemma.core.config.manager")
+local editing = require("flemma.buffer.editing")
 local ui = require("flemma.ui")
 local registry = require("flemma.provider.registry")
 
@@ -17,15 +18,6 @@ local last_request_body_for_testing = nil
 ---@return integer
 local function content_col(role)
   return #("@" .. role .. ": ")
-end
-
----Auto-write buffer if configured and modified
----@param bufnr integer
-local function auto_write_buffer(bufnr)
-  local config = state.get_config()
-  if config.editing and config.editing.auto_write and vim.bo[bufnr].modified then
-    ui.buffer_cmd(bufnr, "silent! write")
-  end
 end
 
 ---Initialize or switch provider based on configuration
@@ -167,7 +159,7 @@ function M.cancel_request()
           "<!-- response aborted by user -->",
         })
         vim.bo[bufnr].modifiable = original_modifiable
-        auto_write_buffer(bufnr)
+        editing.auto_write(bufnr)
       end
 
       state.unlock_buffer(bufnr)
@@ -291,6 +283,7 @@ local function advance_phase2(opts)
 
   -- All denied/rejected were processed synchronously, no approved, no pending
   if #denied > 0 or #rejected > 0 then
+    editing.auto_write(bufnr)
     -- Non-empty tool blocks were processed — re-check if we should continue
     if autopilot_active then
       autopilot.arm(bufnr)
@@ -706,7 +699,7 @@ function M.send_to_provider(opts)
         state.unlock_buffer(bufnr)
 
         -- Auto-write on error if enabled
-        auto_write_buffer(bufnr)
+        editing.auto_write(bufnr)
 
         local notify_msg = "Flemma: " .. msg
         if current_provider:is_context_overflow(msg) then
@@ -811,7 +804,7 @@ function M.send_to_provider(opts)
         end
 
         -- Auto-write when response is complete
-        auto_write_buffer(bufnr)
+        editing.auto_write(bufnr)
 
         -- Reset in-flight usage for next request
         -- Note: output_has_thoughts will be set again when the next request starts
@@ -972,7 +965,7 @@ function M.send_to_provider(opts)
             if not response_started then
               ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
             end
-            auto_write_buffer(bufnr) -- Still auto-write if configured
+            editing.auto_write(bufnr) -- Still auto-write if configured
             ui.update_ui(bufnr) -- Update UI
             return -- Do not proceed to add new prompt or call opts.on_request_complete
           end
@@ -1011,7 +1004,7 @@ function M.send_to_provider(opts)
           end
           ui.move_to_bottom(bufnr)
 
-          auto_write_buffer(bufnr)
+          editing.auto_write(bufnr)
           ui.update_ui(bufnr)
           ui.fold_last_thinking_block(bufnr) -- Attempt to fold the last thinking block
 
@@ -1052,7 +1045,7 @@ function M.send_to_provider(opts)
           end
           vim.notify(error_msg, vim.log.levels.ERROR)
 
-          auto_write_buffer(bufnr) -- Auto-write if enabled, even on error
+          editing.auto_write(bufnr) -- Auto-write if enabled, even on error
           ui.update_ui(bufnr) -- Update UI to remove any artifacts
         end
       end)

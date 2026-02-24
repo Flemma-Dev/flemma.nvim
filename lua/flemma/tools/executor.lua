@@ -5,6 +5,7 @@ local M = {}
 
 local registry = require("flemma.tools.registry")
 local injector = require("flemma.tools.injector")
+local editing = require("flemma.buffer.editing")
 local state = require("flemma.state")
 local log = require("flemma.logging")
 
@@ -169,6 +170,10 @@ local function do_completion(bufnr, tool_id, result, opts)
   ui.schedule_tool_indicator_clear(bufnr, tool_id, 1500)
 
   ui.update_ui(bufnr)
+
+  -- Auto-write after tool result injection so the buffer is saved between
+  -- tool executions, not only after the next send_to_provider() completes.
+  editing.auto_write(bufnr)
 end
 
 ---Handle completion of a tool execution (success or error)
@@ -575,6 +580,7 @@ function M.execute_at_cursor(bufnr)
             if autopilot.get_state(bufnr) == "paused" then
               autopilot.arm(bufnr)
             end
+            editing.auto_write(bufnr)
             -- Notify autopilot so it can resume the loop
             vim.schedule(function()
               if vim.api.nvim_buf_is_valid(bufnr) then
