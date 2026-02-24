@@ -7,6 +7,7 @@ local log = require("flemma.logging")
 local state = require("flemma.state")
 local config_manager = require("flemma.core.config.manager")
 local editing = require("flemma.buffer.editing")
+local writequeue = require("flemma.buffer.writequeue")
 local ui = require("flemma.ui")
 local registry = require("flemma.provider.registry")
 
@@ -844,7 +845,7 @@ function M.send_to_provider(opts)
     end,
 
     on_content = function(text)
-      vim.schedule(function()
+      writequeue.schedule(bufnr, function()
         -- Skip whitespace-only content before the response has started.
         -- Some models (e.g. Opus 4.6 with adaptive thinking) emit a text block
         -- containing only newlines before the thinking block. Writing this would
