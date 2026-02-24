@@ -193,7 +193,8 @@ local function handle_completion(bufnr, tool_id, result, opts)
   entry.completed = true
 
   if opts.async then
-    vim.schedule(function()
+    local writequeue = require("flemma.buffer.writequeue")
+    writequeue.schedule(bufnr, function()
       do_completion(bufnr, tool_id, result, { async = true })
     end)
   else
