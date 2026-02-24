@@ -135,6 +135,9 @@ function M.cleanup_buffer_state(bufnr)
   require("flemma.autopilot").cleanup_buffer(bufnr)
   -- Clean up any notifications associated with this buffer
   require("flemma.notify").cleanup_buffer(bufnr)
+  -- Discard any pending write queue operations
+  local writequeue = require("flemma.buffer.writequeue")
+  writequeue.clear(bufnr)
 end
 
 ---Lock a buffer (mark non-modifiable for request/tool execution)

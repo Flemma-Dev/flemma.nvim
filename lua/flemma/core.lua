@@ -7,6 +7,7 @@ local log = require("flemma.logging")
 local state = require("flemma.state")
 local config_manager = require("flemma.core.config.manager")
 local editing = require("flemma.buffer.editing")
+local writequeue = require("flemma.buffer.writequeue")
 local ui = require("flemma.ui")
 local registry = require("flemma.provider.registry")
 
@@ -133,6 +134,12 @@ function M.cancel_request()
 
     -- Mark as cancelled
     buffer_state.request_cancelled = true
+
+    -- Discard any queued writes from on_content / on_request_complete
+    -- that haven't executed yet. Must happen before the abort marker
+    -- insertion below to prevent stale streaming content from appearing
+    -- after the abort comment.
+    writequeue.clear(bufnr)
 
     -- Use client to cancel the request
     local client = require("flemma.client")
@@ -378,7 +385,7 @@ function M.send_or_execute(opts)
       evaluated_frontmatter = evaluated_frontmatter,
       frontmatter_opts = frontmatter_opts,
     }
-    vim.schedule(function()
+    writequeue.schedule(bufnr, function()
       advance_phase2(phase2_opts)
     end)
     return
@@ -688,7 +695,7 @@ function M.send_to_provider(opts)
   -- Set up callbacks for the provider
   local callbacks = {
     on_error = function(msg)
-      vim.schedule(function()
+      writequeue.schedule(bufnr, function()
         if spinner_timer then
           vim.fn.timer_stop(spinner_timer)
         end
@@ -810,7 +817,9 @@ function M.send_to_provider(opts)
         end
 
         -- Auto-write when response is complete
-        editing.auto_write(bufnr)
+        writequeue.enqueue(bufnr, function()
+          editing.auto_write(bufnr)
+        end)
 
         -- Reset in-flight usage for next request
         -- Note: output_has_thoughts will be set again when the next request starts
@@ -850,7 +859,7 @@ function M.send_to_provider(opts)
     end,
 
     on_content = function(text)
-      vim.schedule(function()
+      writequeue.schedule(bufnr, function()
         -- Skip whitespace-only content before the response has started.
         -- Some models (e.g. Opus 4.6 with adaptive thinking) emit a text block
         -- containing only newlines before the thinking block. Writing this would
@@ -937,7 +946,7 @@ function M.send_to_provider(opts)
     end,
 
     on_request_complete = function(code)
-      vim.schedule(function()
+      writequeue.schedule(bufnr, function()
         -- If the request was cancelled, M.cancel_request() handles cleanup including modifiable.
         if buffer_state.request_cancelled then
           -- M.cancel_request should have already set modifiable = true
