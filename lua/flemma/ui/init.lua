@@ -189,7 +189,7 @@ function M.start_loading_spinner(bufnr)
     -- Only update the extmark - no buffer modification needed
     if spinner_line_idx0 ~= nil and spinner_extmark_id ~= nil then
       frame = (frame % #spinner_frames) + 1
-      vim.api.nvim_buf_set_extmark(bufnr, spinner_ns, spinner_line_idx0, 0, {
+      pcall(vim.api.nvim_buf_set_extmark, bufnr, spinner_ns, spinner_line_idx0, 0, {
         id = spinner_extmark_id,
         virt_text = { { " " .. spinner_frames[frame], "FlemmaAssistantSpinner" } },
         virt_text_pos = "eol",
@@ -274,7 +274,7 @@ function M.update_thinking_preview(bufnr, preview_text)
     return
   end
 
-  vim.api.nvim_buf_set_extmark(bufnr, spinner_ns, line_idx0, 0, {
+  pcall(vim.api.nvim_buf_set_extmark, bufnr, spinner_ns, line_idx0, 0, {
     id = extmark_id,
     virt_text = { { " " .. config.spinner.thinking_char .. " (" .. preview_text .. ")", "FlemmaAssistantSpinner" } },
     virt_text_pos = "eol",
