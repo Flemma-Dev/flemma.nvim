@@ -135,6 +135,12 @@ function M.cancel_request()
     -- Mark as cancelled
     buffer_state.request_cancelled = true
 
+    -- Discard any queued writes from on_content / on_request_complete
+    -- that haven't executed yet. Must happen before the abort marker
+    -- insertion below to prevent stale streaming content from appearing
+    -- after the abort comment.
+    writequeue.clear(bufnr)
+
     -- Use client to cancel the request
     local client = require("flemma.client")
     if client.cancel_request(buffer_state.current_request) then
