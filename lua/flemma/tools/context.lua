@@ -148,10 +148,13 @@ end
 
 ---Find all tool_result segments with a `flemma:tool` status, grouped by status.
 ---Each entry pairs the tool_result metadata with its matching tool_use context.
----Results with status=approved or status=pending that have non-empty content are
----excluded from the main groups (content-overwrite protection) and warned about.
+---Results with status=approved that have non-empty content are excluded from the
+---main groups (content-overwrite protection) and warned about. Pending blocks with
+---user-provided content are returned separately so callers can resolve them
+---(strip the flemma:tool fence, keeping the user's content as a normal tool_result).
 ---@param bufnr integer Buffer number
----@return table<flemma.ast.ToolStatus, flemma.tools.ToolBlockContext[]>
+---@return table<flemma.ast.ToolStatus, flemma.tools.ToolBlockContext[]> groups
+---@return flemma.tools.ToolBlockContext[] user_provided Pending blocks with user-provided content
 function M.resolve_all_tool_blocks(bufnr)
   local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
@@ -175,7 +178,7 @@ function M.resolve_all_tool_blocks(bufnr)
   end
 
   if vim.tbl_isempty(status_results) then
-    return {}
+    return {}, {}
   end
 
   -- Build tool_use lookup and abort message map for matching
@@ -201,30 +204,41 @@ function M.resolve_all_tool_blocks(bufnr)
   ---@type table<flemma.ast.ToolStatus, flemma.tools.ToolBlockContext[]>
   local groups = {}
   local conflict_count = 0
+  ---@type flemma.tools.ToolBlockContext[]
+  local user_provided = {}
 
   for tool_use_id, info in pairs(status_results) do
     local tu = tool_use_map[tool_use_id]
     if tu then
-      -- Content-overwrite protection: approved or pending with user-edited content
-      if (info.status == "approved" or info.status == "pending") and info.content ~= "" then
+      ---@type flemma.tools.ToolBlockContext
+      local block_context = {
+        tool_id = tu.id,
+        tool_name = tu.name,
+        input = tu.input or {},
+        node = tu,
+        start_line = tu.position.start_line,
+        end_line = tu.position.end_line,
+        status = info.status,
+        content = info.content,
+        is_error = info.is_error,
+        tool_result = { start_line = info.tool_result_start_line },
+        aborted_message = abort_message_map[tu.id],
+      }
+
+      if info.status == "approved" and info.content ~= "" then
+        -- Content-overwrite protection: approved with user-edited content.
+        -- Execution would overwrite the user's edits.
         conflict_count = conflict_count + 1
+      elseif info.status == "pending" and info.content ~= "" then
+        -- User provided content for a pending tool — collect for resolution.
+        -- The caller will strip the flemma:tool fence, keeping the content
+        -- as a normal resolved tool_result.
+        table.insert(user_provided, block_context)
       else
         if not groups[info.status] then
           groups[info.status] = {}
         end
-        table.insert(groups[info.status], {
-          tool_id = tu.id,
-          tool_name = tu.name,
-          input = tu.input or {},
-          node = tu,
-          start_line = tu.position.start_line,
-          end_line = tu.position.end_line,
-          status = info.status,
-          content = info.content,
-          is_error = info.is_error,
-          tool_result = { start_line = info.tool_result_start_line },
-          aborted_message = abort_message_map[tu.id],
-        })
+        table.insert(groups[info.status], block_context)
       end
     end
   end
@@ -233,8 +247,8 @@ function M.resolve_all_tool_blocks(bufnr)
     vim.notify(
       "Flemma: "
         .. conflict_count
-        .. " tool result(s) have edited content inside flemma:tool – "
-        .. "skipping execution, your content will be sent as-is.",
+        .. " tool result(s) have edited content inside an approved flemma:tool block – "
+        .. "skipping execution to protect your edits. Remove the flemma:tool fence to send your content.",
       vim.log.levels.WARN
     )
   end
@@ -245,8 +259,11 @@ function M.resolve_all_tool_blocks(bufnr)
       return a.start_line < b.start_line
     end)
   end
+  table.sort(user_provided, function(a, b)
+    return a.start_line < b.start_line
+  end)
 
-  return groups
+  return groups, user_provided
 end
 
 ---Resolve tool context from cursor position

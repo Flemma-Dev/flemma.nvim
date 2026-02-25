@@ -1901,6 +1901,279 @@ describe("Context resolve_all_tool_blocks", function()
 end)
 
 -- ============================================================================
+-- User-Provided Content in Pending Tool Blocks
+-- ============================================================================
+
+describe("Context resolve_all_tool_blocks user-provided content", function()
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("returns pending blocks with content in user_provided, not in groups", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "echo hello" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "hello",
+      "```",
+    })
+
+    local groups, user_provided = context.resolve_all_tool_blocks(bufnr)
+    assert.equals(0, #(groups["pending"] or {}))
+    assert.equals(1, #user_provided)
+    assert.equals("toolu_01", user_provided[1].tool_id)
+    assert.equals("hello", user_provided[1].content)
+  end)
+
+  it("empty pending blocks stay in groups, not in user_provided", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "echo hello" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "```",
+    })
+
+    local groups, user_provided = context.resolve_all_tool_blocks(bufnr)
+    assert.equals(1, #(groups["pending"] or {}))
+    assert.equals(0, #user_provided)
+  end)
+
+  it("mixed: pending with content + empty pending separated correctly", function()
+    local bufnr = create_buffer({
+      "@Assistant: Two tools",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "echo a" }',
+      "```",
+      "",
+      "**Tool Use:** `bash` (`toolu_02`)",
+      "```json",
+      '{ "command": "echo b" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "user output here",
+      "```",
+      "",
+      "**Tool Result:** `toolu_02`",
+      "",
+      "```flemma:tool status=pending",
+      "```",
+    })
+
+    local groups, user_provided = context.resolve_all_tool_blocks(bufnr)
+    assert.equals(1, #(groups["pending"] or {}))
+    assert.equals("toolu_02", groups["pending"][1].tool_id)
+    assert.equals(1, #user_provided)
+    assert.equals("toolu_01", user_provided[1].tool_id)
+  end)
+
+  it("approved with content still excluded (content-overwrite protection)", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "echo hello" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=approved",
+      "User edited content",
+      "```",
+    })
+
+    local groups, user_provided = context.resolve_all_tool_blocks(bufnr)
+    assert.equals(0, #(groups["approved"] or {}))
+    assert.equals(0, #user_provided)
+  end)
+end)
+
+-- ============================================================================
+-- Injector: resolve_user_content Tests
+-- ============================================================================
+
+describe("Injector resolve_user_content", function()
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("strips flemma:tool modeline, preserving user content", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "ls -la" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "total 42",
+      "drwxr-xr-x 2 user user 4096 Jan  1 00:00 .",
+      "```",
+    })
+
+    local ok, err = injector.resolve_user_content(bufnr, "toolu_01")
+    assert.is_true(ok)
+    assert.is_nil(err)
+
+    local lines = get_lines(bufnr)
+    -- Fence opener should now be plain backticks (no flemma:tool)
+    local found_plain_fence = false
+    local found_flemma_fence = false
+    for _, line in ipairs(lines) do
+      if line == "```" then
+        found_plain_fence = true
+      end
+      if line:match("flemma:tool") then
+        found_flemma_fence = true
+      end
+    end
+    assert.is_true(found_plain_fence)
+    assert.is_false(found_flemma_fence)
+
+    -- Content should be preserved
+    local content_found = false
+    for _, line in ipairs(lines) do
+      if line:match("total 42") then
+        content_found = true
+      end
+    end
+    assert.is_true(content_found)
+  end)
+
+  it("resolved block is parsed as a normal tool_result without status", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "echo hi" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "hi",
+      "```",
+    })
+
+    injector.resolve_user_content(bufnr, "toolu_01")
+
+    -- Re-parse: the tool_result should now have no status
+    local doc = parser.get_parsed_document(bufnr)
+    for _, msg in ipairs(doc.messages) do
+      if msg.role == "You" then
+        for _, seg in ipairs(msg.segments) do
+          if seg.kind == "tool_result" then
+            assert.equals("toolu_01", seg.tool_use_id)
+            assert.is_nil(seg.status)
+            assert.equals("hi", seg.content)
+          end
+        end
+      end
+    end
+  end)
+
+  it("resolved block flows through processor as normal tool_result", function()
+    local bufnr = create_buffer({
+      "@You: Run this",
+      "",
+      "@Assistant: Sure",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "echo hi" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "hi",
+      "```",
+    })
+
+    injector.resolve_user_content(bufnr, "toolu_01")
+
+    -- Evaluate through processor — the tool_result should produce a part
+    local doc = parser.get_parsed_document(bufnr)
+    local evaluated = processor.evaluate(doc)
+    local tool_result_parts = {}
+    for _, msg in ipairs(evaluated.messages) do
+      for _, part in ipairs(msg.parts) do
+        if part.kind == "tool_result" then
+          table.insert(tool_result_parts, part)
+        end
+      end
+    end
+    assert.equals(1, #tool_result_parts)
+    assert.equals("toolu_01", tool_result_parts[1].tool_use_id)
+    assert.equals("hi", tool_result_parts[1].content)
+  end)
+
+  it("preserves (error) suffix on header", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "bad_cmd" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01` (error)",
+      "",
+      "```flemma:tool status=pending",
+      "command not found: bad_cmd",
+      "```",
+    })
+
+    injector.resolve_user_content(bufnr, "toolu_01")
+
+    local doc = parser.get_parsed_document(bufnr)
+    for _, msg in ipairs(doc.messages) do
+      if msg.role == "You" then
+        for _, seg in ipairs(msg.segments) do
+          if seg.kind == "tool_result" then
+            assert.is_true(seg.is_error)
+            assert.equals("command not found: bad_cmd", seg.content)
+          end
+        end
+      end
+    end
+  end)
+
+  it("returns error for non-existent tool_id", function()
+    local bufnr = create_buffer({
+      "@You: Hello",
+    })
+
+    local ok, err = injector.resolve_user_content(bufnr, "nonexistent")
+    assert.is_false(ok)
+    assert.is_truthy(err)
+  end)
+end)
+
+-- ============================================================================
 -- Placeholder Injection with flemma:tool Tests
 -- ============================================================================
 

@@ -355,4 +355,42 @@ function M.inject_or_replace(bufnr, tool_id, result)
   return M.inject_result(bufnr, tool_id, result)
 end
 
+---Resolve a pending tool_result block that has user-provided content.
+---Strips the `flemma:tool` modeline from the fence opener, converting the block
+---into a normal resolved tool_result while preserving the user's content intact.
+---@param bufnr integer
+---@param tool_id string
+---@return boolean success
+---@return string|nil error_message
+function M.resolve_user_content(bufnr, tool_id)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return false, "Buffer is no longer valid"
+  end
+
+  local parser = require("flemma.parser")
+  local doc = parser.get_parsed_document(bufnr)
+
+  local seg = find_existing_tool_result(doc, tool_id)
+  if not seg then
+    return false, "Tool result not found: " .. tool_id
+  end
+
+  -- Scan the block's lines for the flemma:tool fence opener
+  local start_0 = seg.position.start_line - 1
+  local end_0 = seg.position.end_line
+  local lines = vim.api.nvim_buf_get_lines(bufnr, start_0, end_0, false)
+
+  for i, line in ipairs(lines) do
+    if line:match("^`+flemma:tool") then
+      -- Replace with a plain fence (preserve the backtick count)
+      local backticks = line:match("^(`+)")
+      lines[i] = backticks
+      set_lines(bufnr, start_0, end_0, lines)
+      return true, nil
+    end
+  end
+
+  return false, "Could not find flemma:tool fence in block for " .. tool_id
+end
+
 return M
