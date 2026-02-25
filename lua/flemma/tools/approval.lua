@@ -377,14 +377,16 @@ function M.setup()
         return nil
       end
 
-      -- Resolve effective sandbox config (global + frontmatter + runtime override)
-      local sandbox = require("flemma.sandbox")
-      local sandbox_config = sandbox.resolve_config(context.opts)
-      if not sandbox_config.enabled or sandbox_config.auto_approve == false then
+      -- Check the config-level opt-out (tools.auto_approve_sandboxed)
+      if tools_config and tools_config.auto_approve_sandboxed == false then
         return nil
       end
 
-      -- Verify a backend is actually available (not just configured)
+      -- Verify sandbox is enabled and a backend is actually available
+      local sandbox = require("flemma.sandbox")
+      if not sandbox.is_enabled(context.opts) then
+        return nil
+      end
       local backend_ok = sandbox.validate_backend(context.opts)
       if not backend_ok then
         return nil

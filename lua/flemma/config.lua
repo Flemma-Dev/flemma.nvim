@@ -74,7 +74,6 @@
 
 ---@class flemma.config.SandboxConfig
 ---@field enabled boolean Master switch (default: true)
----@field auto_approve? boolean Auto-approve tools that run inside the sandbox (default: true). Set false to always require manual approval even when sandboxed.
 ---@field backend? string "auto" = detect quietly, "required" = detect and warn if none, or explicit name (default: "auto")
 ---@field policy? flemma.config.SandboxPolicy
 ---@field backends? table<string, table> Per-backend config
@@ -97,6 +96,7 @@
 ---@class flemma.config.ToolsConfig
 ---@field require_approval boolean
 ---@field auto_approve? flemma.config.AutoApprove
+---@field auto_approve_sandboxed? boolean Auto-approve tools that run inside the sandbox (default: true). Set false to always require manual approval even when sandboxed.
 ---@field presets? table<string, flemma.tools.PresetDefinition> Named approval presets
 ---@field autopilot flemma.config.AutopilotConfig
 ---@field default_timeout integer
@@ -243,6 +243,7 @@ return {
   tools = {
     require_approval = true, -- Require user approval before executing tool calls (two-step <C-]> flow)
     auto_approve = { "$default" }, -- Tools that bypass approval: string[] of tool/preset names, or function(tool_name, input, context) → true|false|"deny"
+    auto_approve_sandboxed = true, -- Auto-approve tools that run inside the sandbox (set false to require manual approval)
     presets = {}, -- Named approval presets (override built-ins or add new ones with "$name" keys)
     autopilot = {
       enabled = true, -- Auto-execute approved tools and re-send when resolved
@@ -285,7 +286,6 @@ return {
   },
   sandbox = {
     enabled = true, -- Enable filesystem sandboxing
-    auto_approve = true, -- Auto-approve tools that run inside the sandbox (set false to require manual approval)
     backend = "auto", -- "auto" detects the best available backend; set explicitly to force one
     policy = {
       rw_paths = { "$CWD", "$FLEMMA_BUFFER_PATH", "/tmp" }, -- Read-write paths (all others are read-only)

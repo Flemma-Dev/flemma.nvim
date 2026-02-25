@@ -2321,10 +2321,9 @@ describe("Sandbox auto-approval resolver", function()
   ---@param overrides? table Overrides merged into the default config
   local function setup_with_sandbox(overrides)
     local config = vim.tbl_deep_extend("force", {
-      tools = { auto_approve = { "$default" } },
+      tools = { auto_approve = { "$default" }, auto_approve_sandboxed = true },
       sandbox = {
         enabled = true,
-        auto_approve = true,
         backend = "auto",
       },
     }, overrides or {})
@@ -2377,8 +2376,8 @@ describe("Sandbox auto-approval resolver", function()
     assert.equals("require_approval", result)
   end)
 
-  it("requires approval when sandbox.auto_approve is false", function()
-    setup_with_sandbox({ sandbox = { auto_approve = false } })
+  it("requires approval when tools.auto_approve_sandboxed is false", function()
+    setup_with_sandbox({ tools = { auto_approve_sandboxed = false } })
     local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
     assert.equals("require_approval", result)
   end)
@@ -2389,17 +2388,6 @@ describe("Sandbox auto-approval resolver", function()
       bufnr = 1,
       tool_id = "t1",
       opts = { auto_approve_exclusions = { bash = true } },
-    }
-    local result = approval.resolve("bash", {}, ctx)
-    assert.equals("require_approval", result)
-  end)
-
-  it("respects frontmatter sandbox.auto_approve = false", function()
-    setup_with_sandbox()
-    local ctx = {
-      bufnr = 1,
-      tool_id = "t1",
-      opts = { sandbox = { auto_approve = false } },
     }
     local result = approval.resolve("bash", {}, ctx)
     assert.equals("require_approval", result)
