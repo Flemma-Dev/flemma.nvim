@@ -366,6 +366,11 @@ function M.setup()
     priority = 25,
     description = "Auto-approve sandboxed tools when sandbox is enabled with an available backend",
     resolve = function(tool_name, _input, context)
+      -- Cheapest check first: config-level opt-out (tools.auto_approve_sandboxed)
+      if tools_config and tools_config.auto_approve_sandboxed == false then
+        return nil
+      end
+
       -- Only handle tools that execute inside the sandbox
       if tool_name ~= "bash" then
         return nil
@@ -377,12 +382,9 @@ function M.setup()
         return nil
       end
 
-      -- Check the config-level opt-out (tools.auto_approve_sandboxed)
-      if tools_config and tools_config.auto_approve_sandboxed == false then
-        return nil
-      end
-
-      -- Verify sandbox is enabled and a backend is actually available
+      -- Verify sandbox is enabled (respects runtime override from :Flemma
+      -- sandbox:disable and frontmatter sandbox options) and a backend is
+      -- actually available (same check as :Flemma status)
       local sandbox = require("flemma.sandbox")
       if not sandbox.is_enabled(context.opts) then
         return nil
