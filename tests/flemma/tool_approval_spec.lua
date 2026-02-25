@@ -2016,7 +2016,7 @@ describe("Injector resolve_user_content", function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("strips flemma:tool modeline, preserving user content", function()
+  it("strips flemma:tool info string, preserving user content", function()
     local bufnr = create_buffer({
       "@Assistant: Tool call",
       "",

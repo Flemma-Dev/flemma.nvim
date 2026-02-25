@@ -356,7 +356,7 @@ function M.inject_or_replace(bufnr, tool_id, result)
 end
 
 ---Resolve a pending tool_result block that has user-provided content.
----Strips the `flemma:tool` modeline from the fence opener, converting the block
+---Strips the `flemma:tool` info string from the fence opener, converting the block
 ---into a normal resolved tool_result while preserving the user's content intact.
 ---Uses the AST's `fence_line` field to locate the fence opener directly.
 ---@param bufnr integer
