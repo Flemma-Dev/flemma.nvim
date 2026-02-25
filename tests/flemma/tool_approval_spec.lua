@@ -1909,7 +1909,7 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("returns pending blocks with content in user_provided, not in groups", function()
+  it("returns pending blocks with content in user_filled, not in groups", function()
     local bufnr = create_buffer({
       "@Assistant: Tool call",
       "",
@@ -1925,14 +1925,14 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
       "```",
     })
 
-    local groups, user_provided = context.resolve_all_tool_blocks(bufnr)
+    local groups, user_filled = context.resolve_all_tool_blocks(bufnr)
     assert.equals(0, #(groups["pending"] or {}))
-    assert.equals(1, #user_provided)
-    assert.equals("toolu_01", user_provided[1].tool_id)
-    assert.equals("hello", user_provided[1].content)
+    assert.equals(1, #user_filled)
+    assert.equals("toolu_01", user_filled[1].tool_id)
+    assert.equals("hello", user_filled[1].content)
   end)
 
-  it("empty pending blocks stay in groups, not in user_provided", function()
+  it("empty pending blocks stay in groups, not in user_filled", function()
     local bufnr = create_buffer({
       "@Assistant: Tool call",
       "",
@@ -1947,9 +1947,9 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
       "```",
     })
 
-    local groups, user_provided = context.resolve_all_tool_blocks(bufnr)
+    local groups, user_filled = context.resolve_all_tool_blocks(bufnr)
     assert.equals(1, #(groups["pending"] or {}))
-    assert.equals(0, #user_provided)
+    assert.equals(0, #user_filled)
   end)
 
   it("mixed: pending with content + empty pending separated correctly", function()
@@ -1978,11 +1978,11 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
       "```",
     })
 
-    local groups, user_provided = context.resolve_all_tool_blocks(bufnr)
+    local groups, user_filled = context.resolve_all_tool_blocks(bufnr)
     assert.equals(1, #(groups["pending"] or {}))
     assert.equals("toolu_02", groups["pending"][1].tool_id)
-    assert.equals(1, #user_provided)
-    assert.equals("toolu_01", user_provided[1].tool_id)
+    assert.equals(1, #user_filled)
+    assert.equals("toolu_01", user_filled[1].tool_id)
   end)
 
   it("approved with content still excluded (content-overwrite protection)", function()
@@ -2001,17 +2001,17 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
       "```",
     })
 
-    local groups, user_provided = context.resolve_all_tool_blocks(bufnr)
+    local groups, user_filled = context.resolve_all_tool_blocks(bufnr)
     assert.equals(0, #(groups["approved"] or {}))
-    assert.equals(0, #user_provided)
+    assert.equals(0, #user_filled)
   end)
 end)
 
 -- ============================================================================
--- Injector: resolve_user_content Tests
+-- Injector: strip_fence_info_string Tests
 -- ============================================================================
 
-describe("Injector resolve_user_content", function()
+describe("Injector strip_fence_info_string", function()
   after_each(function()
     vim.cmd("silent! %bdelete!")
   end)
@@ -2033,7 +2033,7 @@ describe("Injector resolve_user_content", function()
       "```",
     })
 
-    local ok, err = injector.resolve_user_content(bufnr, "toolu_01")
+    local ok, err = injector.strip_fence_info_string(bufnr, "toolu_01")
     assert.is_true(ok)
     assert.is_nil(err)
 
@@ -2078,7 +2078,7 @@ describe("Injector resolve_user_content", function()
       "```",
     })
 
-    injector.resolve_user_content(bufnr, "toolu_01")
+    injector.strip_fence_info_string(bufnr, "toolu_01")
 
     -- Re-parse: the tool_result should now have no status
     local doc = parser.get_parsed_document(bufnr)
@@ -2113,7 +2113,7 @@ describe("Injector resolve_user_content", function()
       "```",
     })
 
-    injector.resolve_user_content(bufnr, "toolu_01")
+    injector.strip_fence_info_string(bufnr, "toolu_01")
 
     -- Evaluate through processor — the tool_result should produce a part
     local doc = parser.get_parsed_document(bufnr)
@@ -2147,7 +2147,7 @@ describe("Injector resolve_user_content", function()
       "```",
     })
 
-    injector.resolve_user_content(bufnr, "toolu_01")
+    injector.strip_fence_info_string(bufnr, "toolu_01")
 
     local doc = parser.get_parsed_document(bufnr)
     for _, msg in ipairs(doc.messages) do
@@ -2167,7 +2167,7 @@ describe("Injector resolve_user_content", function()
       "@You: Hello",
     })
 
-    local ok, err = injector.resolve_user_content(bufnr, "nonexistent")
+    local ok, err = injector.strip_fence_info_string(bufnr, "nonexistent")
     assert.is_false(ok)
     assert.is_truthy(err)
   end)

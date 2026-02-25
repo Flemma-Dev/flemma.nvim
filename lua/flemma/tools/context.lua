@@ -150,11 +150,11 @@ end
 ---Each entry pairs the tool_result metadata with its matching tool_use context.
 ---Results with status=approved that have non-empty content are excluded from the
 ---main groups (content-overwrite protection) and warned about. Pending blocks with
----user-provided content are returned separately so callers can resolve them
+---user-filled content are returned separately so callers can resolve them
 ---(strip the flemma:tool fence, keeping the user's content as a normal tool_result).
 ---@param bufnr integer Buffer number
 ---@return table<flemma.ast.ToolStatus, flemma.tools.ToolBlockContext[]> groups
----@return flemma.tools.ToolBlockContext[] user_provided Pending blocks with user-provided content
+---@return flemma.tools.ToolBlockContext[] user_filled Pending blocks with user-filled content
 function M.resolve_all_tool_blocks(bufnr)
   local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
@@ -206,7 +206,7 @@ function M.resolve_all_tool_blocks(bufnr)
   local groups = {}
   local conflict_count = 0
   ---@type flemma.tools.ToolBlockContext[]
-  local user_provided = {}
+  local user_filled = {}
 
   for tool_use_id, info in pairs(status_results) do
     local tu = tool_use_map[tool_use_id]
@@ -234,7 +234,7 @@ function M.resolve_all_tool_blocks(bufnr)
         -- User provided content for a pending tool — collect for resolution.
         -- The caller will strip the flemma:tool fence, keeping the content
         -- as a normal resolved tool_result.
-        table.insert(user_provided, block_context)
+        table.insert(user_filled, block_context)
       else
         if not groups[info.status] then
           groups[info.status] = {}
@@ -260,11 +260,11 @@ function M.resolve_all_tool_blocks(bufnr)
       return a.start_line < b.start_line
     end)
   end
-  table.sort(user_provided, function(a, b)
+  table.sort(user_filled, function(a, b)
     return a.start_line < b.start_line
   end)
 
-  return groups, user_provided
+  return groups, user_filled
 end
 
 ---Resolve tool context from cursor position

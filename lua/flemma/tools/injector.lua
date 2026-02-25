@@ -355,15 +355,14 @@ function M.inject_or_replace(bufnr, tool_id, result)
   return M.inject_result(bufnr, tool_id, result)
 end
 
----Resolve a pending tool_result block that has user-provided content.
----Strips the `flemma:tool` info string from the fence opener, converting the block
----into a normal resolved tool_result while preserving the user's content intact.
----Uses the AST's `fence_line` field to locate the fence opener directly.
+---Strip the `flemma:tool` info string from a fence opener, converting a pending
+---tool_result block into a normal resolved tool_result while preserving the
+---user's content intact. Uses the AST's `fence_line` field to locate the fence.
 ---@param bufnr integer
 ---@param tool_id string
 ---@return boolean success
 ---@return string|nil error_message
-function M.resolve_user_content(bufnr, tool_id)
+function M.strip_fence_info_string(bufnr, tool_id)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return false, "Buffer is no longer valid"
   end

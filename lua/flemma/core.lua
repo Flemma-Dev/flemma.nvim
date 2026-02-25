@@ -222,13 +222,13 @@ local function advance_phase2(opts)
   local executor = require("flemma.tools.executor")
   local injector = require("flemma.tools.injector")
 
-  local tool_blocks, user_provided = tool_context.resolve_all_tool_blocks(bufnr)
+  local tool_blocks, user_filled = tool_context.resolve_all_tool_blocks(bufnr)
 
-  -- Resolve user-provided pending blocks: the user pasted output into a
+  -- Resolve user-filled pending blocks: the user pasted output into a
   -- flemma:tool status=pending block. Strip the fence info string so the
   -- content becomes a normal resolved tool_result sent to the provider.
-  for _, ctx in ipairs(user_provided) do
-    injector.resolve_user_content(bufnr, ctx.tool_id)
+  for _, ctx in ipairs(user_filled) do
+    injector.strip_fence_info_string(bufnr, ctx.tool_id)
   end
 
   -- Process denied → replace with error
