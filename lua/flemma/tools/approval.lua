@@ -356,6 +356,44 @@ function M.setup()
     end,
   })
 
+  -- Sandbox-aware auto-approval: when sandboxing is enabled and a backend is
+  -- available, auto-approve tools that execute inside the sandbox (currently: bash).
+  -- Priority 50: below config (100) and frontmatter (90) so explicit user
+  -- preferences always win, but above the catch-all (0).
+  -- Checks are deferred to resolve time so runtime overrides and frontmatter
+  -- sandbox options are respected per-call.
+  register_entry("urn:flemma:approval:sandbox", {
+    priority = DEFAULT_PRIORITY,
+    description = "Auto-approve sandboxed tools when sandbox is enabled with an available backend",
+    resolve = function(tool_name, _input, context)
+      -- Only handle tools that execute inside the sandbox
+      if tool_name ~= "bash" then
+        return nil
+      end
+
+      -- Respect frontmatter exclusions (e.g. auto_approve:remove("bash"))
+      local exclusions = context.opts and context.opts.auto_approve_exclusions
+      if exclusions and exclusions[tool_name] then
+        return nil
+      end
+
+      -- Resolve effective sandbox config (global + frontmatter + runtime override)
+      local sandbox = require("flemma.sandbox")
+      local sandbox_config = sandbox.resolve_config(context.opts)
+      if not sandbox_config.enabled or sandbox_config.auto_approve == false then
+        return nil
+      end
+
+      -- Verify a backend is actually available (not just configured)
+      local backend_ok = sandbox.validate_backend(context.opts)
+      if not backend_ok then
+        return nil
+      end
+
+      return "approve"
+    end,
+  })
+
   local require_approval = tools_config and tools_config.require_approval
   if require_approval == false then
     register_entry("urn:flemma:approval:catch-all", {

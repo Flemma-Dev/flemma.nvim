@@ -9,6 +9,8 @@ package.loaded["flemma.tools.context"] = nil
 package.loaded["flemma.tools.injector"] = nil
 package.loaded["flemma.state"] = nil
 package.loaded["flemma.parser"] = nil
+package.loaded["flemma.sandbox"] = nil
+package.loaded["flemma.sandbox.backends.bwrap"] = nil
 
 local approval = require("flemma.tools.approval")
 local context = require("flemma.tools.context")
@@ -2292,5 +2294,171 @@ describe("Config resolver defers to frontmatter", function()
     local ctx = { bufnr = 1, tool_id = "t1", opts = { auto_approve = {} } }
     assert.equals("require_approval", approval.resolve("read", {}, ctx))
     assert.equals("require_approval", approval.resolve("write", {}, ctx))
+  end)
+end)
+
+-- ============================================================================
+-- Sandbox Auto-Approval Resolver Tests
+-- ============================================================================
+
+describe("Sandbox auto-approval resolver", function()
+  local sandbox
+
+  --- Register a mock sandbox backend that always reports as available.
+  local function register_mock_backend()
+    sandbox.register("mock", {
+      available = function()
+        return true, nil
+      end,
+      wrap = function(_policy, _backend_config, inner_cmd)
+        return inner_cmd, nil
+      end,
+      priority = 100,
+    })
+  end
+
+  --- Set config with sandbox enabled and a mock backend, then run approval.setup().
+  ---@param overrides? table Overrides merged into the default config
+  local function setup_with_sandbox(overrides)
+    local config = vim.tbl_deep_extend("force", {
+      tools = { auto_approve = { "$default" } },
+      sandbox = {
+        enabled = true,
+        auto_approve = true,
+        backend = "auto",
+      },
+    }, overrides or {})
+    state.set_config(config)
+    approval.clear()
+    require("flemma.tools.presets").setup(nil)
+    approval.setup()
+  end
+
+  before_each(function()
+    package.loaded["flemma.sandbox"] = nil
+    package.loaded["flemma.sandbox.backends.bwrap"] = nil
+    sandbox = require("flemma.sandbox")
+    sandbox.clear()
+    sandbox.reset_enabled()
+    register_mock_backend()
+  end)
+
+  after_each(function()
+    approval.clear()
+    state.set_config({})
+    sandbox.clear()
+    sandbox.reset_enabled()
+    require("flemma.tools.presets").clear()
+  end)
+
+  it("auto-approves bash when sandbox is enabled with an available backend", function()
+    setup_with_sandbox()
+    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("approve", result)
+  end)
+
+  it("does not affect non-bash tools", function()
+    setup_with_sandbox()
+    -- "calculator" is not in $default and not bash — should require approval
+    local result = approval.resolve("calculator", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("require_approval", result)
+  end)
+
+  it("requires approval for bash when sandbox is disabled", function()
+    setup_with_sandbox({ sandbox = { enabled = false } })
+    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("require_approval", result)
+  end)
+
+  it("requires approval for bash when no backend is available", function()
+    sandbox.clear() -- remove the mock backend
+    setup_with_sandbox()
+    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("require_approval", result)
+  end)
+
+  it("requires approval when sandbox.auto_approve is false", function()
+    setup_with_sandbox({ sandbox = { auto_approve = false } })
+    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("require_approval", result)
+  end)
+
+  it("respects frontmatter exclusions for bash", function()
+    setup_with_sandbox()
+    local ctx = {
+      bufnr = 1,
+      tool_id = "t1",
+      opts = { auto_approve_exclusions = { bash = true } },
+    }
+    local result = approval.resolve("bash", {}, ctx)
+    assert.equals("require_approval", result)
+  end)
+
+  it("respects frontmatter sandbox.auto_approve = false", function()
+    setup_with_sandbox()
+    local ctx = {
+      bufnr = 1,
+      tool_id = "t1",
+      opts = { sandbox = { auto_approve = false } },
+    }
+    local result = approval.resolve("bash", {}, ctx)
+    assert.equals("require_approval", result)
+  end)
+
+  it("respects frontmatter sandbox.enabled = false", function()
+    setup_with_sandbox()
+    local ctx = {
+      bufnr = 1,
+      tool_id = "t1",
+      opts = { sandbox = { enabled = false } },
+    }
+    local result = approval.resolve("bash", {}, ctx)
+    assert.equals("require_approval", result)
+  end)
+
+  it("respects runtime sandbox override disabling sandbox", function()
+    setup_with_sandbox()
+    sandbox.set_enabled(false)
+    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("require_approval", result)
+  end)
+
+  it("config auto_approve with explicit bash overrides sandbox resolver", function()
+    -- Config explicitly includes bash in auto_approve — config resolver (P100) wins
+    setup_with_sandbox({
+      sandbox = { enabled = false },
+      tools = { auto_approve = { "$default", "bash" } },
+    })
+    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("approve", result)
+  end)
+
+  it("config preset deny overrides sandbox resolver", function()
+    setup_with_sandbox({
+      tools = {
+        auto_approve = { "$default", "$deny-bash" },
+        presets = { ["$deny-bash"] = { deny = { "bash" } } },
+      },
+    })
+    require("flemma.tools.presets").setup({ ["$deny-bash"] = { deny = { "bash" } } })
+    -- Re-run setup to pick up new presets
+    approval.clear()
+    approval.setup()
+    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("deny", result)
+  end)
+
+  it("still auto-approves $default tools (read, write, edit) regardless of sandbox", function()
+    setup_with_sandbox()
+    assert.equals("approve", approval.resolve("read", {}, { bufnr = 1, tool_id = "t1" }))
+    assert.equals("approve", approval.resolve("write", {}, { bufnr = 1, tool_id = "t2" }))
+    assert.equals("approve", approval.resolve("edit", {}, { bufnr = 1, tool_id = "t3" }))
+  end)
+
+  it("is registered at default priority (50)", function()
+    setup_with_sandbox()
+    local resolver = approval.get("urn:flemma:approval:sandbox")
+    assert.is_not_nil(resolver)
+    assert.equals(50, resolver.priority)
   end)
 end)

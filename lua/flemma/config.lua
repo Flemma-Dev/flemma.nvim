@@ -74,6 +74,7 @@
 
 ---@class flemma.config.SandboxConfig
 ---@field enabled boolean Master switch (default: true)
+---@field auto_approve? boolean Auto-approve tools that run inside the sandbox (default: true). Set false to always require manual approval even when sandboxed.
 ---@field backend? string "auto" = detect quietly, "required" = detect and warn if none, or explicit name (default: "auto")
 ---@field policy? flemma.config.SandboxPolicy
 ---@field backends? table<string, table> Per-backend config
@@ -284,6 +285,7 @@ return {
   },
   sandbox = {
     enabled = true, -- Enable filesystem sandboxing
+    auto_approve = true, -- Auto-approve tools that run inside the sandbox (set false to require manual approval)
     backend = "auto", -- "auto" detects the best available backend; set explicitly to force one
     policy = {
       rw_paths = { "$CWD", "$FLEMMA_BUFFER_PATH", "/tmp" }, -- Read-write paths (all others are read-only)
