@@ -358,12 +358,12 @@ function M.setup()
 
   -- Sandbox-aware auto-approval: when sandboxing is enabled and a backend is
   -- available, auto-approve tools that execute inside the sandbox (currently: bash).
-  -- Priority 50: below config (100) and frontmatter (90) so explicit user
-  -- preferences always win, but above the catch-all (0).
-  -- Checks are deferred to resolve time so runtime overrides and frontmatter
-  -- sandbox options are respected per-call.
+  -- Priority 25: below config (100), frontmatter (90), and the community default (50)
+  -- so both explicit user preferences and third-party resolvers win. Above the
+  -- catch-all (0). Checks are deferred to resolve time so runtime overrides and
+  -- frontmatter sandbox options are respected per-call.
   register_entry("urn:flemma:approval:sandbox", {
-    priority = DEFAULT_PRIORITY,
+    priority = 25,
     description = "Auto-approve sandboxed tools when sandbox is enabled with an available backend",
     resolve = function(tool_name, _input, context)
       -- Only handle tools that execute inside the sandbox

@@ -2443,10 +2443,26 @@ describe("Sandbox auto-approval resolver", function()
     assert.equals("approve", approval.resolve("edit", {}, { bufnr = 1, tool_id = "t3" }))
   end)
 
-  it("is registered at default priority (50)", function()
+  it("is registered at priority 25 (below community default of 50)", function()
     setup_with_sandbox()
     local resolver = approval.get("urn:flemma:approval:sandbox")
     assert.is_not_nil(resolver)
-    assert.equals(50, resolver.priority)
+    assert.equals(25, resolver.priority)
+  end)
+
+  it("community resolver at default priority wins over sandbox resolver", function()
+    setup_with_sandbox()
+    -- Register a community resolver that requires approval for bash
+    approval.register("community-bash-guard", {
+      resolve = function(tool_name)
+        if tool_name == "bash" then
+          return "require_approval"
+        end
+        return nil
+      end,
+      -- No priority specified → DEFAULT_PRIORITY (50), above sandbox (25)
+    })
+    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("require_approval", result)
   end)
 end)
