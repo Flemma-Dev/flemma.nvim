@@ -211,6 +211,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
               status = tool_status,
               start_line = result_start_line,
               end_line = base_line_num + block_end - 1,
+              fence_line = base_line_num + content_start - 1,
             })
           )
           i = block_end + 1

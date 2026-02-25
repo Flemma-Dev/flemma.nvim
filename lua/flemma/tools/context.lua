@@ -143,7 +143,7 @@ end
 ---@field status flemma.ast.ToolStatus
 ---@field content string
 ---@field is_error boolean
----@field tool_result { start_line: integer } Position of the matching tool_result block
+---@field tool_result { start_line: integer, fence_line?: integer } Position of the matching tool_result block
 ---@field aborted_message? string The message from the abort marker (for aborted blocks)
 
 ---Find all tool_result segments with a `flemma:tool` status, grouped by status.
@@ -160,7 +160,7 @@ function M.resolve_all_tool_blocks(bufnr)
   local doc = parser.get_parsed_document(bufnr)
 
   -- Collect tool_result segments with status, keyed by tool_use_id
-  ---@type table<string, { status: flemma.ast.ToolStatus, content: string, is_error: boolean, tool_result_start_line: integer }>
+  ---@type table<string, { status: flemma.ast.ToolStatus, content: string, is_error: boolean, tool_result_start_line: integer, fence_line?: integer }>
   local status_results = {}
   for _, msg in ipairs(doc.messages) do
     if msg.role == "You" then
@@ -171,6 +171,7 @@ function M.resolve_all_tool_blocks(bufnr)
             content = seg.content,
             is_error = seg.is_error,
             tool_result_start_line = seg.position.start_line,
+            fence_line = seg.fence_line,
           }
         end
       end
@@ -221,7 +222,7 @@ function M.resolve_all_tool_blocks(bufnr)
         status = info.status,
         content = info.content,
         is_error = info.is_error,
-        tool_result = { start_line = info.tool_result_start_line },
+        tool_result = { start_line = info.tool_result_start_line, fence_line = info.fence_line },
         aborted_message = abort_message_map[tu.id],
       }
 
