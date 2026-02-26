@@ -1901,6 +1901,285 @@ describe("Context resolve_all_tool_blocks", function()
 end)
 
 -- ============================================================================
+-- User-Provided Content in Pending Tool Blocks
+-- ============================================================================
+
+describe("Context resolve_all_tool_blocks user-provided content", function()
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("pending blocks with content are in groups['pending']", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "echo hello" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "hello",
+      "```",
+    })
+
+    local groups = context.resolve_all_tool_blocks(bufnr)
+    assert.equals(1, #(groups["pending"] or {}))
+    assert.equals("toolu_01", groups["pending"][1].tool_id)
+    assert.equals("hello", groups["pending"][1].content)
+    assert.is_true(groups["pending"][1].has_content)
+  end)
+
+  it("empty pending blocks are also in groups['pending']", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "echo hello" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "```",
+    })
+
+    local groups = context.resolve_all_tool_blocks(bufnr)
+    assert.equals(1, #(groups["pending"] or {}))
+    assert.equals("", groups["pending"][1].content)
+    assert.is_false(groups["pending"][1].has_content)
+  end)
+
+  it("mixed: pending with and without content both in groups['pending']", function()
+    local bufnr = create_buffer({
+      "@Assistant: Two tools",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "echo a" }',
+      "```",
+      "",
+      "**Tool Use:** `bash` (`toolu_02`)",
+      "```json",
+      '{ "command": "echo b" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "user output here",
+      "```",
+      "",
+      "**Tool Result:** `toolu_02`",
+      "",
+      "```flemma:tool status=pending",
+      "```",
+    })
+
+    local groups = context.resolve_all_tool_blocks(bufnr)
+    assert.equals(2, #(groups["pending"] or {}))
+    -- Distinguish by content
+    local filled = vim.tbl_filter(function(ctx)
+      return ctx.has_content
+    end, groups["pending"])
+    local empty = vim.tbl_filter(function(ctx)
+      return not ctx.has_content
+    end, groups["pending"])
+    assert.equals(1, #filled)
+    assert.equals(1, #empty)
+  end)
+
+  it("approved with content still excluded (content-overwrite protection)", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "echo hello" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=approved",
+      "User edited content",
+      "```",
+    })
+
+    local groups = context.resolve_all_tool_blocks(bufnr)
+    assert.equals(0, #(groups["approved"] or {}))
+  end)
+end)
+
+-- ============================================================================
+-- Injector: strip_fence_info_string Tests
+-- ============================================================================
+
+describe("Injector strip_fence_info_string", function()
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("strips flemma:tool info string, preserving user content", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "ls -la" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "total 42",
+      "drwxr-xr-x 2 user user 4096 Jan  1 00:00 .",
+      "```",
+    })
+
+    local ok, err = injector.strip_fence_info_string(bufnr, "toolu_01")
+    assert.is_true(ok)
+    assert.is_nil(err)
+
+    local lines = get_lines(bufnr)
+    -- Fence opener should now be plain backticks (no flemma:tool)
+    local found_plain_fence = false
+    local found_flemma_fence = false
+    for _, line in ipairs(lines) do
+      if line == "```" then
+        found_plain_fence = true
+      end
+      if line:match("flemma:tool") then
+        found_flemma_fence = true
+      end
+    end
+    assert.is_true(found_plain_fence)
+    assert.is_false(found_flemma_fence)
+
+    -- Content should be preserved
+    local content_found = false
+    for _, line in ipairs(lines) do
+      if line:match("total 42") then
+        content_found = true
+      end
+    end
+    assert.is_true(content_found)
+  end)
+
+  it("resolved block is parsed as a normal tool_result without status", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "echo hi" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "hi",
+      "```",
+    })
+
+    injector.strip_fence_info_string(bufnr, "toolu_01")
+
+    -- Re-parse: the tool_result should now have no status
+    local doc = parser.get_parsed_document(bufnr)
+    for _, msg in ipairs(doc.messages) do
+      if msg.role == "You" then
+        for _, seg in ipairs(msg.segments) do
+          if seg.kind == "tool_result" then
+            assert.equals("toolu_01", seg.tool_use_id)
+            assert.is_nil(seg.status)
+            assert.equals("hi", seg.content)
+          end
+        end
+      end
+    end
+  end)
+
+  it("resolved block flows through processor as normal tool_result", function()
+    local bufnr = create_buffer({
+      "@You: Run this",
+      "",
+      "@Assistant: Sure",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "echo hi" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "hi",
+      "```",
+    })
+
+    injector.strip_fence_info_string(bufnr, "toolu_01")
+
+    -- Evaluate through processor — the tool_result should produce a part
+    local doc = parser.get_parsed_document(bufnr)
+    local evaluated = processor.evaluate(doc)
+    local tool_result_parts = {}
+    for _, msg in ipairs(evaluated.messages) do
+      for _, part in ipairs(msg.parts) do
+        if part.kind == "tool_result" then
+          table.insert(tool_result_parts, part)
+        end
+      end
+    end
+    assert.equals(1, #tool_result_parts)
+    assert.equals("toolu_01", tool_result_parts[1].tool_use_id)
+    assert.equals("hi", tool_result_parts[1].content)
+  end)
+
+  it("preserves (error) suffix on header", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "bad_cmd" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01` (error)",
+      "",
+      "```flemma:tool status=pending",
+      "command not found: bad_cmd",
+      "```",
+    })
+
+    injector.strip_fence_info_string(bufnr, "toolu_01")
+
+    local doc = parser.get_parsed_document(bufnr)
+    for _, msg in ipairs(doc.messages) do
+      if msg.role == "You" then
+        for _, seg in ipairs(msg.segments) do
+          if seg.kind == "tool_result" then
+            assert.is_true(seg.is_error)
+            assert.equals("command not found: bad_cmd", seg.content)
+          end
+        end
+      end
+    end
+  end)
+
+  it("returns error for non-existent tool_id", function()
+    local bufnr = create_buffer({
+      "@You: Hello",
+    })
+
+    local ok, err = injector.strip_fence_info_string(bufnr, "nonexistent")
+    assert.is_false(ok)
+    assert.is_truthy(err)
+  end)
+end)
+
+-- ============================================================================
 -- Placeholder Injection with flemma:tool Tests
 -- ============================================================================
 

@@ -355,4 +355,41 @@ function M.inject_or_replace(bufnr, tool_id, result)
   return M.inject_result(bufnr, tool_id, result)
 end
 
+---Strip the `flemma:tool` info string from a fence opener, converting a pending
+---tool_result block into a normal resolved tool_result while preserving the
+---user's content intact. Uses the AST's `fence_line` field to locate the fence.
+---@param bufnr integer
+---@param tool_id string
+---@return boolean success
+---@return string|nil error_message
+function M.strip_fence_info_string(bufnr, tool_id)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return false, "Buffer is no longer valid"
+  end
+
+  local parser = require("flemma.parser")
+  local doc = parser.get_parsed_document(bufnr)
+
+  local seg = find_existing_tool_result(doc, tool_id)
+  if not seg then
+    return false, "Tool result not found: " .. tool_id
+  end
+
+  if not seg.fence_line then
+    return false, "Tool result has no flemma:tool fence: " .. tool_id
+  end
+
+  -- Read the fence line identified by the AST and extract the backtick prefix
+  local fence_line_0 = seg.fence_line - 1
+  local line = vim.api.nvim_buf_get_lines(bufnr, fence_line_0, fence_line_0 + 1, false)[1]
+  local backticks = line:match("^(`+)")
+  if not backticks then
+    return false, "Unexpected fence line content for " .. tool_id
+  end
+
+  -- Replace the flemma:tool fence with a plain fence, preserving backtick count
+  set_lines(bufnr, fence_line_0, fence_line_0 + 1, { backticks })
+  return true, nil
+end
+
 return M

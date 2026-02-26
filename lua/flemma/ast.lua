@@ -43,6 +43,7 @@ local M = {}
 
 ---@class flemma.ast.ToolResultSegment : flemma.ast.GenericToolResultPart
 ---@field position flemma.ast.Position
+---@field fence_line? integer 1-based line number of the fence opener (only for flemma:tool blocks)
 
 ---@class flemma.ast.AbortedSegment
 ---@field kind "aborted"
@@ -195,7 +196,7 @@ end
 
 ---@param tool_use_id string
 ---@param content string
----@param opts? { is_error?: boolean, status?: flemma.ast.ToolStatus, start_line?: integer, end_line?: integer }
+---@param opts? { is_error?: boolean, status?: flemma.ast.ToolStatus, start_line?: integer, end_line?: integer, fence_line?: integer }
 ---@return flemma.ast.ToolResultSegment
 function M.tool_result(tool_use_id, content, opts)
   opts = opts or {}
@@ -205,6 +206,7 @@ function M.tool_result(tool_use_id, content, opts)
     content = content,
     is_error = opts.is_error or false,
     status = opts.status,
+    fence_line = opts.fence_line,
     position = { start_line = opts.start_line, end_line = opts.end_line },
   }
 end
