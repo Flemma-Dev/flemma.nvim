@@ -13,6 +13,7 @@ local truncate = require("flemma.tools.truncate")
 M.definitions = {
   {
     name = "bash",
+    capabilities = { "can_auto_approve_if_sandboxed" },
     description = "Execute a bash command in the current working directory. "
       .. "Returns stdout and stderr. Output is truncated to last "
       .. truncate.MAX_LINES
