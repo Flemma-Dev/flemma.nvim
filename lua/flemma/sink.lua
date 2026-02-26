@@ -127,6 +127,45 @@ function Sink:write(chunk)
   end
 end
 
+---Write pre-framed lines to the sink
+---If a partial line is buffered from a previous write(), it is flushed as a
+---complete line before the new lines are appended.
+---@param lines string[]
+function Sink:write_lines(lines)
+  if type(lines) ~= "table" then
+    error("sink:write_lines(): expected table, got " .. type(lines))
+  end
+  if self._destroyed then
+    return
+  end
+  if #lines == 0 then
+    return
+  end
+
+  -- Flush any pending partial as a complete line
+  if self._partial ~= "" then
+    local flushed = self._partial
+    self._partial = ""
+    if self._on_line then
+      local ok, err = pcall(self._on_line, flushed)
+      if not ok then
+        log.error("sink on_line callback error: " .. tostring(err))
+      end
+    end
+    table.insert(self._pending, flushed)
+  end
+
+  for _, line in ipairs(lines) do
+    if self._on_line then
+      local ok, err = pcall(self._on_line, line)
+      if not ok then
+        log.error("sink on_line callback error: " .. tostring(err))
+      end
+    end
+    table.insert(self._pending, line)
+  end
+end
+
 ---Flush pending data to the buffer and finalize the partial line.
 ---
 ---Stub for now — full implementation comes in a subsequent task.

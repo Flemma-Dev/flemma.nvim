@@ -106,6 +106,59 @@ describe("flemma.sink", function()
     end)
   end)
 
+  describe("write_lines", function()
+    it("errors when passed a non-table", function()
+      local sink = sink_module.create({ name = "test/wl-type" })
+      assert.has_error(function()
+        sink:write_lines("not a table")
+      end)
+      sink:destroy()
+    end)
+
+    it("is a silent no-op after destroy", function()
+      local sink = sink_module.create({ name = "test/wl-destroyed" })
+      sink:destroy()
+      assert.has_no.errors(function()
+        sink:write_lines({ "data" })
+      end)
+    end)
+
+    it("appends complete lines to pending", function()
+      local lines_seen = {}
+      local sink = sink_module.create({
+        name = "test/wl-basic",
+        on_line = function(line)
+          table.insert(lines_seen, line)
+        end,
+      })
+      sink:write_lines({ "alpha", "beta" })
+      assert.are.same({ "alpha", "beta" }, lines_seen)
+      sink:destroy()
+    end)
+
+    it("flushes pending partial before appending lines", function()
+      local lines_seen = {}
+      local sink = sink_module.create({
+        name = "test/wl-partial-flush",
+        on_line = function(line)
+          table.insert(lines_seen, line)
+        end,
+      })
+      sink:write("partial")
+      sink:write_lines({ "next" })
+      assert.are.same({ "partial", "next" }, lines_seen)
+      sink:destroy()
+    end)
+
+    it("handles empty table as a no-op", function()
+      local sink = sink_module.create({ name = "test/wl-empty" })
+      assert.has_no.errors(function()
+        sink:write_lines({})
+      end)
+      sink:destroy()
+    end)
+  end)
+
   describe("destroy", function()
     it("marks the sink as destroyed", function()
       local sink = sink_module.create({ name = "test/destroy" })
