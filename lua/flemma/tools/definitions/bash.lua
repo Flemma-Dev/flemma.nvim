@@ -60,8 +60,10 @@ M.definitions = {
 
       local timeout = input.timeout or ctx.timeout
 
-      local output_lines = {}
-      local partial_line = "" -- buffer for incomplete line across chunks
+      local sink_module = require("flemma.sink")
+      local output_sink = sink_module.create({
+        name = "bash/" .. (input.label or "cmd"):gsub("[^%w/%-]", "-"),
+      })
       local job_exited = false
       local finished = false
       local timer = nil
@@ -75,11 +77,7 @@ M.definitions = {
       local job_opts = {
         on_stdout = function(_, data)
           if data then
-            -- Per :h channel-callback, the last element is a partial line
-            -- that must be joined with the first element of the next chunk
-            data[1] = partial_line .. data[1]
-            partial_line = table.remove(data)
-            vim.list_extend(output_lines, data)
+            output_sink:write(table.concat(data, "\n"))
           end
         end,
         on_exit = function(_, code)
@@ -91,12 +89,9 @@ M.definitions = {
           job_exited = true
           close_timer()
           vim.schedule(function()
-            -- Flush remaining partial line
-            if partial_line ~= "" then
-              table.insert(output_lines, partial_line)
-            end
-
-            local full_output = table.concat(output_lines, "\n"):gsub("%s+$", "")
+            local all_lines = output_sink:read_lines()
+            local full_output = output_sink:read():gsub("%s+$", "")
+            output_sink:destroy()
 
             -- Apply tail truncation
             local result = ctx.truncate.truncate_tail(full_output)
@@ -116,7 +111,7 @@ M.definitions = {
               local end_line = result.total_lines
 
               if result.last_line_partial then
-                local last_line_size = ctx.truncate.format_size(#output_lines[#output_lines])
+                local last_line_size = ctx.truncate.format_size(#all_lines[#all_lines])
                 output_text = output_text
                   .. string.format(
                     "\n\n[Showing last %s of line %d (line is %s). Full output: %s]",
@@ -178,6 +173,7 @@ M.definitions = {
       -- Sandbox wrapping (if enabled)
       local wrapped_cmd, sandbox_err = ctx.sandbox.wrap_command(inner_cmd)
       if not wrapped_cmd then
+        output_sink:destroy()
         callback({ success = false, error = "Sandbox error: " .. sandbox_err })
         return nil
       end
@@ -185,6 +181,7 @@ M.definitions = {
       local job_id = vim.fn.jobstart(wrapped_cmd, job_opts)
 
       if job_id <= 0 then
+        output_sink:destroy()
         callback({ success = false, error = "Failed to start job" })
         return nil
       end
@@ -192,6 +189,7 @@ M.definitions = {
       -- Setup timeout
       timer = vim.uv.new_timer()
       if not timer then
+        output_sink:destroy()
         callback({ success = false, error = "Failed to create timer" })
         return nil
       end
@@ -208,13 +206,11 @@ M.definitions = {
             vim.fn.jobstop(job_id)
 
             -- Include any partial output collected before the timeout
-            if partial_line ~= "" then
-              table.insert(output_lines, partial_line)
-            end
-            local partial = table.concat(output_lines, "\n"):gsub("%s+$", "")
+            local partial_output = output_sink:read():gsub("%s+$", "")
+            output_sink:destroy()
             local error_msg = string.format("Command timed out after %d seconds.", timeout)
-            if partial ~= "" then
-              error_msg = partial .. "\n\n" .. error_msg
+            if partial_output ~= "" then
+              error_msg = partial_output .. "\n\n" .. error_msg
             end
 
             callback({
@@ -233,6 +229,7 @@ M.definitions = {
         if not job_exited then
           pcall(vim.fn.jobstop, job_id)
         end
+        output_sink:destroy()
       end
     end,
   },
