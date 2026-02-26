@@ -166,6 +166,54 @@ function Sink:write_lines(lines)
   end
 end
 
+---Assemble complete content from all three sources (buffer + pending + partial)
+---@return string[]
+---@private
+function Sink:_assemble_lines()
+  -- 1. Lines already flushed to the Neovim buffer
+  local buffer_lines = {}
+  if vim.api.nvim_buf_is_valid(self._bufnr) then
+    buffer_lines = vim.api.nvim_buf_get_lines(self._bufnr, 0, -1, false)
+    -- Fresh buffer has {""}; treat as empty
+    if #buffer_lines == 1 and buffer_lines[1] == "" and self._first_drain then
+      buffer_lines = {}
+    end
+  end
+
+  -- 2. Pending lines (batched, not yet flushed to buffer)
+  local all_lines = {}
+  vim.list_extend(all_lines, buffer_lines)
+  vim.list_extend(all_lines, self._pending)
+
+  -- 3. Partial line (incomplete trailing data)
+  if self._partial ~= "" then
+    table.insert(all_lines, self._partial)
+  end
+
+  return all_lines
+end
+
+---Read full accumulated content as a string
+---Assembles from buffer + pending + partial without flushing.
+---@return string
+function Sink:read()
+  if self._destroyed then
+    error("sink already destroyed")
+  end
+  local lines = self:_assemble_lines()
+  return table.concat(lines, "\n")
+end
+
+---Read full accumulated content as a lines table
+---Assembles from buffer + pending + partial without flushing.
+---@return string[]
+function Sink:read_lines()
+  if self._destroyed then
+    error("sink already destroyed")
+  end
+  return self:_assemble_lines()
+end
+
 ---Flush pending data to the buffer and finalize the partial line.
 ---
 ---Stub for now — full implementation comes in a subsequent task.
