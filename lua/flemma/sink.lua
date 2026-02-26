@@ -1,0 +1,158 @@
+--- Buffer-backed sink for streaming data accumulation
+---
+--- Replaces all in-memory string/table accumulators with a uniform API backed
+--- by hidden scratch buffers. Callers interact through write/read methods and
+--- never touch the underlying Neovim buffer directly.
+
+---@class flemma.SinkModule
+local M = {}
+
+local log = require("flemma.logging")
+
+local DEFAULT_FLUSH_INTERVAL = 50
+
+---@class flemma.SinkCreateOpts
+---@field name string Sink name (e.g. "stream/curl-42"), used in buffer name
+---@field flush_interval? integer Milliseconds between auto-flushes (default 50)
+---@field on_line? fun(line: string) Real-time callback fired for each complete line
+
+---@class flemma.Sink
+---@field private _bufnr integer Hidden scratch buffer number
+---@field private _name string Sink name (e.g. "stream/curl-42")
+---@field private _destroyed boolean Whether the sink has been destroyed
+---@field private _partial string Incomplete trailing line (line framing)
+---@field private _pending string[] Batched lines not yet flushed to buffer
+---@field private _timer uv.uv_timer_t|nil Batch flush timer
+---@field private _flush_interval integer Milliseconds between auto-flushes
+---@field private _on_line? fun(line: string) Real-time line callback
+---@field private _first_drain boolean Whether the first drain has occurred
+local Sink = {}
+Sink.__index = Sink
+
+---Construct a new Sink instance and start its batch timer.
+---@param bufnr integer
+---@param name string
+---@param flush_interval integer
+---@param on_line? fun(line: string)
+---@return flemma.Sink
+---@private
+function Sink.new(bufnr, name, flush_interval, on_line)
+  local self = setmetatable({
+    _bufnr = bufnr,
+    _name = name,
+    _destroyed = false,
+    _partial = "",
+    _pending = {},
+    _timer = nil,
+    _flush_interval = flush_interval,
+    _on_line = on_line,
+    _first_drain = true,
+  }, Sink)
+
+  -- Start the batch flush timer.
+  -- Capture the pending table as an upvalue so the libuv callback avoids
+  -- private field access through `self` — a LuaLS limitation where closures
+  -- inside constructors can't see private fields of the captured object.
+  local pending = self._pending
+  local sink = self
+  local timer = vim.uv.new_timer()
+  if timer then
+    self._timer = timer
+    timer:start(flush_interval, flush_interval, function()
+      if #pending > 0 then
+        vim.schedule(function()
+          Sink._drain(sink)
+        end)
+      end
+    end)
+  end
+
+  return self
+end
+
+---Create a new sink backed by a hidden scratch buffer.
+---
+---The buffer is unlisted, has no swapfile, no undo, and is named
+---`flemma://sink/<name>`. The batch timer is started but `_drain()` is a
+---stub until write/flush are implemented in subsequent tasks.
+---@param opts flemma.SinkCreateOpts
+---@return flemma.Sink
+function M.create(opts)
+  if not opts.name or opts.name == "" then
+    error("flemma.sink.create: opts.name is required")
+  end
+
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  vim.bo[bufnr].buftype = "nofile"
+  vim.bo[bufnr].swapfile = false
+  vim.bo[bufnr].undolevels = -1
+  vim.bo[bufnr].bufhidden = "hide"
+  vim.api.nvim_buf_set_name(bufnr, "flemma://sink/" .. opts.name)
+
+  local flush_interval = opts.flush_interval or DEFAULT_FLUSH_INTERVAL
+
+  return Sink.new(bufnr, opts.name, flush_interval, opts.on_line)
+end
+
+---Flush pending data to the buffer and finalize the partial line.
+---
+---Stub for now — full implementation comes in a subsequent task.
+---@private
+function Sink:_drain()
+  -- Stub: will be implemented in Task 5
+end
+
+---Flush all pending data (including the partial line) to the Neovim buffer.
+---
+---This is a display concern — reads are always complete regardless of flush
+---state. Stub for now.
+function Sink:flush()
+  -- Stub: will be implemented in Task 5
+end
+
+---Destroy the sink, releasing the buffer and stopping the timer.
+---
+---If the buffer is currently visible in a window, sets `bufhidden=wipe` so
+---it survives until the window closes. Otherwise deletes immediately.
+---Double-destroy is a silent no-op.
+function Sink:destroy()
+  if self._destroyed then
+    return
+  end
+
+  self:flush()
+
+  -- Stop and release the timer
+  if self._timer then
+    self._timer:stop()
+    if not self._timer:is_closing() then
+      self._timer:close()
+    end
+    self._timer = nil
+  end
+
+  self._destroyed = true
+
+  -- Check if the buffer is still valid before operating on it
+  if not vim.api.nvim_buf_is_valid(self._bufnr) then
+    return
+  end
+
+  -- Check visibility: if viewed, defer wipe to window close
+  local windows = vim.fn.win_findbuf(self._bufnr)
+  if #windows > 0 then
+    vim.bo[self._bufnr].bufhidden = "wipe"
+    log.debug("sink '" .. self._name .. "': buffer visible, deferring wipe")
+  else
+    vim.api.nvim_buf_delete(self._bufnr, { force = true })
+    log.debug("sink '" .. self._name .. "': buffer deleted")
+  end
+end
+
+---Check whether the sink has been destroyed.
+---@return boolean
+function Sink:is_destroyed()
+  return self._destroyed
+end
+
+return M

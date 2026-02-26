@@ -1,0 +1,40 @@
+describe("flemma.sink", function()
+  local sink_module
+
+  before_each(function()
+    package.loaded["flemma.sink"] = nil
+    sink_module = require("flemma.sink")
+  end)
+
+  describe("create", function()
+    it("creates a sink with a hidden scratch buffer", function()
+      local sink = sink_module.create({ name = "test/basic" })
+      assert.is_not_nil(sink)
+      assert.is_false(sink:is_destroyed())
+      sink:destroy()
+    end)
+
+    it("errors when name is missing", function()
+      assert.has_error(function()
+        sink_module.create({})
+      end)
+    end)
+  end)
+
+  describe("destroy", function()
+    it("marks the sink as destroyed", function()
+      local sink = sink_module.create({ name = "test/destroy" })
+      sink:destroy()
+      assert.is_true(sink:is_destroyed())
+    end)
+
+    it("is a no-op when called twice", function()
+      local sink = sink_module.create({ name = "test/double-destroy" })
+      sink:destroy()
+      assert.has_no.errors(function()
+        sink:destroy()
+      end)
+      assert.is_true(sink:is_destroyed())
+    end)
+  end)
+end)
