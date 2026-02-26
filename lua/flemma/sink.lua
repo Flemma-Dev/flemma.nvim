@@ -78,7 +78,7 @@ end
 ---@param opts flemma.SinkCreateOpts
 ---@return flemma.Sink
 function M.create(opts)
-  if not opts.name or opts.name == "" then
+  if not opts or not opts.name or opts.name == "" then
     error("flemma.sink.create: opts.name is required")
   end
 
@@ -92,6 +92,39 @@ function M.create(opts)
   local flush_interval = opts.flush_interval or DEFAULT_FLUSH_INTERVAL
 
   return Sink.new(bufnr, opts.name, flush_interval, opts.on_line)
+end
+
+---Write raw data to the sink with automatic line framing
+---Lines are split on \n; partial trailing data is buffered until the next write.
+---Fires on_line callback for each complete line.
+---@param chunk string
+function Sink:write(chunk)
+  if type(chunk) ~= "string" then
+    error("sink:write(): expected string, got " .. type(chunk))
+  end
+  if self._destroyed then
+    return
+  end
+  if chunk == "" then
+    return
+  end
+
+  local input = self._partial .. chunk
+  local lines = vim.split(input, "\n", { plain = true })
+
+  -- Last element is the new partial (empty if chunk ended with \n)
+  self._partial = table.remove(lines)
+
+  -- All preceding elements are complete lines
+  for _, line in ipairs(lines) do
+    if self._on_line then
+      local ok, err = pcall(self._on_line, line)
+      if not ok then
+        log.error("sink on_line callback error: " .. tostring(err))
+      end
+    end
+    table.insert(self._pending, line)
+  end
 end
 
 ---Flush pending data to the buffer and finalize the partial line.
