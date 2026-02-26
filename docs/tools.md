@@ -60,7 +60,9 @@ You can **edit the status directly** in the buffer. This is the primary way to i
 
 ### Content-overwrite protection
 
-If you type content inside an `approved` or `pending` block, Flemma treats it as a manual override: execution is skipped, the cycle pauses, and your content is sent to the model as-is. A warning is shown so you know what happened.
+If you paste or type output inside a `pending` block, Flemma treats it as a user-provided result: on <kbd>Ctrl-]</kbd> the `flemma:tool` fence is stripped and your content is sent to the model as a normal tool result. This is useful when you run a command manually and want to provide the output yourself.
+
+If you edit the content inside an `approved` block, Flemma skips execution to protect your edits – a warning is shown and the cycle pauses so you can review. Remove the `flemma:tool` fence manually to send your content.
 
 ### Configuring approval
 

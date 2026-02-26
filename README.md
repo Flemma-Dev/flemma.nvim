@@ -358,7 +358,7 @@ You are always in control. The entire conversation – every tool call, every re
 
 - **Turn limit:** A configurable safety cap (`tools.autopilot.max_turns`, default 100) stops the loop with a warning if exceeded, preventing runaway cost from models that loop without converging.
 - **Cancellation:** <kbd>Ctrl-C</kbd> cancels the active request or tool execution and fully disarms autopilot – no surprises when you next press <kbd>Ctrl-]</kbd>.
-- **Conflict detection:** If autopilot pauses for approval and you edit the content inside a `flemma:tool` block, Flemma detects your changes and will not overwrite them. It warns and stays paused so you can review.
+- **Conflict detection:** If you edit the content inside an `approved` `flemma:tool` block, Flemma detects your changes, skips execution to protect your edits, and warns so you can review. For `pending` blocks, pasting content is treated as a user-provided result.
 
 ### Runtime control
 
