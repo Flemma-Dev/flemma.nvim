@@ -58,14 +58,14 @@ function M.reset(self)
 
   local sink = require("flemma.sink")
   self._response_buffer.extra.thinking_sink = sink.create({
-    name = "anthropic/thinking-" .. vim.uv.hrtime(),
+    name = "anthropic/thinking",
   })
   self._response_buffer.extra.accumulated_signature = ""
   self._response_buffer.extra.redacted_thinking_blocks = {}
   self._response_buffer.extra.current_block_type = nil
   self._response_buffer.extra.current_tool_use = nil
   self._response_buffer.extra.tool_input_sink = sink.create({
-    name = "anthropic/tool-input-" .. vim.uv.hrtime(),
+    name = "anthropic/tool-input",
   })
   log.debug("anthropic.reset(): Reset Anthropic provider state")
 end
@@ -521,7 +521,7 @@ function M.process_response_line(self, line, callbacks)
     -- Reset accumulated state
     self._response_buffer.extra.thinking_sink:destroy()
     self._response_buffer.extra.thinking_sink = require("flemma.sink").create({
-      name = "anthropic/thinking-" .. vim.uv.hrtime(),
+      name = "anthropic/thinking",
     })
     self._response_buffer.extra.accumulated_signature = ""
     self._response_buffer.extra.redacted_thinking_blocks = {}
@@ -579,7 +579,7 @@ function M.process_response_line(self, line, callbacks)
         }
         self._response_buffer.extra.tool_input_sink:destroy()
         self._response_buffer.extra.tool_input_sink = require("flemma.sink").create({
-          name = "anthropic/tool-input-" .. vim.uv.hrtime(),
+          name = "anthropic/tool-input",
         })
         log.debug(
           "anthropic.process_response_line(): Started tool_use block: "
@@ -639,7 +639,7 @@ function M.process_response_line(self, line, callbacks)
       self._response_buffer.extra.current_tool_use = nil
       self._response_buffer.extra.tool_input_sink:destroy()
       self._response_buffer.extra.tool_input_sink = require("flemma.sink").create({
-        name = "anthropic/tool-input-" .. vim.uv.hrtime(),
+        name = "anthropic/tool-input",
       })
     end
 

@@ -10,6 +10,7 @@ local M = {}
 local log = require("flemma.logging")
 
 local DEFAULT_FLUSH_INTERVAL = 50
+local next_buffer_id = 0
 
 ---@class flemma.SinkCreateOpts
 ---@field name string Sink name (e.g. "stream/curl-42"), used in buffer name
@@ -89,7 +90,8 @@ function M.create(opts)
   vim.bo[bufnr].swapfile = false
   vim.bo[bufnr].undolevels = -1
   vim.bo[bufnr].bufhidden = "hide"
-  vim.api.nvim_buf_set_name(bufnr, "flemma://sink/" .. opts.name)
+  next_buffer_id = next_buffer_id + 1
+  vim.api.nvim_buf_set_name(bufnr, "flemma://sink/" .. opts.name .. "#" .. next_buffer_id)
 
   local flush_interval = opts.flush_interval or DEFAULT_FLUSH_INTERVAL
 

@@ -71,7 +71,7 @@ function M.reset(self)
   local sink = require("flemma.sink")
   self._response_buffer.extra.tool_calls = {}
   self._response_buffer.extra.reasoning_sink = sink.create({
-    name = "openai/reasoning-" .. vim.uv.hrtime(),
+    name = "openai/reasoning",
   })
   self._response_buffer.extra.reasoning_item = nil
   log.debug("openai.reset(): Reset OpenAI provider state")
@@ -525,7 +525,7 @@ function M.process_response_line(self, line, callbacks)
     elseif data.item and data.item.type == "reasoning" then
       self._response_buffer.extra.reasoning_sink:destroy()
       self._response_buffer.extra.reasoning_sink = require("flemma.sink").create({
-        name = "openai/reasoning-" .. vim.uv.hrtime(),
+        name = "openai/reasoning",
       })
       log.debug("openai.process_response_line(): Reasoning item started")
     end

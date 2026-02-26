@@ -623,7 +623,7 @@ end
 function M._new_response_buffer(self)
   local sink = require("flemma.sink")
   self._response_buffer = {
-    lines_sink = sink.create({ name = "provider/response-lines-" .. vim.uv.hrtime() }),
+    lines_sink = sink.create({ name = "provider/response-lines" }),
     successful = false,
     extra = {},
     content = "", -- Accumulated content for spacing decisions
