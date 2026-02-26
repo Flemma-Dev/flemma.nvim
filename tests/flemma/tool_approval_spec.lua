@@ -1982,8 +1982,12 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
     local groups = context.resolve_all_tool_blocks(bufnr)
     assert.equals(2, #(groups["pending"] or {}))
     -- Distinguish by content
-    local filled = vim.tbl_filter(function(ctx) return ctx.has_content end, groups["pending"])
-    local empty = vim.tbl_filter(function(ctx) return not ctx.has_content end, groups["pending"])
+    local filled = vim.tbl_filter(function(ctx)
+      return ctx.has_content
+    end, groups["pending"])
+    local empty = vim.tbl_filter(function(ctx)
+      return not ctx.has_content
+    end, groups["pending"])
     assert.equals(1, #filled)
     assert.equals(1, #empty)
   end)
