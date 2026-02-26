@@ -555,14 +555,17 @@ Flemma uses a priority-based resolver chain to decide whether a tool call should
 
 Built-in resolvers are registered during `setup()`:
 
-| Priority | Name                              | Source                                                      |
-| -------- | --------------------------------- | ----------------------------------------------------------- |
-| 100      | `urn:flemma:approval:config`      | Global `tools.auto_approve` from config (list or function)  |
-| 100      | `<module.path>`                   | Per-module resolver from `tools.auto_approve` module path   |
-| 90       | `urn:flemma:approval:frontmatter` | Per-buffer `flemma.opt.tools.auto_approve` from frontmatter |
-| 0        | `urn:flemma:approval:catch-all`   | Only when `tools.require_approval = false`                  |
+| Priority | Name                              | Source                                                                                                   |
+| -------- | --------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 100      | `urn:flemma:approval:config`      | Global `tools.auto_approve` from config (list or function)                                               |
+| 100      | `<module.path>`                   | Per-module resolver from `tools.auto_approve` module path                                                |
+| 90       | `urn:flemma:approval:frontmatter` | Per-buffer `flemma.opt.tools.auto_approve` from frontmatter                                              |
+| 25       | `urn:flemma:approval:sandbox`     | Auto-approve tools with `can_auto_approve_if_sandboxed` capability when sandbox is enabled and available |
+| 0        | `urn:flemma:approval:catch-all`   | Only when `tools.require_approval = false`                                                               |
 
 Third-party plugins register at the default priority of 50. Set `priority` higher to run before built-in resolvers (e.g., 200 to override config), or lower to act as a fallback.
+
+The sandbox resolver (priority 25) auto-approves tools that declare `"can_auto_approve_if_sandboxed"` in their `capabilities` array when three conditions are met: `tools.auto_approve` is configured, the sandbox is enabled, and a backend is available. Currently only the built-in `bash` tool declares this capability. Disable with `tools.auto_approve_sandboxed = false` in config, or exclude specific tools per-buffer with `auto_approve:remove("bash")` in frontmatter.
 
 ### Registering a resolver
 

@@ -2303,6 +2303,7 @@ end)
 
 describe("Sandbox auto-approval resolver", function()
   local sandbox
+  local registry = require("flemma.tools.registry")
 
   --- Register a mock sandbox backend that always reports as available.
   local function register_mock_backend()
@@ -2356,10 +2357,35 @@ describe("Sandbox auto-approval resolver", function()
     assert.equals("approve", result)
   end)
 
-  it("does not affect non-bash tools", function()
+  it("does not affect tools without can_auto_approve_if_sandboxed capability", function()
     setup_with_sandbox()
-    -- "calculator" is not in $default and not bash — should require approval
+    -- "calculator" has no capabilities — should require approval
     local result = approval.resolve("calculator", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("require_approval", result)
+  end)
+
+  it("auto-approves custom tool that declares can_auto_approve_if_sandboxed", function()
+    -- Register a custom tool with the sandbox capability
+    registry.define("my_sandboxed_tool", {
+      name = "my_sandboxed_tool",
+      description = "A custom sandboxed tool",
+      capabilities = { "can_auto_approve_if_sandboxed" },
+      input_schema = { type = "object", properties = {} },
+    })
+    setup_with_sandbox()
+    local result = approval.resolve("my_sandboxed_tool", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("approve", result)
+  end)
+
+  it("does not auto-approve tool with unrelated capabilities", function()
+    registry.define("safe_tool", {
+      name = "safe_tool",
+      description = "A tool with other capabilities",
+      capabilities = { "some_other_capability" },
+      input_schema = { type = "object", properties = {} },
+    })
+    setup_with_sandbox()
+    local result = approval.resolve("safe_tool", {}, { bufnr = 1, tool_id = "t1" })
     assert.equals("require_approval", result)
   end)
 
@@ -2378,6 +2404,19 @@ describe("Sandbox auto-approval resolver", function()
 
   it("requires approval when tools.auto_approve_sandboxed is false", function()
     setup_with_sandbox({ tools = { auto_approve_sandboxed = false } })
+    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("require_approval", result)
+  end)
+
+  it("requires approval when tools.auto_approve is not configured", function()
+    setup_with_sandbox()
+    -- Override: clear and re-setup with no auto_approve
+    state.set_config({
+      tools = { auto_approve_sandboxed = true },
+      sandbox = { enabled = true, backend = "auto" },
+    })
+    approval.clear()
+    approval.setup()
     local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
     assert.equals("require_approval", result)
   end)
