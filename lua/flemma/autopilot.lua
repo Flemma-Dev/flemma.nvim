@@ -188,7 +188,7 @@ function M.on_tools_complete(bufnr)
   -- Only pause for empty pending blocks — user-filled ones will be resolved on send
   local first_empty_pending = nil
   for _, ctx in ipairs(tool_blocks["pending"] or {}) do
-    if ctx.content == "" then
+    if not ctx.has_content then
       first_empty_pending = ctx
       break
     end

@@ -229,7 +229,7 @@ local function advance_phase2(opts)
   -- content becomes a normal resolved tool_result sent to the provider.
   local pending = tool_blocks["pending"] or {}
   for _, ctx in ipairs(pending) do
-    if ctx.content ~= "" then
+    if ctx.has_content then
       local ok, err = injector.strip_fence_info_string(bufnr, ctx.tool_id)
       if not ok then
         log.warn("Failed to strip fence info string for " .. ctx.tool_id .. ": " .. (err or "unknown"))
@@ -277,7 +277,7 @@ local function advance_phase2(opts)
   -- Re-resolve positions if other blocks were processed (their injections shift line numbers).
   local pending_blocks = {}
   for _, ctx in ipairs(pending) do
-    if ctx.content == "" then
+    if not ctx.has_content then
       table.insert(pending_blocks, ctx)
     end
   end
@@ -285,7 +285,7 @@ local function advance_phase2(opts)
     local fresh = tool_context.resolve_all_tool_blocks(bufnr)
     pending_blocks = {}
     for _, ctx in ipairs(fresh["pending"] or {}) do
-      if ctx.content == "" then
+      if not ctx.has_content then
         table.insert(pending_blocks, ctx)
       end
     end

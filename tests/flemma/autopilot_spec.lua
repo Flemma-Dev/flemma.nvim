@@ -21,7 +21,7 @@ local function get_awaiting_execution(bufnr)
   local pending = groups["pending"] or {}
   local awaiting = {}
   for _, ctx in ipairs(pending) do
-    if not ctx.is_error and ctx.content == "" then
+    if not ctx.is_error and not ctx.has_content then
       table.insert(awaiting, ctx)
     end
   end

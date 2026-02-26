@@ -142,6 +142,7 @@ end
 ---@class flemma.tools.ToolBlockContext : flemma.tools.ToolContext
 ---@field status flemma.ast.ToolStatus
 ---@field content string
+---@field has_content boolean Whether the tool_result block contains non-empty user content
 ---@field is_error boolean
 ---@field tool_result { start_line: integer, fence_line?: integer } Position of the matching tool_result block
 ---@field aborted_message? string The message from the abort marker (for aborted blocks)
@@ -218,12 +219,13 @@ function M.resolve_all_tool_blocks(bufnr)
         end_line = tu.position.end_line,
         status = info.status,
         content = info.content,
+        has_content = info.content ~= "",
         is_error = info.is_error,
         tool_result = { start_line = info.tool_result_start_line, fence_line = info.fence_line },
         aborted_message = abort_message_map[tu.id],
       }
 
-      if info.status == "approved" and info.content ~= "" then
+      if info.status == "approved" and block_context.has_content then
         -- Content-overwrite protection: approved with user-edited content.
         -- Execution would overwrite the user's edits.
         conflict_count = conflict_count + 1
