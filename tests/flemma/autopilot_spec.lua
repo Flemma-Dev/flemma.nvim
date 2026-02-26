@@ -11,7 +11,9 @@ local context = require("flemma.tools.context")
 local state = require("flemma.state")
 local parser = require("flemma.parser")
 
---- Helper: get pending non-error tool blocks awaiting execution
+--- Helper: get pending non-error, empty tool blocks awaiting execution.
+--- Blocks with user-filled content are not awaiting execution — the user
+--- already provided the result.
 ---@param bufnr integer
 ---@return flemma.tools.ToolBlockContext[]
 local function get_awaiting_execution(bufnr)
@@ -19,7 +21,7 @@ local function get_awaiting_execution(bufnr)
   local pending = groups["pending"] or {}
   local awaiting = {}
   for _, ctx in ipairs(pending) do
-    if not ctx.is_error then
+    if not ctx.is_error and ctx.content == "" then
       table.insert(awaiting, ctx)
     end
   end

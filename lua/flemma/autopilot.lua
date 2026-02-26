@@ -185,19 +185,24 @@ function M.on_tools_complete(bufnr)
 
   -- Check for flemma:tool blocks by status
   local tool_blocks = tool_context.resolve_all_tool_blocks(bufnr)
-  local has_pending = tool_blocks["pending"] and #tool_blocks["pending"] > 0
+  -- Only pause for empty pending blocks — user-filled ones will be resolved on send
+  local first_empty_pending = nil
+  for _, ctx in ipairs(tool_blocks["pending"] or {}) do
+    if ctx.content == "" then
+      first_empty_pending = ctx
+      break
+    end
+  end
   local has_actionable = (tool_blocks["approved"] and #tool_blocks["approved"] > 0)
     or (tool_blocks["denied"] and #tool_blocks["denied"] > 0)
     or (tool_blocks["rejected"] and #tool_blocks["rejected"] > 0)
 
-  if has_pending then
+  if first_empty_pending then
     bs.state = "paused"
     log.debug("autopilot: flemma:tool status=pending blocks remain, pausing")
-    -- Move cursor to the first pending block so the user can act
-    local first = tool_blocks["pending"][1]
     local winid = vim.fn.bufwinid(bufnr)
     if winid ~= -1 then
-      vim.api.nvim_win_set_cursor(winid, { first.tool_result.start_line, 0 })
+      vim.api.nvim_win_set_cursor(winid, { first_empty_pending.tool_result.start_line, 0 })
     end
     return
   end

@@ -1909,7 +1909,7 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("returns pending blocks with content in user_filled, not in groups", function()
+  it("pending blocks with content are in groups['pending']", function()
     local bufnr = create_buffer({
       "@Assistant: Tool call",
       "",
@@ -1925,14 +1925,13 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
       "```",
     })
 
-    local groups, user_filled = context.resolve_all_tool_blocks(bufnr)
-    assert.equals(0, #(groups["pending"] or {}))
-    assert.equals(1, #user_filled)
-    assert.equals("toolu_01", user_filled[1].tool_id)
-    assert.equals("hello", user_filled[1].content)
+    local groups = context.resolve_all_tool_blocks(bufnr)
+    assert.equals(1, #(groups["pending"] or {}))
+    assert.equals("toolu_01", groups["pending"][1].tool_id)
+    assert.equals("hello", groups["pending"][1].content)
   end)
 
-  it("empty pending blocks stay in groups, not in user_filled", function()
+  it("empty pending blocks are also in groups['pending']", function()
     local bufnr = create_buffer({
       "@Assistant: Tool call",
       "",
@@ -1947,12 +1946,12 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
       "```",
     })
 
-    local groups, user_filled = context.resolve_all_tool_blocks(bufnr)
+    local groups = context.resolve_all_tool_blocks(bufnr)
     assert.equals(1, #(groups["pending"] or {}))
-    assert.equals(0, #user_filled)
+    assert.equals("", groups["pending"][1].content)
   end)
 
-  it("mixed: pending with content + empty pending separated correctly", function()
+  it("mixed: pending with and without content both in groups['pending']", function()
     local bufnr = create_buffer({
       "@Assistant: Two tools",
       "",
@@ -1978,11 +1977,13 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
       "```",
     })
 
-    local groups, user_filled = context.resolve_all_tool_blocks(bufnr)
-    assert.equals(1, #(groups["pending"] or {}))
-    assert.equals("toolu_02", groups["pending"][1].tool_id)
-    assert.equals(1, #user_filled)
-    assert.equals("toolu_01", user_filled[1].tool_id)
+    local groups = context.resolve_all_tool_blocks(bufnr)
+    assert.equals(2, #(groups["pending"] or {}))
+    -- Distinguish by content
+    local filled = vim.tbl_filter(function(ctx) return ctx.content ~= "" end, groups["pending"])
+    local empty = vim.tbl_filter(function(ctx) return ctx.content == "" end, groups["pending"])
+    assert.equals(1, #filled)
+    assert.equals(1, #empty)
   end)
 
   it("approved with content still excluded (content-overwrite protection)", function()
@@ -2001,9 +2002,8 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
       "```",
     })
 
-    local groups, user_filled = context.resolve_all_tool_blocks(bufnr)
+    local groups = context.resolve_all_tool_blocks(bufnr)
     assert.equals(0, #(groups["approved"] or {}))
-    assert.equals(0, #user_filled)
   end)
 end)
 

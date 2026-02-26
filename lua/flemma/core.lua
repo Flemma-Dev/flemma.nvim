@@ -222,13 +222,19 @@ local function advance_phase2(opts)
   local executor = require("flemma.tools.executor")
   local injector = require("flemma.tools.injector")
 
-  local tool_blocks, user_filled = tool_context.resolve_all_tool_blocks(bufnr)
+  local tool_blocks = tool_context.resolve_all_tool_blocks(bufnr)
 
   -- Resolve user-filled pending blocks: the user pasted output into a
   -- flemma:tool status=pending block. Strip the fence info string so the
   -- content becomes a normal resolved tool_result sent to the provider.
-  for _, ctx in ipairs(user_filled) do
-    injector.strip_fence_info_string(bufnr, ctx.tool_id)
+  local pending = tool_blocks["pending"] or {}
+  for _, ctx in ipairs(pending) do
+    if ctx.content ~= "" then
+      local ok, err = injector.strip_fence_info_string(bufnr, ctx.tool_id)
+      if not ok then
+        log.warn("Failed to strip fence info string for " .. ctx.tool_id .. ": " .. (err or "unknown"))
+      end
+    end
   end
 
   -- Process denied → replace with error
@@ -267,12 +273,22 @@ local function advance_phase2(opts)
     end
   end
 
-  -- Re-resolve pending positions if other blocks were processed (their injections
-  -- shift line numbers). Approved sync tools also replace placeholders inline.
-  local pending_blocks = tool_blocks["pending"] or {}
+  -- Collect truly-pending blocks (empty content — user-filled ones were already resolved).
+  -- Re-resolve positions if other blocks were processed (their injections shift line numbers).
+  local pending_blocks = {}
+  for _, ctx in ipairs(pending) do
+    if ctx.content == "" then
+      table.insert(pending_blocks, ctx)
+    end
+  end
   if (#denied > 0 or #rejected > 0 or #aborted > 0 or #approved > 0) and #pending_blocks > 0 then
     local fresh = tool_context.resolve_all_tool_blocks(bufnr)
-    pending_blocks = fresh["pending"] or {}
+    pending_blocks = {}
+    for _, ctx in ipairs(fresh["pending"] or {}) do
+      if ctx.content == "" then
+        table.insert(pending_blocks, ctx)
+      end
+    end
   end
 
   if #approved > 0 then
