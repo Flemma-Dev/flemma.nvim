@@ -53,6 +53,8 @@ function Sink.new(bufnr, name, flush_interval, on_line)
   -- Capture the pending table as an upvalue so the libuv callback avoids
   -- private field access through `self` — a LuaLS limitation where closures
   -- inside constructors can't see private fields of the captured object.
+  -- INVARIANT: _drain() clears this table in-place (nil-per-element) to
+  -- preserve the reference. Never replace _pending with a new table.
   local pending = self._pending
   local sink = self
   local timer = vim.uv.new_timer()

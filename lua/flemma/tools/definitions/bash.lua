@@ -90,7 +90,7 @@ M.definitions = {
           close_timer()
           vim.schedule(function()
             local all_lines = output_sink:read_lines()
-            local full_output = output_sink:read():gsub("%s+$", "")
+            local full_output = table.concat(all_lines, "\n"):gsub("%s+$", "")
             output_sink:destroy()
 
             -- Apply tail truncation
