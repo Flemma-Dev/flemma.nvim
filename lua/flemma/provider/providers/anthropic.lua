@@ -44,13 +44,29 @@ end
 
 ---@param self flemma.provider.Anthropic
 function M.reset(self)
+  -- Destroy previous sinks if they exist
+  if self._response_buffer and self._response_buffer.extra then
+    if self._response_buffer.extra.thinking_sink then
+      self._response_buffer.extra.thinking_sink:destroy()
+    end
+    if self._response_buffer.extra.tool_input_sink then
+      self._response_buffer.extra.tool_input_sink:destroy()
+    end
+  end
+
   base.reset(self)
-  self._response_buffer.extra.accumulated_thinking = ""
+
+  local sink = require("flemma.sink")
+  self._response_buffer.extra.thinking_sink = sink.create({
+    name = "anthropic/thinking-" .. vim.uv.hrtime(),
+  })
   self._response_buffer.extra.accumulated_signature = ""
   self._response_buffer.extra.redacted_thinking_blocks = {}
   self._response_buffer.extra.current_block_type = nil
   self._response_buffer.extra.current_tool_use = nil
-  self._response_buffer.extra.accumulated_tool_input = ""
+  self._response_buffer.extra.tool_input_sink = sink.create({
+    name = "anthropic/tool-input-" .. vim.uv.hrtime(),
+  })
   log.debug("anthropic.reset(): Reset Anthropic provider state")
 end
 
@@ -470,7 +486,7 @@ function M.process_response_line(self, line, callbacks)
     log.debug("anthropic.process_response_line(): Received message_stop event")
 
     -- Append accumulated thinking at the end (after text content)
-    local accumulated = self._response_buffer.extra.accumulated_thinking
+    local accumulated = self._response_buffer.extra.thinking_sink:read()
     local signature = self._response_buffer.extra.accumulated_signature or ""
 
     if accumulated and #accumulated > 0 then
@@ -503,7 +519,10 @@ function M.process_response_line(self, line, callbacks)
     end
 
     -- Reset accumulated state
-    self._response_buffer.extra.accumulated_thinking = ""
+    self._response_buffer.extra.thinking_sink:destroy()
+    self._response_buffer.extra.thinking_sink = require("flemma.sink").create({
+      name = "anthropic/thinking-" .. vim.uv.hrtime(),
+    })
     self._response_buffer.extra.accumulated_signature = ""
     self._response_buffer.extra.redacted_thinking_blocks = {}
 
@@ -558,7 +577,10 @@ function M.process_response_line(self, line, callbacks)
           id = data.content_block.id,
           name = data.content_block.name,
         }
-        self._response_buffer.extra.accumulated_tool_input = ""
+        self._response_buffer.extra.tool_input_sink:destroy()
+        self._response_buffer.extra.tool_input_sink = require("flemma.sink").create({
+          name = "anthropic/tool-input-" .. vim.uv.hrtime(),
+        })
         log.debug(
           "anthropic.process_response_line(): Started tool_use block: "
             .. data.content_block.name
@@ -577,7 +599,7 @@ function M.process_response_line(self, line, callbacks)
     -- Emit formatted tool_use block
     local current_tool = self._response_buffer.extra.current_tool_use
     if current_tool then
-      local input_json = self._response_buffer.extra.accumulated_tool_input or ""
+      local input_json = self._response_buffer.extra.tool_input_sink:read()
       local parse_ok, input = pcall(json.decode, input_json)
       if not parse_ok then
         input = {}
@@ -615,7 +637,10 @@ function M.process_response_line(self, line, callbacks)
 
       -- Reset tool state
       self._response_buffer.extra.current_tool_use = nil
-      self._response_buffer.extra.accumulated_tool_input = ""
+      self._response_buffer.extra.tool_input_sink:destroy()
+      self._response_buffer.extra.tool_input_sink = require("flemma.sink").create({
+        name = "anthropic/tool-input-" .. vim.uv.hrtime(),
+      })
     end
 
     -- Reset block type tracker; thinking is emitted at message_stop
@@ -635,12 +660,10 @@ function M.process_response_line(self, line, callbacks)
     elseif data.delta.type == "input_json_delta" and data.delta.partial_json ~= nil then
       log.debug("anthropic.process_response_line(): Content input_json_delta: " .. log.inspect(data.delta.partial_json))
       -- Accumulate tool input JSON
-      self._response_buffer.extra.accumulated_tool_input = (self._response_buffer.extra.accumulated_tool_input or "")
-        .. data.delta.partial_json
+      self._response_buffer.extra.tool_input_sink:write(data.delta.partial_json)
     elseif data.delta.type == "thinking_delta" and data.delta.thinking then
       log.debug("anthropic.process_response_line(): Content thinking delta: " .. log.inspect(data.delta.thinking))
-      self._response_buffer.extra.accumulated_thinking = (self._response_buffer.extra.accumulated_thinking or "")
-        .. data.delta.thinking
+      self._response_buffer.extra.thinking_sink:write(data.delta.thinking)
       if callbacks.on_thinking then
         callbacks.on_thinking(data.delta.thinking)
       end
