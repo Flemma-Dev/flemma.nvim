@@ -214,20 +214,56 @@ function Sink:read_lines()
   return self:_assemble_lines()
 end
 
----Flush pending data to the buffer and finalize the partial line.
----
----Stub for now — full implementation comes in a subsequent task.
+---Drain pending lines to the Neovim buffer
 ---@private
 function Sink:_drain()
-  -- Stub: will be implemented in Task 5
+  if self._destroyed then
+    return
+  end
+  if not vim.api.nvim_buf_is_valid(self._bufnr) then
+    -- Buffer was deleted externally; transition to destroyed
+    self._destroyed = true
+    if self._timer and not self._timer:is_closing() then
+      self._timer:stop()
+      self._timer:close()
+    end
+    self._timer = nil
+    return
+  end
+  if #self._pending == 0 then
+    return
+  end
+
+  -- Copy entries and clear in-place to preserve table identity for timer upvalue
+  local lines_to_write = {}
+  for i = 1, #self._pending do
+    lines_to_write[i] = self._pending[i]
+    self._pending[i] = nil
+  end
+
+  if self._first_drain then
+    -- Replace the default empty first line instead of appending
+    self._first_drain = false
+    vim.api.nvim_buf_set_lines(self._bufnr, 0, -1, false, lines_to_write)
+  else
+    vim.api.nvim_buf_set_lines(self._bufnr, -1, -1, false, lines_to_write)
+  end
 end
 
----Flush all pending data (including the partial line) to the Neovim buffer.
----
----This is a display concern — reads are always complete regardless of flush
----state. Stub for now.
+---Flush all pending data (including partial) to the Neovim buffer
+---This is for display purposes; reads already assemble from all sources.
 function Sink:flush()
-  -- Stub: will be implemented in Task 5
+  if self._destroyed then
+    return
+  end
+
+  -- Flush partial as a line
+  if self._partial ~= "" then
+    table.insert(self._pending, self._partial)
+    self._partial = ""
+  end
+
+  self:_drain()
 end
 
 ---Destroy the sink, releasing the buffer and stopping the timer.
