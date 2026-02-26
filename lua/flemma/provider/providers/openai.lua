@@ -59,9 +59,20 @@ end
 
 ---@param self flemma.provider.OpenAI
 function M.reset(self)
+  -- Destroy previous sink if it exists
+  if self._response_buffer and self._response_buffer.extra then
+    if self._response_buffer.extra.reasoning_sink then
+      self._response_buffer.extra.reasoning_sink:destroy()
+    end
+  end
+
   base.reset(self)
+
+  local sink = require("flemma.sink")
   self._response_buffer.extra.tool_calls = {}
-  self._response_buffer.extra.accumulated_reasoning_summary = ""
+  self._response_buffer.extra.reasoning_sink = sink.create({
+    name = "openai/reasoning-" .. vim.uv.hrtime(),
+  })
   self._response_buffer.extra.reasoning_item = nil
   log.debug("openai.reset(): Reset OpenAI provider state")
 end
@@ -375,7 +386,7 @@ function M._emit_reasoning_block(self, callbacks)
     return
   end
 
-  local summary = self._response_buffer.extra.accumulated_reasoning_summary or ""
+  local summary = self._response_buffer.extra.reasoning_sink:read()
   local stripped = vim.trim(summary)
 
   -- Serialize the full reasoning item as base64 for the signature attribute
@@ -512,7 +523,10 @@ function M.process_response_line(self, line, callbacks)
           .. ")"
       )
     elseif data.item and data.item.type == "reasoning" then
-      self._response_buffer.extra.accumulated_reasoning_summary = ""
+      self._response_buffer.extra.reasoning_sink:destroy()
+      self._response_buffer.extra.reasoning_sink = require("flemma.sink").create({
+        name = "openai/reasoning-" .. vim.uv.hrtime(),
+      })
       log.debug("openai.process_response_line(): Reasoning item started")
     end
     return
@@ -567,9 +581,7 @@ function M.process_response_line(self, line, callbacks)
   -- Handle reasoning summary text deltas
   if event_type == "response.reasoning_summary_text.delta" then
     if data.delta then
-      self._response_buffer.extra.accumulated_reasoning_summary = (
-        self._response_buffer.extra.accumulated_reasoning_summary or ""
-      ) .. data.delta
+      self._response_buffer.extra.reasoning_sink:write(data.delta)
       if callbacks.on_thinking then
         callbacks.on_thinking(data.delta)
       end
