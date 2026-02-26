@@ -263,6 +263,40 @@ describe("flemma.sink", function()
     end)
   end)
 
+  describe("external buffer deletion", function()
+    it("transitions to destroyed when buffer is deleted externally", function()
+      local sink = sink_module.create({ name = "test/bd-external" })
+      sink:write("data\n")
+
+      -- Simulate user running :bd!
+      -- Access _bufnr for testing only
+      vim.api.nvim_buf_delete(sink._bufnr, { force = true })
+
+      -- Trigger drain (which detects invalid buffer)
+      sink:flush()
+
+      assert.is_true(sink:is_destroyed())
+    end)
+
+    it("silently drops writes after external deletion", function()
+      local sink = sink_module.create({ name = "test/bd-write" })
+      vim.api.nvim_buf_delete(sink._bufnr, { force = true })
+      sink:flush() -- triggers detection
+      assert.has_no.errors(function()
+        sink:write("more data")
+      end)
+    end)
+
+    it("errors on read after external deletion", function()
+      local sink = sink_module.create({ name = "test/bd-read" })
+      vim.api.nvim_buf_delete(sink._bufnr, { force = true })
+      sink:flush() -- triggers detection
+      assert.has_error(function()
+        sink:read()
+      end, "sink already destroyed")
+    end)
+  end)
+
   describe("destroy", function()
     it("marks the sink as destroyed", function()
       local sink = sink_module.create({ name = "test/destroy" })
