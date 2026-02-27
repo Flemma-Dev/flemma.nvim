@@ -18,7 +18,7 @@ local next_buffer_id = 0
 ---@field on_line? fun(line: string) Real-time callback fired for each complete line
 
 ---@class flemma.Sink
----@field private _bufnr integer Hidden scratch buffer number
+---@field private _bufnr integer Hidden scratch buffer number (-1 before materialization)
 ---@field private _name string Sink name (e.g. "stream/curl-42")
 ---@field private _destroyed boolean Whether the sink has been destroyed
 ---@field private _partial string Incomplete trailing line (line framing)
@@ -28,19 +28,19 @@ local next_buffer_id = 0
 ---@field private _on_line? fun(line: string) Real-time line callback
 ---@field private _first_drain boolean Whether the first drain has occurred
 ---@field private _buffer_has_partial boolean Whether the buffer's last line is a display copy of _partial
+---@field private _materialized boolean Whether the backing buffer has been created
 local Sink = {}
 Sink.__index = Sink
 
----Construct a new Sink instance and start its batch timer.
----@param bufnr integer
+---Construct a new Sink instance (lazy — no buffer or timer until first write).
 ---@param name string
 ---@param flush_interval integer
 ---@param on_line? fun(line: string)
 ---@return flemma.Sink
 ---@private
-function Sink.new(bufnr, name, flush_interval, on_line)
-  local self = setmetatable({
-    _bufnr = bufnr,
+function Sink.new(name, flush_interval, on_line)
+  return setmetatable({
+    _bufnr = -1,
     _name = name,
     _destroyed = false,
     _partial = "",
@@ -50,20 +50,36 @@ function Sink.new(bufnr, name, flush_interval, on_line)
     _on_line = on_line,
     _first_drain = true,
     _buffer_has_partial = false,
+    _materialized = false,
   }, Sink)
+end
+
+---Create the backing buffer and start the batch timer.
+---Called automatically on first write(); idempotent.
+---@private
+function Sink:_materialize()
+  if self._materialized or self._destroyed then
+    return
+  end
+  self._materialized = true
+
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  vim.bo[bufnr].buftype = "nofile"
+  vim.bo[bufnr].swapfile = false
+  vim.bo[bufnr].undolevels = -1
+  vim.bo[bufnr].bufhidden = "hide"
+  next_buffer_id = next_buffer_id + 1
+  vim.api.nvim_buf_set_name(bufnr, "flemma://sink/" .. self._name .. "#" .. next_buffer_id)
+  self._bufnr = bufnr
 
   -- Start the batch flush timer.
-  -- Always schedule drain — the drain function checks internally whether
-  -- there is work to do (pending lines or partial data to display).
-  -- Previous versions gated on `#pending > 0`, but character-by-character
-  -- display also needs drains when only the partial has changed.
   -- INVARIANT: _drain() clears _pending in-place (nil-per-element) to
   -- preserve the table reference. Never replace _pending with a new table.
   local sink = self
   local timer = vim.uv.new_timer()
   if timer then
     self._timer = timer
-    timer:start(flush_interval, flush_interval, function()
+    timer:start(self._flush_interval, self._flush_interval, function()
       vim.schedule(function()
         Sink._drain(sink)
       end)
@@ -72,17 +88,16 @@ function Sink.new(bufnr, name, flush_interval, on_line)
 
   vim.api.nvim_exec_autocmds("User", {
     pattern = "FlemmaSinkCreated",
-    data = { name = self._name, bufnr = self._bufnr },
+    data = { name = self._name, bufnr = bufnr },
   })
-
-  return self
 end
 
----Create a new sink backed by a hidden scratch buffer.
+---Create a new sink.
 ---
----The buffer is unlisted, has no swapfile, no undo, and is named
----`flemma://sink/<name>`. The batch timer starts immediately and drains
----pending lines plus the current partial to the buffer at each tick.
+---The sink starts lazy — no buffer or timer is allocated until the first
+---`write()` or `write_lines()` call. This avoids creating resources for
+---sinks that may never receive data (e.g., thinking sinks when the model
+---produces no thinking output).
 ---@param opts flemma.SinkCreateOpts
 ---@return flemma.Sink
 function M.create(opts)
@@ -90,17 +105,7 @@ function M.create(opts)
     error("flemma.sink.create: opts.name is required")
   end
 
-  local bufnr = vim.api.nvim_create_buf(false, true)
-  vim.bo[bufnr].buftype = "nofile"
-  vim.bo[bufnr].swapfile = false
-  vim.bo[bufnr].undolevels = -1
-  vim.bo[bufnr].bufhidden = "hide"
-  next_buffer_id = next_buffer_id + 1
-  vim.api.nvim_buf_set_name(bufnr, "flemma://sink/" .. opts.name .. "#" .. next_buffer_id)
-
-  local flush_interval = opts.flush_interval or DEFAULT_FLUSH_INTERVAL
-
-  return Sink.new(bufnr, opts.name, flush_interval, opts.on_line)
+  return Sink.new(opts.name, opts.flush_interval or DEFAULT_FLUSH_INTERVAL, opts.on_line)
 end
 
 ---Write raw data to the sink with automatic line framing
@@ -117,6 +122,8 @@ function Sink:write(chunk)
   if chunk == "" then
     return
   end
+
+  self:_materialize()
 
   local input = self._partial .. chunk
   local lines = vim.split(input, "\n", { plain = true })
@@ -150,6 +157,8 @@ function Sink:write_lines(lines)
   if #lines == 0 then
     return
   end
+
+  self:_materialize()
 
   -- Flush any pending partial as a complete line
   if self._partial ~= "" then
@@ -235,7 +244,7 @@ end
 ---a line, never from `_drain()`.
 ---@private
 function Sink:_drain()
-  if self._destroyed then
+  if self._destroyed or not self._materialized then
     return
   end
   if not vim.api.nvim_buf_is_valid(self._bufnr) then
@@ -286,7 +295,7 @@ end
 ---Flush all pending data (including partial) to the Neovim buffer
 ---This is for display purposes; reads already assemble from all sources.
 function Sink:flush()
-  if self._destroyed then
+  if self._destroyed or not self._materialized then
     return
   end
 
@@ -321,6 +330,11 @@ function Sink:destroy()
   end
 
   self._destroyed = true
+
+  -- Nothing to clean up if the buffer was never created
+  if not self._materialized then
+    return
+  end
 
   vim.api.nvim_exec_autocmds("User", {
     pattern = "FlemmaSinkDestroyed",

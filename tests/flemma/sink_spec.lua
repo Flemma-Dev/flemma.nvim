@@ -280,6 +280,7 @@ describe("flemma.sink", function()
 
     it("silently drops writes after external deletion", function()
       local sink = sink_module.create({ name = "test/bd-write" })
+      sink:write("data\n") -- materialize the buffer
       vim.api.nvim_buf_delete(sink._bufnr, { force = true })
       sink:flush() -- triggers detection
       assert.has_no.errors(function()
@@ -289,6 +290,7 @@ describe("flemma.sink", function()
 
     it("errors on read after external deletion", function()
       local sink = sink_module.create({ name = "test/bd-read" })
+      sink:write("data\n") -- materialize the buffer
       vim.api.nvim_buf_delete(sink._bufnr, { force = true })
       sink:flush() -- triggers detection
       assert.has_error(function()
@@ -379,6 +381,89 @@ describe("flemma.sink", function()
       local buf_lines = vim.api.nvim_buf_get_lines(sink._bufnr, 0, -1, false)
       assert.are.same({ "hello" }, buf_lines)
       sink:destroy()
+    end)
+  end)
+
+  describe("lazy materialization", function()
+    it("does not create a buffer on create()", function()
+      local buf_count_before = #vim.api.nvim_list_bufs()
+      local sink = sink_module.create({ name = "test/lazy-no-buf" })
+      local buf_count_after = #vim.api.nvim_list_bufs()
+      assert.are.equal(buf_count_before, buf_count_after)
+      sink:destroy()
+    end)
+
+    it("creates a buffer on first write()", function()
+      local sink = sink_module.create({ name = "test/lazy-write" })
+      local buf_count_before = #vim.api.nvim_list_bufs()
+      sink:write("hello")
+      local buf_count_after = #vim.api.nvim_list_bufs()
+      assert.are.equal(buf_count_before + 1, buf_count_after)
+      sink:destroy()
+    end)
+
+    it("creates a buffer on first write_lines()", function()
+      local sink = sink_module.create({ name = "test/lazy-write-lines" })
+      local buf_count_before = #vim.api.nvim_list_bufs()
+      sink:write_lines({ "hello" })
+      local buf_count_after = #vim.api.nvim_list_bufs()
+      assert.are.equal(buf_count_before + 1, buf_count_after)
+      sink:destroy()
+    end)
+
+    it("read() returns empty string before any writes", function()
+      local sink = sink_module.create({ name = "test/lazy-read-empty" })
+      assert.are.equal("", sink:read())
+      sink:destroy()
+    end)
+
+    it("read_lines() returns empty table before any writes", function()
+      local sink = sink_module.create({ name = "test/lazy-rl-empty" })
+      assert.are.same({}, sink:read_lines())
+      sink:destroy()
+    end)
+
+    it("destroy() before any writes does not error", function()
+      local sink = sink_module.create({ name = "test/lazy-destroy" })
+      assert.has_no.errors(function()
+        sink:destroy()
+      end)
+      assert.is_true(sink:is_destroyed())
+    end)
+
+    it("write() after destroy is a no-op even if never materialized", function()
+      local sink = sink_module.create({ name = "test/lazy-write-after-destroy" })
+      sink:destroy()
+      local buf_count_before = #vim.api.nvim_list_bufs()
+      sink:write("hello")
+      local buf_count_after = #vim.api.nvim_list_bufs()
+      assert.are.equal(buf_count_before, buf_count_after)
+    end)
+
+    it("fires FlemmaSinkCreated on first write, not on create()", function()
+      local created_events = {}
+      local group = vim.api.nvim_create_augroup("TestSinkCreated", { clear = true })
+      vim.api.nvim_create_autocmd("User", {
+        group = group,
+        pattern = "FlemmaSinkCreated",
+        callback = function(event)
+          table.insert(created_events, event.data)
+        end,
+      })
+
+      local sink = sink_module.create({ name = "test/lazy-autocmd" })
+      assert.are.equal(0, #created_events)
+
+      sink:write("data")
+      assert.are.equal(1, #created_events)
+      assert.are.equal("test/lazy-autocmd", created_events[1].name)
+
+      -- Second write does not fire again
+      sink:write("more")
+      assert.are.equal(1, #created_events)
+
+      sink:destroy()
+      vim.api.nvim_del_augroup_by_id(group)
     end)
   end)
 
