@@ -202,6 +202,256 @@ describe("UI Folding", function()
 
       assert.are.equal("<2", ui_preview.get_fold_level(3))
     end)
+
+    it("should return >2 for completed tool_use block start", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: I'll check that.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "file1.txt",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Tool use header line (line 3) should start a level-2 fold
+      assert.are.equal(">2", ui_preview.get_fold_level(3))
+      -- Closing fence (line 6) should end the level-2 fold
+      assert.are.equal("<2", ui_preview.get_fold_level(6))
+    end)
+
+    it("should return >1 for inline tool_result header (graceful degradation)", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: I'll check that.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You: **Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "file1.txt",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Tool result header line (line 8) is also the @You: line (inline header)
+      -- For inline headers, fold level stays at >1 (graceful degradation)
+      assert.are.equal(">1", ui_preview.get_fold_level(8))
+    end)
+
+    it("should return >2 for tool_result on its own line", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: I'll check that.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "file1.txt",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Tool result header (line 10) should start level-2 fold
+      assert.are.equal(">2", ui_preview.get_fold_level(10))
+      -- Closing fence (line 14) should end level-2 fold
+      assert.are.equal("<2", ui_preview.get_fold_level(14))
+    end)
+
+    it("should NOT fold in-flight tool_result (pending status)", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: Running a tool.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```flemma:tool status=pending",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Pending tool result should stay at message level (=), not start a fold
+      assert.are.equal("=", ui_preview.get_fold_level(10))
+    end)
+
+    it("should NOT fold in-flight tool_result (approved status)", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: Running a tool.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```flemma:tool status=approved",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      assert.are.equal("=", ui_preview.get_fold_level(10))
+    end)
+
+    it("should fold tool_result with denied status", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: Running a tool.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```flemma:tool status=denied",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      assert.are.equal(">2", ui_preview.get_fold_level(10))
+      assert.are.equal("<2", ui_preview.get_fold_level(13))
+    end)
+
+    it("should fold tool_result with rejected status", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: Running a tool.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```flemma:tool status=rejected",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      assert.are.equal(">2", ui_preview.get_fold_level(10))
+    end)
+
+    it("should NOT fold tool_use without a matching tool_result", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: I'll check that.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- No matching result — tool_use stays at message level
+      assert.are.equal("=", ui_preview.get_fold_level(3))
+    end)
+
+    it("should fold multiple tool blocks independently", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: Two tools.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "**Tool Use:** `bash` (`toolu_02`)",
+        "```json",
+        '{ "command": "pwd" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "file1.txt",
+        "```",
+        "",
+        "**Tool Result:** `toolu_02`",
+        "",
+        "```",
+        "/home/user",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Both tool_use blocks should fold independently
+      assert.are.equal(">2", ui_preview.get_fold_level(3))
+      assert.are.equal("<2", ui_preview.get_fold_level(6))
+      assert.are.equal(">2", ui_preview.get_fold_level(8))
+      assert.are.equal("<2", ui_preview.get_fold_level(11))
+
+      -- Both tool_result blocks should fold independently
+      assert.are.equal(">2", ui_preview.get_fold_level(15))
+      assert.are.equal("<2", ui_preview.get_fold_level(19))
+      assert.are.equal(">2", ui_preview.get_fold_level(21))
+      assert.are.equal("<2", ui_preview.get_fold_level(25))
+    end)
   end)
 
   describe("fold_last_thinking_block", function()
