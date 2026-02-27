@@ -501,6 +501,26 @@ function M.format_message_fold_preview(msg, max_length, doc)
   return table.concat(parts, SEGMENT_SEPARATOR)
 end
 
+---Find a tool_use or tool_result segment starting at the given line number
+---@param doc flemma.ast.DocumentNode
+---@param lnum integer 1-indexed line number
+---@return flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|nil segment
+---@return "tool_use"|"tool_result"|nil kind
+local function find_tool_segment_at_line(doc, lnum)
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.position and seg.position.start_line == lnum then
+        if seg.kind == "tool_use" then
+          return seg --[[@as flemma.ast.ToolUseSegment]], "tool_use"
+        elseif seg.kind == "tool_result" then
+          return seg --[[@as flemma.ast.ToolResultSegment]], "tool_result"
+        end
+      end
+    end
+  end
+  return nil, nil
+end
+
 ---Find a message whose start or end line matches the given line number
 ---@param doc flemma.ast.DocumentNode
 ---@param lnum integer 1-indexed line number
@@ -603,6 +623,27 @@ function M.get_fold_text()
     else
       local empty_tag = provider and string.format("<thinking %s/>", provider) or "<thinking/>"
       return string.format("%s (%d lines)", empty_tag, total_fold_lines)
+    end
+  end
+
+  -- Check if this is a tool_use or tool_result fold (level 2)
+  local tool_seg, tool_kind = find_tool_segment_at_line(doc, foldstart_lnum)
+  if tool_seg then
+    if tool_kind == "tool_use" then
+      ---@cast tool_seg flemma.ast.ToolUseSegment
+      local suffix = string.format(" (%d lines)", total_fold_lines)
+      local available = text_width - #suffix - 1
+      local tool_preview = M.format_tool_preview(tool_seg.name, tool_seg.input, available)
+      return tool_preview .. suffix
+    elseif tool_kind == "tool_result" then
+      ---@cast tool_seg flemma.ast.ToolResultSegment
+      -- Resolve tool name from matching tool_use
+      local tool_name_map = build_tool_name_map(doc)
+      local tool_name = tool_name_map[tool_seg.tool_use_id] or "result"
+      local suffix = string.format(" (%d lines)", total_fold_lines)
+      local available = text_width - #suffix - 1
+      local result_preview = M.format_tool_result_preview(tool_name, tool_seg.content, tool_seg.is_error, available)
+      return result_preview .. suffix
     end
   end
 
