@@ -70,6 +70,11 @@ function Sink.new(bufnr, name, flush_interval, on_line)
     end)
   end
 
+  vim.api.nvim_exec_autocmds("User", {
+    pattern = "FlemmaSinkCreated",
+    data = { name = self._name, bufnr = self._bufnr },
+  })
+
   return self
 end
 
@@ -316,6 +321,11 @@ function Sink:destroy()
   end
 
   self._destroyed = true
+
+  vim.api.nvim_exec_autocmds("User", {
+    pattern = "FlemmaSinkDestroyed",
+    data = { name = self._name, bufnr = self._bufnr },
+  })
 
   -- Check if the buffer is still valid before operating on it
   if not vim.api.nvim_buf_is_valid(self._bufnr) then
