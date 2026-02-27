@@ -189,12 +189,32 @@ function M.reset(self, opts)
     return
   end
   -- Full reset
+  if self._response_buffer and self._response_buffer.extra then
+    if self._response_buffer.extra.thinking_sink then
+      self._response_buffer.extra.thinking_sink:destroy()
+    end
+  end
   base.reset(self)
   -- Add Vertex-specific extension
-  self._response_buffer.extra.accumulated_thoughts = ""
+  local sink = require("flemma.sink")
+  self._response_buffer.extra.thinking_sink = sink.create({
+    name = "vertex/thinking",
+  })
   -- Track thought signature for state preservation (used with thinking mode + function calls)
   self._response_buffer.extra.thought_signature = nil
   log.debug("vertex.reset(): Reset Vertex AI provider state")
+end
+
+---@param self flemma.provider.Vertex
+---@param exit_code number
+---@param callbacks flemma.provider.Callbacks
+function M.finalize_response(self, exit_code, callbacks)
+  if self._response_buffer and self._response_buffer.extra then
+    if self._response_buffer.extra.thinking_sink then
+      self._response_buffer.extra.thinking_sink:destroy()
+    end
+  end
+  base.finalize_response(self, exit_code, callbacks)
 end
 
 ---@param self flemma.provider.Vertex
@@ -647,8 +667,7 @@ function M.process_response_line(self, line, callbacks)
 
       if part.thought and part.text and #part.text > 0 then
         log.debug("vertex.process_response_line(): Accumulating thought text: " .. log.inspect(part.text))
-        self._response_buffer.extra.accumulated_thoughts = (self._response_buffer.extra.accumulated_thoughts or "")
-          .. part.text
+        self._response_buffer.extra.thinking_sink:write(part.text)
         if callbacks.on_thinking then
           callbacks.on_thinking(part.text)
         end
@@ -738,8 +757,8 @@ function M.process_response_line(self, line, callbacks)
     )
 
     -- Append aggregated thoughts if any (or emit empty thinking tag if we have a signature)
-    local has_thoughts = self._response_buffer.extra.accumulated_thoughts
-      and #self._response_buffer.extra.accumulated_thoughts > 0
+    local accumulated_thoughts = self._response_buffer.extra.thinking_sink:read()
+    local has_thoughts = accumulated_thoughts ~= ""
     local has_signature = self._response_buffer.extra.thought_signature ~= nil
 
     if has_thoughts or has_signature then
@@ -749,7 +768,7 @@ function M.process_response_line(self, line, callbacks)
       local thoughts_block
       if has_thoughts then
         -- Strip leading/trailing whitespace (including newlines) from thoughts
-        local stripped_thoughts = vim.trim(self._response_buffer.extra.accumulated_thoughts)
+        local stripped_thoughts = vim.trim(accumulated_thoughts)
 
         if has_signature then
           -- Include signature attribute on opening tag (namespaced for Vertex)
@@ -775,7 +794,11 @@ function M.process_response_line(self, line, callbacks)
       base._signal_content(self, thoughts_block, callbacks)
 
       -- Reset for next potential full message
-      self._response_buffer.extra.accumulated_thoughts = ""
+      self._response_buffer.extra.thinking_sink:destroy()
+      local sink = require("flemma.sink")
+      self._response_buffer.extra.thinking_sink = sink.create({
+        name = "vertex/thinking",
+      })
       self._response_buffer.extra.thought_signature = nil
     end
 

@@ -101,7 +101,7 @@ local log = require("flemma.logging")
 ---@field [string] any Provider-specific parameters
 
 ---@class flemma.provider.ResponseBuffer
----@field lines string[]
+---@field lines_sink flemma.Sink
 ---@field successful boolean
 ---@field extra table<string, any>
 ---@field content string
@@ -311,6 +311,10 @@ function M.reset(self, opts)
     end
     return
   end
+  -- Destroy previous response buffer sink if it exists
+  if self._response_buffer and self._response_buffer.lines_sink then
+    self._response_buffer.lines_sink:destroy()
+  end
   -- Full reset: create response buffer for all providers
   self:_new_response_buffer()
   self._response_headers = nil
@@ -384,6 +388,10 @@ function M.finalize_response(self, exit_code, callbacks)
   -- Check buffered response if we haven't processed content successfully
   if self._response_buffer and not self._response_buffer.successful then
     self:_check_buffered_response(callbacks)
+  end
+  -- Destroy the response lines sink
+  if self._response_buffer and self._response_buffer.lines_sink then
+    self._response_buffer.lines_sink:destroy()
   end
 end
 
@@ -613,8 +621,9 @@ end
 --- Create a new response buffer for accumulating non-processable lines
 ---@param self flemma.provider.Base
 function M._new_response_buffer(self)
+  local sink = require("flemma.sink")
   self._response_buffer = {
-    lines = {},
+    lines_sink = sink.create({ name = "provider/response-lines" }),
     successful = false,
     extra = {},
     content = "", -- Accumulated content for spacing decisions
@@ -628,7 +637,7 @@ function M._buffer_response_line(self, line)
   if not self._response_buffer then
     self:_new_response_buffer()
   end
-  table.insert(self._response_buffer.lines, line)
+  self._response_buffer.lines_sink:write_lines({ line })
 end
 
 --- Mark that response processing has been successful
@@ -645,11 +654,15 @@ end
 ---@param callbacks flemma.provider.Callbacks
 ---@return boolean
 function M._check_buffered_response(self, callbacks)
-  if not self._response_buffer or #self._response_buffer.lines == 0 then
+  if not self._response_buffer then
     return false
   end
 
-  local body = table.concat(self._response_buffer.lines, "\n")
+  local body = self._response_buffer.lines_sink:read()
+  if body == "" then
+    return false
+  end
+
   local ok, data = pcall(json.decode, body)
   if not ok then
     return false
