@@ -273,6 +273,22 @@ M.apply_syntax = function()
   -- Set ruler highlight group
   set_highlight("FlemmaRuler", syntax_config.ruler.hl)
 
+  -- Set per-role ruler highlights (ruler fg + role line highlight bg) for adopt_line_highlight
+  if syntax_config.ruler.adopt_line_highlight and syntax_config.line_highlights and syntax_config.line_highlights.enabled then
+    local ruler_fg = get_hl_color("FlemmaRuler", "fg") or get_default_color("fg")
+    local ruler_roles = { "frontmatter", "user", "system", "assistant" }
+    for _, role in ipairs(ruler_roles) do
+      local line_hl_group = "FlemmaLine" .. role:sub(1, 1):upper() .. role:sub(2)
+      local role_bg = get_hl_color(line_hl_group, "bg")
+      local ruler_role_group = "FlemmaRuler" .. role:sub(1, 1):upper() .. role:sub(2)
+      if role_bg then
+        vim.api.nvim_set_hl(0, ruler_role_group, { fg = ruler_fg, bg = role_bg, default = true })
+      else
+        vim.api.nvim_set_hl(0, ruler_role_group, { link = "FlemmaRuler", default = true })
+      end
+    end
+  end
+
   -- Set highlight for thinking tags and blocks
   set_highlight("FlemmaThinkingTag", syntax_config.highlights.thinking_tag)
   set_highlight("FlemmaThinkingBlock", syntax_config.highlights.thinking_block)

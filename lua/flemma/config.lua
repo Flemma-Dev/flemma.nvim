@@ -19,6 +19,7 @@
 ---@field enabled boolean
 ---@field char string
 ---@field hl flemma.config.HighlightValue
+---@field adopt_line_highlight boolean When true, rulers inherit the line highlight background of the following block
 
 ---@class flemma.config.SignRole
 ---@field char? string
@@ -191,11 +192,12 @@ return {
     tool_result_error = "DiagnosticError", -- Highlight group or hex color for (error) marker in tool results
     tool_preview = "Comment", -- Highlight group or hex color for tool preview virtual lines in pending tool blocks
   },
-  role_style = "bold,underline", -- style applied to role markers like @You:
+  role_style = "bold", -- style applied to role markers like @You:
   ruler = {
     enabled = true, -- Set to false to disable rulers between messages
     char = "─", -- The character to use for the ruler
     hl = { dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }, -- Highlight group or hex color for the ruler
+    adopt_line_highlight = true, -- Ruler inherits the line highlight background of the following block
   },
   signs = {
     enabled = false, -- Enable sign column highlighting (disabled by default)

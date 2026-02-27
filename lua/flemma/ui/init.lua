@@ -55,7 +55,8 @@ function M.add_rulers(bufnr, doc)
   -- Clear existing extmarks
   vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
-  local ruler_config = state.get_config().ruler
+  local current_config = state.get_config()
+  local ruler_config = current_config.ruler
   if ruler_config.enabled == false then
     return
   end
@@ -69,15 +70,29 @@ function M.add_rulers(bufnr, doc)
 
   local win_width = vim.api.nvim_win_get_width(winid)
 
+  -- Check if rulers should adopt the line highlight of the following block
+  local adopt = ruler_config.adopt_line_highlight
+    and current_config.line_highlights
+    and current_config.line_highlights.enabled
+
   for i, msg in ipairs(doc.messages) do
     -- Add a ruler before each message after the first, and before the first if frontmatter exists
     if i > 1 or (i == 1 and doc.frontmatter ~= nil) then
       local line_idx = msg.position.start_line - 1
       if line_idx >= 0 and line_idx < vim.api.nvim_buf_line_count(bufnr) then
-        -- Create virtual line with ruler using the FlemmaRuler highlight group
+        -- Determine ruler highlight: per-role variant if adopting line highlights
+        local ruler_hl = "FlemmaRuler"
+        if adopt then
+          local role_key = string.lower(msg.role)
+          if msg.role == "You" then
+            role_key = "user"
+          end
+          ruler_hl = "FlemmaRuler" .. role_key:sub(1, 1):upper() .. role_key:sub(2)
+        end
+        -- Create virtual line with ruler
         local ruler_text = string.rep(ruler_config.char, win_width)
         vim.api.nvim_buf_set_extmark(bufnr, ns_id, line_idx, 0, {
-          virt_lines = { { { ruler_text, "FlemmaRuler" } } }, -- Use defined group
+          virt_lines = { { { ruler_text, ruler_hl } } },
           virt_lines_above = true,
         })
       end
