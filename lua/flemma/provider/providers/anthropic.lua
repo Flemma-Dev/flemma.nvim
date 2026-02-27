@@ -71,6 +71,21 @@ function M.reset(self)
 end
 
 ---@param self flemma.provider.Anthropic
+---@param exit_code number
+---@param callbacks flemma.provider.Callbacks
+function M.finalize_response(self, exit_code, callbacks)
+  if self._response_buffer and self._response_buffer.extra then
+    if self._response_buffer.extra.thinking_sink then
+      self._response_buffer.extra.thinking_sink:destroy()
+    end
+    if self._response_buffer.extra.tool_input_sink then
+      self._response_buffer.extra.tool_input_sink:destroy()
+    end
+  end
+  base.finalize_response(self, exit_code, callbacks)
+end
+
+---@param self flemma.provider.Anthropic
 ---@return string|nil
 function M.get_api_key(self)
   -- Call the base implementation with Anthropic-specific parameters

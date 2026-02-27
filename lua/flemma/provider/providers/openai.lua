@@ -78,6 +78,18 @@ function M.reset(self)
 end
 
 ---@param self flemma.provider.OpenAI
+---@param exit_code number
+---@param callbacks flemma.provider.Callbacks
+function M.finalize_response(self, exit_code, callbacks)
+  if self._response_buffer and self._response_buffer.extra then
+    if self._response_buffer.extra.reasoning_sink then
+      self._response_buffer.extra.reasoning_sink:destroy()
+    end
+  end
+  base.finalize_response(self, exit_code, callbacks)
+end
+
+---@param self flemma.provider.OpenAI
 ---@return string|nil
 function M.get_api_key(self)
   -- Call the base implementation with OpenAI-specific parameters
