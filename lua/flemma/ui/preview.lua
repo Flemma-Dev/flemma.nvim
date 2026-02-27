@@ -222,6 +222,89 @@ local function find_thinking_at_line(doc, lnum)
   return nil, nil
 end
 
+---Determine if a tool_result segment is in a terminal (foldable) state.
+---Terminal states: no status with content (completed), denied, rejected, aborted.
+---In-flight states: pending, approved, no status with empty content (executing).
+---@param seg flemma.ast.ToolResultSegment
+---@return boolean
+local function is_tool_result_terminal(seg)
+  if seg.status then
+    return seg.status == "denied" or seg.status == "rejected" or seg.status == "aborted"
+  end
+  -- No status: completed if it has content, executing if empty
+  return seg.content ~= ""
+end
+
+---Determine if a tool_use segment has a matching completed tool_result in the document.
+---A tool_use is "completed" when its matching tool_result exists and is in a terminal state
+---(no status with content, or status is denied/rejected/aborted).
+---@param doc flemma.ast.DocumentNode
+---@param tool_use_id string
+---@return boolean
+local function is_tool_use_completed(doc, tool_use_id)
+  for _, msg in ipairs(doc.messages) do
+    if msg.role == "You" then
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "tool_result" and seg.tool_use_id == tool_use_id then
+          ---@cast seg flemma.ast.ToolResultSegment
+          return is_tool_result_terminal(seg)
+        end
+      end
+    end
+  end
+  return false
+end
+
+---Find a tool_use or tool_result segment whose position spans the given line,
+---checking whether it should create a fold boundary.
+---Returns the segment and whether lnum is at its start or end boundary.
+---Skips segments whose start_line equals their parent message's start_line (inline headers).
+---@param doc flemma.ast.DocumentNode
+---@param lnum integer 1-indexed line number
+---@return flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|nil segment
+---@return "start"|"end"|nil boundary
+local function find_foldable_tool_at_line(doc, lnum)
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.position and seg.position.start_line and seg.position.end_line then
+        if seg.kind == "tool_use" then
+          ---@cast seg flemma.ast.ToolUseSegment
+          -- Skip inline headers (segment starts on same line as message)
+          if seg.position.start_line == msg.position.start_line then
+            goto continue
+          end
+          -- Only fold if the tool_use has a completed matching result
+          if not is_tool_use_completed(doc, seg.id) then
+            goto continue
+          end
+          if seg.position.start_line == lnum then
+            return seg, "start"
+          elseif seg.position.end_line == lnum then
+            return seg, "end"
+          end
+        elseif seg.kind == "tool_result" then
+          ---@cast seg flemma.ast.ToolResultSegment
+          -- Skip inline headers
+          if seg.position.start_line == msg.position.start_line then
+            goto continue
+          end
+          -- Only fold if terminal
+          if not is_tool_result_terminal(seg) then
+            goto continue
+          end
+          if seg.position.start_line == lnum then
+            return seg, "start"
+          elseif seg.position.end_line == lnum then
+            return seg, "end"
+          end
+        end
+      end
+      ::continue::
+    end
+  end
+  return nil, nil
+end
+
 local SEGMENT_SEPARATOR = " | "
 
 -- Minimum width (in characters) for a tool preview to be meaningful.
@@ -455,6 +538,14 @@ function M.get_fold_level(lnum)
   if thinking_boundary == "start" then
     return ">2"
   elseif thinking_boundary == "end" then
+    return "<2"
+  end
+
+  -- Level 2 folds: completed/terminal tool_use and tool_result blocks
+  local _, tool_boundary = find_foldable_tool_at_line(doc, lnum)
+  if tool_boundary == "start" then
+    return ">2"
+  elseif tool_boundary == "end" then
     return "<2"
   end
 
