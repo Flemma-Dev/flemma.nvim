@@ -777,4 +777,119 @@ describe("UI Folding", function()
       assert.is_truthy(fold_text:match("%(6 lines%)"), "Fold text should show line count")
     end)
   end)
+
+  describe("fold_completed_blocks", function()
+    it("should fold completed tool_use and tool_result blocks", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: Checking.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "file1.txt",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99
+
+      -- Call auto-fold
+      ui.fold_completed_blocks(bufnr)
+
+      -- Tool use block should be folded
+      local tu_foldclosed = vim.fn.foldclosed(3)
+      assert.are.equal(3, tu_foldclosed, "Tool use block should be folded at line 3")
+
+      -- Tool result block should be folded
+      local tr_foldclosed = vim.fn.foldclosed(10)
+      assert.are.equal(10, tr_foldclosed, "Tool result block should be folded at line 10")
+    end)
+
+    it("should not fold pending tool blocks", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: Running.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```flemma:tool status=pending",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99
+
+      ui.fold_completed_blocks(bufnr)
+
+      -- Pending tool result should NOT be folded
+      local foldclosed = vim.fn.foldclosed(10)
+      assert.are.equal(-1, foldclosed, "Pending tool result should not be folded")
+    end)
+
+    it("should not escalate fold when block is already closed", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: Checking.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "file1.txt",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99
+
+      -- Pre-close the tool_use fold
+      vim.cmd("3,6 foldclose")
+
+      -- Call auto-fold — should not escalate
+      ui.fold_completed_blocks(bufnr)
+
+      -- Message fold should remain open (not escalated by double-close)
+      local msg_foldclosed = vim.fn.foldclosed(1)
+      assert.are.equal(-1, msg_foldclosed, "Message fold should not be escalated")
+    end)
+  end)
 end)
