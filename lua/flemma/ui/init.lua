@@ -379,6 +379,112 @@ function M.fold_last_thinking_block(bufnr)
   end
 end
 
+---Close a fold range in a buffer's window, guarding against already-closed folds.
+---@param winid integer
+---@param start_lnum integer 1-indexed start line
+---@param end_lnum integer 1-indexed end line
+local function safe_foldclose(winid, start_lnum, end_lnum)
+  local fold_exists = vim.fn.win_execute(winid, string.format("echo foldlevel(%d)", start_lnum))
+  if not (tonumber(vim.trim(fold_exists)) and tonumber(vim.trim(fold_exists)) > 0) then
+    return
+  end
+  local already_closed = vim.fn.win_execute(winid, string.format("echo foldclosed(%d)", start_lnum))
+  if tonumber(vim.trim(already_closed)) ~= -1 then
+    return
+  end
+  vim.fn.win_execute(winid, string.format("%d,%d foldclose", start_lnum, end_lnum))
+end
+
+---Fold all completed/terminal tool blocks and the last thinking block in a buffer.
+---Called after tool execution completes and after streaming finishes.
+---@param bufnr integer
+function M.fold_completed_blocks(bufnr)
+  log.debug("fold_completed_blocks(): Folding completed blocks in buffer " .. bufnr)
+
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid == -1 then
+    log.debug("fold_completed_blocks(): Buffer " .. bufnr .. " has no window. Cannot close folds.")
+    return
+  end
+
+  local parser = require("flemma.parser")
+  local doc = parser.get_parsed_document(bufnr)
+
+  if #doc.messages == 0 then
+    return
+  end
+
+  -- Fold completed tool_use blocks (those with a matching terminal result)
+  for _, msg in ipairs(doc.messages) do
+    if msg.role == "Assistant" then
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "tool_use" and seg.position then
+          -- Skip inline headers
+          if seg.position.start_line == msg.position.start_line then
+            goto continue_tu
+          end
+          -- Check if this tool_use has a completed result
+          local has_completed_result = false
+          for _, rmsg in ipairs(doc.messages) do
+            if rmsg.role == "You" then
+              for _, rseg in ipairs(rmsg.segments) do
+                if rseg.kind == "tool_result" and rseg.tool_use_id == seg.id then
+                  ---@cast rseg flemma.ast.ToolResultSegment
+                  if rseg.status then
+                    has_completed_result = rseg.status == "denied" or rseg.status == "rejected" or rseg.status == "aborted"
+                  else
+                    has_completed_result = rseg.content ~= ""
+                  end
+                end
+              end
+            end
+          end
+          if has_completed_result then
+            safe_foldclose(winid, seg.position.start_line, seg.position.end_line)
+          end
+          ::continue_tu::
+        end
+      end
+    end
+  end
+
+  -- Fold terminal tool_result blocks
+  for _, msg in ipairs(doc.messages) do
+    if msg.role == "You" then
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "tool_result" and seg.position then
+          -- Skip inline headers
+          if seg.position.start_line == msg.position.start_line then
+            goto continue_tr
+          end
+          ---@cast seg flemma.ast.ToolResultSegment
+          local is_terminal
+          if seg.status then
+            is_terminal = seg.status == "denied" or seg.status == "rejected" or seg.status == "aborted"
+          else
+            is_terminal = seg.content ~= ""
+          end
+          if is_terminal then
+            safe_foldclose(winid, seg.position.start_line, seg.position.end_line)
+          end
+          ::continue_tr::
+        end
+      end
+    end
+  end
+
+  -- Fold thinking blocks in the second-to-last message (preserve existing behavior)
+  local last_message = doc.messages[#doc.messages]
+  if last_message.role == "You" and #doc.messages >= 2 then
+    local second_to_last = doc.messages[#doc.messages - 1]
+    for _, seg in ipairs(second_to_last.segments) do
+      if seg.kind == "thinking" and seg.position then
+        safe_foldclose(winid, seg.position.start_line, seg.position.end_line)
+      end
+    end
+  end
+end
+
 ---Place signs for a message
 ---@param bufnr integer
 ---@param start_line integer
