@@ -708,15 +708,19 @@ describe("Result Injector", function()
       assert.is_not_nil(header_line)
 
       local lines = get_lines(bufnr)
-      -- Should have added @You: **Tool Result:** `toolu_ph_test` after the assistant message
-      local found = false
+      -- Should have added @You: and **Tool Result:** `toolu_ph_test` (on separate lines)
+      local found_you = false
+      local found_header = false
       for _, line in ipairs(lines) do
-        if line:match("@You:") and line:match("Tool Result") and line:match("toolu_ph_test") then
-          found = true
-          break
+        if line:match("^@You:") then
+          found_you = true
+        end
+        if line:match("Tool Result") and line:match("toolu_ph_test") then
+          found_header = true
         end
       end
-      assert.is_true(found, "Should have inserted @You: Tool Result header")
+      assert.is_true(found_you, "Should have inserted @You: line")
+      assert.is_true(found_header, "Should have inserted Tool Result header")
     end)
 
     it("reuses existing tool_result position on re-execution", function()

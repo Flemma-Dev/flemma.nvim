@@ -261,27 +261,29 @@ function M.inject_placeholder(bufnr, tool_id, inject_opts)
       local remaining_content = you_line:sub(#role_prefix + 1)
 
       if remaining_content and remaining_content:match("%S") then
-        -- @You: has inline content - replace with header + move content down
+        -- @You: has inline content - put header on separate line, move content down
         set_lines(bufnr, you_start - 1, you_start, {
-          "@You: " .. header_text,
+          "@You:",
+          "",
+          header_text,
           "",
           fence_open,
           "```",
           "",
           remaining_content,
         })
-        return you_start, nil, { modified = true }
+        return you_start + 2, nil, { modified = true }
       else
-        -- @You: line is empty or whitespace-only - replace it with header
-        set_lines(bufnr, you_start - 1, you_start, { "@You: " .. header_text, "", fence_open, "```" })
-        return you_start, nil, { modified = true }
+        -- @You: line is empty or whitespace-only - replace it, header on separate line
+        set_lines(bufnr, you_start - 1, you_start, { "@You:", "", header_text, "", fence_open, "```" })
+        return you_start + 2, nil, { modified = true }
       end
     end
   else
     -- No @You: message exists - create one after the assistant message
     local insert_after = assistant_msg.position.end_line
-    set_lines(bufnr, insert_after, insert_after, { "", "@You: " .. header_text, "", fence_open, "```" })
-    return insert_after + 2, nil, { modified = true } -- +1 for blank, +1 for 1-based
+    set_lines(bufnr, insert_after, insert_after, { "", "@You:", "", header_text, "", fence_open, "```" })
+    return insert_after + 4, nil, { modified = true } -- +1 blank +1 @You: +1 blank +1 header = +4
   end
 end
 
