@@ -693,4 +693,88 @@ describe("UI Folding", function()
       assert.are.equal(2, foldclosed, "Thinking block with signature should be folded at line 2")
     end)
   end)
+
+  describe("get_fold_text", function()
+    it("should show tool preview for folded tool_use block", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: I'll check that.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls -la" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "file1.txt",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.preview').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      -- Close fold at tool_use block (lines 3-6)
+      vim.cmd("3,6 foldclose")
+
+      -- Get fold text
+      vim.v.foldstart = 3
+      vim.v.foldend = 6
+      local fold_text = ui_preview.get_fold_text()
+      assert.is_truthy(fold_text:match("bash"), "Fold text should contain tool name")
+      assert.is_truthy(fold_text:match("ls %-la"), "Fold text should contain command preview")
+      assert.is_truthy(fold_text:match("%(4 lines%)"), "Fold text should show line count")
+    end)
+
+    it("should show content preview for folded tool_result block", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: Checking.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "file1.txt",
+        "file2.txt",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.preview').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      -- Close fold at tool_result block (lines 10-15)
+      vim.cmd("10,15 foldclose")
+
+      vim.v.foldstart = 10
+      vim.v.foldend = 15
+      local fold_text = ui_preview.get_fold_text()
+      assert.is_truthy(fold_text:match("bash"), "Fold text should contain tool name")
+      assert.is_truthy(fold_text:match("file1%.txt"), "Fold text should preview result content")
+      assert.is_truthy(fold_text:match("%(6 lines%)"), "Fold text should show line count")
+    end)
+  end)
 end)
