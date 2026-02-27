@@ -26,82 +26,76 @@ describe("flemma.usage", function()
   end)
 
   describe("format_notification", function()
-    it("should format request usage without session data", function()
+    it("should format request without session data", function()
       local request = session_module.Request.new({
         provider = "openai",
         model = "gpt-4o",
         input_tokens = 100,
         output_tokens = 50,
-        thoughts_tokens = 0,
         input_price = 2.50,
         output_price = 10.00,
       })
 
       local result = usage.format_notification(request, nil)
 
-      assert.is_string(result)
-      assert.has_match("Request:", result)
-      assert.has_match("Model:.*gpt%-4o.*openai", result)
-      assert.has_match("Input:.*100 tokens", result)
-      assert.has_match("Output:.*50 tokens", result)
+      assert.has_match("`gpt%-4o` %(openai%)", result.text)
+      assert.has_match("Request", result.text)
+      assert.has_match("\xE2\x86\x91 100", result.text)
+      assert.has_match("\xE2\x86\x93 50 tokens", result.text)
+      assert.has_no_match("Session", result.text)
+      assert.has_match("Cache .+ 0%%", result.text)
+      assert.are.equal(1, #result.highlights)
+      assert.are.equal("FlemmaNotifyCacheBad", result.highlights[1].group)
     end)
 
-    it("should format request usage with thoughts tokens (OpenAI - thoughts included in output)", function()
-      -- OpenAI: completion_tokens already includes reasoning_tokens
+    it("should format request with thinking tokens (OpenAI)", function()
       local request = session_module.Request.new({
         provider = "openai",
         model = "o1",
         input_tokens = 100,
-        output_tokens = 50, -- completion_tokens (includes reasoning)
-        thoughts_tokens = 25, -- reasoning_tokens (subset, for display)
+        output_tokens = 50,
+        thoughts_tokens = 25,
         input_price = 15.00,
         output_price = 60.00,
-        output_has_thoughts = true, -- OpenAI behavior
+        output_has_thoughts = true,
       })
 
       local result = usage.format_notification(request, nil)
 
-      assert.is_string(result)
-      assert.has_match("Request:", result)
-      assert.has_match("Input:.*100 tokens", result)
-      -- Should show 50 tokens (not 75), since thoughts are already included
-      assert.has_match("Output:.*50 tokens.*⊂ 25 thoughts", result)
+      -- OpenAI: thoughts already included in output_tokens, so display shows 50
+      assert.has_match("\xE2\x86\x93 50", result.text)
+      assert.has_match("\xE2\x97\x8B 25 thinking", result.text)
     end)
 
-    it("should format request usage with thoughts tokens (Vertex - thoughts separate)", function()
-      -- Vertex: candidatesTokenCount and thoughtsTokenCount are separate
+    it("should format request with thinking tokens (Vertex)", function()
       local request = session_module.Request.new({
         provider = "vertex",
         model = "gemini-2.5-pro",
         input_tokens = 100,
-        output_tokens = 50, -- candidatesTokenCount
-        thoughts_tokens = 25, -- thoughtsTokenCount
+        output_tokens = 50,
+        thoughts_tokens = 25,
         input_price = 1.25,
         output_price = 10.00,
-        output_has_thoughts = false, -- Vertex behavior
+        output_has_thoughts = false,
       })
 
       local result = usage.format_notification(request, nil)
 
-      assert.is_string(result)
-      assert.has_match("Request:", result)
-      assert.has_match("Input:.*100 tokens", result)
-      -- Should show 75 tokens (50 + 25), since thoughts are separate
-      assert.has_match("Output:.*75 tokens.*⊂ 25 thoughts", result)
+      -- Vertex: thoughts separate, total output = 50 + 25 = 75
+      assert.has_match("\xE2\x86\x93 75", result.text)
+      assert.has_match("\xE2\x97\x8B 25 thinking", result.text)
     end)
 
-    it("should format both request and session usage", function()
+    it("should format request and session", function()
       local request = session_module.Request.new({
         provider = "openai",
         model = "gpt-4o",
         input_tokens = 100,
         output_tokens = 50,
-        thoughts_tokens = 0,
         input_price = 2.50,
         output_price = 10.00,
       })
 
-      -- Create a session with the same request
       local session = session_module.Session.new()
       session:add_request({
         provider = "openai",
@@ -115,25 +109,28 @@ describe("flemma.usage", function()
 
       local result = usage.format_notification(request, session)
 
-      assert.is_string(result)
-      assert.has_match("Request:", result)
-      assert.has_match("Session:", result)
-      assert.has_match("Input:.*100 tokens", result) -- Request
-      assert.has_match("Input:.*500 tokens", result) -- Session
+      assert.has_match("Request", result.text)
+      assert.has_match("Session", result.text)
+      assert.has_match("Requests", result.text)
+
+      -- Both request and session detail lines have ↑
+      local arrow_up_count = 0
+      for _ in result.text:gmatch("\xE2\x86\x91") do
+        arrow_up_count = arrow_up_count + 1
+      end
+      assert.is_true(arrow_up_count >= 2)
     end)
 
     it("should handle nil request gracefully", function()
-      -- Create an empty session
       local session = session_module.Session.new()
 
       local result = usage.format_notification(nil, session)
 
-      -- Should return empty string when no request and empty session
-      assert.are.equal("", result)
+      assert.are.equal("", result.text)
+      assert.are.equal(0, #result.highlights)
     end)
 
-    it("should format session usage only when no request", function()
-      -- Create a session with requests
+    it("should format session only when no request", function()
       local session = session_module.Session.new()
       session:add_request({
         provider = "openai",
@@ -147,33 +144,27 @@ describe("flemma.usage", function()
 
       local result = usage.format_notification(nil, session)
 
-      assert.is_string(result)
-      assert.has_match("Session:", result)
-      assert.has_match("Input:.*200 tokens", result)
-      assert.has_no_match("Request:", result)
+      assert.has_match("Session", result.text)
+      assert.has_no_match("Request .+%$", result.text)
     end)
 
-    it("should include cost information when pricing is enabled", function()
+    it("should include costs when pricing enabled", function()
       local request = session_module.Request.new({
         provider = "openai",
         model = "gpt-4o",
-        input_tokens = 1000,
-        output_tokens = 500,
-        thoughts_tokens = 0,
-        input_price = 2.50,
-        output_price = 10.00,
+        input_tokens = 1000000,
+        output_tokens = 500000,
+        input_price = 3.00,
+        output_price = 15.00,
       })
 
       local result = usage.format_notification(request, nil)
 
-      assert.is_string(result)
-      -- Should contain dollar signs indicating cost calculation
-      assert.has_match("%$", result)
-      assert.has_match("Total:.*%$", result)
+      assert.has_match("%$", result.text)
+      assert.has_match("Request .+ %$", result.text)
     end)
 
-    it("should not include cost information when pricing is disabled", function()
-      -- Disable pricing
+    it("should not include costs when pricing disabled", function()
       state.set_config({
         provider = "openai",
         model = "gpt-4o",
@@ -185,104 +176,99 @@ describe("flemma.usage", function()
       local request = session_module.Request.new({
         provider = "openai",
         model = "gpt-4o",
-        input_tokens = 1000,
-        output_tokens = 500,
-        thoughts_tokens = 0,
-        input_price = 2.50,
-        output_price = 10.00,
+        input_tokens = 1000000,
+        output_tokens = 500000,
+        input_price = 3.00,
+        output_price = 15.00,
       })
 
       local result = usage.format_notification(request, nil)
 
-      assert.is_string(result)
-      assert.has_match("1000 tokens", result)
-      assert.has_match("500 tokens", result)
-      -- Should not contain dollar signs
-      assert.has_no_match("%$", result)
-      assert.has_no_match("Total:", result)
+      assert.has_no_match("%$", result.text)
+      assert.has_match("\xE2\x86\x91", result.text)
+      assert.has_match("\xE2\x86\x93", result.text)
+      assert.has_match("Cache .+%%", result.text)
     end)
 
-    it("should handle session usage with thoughts tokens in cost calculation", function()
-      -- Create a session with requests
+    it("should show model from request not config", function()
+      local request = session_module.Request.new({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 3.00,
+        output_price = 15.00,
+      })
+
+      local result = usage.format_notification(request, nil)
+
+      assert.has_match("claude%-sonnet%-4%-5", result.text)
+      assert.has_no_match("gpt%-4o", result.text)
+    end)
+
+    it("should display cache percentage", function()
+      -- Total input = 100 + 400 + 0 = 500; cache hit = 400/500 = 80%
+      local request = session_module.Request.new({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 100,
+        output_tokens = 200,
+        input_price = 3.00,
+        output_price = 15.00,
+        cache_read_input_tokens = 400,
+        cache_creation_input_tokens = 0,
+      })
+
+      local result = usage.format_notification(request, nil)
+
+      assert.has_match("Cache .+ 80%%", result.text)
+      local found_good = false
+      for _, highlight in ipairs(result.highlights) do
+        if highlight.group == "FlemmaNotifyCacheGood" then
+          found_good = true
+        end
+      end
+      assert.is_true(found_good)
+    end)
+
+    it("should highlight cache warning for low hit rate", function()
+      -- Total input = 400 + 100 + 0 = 500; cache hit = 100/500 = 20%
+      local request = session_module.Request.new({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 400,
+        output_tokens = 200,
+        input_price = 3.00,
+        output_price = 15.00,
+        cache_read_input_tokens = 100,
+      })
+
+      local result = usage.format_notification(request, nil)
+
+      assert.has_match("20%%", result.text)
+      local found_bad = false
+      for _, highlight in ipairs(result.highlights) do
+        if highlight.group == "FlemmaNotifyCacheBad" then
+          found_bad = true
+        end
+      end
+      assert.is_true(found_bad)
+    end)
+
+    it("should format numbers with comma separators", function()
       local session = session_module.Session.new()
       session:add_request({
         provider = "openai",
         model = "gpt-4o",
-        input_tokens = 1000,
-        output_tokens = 300,
-        thoughts_tokens = 200,
+        input_tokens = 20449,
+        output_tokens = 4271,
         input_price = 2.50,
         output_price = 10.00,
       })
 
       local result = usage.format_notification(nil, session)
 
-      assert.is_string(result)
-      assert.has_match("Session:", result)
-      assert.has_match("Input:.*1000 tokens", result)
-      -- Should show combined output + thoughts tokens for cost (500 total)
-      assert.has_match("Output:.*500 tokens", result)
-      assert.has_match("%$", result) -- Should include cost
-    end)
-
-    it("should display cost from request's pre-computed fields", function()
-      local request = session_module.Request.new({
-        provider = "anthropic",
-        model = "claude-sonnet-4-5",
-        input_tokens = 1000000,
-        output_tokens = 500000,
-        thoughts_tokens = 0,
-        input_price = 3.00,
-        output_price = 15.00,
-      })
-
-      local result = usage.format_notification(request, nil)
-
-      -- Input cost: 1000000 / 1000000 * 3.00 = $3.00
-      assert.has_match("Input:.*1000000 tokens.*%$3%.00", result)
-      -- Output cost: 500000 / 1000000 * 15.00 = $7.50
-      assert.has_match("Output:.*500000 tokens.*%$7%.50", result)
-      -- Total cost: $10.50
-      assert.has_match("Total:.*%$10%.50", result)
-    end)
-
-    it("should show model and provider from request, not config", function()
-      -- Config says openai/gpt-4o, but request was made with anthropic/claude-sonnet-4-5
-      local request = session_module.Request.new({
-        provider = "anthropic",
-        model = "claude-sonnet-4-5",
-        input_tokens = 100,
-        output_tokens = 50,
-        thoughts_tokens = 0,
-        input_price = 3.00,
-        output_price = 15.00,
-      })
-
-      local result = usage.format_notification(request, nil)
-
-      -- Should show the request's model/provider, not config's
-      assert.has_match("Model:.*claude%-sonnet%-4%-5.*anthropic", result)
-      assert.has_no_match("gpt%-4o", result)
-    end)
-
-    it("should display cache line from request fields", function()
-      local request = session_module.Request.new({
-        provider = "anthropic",
-        model = "claude-sonnet-4-5",
-        input_tokens = 500,
-        output_tokens = 200,
-        thoughts_tokens = 0,
-        input_price = 3.00,
-        output_price = 15.00,
-        cache_read_input_tokens = 1000,
-        cache_creation_input_tokens = 300,
-        cache_read_multiplier = 0.1,
-        cache_write_multiplier = 1.25,
-      })
-
-      local result = usage.format_notification(request, nil)
-
-      assert.has_match("Cache:.*1000 read.*300 write", result)
+      assert.has_match("20,449", result.text)
     end)
   end)
 end)

@@ -128,6 +128,7 @@ function M.prepare_curl_command(tmp_file, headers, endpoint, parameters)
     "curl",
     "-N", -- disable buffering
     "-s", -- silent mode
+    "-i", -- include HTTP response headers in output
     "--connect-timeout",
     tostring(connect_timeout), -- connection timeout
     "--max-time",
@@ -168,6 +169,7 @@ end
 ---@field process_response_line_fn? fun(line: string, callbacks: flemma.client.RequestCallbacks) Function to process each response line
 ---@field finalize_response_fn? fun(code: number, callbacks: flemma.client.RequestCallbacks) Function to finalize provider response processing
 ---@field reset_fn? fun() Optional function to reset provider state
+---@field on_response_headers_fn? fun(headers: table<string, string[]>) Called with parsed HTTP response headers (lowercase keys)
 
 -- Send request to API using curl or a test fixture
 ---@param opts flemma.client.RequestOptions Request configuration
@@ -212,12 +214,57 @@ function M.send_request(opts)
     log.debug("send_request(): ... @request.json <<< " .. json.encode(opts.request_body))
   end
 
-  -- Buffers for partial lines split across on_stdout/on_stderr callbacks.
-  -- Neovim's jobstart splits output on newlines: the last element of each
-  -- callback's data array is either "" (chunk ended with \n) or a partial
-  -- line that must be prepended to the first element of the next callback.
-  local stdout_buffer = ""
+  -- Stderr buffer for partial lines (log-only output, not worth a sink).
   local stderr_buffer = ""
+
+  -- Header parsing state: when using curl -i, HTTP response headers precede
+  -- the body and are separated by a blank line. Skip header parsing for test
+  -- fixtures (cat), which have no HTTP headers.
+  local parsing_headers = not fixture_path
+  local response_headers = {} ---@type table<string, string[]>
+
+  ---Process a single complete stdout line, dispatching to header parsing or body processing
+  ---@param line string
+  local function process_stdout_line(line)
+    if parsing_headers then
+      local stripped = line:gsub("\r$", "")
+      if stripped == "" then
+        parsing_headers = false
+        if opts.on_response_headers_fn then
+          opts.on_response_headers_fn(response_headers)
+        end
+      else
+        local name, value = stripped:match("^([%w%-]+):%s*(.+)$")
+        if name then
+          local lower_name = name:lower()
+          response_headers[lower_name] = response_headers[lower_name] or {}
+          table.insert(response_headers[lower_name], vim.trim(value))
+        end
+      end
+    else
+      -- Skip empty lines in the body (SSE boundary separators).
+      -- The sink fires on_line for all complete lines including empty ones;
+      -- previously, the on_stdout loop filtered with #line > 0.
+      if #line == 0 then
+        return
+      end
+      log.debug("send_request(): on_stdout: " .. line)
+      if opts.process_response_line_fn then
+        opts.process_response_line_fn(line, opts.callbacks)
+      end
+    end
+  end
+
+  -- Sink for stdout line framing and real-time SSE dispatch.
+  -- Neovim's jobstart splits stdout on newlines; table.concat(data, "\n")
+  -- reconstructs the original bytes which the sink re-frames into lines.
+  local sink_module = require("flemma.sink")
+  local stdout_sink = sink_module.create({
+    name = "http/" .. (opts.endpoint or "request"):gsub("[^%w/%-]", "-"),
+    on_line = function(line)
+      process_stdout_line(line)
+    end,
+  })
 
   -- Start job
   local job_id = vim.fn.jobstart(cmd, {
@@ -226,39 +273,7 @@ function M.send_request(opts)
       if not data then
         return
       end
-
-      -- Detect EOF: Neovim sends {""} when the stream ends, allowing
-      -- any buffered partial line to be flushed as a complete line.
-      local is_eof = (#data == 1 and data[1] == "")
-
-      -- Prepend any buffered partial line to the first element
-      data[1] = stdout_buffer .. data[1]
-
-      -- The last element is always either "" (complete) or a partial line
-      stdout_buffer = data[#data]
-
-      -- Process all complete lines (everything except the last element)
-      for i = 1, #data - 1 do
-        local line = data[i]
-        if line and #line > 0 then
-          log.debug("send_request(): on_stdout: " .. line)
-
-          if opts.process_response_line_fn then
-            opts.process_response_line_fn(line, opts.callbacks)
-          end
-        end
-      end
-
-      -- At EOF, flush any remaining buffered content as a complete line
-      if is_eof and #stdout_buffer > 0 then
-        local line = stdout_buffer
-        stdout_buffer = ""
-        log.debug("send_request(): on_stdout: " .. line)
-
-        if opts.process_response_line_fn then
-          opts.process_response_line_fn(line, opts.callbacks)
-        end
-      end
+      stdout_sink:write(table.concat(data, "\n"))
     end,
     on_stderr = function(_, data)
       if not data then
@@ -284,8 +299,9 @@ function M.send_request(opts)
       end
     end,
     on_exit = function(_, code)
-      -- Clean up temporary file
+      -- Clean up temporary file and stdout sink
       os.remove(tmp_file)
+      stdout_sink:destroy()
 
       -- Log exit code
       log.info("send_request(): on_exit: Request completed with exit code: " .. tostring(code))

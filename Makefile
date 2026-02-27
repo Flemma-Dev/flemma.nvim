@@ -28,9 +28,10 @@ check:
 develop:
 	@-rm ~/.cache/nvim/flemma.log
 	@nvim --cmd "set runtimepath^=`pwd`"												\
-		-c "lua require(\"flemma\").setup({												\
+		-c "																			\
+		lua require(\"flemma\").setup({													\
 			model = \"\$$haiku\",														\
-			parameters = { max_tokens = 8000, thinking = \"minimal\" },					\
+			parameters = { thinking = \"minimal\" },									\
 			presets = {																	\
 				[\"\$$haiku\"] = \"anthropic claude-haiku-4-5\",						\
 				[\"\$$gpt\"] = \"openai gpt-5.2\",										\
@@ -38,7 +39,16 @@ develop:
 			logging = { enabled = true },												\
 			editing = { auto_write = true },											\
 			tools = { modules = { \"extras.flemma.tools.calculator\" } },				\
-		})"																				\
+		})																				\
+																						\
+		dofile(\"$(CURDIR)/contrib/extras/sink_viewer.lua\").setup({					\
+			pattern = {																	\
+				\"^anthropic/thinking\",												\
+				\"^openai/reasoning\",													\
+				\"^vertex/thinking\",													\
+			}																			\
+		})																				\
+		"																				\
 		-c ":edit $$HOME/.cache/nvim/flemma.log"										\
 		-c ":tabedit example.chat"
 

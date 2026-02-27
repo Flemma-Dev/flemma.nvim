@@ -101,7 +101,7 @@ local log = require("flemma.logging")
 ---@field [string] any Provider-specific parameters
 
 ---@class flemma.provider.ResponseBuffer
----@field lines string[]
+---@field lines_sink flemma.Sink
 ---@field successful boolean
 ---@field extra table<string, any>
 ---@field content string
@@ -112,6 +112,7 @@ local log = require("flemma.logging")
 ---@field endpoint? string
 ---@field api_version? string
 ---@field _response_buffer? flemma.provider.ResponseBuffer
+---@field _response_headers? table<string, string[]>
 ---@field set_parameter_overrides fun(self, overrides: table<string, any>|nil)
 local M = {}
 
@@ -310,8 +311,13 @@ function M.reset(self, opts)
     end
     return
   end
+  -- Destroy previous response buffer sink if it exists
+  if self._response_buffer and self._response_buffer.lines_sink then
+    self._response_buffer.lines_sink:destroy()
+  end
   -- Full reset: create response buffer for all providers
   self:_new_response_buffer()
+  self._response_headers = nil
 end
 
 -- ============================================================================
@@ -382,6 +388,10 @@ function M.finalize_response(self, exit_code, callbacks)
   -- Check buffered response if we haven't processed content successfully
   if self._response_buffer and not self._response_buffer.successful then
     self:_check_buffered_response(callbacks)
+  end
+  -- Destroy the response lines sink
+  if self._response_buffer and self._response_buffer.lines_sink then
+    self._response_buffer.lines_sink:destroy()
   end
 end
 
@@ -481,6 +491,73 @@ function M:is_auth_error(message)
   return false
 end
 
+--- Store parsed HTTP response headers from the current request.
+---@param self flemma.provider.Base
+---@param headers table<string, string[]>
+function M:set_response_headers(headers)
+  self._response_headers = headers
+end
+
+--- Detect whether an error message indicates a rate limit error.
+--- Covers Anthropic ("rate limit"), OpenAI ("rate_limit_exceeded"),
+--- Vertex ("resource exhausted"), and generic patterns.
+---@param message string|nil The error message to check
+---@return boolean
+function M:is_rate_limit_error(message)
+  if not message or type(message) ~= "string" then
+    return false
+  end
+  local lower = message:lower()
+  if lower:match("rate limit") then
+    return true
+  end
+  if lower:match("rate_limit_exceeded") then
+    return true
+  end
+  if lower:match("resource exhausted") then
+    return true
+  end
+  if lower:match("too many requests") then
+    return true
+  end
+  if lower:match("quota exceeded") then
+    return true
+  end
+  if lower:match("overloaded") then
+    return true
+  end
+  return false
+end
+
+---@param name string Lowercase header name
+---@return boolean
+local function is_rate_limit_header(name)
+  return name == "retry-after" or name:match("ratelimit") ~= nil
+end
+
+--- Format rate limit details from HTTP response headers.
+--- Returns a sorted, newline-separated string of relevant headers, or nil if none found.
+---@param self flemma.provider.Base
+---@return string|nil
+function M:format_rate_limit_details()
+  if not self._response_headers then
+    return nil
+  end
+  local details = {}
+  for name, values in pairs(self._response_headers) do
+    if is_rate_limit_header(name) then
+      for _, value in ipairs(values) do
+        table.insert(details, name .. ": " .. value)
+      end
+    end
+  end
+  if #details > 0 then
+    table.sort(details)
+    return table.concat(details, "\n")
+  end
+  return nil
+end
+
 -- ============================================================================
 -- Internal helpers — used by providers via self:method(), not meant to be overridden
 -- ============================================================================
@@ -544,8 +621,9 @@ end
 --- Create a new response buffer for accumulating non-processable lines
 ---@param self flemma.provider.Base
 function M._new_response_buffer(self)
+  local sink = require("flemma.sink")
   self._response_buffer = {
-    lines = {},
+    lines_sink = sink.create({ name = "provider/response-lines" }),
     successful = false,
     extra = {},
     content = "", -- Accumulated content for spacing decisions
@@ -559,7 +637,7 @@ function M._buffer_response_line(self, line)
   if not self._response_buffer then
     self:_new_response_buffer()
   end
-  table.insert(self._response_buffer.lines, line)
+  self._response_buffer.lines_sink:write_lines({ line })
 end
 
 --- Mark that response processing has been successful
@@ -576,11 +654,15 @@ end
 ---@param callbacks flemma.provider.Callbacks
 ---@return boolean
 function M._check_buffered_response(self, callbacks)
-  if not self._response_buffer or #self._response_buffer.lines == 0 then
+  if not self._response_buffer then
     return false
   end
 
-  local body = table.concat(self._response_buffer.lines, "\n")
+  local body = self._response_buffer.lines_sink:read()
+  if body == "" then
+    return false
+  end
+
   local ok, data = pcall(json.decode, body)
   if not ok then
     return false

@@ -7,6 +7,9 @@ local log = require("flemma.logging")
 local state = require("flemma.state")
 local registry = require("flemma.provider.registry")
 
+local FALLBACK_MAX_TOKENS = 4000
+local MIN_MAX_TOKENS = 1024
+
 ---Check if a parameter key is a general parameter applicable to all providers
 ---@param key string
 ---@return boolean
@@ -102,6 +105,77 @@ function M.validate_parameters(provider_name, model_name, parameters)
 end
 
 --------------------------------------------------------------------------------
+-- max_tokens resolution
+--------------------------------------------------------------------------------
+
+---Resolve percentage-based or over-limit max_tokens to an integer.
+---Mutates parameters.max_tokens in place.
+---@param provider_name string
+---@param model_name string
+---@param parameters table<string, any>
+function M.resolve_max_tokens(provider_name, model_name, parameters)
+  local value = parameters.max_tokens
+  if value == nil then
+    return
+  end
+
+  if type(value) == "string" then
+    local pct_str = value:match("^(%d+)%%$")
+    if pct_str then
+      local pct = tonumber(pct_str)
+      local model_info = registry.get_model_info(provider_name, model_name)
+      if model_info and model_info.max_output_tokens then
+        local resolved = math.floor(model_info.max_output_tokens * pct / 100)
+        parameters.max_tokens = math.max(resolved, MIN_MAX_TOKENS)
+        log.debug(
+          "resolve_max_tokens(): "
+            .. value
+            .. " of "
+            .. tostring(model_info.max_output_tokens)
+            .. " → "
+            .. tostring(parameters.max_tokens)
+        )
+      else
+        parameters.max_tokens = FALLBACK_MAX_TOKENS
+        log.debug(
+          "resolve_max_tokens(): No model data for "
+            .. provider_name
+            .. "/"
+            .. model_name
+            .. ", falling back to "
+            .. tostring(FALLBACK_MAX_TOKENS)
+        )
+      end
+    else
+      parameters.max_tokens = FALLBACK_MAX_TOKENS
+      log.warn(
+        "resolve_max_tokens(): Invalid max_tokens string '"
+          .. value
+          .. "', falling back to "
+          .. tostring(FALLBACK_MAX_TOKENS)
+      )
+    end
+    return
+  end
+
+  if type(value) == "number" then
+    local model_info = registry.get_model_info(provider_name, model_name)
+    if model_info and model_info.max_output_tokens and value > model_info.max_output_tokens then
+      vim.notify(
+        string.format(
+          "Flemma: max_tokens %d exceeds %s limit (%d), clamping.",
+          value,
+          model_name,
+          model_info.max_output_tokens
+        ),
+        vim.log.levels.WARN
+      )
+      parameters.max_tokens = model_info.max_output_tokens
+    end
+  end
+end
+
+--------------------------------------------------------------------------------
 -- Configuration management
 --------------------------------------------------------------------------------
 
@@ -184,6 +258,9 @@ function M.prepare_config(provider_name, model_name, parameters)
   -- Merge parameters
   local merged_params = M.merge_parameters(parameters or {}, resolved_provider)
   merged_params.model = validated_model
+
+  -- Resolve percentage-based or over-limit max_tokens before validation
+  M.resolve_max_tokens(resolved_provider, validated_model, merged_params)
 
   -- Validate parameters (shows warnings but doesn't fail)
   M.validate_parameters(resolved_provider, validated_model, merged_params)

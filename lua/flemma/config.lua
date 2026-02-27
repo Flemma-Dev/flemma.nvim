@@ -48,7 +48,7 @@
 ---@field thinking_format string Format string when thinking is active. {model} = model name, {level} = thinking level
 
 ---@class flemma.config.Parameters
----@field max_tokens? integer
+---@field max_tokens? integer|string Integer token count or percentage string (e.g. "50%") of model's max_output_tokens
 ---@field temperature? number
 ---@field timeout? integer
 ---@field connect_timeout? integer
@@ -96,6 +96,7 @@
 ---@class flemma.config.ToolsConfig
 ---@field require_approval boolean
 ---@field auto_approve? flemma.config.AutoApprove
+---@field auto_approve_sandboxed? boolean Auto-approve tools that run inside the sandbox (default: true). Set false to always require manual approval even when sandboxed.
 ---@field presets? table<string, flemma.tools.PresetDefinition> Named approval presets
 ---@field autopilot flemma.config.AutopilotConfig
 ---@field default_timeout integer
@@ -232,7 +233,7 @@ return {
   provider = "anthropic", -- Default provider: "anthropic", "openai", or "vertex"
   model = nil, -- Will use provider-specific default if nil
   parameters = {
-    max_tokens = 4000, -- Default max tokens for all providers
+    max_tokens = "50%", -- Default max tokens: percentage of model's max_output_tokens, or integer
     temperature = 0.7, -- Default temperature for all providers
     timeout = 120, -- Default response timeout for cURL requests
     connect_timeout = 10, -- Default connection timeout for cURL requests
@@ -242,6 +243,7 @@ return {
   tools = {
     require_approval = true, -- Require user approval before executing tool calls (two-step <C-]> flow)
     auto_approve = { "$default" }, -- Tools that bypass approval: string[] of tool/preset names, or function(tool_name, input, context) → true|false|"deny"
+    auto_approve_sandboxed = true, -- Auto-approve tools that run inside the sandbox (set false to require manual approval)
     presets = {}, -- Named approval presets (override built-ins or add new ones with "$name" keys)
     autopilot = {
       enabled = true, -- Auto-execute approved tools and re-send when resolved

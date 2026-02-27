@@ -2216,6 +2216,48 @@ describe("Context overflow detection", function()
 end)
 
 -- ============================================================================
+-- Rate Limit Error Detection Tests
+-- ============================================================================
+
+describe("Rate limit error detection", function()
+  local base = require("flemma.provider.base")
+
+  it("detects Anthropic rate limit", function()
+    assert.is_true(base:is_rate_limit_error("Number of concurrent connections has exceeded your rate limit"))
+  end)
+
+  it("detects OpenAI rate_limit_exceeded", function()
+    assert.is_true(base:is_rate_limit_error("Error code: rate_limit_exceeded"))
+  end)
+
+  it("detects Vertex resource exhausted", function()
+    assert.is_true(base:is_rate_limit_error("RESOURCE_EXHAUSTED: quota exceeded"))
+  end)
+
+  it("detects generic too many requests", function()
+    assert.is_true(base:is_rate_limit_error("too many requests, please slow down"))
+  end)
+
+  it("detects quota exceeded", function()
+    assert.is_true(base:is_rate_limit_error("Your quota exceeded for this billing period"))
+  end)
+
+  it("detects Anthropic overloaded", function()
+    assert.is_true(base:is_rate_limit_error("overloaded_error: Overloaded"))
+  end)
+
+  it("does not false-positive on unrelated errors", function()
+    assert.is_false(base:is_rate_limit_error("Invalid API key"))
+    assert.is_false(base:is_rate_limit_error("prompt is too long"))
+    assert.is_false(base:is_rate_limit_error(""))
+  end)
+
+  it("handles nil gracefully", function()
+    assert.is_false(base:is_rate_limit_error(nil))
+  end)
+end)
+
+-- ============================================================================
 -- Orphaned Tool Call Synthetic Injection Tests
 -- ============================================================================
 

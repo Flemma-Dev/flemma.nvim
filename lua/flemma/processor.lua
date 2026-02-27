@@ -36,7 +36,11 @@ end
 ---@field data string
 ---@field position? flemma.ast.Position
 
----@alias flemma.processor.EvaluatedPart flemma.processor.TextPart|flemma.processor.ThinkingPart|flemma.processor.FilePart|flemma.processor.ToolUsePart|flemma.processor.ToolResultPart
+---@class flemma.processor.AbortedPart
+---@field kind "aborted"
+---@field message string
+
+---@alias flemma.processor.EvaluatedPart flemma.processor.TextPart|flemma.processor.ThinkingPart|flemma.processor.FilePart|flemma.processor.ToolUsePart|flemma.processor.ToolResultPart|flemma.processor.AbortedPart
 
 ---@class flemma.processor.EvaluatedMessage
 ---@field role "You"|"Assistant"|"System"
@@ -245,6 +249,8 @@ function M.evaluate(doc, base_context, evaluated_frontmatter)
             is_error = seg.is_error,
           })
         end
+      elseif seg.kind == "aborted" then
+        table.insert(parts, { kind = "aborted", message = seg.message })
       end
     end
 

@@ -2,18 +2,30 @@ if exists("b:current_syntax")
   finish
 endif
 
-" Keywords
-syntax keyword FlemmaNotifyKeyword Request Session
+" Section labels
+syntax keyword FlemmaNotifyLabel Request Session Cache Requests
 
-" Numbers including decimals (with optional $ prefix)
-syntax match FlemmaNotifyNumber "\$\?\<\d\+\(\.\d\+\)\?\>"
+" Dotted leaders (middle dot U+00B7)
+syntax match FlemmaNotifyLeader "·"
 
-" Model names (between backticks)
+" Cost values ($N.NN)
+syntax match FlemmaNotifyCost "\$\d\+\.\d\+"
+
+" Model names (between backticks, concealed)
 syntax region FlemmaNotifyModel matchgroup=Conceal start=/`/ end=/`/ concealends
 
+" Token detail lines (lines starting with spaces then ↑ or ↓)
+syntax match FlemmaNotifyDim "^\s\+[↑↓].*$"
+
 " Highlight groups
-highlight default link FlemmaNotifyKeyword Type
-highlight default FlemmaNotifyNumber gui=bold
+highlight default link FlemmaNotifyLabel Type
+highlight default link FlemmaNotifyLeader Comment
+highlight default FlemmaNotifyCost gui=bold
 highlight default link FlemmaNotifyModel Special
+highlight default link FlemmaNotifyDim Comment
+
+" Cache extmark highlight groups (applied dynamically in Lua)
+highlight default link FlemmaNotifyCacheGood DiagnosticOk
+highlight default link FlemmaNotifyCacheBad DiagnosticWarn
 
 let b:current_syntax = "flemma_notify"

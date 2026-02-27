@@ -17,6 +17,7 @@ local M = {}
 ---@private
 local function setup_commands()
   local core = require("flemma.core")
+  local editing = require("flemma.buffer.editing")
   local navigation = require("flemma.navigation")
   local log = require("flemma.logging")
   local registry = require("flemma.provider.registry")
@@ -203,6 +204,7 @@ local function setup_commands()
       if chat_content then
         vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.split(chat_content, "\n", {}))
         vim.bo[bufnr].filetype = "chat"
+        editing.auto_write(bufnr)
       end
     end,
   }

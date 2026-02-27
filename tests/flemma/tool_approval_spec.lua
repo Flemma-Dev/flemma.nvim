@@ -9,6 +9,8 @@ package.loaded["flemma.tools.context"] = nil
 package.loaded["flemma.tools.injector"] = nil
 package.loaded["flemma.state"] = nil
 package.loaded["flemma.parser"] = nil
+package.loaded["flemma.sandbox"] = nil
+package.loaded["flemma.sandbox.backends.bwrap"] = nil
 
 local approval = require("flemma.tools.approval")
 local context = require("flemma.tools.context")
@@ -1899,6 +1901,285 @@ describe("Context resolve_all_tool_blocks", function()
 end)
 
 -- ============================================================================
+-- User-Provided Content in Pending Tool Blocks
+-- ============================================================================
+
+describe("Context resolve_all_tool_blocks user-provided content", function()
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("pending blocks with content are in groups['pending']", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "echo hello" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "hello",
+      "```",
+    })
+
+    local groups = context.resolve_all_tool_blocks(bufnr)
+    assert.equals(1, #(groups["pending"] or {}))
+    assert.equals("toolu_01", groups["pending"][1].tool_id)
+    assert.equals("hello", groups["pending"][1].content)
+    assert.is_true(groups["pending"][1].has_content)
+  end)
+
+  it("empty pending blocks are also in groups['pending']", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "echo hello" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "```",
+    })
+
+    local groups = context.resolve_all_tool_blocks(bufnr)
+    assert.equals(1, #(groups["pending"] or {}))
+    assert.equals("", groups["pending"][1].content)
+    assert.is_false(groups["pending"][1].has_content)
+  end)
+
+  it("mixed: pending with and without content both in groups['pending']", function()
+    local bufnr = create_buffer({
+      "@Assistant: Two tools",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "echo a" }',
+      "```",
+      "",
+      "**Tool Use:** `bash` (`toolu_02`)",
+      "```json",
+      '{ "command": "echo b" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "user output here",
+      "```",
+      "",
+      "**Tool Result:** `toolu_02`",
+      "",
+      "```flemma:tool status=pending",
+      "```",
+    })
+
+    local groups = context.resolve_all_tool_blocks(bufnr)
+    assert.equals(2, #(groups["pending"] or {}))
+    -- Distinguish by content
+    local filled = vim.tbl_filter(function(ctx)
+      return ctx.has_content
+    end, groups["pending"])
+    local empty = vim.tbl_filter(function(ctx)
+      return not ctx.has_content
+    end, groups["pending"])
+    assert.equals(1, #filled)
+    assert.equals(1, #empty)
+  end)
+
+  it("approved with content still excluded (content-overwrite protection)", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "echo hello" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=approved",
+      "User edited content",
+      "```",
+    })
+
+    local groups = context.resolve_all_tool_blocks(bufnr)
+    assert.equals(0, #(groups["approved"] or {}))
+  end)
+end)
+
+-- ============================================================================
+-- Injector: strip_fence_info_string Tests
+-- ============================================================================
+
+describe("Injector strip_fence_info_string", function()
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("strips flemma:tool info string, preserving user content", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "ls -la" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "total 42",
+      "drwxr-xr-x 2 user user 4096 Jan  1 00:00 .",
+      "```",
+    })
+
+    local ok, err = injector.strip_fence_info_string(bufnr, "toolu_01")
+    assert.is_true(ok)
+    assert.is_nil(err)
+
+    local lines = get_lines(bufnr)
+    -- Fence opener should now be plain backticks (no flemma:tool)
+    local found_plain_fence = false
+    local found_flemma_fence = false
+    for _, line in ipairs(lines) do
+      if line == "```" then
+        found_plain_fence = true
+      end
+      if line:match("flemma:tool") then
+        found_flemma_fence = true
+      end
+    end
+    assert.is_true(found_plain_fence)
+    assert.is_false(found_flemma_fence)
+
+    -- Content should be preserved
+    local content_found = false
+    for _, line in ipairs(lines) do
+      if line:match("total 42") then
+        content_found = true
+      end
+    end
+    assert.is_true(content_found)
+  end)
+
+  it("resolved block is parsed as a normal tool_result without status", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "echo hi" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "hi",
+      "```",
+    })
+
+    injector.strip_fence_info_string(bufnr, "toolu_01")
+
+    -- Re-parse: the tool_result should now have no status
+    local doc = parser.get_parsed_document(bufnr)
+    for _, msg in ipairs(doc.messages) do
+      if msg.role == "You" then
+        for _, seg in ipairs(msg.segments) do
+          if seg.kind == "tool_result" then
+            assert.equals("toolu_01", seg.tool_use_id)
+            assert.is_nil(seg.status)
+            assert.equals("hi", seg.content)
+          end
+        end
+      end
+    end
+  end)
+
+  it("resolved block flows through processor as normal tool_result", function()
+    local bufnr = create_buffer({
+      "@You: Run this",
+      "",
+      "@Assistant: Sure",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "echo hi" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01`",
+      "",
+      "```flemma:tool status=pending",
+      "hi",
+      "```",
+    })
+
+    injector.strip_fence_info_string(bufnr, "toolu_01")
+
+    -- Evaluate through processor — the tool_result should produce a part
+    local doc = parser.get_parsed_document(bufnr)
+    local evaluated = processor.evaluate(doc)
+    local tool_result_parts = {}
+    for _, msg in ipairs(evaluated.messages) do
+      for _, part in ipairs(msg.parts) do
+        if part.kind == "tool_result" then
+          table.insert(tool_result_parts, part)
+        end
+      end
+    end
+    assert.equals(1, #tool_result_parts)
+    assert.equals("toolu_01", tool_result_parts[1].tool_use_id)
+    assert.equals("hi", tool_result_parts[1].content)
+  end)
+
+  it("preserves (error) suffix on header", function()
+    local bufnr = create_buffer({
+      "@Assistant: Tool call",
+      "",
+      "**Tool Use:** `bash` (`toolu_01`)",
+      "```json",
+      '{ "command": "bad_cmd" }',
+      "```",
+      "",
+      "@You: **Tool Result:** `toolu_01` (error)",
+      "",
+      "```flemma:tool status=pending",
+      "command not found: bad_cmd",
+      "```",
+    })
+
+    injector.strip_fence_info_string(bufnr, "toolu_01")
+
+    local doc = parser.get_parsed_document(bufnr)
+    for _, msg in ipairs(doc.messages) do
+      if msg.role == "You" then
+        for _, seg in ipairs(msg.segments) do
+          if seg.kind == "tool_result" then
+            assert.is_true(seg.is_error)
+            assert.equals("command not found: bad_cmd", seg.content)
+          end
+        end
+      end
+    end
+  end)
+
+  it("returns error for non-existent tool_id", function()
+    local bufnr = create_buffer({
+      "@You: Hello",
+    })
+
+    local ok, err = injector.strip_fence_info_string(bufnr, "nonexistent")
+    assert.is_false(ok)
+    assert.is_truthy(err)
+  end)
+end)
+
+-- ============================================================================
 -- Placeholder Injection with flemma:tool Tests
 -- ============================================================================
 
@@ -2292,5 +2573,214 @@ describe("Config resolver defers to frontmatter", function()
     local ctx = { bufnr = 1, tool_id = "t1", opts = { auto_approve = {} } }
     assert.equals("require_approval", approval.resolve("read", {}, ctx))
     assert.equals("require_approval", approval.resolve("write", {}, ctx))
+  end)
+end)
+
+-- ============================================================================
+-- Sandbox Auto-Approval Resolver Tests
+-- ============================================================================
+
+describe("Sandbox auto-approval resolver", function()
+  local sandbox
+  local registry = require("flemma.tools.registry")
+
+  --- Register a mock sandbox backend that always reports as available.
+  local function register_mock_backend()
+    sandbox.register("mock", {
+      available = function()
+        return true, nil
+      end,
+      wrap = function(_policy, _backend_config, inner_cmd)
+        return inner_cmd, nil
+      end,
+      priority = 100,
+    })
+  end
+
+  --- Set config with sandbox enabled and a mock backend, then run approval.setup().
+  ---@param overrides? table Overrides merged into the default config
+  local function setup_with_sandbox(overrides)
+    local config = vim.tbl_deep_extend("force", {
+      tools = { auto_approve = { "$default" }, auto_approve_sandboxed = true },
+      sandbox = {
+        enabled = true,
+        backend = "auto",
+      },
+    }, overrides or {})
+    state.set_config(config)
+    approval.clear()
+    require("flemma.tools.presets").setup(nil)
+    approval.setup()
+  end
+
+  before_each(function()
+    package.loaded["flemma.sandbox"] = nil
+    package.loaded["flemma.sandbox.backends.bwrap"] = nil
+    sandbox = require("flemma.sandbox")
+    sandbox.clear()
+    sandbox.reset_enabled()
+    register_mock_backend()
+  end)
+
+  after_each(function()
+    approval.clear()
+    state.set_config({})
+    sandbox.clear()
+    sandbox.reset_enabled()
+    require("flemma.tools.presets").clear()
+  end)
+
+  it("auto-approves bash when sandbox is enabled with an available backend", function()
+    setup_with_sandbox()
+    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("approve", result)
+  end)
+
+  it("does not affect tools without can_auto_approve_if_sandboxed capability", function()
+    setup_with_sandbox()
+    -- "calculator" has no capabilities — should require approval
+    local result = approval.resolve("calculator", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("require_approval", result)
+  end)
+
+  it("auto-approves custom tool that declares can_auto_approve_if_sandboxed", function()
+    -- Register a custom tool with the sandbox capability
+    registry.define("my_sandboxed_tool", {
+      name = "my_sandboxed_tool",
+      description = "A custom sandboxed tool",
+      capabilities = { "can_auto_approve_if_sandboxed" },
+      input_schema = { type = "object", properties = {} },
+    })
+    setup_with_sandbox()
+    local result = approval.resolve("my_sandboxed_tool", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("approve", result)
+  end)
+
+  it("does not auto-approve tool with unrelated capabilities", function()
+    registry.define("safe_tool", {
+      name = "safe_tool",
+      description = "A tool with other capabilities",
+      capabilities = { "some_other_capability" },
+      input_schema = { type = "object", properties = {} },
+    })
+    setup_with_sandbox()
+    local result = approval.resolve("safe_tool", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("require_approval", result)
+  end)
+
+  it("requires approval for bash when sandbox is disabled", function()
+    setup_with_sandbox({ sandbox = { enabled = false } })
+    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("require_approval", result)
+  end)
+
+  it("requires approval for bash when no backend is available", function()
+    sandbox.clear() -- remove the mock backend
+    setup_with_sandbox()
+    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("require_approval", result)
+  end)
+
+  it("requires approval when tools.auto_approve_sandboxed is false", function()
+    setup_with_sandbox({ tools = { auto_approve_sandboxed = false } })
+    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("require_approval", result)
+  end)
+
+  it("requires approval when tools.auto_approve is not configured", function()
+    setup_with_sandbox()
+    -- Override: clear and re-setup with no auto_approve
+    state.set_config({
+      tools = { auto_approve_sandboxed = true },
+      sandbox = { enabled = true, backend = "auto" },
+    })
+    approval.clear()
+    approval.setup()
+    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("require_approval", result)
+  end)
+
+  it("respects frontmatter exclusions for bash", function()
+    setup_with_sandbox()
+    local ctx = {
+      bufnr = 1,
+      tool_id = "t1",
+      opts = { auto_approve_exclusions = { bash = true } },
+    }
+    local result = approval.resolve("bash", {}, ctx)
+    assert.equals("require_approval", result)
+  end)
+
+  it("respects frontmatter sandbox.enabled = false", function()
+    setup_with_sandbox()
+    local ctx = {
+      bufnr = 1,
+      tool_id = "t1",
+      opts = { sandbox = { enabled = false } },
+    }
+    local result = approval.resolve("bash", {}, ctx)
+    assert.equals("require_approval", result)
+  end)
+
+  it("respects runtime sandbox override disabling sandbox", function()
+    setup_with_sandbox()
+    sandbox.set_enabled(false)
+    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("require_approval", result)
+  end)
+
+  it("config auto_approve with explicit bash overrides sandbox resolver", function()
+    -- Config explicitly includes bash in auto_approve — config resolver (P100) wins
+    setup_with_sandbox({
+      sandbox = { enabled = false },
+      tools = { auto_approve = { "$default", "bash" } },
+    })
+    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("approve", result)
+  end)
+
+  it("config preset deny overrides sandbox resolver", function()
+    setup_with_sandbox({
+      tools = {
+        auto_approve = { "$default", "$deny-bash" },
+        presets = { ["$deny-bash"] = { deny = { "bash" } } },
+      },
+    })
+    require("flemma.tools.presets").setup({ ["$deny-bash"] = { deny = { "bash" } } })
+    -- Re-run setup to pick up new presets
+    approval.clear()
+    approval.setup()
+    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("deny", result)
+  end)
+
+  it("still auto-approves $default tools (read, write, edit) regardless of sandbox", function()
+    setup_with_sandbox()
+    assert.equals("approve", approval.resolve("read", {}, { bufnr = 1, tool_id = "t1" }))
+    assert.equals("approve", approval.resolve("write", {}, { bufnr = 1, tool_id = "t2" }))
+    assert.equals("approve", approval.resolve("edit", {}, { bufnr = 1, tool_id = "t3" }))
+  end)
+
+  it("is registered at priority 25 (below community default of 50)", function()
+    setup_with_sandbox()
+    local resolver = approval.get("urn:flemma:approval:sandbox")
+    assert.is_not_nil(resolver)
+    assert.equals(25, resolver.priority)
+  end)
+
+  it("community resolver at default priority wins over sandbox resolver", function()
+    setup_with_sandbox()
+    -- Register a community resolver that requires approval for bash
+    approval.register("community-bash-guard", {
+      resolve = function(tool_name)
+        if tool_name == "bash" then
+          return "require_approval"
+        end
+        return nil
+      end,
+      -- No priority specified → DEFAULT_PRIORITY (50), above sandbox (25)
+    })
+    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
+    assert.equals("require_approval", result)
   end)
 end)

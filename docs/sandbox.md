@@ -156,6 +156,44 @@ The boolean shorthand (`flemma.opt.sandbox = true`) expands to `{ enabled = true
 
 ---
 
+## Auto-approval of sandboxed tools
+
+When the sandbox is enabled and a backend is available, Flemma automatically approves tool calls for tools that declare the `"can_auto_approve_if_sandboxed"` capability. Currently only the built-in `bash` tool declares this capability. This means sandboxed sessions run without manual approval prompts for bash by default — the sandbox provides the safety boundary instead.
+
+The auto-approval resolver sits at priority 25 in the [approval chain](tools.md#approval-resolvers), below config (100), frontmatter (90), and the community default (50). Explicit user preferences always win.
+
+### Opting out
+
+Disable sandbox-based auto-approval globally:
+
+```lua
+require("flemma").setup({
+  tools = {
+    auto_approve_sandboxed = false,  -- always require manual approval, even when sandboxed
+  },
+})
+```
+
+Or exclude specific tools per-buffer in frontmatter:
+
+````lua
+```lua
+flemma.opt.tools.auto_approve = { "$default" }
+flemma.opt.tools.auto_approve:remove("bash")
+```
+````
+
+### Requirements
+
+All three conditions must be met for sandbox auto-approval to activate:
+
+1. **`tools.auto_approve` is configured** — the user has opted into some form of auto-approval
+2. **Sandbox is enabled and available** — `sandbox.enabled = true`, no runtime disable override, and a backend (e.g., `bwrap`) is installed and functional
+
+If any condition is unmet, the resolver yields (`nil`) and the chain continues to the next resolver.
+
+---
+
 ## Runtime commands
 
 Toggle sandboxing at runtime without changing your config:

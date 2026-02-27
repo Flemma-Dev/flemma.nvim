@@ -43,8 +43,14 @@ local M = {}
 
 ---@class flemma.ast.ToolResultSegment : flemma.ast.GenericToolResultPart
 ---@field position flemma.ast.Position
+---@field fence_line? integer 1-based line number of the fence opener (only for flemma:tool blocks)
 
----@alias flemma.ast.Segment flemma.ast.TextSegment|flemma.ast.ExpressionSegment|flemma.ast.ThinkingSegment|flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment
+---@class flemma.ast.AbortedSegment
+---@field kind "aborted"
+---@field message string
+---@field position flemma.ast.Position
+
+---@alias flemma.ast.Segment flemma.ast.TextSegment|flemma.ast.ExpressionSegment|flemma.ast.ThinkingSegment|flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|flemma.ast.AbortedSegment
 
 ---@class flemma.ast.Diagnostic
 ---@field type "frontmatter"|"expression"|"file"|"tool_use"|"parse"
@@ -100,7 +106,7 @@ local M = {}
 ---@field name string
 ---@field input table<string, any>
 
----@alias flemma.ast.ToolStatus "pending"|"approved"|"rejected"|"denied"
+---@alias flemma.ast.ToolStatus "pending"|"approved"|"rejected"|"denied"|"aborted"
 
 ---@class flemma.ast.GenericToolResultPart
 ---@field kind "tool_result"
@@ -190,7 +196,7 @@ end
 
 ---@param tool_use_id string
 ---@param content string
----@param opts? { is_error?: boolean, status?: flemma.ast.ToolStatus, start_line?: integer, end_line?: integer }
+---@param opts? { is_error?: boolean, status?: flemma.ast.ToolStatus, start_line?: integer, end_line?: integer, fence_line?: integer }
 ---@return flemma.ast.ToolResultSegment
 function M.tool_result(tool_use_id, content, opts)
   opts = opts or {}
@@ -200,8 +206,16 @@ function M.tool_result(tool_use_id, content, opts)
     content = content,
     is_error = opts.is_error or false,
     status = opts.status,
+    fence_line = opts.fence_line,
     position = { start_line = opts.start_line, end_line = opts.end_line },
   }
+end
+
+---@param message string
+---@param pos flemma.ast.Position
+---@return flemma.ast.AbortedSegment
+function M.aborted(message, pos)
+  return { kind = "aborted", message = message, position = pos }
 end
 
 --- Evaluated message parts -> GenericPart[], diagnostics[]

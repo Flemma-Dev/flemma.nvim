@@ -50,10 +50,17 @@ function M.wrap(policy, backend_config, inner_cmd)
   vim.list_extend(args, { "--proc", "/proc" })
   vim.list_extend(args, { "--tmpfs", "/run" })
 
-  -- NixOS: /run/current-system holds symlinks to all system packages.
-  -- The tmpfs above hides it, so re-bind it read-only on top.
-  if vim.uv.fs_stat("/run/current-system") then
-    vim.list_extend(args, { "--ro-bind", "/run/current-system", "/run/current-system" })
+  -- NixOS: /run/current-system and /run/booted-system are symlinks into
+  -- /nix/store that tools like `nix path-info` rely on. The tmpfs above
+  -- hides them. Use --symlink (not --ro-bind) so the link target is
+  -- preserved — --ro-bind follows the symlink and mounts the store path
+  -- as a plain directory, which breaks nix store-path detection.
+  for _, name in ipairs({ "current-system", "booted-system" }) do
+    local run_path = "/run/" .. name
+    local target = vim.uv.fs_readlink(run_path)
+    if target then
+      vim.list_extend(args, { "--symlink", target, run_path })
+    end
   end
 
   -- Capabilities / privilege isolation

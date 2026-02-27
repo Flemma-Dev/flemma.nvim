@@ -246,20 +246,29 @@ M.apply_syntax = function()
   set_highlight("FlemmaUserLuaExpression", syntax_config.highlights.user_lua_expression) -- Highlight for {{expression}} in user messages
   set_highlight("FlemmaUserFileReference", syntax_config.highlights.user_file_reference) -- Highlight for @./file in user messages
 
-  set_highlight("FlemmaAssistantSpinner", { link = "FlemmaAssistant" })
+  -- Set up spinner highlight with fg-only (no bg) so hl_mode="combine" inherits line highlight bg
+  local spinner_fg = get_hl_color("FlemmaAssistant", "fg") or get_default_color("fg")
+  vim.api.nvim_set_hl(0, "FlemmaAssistantSpinner", { fg = spinner_fg, default = true })
 
   -- Set up role marker highlights (e.g., @You:, @System:)
-  -- Use existing highlight groups which are now correctly defined by set_highlight
-  vim.cmd(string.format(
-    [[
-    execute 'highlight FlemmaRoleSystem guifg=' . synIDattr(synIDtrans(hlID("FlemmaSystem")), "fg", "gui") . ' gui=%s'
-    execute 'highlight FlemmaRoleUser guifg=' . synIDattr(synIDtrans(hlID("FlemmaUser")), "fg", "gui") . ' gui=%s'
-    execute 'highlight FlemmaRoleAssistant guifg=' . synIDattr(synIDtrans(hlID("FlemmaAssistant")), "fg", "gui") . ' gui=%s'
-  ]],
-    syntax_config.role_style,
-    syntax_config.role_style,
-    syntax_config.role_style
-  ))
+  -- Extract fg from the resolved highlight group, falling back to Normal/defaults.
+  -- Parse role_style string into nvim_set_hl attributes (e.g., "bold,underline" -> { bold = true, underline = true }).
+  local role_groups = {
+    { source = "FlemmaSystem", target = "FlemmaRoleSystem" },
+    { source = "FlemmaUser", target = "FlemmaRoleUser" },
+    { source = "FlemmaAssistant", target = "FlemmaRoleAssistant" },
+  }
+  for _, role in ipairs(role_groups) do
+    local fg = get_hl_color(role.source, "fg") or get_default_color("fg")
+    ---@type vim.api.keyset.highlight
+    local hl_opts = {}
+    for style in syntax_config.role_style:gmatch("[^,]+") do
+      hl_opts[vim.trim(style)] = true
+    end
+    hl_opts.fg = fg
+    hl_opts.default = true
+    vim.api.nvim_set_hl(0, role.target, hl_opts)
+  end
 
   -- Set ruler highlight group
   set_highlight("FlemmaRuler", syntax_config.ruler.hl)

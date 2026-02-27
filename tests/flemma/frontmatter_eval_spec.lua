@@ -271,8 +271,10 @@ describe("Frontmatter evaluation caching", function()
       return content:match("%*%*Tool Use:%*%*") ~= nil
     end)
 
-    -- First dispatch cycle: exactly 1 evaluation from send_or_execute
-    assert.spy(eval_spy).was_called(1)
+    -- NOTE: We do NOT assert an exact call count here. The autopilot re-dispatch
+    -- (via vim.schedule) can fire during vim.wait polling, so by the time we reach
+    -- this point evaluate_frontmatter may have been called 1 or 2 times depending
+    -- on event loop timing. The final assertions below validate the real invariant.
 
     -- Autopilot fires and calls send_or_execute again for tool categorization + execution.
     -- Wait for the tool result placeholder to appear

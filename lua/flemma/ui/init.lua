@@ -134,22 +134,22 @@ end
 ---@param bufnr integer
 ---@return integer timer_id
 function M.start_loading_spinner(bufnr)
-  local original_modifiable_initial = vim.bo[bufnr].modifiable
-  vim.bo[bufnr].modifiable = true -- Allow plugin modifications for initial message
-
   local buffer_state = state.get_buffer_state(bufnr)
   local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
   local frame = 1
   local spinner_line_idx0 = nil
   local spinner_extmark_id = nil
 
-  vim.schedule(function()
+  local writequeue = require("flemma.buffer.writequeue")
+  writequeue.schedule(bufnr, function()
+    local original_modifiable = vim.bo[bufnr].modifiable
+    vim.bo[bufnr].modifiable = true
+
     -- Clear any existing virtual text
     vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
     vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)
 
     -- Check if we need to add a blank line before the spinner
-    vim.bo[bufnr].modifiable = true
     local line_count = vim.api.nvim_buf_line_count(bufnr)
     local last_line = line_count > 0 and vim.api.nvim_buf_get_lines(bufnr, line_count - 1, line_count, false)[1] or ""
     if last_line:match("%S") then
@@ -178,7 +178,7 @@ function M.start_loading_spinner(bufnr)
     -- Move to bottom and center the line so user sees the message
     M.move_to_bottom(bufnr)
     M.center_cursor(bufnr)
-    vim.bo[bufnr].modifiable = original_modifiable_initial
+    vim.bo[bufnr].modifiable = original_modifiable
   end)
 
   local timer = vim.fn.timer_start(100, function()
@@ -189,7 +189,7 @@ function M.start_loading_spinner(bufnr)
     -- Only update the extmark - no buffer modification needed
     if spinner_line_idx0 ~= nil and spinner_extmark_id ~= nil then
       frame = (frame % #spinner_frames) + 1
-      vim.api.nvim_buf_set_extmark(bufnr, spinner_ns, spinner_line_idx0, 0, {
+      pcall(vim.api.nvim_buf_set_extmark, bufnr, spinner_ns, spinner_line_idx0, 0, {
         id = spinner_extmark_id,
         virt_text = { { " " .. spinner_frames[frame], "FlemmaAssistantSpinner" } },
         virt_text_pos = "eol",
@@ -274,7 +274,7 @@ function M.update_thinking_preview(bufnr, preview_text)
     return
   end
 
-  vim.api.nvim_buf_set_extmark(bufnr, spinner_ns, line_idx0, 0, {
+  pcall(vim.api.nvim_buf_set_extmark, bufnr, spinner_ns, line_idx0, 0, {
     id = extmark_id,
     virt_text = { { " " .. config.spinner.thinking_char .. " (" .. preview_text .. ")", "FlemmaAssistantSpinner" } },
     virt_text_pos = "eol",

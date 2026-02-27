@@ -659,7 +659,8 @@ describe("Vertex AI Provider", function()
       -- Full reset creates a new response buffer
       provider:reset()
       assert.is_not.equals(original_buffer, provider._response_buffer)
-      assert.equals("", provider._response_buffer.extra.accumulated_thoughts)
+      assert.is_not_nil(provider._response_buffer.extra.thinking_sink)
+      assert.equals("", provider._response_buffer.extra.thinking_sink:read())
     end)
   end)
 

@@ -6,8 +6,12 @@ local M = {}
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local config_manager = require("flemma.core.config.manager")
+local editing = require("flemma.buffer.editing")
+local writequeue = require("flemma.buffer.writequeue")
 local ui = require("flemma.ui")
 local registry = require("flemma.provider.registry")
+
+local ABORT_MESSAGE = "Response interrupted by the user."
 
 -- For testing purposes
 local last_request_body_for_testing = nil
@@ -17,15 +21,6 @@ local last_request_body_for_testing = nil
 ---@return integer
 local function content_col(role)
   return #("@" .. role .. ": ")
-end
-
----Auto-write buffer if configured and modified
----@param bufnr integer
-local function auto_write_buffer(bufnr)
-  local config = state.get_config()
-  if config.editing and config.editing.auto_write and vim.bo[bufnr].modified then
-    ui.buffer_cmd(bufnr, "silent! write")
-  end
 end
 
 ---Initialize or switch provider based on configuration
@@ -142,6 +137,12 @@ function M.cancel_request()
     -- Mark as cancelled
     buffer_state.request_cancelled = true
 
+    -- Discard any queued writes from on_content / on_request_complete
+    -- that haven't executed yet. Must happen before the abort marker
+    -- insertion below to prevent stale streaming content from appearing
+    -- after the abort comment.
+    writequeue.clear(bufnr)
+
     -- Use client to cancel the request
     local client = require("flemma.client")
     if client.cancel_request(buffer_state.current_request) then
@@ -161,13 +162,18 @@ function M.cancel_request()
         local original_modifiable = vim.bo[bufnr].modifiable
         vim.bo[bufnr].modifiable = true
         local line_count = vim.api.nvim_buf_line_count(bufnr)
+        local last_content = vim.api.nvim_buf_get_lines(bufnr, line_count - 1, line_count, false)[1]
+        local separator = (last_content == "") and {} or { "" }
         ui.buffer_cmd(bufnr, "undojoin")
-        vim.api.nvim_buf_set_lines(bufnr, line_count, line_count, false, {
-          "",
-          "<!-- response aborted by user -->",
-        })
+        vim.api.nvim_buf_set_lines(
+          bufnr,
+          line_count,
+          line_count,
+          false,
+          vim.list_extend(separator, { "<!-- flemma:aborted: " .. ABORT_MESSAGE .. " -->" })
+        )
         vim.bo[bufnr].modifiable = original_modifiable
-        auto_write_buffer(bufnr)
+        editing.auto_write(bufnr)
       end
 
       state.unlock_buffer(bufnr)
@@ -218,6 +224,19 @@ local function advance_phase2(opts)
 
   local tool_blocks = tool_context.resolve_all_tool_blocks(bufnr)
 
+  -- Resolve user-filled pending blocks: the user pasted output into a
+  -- flemma:tool status=pending block. Strip the fence info string so the
+  -- content becomes a normal resolved tool_result sent to the provider.
+  local pending = tool_blocks["pending"] or {}
+  for _, ctx in ipairs(pending) do
+    if ctx.has_content then
+      local ok, err = injector.strip_fence_info_string(bufnr, ctx.tool_id)
+      if not ok then
+        log.warn("Failed to strip fence info string for " .. ctx.tool_id .. ": " .. (err or "unknown"))
+      end
+    end
+  end
+
   -- Process denied → replace with error
   local denied = tool_blocks["denied"] or {}
   for _, ctx in ipairs(denied) do
@@ -236,6 +255,15 @@ local function advance_phase2(opts)
     })
   end
 
+  -- Process aborted → replace with abort message from the marker
+  local aborted = tool_blocks["aborted"] or {}
+  for _, ctx in ipairs(aborted) do
+    injector.inject_result(bufnr, ctx.tool_id, {
+      success = false,
+      error = ctx.aborted_message or ABORT_MESSAGE,
+    })
+  end
+
   -- Process approved → execute tool (pass pre-evaluated opts to avoid re-evaluating frontmatter)
   local approved = tool_blocks["approved"] or {}
   for _, ctx in ipairs(approved) do
@@ -245,12 +273,22 @@ local function advance_phase2(opts)
     end
   end
 
-  -- Re-resolve pending positions if other blocks were processed (their injections
-  -- shift line numbers). Approved sync tools also replace placeholders inline.
-  local pending_blocks = tool_blocks["pending"] or {}
-  if (#denied > 0 or #rejected > 0 or #approved > 0) and #pending_blocks > 0 then
+  -- Collect truly-pending blocks (empty content — user-filled ones were already resolved).
+  -- Re-resolve positions if other blocks were processed (their injections shift line numbers).
+  local pending_blocks = {}
+  for _, ctx in ipairs(pending) do
+    if not ctx.has_content then
+      table.insert(pending_blocks, ctx)
+    end
+  end
+  if (#denied > 0 or #rejected > 0 or #aborted > 0 or #approved > 0) and #pending_blocks > 0 then
     local fresh = tool_context.resolve_all_tool_blocks(bufnr)
-    pending_blocks = fresh["pending"] or {}
+    pending_blocks = {}
+    for _, ctx in ipairs(fresh["pending"] or {}) do
+      if not ctx.has_content then
+        table.insert(pending_blocks, ctx)
+      end
+    end
   end
 
   if #approved > 0 then
@@ -289,8 +327,9 @@ local function advance_phase2(opts)
     return
   end
 
-  -- All denied/rejected were processed synchronously, no approved, no pending
-  if #denied > 0 or #rejected > 0 then
+  -- All denied/rejected/aborted were processed synchronously, no approved, no pending
+  if #denied > 0 or #rejected > 0 or #aborted > 0 then
+    editing.auto_write(bufnr)
     -- Non-empty tool blocks were processed — re-check if we should continue
     if autopilot_active then
       autopilot.arm(bufnr)
@@ -346,7 +385,24 @@ function M.send_or_execute(opts)
     local injector = require("flemma.tools.injector")
     local first_placeholder_line = nil
 
+    -- Partition into aborted (skip approval) and normal (run approval)
+    local aborted_pending = {}
+    local normal_pending = {}
     for _, ctx in ipairs(pending) do
+      if ctx.aborted then
+        table.insert(aborted_pending, ctx)
+      else
+        table.insert(normal_pending, ctx)
+      end
+    end
+
+    -- Aborted tools: inject placeholder with status=aborted directly (no approval)
+    for _, ctx in ipairs(aborted_pending) do
+      injector.inject_placeholder(bufnr, ctx.tool_id, { status = "aborted" })
+    end
+
+    -- Normal tools: run through approval flow
+    for _, ctx in ipairs(normal_pending) do
       local decision =
         approval.resolve(ctx.tool_name, ctx.input, { bufnr = bufnr, tool_id = ctx.tool_id, opts = frontmatter_opts })
 
@@ -385,7 +441,7 @@ function M.send_or_execute(opts)
       evaluated_frontmatter = evaluated_frontmatter,
       frontmatter_opts = frontmatter_opts,
     }
-    vim.schedule(function()
+    writequeue.schedule(bufnr, function()
       advance_phase2(phase2_opts)
     end)
     return
@@ -618,6 +674,10 @@ function M.send_to_provider(opts)
       end
     end
   end
+  if merged_overrides and merged_overrides.max_tokens ~= nil then
+    local config = state.get_config()
+    config_manager.resolve_max_tokens(config.provider, config.model, merged_overrides)
+  end
   current_provider:set_parameter_overrides(merged_overrides)
 
   -- Validate provider (endpoint, API key, headers) and build request body.
@@ -695,7 +755,7 @@ function M.send_to_provider(opts)
   -- Set up callbacks for the provider
   local callbacks = {
     on_error = function(msg)
-      vim.schedule(function()
+      writequeue.schedule(bufnr, function()
         if spinner_timer then
           vim.fn.timer_stop(spinner_timer)
         end
@@ -706,7 +766,7 @@ function M.send_to_provider(opts)
         state.unlock_buffer(bufnr)
 
         -- Auto-write on error if enabled
-        auto_write_buffer(bufnr)
+        editing.auto_write(bufnr)
 
         local notify_msg = "Flemma: " .. msg
         if current_provider:is_context_overflow(msg) then
@@ -716,6 +776,12 @@ function M.send_to_provider(opts)
         elseif current_provider:is_auth_error(msg) then
           current_provider:reset({ auth = true })
           notify_msg = notify_msg .. "\n\nAuthentication expired. Send again to generate a fresh token."
+        elseif current_provider:is_rate_limit_error(msg) then
+          local details = current_provider:format_rate_limit_details()
+          if details then
+            notify_msg = notify_msg .. "\n\n" .. details
+          end
+          notify_msg = notify_msg .. "\n\nTry again in a moment."
         end
         if log.is_enabled() then
           notify_msg = notify_msg .. "\nSee " .. log.get_path() .. " for details"
@@ -801,17 +867,19 @@ function M.send_to_provider(opts)
 
           -- Use the just-created Request for the notification
           local latest_request = session:get_latest_request()
-          local usage_str = usage.format_notification(latest_request, session)
-          if usage_str ~= "" then
+          local usage_result = usage.format_notification(latest_request, session)
+          if usage_result.text ~= "" then
             local notify_opts = vim.tbl_deep_extend("force", config.notify, {
               title = "Usage",
             })
-            require("flemma.notify").show(usage_str, notify_opts, bufnr)
+            require("flemma.notify").show(usage_result.text, notify_opts, bufnr, usage_result.highlights)
           end
         end
 
         -- Auto-write when response is complete
-        auto_write_buffer(bufnr)
+        writequeue.enqueue(bufnr, function()
+          editing.auto_write(bufnr)
+        end)
 
         -- Reset in-flight usage for next request
         -- Note: output_has_thoughts will be set again when the next request starts
@@ -851,7 +919,7 @@ function M.send_to_provider(opts)
     end,
 
     on_content = function(text)
-      vim.schedule(function()
+      writequeue.schedule(bufnr, function()
         -- Skip whitespace-only content before the response has started.
         -- Some models (e.g. Opus 4.6 with adaptive thinking) emit a text block
         -- containing only newlines before the thinking block. Writing this would
@@ -938,7 +1006,7 @@ function M.send_to_provider(opts)
     end,
 
     on_request_complete = function(code)
-      vim.schedule(function()
+      writequeue.schedule(bufnr, function()
         -- If the request was cancelled, M.cancel_request() handles cleanup including modifiable.
         if buffer_state.request_cancelled then
           -- M.cancel_request should have already set modifiable = true
@@ -972,7 +1040,7 @@ function M.send_to_provider(opts)
             if not response_started then
               ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
             end
-            auto_write_buffer(bufnr) -- Still auto-write if configured
+            editing.auto_write(bufnr) -- Still auto-write if configured
             ui.update_ui(bufnr) -- Update UI
             return -- Do not proceed to add new prompt or call opts.on_request_complete
           end
@@ -1011,7 +1079,7 @@ function M.send_to_provider(opts)
           end
           ui.move_to_bottom(bufnr)
 
-          auto_write_buffer(bufnr)
+          editing.auto_write(bufnr)
           ui.update_ui(bufnr)
           ui.fold_last_thinking_block(bufnr) -- Attempt to fold the last thinking block
 
@@ -1052,7 +1120,7 @@ function M.send_to_provider(opts)
           end
           vim.notify(error_msg, vim.log.levels.ERROR)
 
-          auto_write_buffer(bufnr) -- Auto-write if enabled, even on error
+          editing.auto_write(bufnr) -- Auto-write if enabled, even on error
           ui.update_ui(bufnr) -- Update UI to remove any artifacts
         end
       end)
@@ -1076,6 +1144,9 @@ function M.send_to_provider(opts)
     end,
     reset_fn = function()
       return current_provider:reset()
+    end,
+    on_response_headers_fn = function(response_headers)
+      current_provider:set_response_headers(response_headers)
     end,
   })
 

@@ -8,6 +8,7 @@ local M = {}
 local TOOL_USE_PATTERN = "^%*%*Tool Use:%*%*%s*`([^`]+)`%s*%(`([^)]+)`%)"
 local TOOL_RESULT_PATTERN = "^%*%*Tool Result:%*%*%s*`([^`]+)`"
 local TOOL_RESULT_ERROR_PATTERN = "%s*%(error%)%s*$"
+local ABORTED_PATTERN = "^<!%-%-%s*flemma:aborted:%s*(.-)%s*%-%->$"
 
 ---@type table<string, flemma.ast.ToolStatus>
 local TOOL_STATUS_MAP = {
@@ -15,6 +16,7 @@ local TOOL_STATUS_MAP = {
   approved = "approved",
   rejected = "rejected",
   denied = "denied",
+  aborted = "aborted",
   reject = "rejected",
   deny = "denied",
 }
@@ -209,6 +211,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
               status = tool_status,
               start_line = result_start_line,
               end_line = base_line_num + block_end - 1,
+              fence_line = base_line_num + content_start - 1,
             })
           )
           i = block_end + 1
@@ -426,12 +429,21 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
         i = block_start
       end
     else
-      -- Regular text line
-      emit_text(line, current_line_num)
-      if i < #lines then
-        emit_text("\n", current_line_num)
+      local aborted_message = line:match(ABORTED_PATTERN)
+      if aborted_message then
+        table.insert(
+          segments,
+          ast.aborted(aborted_message, { start_line = current_line_num, end_line = current_line_num })
+        )
+        i = i + 1
+      else
+        -- Regular text line
+        emit_text(line, current_line_num)
+        if i < #lines then
+          emit_text("\n", current_line_num)
+        end
+        i = i + 1
       end
-      i = i + 1
     end
   end
 

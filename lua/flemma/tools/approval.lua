@@ -356,6 +356,59 @@ function M.setup()
     end,
   })
 
+  -- Sandbox-aware auto-approval: when sandboxing is enabled and a backend is
+  -- available, auto-approve tools that declare "can_auto_approve_if_sandboxed"
+  -- in their capabilities array (currently: bash).
+  -- Priority 25: below config (100), frontmatter (90), and the community default (50)
+  -- so both explicit user preferences and third-party resolvers win. Above the
+  -- catch-all (0). Checks are deferred to resolve time so runtime overrides and
+  -- frontmatter sandbox options are respected per-call.
+  register_entry("urn:flemma:approval:sandbox", {
+    priority = 25,
+    description = "Auto-approve sandboxed tools when sandbox is enabled with an available backend",
+    resolve = function(tool_name, _input, context)
+      -- Config-level guards (cheapest checks first)
+      if not tools_config or tools_config.auto_approve_sandboxed == false then
+        return nil
+      end
+      -- Only activate when auto_approve is configured — don't make exceptions
+      -- when the user hasn't opted into any auto-approval
+      if not tools_config.auto_approve then
+        return nil
+      end
+
+      -- Only handle tools that declare the sandbox auto-approve capability
+      local registry = require("flemma.tools.registry")
+      local definition = registry.get(tool_name)
+      if not definition or not definition.capabilities then
+        return nil
+      end
+      if not vim.tbl_contains(definition.capabilities, "can_auto_approve_if_sandboxed") then
+        return nil
+      end
+
+      -- Respect frontmatter exclusions (e.g. auto_approve:remove("bash"))
+      local exclusions = context.opts and context.opts.auto_approve_exclusions
+      if exclusions and exclusions[tool_name] then
+        return nil
+      end
+
+      -- Verify sandbox is enabled (respects runtime override from :Flemma
+      -- sandbox:disable and frontmatter sandbox options) and a backend is
+      -- actually available (same check as :Flemma status)
+      local sandbox = require("flemma.sandbox")
+      if not sandbox.is_enabled(context.opts) then
+        return nil
+      end
+      local backend_ok = sandbox.validate_backend(context.opts)
+      if not backend_ok then
+        return nil
+      end
+
+      return "approve"
+    end,
+  })
+
   local require_approval = tools_config and tools_config.require_approval
   if require_approval == false then
     register_entry("urn:flemma:approval:catch-all", {

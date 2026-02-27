@@ -470,7 +470,7 @@ describe("Anthropic Provider Extended Thinking", function()
       })
 
       -- Manually set some state
-      provider._response_buffer.extra.accumulated_thinking = "some thinking"
+      provider._response_buffer.extra.thinking_sink:write("some thinking")
       provider._response_buffer.extra.accumulated_signature = "some-sig"
       provider._response_buffer.extra.redacted_thinking_blocks = { "data1" }
       provider._response_buffer.extra.current_block_type = "thinking"
@@ -479,7 +479,7 @@ describe("Anthropic Provider Extended Thinking", function()
       provider:reset()
 
       -- State should be cleared
-      assert.are.equal("", provider._response_buffer.extra.accumulated_thinking)
+      assert.are.equal("", provider._response_buffer.extra.thinking_sink:read())
       assert.are.equal("", provider._response_buffer.extra.accumulated_signature)
       assert.are.same({}, provider._response_buffer.extra.redacted_thinking_blocks)
       assert.is_nil(provider._response_buffer.extra.current_block_type)

@@ -43,6 +43,7 @@ local M = {}
 ---@field enabled? boolean Set to false to exclude from API requests by default (still executable, can be enabled via flemma.opt.tools)
 ---@field executable? boolean Set to false to disable execution
 ---@field execute? fun(input: table<string, any>, context: flemma.tools.ExecutionContext, callback?: fun(result: flemma.tools.ExecutionResult)): any Executor function (sync returns ExecutionResult, async returns cancel fn or nil)
+---@field capabilities? string[] Declarative capability tags (e.g., "can_auto_approve_if_sandboxed") queried by resolvers and policies
 ---@field format_preview? fun(input: table<string, any>, max_length: integer): string Custom preview body generator (receives input and available width after "name: " prefix)
 
 ---@class flemma.tools.ExecutionResult
