@@ -27,6 +27,7 @@ local next_buffer_id = 0
 ---@field private _flush_interval integer Milliseconds between auto-flushes
 ---@field private _on_line? fun(line: string) Real-time line callback
 ---@field private _first_drain boolean Whether the first drain has occurred
+---@field private _buffer_has_partial boolean Whether the buffer's last line is a display copy of _partial
 local Sink = {}
 Sink.__index = Sink
 
@@ -48,25 +49,24 @@ function Sink.new(bufnr, name, flush_interval, on_line)
     _flush_interval = flush_interval,
     _on_line = on_line,
     _first_drain = true,
+    _buffer_has_partial = false,
   }, Sink)
 
   -- Start the batch flush timer.
-  -- Capture the pending table as an upvalue so the libuv callback avoids
-  -- private field access through `self` — a LuaLS limitation where closures
-  -- inside constructors can't see private fields of the captured object.
-  -- INVARIANT: _drain() clears this table in-place (nil-per-element) to
-  -- preserve the reference. Never replace _pending with a new table.
-  local pending = self._pending
+  -- Always schedule drain — the drain function checks internally whether
+  -- there is work to do (pending lines or partial data to display).
+  -- Previous versions gated on `#pending > 0`, but character-by-character
+  -- display also needs drains when only the partial has changed.
+  -- INVARIANT: _drain() clears _pending in-place (nil-per-element) to
+  -- preserve the table reference. Never replace _pending with a new table.
   local sink = self
   local timer = vim.uv.new_timer()
   if timer then
     self._timer = timer
     timer:start(flush_interval, flush_interval, function()
-      if #pending > 0 then
-        vim.schedule(function()
-          Sink._drain(sink)
-        end)
-      end
+      vim.schedule(function()
+        Sink._drain(sink)
+      end)
     end)
   end
 
@@ -76,8 +76,8 @@ end
 ---Create a new sink backed by a hidden scratch buffer.
 ---
 ---The buffer is unlisted, has no swapfile, no undo, and is named
----`flemma://sink/<name>`. The batch timer is started but `_drain()` is a
----stub until write/flush are implemented in subsequent tasks.
+---`flemma://sink/<name>`. The batch timer starts immediately and drains
+---pending lines plus the current partial to the buffer at each tick.
 ---@param opts flemma.SinkCreateOpts
 ---@return flemma.Sink
 function M.create(opts)
@@ -181,6 +181,10 @@ function Sink:_assemble_lines()
     -- Fresh buffer has {""}; treat as empty
     if #buffer_lines == 1 and buffer_lines[1] == "" and self._first_drain then
       buffer_lines = {}
+    elseif self._buffer_has_partial and #buffer_lines > 0 then
+      -- The buffer's last line is a display copy of _partial; exclude it
+      -- to avoid double-counting (it's added back from _partial below)
+      table.remove(buffer_lines)
     end
   end
 
@@ -218,7 +222,12 @@ function Sink:read_lines()
   return self:_assemble_lines()
 end
 
----Drain pending lines to the Neovim buffer
+---Drain pending lines and current partial to the Neovim buffer
+---
+---Complete lines from `_pending` are appended. The current `_partial` is written
+---as the buffer's last line for character-by-character display. The `on_line`
+---callback is unaffected — it only fires in `write()` when a newline completes
+---a line, never from `_drain()`.
 ---@private
 function Sink:_drain()
   if self._destroyed then
@@ -234,24 +243,39 @@ function Sink:_drain()
     self._timer = nil
     return
   end
-  if #self._pending == 0 then
+
+  local has_new_pending = #self._pending > 0
+  local has_partial = self._partial ~= ""
+
+  -- Nothing to do: no new complete lines and no partial state to update
+  if not has_new_pending and not has_partial and not self._buffer_has_partial then
     return
   end
 
-  -- Copy entries and clear in-place to preserve table identity for timer upvalue
+  -- Build lines to write: pending complete lines + current partial (if any)
   local lines_to_write = {}
   for i = 1, #self._pending do
-    lines_to_write[i] = self._pending[i]
+    lines_to_write[#lines_to_write + 1] = self._pending[i]
     self._pending[i] = nil
+  end
+  if has_partial then
+    lines_to_write[#lines_to_write + 1] = self._partial
   end
 
   if self._first_drain then
     -- Replace the default empty first line instead of appending
     self._first_drain = false
-    vim.api.nvim_buf_set_lines(self._bufnr, 0, -1, false, lines_to_write)
-  else
+    if #lines_to_write > 0 then
+      vim.api.nvim_buf_set_lines(self._bufnr, 0, -1, false, lines_to_write)
+    end
+  elseif self._buffer_has_partial then
+    -- Replace the old partial (last line) and append new content after it
+    vim.api.nvim_buf_set_lines(self._bufnr, -2, -1, false, lines_to_write)
+  elseif #lines_to_write > 0 then
     vim.api.nvim_buf_set_lines(self._bufnr, -1, -1, false, lines_to_write)
   end
+
+  self._buffer_has_partial = has_partial
 end
 
 ---Flush all pending data (including partial) to the Neovim buffer
