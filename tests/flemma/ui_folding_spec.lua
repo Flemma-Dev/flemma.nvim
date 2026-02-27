@@ -454,7 +454,7 @@ describe("UI Folding", function()
     end)
   end)
 
-  describe("fold_last_thinking_block", function()
+  describe("fold_completed_blocks (thinking)", function()
     it("should fold thinking block when last message is @You:", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.bo[bufnr].filetype = "chat"
@@ -477,7 +477,7 @@ describe("UI Folding", function()
       vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
-      ui.fold_last_thinking_block(bufnr)
+      ui.fold_completed_blocks(bufnr)
 
       -- Check that the fold exists and is closed
       -- Line 2 is the start of the thinking block
@@ -510,7 +510,7 @@ describe("UI Folding", function()
       vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
-      ui.fold_last_thinking_block(bufnr)
+      ui.fold_completed_blocks(bufnr)
 
       -- The thinking block should not be folded since the last message is @Assistant:
       local foldclosed = vim.fn.foldclosed(3)
@@ -534,7 +534,7 @@ describe("UI Folding", function()
 
       -- Should not crash
       assert.has_no.errors(function()
-        ui.fold_last_thinking_block(bufnr)
+        ui.fold_completed_blocks(bufnr)
       end)
     end)
 
@@ -549,7 +549,7 @@ describe("UI Folding", function()
 
       -- Should not crash
       assert.has_no.errors(function()
-        ui.fold_last_thinking_block(bufnr)
+        ui.fold_completed_blocks(bufnr)
       end)
     end)
 
@@ -578,7 +578,7 @@ describe("UI Folding", function()
       vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
-      ui.fold_last_thinking_block(bufnr)
+      ui.fold_completed_blocks(bufnr)
 
       -- Check that the fold exists and is closed
       -- Line 5 is the start of the thinking block
@@ -617,7 +617,7 @@ describe("UI Folding", function()
       vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
-      ui.fold_last_thinking_block(bufnr)
+      ui.fold_completed_blocks(bufnr)
 
       -- The second thinking block (line 8) should be folded
       local foldclosed_second = vim.fn.foldclosed(8)
@@ -650,7 +650,7 @@ describe("UI Folding", function()
       vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
-      ui.fold_last_thinking_block(bufnr)
+      ui.fold_completed_blocks(bufnr)
 
       -- Check that the fold exists and is closed
       local foldlevel = vim.fn.foldlevel(2)
@@ -682,7 +682,7 @@ describe("UI Folding", function()
       vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
-      ui.fold_last_thinking_block(bufnr)
+      ui.fold_completed_blocks(bufnr)
 
       -- Check that the fold exists and is closed
       -- Line 2 is the start of the thinking block
