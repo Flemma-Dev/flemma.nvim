@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.5.0
+
+### Minor Changes
+
+- 2350bd7: Added automatic handling of aborted responses: when a user cancels (`<C-c>`) mid-stream after tool_use blocks, orphaned tool calls are now automatically resolved with error results instead of triggering the approval flow. The abort marker (`<!-- flemma:aborted: message -->`) is preserved for the LLM on the last text-only assistant message so it can continue contextually.
+- 5c3aee7: Added max_input_tokens and max_output_tokens to all model definitions, enabling future context window awareness and cost prediction features
+- 681ebbf: Added `flemma.sink` module — a buffer-backed data accumulator that replaces in-memory string/table accumulators across the codebase. Sinks handle line framing, write batching, and lifecycle management behind an opaque API. Migrated cURL streaming, bash tool output, provider response buffering, thinking accumulation, and tool input accumulation to use sinks.
+- 2d24104: Use Anthropic's auto-caching API for the conversation tail breakpoint, replacing manual last-user-message walking with a more robust top-level cache_control field
+- 9aff386: Redesigned usage notifications with compact dotted-leader layout, cache hit percentage with conditional color highlighting, and arrow-based token display
+- c574d43: Show rate limit details (retry-after, remaining quota headers) in error notifications when API returns HTTP 429, with a fallback "Try again in a moment" hint when headers are unavailable
+- ee19164: Auto-approve bash tool when sandbox is enabled and a backend is available. A new resolver at priority 25 approves bash calls when sandboxing is active, so sandboxed sessions run without manual approval prompts by default. Users can opt out via `tools.auto_approve_sandboxed = false` in config, or by excluding bash from auto-approval in frontmatter (`auto_approve:remove("bash")`).
+- 8758bdd: Smart max_tokens: default is now "50%" (half the model's max output), percentage strings are resolved automatically, and integers exceeding the model limit are clamped with a warning. `:Flemma status` shows the resolved value alongside the percentage.
+
+### Patch Changes
+
+- 1991273: Fixed auto_write not consistently writing the buffer after tool execution, denied/rejected tool processing, and `:Flemma import`
+- 8058909: Fixed bwrap sandbox breaking nix commands on NixOS by using `--symlink` instead of `--ro-bind` for `/run/current-system` and `/run/booted-system`, preserving their symlink nature so nix can detect store paths correctly
+- e4afad6: Fixed role marker highlights losing foreground color when the base highlight group only defines background, and fixed spinner background not inheriting line highlight colors
+- b767a0d: Fixed pending tool blocks with user-provided content being silently discarded. When a user pastes output into a `flemma:tool status=pending` block and presses `<C-]>`, the content is now accepted as the tool result and sent to the provider instead of being replaced by a synthetic error.
+- 80eb9fc: Fixed E565 textlock errors when visual-mode plugins (e.g., targets.vim) hold textlock while streaming responses complete. All async buffer modifications now go through a per-buffer FIFO write queue that retries on textlock.
+- 0c333ef: Added FlemmaSinkCreated and FlemmaSinkDestroyed user autocmd events for observing sink lifecycle
+- 2d24104: Fixed non-deterministic tool ordering in Vertex provider that was causing implicit cache misses on every request
+
 ## 0.4.0
 
 ### Minor Changes
