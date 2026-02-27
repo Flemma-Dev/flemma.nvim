@@ -892,4 +892,63 @@ describe("UI Folding", function()
       assert.are.equal(-1, msg_foldclosed, "Message fold should not be escalated")
     end)
   end)
+
+  describe("folding integration", function()
+    it("correctly folds a complete conversation with thinking and tools", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "```lua",
+        "model = 'claude-sonnet-4-5'",
+        "```",
+        "",
+        "@You: What files are in this directory?",
+        "",
+        "@Assistant: Let me check.",
+        "<thinking>",
+        "User wants a directory listing.",
+        "</thinking>",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "file1.txt",
+        "file2.txt",
+        "```",
+        "",
+        "@Assistant: There are two files: file1.txt and file2.txt.",
+        "",
+        "@You: Thanks!",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 1
+
+      -- With foldlevel=1:
+      -- Frontmatter should be folded (level 2)
+      assert.are_not.equal(-1, vim.fn.foldclosed(1), "Frontmatter should be folded")
+      -- Thinking should be folded (level 2)
+      assert.are_not.equal(-1, vim.fn.foldclosed(8), "Thinking should be folded")
+      -- Tool use should be folded (level 2)
+      assert.are_not.equal(-1, vim.fn.foldclosed(12), "Tool use should be folded")
+      -- Tool result should be folded (level 2)
+      assert.are_not.equal(-1, vim.fn.foldclosed(19), "Tool result should be folded")
+      -- Messages should be open (level 1)
+      assert.are.equal(-1, vim.fn.foldclosed(5), "User message should be open")
+      assert.are.equal(-1, vim.fn.foldclosed(7), "Assistant message should be open")
+      assert.are.equal(-1, vim.fn.foldclosed(26), "Final assistant message should be open")
+    end)
+  end)
 end)

@@ -351,7 +351,9 @@ function M.fold_completed_blocks(bufnr)
                 if rseg.kind == "tool_result" and rseg.tool_use_id == seg.id then
                   ---@cast rseg flemma.ast.ToolResultSegment
                   if rseg.status then
-                    has_completed_result = rseg.status == "denied" or rseg.status == "rejected" or rseg.status == "aborted"
+                    has_completed_result = rseg.status == "denied"
+                      or rseg.status == "rejected"
+                      or rseg.status == "aborted"
                   else
                     has_completed_result = rseg.content ~= ""
                   end

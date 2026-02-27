@@ -511,9 +511,11 @@ local function find_tool_segment_at_line(doc, lnum)
     for _, seg in ipairs(msg.segments) do
       if seg.position and seg.position.start_line == lnum then
         if seg.kind == "tool_use" then
-          return seg --[[@as flemma.ast.ToolUseSegment]], "tool_use"
+          ---@cast seg flemma.ast.ToolUseSegment
+          return seg, "tool_use"
         elseif seg.kind == "tool_result" then
-          return seg --[[@as flemma.ast.ToolResultSegment]], "tool_result"
+          ---@cast seg flemma.ast.ToolResultSegment
+          return seg, "tool_result"
         end
       end
     end
