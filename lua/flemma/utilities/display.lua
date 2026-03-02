@@ -1,5 +1,5 @@
 --- Shared display utilities for Flemma UI
----@class flemma.ui.Display
+---@class flemma.utilities.Display
 local M = {}
 
 local DEFAULT_NEWLINE_CHAR = "↵"

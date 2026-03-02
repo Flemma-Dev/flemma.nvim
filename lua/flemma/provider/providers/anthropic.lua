@@ -1,7 +1,7 @@
 --- Anthropic provider for Flemma
 --- Implements the Anthropic (Claude) API integration
 local base = require("flemma.provider.base")
-local json = require("flemma.json")
+local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 
 ---@class flemma.provider.Anthropic : flemma.provider.Base

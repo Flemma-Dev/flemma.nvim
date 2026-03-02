@@ -1,6 +1,6 @@
 local processor = require("flemma.processor")
 local ast = require("flemma.ast")
-local roles = require("flemma.roles")
+local roles = require("flemma.utilities.roles")
 
 ---@class flemma.Pipeline
 local M = {}

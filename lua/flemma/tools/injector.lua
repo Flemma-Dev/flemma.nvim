@@ -3,7 +3,7 @@
 ---@class flemma.tools.Injector
 local M = {}
 
-local roles = require("flemma.roles")
+local roles = require("flemma.utilities.roles")
 
 --- Error messages for tool status resolution
 M.DENIED_MESSAGE = "The tool was denied by a policy."
@@ -22,8 +22,9 @@ function M.resolve_error_message(status, content)
   return M.DENIED_MESSAGE
 end
 
+local buffer = require("flemma.utilities.buffer")
 local codeblock = require("flemma.codeblock")
-local json = require("flemma.json")
+local json = require("flemma.utilities.json")
 
 --- Find the assistant message containing a tool_use with the given ID
 --- @param doc table Parsed document AST
@@ -130,10 +131,9 @@ end
 --- @param end_idx integer 0-based end line (exclusive)
 --- @param lines string[]
 local function set_lines(bufnr, start_idx, end_idx, lines)
-  local was_modifiable = vim.bo[bufnr].modifiable
-  vim.bo[bufnr].modifiable = true
-  vim.api.nvim_buf_set_lines(bufnr, start_idx, end_idx, false, lines)
-  vim.bo[bufnr].modifiable = was_modifiable
+  buffer.with_modifiable(bufnr, function()
+    vim.api.nvim_buf_set_lines(bufnr, start_idx, end_idx, false, lines)
+  end)
 end
 
 --- Phase 1: Insert placeholder for a tool result
@@ -234,7 +234,7 @@ function M.inject_placeholder(bufnr, tool_id, inject_opts)
 
         if first_start == you_start then
           -- First result header is inline with @You: line - split it
-          local old_line = vim.api.nvim_buf_get_lines(bufnr, you_start - 1, you_start, false)[1]
+          local old_line = buffer.get_line(bufnr, you_start)
           local old_header = old_line:match("^@You:%s*(.+)$")
           set_lines(bufnr, you_start - 1, you_start, {
             "@You: " .. header_text,
@@ -257,7 +257,7 @@ function M.inject_placeholder(bufnr, tool_id, inject_opts)
       local you_start = you_msg.position.start_line
       -- Insert header right after the @You: line marker, shifting content down
       -- Get the current @You: line text
-      local you_line = vim.api.nvim_buf_get_lines(bufnr, you_start - 1, you_start, false)[1]
+      local you_line = buffer.get_line(bufnr, you_start)
       -- Extract the content after "@You: " or "@You:"
       local role_prefix = you_line:match("^@You:%s*")
       local remaining_content = you_line:sub(#role_prefix + 1)
@@ -321,7 +321,7 @@ function M.inject_result(bufnr, tool_id, result)
     end
 
     -- Check if header is on a @You: line
-    local current_header = vim.api.nvim_buf_get_lines(bufnr, header_line - 1, header_line, false)[1]
+    local current_header = buffer.get_line(bufnr, header_line)
     if current_header:match("^@You:") then
       header_text = "@You: " .. header_text
     end

@@ -69,7 +69,7 @@ Capabilities contract (registered via `registry.register`)
 Missing boolean capabilities default to `false` at registration time.
 ]]
 
-local json = require("flemma.json")
+local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 
 -- ============================================================================

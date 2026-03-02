@@ -36,7 +36,7 @@ describe("format_content_preview", function()
     local saved = vim.opt.listchars:get()
     vim.opt.listchars:append({ eol = "$" })
 
-    package.loaded["flemma.ui.display"] = nil
+    package.loaded["flemma.utilities.display"] = nil
     package.loaded["flemma.ui.preview"] = nil
     local preview = require("flemma.ui.preview")
     local result = preview.format_content_preview("line1\nline2")

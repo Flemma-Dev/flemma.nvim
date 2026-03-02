@@ -1,7 +1,7 @@
 --- OpenAI provider for Flemma
 --- Implements the OpenAI Responses API integration
 local base = require("flemma.provider.base")
-local json = require("flemma.json")
+local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local models = require("flemma.models")
 

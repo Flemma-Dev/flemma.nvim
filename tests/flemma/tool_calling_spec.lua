@@ -5,7 +5,7 @@ package.loaded["flemma.tools.definitions.bash"] = nil
 package.loaded["flemma.tools.definitions.read"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
 package.loaded["flemma.tools.definitions.write"] = nil
-package.loaded["flemma.tools.truncate"] = nil
+package.loaded["flemma.utilities.truncate"] = nil
 
 local ast = require("flemma.ast")
 local client = require("flemma.client")

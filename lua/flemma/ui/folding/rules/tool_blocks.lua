@@ -2,8 +2,8 @@
 ---@class flemma.ui.folding.rules.ToolBlocks : flemma.ui.folding.FoldRule
 local M = {}
 
-local utils = require("flemma.ui.folding.utils")
-local roles = require("flemma.roles")
+local utils = require("flemma.utilities.folding")
+local roles = require("flemma.utilities.roles")
 
 M.name = "tool_blocks"
 M.auto_close = true

@@ -5,7 +5,7 @@ local M = {}
 
 local log = require("flemma.logging")
 local state = require("flemma.state")
-local roles = require("flemma.roles")
+local roles = require("flemma.utilities.roles")
 
 ---@class flemma.highlight.RGB
 ---@field r integer 0-255

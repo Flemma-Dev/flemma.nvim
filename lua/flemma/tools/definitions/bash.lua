@@ -8,7 +8,7 @@ local M = {}
 
 -- Module-level require for description constants only (evaluated at load time).
 -- Runtime code inside execute() must use ctx.truncate instead.
-local truncate = require("flemma.tools.truncate")
+local truncate = require("flemma.utilities.truncate")
 
 M.definitions = {
   {

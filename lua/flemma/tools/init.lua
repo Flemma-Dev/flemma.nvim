@@ -3,7 +3,7 @@
 ---@class flemma.Tools
 local M = {}
 
-local json = require("flemma.json")
+local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
 local registry = require("flemma.tools.registry")
 

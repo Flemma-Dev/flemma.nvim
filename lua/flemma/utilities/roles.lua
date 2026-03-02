@@ -1,7 +1,7 @@
 --- Shared role name mapping utilities
 --- Centralizes the conversion between buffer-format role names ("You", "Assistant", "System")
 --- and internal config keys ("user", "assistant", "system"), plus highlight group name construction.
----@class flemma.Roles
+---@class flemma.utilities.Roles
 local M = {}
 
 --- Buffer-format role name constants

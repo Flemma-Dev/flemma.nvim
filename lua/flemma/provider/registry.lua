@@ -331,7 +331,7 @@ end
 ---@field has_explicit_model boolean
 
 --- Extract provider/model parameters from parsed modeline tokens
----@param parsed flemma.modeline.ParsedTokens Parsed tokens from modeline.parse/modeline.parse_args
+---@param parsed flemma.utilities.modeline.ParsedTokens Parsed tokens from modeline.parse/modeline.parse_args
 ---@return flemma.provider.SwitchArgs
 function M.extract_switch_arguments(parsed)
   local info = {

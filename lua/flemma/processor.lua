@@ -1,7 +1,7 @@
 local ctxutil = require("flemma.context")
 local eval = require("flemma.eval")
 local emittable = require("flemma.emittable")
-local json = require("flemma.json")
+local json = require("flemma.utilities.json")
 local codeblock_parsers = require("flemma.codeblock.parsers")
 
 ---@class flemma.Processor

@@ -22,7 +22,7 @@ local function setup_commands()
   local log = require("flemma.logging")
   local registry = require("flemma.provider.registry")
   local notify_module = require("flemma.notify")
-  local modeline = require("flemma.modeline")
+  local modeline = require("flemma.utilities.modeline")
   local presets = require("flemma.presets")
 
   ---@param enable? boolean

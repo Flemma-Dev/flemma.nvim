@@ -1,7 +1,7 @@
 --- Centralized JSON encode/decode for Flemma
 --- Wraps vim.json with luanil options so JSON null always becomes Lua nil.
 --- All Flemma code MUST use this module instead of vim.fn.json_* or vim.json.* directly.
----@class flemma.Json
+---@class flemma.utilities.Json
 local M = {}
 
 local DECODE_OPTS = { luanil = { object = true, array = true } }

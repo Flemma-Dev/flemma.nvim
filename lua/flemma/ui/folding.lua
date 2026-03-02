@@ -200,7 +200,7 @@ end
 ---Returns a list of {text, highlight_group} tuples for per-segment highlighting.
 ---@return {[1]:string, [2]:string}[]
 function M.get_fold_text()
-  local roles = require("flemma.roles")
+  local roles = require("flemma.utilities.roles")
   local foldstart_lnum = vim.v.foldstart
   local foldend_lnum = vim.v.foldend
   local total_fold_lines = foldend_lnum - foldstart_lnum + 1

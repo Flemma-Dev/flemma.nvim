@@ -3,7 +3,7 @@
 ---@class flemma.tools.Context
 local M = {}
 
-local roles = require("flemma.roles")
+local roles = require("flemma.utilities.roles")
 
 ---@class flemma.tools.ToolContext
 ---@field tool_id string The unique ID of the tool call

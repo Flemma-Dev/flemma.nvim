@@ -4,7 +4,7 @@
 local M = {}
 
 local query = require("flemma.ast.query")
-local display = require("flemma.ui.display")
+local display = require("flemma.utilities.display")
 
 -- Constants for preview text
 local MAX_CONTENT_PREVIEW_LINES = 10

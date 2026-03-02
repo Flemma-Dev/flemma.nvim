@@ -19,6 +19,7 @@ Explore `lua/flemma/` to understand the codebase — module files are named desc
 - `parser.lua` / `ast.lua` — AST-based buffer parsing (heart of the stateless design)
 - `provider/base.lua` — provider contract; `provider/providers/{anthropic,openai,vertex}.lua` — implementations
 - `tools/` — tool registry, executor, injector, approval, and built-in definitions in `tools/definitions/`
+- `utilities/` — stateless shared infrastructure: `json.lua` (JSON encode/decode), `roles.lua` (role name mapping), `modeline.lua` (argument parsing), `truncate.lua` (output truncation), `display.lua` (display helpers), `folding.lua` (fold rule utilities), `buffer.lua` (modifiable guard and line accessors), `bash/` (bash tool internals)
 - `core.lua` — main orchestration; `state.lua` — ephemeral per-buffer state
 - Production file names never contain underscores; test files use `_spec.lua` suffix.
 - Tests live in `tests/flemma/*_spec.lua` with fixtures in `tests/fixtures/`.
@@ -47,7 +48,7 @@ Every module uses `local M = {}` / `return M`. Every module has a `---@class fle
 
 ### JSON handling
 
-- **Always use `require("flemma.json")` for all JSON operations.** Never use `vim.fn.json_decode`, `vim.fn.json_encode`, `vim.json.decode`, or `vim.json.encode` directly. The `flemma.json` module wraps `vim.json` with `luanil` options so JSON `null` becomes Lua `nil` (not `vim.NIL`). Using `vim.fn.json_decode` or bare `vim.json.decode` will reintroduce the `vim.NIL` bug where JSON `null` becomes a truthy userdata value that passes `if x then` guards and crashes on math/string operations.
+- **Always use `require("flemma.utilities.json")` for all JSON operations.** Never use `vim.fn.json_decode`, `vim.fn.json_encode`, `vim.json.decode`, or `vim.json.encode` directly. The `flemma.utilities.json` module wraps `vim.json` with `luanil` options so JSON `null` becomes Lua `nil` (not `vim.NIL`). Using `vim.fn.json_decode` or bare `vim.json.decode` will reintroduce the `vim.NIL` bug where JSON `null` becomes a truthy userdata value that passes `if x then` guards and crashes on math/string operations.
 
 ### Error handling
 
@@ -183,7 +184,7 @@ When you resolve a non-obvious issue — something that required real investigat
 
 - **Don't abbreviate variable names.** Use full, descriptive names (`definition` not `def_entry`, `provider_name` not `prov_name`). The codebase consistently spells things out; cryptic abbreviations stand out and hurt readability.
 
-- **JSON `null` becomes `vim.NIL` (truthy userdata), not Lua `nil`.** `vim.fn.json_decode` and bare `vim.json.decode` map JSON `null` to `vim.NIL`, which passes `if x then` guards and crashes on `math.floor(x)`, `x * 1000`, `"str" .. x`, etc. The `flemma.json` module wraps `vim.json.decode` with `luanil = { object = true, array = true }` to convert `null` to real `nil`. Always use `require("flemma.json")` — never call `vim.fn.json_*` or `vim.json.*` directly.
+- **JSON `null` becomes `vim.NIL` (truthy userdata), not Lua `nil`.** `vim.fn.json_decode` and bare `vim.json.decode` map JSON `null` to `vim.NIL`, which passes `if x then` guards and crashes on `math.floor(x)`, `x * 1000`, `"str" .. x`, etc. The `flemma.utilities.json` module wraps `vim.json.decode` with `luanil = { object = true, array = true }` to convert `null` to real `nil`. Always use `require("flemma.utilities.json")` — never call `vim.fn.json_*` or `vim.json.*` directly.
 
 ## Session Closure Checklist
 

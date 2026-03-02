@@ -1,7 +1,7 @@
 --- Google Vertex AI provider for Flemma
 --- Implements the Google Vertex AI API integration
 local base = require("flemma.provider.base")
-local json = require("flemma.json")
+local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 
 local TOKEN_TTL_SECONDS = 3600

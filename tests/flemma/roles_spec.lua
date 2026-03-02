@@ -1,6 +1,6 @@
-local roles = require("flemma.roles")
+local roles = require("flemma.utilities.roles")
 
-describe("flemma.roles", function()
+describe("flemma.utilities.roles", function()
   describe("constants", function()
     it("exposes buffer-format role names", function()
       assert.equals("You", roles.YOU)

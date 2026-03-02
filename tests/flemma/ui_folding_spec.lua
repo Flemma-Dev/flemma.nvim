@@ -8,7 +8,7 @@ describe("UI Folding", function()
     package.loaded["flemma.ui"] = nil
     package.loaded["flemma.ui.preview"] = nil
     package.loaded["flemma.ui.folding"] = nil
-    package.loaded["flemma.ui.folding.utils"] = nil
+    package.loaded["flemma.utilities.folding"] = nil
     package.loaded["flemma.ui.folding.rules.frontmatter"] = nil
     package.loaded["flemma.ui.folding.rules.thinking"] = nil
     package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
@@ -1048,7 +1048,7 @@ describe("UI Folding", function()
       -- Reconfigure with thinking auto-close disabled
       package.loaded["flemma"] = nil
       package.loaded["flemma.ui.folding"] = nil
-      package.loaded["flemma.ui.folding.utils"] = nil
+      package.loaded["flemma.utilities.folding"] = nil
       package.loaded["flemma.ui.folding.rules.frontmatter"] = nil
       package.loaded["flemma.ui.folding.rules.thinking"] = nil
       package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
@@ -1089,7 +1089,7 @@ describe("UI Folding", function()
     it("should respect auto_close.tool_use = false", function()
       package.loaded["flemma"] = nil
       package.loaded["flemma.ui.folding"] = nil
-      package.loaded["flemma.ui.folding.utils"] = nil
+      package.loaded["flemma.utilities.folding"] = nil
       package.loaded["flemma.ui.folding.rules.frontmatter"] = nil
       package.loaded["flemma.ui.folding.rules.thinking"] = nil
       package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
@@ -1178,7 +1178,7 @@ describe("UI Folding", function()
       -- rather than first-writer-wins. If a thinking block starts on the
       -- same line that a message starts, >2 should beat >1 regardless of
       -- rule evaluation order.
-      local utils = require("flemma.ui.folding.utils")
+      local utils = require("flemma.utilities.folding")
       local fold_map = {}
 
       -- Simulate messages rule writing >1 first
@@ -1190,7 +1190,7 @@ describe("UI Folding", function()
     end)
 
     it("should not downgrade >2 to >1", function()
-      local utils = require("flemma.ui.folding.utils")
+      local utils = require("flemma.utilities.folding")
       local fold_map = {}
 
       -- Higher level first
@@ -1202,7 +1202,7 @@ describe("UI Folding", function()
     end)
 
     it("should keep <2 over <1 on the same line", function()
-      local utils = require("flemma.ui.folding.utils")
+      local utils = require("flemma.utilities.folding")
       local fold_map = {}
 
       utils.set_fold(fold_map, 7, "<1")
@@ -1229,7 +1229,7 @@ describe("UI Folding", function()
         name = "custom",
         auto_close = false,
         populate = function(_, fold_map)
-          local utils = require("flemma.ui.folding.utils")
+          local utils = require("flemma.utilities.folding")
           utils.set_fold(fold_map, 2, ">3")
         end,
         get_closeable_ranges = function(_)
@@ -1261,7 +1261,7 @@ describe("UI Folding", function()
         name = "late_override",
         auto_close = false,
         populate = function(_, fold_map)
-          local utils = require("flemma.ui.folding.utils")
+          local utils = require("flemma.utilities.folding")
           utils.set_fold(fold_map, 2, ">3")
         end,
         get_closeable_ranges = function(_)
@@ -1276,7 +1276,7 @@ describe("UI Folding", function()
     it("should load built-in rules lazily", function()
       -- Clear and re-require to reset state
       package.loaded["flemma.ui.folding"] = nil
-      package.loaded["flemma.ui.folding.utils"] = nil
+      package.loaded["flemma.utilities.folding"] = nil
       package.loaded["flemma.ui.folding.rules.frontmatter"] = nil
       package.loaded["flemma.ui.folding.rules.thinking"] = nil
       package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil

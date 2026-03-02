@@ -1,9 +1,9 @@
 ---Modeline / argument parsing utilities for Flemma
----@class flemma.Modeline
+---@class flemma.utilities.Modeline
 local M = {}
 
 ---Mixed-key table returned by modeline parsing: string keys for key=value tokens, integer keys for positionals
----@alias flemma.modeline.ParsedTokens table<string|integer, any>
+---@alias flemma.utilities.modeline.ParsedTokens table<string|integer, any>
 
 ---Coerce a raw string value to its natural Lua type
 ---@param raw string
@@ -31,7 +31,7 @@ end
 
 ---Parse a list of tokens into a key=value / positional table
 ---@param tokens string[]
----@return flemma.modeline.ParsedTokens
+---@return flemma.utilities.modeline.ParsedTokens
 local function parse_tokens(tokens)
   local result = {}
   local positional_index = 0
@@ -52,7 +52,7 @@ end
 ---Parse a string array (e.g. command fargs) starting at a given index
 ---@param args string[]|any
 ---@param start_index? integer 1-based start index (default 1)
----@return flemma.modeline.ParsedTokens
+---@return flemma.utilities.modeline.ParsedTokens
 function M.parse_args(args, start_index)
   if type(args) ~= "table" then
     return {}
@@ -68,7 +68,7 @@ end
 
 ---Parse a single whitespace-separated line into key=value / positional table
 ---@param line string|any
----@return flemma.modeline.ParsedTokens
+---@return flemma.utilities.modeline.ParsedTokens
 function M.parse(line)
   if type(line) ~= "string" or line == "" then
     return {}

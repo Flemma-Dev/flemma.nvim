@@ -8,7 +8,7 @@ local injector = require("flemma.tools.injector")
 local editing = require("flemma.buffer.editing")
 local state = require("flemma.state")
 local log = require("flemma.logging")
-local roles = require("flemma.roles")
+local roles = require("flemma.utilities.roles")
 
 ---@class flemma.tools.PendingExecution
 ---@field tool_id string
@@ -265,7 +265,7 @@ function M.build_execution_context(params)
         rawset(self, "sandbox", sandbox_namespace)
         return sandbox_namespace
       elseif key == "truncate" then
-        local truncate_module = require("flemma.tools.truncate")
+        local truncate_module = require("flemma.utilities.truncate")
         rawset(self, "truncate", truncate_module)
         return truncate_module
       elseif key == "path" then

@@ -1,6 +1,6 @@
 --- HTTP client for Flemma
 --- Handles all HTTP requests and transport mechanisms
-local json = require("flemma.json")
+local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 
 ---@class flemma.Client

@@ -1,7 +1,7 @@
 local ast = require("flemma.ast")
 local codeblock = require("flemma.codeblock")
-local json = require("flemma.json")
-local roles = require("flemma.roles")
+local json = require("flemma.utilities.json")
+local roles = require("flemma.utilities.roles")
 
 ---@class flemma.Parser
 local M = {}
@@ -201,7 +201,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
       if block then
         if block.language == "flemma:tool" then
           -- Tool status placeholder — parse info string for status
-          local modeline = require("flemma.modeline")
+          local modeline = require("flemma.utilities.modeline")
           local parsed = modeline.parse(block.info or "")
           local tool_status = TOOL_STATUS_MAP[parsed.status] or "pending"
 
