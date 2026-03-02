@@ -692,6 +692,22 @@ function M.add_tool_previews(bufnr, doc)
   end
 end
 
+---Force Neovim to re-evaluate all fold levels for a buffer.
+---
+---Incremental fold recalculation only updates changed lines, but tool_use
+---fold levels depend on distant tool_result segments — resetting foldmethod
+---forces a complete re-evaluation.
+---@param bufnr integer
+function M.invalidate_folds(bufnr)
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid ~= -1 then
+    local foldmethod = vim.fn.win_execute(winid, "echo &foldmethod")
+    if vim.trim(foldmethod) == "expr" then
+      vim.fn.win_execute(winid, "set foldmethod=expr")
+    end
+  end
+end
+
 ---Force UI update (rulers, signs, and line highlights)
 ---@param bufnr integer
 function M.update_ui(bufnr)
@@ -716,6 +732,8 @@ function M.update_ui(bufnr)
   M.apply_line_highlights(bufnr, doc)
   M.add_tool_previews(bufnr, doc)
   -- Note: spinner extmark (with suppression) is managed by start_loading_spinner and its timer
+
+  M.invalidate_folds(bufnr)
 
   -- Clear and reapply all signs
   vim.fn.sign_unplace("flemma_ns", { buffer = bufnr })
