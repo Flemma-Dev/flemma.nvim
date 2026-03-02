@@ -193,6 +193,21 @@ describe("Approval Resolver Registry", function()
       assert.equals(0, approval.count())
     end)
   end)
+
+  describe("has", function()
+    it("returns true for a registered resolver", function()
+      approval.register("my-resolver", {
+        resolve = function()
+          return "approve"
+        end,
+      })
+      assert.is_true(approval.has("my-resolver"))
+    end)
+
+    it("returns false for an unknown resolver", function()
+      assert.is_false(approval.has("nonexistent"))
+    end)
+  end)
 end)
 
 -- ============================================================================
@@ -2645,7 +2660,7 @@ describe("Sandbox auto-approval resolver", function()
 
   it("auto-approves custom tool that declares can_auto_approve_if_sandboxed", function()
     -- Register a custom tool with the sandbox capability
-    registry.define("my_sandboxed_tool", {
+    registry.register("my_sandboxed_tool", {
       name = "my_sandboxed_tool",
       description = "A custom sandboxed tool",
       capabilities = { "can_auto_approve_if_sandboxed" },
@@ -2657,7 +2672,7 @@ describe("Sandbox auto-approval resolver", function()
   end)
 
   it("does not auto-approve tool with unrelated capabilities", function()
-    registry.define("safe_tool", {
+    registry.register("safe_tool", {
       name = "safe_tool",
       description = "A tool with other capabilities",
       capabilities = { "some_other_capability" },

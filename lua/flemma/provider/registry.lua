@@ -88,10 +88,8 @@ function M.register(source, entry)
   if entry then
     -- Two-arg form: register("name", entry)
     name = source
-    local loader = require("flemma.loader")
-    if loader.is_module_path(name) then
-      error(string.format("flemma: provider name '%s' must not contain dots (dots indicate module paths)", name), 2)
-    end
+    local registry_utils = require("flemma.registry")
+    registry_utils.validate_name(name, "provider")
     definition = entry
   else
     -- Single-arg form: register("module.path") — load module and read metadata
@@ -162,11 +160,40 @@ function M.setup()
   end
 end
 
+---Unregister a provider by name
+---@param name string The provider identifier
+---@return boolean removed True if a provider was found and removed
+function M.unregister(name)
+  if not providers[name] then
+    return false
+  end
+  providers[name] = nil
+  M.defaults[name] = nil
+  M.models[name] = nil
+  return true
+end
+
 ---Clear all registered providers (for test isolation)
 function M.clear()
   providers = {}
   M.defaults = {}
   M.models = {}
+end
+
+---Get all registered provider entries
+---@return table<string, flemma.provider.ProviderEntry>
+function M.get_all()
+  return vim.deepcopy(providers)
+end
+
+---Get the count of registered providers
+---@return integer
+function M.count()
+  local n = 0
+  for _ in pairs(providers) do
+    n = n + 1
+  end
+  return n
 end
 
 --------------------------------------------------------------------------------

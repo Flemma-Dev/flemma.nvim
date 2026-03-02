@@ -46,7 +46,7 @@ describe("Tool Registry Extensions", function()
 
   describe("is_executable", function()
     it("returns true for tool with execute function", function()
-      registry.define("test", {
+      registry.register("test", {
         name = "test",
         execute = function() end,
       })
@@ -54,7 +54,7 @@ describe("Tool Registry Extensions", function()
     end)
 
     it("returns false for tool without execute function", function()
-      registry.define("schema_only", {
+      registry.register("schema_only", {
         name = "schema_only",
         description = "No executor",
       })
@@ -62,7 +62,7 @@ describe("Tool Registry Extensions", function()
     end)
 
     it("returns false for tool with executable=false", function()
-      registry.define("disabled", {
+      registry.register("disabled", {
         name = "disabled",
         execute = function() end,
         executable = false,
@@ -78,7 +78,7 @@ describe("Tool Registry Extensions", function()
   describe("get_executor", function()
     it("returns executor and false for sync tool", function()
       local fn = function() end
-      registry.define("sync_tool", {
+      registry.register("sync_tool", {
         name = "sync_tool",
         async = false,
         execute = fn,
@@ -90,7 +90,7 @@ describe("Tool Registry Extensions", function()
 
     it("returns executor and true for async tool", function()
       local fn = function() end
-      registry.define("async_tool", {
+      registry.register("async_tool", {
         name = "async_tool",
         async = true,
         execute = fn,
@@ -101,7 +101,7 @@ describe("Tool Registry Extensions", function()
     end)
 
     it("returns nil for non-executable tool", function()
-      registry.define("disabled", {
+      registry.register("disabled", {
         name = "disabled",
         execute = function() end,
         executable = false,
@@ -112,7 +112,7 @@ describe("Tool Registry Extensions", function()
     end)
 
     it("returns nil for tool without execute", function()
-      registry.define("no_exec", { name = "no_exec" })
+      registry.register("no_exec", { name = "no_exec" })
       local executor, is_async = registry.get_executor("no_exec")
       assert.is_nil(executor)
       assert.is_false(is_async)
@@ -127,8 +127,8 @@ describe("Tool Registry Extensions", function()
 
   describe("enabled flag", function()
     it("excludes disabled tools from get_all()", function()
-      registry.define("visible", { name = "visible", execute = function() end })
-      registry.define("secret", { name = "secret", enabled = false, execute = function() end })
+      registry.register("visible", { name = "visible", execute = function() end })
+      registry.register("secret", { name = "secret", enabled = false, execute = function() end })
 
       local all = registry.get_all()
       assert.is_not_nil(all.visible)
@@ -136,8 +136,8 @@ describe("Tool Registry Extensions", function()
     end)
 
     it("includes disabled tools when include_disabled is true", function()
-      registry.define("visible", { name = "visible", execute = function() end })
-      registry.define("secret", { name = "secret", enabled = false, execute = function() end })
+      registry.register("visible", { name = "visible", execute = function() end })
+      registry.register("secret", { name = "secret", enabled = false, execute = function() end })
 
       local all = registry.get_all({ include_disabled = true })
       assert.is_not_nil(all.visible)
@@ -145,7 +145,7 @@ describe("Tool Registry Extensions", function()
     end)
 
     it("allows disabled tools to be executed", function()
-      registry.define("secret", { name = "secret", enabled = false, execute = function() end })
+      registry.register("secret", { name = "secret", enabled = false, execute = function() end })
 
       assert.is_true(registry.is_executable("secret"))
       local exec, is_async = registry.get_executor("secret")
@@ -154,9 +154,46 @@ describe("Tool Registry Extensions", function()
     end)
 
     it("allows disabled tools to be looked up by name", function()
-      registry.define("secret", { name = "secret", enabled = false, execute = function() end })
+      registry.register("secret", { name = "secret", enabled = false, execute = function() end })
 
       assert.is_not_nil(registry.get("secret"))
+    end)
+  end)
+
+  describe("has", function()
+    it("returns true for a registered tool", function()
+      registry.register("test", { name = "test", execute = function() end })
+      assert.is_true(registry.has("test"))
+    end)
+
+    it("returns false for a non-existent tool", function()
+      assert.is_false(registry.has("nonexistent"))
+    end)
+
+    it("returns true for a disabled tool", function()
+      registry.register("secret", { name = "secret", enabled = false })
+      assert.is_true(registry.has("secret"))
+    end)
+  end)
+
+  describe("unregister", function()
+    it("removes a registered tool and returns true", function()
+      registry.register("test", { name = "test", execute = function() end })
+      assert.is_true(registry.unregister("test"))
+      assert.is_nil(registry.get("test"))
+      assert.is_false(registry.has("test"))
+    end)
+
+    it("returns false for a non-existent tool", function()
+      assert.is_false(registry.unregister("nonexistent"))
+    end)
+
+    it("decrements count after removal", function()
+      registry.register("a", { name = "a" })
+      registry.register("b", { name = "b" })
+      assert.equals(2, registry.count())
+      registry.unregister("a")
+      assert.equals(1, registry.count())
     end)
   end)
 end)
@@ -1515,7 +1552,7 @@ describe("Tool Executor", function()
 
     it("rejects duplicate execution of same tool_id", function()
       -- Use an async tool that never completes, so the pending slot stays occupied
-      registry.define("slow_async_dup", {
+      registry.register("slow_async_dup", {
         name = "slow_async_dup",
         description = "Async tool that never completes",
         async = true,
@@ -1558,7 +1595,7 @@ describe("Tool Executor", function()
     end)
 
     it("rejects execution of non-executable tool", function()
-      registry.define("schema_only", {
+      registry.register("schema_only", {
         name = "schema_only",
         description = "No executor",
         input_schema = {},
@@ -1900,7 +1937,7 @@ describe("Tool Executor", function()
       local cancel_called = false
 
       -- Register an async tool that returns a cancel function
-      registry.define("slow_async", {
+      registry.register("slow_async", {
         name = "slow_async",
         description = "Slow async tool for testing",
         async = true,

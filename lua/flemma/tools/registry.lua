@@ -57,11 +57,9 @@ local tools = {}
 ---Store a single tool definition
 ---@param name string The tool name
 ---@param definition flemma.tools.ToolDefinition The tool definition
-function M.define(name, definition)
-  local loader = require("flemma.loader")
-  if loader.is_module_path(name) then
-    error(string.format("flemma: tool name '%s' must not contain dots (dots indicate module paths)", name), 2)
-  end
+function M.register(name, definition)
+  local registry_utils = require("flemma.registry")
+  registry_utils.validate_name(name, "tool")
   if tools[name] and tools[name] ~= definition then
     vim.notify(
       string.format("Flemma: tool '%s' redefined (previously registered, now overwritten)", name),
@@ -69,6 +67,16 @@ function M.define(name, definition)
     )
   end
   tools[name] = definition
+end
+
+--- Deprecated alias for register()
+M.define = M.register
+
+---Check if a tool exists by name
+---@param name string The tool name
+---@return boolean
+function M.has(name)
+  return tools[name] ~= nil
 end
 
 ---Get a tool definition by name
@@ -93,6 +101,17 @@ function M.get_all(opts)
     end
   end
   return result
+end
+
+---Unregister a tool by name
+---@param name string The tool name
+---@return boolean removed True if a tool was found and removed
+function M.unregister(name)
+  if tools[name] then
+    tools[name] = nil
+    return true
+  end
+  return false
 end
 
 ---Clear all registered tools

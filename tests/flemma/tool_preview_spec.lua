@@ -119,7 +119,7 @@ describe("Tool Preview", function()
     it("uses custom format_preview from tool registry", function()
       package.loaded["flemma.tools.registry"] = nil
       local registry = require("flemma.tools.registry")
-      registry.define("custom_tool", {
+      registry.register("custom_tool", {
         name = "custom_tool",
         description = "test tool",
         input_schema = { type = "object", properties = {} },
@@ -132,7 +132,7 @@ describe("Tool Preview", function()
       assert.are.equal("custom_tool: custom: value", result)
 
       -- Clean up
-      registry.define("custom_tool", nil)
+      registry.register("custom_tool", nil)
     end)
 
     it("falls back to generic formatting when no format_preview", function()
@@ -143,7 +143,7 @@ describe("Tool Preview", function()
     it("collapses newlines in custom format_preview output", function()
       package.loaded["flemma.tools.registry"] = nil
       local registry = require("flemma.tools.registry")
-      registry.define("newline_tool", {
+      registry.register("newline_tool", {
         name = "newline_tool",
         description = "test tool",
         input_schema = { type = "object", properties = {} },
@@ -155,13 +155,13 @@ describe("Tool Preview", function()
       local result = ui_preview.format_tool_preview("newline_tool", {})
       assert.are.equal("newline_tool: line1⤶line2", result)
 
-      registry.define("newline_tool", nil)
+      registry.register("newline_tool", nil)
     end)
 
     it("truncates custom format_preview output to max_length", function()
       package.loaded["flemma.tools.registry"] = nil
       local registry = require("flemma.tools.registry")
-      registry.define("long_tool", {
+      registry.register("long_tool", {
         name = "long_tool",
         description = "test tool",
         input_schema = { type = "object", properties = {} },
@@ -175,7 +175,7 @@ describe("Tool Preview", function()
       assert.is_truthy(result:match("^long_tool: "), "Should start with tool name prefix")
       assert.is_truthy(result:match("…$"), "Should end with truncation marker")
 
-      registry.define("long_tool", nil)
+      registry.register("long_tool", nil)
     end)
 
     it("passes available width (after name prefix) to format_preview", function()
@@ -183,7 +183,7 @@ describe("Tool Preview", function()
       local registry = require("flemma.tools.registry")
       local received_max_length
 
-      registry.define("width_tool", {
+      registry.register("width_tool", {
         name = "width_tool",
         description = "test tool",
         input_schema = { type = "object", properties = {} },
@@ -197,7 +197,7 @@ describe("Tool Preview", function()
       -- "width_tool: " is 12 chars, so available should be 50 - 12 = 38
       assert.are.equal(38, received_max_length)
 
-      registry.define("width_tool", nil)
+      registry.register("width_tool", nil)
     end)
   end)
 

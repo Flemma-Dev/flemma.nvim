@@ -73,12 +73,67 @@ function M.register(source)
   invalidate_cache()
 end
 
+---Get a fold rule by name.
+---@param name string
+---@return flemma.ui.folding.FoldRule|nil
+function M.get(name)
+  ensure_rules_loaded()
+  for _, rule in ipairs(rules) do
+    if rule.name == name then
+      return rule
+    end
+  end
+  return nil
+end
+
+---Get all registered fold rules (ordered copy).
+---@return flemma.ui.folding.FoldRule[]
+function M.get_all()
+  ensure_rules_loaded()
+  return vim.deepcopy(rules)
+end
+
+---Check if a fold rule exists by name.
+---@param name string
+---@return boolean
+function M.has(name)
+  ensure_rules_loaded()
+  for _, rule in ipairs(rules) do
+    if rule.name == name then
+      return true
+    end
+  end
+  return false
+end
+
+---Unregister a fold rule by name.
+---@param name string
+---@return boolean removed True if a rule was found and removed
+function M.unregister(name)
+  ensure_rules_loaded()
+  for i, rule in ipairs(rules) do
+    if rule.name == name then
+      table.remove(rules, i)
+      invalidate_cache()
+      return true
+    end
+  end
+  return false
+end
+
 ---Clear all registered rules and reset initialization state.
 ---Used by tests for isolation.
 function M.clear()
   rules = {}
   initialized = false
   invalidate_cache()
+end
+
+---Get the count of registered fold rules.
+---@return integer
+function M.count()
+  ensure_rules_loaded()
+  return #rules
 end
 
 ---Build a fold map by iterating all registered rules.

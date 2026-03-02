@@ -64,19 +64,19 @@ describe("flemma.status", function()
 
       local registry = require("flemma.tools.registry")
       registry.clear()
-      registry.define("alpha_tool", {
+      registry.register("alpha_tool", {
         name = "alpha_tool",
         description = "An enabled tool",
         input_schema = { type = "object" },
         enabled = true,
       })
-      registry.define("beta_tool", {
+      registry.register("beta_tool", {
         name = "beta_tool",
         description = "A disabled tool",
         input_schema = { type = "object" },
         enabled = false,
       })
-      registry.define("gamma_tool", {
+      registry.register("gamma_tool", {
         name = "gamma_tool",
         description = "Another enabled tool",
         input_schema = { type = "object" },
@@ -425,17 +425,17 @@ describe("flemma.status", function()
 
       local registry = require("flemma.tools.registry")
       registry.clear()
-      registry.define("read", {
+      registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
       })
-      registry.define("bash", {
+      registry.register("bash", {
         name = "bash",
         description = "Bash tool",
         input_schema = { type = "object" },
       })
-      registry.define("edit", {
+      registry.register("edit", {
         name = "edit",
         description = "Edit tool",
         input_schema = { type = "object" },
@@ -460,7 +460,7 @@ describe("flemma.status", function()
 
       local registry = require("flemma.tools.registry")
       registry.clear()
-      registry.define("read", {
+      registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
@@ -487,12 +487,12 @@ describe("flemma.status", function()
 
       local registry = require("flemma.tools.registry")
       registry.clear()
-      registry.define("bash", {
+      registry.register("bash", {
         name = "bash",
         description = "Bash tool",
         input_schema = { type = "object" },
       })
-      registry.define("read", {
+      registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
@@ -520,7 +520,7 @@ describe("flemma.status", function()
 
       local registry = require("flemma.tools.registry")
       registry.clear()
-      registry.define("read", {
+      registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
@@ -564,7 +564,7 @@ describe("flemma.status", function()
 
       local registry = require("flemma.tools.registry")
       registry.clear()
-      registry.define("read", {
+      registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },

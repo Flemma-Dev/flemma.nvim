@@ -1219,4 +1219,49 @@ describe("UI Folding", function()
       assert.are.equal(-1, vim.fn.foldclosed(26), "Final assistant message should be open")
     end)
   end)
+
+  describe("rule registry", function()
+    it("get() returns a rule by name", function()
+      local rule = folding.get("thinking")
+      assert.is_not_nil(rule)
+      assert.are.equal("thinking", rule.name)
+    end)
+
+    it("get() returns nil for unknown name", function()
+      assert.is_nil(folding.get("nonexistent"))
+    end)
+
+    it("get_all() returns ordered copy of all rules", function()
+      local all = folding.get_all()
+      assert.are.equal(4, #all)
+      -- Verify it is a copy
+      all[1] = nil
+      assert.is_not_nil(folding.get_all()[1])
+    end)
+
+    it("has() returns true for built-in rules", function()
+      assert.is_true(folding.has("frontmatter"))
+      assert.is_true(folding.has("thinking"))
+      assert.is_true(folding.has("tool_blocks"))
+      assert.is_true(folding.has("messages"))
+    end)
+
+    it("has() returns false for unknown name", function()
+      assert.is_false(folding.has("nonexistent"))
+    end)
+
+    it("unregister() removes a rule and returns true", function()
+      assert.is_true(folding.unregister("thinking"))
+      assert.is_false(folding.has("thinking"))
+      assert.are.equal(3, folding.count())
+    end)
+
+    it("unregister() returns false for unknown name", function()
+      assert.is_false(folding.unregister("nonexistent"))
+    end)
+
+    it("count() returns the number of built-in rules", function()
+      assert.are.equal(4, folding.count())
+    end)
+  end)
 end)

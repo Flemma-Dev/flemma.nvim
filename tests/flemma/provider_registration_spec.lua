@@ -213,6 +213,74 @@ describe("provider registration", function()
     end)
   end)
 
+  describe("unregister()", function()
+    it("removes a provider and returns true", function()
+      registry.register("custom", {
+        module = "flemma.provider.providers.openai",
+        capabilities = {
+          supports_reasoning = false,
+          supports_thinking_budget = false,
+          outputs_thinking = false,
+        },
+        display_name = "Custom",
+      })
+
+      assert.is_true(registry.unregister("custom"))
+      assert.is_false(registry.has("custom"))
+      assert.is_nil(registry.get("custom"))
+    end)
+
+    it("returns false for unknown provider", function()
+      assert.is_false(registry.unregister("nonexistent"))
+    end)
+
+    it("cleans up defaults and models", function()
+      registry.register("custom", {
+        module = "flemma.provider.providers.openai",
+        capabilities = {
+          supports_reasoning = false,
+          supports_thinking_budget = false,
+          outputs_thinking = false,
+        },
+        display_name = "Custom",
+        default_model = "my-model",
+        models = { ["my-model"] = { pricing = { input = 1.0, output = 2.0 } } },
+      })
+
+      assert.is_not_nil(registry.defaults["custom"])
+      registry.unregister("custom")
+      assert.is_nil(registry.defaults["custom"])
+      assert.is_nil(registry.models["custom"])
+    end)
+  end)
+
+  describe("get_all()", function()
+    it("returns a copy of all provider entries", function()
+      local all = registry.get_all()
+      assert.is_not_nil(all["anthropic"])
+      assert.is_not_nil(all["openai"])
+      assert.is_not_nil(all["vertex"])
+      assert.are.equal("flemma.provider.providers.anthropic", all["anthropic"].module)
+    end)
+
+    it("returns a deep copy (mutations do not affect registry)", function()
+      local all = registry.get_all()
+      all["anthropic"] = nil
+      assert.is_true(registry.has("anthropic"))
+    end)
+  end)
+
+  describe("count()", function()
+    it("returns the number of registered providers", function()
+      assert.are.equal(3, registry.count())
+    end)
+
+    it("returns 0 after clear", function()
+      registry.clear()
+      assert.are.equal(0, registry.count())
+    end)
+  end)
+
   describe("clear()", function()
     it("resets all providers", function()
       registry.clear()

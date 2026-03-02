@@ -88,7 +88,7 @@ describe("flemma.loader", function()
     it("tools registry rejects names with dots", function()
       local registry = require("flemma.tools.registry")
       assert.has_error(function()
-        registry.define("my.tool", {
+        registry.register("my.tool", {
           name = "my.tool",
           description = "test",
           input_schema = { type = "object" },

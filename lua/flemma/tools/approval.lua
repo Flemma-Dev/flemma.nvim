@@ -76,13 +76,8 @@ end
 ---@param name string Unique resolver name
 ---@param definition flemma.tools.ApprovalResolverDefinition
 function M.register(name, definition)
-  local loader = require("flemma.loader")
-  if loader.is_module_path(name) then
-    error(
-      string.format("flemma: approval resolver name '%s' must not contain dots (dots indicate module paths)", name),
-      2
-    )
-  end
+  local registry_utils = require("flemma.registry")
+  registry_utils.validate_name(name, "approval resolver")
   register_entry(name, definition)
 end
 
@@ -109,6 +104,18 @@ function M.get(name)
     end
   end
   return nil
+end
+
+---Check if a resolver exists by name.
+---@param name string
+---@return boolean
+function M.has(name)
+  for _, entry in ipairs(resolvers) do
+    if entry.name == name then
+      return true
+    end
+  end
+  return false
 end
 
 ---Get all registered resolvers, sorted by priority (highest first).

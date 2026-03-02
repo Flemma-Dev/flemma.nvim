@@ -65,7 +65,7 @@ function M.register_async(resolve_fn, opts)
   ---@param name string
   ---@param def flemma.tools.ToolDefinition
   local function register(name, def)
-    registry.define(name, def)
+    registry.register(name, def)
   end
 
   -- Set up timeout
@@ -231,7 +231,7 @@ function M.register(source, definition)
   if type(source) == "string" then
     if definition then
       -- register(name, def) — single definition
-      registry.define(source, definition)
+      registry.register(source, definition)
     else
       -- register("module.name") — load module
       local mod = require(source)
@@ -239,7 +239,7 @@ function M.register(source, definition)
         M.register_async(mod.resolve, { timeout = mod.timeout })
       elseif mod.definitions then
         for _, def in ipairs(mod.definitions) do
-          registry.define(def.name, def)
+          registry.register(def.name, def)
         end
       end
     end
@@ -250,11 +250,11 @@ function M.register(source, definition)
       M.register_async(source.resolve, { timeout = source.timeout })
     elseif source.name then
       -- Single definition table
-      registry.define(source.name, source)
+      registry.register(source.name, source)
     else
       -- Array of definitions
       for _, def in ipairs(source) do
-        registry.define(def.name, def)
+        registry.register(def.name, def)
       end
     end
   end
