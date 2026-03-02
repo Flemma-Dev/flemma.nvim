@@ -26,6 +26,7 @@ local session_module = require("flemma.session")
 ---@field spinner_line_idx0 integer|nil 0-indexed line of the spinner extmark
 ---@field autopilot_override? boolean Per-buffer autopilot override (set from frontmatter, nil = use global config)
 ---@field auto_closed_folds? table<string, boolean>
+---@field ui_update_tick? integer Last changedtick processed by update_ui (gates CursorHold redundancy)
 
 ---@diagnostic disable-next-line: missing-fields
 local config = {} ---@type flemma.Config

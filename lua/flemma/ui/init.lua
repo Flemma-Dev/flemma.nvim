@@ -957,8 +957,14 @@ function M.setup()
     group = augroup,
     pattern = "*.chat",
     callback = function(ev)
-      -- Use the new function for debounced updates
+      local buffer_state = state.get_buffer_state(ev.buf)
+      local tick = vim.api.nvim_buf_get_changedtick(ev.buf)
+      -- CursorHold fires frequently with low updatetime — skip if buffer unchanged
+      if (ev.event == "CursorHold" or ev.event == "CursorHoldI") and buffer_state.ui_update_tick == tick then
+        return
+      end
       require("flemma.core").update_ui(ev.buf)
+      buffer_state.ui_update_tick = tick
     end,
   })
 
