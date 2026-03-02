@@ -180,26 +180,75 @@ local function get_document()
   return parser.get_parsed_document(bufnr)
 end
 
----Get fold text for display
+---Compute the display width of a string (handles multibyte characters correctly).
+---@param s string
+---@return integer
+local function strwidth(s)
+  return vim.api.nvim_strwidth(s)
+end
+
+---Get the body text for a tool use fold (custom format_preview or generic key-value).
+---@param tool_seg flemma.ast.ToolUseSegment
+---@param available integer Available width for the body
 ---@return string
+local function get_tool_use_body(tool_seg, available)
+  local registry = require("flemma.tools.registry")
+  local tool_def = registry.get(tool_seg.name)
+
+  local body
+  if tool_def and tool_def.format_preview then
+    body = tool_def.format_preview(tool_seg.input, available)
+    body = body:gsub("\n", "⤶")
+  else
+    local keys = vim.tbl_keys(tool_seg.input)
+    if #keys == 0 then
+      return ""
+    end
+    body = preview.format_tool_preview_body(tool_seg.input, available)
+  end
+
+  -- Post-hoc truncation for custom format_preview that may ignore max_length
+  if strwidth(body) > available then
+    -- Truncate to fit: use byte-level truncation then verify display width
+    while strwidth(body) > available - 1 do
+      body = body:sub(1, #body - 1)
+    end
+    body = body .. "…"
+  end
+
+  return body
+end
+
+---Get fold text for display.
+---Returns a list of {text, highlight_group} tuples for per-segment highlighting.
+---@return {[1]:string, [2]:string}[]
 function M.get_fold_text()
+  local roles = require("flemma.roles")
   local foldstart_lnum = vim.v.foldstart
   local foldend_lnum = vim.v.foldend
   local total_fold_lines = foldend_lnum - foldstart_lnum + 1
   local doc = get_document()
   local text_width = preview.get_text_area_width(vim.api.nvim_get_current_win())
+  local suffix = string.format("(%d lines)", total_fold_lines)
 
   -- Check for frontmatter fold (level 2)
   local fm = doc.frontmatter
   if fm and fm.position.start_line == foldstart_lnum then
-    -- Account for surrounding chrome: "```lang  ``` (N lines)"
-    local suffix = string.format(" ``` (%d lines)", total_fold_lines)
     local prefix = "```" .. fm.language .. " "
-    local fold_preview = preview.format_content_preview(fm.code, text_width - #prefix - #suffix)
+    local suffix_full = " ``` " .. suffix
+    local fold_preview = preview.format_content_preview(fm.code, text_width - strwidth(prefix) - strwidth(suffix_full))
     if fold_preview ~= "" then
-      return prefix .. fold_preview .. suffix
+      return {
+        { prefix, "Comment" },
+        { fold_preview, "Comment" },
+        { " ``` ", "Comment" },
+        { suffix, "FlemmaFoldMeta" },
+      }
     else
-      return string.format("```%s (%d lines)", fm.language, total_fold_lines)
+      return {
+        { string.format("```%s ", fm.language), "Comment" },
+        { suffix, "FlemmaFoldMeta" },
+      }
     end
   end
 
@@ -207,19 +256,40 @@ function M.get_fold_text()
   local thinking_seg = query.find_thinking_at_line(doc, foldstart_lnum)
   if thinking_seg then
     if thinking_seg.redacted then
-      return string.format("<thinking redacted> (%d lines)", total_fold_lines)
+      return {
+        { "<thinking redacted> ", "FlemmaThinkingTag" },
+        { suffix, "FlemmaFoldMeta" },
+      }
     end
     local provider = thinking_seg.signature and thinking_seg.signature.provider
-    -- Account for surrounding chrome: "<thinking [provider]>  </thinking> (N lines)"
-    local tag = provider and string.format("<thinking %s>", provider) or "<thinking>"
-    local suffix = string.format(" </thinking> (%d lines)", total_fold_lines)
-    local fold_preview = preview.format_content_preview(thinking_seg.content, text_width - #tag - #suffix - 1)
-    if fold_preview ~= "" then
-      return tag .. " " .. fold_preview .. suffix
-    else
-      local empty_tag = provider and string.format("<thinking %s/>", provider) or "<thinking/>"
-      return string.format("%s (%d lines)", empty_tag, total_fold_lines)
+    ---@type {[1]:string, [2]:string}[]
+    local chunks = {}
+    table.insert(chunks, { "<thinking", "FlemmaThinkingTag" })
+    if provider then
+      table.insert(chunks, { " " .. provider, "Comment" })
     end
+    table.insert(chunks, { "> ", "FlemmaThinkingTag" })
+
+    -- Compute available width for preview
+    local chrome_width = strwidth("<thinking")
+      + (provider and strwidth(" " .. provider) or 0)
+      + strwidth("> ")
+      + strwidth(" </thinking> ")
+      + strwidth(suffix)
+    local fold_preview = preview.format_content_preview(thinking_seg.content, text_width - chrome_width)
+
+    if fold_preview ~= "" then
+      table.insert(chunks, { fold_preview .. " ", "FlemmaThinkingBlock" })
+      table.insert(chunks, { "</thinking> ", "FlemmaThinkingTag" })
+      table.insert(chunks, { suffix, "FlemmaFoldMeta" })
+    else
+      -- Remove the chunks we added and use self-closing tag
+      chunks = {}
+      local empty_tag = provider and string.format("<thinking %s/> ", provider) or "<thinking/> "
+      table.insert(chunks, { empty_tag, "FlemmaThinkingTag" })
+      table.insert(chunks, { suffix, "FlemmaFoldMeta" })
+    end
+    return chunks
   end
 
   -- Check if this is a tool_use or tool_result fold (level 2)
@@ -227,36 +297,87 @@ function M.get_fold_text()
   if tool_seg then
     if tool_kind == "tool_use" then
       ---@cast tool_seg flemma.ast.ToolUseSegment
-      local prefix = "◆ Tool Use: "
-      local suffix = string.format(" (%d lines)", total_fold_lines)
-      local available = text_width - #prefix - #suffix - 1
-      local tool_preview = preview.format_tool_preview(tool_seg.name, tool_seg.input, available)
-      return prefix .. tool_preview .. suffix
+      ---@type {[1]:string, [2]:string}[]
+      local chunks = {
+        { "◆ ", "FlemmaToolIcon" },
+        { "Tool Use: ", "FlemmaToolUseTitle" },
+      }
+
+      local fixed_width = strwidth("◆ ")
+        + strwidth("Tool Use: ")
+        + strwidth(tool_seg.name)
+        + strwidth(": ")
+        + strwidth(" ")
+        + strwidth(suffix)
+      local available = text_width - fixed_width
+      local body = get_tool_use_body(tool_seg, available)
+
+      if body ~= "" then
+        table.insert(chunks, { tool_seg.name, "FlemmaToolName" })
+        table.insert(chunks, { ": " .. body .. " ", "FlemmaFoldPreview" })
+      else
+        table.insert(chunks, { tool_seg.name .. " ", "FlemmaToolName" })
+      end
+      table.insert(chunks, { suffix, "FlemmaFoldMeta" })
+      return chunks
     elseif tool_kind == "tool_result" then
       ---@cast tool_seg flemma.ast.ToolResultSegment
-      -- Resolve tool name from matching tool_use
-      local prefix = "◆ Tool Result: "
       local tool_name_map = query.build_tool_name_map(doc)
       local tool_name = tool_name_map[tool_seg.tool_use_id] or "result"
-      local suffix = string.format(" (%d lines)", total_fold_lines)
-      local available = text_width - #prefix - #suffix - 1
-      local result_preview =
-        preview.format_tool_result_preview(tool_name, tool_seg.content, tool_seg.is_error, available)
-      return prefix .. result_preview .. suffix
+
+      ---@type {[1]:string, [2]:string}[]
+      local chunks = {
+        { "◆ ", "FlemmaToolIcon" },
+        { "Tool Result: ", "FlemmaToolResultTitle" },
+        { tool_name, "FlemmaToolName" },
+      }
+
+      local fixed_width = strwidth("◆ ")
+        + strwidth("Tool Result: ")
+        + strwidth(tool_name)
+        + strwidth(": ")
+        + strwidth(" ")
+        + strwidth(suffix)
+      if tool_seg.is_error then
+        fixed_width = fixed_width + strwidth("(error) ")
+      end
+      local available = text_width - fixed_width
+
+      local body = preview.format_content_preview(tool_seg.content, available)
+
+      if body ~= "" or tool_seg.is_error then
+        table.insert(chunks, { ": ", "FlemmaFoldPreview" })
+        if tool_seg.is_error then
+          table.insert(chunks, { "(error) ", "FlemmaToolResultError" })
+        end
+        if body ~= "" then
+          table.insert(chunks, { body .. " ", "FlemmaFoldPreview" })
+        end
+      else
+        table.insert(chunks, { " ", "FlemmaToolName" })
+      end
+      table.insert(chunks, { suffix, "FlemmaFoldMeta" })
+      return chunks
     end
   end
 
   -- Message folds (level 1)
   local msg = query.find_message_at_line(doc, foldstart_lnum)
   if msg then
-    local role_prefix = "@" .. msg.role .. ":"
-    -- Account for surrounding chrome: "@Role:  (N lines)"
-    local suffix = string.format(" (%d lines)", total_fold_lines)
-    local fold_preview = preview.format_message_fold_preview(msg, text_width - #role_prefix - #suffix - 1, doc)
-    return role_prefix .. " " .. fold_preview .. suffix
+    local role_marker = "@" .. msg.role .. ":"
+    local role_hl = roles.highlight_group("FlemmaRole", msg.role)
+    local content_hl = roles.highlight_group("Flemma", msg.role)
+
+    local chrome_width = strwidth(role_marker) + strwidth(" ") + strwidth(" ") + strwidth(suffix)
+    local fold_preview = preview.format_message_fold_preview(msg, text_width - chrome_width, doc)
+    return {
+      { role_marker, role_hl },
+      { " " .. fold_preview .. " ", content_hl },
+      { suffix, "FlemmaFoldMeta" },
+    }
   end
 
-  return vim.fn.getline(foldstart_lnum)
+  return { { vim.fn.getline(foldstart_lnum), "Folded" } }
 end
 
 -- ============================================================================

@@ -702,7 +702,31 @@ describe("UI Folding", function()
   end)
 
   describe("get_fold_text", function()
-    it("should show tool preview for folded tool_use block", function()
+    ---Join chunk texts into a single string for content assertions
+    ---@param chunks {[1]:string, [2]:string}[]
+    ---@return string
+    local function chunks_to_string(chunks)
+      local parts = {}
+      for _, chunk in ipairs(chunks) do
+        table.insert(parts, chunk[1])
+      end
+      return table.concat(parts)
+    end
+
+    ---Find a chunk containing the given text pattern
+    ---@param chunks {[1]:string, [2]:string}[]
+    ---@param pattern string
+    ---@return {[1]:string, [2]:string}|nil
+    local function find_chunk(chunks, pattern)
+      for _, chunk in ipairs(chunks) do
+        if chunk[1]:match(pattern) then
+          return chunk
+        end
+      end
+      return nil
+    end
+
+    it("should return chunk list for folded tool_use block", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.bo[bufnr].filetype = "chat"
 
@@ -734,17 +758,39 @@ describe("UI Folding", function()
       -- Close fold at tool_use block (lines 3-6)
       vim.cmd("3,6 foldclose")
 
-      -- Get fold text
       vim.v.foldstart = 3
       vim.v.foldend = 6
-      local fold_text = folding.get_fold_text()
-      assert.is_truthy(fold_text:match("^... Tool Use: "), "Fold text should start with 'Tool Use: ' prefix")
-      assert.is_truthy(fold_text:match("bash"), "Fold text should contain tool name")
-      assert.is_truthy(fold_text:match("ls %-la"), "Fold text should contain command preview")
-      assert.is_truthy(fold_text:match("%(4 lines%)"), "Fold text should show line count")
+      local chunks = folding.get_fold_text()
+
+      -- Should return a list of chunks, not a string
+      assert.is_table(chunks, "get_fold_text should return a table of chunks")
+      assert.is_table(chunks[1], "Each chunk should be a {text, hl_group} tuple")
+
+      local text = chunks_to_string(chunks)
+      assert.is_truthy(text:match("Tool Use: "), "Fold text should contain 'Tool Use: '")
+      assert.is_truthy(text:match("bash"), "Fold text should contain tool name")
+      assert.is_truthy(text:match("ls %-la"), "Fold text should contain command preview")
+      assert.is_truthy(text:match("%(4 lines%)"), "Fold text should show line count")
+
+      -- Verify highlight groups
+      local icon_chunk = find_chunk(chunks, "◆")
+      assert.is_not_nil(icon_chunk, "Should have icon chunk")
+      assert.are.equal("FlemmaToolIcon", icon_chunk[2])
+
+      local title_chunk = find_chunk(chunks, "Tool Use:")
+      assert.is_not_nil(title_chunk, "Should have title chunk")
+      assert.are.equal("FlemmaToolUseTitle", title_chunk[2])
+
+      local name_chunk = find_chunk(chunks, "^bash")
+      assert.is_not_nil(name_chunk, "Should have name chunk")
+      assert.are.equal("FlemmaToolName", name_chunk[2])
+
+      local meta_chunk = chunks[#chunks]
+      assert.is_truthy(meta_chunk[1]:match("%(4 lines%)"), "Last chunk should be line count")
+      assert.are.equal("FlemmaFoldMeta", meta_chunk[2])
     end)
 
-    it("should show content preview for folded tool_result block", function()
+    it("should return chunk list for folded tool_result block", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.bo[bufnr].filetype = "chat"
 
@@ -779,11 +825,106 @@ describe("UI Folding", function()
 
       vim.v.foldstart = 10
       vim.v.foldend = 15
-      local fold_text = folding.get_fold_text()
-      assert.is_truthy(fold_text:match("^... Tool Result: "), "Fold text should start with 'Tool Result: ' prefix")
-      assert.is_truthy(fold_text:match("bash"), "Fold text should contain tool name")
-      assert.is_truthy(fold_text:match("file1%.txt"), "Fold text should preview result content")
-      assert.is_truthy(fold_text:match("%(6 lines%)"), "Fold text should show line count")
+      local chunks = folding.get_fold_text()
+
+      assert.is_table(chunks, "get_fold_text should return a table of chunks")
+
+      local text = chunks_to_string(chunks)
+      assert.is_truthy(text:match("Tool Result: "), "Fold text should contain 'Tool Result: '")
+      assert.is_truthy(text:match("bash"), "Fold text should contain tool name")
+      assert.is_truthy(text:match("file1%.txt"), "Fold text should preview result content")
+      assert.is_truthy(text:match("%(6 lines%)"), "Fold text should show line count")
+
+      -- Verify highlight groups
+      local icon_chunk = find_chunk(chunks, "◆")
+      assert.is_not_nil(icon_chunk, "Should have icon chunk")
+      assert.are.equal("FlemmaToolIcon", icon_chunk[2])
+
+      local title_chunk = find_chunk(chunks, "Tool Result:")
+      assert.is_not_nil(title_chunk, "Should have title chunk")
+      assert.are.equal("FlemmaToolResultTitle", title_chunk[2])
+
+      local meta_chunk = chunks[#chunks]
+      assert.is_truthy(meta_chunk[1]:match("%(6 lines%)"), "Last chunk should be line count")
+      assert.are.equal("FlemmaFoldMeta", meta_chunk[2])
+    end)
+
+    it("should return chunk list for folded message", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You: What files are here?",
+        "@Assistant: Let me check those files for you.",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      vim.v.foldstart = 2
+      vim.v.foldend = 2
+      local chunks = folding.get_fold_text()
+
+      assert.is_table(chunks, "get_fold_text should return a table of chunks")
+
+      local text = chunks_to_string(chunks)
+      assert.is_truthy(text:match("@Assistant:"), "Fold text should contain role marker")
+
+      -- Verify role highlight groups
+      local role_chunk = find_chunk(chunks, "@Assistant:")
+      assert.is_not_nil(role_chunk, "Should have role chunk")
+      assert.are.equal("FlemmaRoleAssistant", role_chunk[2])
+
+      local meta_chunk = chunks[#chunks]
+      assert.are.equal("FlemmaFoldMeta", meta_chunk[2])
+    end)
+
+    it("should return chunk list for folded thinking block", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: response",
+        "<thinking>",
+        "thinking content here",
+        "</thinking>",
+        "actual response",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      vim.cmd("2,4 foldclose")
+
+      vim.v.foldstart = 2
+      vim.v.foldend = 4
+      local chunks = folding.get_fold_text()
+
+      assert.is_table(chunks, "get_fold_text should return a table of chunks")
+
+      local text = chunks_to_string(chunks)
+      assert.is_truthy(text:match("<thinking>"), "Should contain opening tag")
+      assert.is_truthy(text:match("thinking content"), "Should contain preview")
+      assert.is_truthy(text:match("</thinking>"), "Should contain closing tag")
+      assert.is_truthy(text:match("%(3 lines%)"), "Should show line count")
+
+      -- Verify highlight groups
+      local tag_chunk = find_chunk(chunks, "<thinking")
+      assert.is_not_nil(tag_chunk, "Should have thinking tag chunk")
+      assert.are.equal("FlemmaThinkingTag", tag_chunk[2])
+
+      local meta_chunk = chunks[#chunks]
+      assert.are.equal("FlemmaFoldMeta", meta_chunk[2])
     end)
   end)
 

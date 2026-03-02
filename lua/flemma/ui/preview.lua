@@ -98,7 +98,7 @@ end
 ---@param input table<string, any>
 ---@param max_length? integer Maximum body length (defaults to DEFAULT_MAX_LENGTH)
 ---@return string
-local function format_tool_preview_body(input, max_length)
+function M.format_tool_preview_body(input, max_length)
   max_length = max_length or DEFAULT_MAX_LENGTH
 
   local keys = vim.tbl_keys(input)
@@ -179,7 +179,7 @@ function M.format_tool_preview(tool_name, input, max_length)
     if #keys == 0 then
       return tool_name
     end
-    body = format_tool_preview_body(input, available)
+    body = M.format_tool_preview_body(input, available)
   end
 
   local preview = name_prefix .. body

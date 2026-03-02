@@ -17,10 +17,14 @@ Configuration keys map to dedicated highlight groups:
 | `highlights.user_file_reference` | `@./path` fragments                                                      |
 | `highlights.thinking_tag`        | `<thinking>` / `</thinking>` tags                                        |
 | `highlights.thinking_block`      | Content inside thinking blocks                                           |
-| `highlights.tool_use`            | `**Tool Use:**` title line                                               |
-| `highlights.tool_result`         | `**Tool Result:**` title line                                            |
+| `highlights.tool_icon`           | `◆`/`◇` icon in tool fold text (`FlemmaToolIcon`)                        |
+| `highlights.tool_name`           | Tool name in tool fold text (`FlemmaToolName`)                           |
+| `highlights.tool_use_title`      | `**Tool Use:**` title line (`FlemmaToolUseTitle`)                        |
+| `highlights.tool_result_title`   | `**Tool Result:**` title line (`FlemmaToolResultTitle`)                  |
 | `highlights.tool_result_error`   | `(error)` marker in tool results                                         |
 | `highlights.tool_preview`        | Tool preview virtual lines in pending placeholders (`FlemmaToolPreview`) |
+| `highlights.fold_preview`        | Content preview text in fold lines (`FlemmaFoldPreview`)                 |
+| `highlights.fold_meta`           | Line count and padding in fold lines (`FlemmaFoldMeta`)                  |
 
 Each value accepts a highlight name, a hex colour string, or a table of highlight attributes (`{ fg = "#ffcc00", bold = true }`).
 
@@ -146,11 +150,13 @@ The initial fold level is controlled by `editing.foldlevel` (default: `1`, which
 
 ### Fold text
 
-Collapsed folds show a preview of their content: the first 10 lines, joined with `⤶` and dynamically sized to the editor's text area width. The format varies by content type:
+Collapsed folds show a preview of their content with per-segment syntax highlighting. Neovim's `foldtext` returns `{text, hl_group}` tuples so each part of the fold line uses its own highlight group. The format varies by content type:
 
-- **Messages:** `@Role: preview... (N lines)`
-- **Thinking blocks:** `<thinking preview...> (N lines)` – shows `<thinking redacted>` for redacted blocks, or `<thinking provider>` for blocks with a provider signature.
-- **Frontmatter:** ` ```language preview... ``` (N lines) `
+- **Messages:** `@Role: preview... (N lines)` — role prefix uses the role's highlight group (e.g., `FlemmaAssistant`), preview uses `FlemmaFoldPreview`, line count uses `FlemmaFoldMeta`.
+- **Tool Use:** `◆ Tool Use: name: params... (N lines)` — icon uses `FlemmaToolIcon`, title uses `FlemmaToolUseTitle`, name uses `FlemmaToolName`, preview uses `FlemmaFoldPreview`, meta uses `FlemmaFoldMeta`.
+- **Tool Result:** `◇ Tool Result: name: preview... (N lines)` — same structure as tool use but with `FlemmaToolResultTitle`. Errors show `(error)` with `FlemmaToolResultError`.
+- **Thinking blocks:** `<thinking preview...> (N lines)` — shows `<thinking redacted>` for redacted blocks, or `<thinking provider>` for blocks with a provider signature. Uses `FlemmaThinkingTag` for delimiters and `FlemmaFoldPreview` for content.
+- **Frontmatter:** ` ```language preview... ``` (N lines) ` — uses `FlemmaFoldMeta` for fences and `FlemmaFoldPreview` for content.
 
 ## Notifications
 

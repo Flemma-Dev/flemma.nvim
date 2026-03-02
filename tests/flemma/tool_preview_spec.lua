@@ -493,6 +493,41 @@ describe("Tool Preview", function()
   end)
 end)
 
+describe("format_tool_preview_body", function()
+  it("formats single scalar key", function()
+    local result = ui_preview.format_tool_preview_body({ command = "ls -la" })
+    assert.are.equal('command="ls -la"', result)
+  end)
+
+  it("formats multiple keys sorted alphabetically", function()
+    local result = ui_preview.format_tool_preview_body({ query = "foo", path = "./src" })
+    assert.are.equal('path="./src", query="foo"', result)
+  end)
+
+  it("returns empty string for empty input", function()
+    local result = ui_preview.format_tool_preview_body({})
+    assert.are.equal("", result)
+  end)
+
+  it("truncates to max_length", function()
+    local long_value = string.rep("a", 200)
+    local result = ui_preview.format_tool_preview_body({ command = long_value }, 40)
+    assert.is_truthy(#result <= 40, "Should be at most 40 chars, got " .. #result)
+    assert.is_truthy(result:match("…$"), "Should end with truncation marker")
+  end)
+
+  it("puts scalar keys before table keys", function()
+    local result = ui_preview.format_tool_preview_body({
+      name = "test",
+      options = { verbose = true },
+    })
+    -- "name" (scalar) should come before "options" (table)
+    local name_pos = result:find("name=")
+    local options_pos = result:find("options=")
+    assert.is_truthy(name_pos < options_pos, "Scalar keys should come before table keys")
+  end)
+end)
+
 describe("format_message_fold_preview", function()
   local ast = require("flemma.ast")
   local preview

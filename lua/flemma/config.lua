@@ -10,10 +10,14 @@
 ---@field user_file_reference flemma.config.HighlightValue
 ---@field thinking_tag flemma.config.HighlightValue
 ---@field thinking_block flemma.config.HighlightValue
----@field tool_use flemma.config.HighlightValue
----@field tool_result flemma.config.HighlightValue
+---@field tool_icon flemma.config.HighlightValue
+---@field tool_name flemma.config.HighlightValue
+---@field tool_use_title flemma.config.HighlightValue
+---@field tool_result_title flemma.config.HighlightValue
 ---@field tool_result_error flemma.config.HighlightValue
 ---@field tool_preview flemma.config.HighlightValue
+---@field fold_preview flemma.config.HighlightValue
+---@field fold_meta flemma.config.HighlightValue
 
 ---@class flemma.config.Ruler
 ---@field enabled boolean
@@ -194,10 +198,17 @@ return {
     user_file_reference = "Include", -- Highlight group or hex color for @./file references in user messages
     thinking_tag = "Comment", -- Highlight group or hex color for <thinking> and </thinking> tags
     thinking_block = { dark = "Comment+bg:#102020-fg:#111111", light = "Comment-bg:#102020+fg:#111111" }, -- Highlight group or hex color for content inside <thinking> blocks
-    tool_use = "Function", -- Highlight group or hex color for **Tool Use:** title
-    tool_result = "Function", -- Highlight group or hex color for **Tool Result:** title
-    tool_result_error = "DiagnosticError", -- Highlight group or hex color for (error) marker in tool results
-    tool_preview = "Comment", -- Highlight group or hex color for tool preview virtual lines in pending tool blocks
+    -- Tools
+    tool_icon = "FlemmaToolUseTitle", -- Highlight for ◆ symbol in tool fold lines
+    tool_name = "Function", -- Highlight for tool name in fold lines and headers
+    tool_use_title = "Function", -- Highlight for **Tool Use:** title text
+    tool_result_title = "Function", -- Highlight for **Tool Result:** title text
+    tool_result_error = "DiagnosticError", -- Highlight for (error) marker in tool results
+    tool_preview = "Comment", -- Highlight for tool preview virtual lines in pending tool blocks
+
+    -- Folds
+    fold_preview = "Comment", -- Highlight for tool content preview text in fold lines
+    fold_meta = "Comment", -- Highlight for (N lines) suffix in fold lines
   },
   role_style = "bold", -- style applied to role markers like @You:
   ruler = {

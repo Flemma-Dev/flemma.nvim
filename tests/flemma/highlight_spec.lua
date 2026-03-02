@@ -125,4 +125,73 @@ describe("Highlight", function()
       assert.is_nil(spinner_hl.link, "FlemmaAssistantSpinner should not be a link")
     end)
   end)
+
+  describe("fold and tool highlight groups", function()
+    local function setup_and_apply()
+      flemma.setup({})
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant: test" })
+      highlight.apply_syntax()
+    end
+
+    it("should define FlemmaToolIcon after apply_syntax", function()
+      setup_and_apply()
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaToolIcon" })
+      assert.is_truthy(hl.link or hl.fg, "FlemmaToolIcon should be defined")
+    end)
+
+    it("should define FlemmaToolName after apply_syntax", function()
+      setup_and_apply()
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaToolName" })
+      assert.is_truthy(hl.link or hl.fg, "FlemmaToolName should be defined")
+    end)
+
+    it("should define FlemmaFoldPreview after apply_syntax", function()
+      setup_and_apply()
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaFoldPreview" })
+      assert.is_truthy(hl.link or hl.fg, "FlemmaFoldPreview should be defined")
+    end)
+
+    it("should define FlemmaFoldMeta after apply_syntax", function()
+      setup_and_apply()
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaFoldMeta" })
+      assert.is_truthy(hl.link or hl.fg, "FlemmaFoldMeta should be defined")
+    end)
+
+    it("should still define FlemmaToolPreview (unchanged)", function()
+      setup_and_apply()
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaToolPreview" })
+      assert.is_truthy(hl.link or hl.fg, "FlemmaToolPreview should still be defined")
+    end)
+
+    it("should accept renamed config key tool_use_title", function()
+      flemma.setup({
+        highlights = { tool_use_title = "DiagnosticInfo" },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant: test" })
+      highlight.apply_syntax()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaToolUseTitle" })
+      assert.is_truthy(hl.link or hl.fg, "FlemmaToolUseTitle should be defined via tool_use_title config key")
+    end)
+
+    it("should accept renamed config key tool_result_title", function()
+      flemma.setup({
+        highlights = { tool_result_title = "DiagnosticInfo" },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant: test" })
+      highlight.apply_syntax()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaToolResultTitle" })
+      assert.is_truthy(hl.link or hl.fg, "FlemmaToolResultTitle should be defined via tool_result_title config key")
+    end)
+  end)
 end)

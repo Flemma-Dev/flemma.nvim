@@ -300,10 +300,16 @@ M.apply_syntax = function()
 
   -- Set highlight for tool use and tool result syntax
   -- Note: Tool names and IDs in backticks are handled by treesitter markdown_inline
-  set_highlight("FlemmaToolUseTitle", syntax_config.highlights.tool_use)
-  set_highlight("FlemmaToolResultTitle", syntax_config.highlights.tool_result)
+  set_highlight("FlemmaToolIcon", syntax_config.highlights.tool_icon)
+  set_highlight("FlemmaToolName", syntax_config.highlights.tool_name)
+  set_highlight("FlemmaToolUseTitle", syntax_config.highlights.tool_use_title)
+  set_highlight("FlemmaToolResultTitle", syntax_config.highlights.tool_result_title)
   set_highlight("FlemmaToolResultError", syntax_config.highlights.tool_result_error)
   set_highlight("FlemmaToolPreview", syntax_config.highlights.tool_preview)
+
+  -- Set highlight for fold text segments
+  set_highlight("FlemmaFoldPreview", syntax_config.highlights.fold_preview)
+  set_highlight("FlemmaFoldMeta", syntax_config.highlights.fold_meta)
 
   -- Tool execution indicator highlights
   set_highlight("FlemmaToolPending", { link = "DiagnosticInfo", default = true })
