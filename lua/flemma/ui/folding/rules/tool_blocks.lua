@@ -5,7 +5,6 @@ local M = {}
 local utils = require("flemma.ui.folding.utils")
 
 M.name = "tool_blocks"
-M.level = 2
 M.auto_close = true
 
 ---Determine if a tool_result segment is in a terminal (foldable) state.

@@ -5,7 +5,6 @@ local M = {}
 local utils = require("flemma.ui.folding.utils")
 
 M.name = "messages"
-M.level = 1
 M.auto_close = false
 
 ---Populate fold map entries for message start/end boundaries.

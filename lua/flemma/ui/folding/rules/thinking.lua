@@ -5,7 +5,6 @@ local M = {}
 local utils = require("flemma.ui.folding.utils")
 
 M.name = "thinking"
-M.level = 2
 M.auto_close = true
 
 ---Populate fold map entries for all thinking block boundaries.

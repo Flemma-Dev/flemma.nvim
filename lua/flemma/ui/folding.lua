@@ -12,7 +12,6 @@ local query = require("flemma.ast.query")
 
 ---@class flemma.ui.folding.FoldRule
 ---@field name string
----@field level integer
 ---@field auto_close boolean
 ---@field populate fun(doc: flemma.ast.DocumentNode, fold_map: table<integer, string>)
 ---@field get_closeable_ranges fun(doc: flemma.ast.DocumentNode): flemma.ui.folding.CloseableRange[]
@@ -235,9 +234,12 @@ end
 ---
 ---Incremental fold recalculation only updates changed lines, but tool_use
 ---fold levels depend on distant tool_result segments — resetting foldmethod
----forces a complete re-evaluation.
+---forces a complete re-evaluation. The fold map cache is also invalidated
+---so get_fold_level rebuilds from the current AST even when changedtick
+---has not advanced (e.g., update_ui on the same event loop tick).
 ---@param bufnr integer
 function M.invalidate_folds(bufnr)
+  invalidate_cache()
   local winid = vim.fn.bufwinid(bufnr)
   if winid ~= -1 then
     local foldmethod = vim.fn.win_execute(winid, "echo &foldmethod")

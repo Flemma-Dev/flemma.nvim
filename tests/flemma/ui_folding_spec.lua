@@ -1086,7 +1086,6 @@ describe("UI Folding", function()
       -- Register a custom rule that marks line 2 at level 3
       folding.register({
         name = "custom",
-        level = 3,
         auto_close = false,
         populate = function(_, fold_map)
           local utils = require("flemma.ui.folding.utils")
@@ -1100,6 +1099,37 @@ describe("UI Folding", function()
       -- The custom rule's >3 should beat the messages rule's >1 on line 2
       local fold_level = folding.get_fold_level(2)
       assert.are.equal(">3", fold_level)
+    end)
+
+    it("should invalidate cache when a rule is registered after first evaluation", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You: question",
+        "@Assistant: response",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Prime the cache — only builtins are registered at this point
+      assert.are.equal(">1", folding.get_fold_level(2))
+
+      -- Register a rule that overrides line 2 AFTER cache was built
+      folding.register({
+        name = "late_override",
+        auto_close = false,
+        populate = function(_, fold_map)
+          local utils = require("flemma.ui.folding.utils")
+          utils.set_fold(fold_map, 2, ">3")
+        end,
+        get_closeable_ranges = function(_)
+          return {}
+        end,
+      })
+
+      -- Must see the new rule's effect despite the cache being primed earlier
+      assert.are.equal(">3", folding.get_fold_level(2))
     end)
 
     it("should load built-in rules lazily", function()

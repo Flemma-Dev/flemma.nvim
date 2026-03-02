@@ -5,7 +5,6 @@ local M = {}
 local utils = require("flemma.ui.folding.utils")
 
 M.name = "frontmatter"
-M.level = 2
 M.auto_close = false
 
 ---Populate fold map entries for frontmatter boundaries.

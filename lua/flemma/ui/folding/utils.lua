@@ -14,7 +14,7 @@ end
 ---is kept, making rule evaluation order irrelevant for correctness.
 ---@param fold_map table<integer, string>
 ---@param lnum integer 1-indexed line number
----@param fold_expr string e.g. ">2", "<2"
+---@param fold_expr string Fold expression in ">N" or "<N" format (e.g. ">2", "<1")
 function M.set_fold(fold_map, lnum, fold_expr)
   local existing = fold_map[lnum]
   if not existing then
