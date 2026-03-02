@@ -429,9 +429,15 @@ end
 
 ---Fold all completed/terminal blocks using rules and auto_close configuration.
 ---Uses ephemeral auto_closed_folds set for new-fold detection.
+---Skips when the buffer has not changed since the last call (changedtick guard in buffer state).
 ---@param bufnr integer
 function M.fold_completed_blocks(bufnr)
-  log.debug("fold_completed_blocks(): Folding completed blocks in buffer " .. bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  local tick = vim.api.nvim_buf_get_changedtick(bufnr)
+  if buffer_state.fold_completed_tick == tick then
+    return
+  end
+  buffer_state.fold_completed_tick = tick
 
   local winid = vim.fn.bufwinid(bufnr)
   if winid == -1 then
@@ -449,10 +455,11 @@ function M.fold_completed_blocks(bufnr)
   local current_config = state.get_config()
   local auto_close_config = current_config.editing and current_config.editing.auto_close or {}
 
-  local buffer_state = state.get_buffer_state(bufnr)
   if not buffer_state.auto_closed_folds then
     buffer_state.auto_closed_folds = {}
   end
+
+  local new_folds = {}
 
   ensure_rules_loaded()
   for _, rule in ipairs(rules) do
@@ -468,8 +475,13 @@ function M.fold_completed_blocks(bufnr)
       if should_auto_close and not buffer_state.auto_closed_folds[range.id] then
         safe_foldclose(winid, range.start_line, range.end_line)
         buffer_state.auto_closed_folds[range.id] = true
+        table.insert(new_folds, range.id)
       end
     end
+  end
+
+  if #new_folds > 0 then
+    log.debug("fold_completed_blocks(): Auto-closed " .. #new_folds .. " fold(s) in buffer " .. bufnr)
   end
 end
 

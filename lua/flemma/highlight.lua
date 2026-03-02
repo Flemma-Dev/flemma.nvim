@@ -5,7 +5,6 @@ local M = {}
 
 local log = require("flemma.logging")
 local state = require("flemma.state")
-local core = require("flemma.core")
 local roles = require("flemma.roles")
 
 ---@class flemma.highlight.RGB
@@ -384,13 +383,13 @@ M.setup = function()
   setup_signs()
 
   -- Set up autocmd for the chat filetype
+  -- NOTE: Only apply_syntax() here — update_ui is handled by the FlemmaUI augroup
+  -- (BufEnter/BufWinEnter/CursorHold) to avoid redundant fold/sign/ruler work.
   vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter", "FileType" }, {
     group = augroup,
     pattern = { "*.chat", "chat" },
-    callback = function(ev)
+    callback = function()
       M.apply_syntax()
-      -- Add rulers and thinking tag highlights via core module
-      core.update_ui(ev.buf)
     end,
   })
 end

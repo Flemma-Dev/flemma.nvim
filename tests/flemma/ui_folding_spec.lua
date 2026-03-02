@@ -1405,4 +1405,161 @@ describe("UI Folding", function()
       assert.are.equal(4, folding.count())
     end)
   end)
+
+  describe("update_ui changedtick stability", function()
+    it("should not change changedtick when update_ui is called on an unchanged buffer", function()
+      local ui = require("flemma.ui")
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: Checking.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "file1.txt",
+        "```",
+        "",
+        "@Assistant: Here are the files.",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Set up in a window with folding
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      folding.setup_folding()
+
+      -- First update_ui call to establish baseline
+      ui.update_ui(bufnr)
+      local tick_after_first = vim.api.nvim_buf_get_changedtick(bufnr)
+
+      -- Second update_ui call on unchanged buffer
+      ui.update_ui(bufnr)
+      local tick_after_second = vim.api.nvim_buf_get_changedtick(bufnr)
+
+      assert.are.equal(
+        tick_after_first,
+        tick_after_second,
+        "update_ui should not change changedtick on an unchanged buffer"
+      )
+    end)
+
+    it("CursorHold guard should prevent redundant fold_completed_blocks calls", function()
+      local ui = require("flemma.ui")
+      local state = require("flemma.state")
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: Checking.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "file1.txt",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      folding.setup_folding()
+
+      -- Simulate the CursorHold pattern:
+      -- 1. Read tick before update_ui
+      local tick_before = vim.api.nvim_buf_get_changedtick(bufnr)
+      -- 2. Call update_ui (as the autocmd does)
+      ui.update_ui(bufnr)
+      -- 3. Read tick after update_ui
+      local tick_after = vim.api.nvim_buf_get_changedtick(bufnr)
+
+      -- 4. Store ui_update_tick as the autocmd does (using the PRE-update tick)
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.ui_update_tick = tick_before
+
+      -- 5. Simulate next CursorHold: check guard
+      local tick_now = vim.api.nvim_buf_get_changedtick(bufnr)
+      local guard_would_skip = (buffer_state.ui_update_tick == tick_now)
+
+      -- If update_ui changed changedtick, the guard fails
+      -- (ui_update_tick holds the pre-update tick, tick_now holds the post-update tick)
+      assert.is_true(
+        guard_would_skip,
+        string.format(
+          "CursorHold guard should skip redundant update_ui calls "
+            .. "(ui_update_tick=%d, current_tick=%d, tick_before=%d, tick_after=%d)",
+          buffer_state.ui_update_tick,
+          tick_now,
+          tick_before,
+          tick_after
+        )
+      )
+    end)
+
+    it("fold_completed_blocks should skip when called twice on the same buffer state", function()
+      local state = require("flemma.state")
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: Checking.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "file1.txt",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      folding.setup_folding()
+
+      -- First call: should process folds normally
+      folding.fold_completed_blocks(bufnr)
+      local tool_use_folded = vim.fn.foldclosed(3)
+      assert.are.equal(3, tool_use_folded, "Tool use should be folded after first call")
+
+      -- Open the fold manually and clear auto_closed_folds tracking
+      -- This isolates the changedtick guard from the per-fold dedup
+      vim.cmd("3 foldopen")
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.auto_closed_folds = {}
+
+      -- Second call on same changedtick: should return early (fold_completed_tick guard)
+      -- WITHOUT the guard, the function would re-iterate rules, find the range
+      -- again, and re-close the fold (since auto_closed_folds was cleared)
+      folding.fold_completed_blocks(bufnr)
+
+      -- If the guard works, the fold stays open (function returned early)
+      -- If guard is missing, the fold gets re-closed (function re-executed fully)
+      assert.are.equal(-1, vim.fn.foldclosed(3), "fold_completed_blocks should skip when changedtick has not changed")
+    end)
+  end)
 end)
