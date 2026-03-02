@@ -6,6 +6,7 @@ local M = {}
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local core = require("flemma.core")
+local roles = require("flemma.roles")
 
 ---@class flemma.highlight.RGB
 ---@field r integer 0-255
@@ -282,9 +283,9 @@ M.apply_syntax = function()
     local ruler_fg = get_hl_color("FlemmaRuler", "fg") or get_default_color("fg")
     local ruler_roles = { "frontmatter", "user", "system", "assistant" }
     for _, role in ipairs(ruler_roles) do
-      local line_hl_group = "FlemmaLine" .. role:sub(1, 1):upper() .. role:sub(2)
+      local line_hl_group = "FlemmaLine" .. roles.capitalize(role)
       local role_bg = get_hl_color(line_hl_group, "bg")
-      local ruler_role_group = "FlemmaRuler" .. role:sub(1, 1):upper() .. role:sub(2)
+      local ruler_role_group = "FlemmaRuler" .. roles.capitalize(role)
       if role_bg then
         vim.api.nvim_set_hl(0, ruler_role_group, { fg = ruler_fg, bg = role_bg, default = true })
       else
@@ -317,11 +318,11 @@ local function setup_line_highlights()
     return
   end
 
-  local roles = { "frontmatter", "user", "system", "assistant" }
-  for _, role in ipairs(roles) do
-    local role_config = current_config.line_highlights[role]
+  local line_highlight_keys = { "frontmatter", "user", "system", "assistant" }
+  for _, key in ipairs(line_highlight_keys) do
+    local role_config = current_config.line_highlights[key]
     if role_config then
-      local group_name = "FlemmaLine" .. role:sub(1, 1):upper() .. role:sub(2)
+      local group_name = "FlemmaLine" .. roles.capitalize(key)
       set_highlight(group_name, role_config, "bg")
     end
   end
@@ -340,7 +341,7 @@ local function setup_signs()
     -- Iterate using internal keys
     for internal_role_key, sign_data in pairs(signs) do
       -- Define the specific highlight group name for the sign (e.g., FlemmaSignUser)
-      local sign_hl_group = "FlemmaSign" .. internal_role_key:sub(1, 1):upper() .. internal_role_key:sub(2)
+      local sign_hl_group = "FlemmaSign" .. roles.capitalize(internal_role_key)
 
       -- Set the sign highlight group if highlighting is enabled
       if sign_data.config.hl ~= false then

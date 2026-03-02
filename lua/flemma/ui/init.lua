@@ -8,6 +8,7 @@ local state = require("flemma.state")
 local config = require("flemma.config")
 local preview = require("flemma.ui.preview")
 local folding = require("flemma.ui.folding")
+local roles = require("flemma.roles")
 
 -- Extmark priority constants
 -- Higher values take precedence when multiple extmarks overlap on the same line.
@@ -92,11 +93,7 @@ function M.add_rulers(bufnr, doc)
         -- Determine ruler highlight: per-role variant if adopting line highlights
         local ruler_hl = "FlemmaRuler"
         if adopt then
-          local role_key = string.lower(msg.role)
-          if msg.role == "You" then
-            role_key = "user"
-          end
-          ruler_hl = "FlemmaRuler" .. role_key:sub(1, 1):upper() .. role_key:sub(2)
+          ruler_hl = roles.highlight_group("FlemmaRuler", msg.role)
         end
         -- Create virtual line with ruler
         local ruler_text = string.rep(ruler_config.char, win_width)
@@ -319,11 +316,8 @@ function M.place_signs(bufnr, start_line, end_line, role)
     return
   end
 
-  -- Map the display role ("You", "System", "Assistant") to the internal config key ("user", "system", "assistant")
-  local internal_role_key = string.lower(role) -- Default to lowercase
-  if role == "You" then
-    internal_role_key = "user" -- Map "You" specifically to "user"
-  end
+  -- Map the display role to the internal config key
+  local internal_role_key = roles.to_key(role)
 
   local sign_name = "flemma_" .. internal_role_key -- Construct sign name like "flemma_user"
   local sign_config = current_config.signs[internal_role_key] -- Look up config using "user", "system", etc.
@@ -370,14 +364,8 @@ function M.apply_line_highlights(bufnr, doc)
 
   -- Highlight messages
   for _, msg in ipairs(doc.messages) do
-    -- Map the display role to internal config key
-    local internal_role_key = string.lower(msg.role)
-    if msg.role == "You" then
-      internal_role_key = "user"
-    end
-
     -- Construct highlight group name (e.g., "FlemmaLineUser")
-    local hl_group = "FlemmaLine" .. internal_role_key:sub(1, 1):upper() .. internal_role_key:sub(2)
+    local hl_group = roles.highlight_group("FlemmaLine", msg.role)
 
     -- Apply line highlight to each line in the message
     for lnum = msg.position.start_line, msg.position.end_line do
@@ -546,7 +534,7 @@ function M.add_tool_previews(bufnr, doc)
 
   -- Find tool_result segments with status and empty content
   for _, msg in ipairs(doc.messages) do
-    if msg.role == "You" then
+    if roles.is_user(msg.role) then
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "tool_result" and seg.status and seg.content == "" then
           local tool_use = tool_use_map[seg.tool_use_id]
@@ -840,7 +828,7 @@ function M.reposition_tool_indicators(bufnr)
   local doc = parser.get_parsed_document(bufnr)
   local result_positions = {}
   for _, msg in ipairs(doc.messages) do
-    if msg.role == "You" then
+    if roles.is_user(msg.role) then
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "tool_result" then
           result_positions[seg.tool_use_id] = seg.position.start_line - 1 -- 0-based

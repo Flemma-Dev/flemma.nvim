@@ -1,6 +1,7 @@
 local ast = require("flemma.ast")
 local codeblock = require("flemma.codeblock")
 local json = require("flemma.json")
+local roles = require("flemma.roles")
 
 ---@class flemma.Parser
 local M = {}
@@ -535,7 +536,7 @@ local function parse_message(lines, start_idx, line_offset, diagnostics)
     for _, diag in ipairs(msg_diagnostics) do
       table.insert(diagnostics, diag)
     end
-  elseif role == "You" then
+  elseif roles.is_user(role) then
     -- Parse tool_result blocks and regular content
     local msg_diagnostics
     segments, msg_diagnostics = parse_user_segments(content_lines, content_start_line, {})

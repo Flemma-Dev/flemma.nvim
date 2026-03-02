@@ -3,6 +3,7 @@
 local M = {}
 
 local utils = require("flemma.ui.folding.utils")
+local roles = require("flemma.roles")
 
 M.name = "tool_blocks"
 M.auto_close = true
@@ -26,7 +27,7 @@ end
 local function build_completion_map(doc)
   local completed = {}
   for _, msg in ipairs(doc.messages) do
-    if msg.role == "You" then
+    if roles.is_user(msg.role) then
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "tool_result" then
           ---@cast seg flemma.ast.ToolResultSegment

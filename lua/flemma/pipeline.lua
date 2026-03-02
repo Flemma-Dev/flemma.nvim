@@ -1,5 +1,6 @@
 local processor = require("flemma.processor")
 local ast = require("flemma.ast")
+local roles = require("flemma.roles")
 
 ---@class flemma.Pipeline
 local M = {}
@@ -99,12 +100,12 @@ function M.run(doc, context, evaluated_frontmatter)
   local last_assistant_idx = nil
 
   for _, msg in ipairs(evaluated.messages) do
-    if msg.role == "You" then
-      table.insert(collected, { role = "user", evaluated_parts = msg.parts })
-    elseif msg.role == "Assistant" then
-      table.insert(collected, { role = "assistant", evaluated_parts = msg.parts })
+    if roles.is_user(msg.role) then
+      table.insert(collected, { role = roles.to_key(msg.role), evaluated_parts = msg.parts })
+    elseif msg.role == roles.ASSISTANT then
+      table.insert(collected, { role = roles.to_key(msg.role), evaluated_parts = msg.parts })
       last_assistant_idx = #collected
-    elseif msg.role == "System" then
+    elseif msg.role == roles.SYSTEM then
       local parts, diags = ast.to_generic_parts(msg.parts, source_file)
       for _, d in ipairs(diags) do
         table.insert(all_diagnostics, d)

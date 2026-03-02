@@ -8,6 +8,7 @@ local injector = require("flemma.tools.injector")
 local editing = require("flemma.buffer.editing")
 local state = require("flemma.state")
 local log = require("flemma.logging")
+local roles = require("flemma.roles")
 
 ---@class flemma.tools.PendingExecution
 ---@field tool_id string
@@ -86,7 +87,7 @@ local function move_cursor_after_result(bufnr, tool_id, mode)
 
   local target_line = nil
   for _, msg in ipairs(doc.messages) do
-    if msg.role == "You" then
+    if roles.is_user(msg.role) then
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "tool_result" and seg.tool_use_id == tool_id then
           if mode == "result" then
@@ -572,7 +573,7 @@ function M.execute_at_cursor(bufnr)
   local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
   for _, msg in ipairs(doc.messages) do
-    if msg.role == "You" then
+    if roles.is_user(msg.role) then
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "tool_result" and seg.tool_use_id == ctx.tool_id and seg.status then
           if seg.status == "rejected" or seg.status == "denied" then

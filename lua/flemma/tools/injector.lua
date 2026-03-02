@@ -3,6 +3,8 @@
 ---@class flemma.tools.Injector
 local M = {}
 
+local roles = require("flemma.roles")
+
 --- Error messages for tool status resolution
 M.DENIED_MESSAGE = "The tool was denied by a policy."
 M.REJECTED_MESSAGE = "This tool has been rejected by the user."
@@ -46,7 +48,7 @@ end
 --- @return table|nil segment, table|nil message
 local function find_existing_tool_result(doc, tool_id)
   for _, msg in ipairs(doc.messages) do
-    if msg.role == "You" then
+    if roles.is_user(msg.role) then
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "tool_result" and seg.tool_use_id == tool_id then
           return seg, msg
@@ -64,7 +66,7 @@ end
 local function find_you_message_after(doc, after_msg_idx)
   if after_msg_idx < #doc.messages then
     local next_msg = doc.messages[after_msg_idx + 1]
-    if next_msg.role == "You" then
+    if roles.is_user(next_msg.role) then
       return next_msg, after_msg_idx + 1
     end
   end
