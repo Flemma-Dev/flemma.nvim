@@ -950,11 +950,25 @@ function M.send_to_provider(opts)
             ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
             last_line = vim.api.nvim_buf_line_count(bufnr)
 
-            -- Check if response starts with a code fence
-            if content_lines[1]:match("^```") then
-              -- Add a newline before the code fence
+            -- Number of extra lines inserted for the header (beyond one)
+            local header_lines = 1
+
+            if content_lines[1]:match("^%*%*Tool Use:%*%*") then
+              -- Tool use header on its own line so the block is independently foldable
+              ui.buffer_cmd(bufnr, "undojoin")
+              vim.api.nvim_buf_set_lines(
+                bufnr,
+                last_line,
+                last_line,
+                false,
+                { "@Assistant:", "", content_lines[1] }
+              )
+              header_lines = 3
+            elseif content_lines[1]:match("^```") then
+              -- Code fence on its own line (no blank separator needed)
               ui.buffer_cmd(bufnr, "undojoin")
               vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant:", content_lines[1] })
+              header_lines = 2
             else
               -- Start with @Assistant: prefix as normal
               ui.buffer_cmd(bufnr, "undojoin")
@@ -964,7 +978,13 @@ function M.send_to_provider(opts)
             -- Add remaining lines if any
             if #content_lines > 1 then
               ui.buffer_cmd(bufnr, "undojoin")
-              vim.api.nvim_buf_set_lines(bufnr, last_line + 1, last_line + 1, false, { unpack(content_lines, 2) })
+              vim.api.nvim_buf_set_lines(
+                bufnr,
+                last_line + header_lines,
+                last_line + header_lines,
+                false,
+                { unpack(content_lines, 2) }
+              )
             end
           else
             -- Get the last line's content
