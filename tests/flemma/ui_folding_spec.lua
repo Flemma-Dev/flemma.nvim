@@ -8,6 +8,7 @@ describe("UI Folding", function()
     package.loaded["flemma.ui"] = nil
     package.loaded["flemma.ui.preview"] = nil
     package.loaded["flemma.ui.folding"] = nil
+    package.loaded["flemma.ui.folding.utils"] = nil
     package.loaded["flemma.ui.folding.rules.frontmatter"] = nil
     package.loaded["flemma.ui.folding.rules.thinking"] = nil
     package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
@@ -903,6 +904,7 @@ describe("UI Folding", function()
       -- Reconfigure with thinking auto-close disabled
       package.loaded["flemma"] = nil
       package.loaded["flemma.ui.folding"] = nil
+      package.loaded["flemma.ui.folding.utils"] = nil
       package.loaded["flemma.ui.folding.rules.frontmatter"] = nil
       package.loaded["flemma.ui.folding.rules.thinking"] = nil
       package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
@@ -940,6 +942,7 @@ describe("UI Folding", function()
     it("should respect auto_close.tool_use = false", function()
       package.loaded["flemma"] = nil
       package.loaded["flemma.ui.folding"] = nil
+      package.loaded["flemma.ui.folding.utils"] = nil
       package.loaded["flemma.ui.folding.rules.frontmatter"] = nil
       package.loaded["flemma.ui.folding.rules.thinking"] = nil
       package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
@@ -1016,6 +1019,103 @@ describe("UI Folding", function()
       -- Second call: should NOT re-close because the ID is already in auto_closed_folds
       folding.fold_completed_blocks(bufnr)
       assert.are.equal(-1, vim.fn.foldclosed(2), "Thinking block should stay open after second auto-close call")
+    end)
+  end)
+
+  describe("highest foldlevel wins", function()
+    it("should keep >2 when messages rule runs after thinking rule on same line", function()
+      -- This test validates that the fold map uses highest-foldlevel-wins
+      -- rather than first-writer-wins. If a thinking block starts on the
+      -- same line that a message starts, >2 should beat >1 regardless of
+      -- rule evaluation order.
+      local utils = require("flemma.ui.folding.utils")
+      local fold_map = {}
+
+      -- Simulate messages rule writing >1 first
+      utils.set_fold(fold_map, 5, ">1")
+      -- Then thinking rule writes >2 on the same line
+      utils.set_fold(fold_map, 5, ">2")
+
+      assert.are.equal(">2", fold_map[5])
+    end)
+
+    it("should not downgrade >2 to >1", function()
+      local utils = require("flemma.ui.folding.utils")
+      local fold_map = {}
+
+      -- Higher level first
+      utils.set_fold(fold_map, 10, ">2")
+      -- Lower level attempt
+      utils.set_fold(fold_map, 10, ">1")
+
+      assert.are.equal(">2", fold_map[10])
+    end)
+
+    it("should keep <2 over <1 on the same line", function()
+      local utils = require("flemma.ui.folding.utils")
+      local fold_map = {}
+
+      utils.set_fold(fold_map, 7, "<1")
+      utils.set_fold(fold_map, 7, "<2")
+
+      assert.are.equal("<2", fold_map[7])
+    end)
+  end)
+
+  describe("registry", function()
+    it("should register a custom fold rule", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You: question",
+        "@Assistant: response",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Register a custom rule that marks line 2 at level 3
+      folding.register({
+        name = "custom",
+        level = 3,
+        auto_close = false,
+        populate = function(_, fold_map)
+          local utils = require("flemma.ui.folding.utils")
+          utils.set_fold(fold_map, 2, ">3")
+        end,
+        get_closeable_ranges = function(_)
+          return {}
+        end,
+      })
+
+      -- The custom rule's >3 should beat the messages rule's >1 on line 2
+      local fold_level = folding.get_fold_level(2)
+      assert.are.equal(">3", fold_level)
+    end)
+
+    it("should load built-in rules lazily", function()
+      -- Clear and re-require to reset state
+      package.loaded["flemma.ui.folding"] = nil
+      package.loaded["flemma.ui.folding.utils"] = nil
+      package.loaded["flemma.ui.folding.rules.frontmatter"] = nil
+      package.loaded["flemma.ui.folding.rules.thinking"] = nil
+      package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
+      package.loaded["flemma.ui.folding.rules.messages"] = nil
+      local fresh_folding = require("flemma.ui.folding")
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You: question",
+        "@Assistant: response",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Built-in rules should be loaded on first call to get_fold_level
+      local fold_level = fresh_folding.get_fold_level(1)
+      assert.are.equal(">1", fold_level)
     end)
   end)
 

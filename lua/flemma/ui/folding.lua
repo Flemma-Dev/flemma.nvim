@@ -1,20 +1,20 @@
 --- Folding module for Flemma UI
 --- Manages fold levels, fold text, fold setup, and auto-close behavior.
---- Uses a registry of fold rules following the BUILTINS pattern.
+--- Uses a registry of fold rules following the BUILTIN_RULES pattern.
 ---@class flemma.ui.Folding
 local M = {}
 
 local state = require("flemma.state")
 local log = require("flemma.logging")
+local loader = require("flemma.loader")
 local preview = require("flemma.ui.preview")
 local config = require("flemma.config")
 
----@type flemma.ui.folding.FoldRule[]
-local BUILTINS = {
-  require("flemma.ui.folding.rules.frontmatter"),
-  require("flemma.ui.folding.rules.thinking"),
-  require("flemma.ui.folding.rules.tool_blocks"),
-  require("flemma.ui.folding.rules.messages"),
+local BUILTIN_RULES = {
+  "flemma.ui.folding.rules.frontmatter",
+  "flemma.ui.folding.rules.thinking",
+  "flemma.ui.folding.rules.tool_blocks",
+  "flemma.ui.folding.rules.messages",
 }
 
 -- ============================================================================
@@ -24,13 +24,60 @@ local BUILTINS = {
 ---@type { changedtick: integer, bufnr: integer, map: table<integer, string> }
 local fold_map_cache = { changedtick = -1, bufnr = -1, map = {} }
 
----Build a fold map by iterating all BUILTINS rules.
----First-writer-wins: if a line already has a fold level, later rules skip it.
+---Invalidate the fold map cache so the next get_fold_level rebuilds it.
+local function invalidate_cache()
+  fold_map_cache = { changedtick = -1, bufnr = -1, map = {} }
+end
+
+-- ============================================================================
+-- Rule Registry
+-- ============================================================================
+
+---@type flemma.ui.folding.FoldRule[]
+local rules = {}
+local initialized = false
+
+---Load built-in rules on first use.
+local function ensure_rules_loaded()
+  if initialized then
+    return
+  end
+  initialized = true
+  for _, module_path in ipairs(BUILTIN_RULES) do
+    table.insert(rules, loader.load(module_path))
+  end
+end
+
+---Register a fold rule by module path or table.
+---Invalidates the fold map cache since the rule set changed.
+---@param source string|flemma.ui.folding.FoldRule Module path or rule table
+function M.register(source)
+  ensure_rules_loaded()
+  if type(source) == "string" then
+    table.insert(rules, loader.load(source))
+  else
+    table.insert(rules, source)
+  end
+  invalidate_cache()
+end
+
+---Clear all registered rules and reset initialization state.
+---Used by tests for isolation.
+function M.clear()
+  rules = {}
+  initialized = false
+  invalidate_cache()
+end
+
+---Build a fold map by iterating all registered rules.
+---Highest foldlevel wins: when two rules claim the same line, the entry
+---with the greater numeric level is kept (via utils.set_fold).
 ---@param doc flemma.ast.DocumentNode
 ---@return table<integer, string>
 local function build_fold_map(doc)
+  ensure_rules_loaded()
   local fold_map = {}
-  for _, rule in ipairs(BUILTINS) do
+  for _, rule in ipairs(rules) do
     rule.populate(doc, fold_map)
   end
   return fold_map
@@ -309,7 +356,8 @@ function M.fold_completed_blocks(bufnr)
     buffer_state.auto_closed_folds = {}
   end
 
-  for _, rule in ipairs(BUILTINS) do
+  ensure_rules_loaded()
+  for _, rule in ipairs(rules) do
     local ranges = rule.get_closeable_ranges(doc)
     for _, range in ipairs(ranges) do
       -- Check config for this range's config_key (or rule name); fall back to rule's default

@@ -2,6 +2,8 @@
 ---@class flemma.ui.folding.rules.ToolBlocks : flemma.ui.folding.FoldRule
 local M = {}
 
+local utils = require("flemma.ui.folding.utils")
+
 M.name = "tool_blocks"
 M.level = 2
 M.auto_close = true
@@ -57,22 +59,14 @@ function M.populate(doc, fold_map)
       if seg.kind == "tool_use" then
         ---@cast seg flemma.ast.ToolUseSegment
         if completed[seg.id] then
-          if not fold_map[seg.position.start_line] then
-            fold_map[seg.position.start_line] = ">2"
-          end
-          if not fold_map[seg.position.end_line] then
-            fold_map[seg.position.end_line] = "<2"
-          end
+          utils.set_fold(fold_map, seg.position.start_line, ">2")
+          utils.set_fold(fold_map, seg.position.end_line, "<2")
         end
       elseif seg.kind == "tool_result" then
         ---@cast seg flemma.ast.ToolResultSegment
         if is_tool_result_terminal(seg) then
-          if not fold_map[seg.position.start_line] then
-            fold_map[seg.position.start_line] = ">2"
-          end
-          if not fold_map[seg.position.end_line] then
-            fold_map[seg.position.end_line] = "<2"
-          end
+          utils.set_fold(fold_map, seg.position.start_line, ">2")
+          utils.set_fold(fold_map, seg.position.end_line, "<2")
         end
       end
 

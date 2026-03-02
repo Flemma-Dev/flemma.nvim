@@ -2,6 +2,8 @@
 ---@class flemma.ui.folding.rules.Thinking : flemma.ui.folding.FoldRule
 local M = {}
 
+local utils = require("flemma.ui.folding.utils")
+
 M.name = "thinking"
 M.level = 2
 M.auto_close = true
@@ -13,12 +15,8 @@ function M.populate(doc, fold_map)
   for _, msg in ipairs(doc.messages) do
     for _, seg in ipairs(msg.segments) do
       if seg.kind == "thinking" and seg.position then
-        if not fold_map[seg.position.start_line] then
-          fold_map[seg.position.start_line] = ">2"
-        end
-        if not fold_map[seg.position.end_line] then
-          fold_map[seg.position.end_line] = "<2"
-        end
+        utils.set_fold(fold_map, seg.position.start_line, ">2")
+        utils.set_fold(fold_map, seg.position.end_line, "<2")
       end
     end
   end

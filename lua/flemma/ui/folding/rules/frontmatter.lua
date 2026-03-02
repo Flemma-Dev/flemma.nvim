@@ -15,6 +15,8 @@
 ---@class flemma.ui.folding.rules.Frontmatter : flemma.ui.folding.FoldRule
 local M = {}
 
+local utils = require("flemma.ui.folding.utils")
+
 M.name = "frontmatter"
 M.level = 2
 M.auto_close = false
@@ -27,12 +29,8 @@ function M.populate(doc, fold_map)
   if not fm then
     return
   end
-  if not fold_map[fm.position.start_line] then
-    fold_map[fm.position.start_line] = ">2"
-  end
-  if not fold_map[fm.position.end_line] then
-    fold_map[fm.position.end_line] = "<2"
-  end
+  utils.set_fold(fold_map, fm.position.start_line, ">2")
+  utils.set_fold(fold_map, fm.position.end_line, "<2")
 end
 
 ---Get closeable ranges for auto-fold. Frontmatter is never auto-closed by default.
