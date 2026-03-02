@@ -276,18 +276,54 @@ local function coalesce_segments(segments)
   return entries
 end
 
+---Get the body text for a tool use (custom format_preview or generic key-value).
+---Handles newline collapsing and post-hoc truncation for custom formatters.
+---@param tool_name string
+---@param input table<string, any>
+---@param available integer Available width for the body
+---@return string
+function M.get_tool_use_body(tool_name, input, available)
+  local registry = require("flemma.tools.registry")
+  local tool_def = registry.get(tool_name)
+
+  local body
+  if tool_def and tool_def.format_preview then
+    body = tool_def.format_preview(input, available)
+    body = body:gsub("\n", display.get_newline_char())
+  else
+    local keys = vim.tbl_keys(input)
+    if #keys == 0 then
+      return ""
+    end
+    body = M.format_tool_preview_body(input, available)
+  end
+
+  -- Post-hoc truncation for custom format_preview that may ignore max_length
+  if #body > available then
+    local truncated_length = available - #CONTENT_PREVIEW_TRUNCATION_MARKER
+    if truncated_length < 0 then
+      truncated_length = 0
+    end
+    body = body:sub(1, truncated_length) .. CONTENT_PREVIEW_TRUNCATION_MARKER
+  end
+
+  return body
+end
+
 ---Build a composite fold preview from a message's segments in buffer order.
 ---Consecutive text segments are merged; tool_use and tool_result segments produce
----tool previews. Entries are joined with ' | ' and truncated to fit max_length.
+---per-segment highlighted chunks. Entries are joined with ' | ' separators.
 ---@param msg flemma.ast.MessageNode
 ---@param max_length integer Available width for the preview body (excluding role prefix and suffix)
 ---@param doc? flemma.ast.DocumentNode Document for resolving tool names from tool_result IDs
----@return string
-function M.format_message_fold_preview(msg, max_length, doc)
+---@param content_hl? string Highlight group for text entries (default: "FlemmaFoldPreview")
+---@return {[1]:string, [2]:string}[]
+function M.format_message_fold_preview(msg, max_length, doc, content_hl)
+  content_hl = content_hl or "FlemmaFoldPreview"
   local entries = coalesce_segments(msg.segments)
 
   if #entries == 0 then
-    return ""
+    return {}
   end
 
   -- Build tool name lookup only when there are tool_result entries and a doc is available
@@ -302,8 +338,19 @@ function M.format_message_fold_preview(msg, max_length, doc)
     end
   end
 
-  local parts = {}
+  ---@type {[1]:string, [2]:string}[]
+  local chunks = {}
   local used = 0
+
+  ---Append an overflow indicator and stop iteration
+  ---@param remaining integer Number of remaining entries
+  local function add_overflow(remaining)
+    if used > 0 then
+      table.insert(chunks, { SEGMENT_SEPARATOR, "FlemmaFoldMeta" })
+    end
+    local text = remaining == 1 and "(+1 tool)" or string.format("(+%d more)", remaining)
+    table.insert(chunks, { text, "FlemmaFoldMeta" })
+  end
 
   for i, entry in ipairs(entries) do
     local remaining_entries = #entries - i
@@ -311,12 +358,7 @@ function M.format_message_fold_preview(msg, max_length, doc)
     local available = max_length - used - separator_cost
 
     if available <= 0 then
-      local overflow = #entries - i + 1
-      if overflow == 1 then
-        table.insert(parts, "(+1 tool)")
-      else
-        table.insert(parts, string.format("(+%d more)", overflow))
-      end
+      add_overflow(#entries - i + 1)
       break
     end
 
@@ -325,52 +367,83 @@ function M.format_message_fold_preview(msg, max_length, doc)
       remainder_reserve = #SEGMENT_SEPARATOR + #string.format("(+%d more)", remaining_entries)
     end
 
-    local preview
+    ---@type {[1]:string, [2]:string}[]
+    local entry_chunks = {}
+    local entry_width
+
     if entry.kind == "tool_use" then
       local tool_seg = entry.segment --[[@as flemma.ast.ToolUseSegment]]
       local width_for_tool = available - remainder_reserve
       if width_for_tool < MIN_TOOL_PREVIEW_WIDTH then
-        local overflow = #entries - i + 1
-        if overflow == 1 then
-          table.insert(parts, "(+1 tool)")
-        else
-          table.insert(parts, string.format("(+%d more)", overflow))
-        end
+        add_overflow(#entries - i + 1)
         break
       end
-      preview = M.format_tool_preview(tool_seg.name, tool_seg.input, width_for_tool)
+      -- Build name + body chunks
+      local name_prefix_width = #tool_seg.name + #": "
+      local body = M.get_tool_use_body(tool_seg.name, tool_seg.input, width_for_tool - name_prefix_width)
+      if body ~= "" then
+        table.insert(entry_chunks, { tool_seg.name, "FlemmaToolName" })
+        table.insert(entry_chunks, { ": " .. body, "FlemmaFoldPreview" })
+        entry_width = #tool_seg.name + #": " + #body
+      else
+        table.insert(entry_chunks, { tool_seg.name, "FlemmaToolName" })
+        entry_width = #tool_seg.name
+      end
     elseif entry.kind == "tool_result" then
       local result_seg = entry.segment --[[@as flemma.ast.ToolResultSegment]]
       local tool_name = (tool_name_map and tool_name_map[result_seg.tool_use_id]) or "result"
       local width_for_result = available - remainder_reserve
       if width_for_result < MIN_TOOL_PREVIEW_WIDTH then
-        local overflow = #entries - i + 1
-        if overflow == 1 then
-          table.insert(parts, "(+1 tool)")
-        else
-          table.insert(parts, string.format("(+%d more)", overflow))
-        end
+        add_overflow(#entries - i + 1)
         break
       end
-      preview = M.format_tool_result_preview(tool_name, result_seg.content, result_seg.is_error, width_for_result)
+      -- Build name + separator + optional error + body chunks
+      local prefix_width = #tool_name + #": "
+      if result_seg.is_error then
+        prefix_width = prefix_width + #"(error) "
+      end
+      local body_available = width_for_result - prefix_width
+      local body = M.format_content_preview(result_seg.content, body_available)
+
+      table.insert(entry_chunks, { tool_name, "FlemmaToolName" })
+      entry_width = #tool_name
+
+      if body ~= "" or result_seg.is_error then
+        table.insert(entry_chunks, { ": ", "FlemmaFoldPreview" })
+        entry_width = entry_width + #": "
+        if result_seg.is_error then
+          table.insert(entry_chunks, { "(error) ", "FlemmaToolResultError" })
+          entry_width = entry_width + #"(error) "
+        end
+        if body ~= "" then
+          table.insert(entry_chunks, { body, "FlemmaFoldPreview" })
+          entry_width = entry_width + #body
+        end
+      end
     else
-      preview = M.format_content_preview(entry.value --[[@as string]], available - remainder_reserve)
+      local text_preview = M.format_content_preview(entry.value --[[@as string]], available - remainder_reserve)
+      if text_preview == "" then
+        goto continue
+      end
+      table.insert(entry_chunks, { text_preview, content_hl })
+      entry_width = #text_preview
     end
 
-    if preview == "" then
+    if #entry_chunks == 0 then
       goto continue
     end
 
     if used > 0 then
+      table.insert(chunks, { SEGMENT_SEPARATOR, "FlemmaFoldMeta" })
       used = used + #SEGMENT_SEPARATOR
     end
-    used = used + #preview
-    table.insert(parts, preview)
+    vim.list_extend(chunks, entry_chunks)
+    used = used + entry_width
 
     ::continue::
   end
 
-  return table.concat(parts, SEGMENT_SEPARATOR)
+  return chunks
 end
 
 return M

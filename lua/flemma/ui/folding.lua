@@ -188,36 +188,12 @@ local function strwidth(s)
 end
 
 ---Get the body text for a tool use fold (custom format_preview or generic key-value).
+---Delegates to the shared preview helper.
 ---@param tool_seg flemma.ast.ToolUseSegment
 ---@param available integer Available width for the body
 ---@return string
 local function get_tool_use_body(tool_seg, available)
-  local registry = require("flemma.tools.registry")
-  local tool_def = registry.get(tool_seg.name)
-
-  local body
-  if tool_def and tool_def.format_preview then
-    body = tool_def.format_preview(tool_seg.input, available)
-    local display = require("flemma.ui.display")
-    body = body:gsub("\n", display.get_newline_char())
-  else
-    local keys = vim.tbl_keys(tool_seg.input)
-    if #keys == 0 then
-      return ""
-    end
-    body = preview.format_tool_preview_body(tool_seg.input, available)
-  end
-
-  -- Post-hoc truncation for custom format_preview that may ignore max_length
-  if strwidth(body) > available then
-    -- Truncate to fit: use byte-level truncation then verify display width
-    while strwidth(body) > available - 1 do
-      body = body:sub(1, #body - 1)
-    end
-    body = body .. "…"
-  end
-
-  return body
+  return preview.get_tool_use_body(tool_seg.name, tool_seg.input, available)
 end
 
 ---Get fold text for display.
@@ -370,12 +346,16 @@ function M.get_fold_text()
     local content_hl = roles.highlight_group("Flemma", msg.role)
 
     local chrome_width = strwidth(role_marker) + strwidth(" ") + strwidth(" ") + strwidth(suffix)
-    local fold_preview = preview.format_message_fold_preview(msg, text_width - chrome_width, doc)
-    return {
+    local preview_chunks = preview.format_message_fold_preview(msg, text_width - chrome_width, doc, content_hl)
+    ---@type {[1]:string, [2]:string}[]
+    local chunks = {
       { role_marker, role_hl },
-      { " " .. fold_preview .. " ", content_hl },
-      { suffix, "FlemmaFoldMeta" },
+      { " ", content_hl },
     }
+    vim.list_extend(chunks, preview_chunks)
+    table.insert(chunks, { " ", content_hl })
+    table.insert(chunks, { suffix, "FlemmaFoldMeta" })
+    return chunks
   end
 
   return { { vim.fn.getline(foldstart_lnum), "Folded" } }
