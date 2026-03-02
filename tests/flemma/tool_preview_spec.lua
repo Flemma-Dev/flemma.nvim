@@ -20,16 +20,29 @@ describe("format_content_preview", function()
 
   it("preserves newline indicators when collapsing whitespace", function()
     local result = ui_preview.format_content_preview("line1  extra\n  line2  extra")
-    -- Each line is trimmed, then joined with ⤶; interior spaces collapsed
-    assert.is_truthy(result:match("⤶"), "Should have newline indicator")
+    -- Each line is trimmed, then joined with ↵; interior spaces collapsed
+    assert.is_truthy(result:match("↵"), "Should have newline indicator")
     assert.is_falsy(result:match("  "), "Should not have consecutive spaces")
   end)
 
   it("preserves multiple consecutive newline indicators", function()
     local result = ui_preview.format_content_preview("line1\n\n\nline2")
-    -- Empty lines become empty strings after trim, joined by ⤶
-    -- The ⤶ chars should NOT be collapsed
-    assert.is_truthy(result:match("⤶⤶"), "Should preserve multiple consecutive newline indicators")
+    -- Empty lines become empty strings after trim, joined by ↵
+    -- The ↵ chars should NOT be collapsed
+    assert.is_truthy(result:match("↵↵"), "Should preserve multiple consecutive newline indicators")
+  end)
+
+  it("uses eol from listchars when defined", function()
+    local saved = vim.opt.listchars:get()
+    vim.opt.listchars:append({ eol = "$" })
+
+    package.loaded["flemma.ui.preview"] = nil
+    local preview = require("flemma.ui.preview")
+    local result = preview.format_content_preview("line1\nline2")
+    assert.is_truthy(result:match("%$"), "Should use eol char from listchars")
+    assert.is_falsy(result:match("↵"), "Should NOT use default newline char")
+
+    vim.opt.listchars = saved
   end)
 end)
 
@@ -113,7 +126,7 @@ describe("Tool Preview", function()
 
     it("collapses newlines in string values", function()
       local result = ui_preview.format_tool_preview("run_cmd", { command = "echo hello\necho world" })
-      assert.are.equal('run_cmd: command="echo hello⤶echo world"', result)
+      assert.are.equal('run_cmd: command="echo hello↵echo world"', result)
     end)
 
     it("uses custom format_preview from tool registry", function()
@@ -153,7 +166,7 @@ describe("Tool Preview", function()
       })
 
       local result = ui_preview.format_tool_preview("newline_tool", {})
-      assert.are.equal("newline_tool: line1⤶line2", result)
+      assert.are.equal("newline_tool: line1↵line2", result)
 
       registry.register("newline_tool", nil)
     end)
@@ -682,8 +695,8 @@ describe("format_message_fold_preview", function()
     -- Should be one merged text preview with newline indicators, NOT multiple ' | ' entries
     assert.is_truthy(result:match("summary"), "Should contain first line content")
     assert.is_truthy(result:match("Total RAM"), "Should contain second line content")
-    -- The newline char ⤶ joins lines within a single text preview
-    assert.is_truthy(result:match("⤶"), "Should use newline indicator within merged text")
+    -- The newline char ↵ joins lines within a single text preview
+    assert.is_truthy(result:match("↵"), "Should use newline indicator within merged text")
     -- No segment separator should appear (all text merges into one entry)
     -- Count occurrences of the exact segment separator " | "
     -- Since content has no pipes, any " | " would be a segment separator
@@ -779,7 +792,7 @@ describe("format_tool_result_preview", function()
 
   it("collapses multiline content", function()
     local result = preview_mod.format_tool_result_preview("bash", "line1\nline2\nline3", false)
-    assert.is_truthy(result:match("⤶"), "Should collapse newlines")
+    assert.is_truthy(result:match("↵"), "Should collapse newlines")
     assert.is_truthy(result:match("^bash: "), "Should start with tool name")
   end)
 end)

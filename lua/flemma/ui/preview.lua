@@ -8,8 +8,16 @@ local query = require("flemma.ast.query")
 -- Constants for preview text
 local MAX_CONTENT_PREVIEW_LINES = 10
 local DEFAULT_MAX_LENGTH = 80
-local CONTENT_PREVIEW_NEWLINE_CHAR = "⤶"
+local DEFAULT_NEWLINE_CHAR = "↵"
 local CONTENT_PREVIEW_TRUNCATION_MARKER = "…"
+
+---Get the newline indicator character.
+---Uses the `eol` value from `listchars` when defined, otherwise falls back to `↵`.
+---@return string
+function M.get_newline_char()
+  local listchars = vim.opt.listchars:get()
+  return listchars.eol or DEFAULT_NEWLINE_CHAR
+end
 
 ---Get the available text area width for a window (total width minus signcolumn, numbercolumn, foldcolumn)
 ---Returns DEFAULT_MAX_LENGTH when the window is invalid (e.g., buffer not displayed or test environment).
@@ -50,9 +58,9 @@ function M.format_content_preview(content, max_length)
     table.insert(lines, vim.trim(line))
   end
 
-  local preview = table.concat(lines, CONTENT_PREVIEW_NEWLINE_CHAR)
+  local preview = table.concat(lines, M.get_newline_char())
   preview = vim.trim(preview)
-  -- Collapse runs of 2+ spaces/tabs to a single space (but preserve ⤶ sequences)
+  -- Collapse runs of 2+ spaces/tabs to a single space (but preserve newline indicator sequences)
   preview = preview:gsub("[ \t][ \t]+", " ")
 
   if #preview > max_length then
@@ -129,7 +137,7 @@ function M.format_tool_preview_body(input, max_length)
     local value = input[key]
     local formatted
     if type(value) == "string" then
-      local display_value = value:gsub("\n", CONTENT_PREVIEW_NEWLINE_CHAR):gsub('"', '\\"')
+      local display_value = value:gsub("\n", M.get_newline_char()):gsub('"', '\\"')
       formatted = key .. '="' .. display_value .. '"'
     elseif type(value) == "table" then
       formatted = key .. "=" .. format_table_value(value)
@@ -173,7 +181,7 @@ function M.format_tool_preview(tool_name, input, max_length)
   if tool_def and tool_def.format_preview then
     body = tool_def.format_preview(input, available)
     -- Collapse newlines for single-line display
-    body = body:gsub("\n", CONTENT_PREVIEW_NEWLINE_CHAR)
+    body = body:gsub("\n", M.get_newline_char())
   else
     local keys = vim.tbl_keys(input)
     if #keys == 0 then

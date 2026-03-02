@@ -242,7 +242,7 @@ tools.register("my_search", {
 })
 ```
 
-The function receives the input table and the available character width (the total preview width minus the `"name: "` prefix). Return a single-line string; newlines are collapsed to `⤶` and the result is truncated to fit the editor width.
+The function receives the input table and the available character width (the total preview width minus the `"name: "` prefix). Return a single-line string; newlines are collapsed to the `eol` character from `listchars` (or `↵` by default) and the result is truncated to fit the editor width.
 
 ### Styling
 
