@@ -523,7 +523,11 @@ local function show_pending_for_buffer(bufnr)
         buffer_state[bufnr] = { notifications = {} }
       end
 
-      -- Compute aligned widths across existing + new notification
+      -- Enforce limit early so dismissed notifications don't inflate item padding
+      local notif_config = get_config()
+      enforce_limit(bufnr, math.max(0, notif_config.limit - 1))
+
+      -- Compute aligned widths across surviving + new notification
       local item_widths = compute_aligned_widths(bufnr, notif_data.segments)
 
       -- Re-render existing notifications with updated alignment
@@ -539,7 +543,6 @@ local function show_pending_for_buffer(bufnr)
 
       -- Insert at front (most recent first)
       table.insert(buffer_state[bufnr].notifications, 1, notification)
-      enforce_limit(bufnr, get_config().limit)
       reposition_notifications(bufnr)
     end
   end
@@ -572,7 +575,11 @@ function M.show(segments, bufnr)
       return
     end
 
-    -- Compute aligned widths across all active notifications + the new one
+    -- Enforce limit early: dismiss excess before computing widths,
+    -- so old notifications don't inflate item padding
+    enforce_limit(bufnr, math.max(0, config.limit - 1))
+
+    -- Compute aligned widths across surviving notifications + the new one
     local item_widths = compute_aligned_widths(bufnr, segments)
 
     -- Re-render existing notifications with updated alignment
@@ -592,7 +599,6 @@ function M.show(segments, bufnr)
     -- Insert at front (most recent first)
     table.insert(buffer_state[bufnr].notifications, 1, notification)
 
-    enforce_limit(bufnr, config.limit)
     reposition_notifications(bufnr)
   end)
 end
