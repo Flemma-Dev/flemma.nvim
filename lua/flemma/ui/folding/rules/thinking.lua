@@ -39,13 +39,12 @@ function M.get_closeable_ranges(doc)
     return ranges
   end
 
-  local second_to_last = doc.messages[#doc.messages - 1]
-  local counter = 0
+  local message_index = #doc.messages - 1
+  local second_to_last = doc.messages[message_index]
   for _, seg in ipairs(second_to_last.segments) do
     if seg.kind == "thinking" and seg.position then
-      counter = counter + 1
       table.insert(ranges, {
-        id = "thinking:" .. counter,
+        id = "thinking:" .. message_index,
         start_line = seg.position.start_line,
         end_line = seg.position.end_line,
       })
