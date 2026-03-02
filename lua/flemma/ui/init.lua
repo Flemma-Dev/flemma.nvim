@@ -31,11 +31,19 @@ local line_hl_ns = vim.api.nvim_create_namespace("flemma_line_highlights")
 local tool_exec_ns = vim.api.nvim_create_namespace("flemma_tool_execution")
 local tool_preview_ns = vim.api.nvim_create_namespace("flemma_tool_preview")
 
---- Per-tool indicator state: key(bufnr, tool_id) -> { extmark_id, timer, bufnr, tool_id }
-local tool_indicators = {}
+---@class flemma.ui.ToolIndicator
+---@field extmark_id integer
+---@field timer integer|nil
 
-local function indicator_key(bufnr, tool_id)
-  return tostring(bufnr) .. ":" .. tool_id
+---Get or initialize the tool indicators table for a buffer
+---@param bufnr integer
+---@return table<string, flemma.ui.ToolIndicator>
+local function get_tool_indicators(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  if not buffer_state.tool_indicators then
+    buffer_state.tool_indicators = {}
+  end
+  return buffer_state.tool_indicators
 end
 
 --- Execute a command in the context of a buffer's window
@@ -669,7 +677,6 @@ function M.show_pending_tool_indicator(bufnr, tool_id, header_line)
 
   M.clear_tool_indicator(bufnr, tool_id)
 
-  local key = indicator_key(bufnr, tool_id)
   local line_idx = header_line - 1
 
   local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
@@ -680,11 +687,9 @@ function M.show_pending_tool_indicator(bufnr, tool_id, header_line)
     spell = false,
   })
 
-  tool_indicators[key] = {
+  get_tool_indicators(bufnr)[tool_id] = {
     extmark_id = extmark_id,
     timer = nil,
-    bufnr = bufnr,
-    tool_id = tool_id,
   }
 end
 
@@ -701,7 +706,6 @@ function M.show_tool_indicator(bufnr, tool_id, header_line)
   -- Clean up any existing indicator for this tool
   M.clear_tool_indicator(bufnr, tool_id)
 
-  local key = indicator_key(bufnr, tool_id)
   local line_idx = header_line - 1
   local frame = 1
 
@@ -713,17 +717,16 @@ function M.show_tool_indicator(bufnr, tool_id, header_line)
     spell = false,
   })
 
-  local timer = vim.fn.timer_start(100, function()
+  local timer ---@type integer
+  timer = vim.fn.timer_start(100, function()
     if not vim.api.nvim_buf_is_valid(bufnr) then
-      local ind = tool_indicators[key]
-      if ind and ind.timer then
-        vim.fn.timer_stop(ind.timer)
-      end
-      tool_indicators[key] = nil
+      -- Buffer gone — stop ourselves; buffer state cleanup may have already run
+      vim.fn.timer_stop(timer)
       return
     end
 
-    local ind = tool_indicators[key]
+    local indicators = get_tool_indicators(bufnr)
+    local ind = indicators[tool_id]
     if not ind then
       return
     end
@@ -744,11 +747,9 @@ function M.show_tool_indicator(bufnr, tool_id, header_line)
     })
   end, { ["repeat"] = -1 })
 
-  tool_indicators[key] = {
+  get_tool_indicators(bufnr)[tool_id] = {
     extmark_id = extmark_id,
     timer = timer,
-    bufnr = bufnr,
-    tool_id = tool_id,
   }
 end
 
@@ -758,8 +759,8 @@ end
 ---@param tool_id string
 ---@param success boolean
 function M.update_tool_indicator(bufnr, tool_id, success)
-  local key = indicator_key(bufnr, tool_id)
-  local ind = tool_indicators[key]
+  local indicators = get_tool_indicators(bufnr)
+  local ind = indicators[tool_id]
   if not ind then
     return
   end
@@ -771,14 +772,14 @@ function M.update_tool_indicator(bufnr, tool_id, success)
   end
 
   if not vim.api.nvim_buf_is_valid(bufnr) then
-    tool_indicators[key] = nil
+    indicators[tool_id] = nil
     return
   end
 
   -- Query extmark's current position (may have shifted due to buffer edits)
   local current_line = get_extmark_line(bufnr, ind.extmark_id)
   if not current_line then
-    tool_indicators[key] = nil
+    indicators[tool_id] = nil
     return
   end
 
@@ -806,8 +807,8 @@ end
 ---@param bufnr integer
 ---@param tool_id string
 function M.clear_tool_indicator(bufnr, tool_id)
-  local key = indicator_key(bufnr, tool_id)
-  local ind = tool_indicators[key]
+  local indicators = get_tool_indicators(bufnr)
+  local ind = indicators[tool_id]
   if not ind then
     return
   end
@@ -816,13 +817,11 @@ function M.clear_tool_indicator(bufnr, tool_id)
     vim.fn.timer_stop(ind.timer)
   end
 
-  -- Always delete from the buffer where the extmark actually lives (ind.bufnr),
-  -- not the passed bufnr, to avoid leaking extmarks on cross-buffer tool_id collisions.
-  if vim.api.nvim_buf_is_valid(ind.bufnr) then
-    pcall(vim.api.nvim_buf_del_extmark, ind.bufnr, tool_exec_ns, ind.extmark_id)
+  if vim.api.nvim_buf_is_valid(bufnr) then
+    pcall(vim.api.nvim_buf_del_extmark, bufnr, tool_exec_ns, ind.extmark_id)
   end
 
-  tool_indicators[key] = nil
+  indicators[tool_id] = nil
 end
 
 --- Reposition all tool indicators to their correct header lines after buffer modification.
@@ -850,25 +849,24 @@ function M.reposition_tool_indicators(bufnr)
     end
   end
 
-  for _, ind in pairs(tool_indicators) do
-    if ind.bufnr == bufnr then
-      local target_line = result_positions[ind.tool_id]
-      if target_line then
-        local current_line = get_extmark_line(bufnr, ind.extmark_id)
-        if current_line and current_line ~= target_line then
-          -- Read current virtual text to preserve it during repositioning
-          local ok, pos =
-            pcall(vim.api.nvim_buf_get_extmark_by_id, bufnr, tool_exec_ns, ind.extmark_id, { details = true })
-          if ok and pos and #pos >= 3 then
-            pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, target_line, 0, {
-              id = ind.extmark_id,
-              virt_text = pos[3].virt_text,
-              virt_text_pos = "eol",
-              hl_mode = "combine",
-              priority = PRIORITY.TOOL_EXECUTION,
-              spell = false,
-            })
-          end
+  local indicators = get_tool_indicators(bufnr)
+  for tool_id, ind in pairs(indicators) do
+    local target_line = result_positions[tool_id]
+    if target_line then
+      local current_line = get_extmark_line(bufnr, ind.extmark_id)
+      if current_line and current_line ~= target_line then
+        -- Read current virtual text to preserve it during repositioning
+        local ok, pos =
+          pcall(vim.api.nvim_buf_get_extmark_by_id, bufnr, tool_exec_ns, ind.extmark_id, { details = true })
+        if ok and pos and #pos >= 3 then
+          pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, target_line, 0, {
+            id = ind.extmark_id,
+            virt_text = pos[3].virt_text,
+            virt_text_pos = "eol",
+            hl_mode = "combine",
+            priority = PRIORITY.TOOL_EXECUTION,
+            spell = false,
+          })
         end
       end
     end
@@ -884,8 +882,8 @@ end
 ---@param tool_id string
 ---@param delay_ms integer Milliseconds to wait before clearing
 function M.schedule_tool_indicator_clear(bufnr, tool_id, delay_ms)
-  local key = indicator_key(bufnr, tool_id)
-  local ind = tool_indicators[key]
+  local indicators = get_tool_indicators(bufnr)
+  local ind = indicators[tool_id]
   if not ind then
     return
   end
@@ -896,7 +894,7 @@ function M.schedule_tool_indicator_clear(bufnr, tool_id, delay_ms)
     if cleared then
       return
     end
-    local current = tool_indicators[key]
+    local current = get_tool_indicators(bufnr)[tool_id]
     if not current or current.extmark_id ~= expected_extmark then
       cleared = true
       return -- indicator was replaced by re-execution
@@ -930,11 +928,10 @@ end
 --- Clear all tool indicators for a buffer (used on buffer cleanup)
 ---@param bufnr integer
 function M.clear_all_tool_indicators(bufnr)
+  local indicators = get_tool_indicators(bufnr)
   local to_clear = {}
-  for _, ind in pairs(tool_indicators) do
-    if ind.bufnr == bufnr then
-      table.insert(to_clear, ind.tool_id)
-    end
+  for tool_id in pairs(indicators) do
+    table.insert(to_clear, tool_id)
   end
 
   for _, tool_id in ipairs(to_clear) do
