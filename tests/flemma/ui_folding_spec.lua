@@ -13,6 +13,9 @@ describe("UI Folding", function()
     package.loaded["flemma.ui.folding.rules.thinking"] = nil
     package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
     package.loaded["flemma.ui.folding.rules.messages"] = nil
+    package.loaded["flemma.ast"] = nil
+    package.loaded["flemma.ast.nodes"] = nil
+    package.loaded["flemma.ast.query"] = nil
     package.loaded["flemma.parser"] = nil
     package.loaded["flemma.config"] = nil
 
@@ -909,6 +912,9 @@ describe("UI Folding", function()
       package.loaded["flemma.ui.folding.rules.thinking"] = nil
       package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
       package.loaded["flemma.ui.folding.rules.messages"] = nil
+      package.loaded["flemma.ast"] = nil
+      package.loaded["flemma.ast.nodes"] = nil
+      package.loaded["flemma.ast.query"] = nil
       flemma = require("flemma")
       flemma.setup({ editing = { auto_close = { thinking = false } } })
       folding = require("flemma.ui.folding")
@@ -947,6 +953,9 @@ describe("UI Folding", function()
       package.loaded["flemma.ui.folding.rules.thinking"] = nil
       package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
       package.loaded["flemma.ui.folding.rules.messages"] = nil
+      package.loaded["flemma.ast"] = nil
+      package.loaded["flemma.ast.nodes"] = nil
+      package.loaded["flemma.ast.query"] = nil
       flemma = require("flemma")
       flemma.setup({ editing = { auto_close = { tool_use = false, tool_result = false } } })
       folding = require("flemma.ui.folding")
@@ -1101,6 +1110,9 @@ describe("UI Folding", function()
       package.loaded["flemma.ui.folding.rules.thinking"] = nil
       package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
       package.loaded["flemma.ui.folding.rules.messages"] = nil
+      package.loaded["flemma.ast"] = nil
+      package.loaded["flemma.ast.nodes"] = nil
+      package.loaded["flemma.ast.query"] = nil
       local fresh_folding = require("flemma.ui.folding")
 
       local bufnr = vim.api.nvim_create_buf(false, false)

@@ -8,7 +8,20 @@ local state = require("flemma.state")
 local log = require("flemma.logging")
 local loader = require("flemma.loader")
 local preview = require("flemma.ui.preview")
-local config = require("flemma.config")
+local query = require("flemma.ast.query")
+
+---@class flemma.ui.folding.FoldRule
+---@field name string
+---@field level integer
+---@field auto_close boolean
+---@field populate fun(doc: flemma.ast.DocumentNode, fold_map: table<integer, string>)
+---@field get_closeable_ranges fun(doc: flemma.ast.DocumentNode): flemma.ui.folding.CloseableRange[]
+
+---@class flemma.ui.folding.CloseableRange
+---@field id string
+---@field start_line integer
+---@field end_line integer
+---@field config_key? string Override rule.name for auto_close config lookup
 
 local BUILTIN_RULES = {
   "flemma.ui.folding.rules.frontmatter",
@@ -102,91 +115,16 @@ function M.get_fold_level(lnum)
 end
 
 -- ============================================================================
--- Fold Text Helpers (moved from preview.lua)
+-- Fold Text
 -- ============================================================================
 
----Get the cached AST document for the current buffer
+---Get the cached AST document for the current buffer.
 ---@return flemma.ast.DocumentNode
 local function get_document()
   local bufnr = vim.api.nvim_get_current_buf()
   local parser = require("flemma.parser")
   return parser.get_parsed_document(bufnr)
 end
-
----Find a thinking segment whose start line matches the given line number
----@param doc flemma.ast.DocumentNode
----@param lnum integer 1-indexed line number
----@return flemma.ast.ThinkingSegment|nil segment
-local function find_thinking_at_line(doc, lnum)
-  for _, msg in ipairs(doc.messages) do
-    for _, seg in ipairs(msg.segments) do
-      if seg.kind == "thinking" and seg.position then
-        ---@cast seg flemma.ast.ThinkingSegment
-        if seg.position.start_line == lnum then
-          return seg
-        end
-      end
-    end
-  end
-  return nil
-end
-
----Find a tool_use or tool_result segment starting at the given line number
----@param doc flemma.ast.DocumentNode
----@param lnum integer 1-indexed line number
----@return flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|nil segment
----@return "tool_use"|"tool_result"|nil kind
-local function find_tool_segment_at_line(doc, lnum)
-  for _, msg in ipairs(doc.messages) do
-    for _, seg in ipairs(msg.segments) do
-      if seg.position and seg.position.start_line == lnum then
-        if seg.kind == "tool_use" then
-          ---@cast seg flemma.ast.ToolUseSegment
-          return seg, "tool_use"
-        elseif seg.kind == "tool_result" then
-          ---@cast seg flemma.ast.ToolResultSegment
-          return seg, "tool_result"
-        end
-      end
-    end
-  end
-  return nil, nil
-end
-
----Find a message whose start line matches the given line number
----@param doc flemma.ast.DocumentNode
----@param lnum integer 1-indexed line number
----@return flemma.ast.MessageNode|nil message
-local function find_message_at_line(doc, lnum)
-  for _, msg in ipairs(doc.messages) do
-    if msg.position.start_line == lnum then
-      return msg
-    end
-  end
-  return nil
-end
-
----Build a tool_use_id -> tool_name lookup from all Assistant messages in a document.
----@param doc flemma.ast.DocumentNode
----@return table<string, string>
-local function build_tool_name_map(doc)
-  local map = {}
-  for _, msg in ipairs(doc.messages) do
-    if msg.role == "Assistant" then
-      for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_use" then
-          local tool_seg = seg --[[@as flemma.ast.ToolUseSegment]]
-          map[tool_seg.id] = tool_seg.name
-        end
-      end
-    end
-  end
-  return map
-end
-
--- ============================================================================
--- Fold Text
--- ============================================================================
 
 ---Get fold text for display
 ---@return string
@@ -212,7 +150,7 @@ function M.get_fold_text()
   end
 
   -- Check if this is a thinking fold (level 2)
-  local thinking_seg = find_thinking_at_line(doc, foldstart_lnum)
+  local thinking_seg = query.find_thinking_at_line(doc, foldstart_lnum)
   if thinking_seg then
     if thinking_seg.redacted then
       return string.format("<thinking redacted> (%d lines)", total_fold_lines)
@@ -231,7 +169,7 @@ function M.get_fold_text()
   end
 
   -- Check if this is a tool_use or tool_result fold (level 2)
-  local tool_seg, tool_kind = find_tool_segment_at_line(doc, foldstart_lnum)
+  local tool_seg, tool_kind = query.find_tool_segment_at_line(doc, foldstart_lnum)
   if tool_seg then
     if tool_kind == "tool_use" then
       ---@cast tool_seg flemma.ast.ToolUseSegment
@@ -244,7 +182,7 @@ function M.get_fold_text()
       ---@cast tool_seg flemma.ast.ToolResultSegment
       -- Resolve tool name from matching tool_use
       local prefix = "◆ Tool Result: "
-      local tool_name_map = build_tool_name_map(doc)
+      local tool_name_map = query.build_tool_name_map(doc)
       local tool_name = tool_name_map[tool_seg.tool_use_id] or "result"
       local suffix = string.format(" (%d lines)", total_fold_lines)
       local available = text_width - #prefix - #suffix - 1
@@ -255,7 +193,7 @@ function M.get_fold_text()
   end
 
   -- Message folds (level 1)
-  local msg = find_message_at_line(doc, foldstart_lnum)
+  local msg = query.find_message_at_line(doc, foldstart_lnum)
   if msg then
     local role_prefix = "@" .. msg.role .. ":"
     -- Account for surrounding chrome: "@Role:  (N lines)"
@@ -290,7 +228,7 @@ function M.setup_folding(bufnr)
   vim.wo[winid].foldmethod = "expr"
   vim.wo[winid].foldexpr = 'v:lua.require("flemma.ui.folding").get_fold_level(v:lnum)'
   vim.wo[winid].foldtext = 'v:lua.require("flemma.ui.folding").get_fold_text()'
-  vim.wo[winid].foldlevel = config.editing.foldlevel
+  vim.wo[winid].foldlevel = state.get_config().editing.foldlevel
 end
 
 ---Force Neovim to re-evaluate all fold levels for a buffer.
@@ -318,12 +256,13 @@ end
 ---@param start_lnum integer 1-indexed start line
 ---@param end_lnum integer 1-indexed end line
 local function safe_foldclose(winid, start_lnum, end_lnum)
-  local fold_exists = vim.fn.win_execute(winid, string.format("echo foldlevel(%d)", start_lnum))
-  if not (tonumber(vim.trim(fold_exists)) and tonumber(vim.trim(fold_exists)) > 0) then
+  local fold_level_str = vim.fn.win_execute(winid, string.format("echo foldlevel(%d)", start_lnum))
+  local fold_level = tonumber(vim.trim(fold_level_str))
+  if not fold_level or fold_level <= 0 then
     return
   end
-  local already_closed = vim.fn.win_execute(winid, string.format("echo foldclosed(%d)", start_lnum))
-  if tonumber(vim.trim(already_closed)) ~= -1 then
+  local fold_closed_str = vim.fn.win_execute(winid, string.format("echo foldclosed(%d)", start_lnum))
+  if tonumber(vim.trim(fold_closed_str)) ~= -1 then
     return
   end
   vim.fn.win_execute(winid, string.format("%d,%d foldclose", start_lnum, end_lnum))

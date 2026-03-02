@@ -3,6 +3,8 @@
 ---@class flemma.ui.Preview
 local M = {}
 
+local query = require("flemma.ast.query")
+
 -- Constants for preview text
 local MAX_CONTENT_PREVIEW_LINES = 10
 local DEFAULT_MAX_LENGTH = 80
@@ -226,24 +228,6 @@ function M.format_tool_result_preview(tool_name, content, is_error, max_length)
   return name_prefix .. body
 end
 
----Build a tool_use_id → tool_name lookup from all Assistant messages in a document.
----@param doc flemma.ast.DocumentNode
----@return table<string, string>
-local function build_tool_name_map(doc)
-  local map = {}
-  for _, msg in ipairs(doc.messages) do
-    if msg.role == "Assistant" then
-      for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_use" then
-          local tool_seg = seg --[[@as flemma.ast.ToolUseSegment]]
-          map[tool_seg.id] = tool_seg.name
-        end
-      end
-    end
-  end
-  return map
-end
-
 ---@alias flemma.ui.preview.CoalescedEntry {kind: "text"|"tool_use"|"tool_result", value: string|nil, segment: flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|nil}
 
 ---Coalesce raw AST segments into logical preview entries.
@@ -312,7 +296,7 @@ function M.format_message_fold_preview(msg, max_length, doc)
   if doc then
     for _, entry in ipairs(entries) do
       if entry.kind == "tool_result" then
-        tool_name_map = build_tool_name_map(doc)
+        tool_name_map = query.build_tool_name_map(doc)
         break
       end
     end
