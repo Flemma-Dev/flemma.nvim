@@ -46,6 +46,13 @@
 ---@field user flemma.config.HighlightValue
 ---@field assistant flemma.config.HighlightValue
 
+---@class flemma.Config.Notifications
+---@field enabled boolean Whether notifications are shown
+---@field timeout integer Milliseconds before auto-dismiss. 0 for persistent.
+---@field limit integer Maximum visible notifications at once.
+---@field position "overlay" Display mode ("overlay" pins to window top).
+---@field zindex integer Floating window stacking priority.
+
 ---@class flemma.config.Pricing
 ---@field enabled boolean
 
@@ -147,7 +154,7 @@
 ---@field signs? flemma.config.Signs
 ---@field spinner? flemma.config.Spinner
 ---@field line_highlights? flemma.config.LineHighlights
----@field notify? flemma.notify.Options
+---@field notifications? flemma.Config.Notifications
 ---@field pricing? flemma.config.Pricing
 ---@field statusline? flemma.config.Statusline
 ---@field provider? string
@@ -170,7 +177,7 @@
 ---@field signs flemma.config.Signs
 ---@field spinner flemma.config.Spinner
 ---@field line_highlights flemma.config.LineHighlights
----@field notify flemma.notify.Options
+---@field notifications flemma.Config.Notifications
 ---@field pricing flemma.config.Pricing
 ---@field statusline flemma.config.Statusline
 ---@field provider string
@@ -243,7 +250,13 @@ return {
     user = { dark = "Normal", light = "Normal" }, -- Background color for user message lines
     assistant = { dark = "Normal+bg:#102020", light = "Normal-bg:#102020" }, -- Background color for assistant message lines
   },
-  notify = require("flemma.notify").default_opts,
+  notifications = {
+    enabled = true,
+    timeout = 10000,
+    limit = 1,
+    position = "overlay",
+    zindex = 30,
+  },
   pricing = {
     enabled = true, -- Whether to show pricing information in notifications
   },

@@ -160,22 +160,23 @@ Collapsed folds show a preview of their content with per-segment syntax highligh
 
 ## Notifications
 
-Completed requests and diagnostics are shown in floating notification windows positioned at the top-right of the buffer window. Customise the appearance via the `notify` key:
+Completed requests show a single-line notification bar pinned to the top of the chat window. The bar displays model, provider, token counts, cost, and cache statistics — all rendered using priority-based truncation so content degrades gracefully in narrow terminals. Higher-priority items (model name, cost) survive; lower-priority items (individual token breakdowns) are dropped first.
 
 ```lua
-notify = {
-  enabled = true,        -- set to false to suppress all notifications
-  timeout = 8000,        -- milliseconds before auto-dismiss
-  max_width = 60,        -- character width cap before wrapping
-  padding = 1,           -- spaces around content
-  border = "rounded",    -- any Neovim border style ("single", "double", "rounded", "shadow", etc.)
-  title = nil,           -- optional window title
+notifications = {
+  enabled = true,        -- set to false to suppress all notification bars
+  timeout = 10000,       -- milliseconds before auto-dismiss (0 = persistent)
+  limit = 3,             -- maximum stacked notifications per buffer
+  position = "overlay",  -- "overlay" (pinned to window top)
+  zindex = 30,           -- floating window z-index (above nvim-treesitter-context)
 }
 ```
 
-See `lua/flemma/notify.lua` for the full default options.
+Notification bars use dedicated highlight groups (`FlemmaNotificationsBar`, `FlemmaNotificationsModel`, `FlemmaNotificationsCost`, etc.) for distinct styling of each segment. The bottom-most bar has an underline border (`FlemmaNotificationsBottom`) to visually separate notifications from buffer content.
 
-Notifications stack vertically when multiple are active. Each `.chat` buffer has its own notification stack – notifications for hidden buffers are queued and shown when the buffer becomes visible. Recall the most recent notification with `:Flemma notification:recall`.
+Bars stack vertically when multiple are active — the most recent appears at the top, older ones shift down. Each `.chat` buffer has its own notification stack. Notifications for hidden buffers are queued and shown when the buffer becomes visible. Bars re-render automatically on window resize to reflow content for the new width. Recall the most recent notification with `:Flemma notification:recall`.
+
+See `lua/flemma/notifications.lua` for the full implementation.
 
 ## Extmark priority
 

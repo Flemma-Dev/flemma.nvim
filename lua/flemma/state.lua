@@ -146,7 +146,7 @@ function M.cleanup_buffer_state(bufnr)
     buffer_states[bufnr] = nil
   end
   -- Clean up any notifications associated with this buffer
-  require("flemma.notify").cleanup_buffer(bufnr)
+  require("flemma.notifications").cleanup_buffer(bufnr)
   -- Discard any pending write queue operations
   local writequeue = require("flemma.buffer.writequeue")
   writequeue.clear(bufnr)

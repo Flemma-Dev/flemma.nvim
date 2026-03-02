@@ -314,6 +314,46 @@ M.apply_syntax = function()
   set_highlight("FlemmaToolPending", { link = "DiagnosticInfo", default = true })
   set_highlight("FlemmaToolSuccess", { link = "DiagnosticOk", default = true })
   set_highlight("FlemmaToolError", { link = "DiagnosticError", default = true })
+
+  -- Notification bar highlight groups
+  vim.api.nvim_set_hl(0, "FlemmaNotificationsBar", { link = "StatusLine", default = true })
+
+  -- Derive border underline color from StatusLine bg — shift it to create visible contrast
+  local bar_bg_hex = get_hl_color("StatusLine", "bg")
+  local normal_bg_hex = get_hl_color("Normal", "bg")
+  local border_sp
+  if bar_bg_hex then
+    local bar_bg_rgb = hex_to_rgb(bar_bg_hex)
+    if bar_bg_rgb then
+      -- Darken for light backgrounds, lighten for dark backgrounds
+      local is_dark = (bar_bg_rgb.r + bar_bg_rgb.g + bar_bg_rgb.b) < 384
+      local shift = { r = 30, g = 30, b = 30 }
+      local adjusted = blend_colors(bar_bg_rgb, shift, is_dark and "+" or "-")
+      border_sp = tonumber(rgb_to_hex(adjusted):gsub("^#", ""), 16)
+    end
+  end
+  if not border_sp and normal_bg_hex then
+    local normal_bg_rgb = hex_to_rgb(normal_bg_hex)
+    if normal_bg_rgb then
+      local is_dark = (normal_bg_rgb.r + normal_bg_rgb.g + normal_bg_rgb.b) < 384
+      local shift = { r = 40, g = 40, b = 40 }
+      local adjusted = blend_colors(normal_bg_rgb, shift, is_dark and "+" or "-")
+      border_sp = tonumber(rgb_to_hex(adjusted):gsub("^#", ""), 16)
+    end
+  end
+  if not border_sp then
+    local fallback = vim.api.nvim_get_hl(0, { name = "Comment", link = false })
+    border_sp = fallback.fg
+  end
+  vim.api.nvim_set_hl(0, "FlemmaNotificationsBottom", { underline = true, sp = border_sp, default = true })
+  vim.api.nvim_set_hl(0, "FlemmaNotificationsModel", { link = "Special", default = true })
+  vim.api.nvim_set_hl(0, "FlemmaNotificationsProvider", { link = "Comment", default = true })
+  vim.api.nvim_set_hl(0, "FlemmaNotificationsSeparator", { fg = border_sp, default = true })
+  vim.api.nvim_set_hl(0, "FlemmaNotificationsCost", { bold = true, default = true })
+  vim.api.nvim_set_hl(0, "FlemmaNotificationsLabel", { link = "Type", default = true })
+  vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheGood", { link = "DiagnosticOk", default = true })
+  vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheBad", { link = "DiagnosticWarn", default = true })
+  vim.api.nvim_set_hl(0, "FlemmaNotificationsTokens", { link = "Comment", default = true })
 end
 
 ---Setup line highlight groups for full-line background highlighting

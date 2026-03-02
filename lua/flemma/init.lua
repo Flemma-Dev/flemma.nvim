@@ -114,7 +114,7 @@ M.setup = function(user_opts)
   highlight.setup()
 
   -- Set up notifications
-  require("flemma.notify").setup()
+  require("flemma.notifications").setup()
 
   -- Set up chat filetype handling
   ui.setup_chat_filetype_autocmds()

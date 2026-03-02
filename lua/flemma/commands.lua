@@ -21,7 +21,7 @@ local function setup_commands()
   local navigation = require("flemma.navigation")
   local log = require("flemma.logging")
   local registry = require("flemma.provider.registry")
-  local notify_module = require("flemma.notify")
+  local notifications_module = require("flemma.notifications")
   local modeline = require("flemma.utilities.modeline")
   local presets = require("flemma.presets")
 
@@ -374,7 +374,7 @@ local function setup_commands()
     children = {
       recall = {
         action = function()
-          notify_module.recall_last()
+          notifications_module.recall_last()
         end,
       },
     },
