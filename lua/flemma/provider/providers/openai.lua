@@ -231,7 +231,7 @@ function M.build_request(self, prompt, context)
         elseif p.kind == "tool_use" then
           -- Flush any accumulated text before the tool call
           if #text_parts > 0 then
-            local text = table.concat(text_parts, "")
+            local text = vim.trim(table.concat(text_parts, ""))
             if #text > 0 then
               item_index = item_index + 1
               table.insert(input_items, {
@@ -260,7 +260,7 @@ function M.build_request(self, prompt, context)
 
       -- Flush remaining text
       if #text_parts > 0 then
-        local text = table.concat(text_parts, "")
+        local text = vim.trim(table.concat(text_parts, ""))
         if #text > 0 then
           item_index = item_index + 1
           table.insert(input_items, {

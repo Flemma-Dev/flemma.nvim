@@ -429,7 +429,7 @@ function M.build_request(self, prompt, _context)
         end
       end
       -- Add text if any
-      local combined_text = table.concat(text_parts, "")
+      local combined_text = vim.trim(table.concat(text_parts, ""))
       if #combined_text > 0 then
         local text_part = { text = combined_text }
         -- If we have a signature but no function calls, attach signature to the text part
