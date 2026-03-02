@@ -198,7 +198,8 @@ local function get_tool_use_body(tool_seg, available)
   local body
   if tool_def and tool_def.format_preview then
     body = tool_def.format_preview(tool_seg.input, available)
-    body = body:gsub("\n", preview.get_newline_char())
+    local display = require("flemma.ui.display")
+    body = body:gsub("\n", display.get_newline_char())
   else
     local keys = vim.tbl_keys(tool_seg.input)
     if #keys == 0 then
