@@ -63,6 +63,19 @@ local function blend_colors(base_rgb, mod_rgb, direction)
   end
 end
 
+---Mix two colors by linear interpolation
+---@param color_a flemma.highlight.RGB
+---@param color_b flemma.highlight.RGB
+---@param factor number 0.0 = all color_a, 1.0 = all color_b
+---@return flemma.highlight.RGB
+local function mix_colors(color_a, color_b, factor)
+  return {
+    r = math.floor(color_a.r * (1 - factor) + color_b.r * factor + 0.5),
+    g = math.floor(color_a.g * (1 - factor) + color_b.g * factor + 0.5),
+    b = math.floor(color_a.b * (1 - factor) + color_b.b * factor + 0.5),
+  }
+end
+
 ---Get color from a highlight group attribute
 ---@param group_name string Highlight group name (e.g., "Normal")
 ---@param attr string Attribute to get ("fg" or "bg")
@@ -316,28 +329,47 @@ M.apply_syntax = function()
   set_highlight("FlemmaToolError", { link = "DiagnosticError", default = true })
 
   -- Notification bar highlight groups
-  vim.api.nvim_set_hl(0, "FlemmaNotificationsBar", { link = "StatusLine", default = true })
-
-  -- Derive border underline color from StatusLine bg — shift it to create visible contrast
-  local bar_bg_hex = get_hl_color("StatusLine", "bg")
+  -- Blend: Normal bg → mix 30% StatusLine bg → mix 20% DiffChange fg
   local normal_bg_hex = get_hl_color("Normal", "bg")
-  local border_sp
-  if bar_bg_hex then
-    local bar_bg_rgb = hex_to_rgb(bar_bg_hex)
-    if bar_bg_rgb then
-      -- Darken for light backgrounds, lighten for dark backgrounds
-      local is_dark = (bar_bg_rgb.r + bar_bg_rgb.g + bar_bg_rgb.b) < 384
-      local shift = { r = 30, g = 30, b = 30 }
-      local adjusted = blend_colors(bar_bg_rgb, shift, is_dark and "+" or "-")
-      border_sp = tonumber(rgb_to_hex(adjusted):gsub("^#", ""), 16)
+  local normal_fg_hex = get_hl_color("Normal", "fg")
+  local statusline_bg_hex = get_hl_color("StatusLine", "bg")
+  local diffchange_fg_hex = get_hl_color("DiffChange", "fg")
+
+  local bar_bg_rgb
+  local normal_bg_rgb = normal_bg_hex and hex_to_rgb(normal_bg_hex)
+  if normal_bg_rgb then
+    bar_bg_rgb = normal_bg_rgb
+    local statusline_bg_rgb = statusline_bg_hex and hex_to_rgb(statusline_bg_hex)
+    if statusline_bg_rgb then
+      bar_bg_rgb = mix_colors(bar_bg_rgb, statusline_bg_rgb, 0.3)
     end
+    local diffchange_fg_rgb = diffchange_fg_hex and hex_to_rgb(diffchange_fg_hex)
+    if diffchange_fg_rgb then
+      bar_bg_rgb = mix_colors(bar_bg_rgb, diffchange_fg_rgb, 0.2)
+    end
+    vim.api.nvim_set_hl(
+      0,
+      "FlemmaNotificationsBar",
+      { bg = rgb_to_hex(bar_bg_rgb), fg = normal_fg_hex, default = true }
+    )
+  else
+    vim.api.nvim_set_hl(0, "FlemmaNotificationsBar", { link = "StatusLine", default = true })
+  end
+
+  -- Derive border underline color from bar bg — shift to create visible contrast
+  local border_sp
+  if bar_bg_rgb then
+    local is_dark = (bar_bg_rgb.r + bar_bg_rgb.g + bar_bg_rgb.b) < 384
+    local shift = { r = 30, g = 30, b = 30 }
+    local adjusted = blend_colors(bar_bg_rgb, shift, is_dark and "+" or "-")
+    border_sp = tonumber(rgb_to_hex(adjusted):gsub("^#", ""), 16)
   end
   if not border_sp and normal_bg_hex then
-    local normal_bg_rgb = hex_to_rgb(normal_bg_hex)
-    if normal_bg_rgb then
-      local is_dark = (normal_bg_rgb.r + normal_bg_rgb.g + normal_bg_rgb.b) < 384
+    local fallback_bg_rgb = hex_to_rgb(normal_bg_hex)
+    if fallback_bg_rgb then
+      local is_dark = (fallback_bg_rgb.r + fallback_bg_rgb.g + fallback_bg_rgb.b) < 384
       local shift = { r = 40, g = 40, b = 40 }
-      local adjusted = blend_colors(normal_bg_rgb, shift, is_dark and "+" or "-")
+      local adjusted = blend_colors(fallback_bg_rgb, shift, is_dark and "+" or "-")
       border_sp = tonumber(rgb_to_hex(adjusted):gsub("^#", ""), 16)
     end
   end
