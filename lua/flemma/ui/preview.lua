@@ -633,19 +633,21 @@ function M.get_fold_text()
   if tool_seg then
     if tool_kind == "tool_use" then
       ---@cast tool_seg flemma.ast.ToolUseSegment
+      local prefix = "◆ Tool Use: "
       local suffix = string.format(" (%d lines)", total_fold_lines)
-      local available = text_width - #suffix - 1
+      local available = text_width - #prefix - #suffix - 1
       local tool_preview = M.format_tool_preview(tool_seg.name, tool_seg.input, available)
-      return tool_preview .. suffix
+      return prefix .. tool_preview .. suffix
     elseif tool_kind == "tool_result" then
       ---@cast tool_seg flemma.ast.ToolResultSegment
       -- Resolve tool name from matching tool_use
+      local prefix = "◆ Tool Result: "
       local tool_name_map = build_tool_name_map(doc)
       local tool_name = tool_name_map[tool_seg.tool_use_id] or "result"
       local suffix = string.format(" (%d lines)", total_fold_lines)
-      local available = text_width - #suffix - 1
+      local available = text_width - #prefix - #suffix - 1
       local result_preview = M.format_tool_result_preview(tool_name, tool_seg.content, tool_seg.is_error, available)
-      return result_preview .. suffix
+      return prefix .. result_preview .. suffix
     end
   end
 

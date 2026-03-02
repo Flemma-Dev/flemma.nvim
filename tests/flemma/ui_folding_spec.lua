@@ -731,6 +731,7 @@ describe("UI Folding", function()
       vim.v.foldstart = 3
       vim.v.foldend = 6
       local fold_text = ui_preview.get_fold_text()
+      assert.is_truthy(fold_text:match("^... Tool Use: "), "Fold text should start with 'Tool Use: ' prefix")
       assert.is_truthy(fold_text:match("bash"), "Fold text should contain tool name")
       assert.is_truthy(fold_text:match("ls %-la"), "Fold text should contain command preview")
       assert.is_truthy(fold_text:match("%(4 lines%)"), "Fold text should show line count")
@@ -772,6 +773,7 @@ describe("UI Folding", function()
       vim.v.foldstart = 10
       vim.v.foldend = 15
       local fold_text = ui_preview.get_fold_text()
+      assert.is_truthy(fold_text:match("^... Tool Result: "), "Fold text should start with 'Tool Result: ' prefix")
       assert.is_truthy(fold_text:match("bash"), "Fold text should contain tool name")
       assert.is_truthy(fold_text:match("file1%.txt"), "Fold text should preview result content")
       assert.is_truthy(fold_text:match("%(6 lines%)"), "Fold text should show line count")
