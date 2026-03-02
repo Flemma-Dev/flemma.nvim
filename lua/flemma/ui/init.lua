@@ -300,7 +300,6 @@ function M.update_thinking_preview(bufnr, preview_text)
   })
 end
 
-
 ---Place signs for a message
 ---@param bufnr integer
 ---@param start_line integer
@@ -384,7 +383,6 @@ function M.apply_line_highlights(bufnr, doc)
     end
   end
 end
-
 
 -- Updatetime management state
 -- We use reference counting to track how many chat buffers are "active"
@@ -561,7 +559,6 @@ function M.add_tool_previews(bufnr, doc)
     end
   end
 end
-
 
 ---Force UI update (rulers, signs, and line highlights)
 ---@param bufnr integer

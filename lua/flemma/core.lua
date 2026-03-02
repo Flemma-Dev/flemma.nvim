@@ -956,13 +956,7 @@ function M.send_to_provider(opts)
             if content_lines[1]:match("^%*%*Tool Use:%*%*") then
               -- Tool use header on its own line so the block is independently foldable
               ui.buffer_cmd(bufnr, "undojoin")
-              vim.api.nvim_buf_set_lines(
-                bufnr,
-                last_line,
-                last_line,
-                false,
-                { "@Assistant:", "", content_lines[1] }
-              )
+              vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant:", "", content_lines[1] })
               header_lines = 3
             elseif content_lines[1]:match("^```") then
               -- Code fence on its own line (no blank separator needed)

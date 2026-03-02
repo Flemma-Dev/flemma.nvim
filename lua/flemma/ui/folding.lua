@@ -201,7 +201,8 @@ function M.get_fold_text()
       local tool_name = tool_name_map[tool_seg.tool_use_id] or "result"
       local suffix = string.format(" (%d lines)", total_fold_lines)
       local available = text_width - #prefix - #suffix - 1
-      local result_preview = preview.format_tool_result_preview(tool_name, tool_seg.content, tool_seg.is_error, available)
+      local result_preview =
+        preview.format_tool_result_preview(tool_name, tool_seg.content, tool_seg.is_error, available)
       return prefix .. result_preview .. suffix
     end
   end
