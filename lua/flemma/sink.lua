@@ -340,10 +340,17 @@ function Sink:flush()
     return
   end
 
-  -- Flush partial as a line
+  -- Flush partial as a complete line, firing on_line so consumers see it
   if self._partial ~= "" then
-    table.insert(self._pending, self._partial)
+    local flushed = self._partial
     self._partial = ""
+    if self._on_line then
+      local ok, err = pcall(self._on_line, flushed)
+      if not ok then
+        log.error("sink on_line callback error: " .. tostring(err))
+      end
+    end
+    table.insert(self._pending, flushed)
   end
 
   self:_drain()

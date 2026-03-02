@@ -246,6 +246,35 @@ describe("flemma.sink", function()
       sink:destroy()
     end)
 
+    it("fires on_line for remaining partial", function()
+      local lines_seen = {}
+      local sink = sink_module.create({
+        name = "test/flush-partial-online",
+        on_line = function(line)
+          table.insert(lines_seen, line)
+        end,
+      })
+      sink:write("hello\npartial")
+      assert.are.same({ "hello" }, lines_seen) -- only "hello" fired so far
+      sink:flush()
+      assert.are.same({ "hello", "partial" }, lines_seen) -- "partial" should fire on flush
+      sink:destroy()
+    end)
+
+    it("fires on_line for remaining partial on destroy", function()
+      local lines_seen = {}
+      local sink = sink_module.create({
+        name = "test/flush-partial-online-destroy",
+        on_line = function(line)
+          table.insert(lines_seen, line)
+        end,
+      })
+      sink:write("hello\npartial")
+      assert.are.same({ "hello" }, lines_seen)
+      sink:destroy()
+      assert.are.same({ "hello", "partial" }, lines_seen) -- destroy() calls flush(), should fire on_line
+    end)
+
     it("is a no-op when nothing is pending", function()
       local sink = sink_module.create({ name = "test/flush-noop" })
       assert.has_no.errors(function()

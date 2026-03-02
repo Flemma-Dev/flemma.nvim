@@ -649,7 +649,10 @@ function M._mark_response_successful(self)
   self._response_buffer.successful = true
 end
 
---- Check buffered response lines for JSON errors
+--- Check buffered response lines for errors.
+--- Tries JSON parsing first; if that fails, surfaces the raw body as an error.
+--- This handles non-JSON error responses (HTML pages, plain text) from proxies,
+--- CDNs, or misconfigured endpoints.
 ---@param self flemma.provider.Base
 ---@param callbacks flemma.provider.Callbacks
 ---@return boolean
@@ -663,14 +666,24 @@ function M._check_buffered_response(self, callbacks)
     return false
   end
 
+  -- Try JSON first — most API errors use structured JSON
   local ok, data = pcall(json.decode, body)
-  if not ok then
-    return false
+  if ok and type(data) == "table" then
+    local msg = self:extract_json_response_error(data)
+    if msg and callbacks.on_error then
+      callbacks.on_error(msg)
+      return true
+    end
   end
 
-  local msg = self:extract_json_response_error(data)
-  if msg and callbacks.on_error then
-    callbacks.on_error(msg)
+  -- Non-JSON or unrecognized JSON structure — surface the raw body
+  if callbacks.on_error then
+    local MAX_BODY_LENGTH = 300
+    local truncated = #body > MAX_BODY_LENGTH and body:sub(1, MAX_BODY_LENGTH) .. "..." or body
+    -- Collapse whitespace for readability (HTML can be verbose)
+    truncated = truncated:gsub("%s+", " "):gsub("^ ", ""):gsub(" $", "")
+    log.error("base._check_buffered_response(): Non-JSON or unrecognized error response: " .. truncated)
+    callbacks.on_error("Unexpected API response: " .. truncated)
     return true
   end
   return false

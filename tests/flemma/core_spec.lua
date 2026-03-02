@@ -244,6 +244,83 @@ describe(":Flemma send command", function()
     notify_spy:revert()
   end)
 
+  it("surfaces an error when the API returns non-JSON HTML", function()
+    -- Arrange: Switch to OpenAI and register HTML error fixture
+    core.switch_provider("openai", "o3", {})
+    client.register_fixture("api%.openai%.com", "tests/fixtures/openai_html_error.txt")
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: This will get HTML back" })
+
+    local notify_spy = stub(vim, "notify")
+
+    vim.cmd("Flemma send")
+
+    -- Wait for error notification
+    vim.wait(2000, function()
+      for _, call in ipairs(notify_spy.calls) do
+        local msg = call.refs[1]
+        if msg and msg:match("^Flemma:") and call.refs[2] == vim.log.levels.ERROR then
+          return true
+        end
+      end
+      return false
+    end, 10, false)
+
+    -- Should have notified an error, not silently added a new @You: prompt
+    local error_seen = false
+    for _, call in ipairs(notify_spy.calls) do
+      local msg = call.refs[1]
+      if msg and msg:match("^Flemma:") and call.refs[2] == vim.log.levels.ERROR then
+        error_seen = true
+      end
+    end
+
+    assert.is_true(error_seen, "Expected error notification for non-JSON HTML response")
+    assert.is_true(vim.bo[bufnr].modifiable, "Buffer should be modifiable after an error")
+
+    notify_spy:revert()
+  end)
+
+  it("surfaces an error when the API returns plain text", function()
+    -- Arrange: Switch to OpenAI and register plain text error fixture
+    core.switch_provider("openai", "o3", {})
+    client.register_fixture("api%.openai%.com", "tests/fixtures/openai_plain_text_error.txt")
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: This will get plain text back" })
+
+    local notify_spy = stub(vim, "notify")
+
+    vim.cmd("Flemma send")
+
+    -- Wait for error notification
+    vim.wait(2000, function()
+      for _, call in ipairs(notify_spy.calls) do
+        local msg = call.refs[1]
+        if msg and msg:match("^Flemma:") and call.refs[2] == vim.log.levels.ERROR then
+          return true
+        end
+      end
+      return false
+    end, 10, false)
+
+    local error_seen = false
+    for _, call in ipairs(notify_spy.calls) do
+      local msg = call.refs[1]
+      if msg and msg:match("^Flemma:") and call.refs[2] == vim.log.levels.ERROR then
+        error_seen = true
+      end
+    end
+
+    assert.is_true(error_seen, "Expected error notification for plain text response")
+    assert.is_true(vim.bo[bufnr].modifiable, "Buffer should be modifiable after an error")
+
+    notify_spy:revert()
+  end)
+
   it("errors and does not switch when an unknown provider is requested", function()
     -- Arrange: Ensure we start from a valid, known provider (default is Anthropic)
     local original_provider = flemma.get_current_provider_name()

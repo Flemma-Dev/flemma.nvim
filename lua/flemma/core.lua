@@ -1060,10 +1060,11 @@ function M.send_to_provider(opts)
           end
 
           if not response_started then
-            log.info(
+            log.warn(
               "send_to_provider(): on_request_complete: cURL success (code 0), no API error, but no response content was processed."
             )
             ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
+            vim.notify("Flemma: Request completed but no response was received.", vim.log.levels.WARN)
           end
 
           -- Add new "@You:" prompt for the next message (buffer is already modifiable)
