@@ -166,8 +166,8 @@ function M.format_tool_preview(tool_name, input, max_length)
   local name_prefix = tool_name .. ": "
   local available = max_length - #name_prefix
 
-  local registry = require("flemma.tools.registry")
-  local tool_def = registry.get(tool_name)
+  local tools = require("flemma.tools")
+  local tool_def = tools.get(tool_name)
 
   local body
   if tool_def and tool_def.format_preview then
@@ -283,8 +283,8 @@ end
 ---@param available integer Available width for the body
 ---@return string
 function M.get_tool_use_body(tool_name, input, available)
-  local registry = require("flemma.tools.registry")
-  local tool_def = registry.get(tool_name)
+  local tools = require("flemma.tools")
+  local tool_def = tools.get(tool_name)
 
   local body
   if tool_def and tool_def.format_preview then

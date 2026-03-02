@@ -274,7 +274,13 @@ function M.clear()
   loaded_modules = {}
 end
 
-M.get = registry.get
+---Get a tool definition by name, ensuring lazy modules are loaded first.
+---@param name string
+---@return flemma.tools.ToolDefinition|nil
+function M.get(name)
+  ensure_modules_loaded()
+  return registry.get(name)
+end
 M.count = registry.count
 M.is_executable = registry.is_executable
 M.get_executor = registry.get_executor

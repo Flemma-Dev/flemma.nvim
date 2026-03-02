@@ -131,7 +131,6 @@ describe("Tool Preview", function()
     end)
 
     it("uses custom format_preview from tool registry", function()
-      package.loaded["flemma.tools.registry"] = nil
       local registry = require("flemma.tools.registry")
       registry.register("custom_tool", {
         name = "custom_tool",
@@ -146,7 +145,7 @@ describe("Tool Preview", function()
       assert.are.equal("custom_tool: custom: value", result)
 
       -- Clean up
-      registry.register("custom_tool", nil)
+      registry.unregister("custom_tool")
     end)
 
     it("falls back to generic formatting when no format_preview", function()
@@ -155,7 +154,6 @@ describe("Tool Preview", function()
     end)
 
     it("collapses newlines in custom format_preview output", function()
-      package.loaded["flemma.tools.registry"] = nil
       local registry = require("flemma.tools.registry")
       registry.register("newline_tool", {
         name = "newline_tool",
@@ -169,11 +167,10 @@ describe("Tool Preview", function()
       local result = ui_preview.format_tool_preview("newline_tool", {})
       assert.are.equal("newline_tool: line1↵line2", result)
 
-      registry.register("newline_tool", nil)
+      registry.unregister("newline_tool")
     end)
 
     it("truncates custom format_preview output to max_length", function()
-      package.loaded["flemma.tools.registry"] = nil
       local registry = require("flemma.tools.registry")
       registry.register("long_tool", {
         name = "long_tool",
@@ -189,11 +186,10 @@ describe("Tool Preview", function()
       assert.is_truthy(result:match("^long_tool: "), "Should start with tool name prefix")
       assert.is_truthy(result:match("…$"), "Should end with truncation marker")
 
-      registry.register("long_tool", nil)
+      registry.unregister("long_tool")
     end)
 
     it("passes available width (after name prefix) to format_preview", function()
-      package.loaded["flemma.tools.registry"] = nil
       local registry = require("flemma.tools.registry")
       local received_max_length
 
@@ -211,7 +207,7 @@ describe("Tool Preview", function()
       -- "width_tool: " is 12 chars, so available should be 50 - 12 = 38
       assert.are.equal(38, received_max_length)
 
-      registry.register("width_tool", nil)
+      registry.unregister("width_tool")
     end)
   end)
 
