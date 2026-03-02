@@ -1101,7 +1101,6 @@ function M.send_to_provider(opts)
 
           editing.auto_write(bufnr)
           ui.update_ui(bufnr)
-          ui.fold_completed_blocks(bufnr)
 
           if opts.on_request_complete then
             opts.on_request_complete()

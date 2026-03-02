@@ -171,9 +171,6 @@ local function do_completion(bufnr, tool_id, result, opts)
 
   ui.update_ui(bufnr)
 
-  -- Auto-fold completed tool blocks
-  ui.fold_completed_blocks(bufnr)
-
   -- Auto-write after tool result injection so the buffer is saved between
   -- tool executions, not only after the next send_to_provider() completes.
   editing.auto_write(bufnr)
