@@ -106,11 +106,18 @@
 ---@field bash flemma.config.BashToolConfig
 ---@field modules? string[] Lua module paths for third-party tool sources
 
+---@class flemma.config.AutoClose
+---@field thinking boolean
+---@field tool_use boolean
+---@field tool_result boolean
+---@field frontmatter boolean
+
 ---@class flemma.config.Editing
 ---@field disable_textwidth boolean
 ---@field auto_write boolean
 ---@field manage_updatetime boolean
 ---@field foldlevel integer
+---@field auto_close flemma.config.AutoClose
 
 ---@class flemma.config.NormalKeymaps
 ---@field send string
@@ -268,6 +275,12 @@ return {
     auto_write = false, -- Whether to automatically write the buffer after changes
     manage_updatetime = true, -- Whether to set updatetime to 100 in chat buffers and restore original value when leaving
     foldlevel = 1, -- Default fold level: 0=all closed, 1=thinking/frontmatter collapsed, 99=all open
+    auto_close = {
+      thinking = true, -- Auto-close thinking blocks when they become terminal
+      tool_use = true, -- Auto-close tool_use blocks when completed
+      tool_result = true, -- Auto-close tool_result blocks when terminal
+      frontmatter = false, -- Auto-close frontmatter blocks (disabled by default)
+    },
   },
   logging = {
     enabled = false, -- Logging disabled by default
