@@ -9,6 +9,7 @@
 ---@field id string
 ---@field start_line integer
 ---@field end_line integer
+---@field config_key? string Override rule.name for auto_close config lookup
 
 --- Fold rule for frontmatter fenced blocks
 ---@class flemma.ui.folding.rules.Frontmatter : flemma.ui.folding.FoldRule

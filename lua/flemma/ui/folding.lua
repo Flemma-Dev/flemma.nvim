@@ -309,19 +309,18 @@ function M.fold_completed_blocks(bufnr)
   end
 
   for _, rule in ipairs(BUILTINS) do
-    -- Check config for this rule name; fall back to rule's default
-    local should_auto_close = auto_close_config[rule.name]
-    if should_auto_close == nil then
-      should_auto_close = rule.auto_close
-    end
+    local ranges = rule.get_closeable_ranges(doc)
+    for _, range in ipairs(ranges) do
+      -- Check config for this range's config_key (or rule name); fall back to rule's default
+      local config_key = range.config_key or rule.name
+      local should_auto_close = auto_close_config[config_key]
+      if should_auto_close == nil then
+        should_auto_close = rule.auto_close
+      end
 
-    if should_auto_close then
-      local ranges = rule.get_closeable_ranges(doc)
-      for _, range in ipairs(ranges) do
-        if not buffer_state.auto_closed_folds[range.id] then
-          safe_foldclose(winid, range.start_line, range.end_line)
-          buffer_state.auto_closed_folds[range.id] = true
-        end
+      if should_auto_close and not buffer_state.auto_closed_folds[range.id] then
+        safe_foldclose(winid, range.start_line, range.end_line)
+        buffer_state.auto_closed_folds[range.id] = true
       end
     end
   end

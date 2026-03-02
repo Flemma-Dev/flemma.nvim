@@ -158,15 +158,16 @@ describe("State Management", function()
       vim.bo[chat_buf].filetype = "chat"
 
       -- Now apply settings to the correct window
+      local folding = require("flemma.ui.folding")
       vim.api.nvim_win_call(win1, function()
-        ui.setup_folding()
+        folding.setup_folding()
       end)
 
       -- Check folding is set on win1
       assert.equals("expr", vim.wo[win1].foldmethod)
 
       -- win2 should not have chat folding
-      assert.not_equals('v:lua.require("flemma.ui.preview").get_fold_level(v:lnum)', vim.wo[win2].foldexpr)
+      assert.not_equals('v:lua.require("flemma.ui.folding").get_fold_level(v:lnum)', vim.wo[win2].foldexpr)
     end)
   end)
 

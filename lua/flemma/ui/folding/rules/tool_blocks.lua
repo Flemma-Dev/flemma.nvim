@@ -106,6 +106,7 @@ function M.get_closeable_ranges(doc)
             id = "tool_use:" .. seg.id,
             start_line = seg.position.start_line,
             end_line = seg.position.end_line,
+            config_key = "tool_use",
           })
         end
       elseif seg.kind == "tool_result" then
@@ -115,6 +116,7 @@ function M.get_closeable_ranges(doc)
             id = "tool_result:" .. seg.tool_use_id,
             start_line = seg.position.start_line,
             end_line = seg.position.end_line,
+            config_key = "tool_result",
           })
         end
       end

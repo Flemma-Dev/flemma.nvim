@@ -1,19 +1,22 @@
 describe("UI Folding", function()
   local flemma
-  local ui
-  local ui_preview
+  local folding
 
   before_each(function()
     -- Invalidate caches to ensure clean setup
     package.loaded["flemma"] = nil
     package.loaded["flemma.ui"] = nil
     package.loaded["flemma.ui.preview"] = nil
+    package.loaded["flemma.ui.folding"] = nil
+    package.loaded["flemma.ui.folding.rules.frontmatter"] = nil
+    package.loaded["flemma.ui.folding.rules.thinking"] = nil
+    package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
+    package.loaded["flemma.ui.folding.rules.messages"] = nil
     package.loaded["flemma.parser"] = nil
     package.loaded["flemma.config"] = nil
 
     flemma = require("flemma")
-    ui = require("flemma.ui")
-    ui_preview = require("flemma.ui.preview")
+    folding = require("flemma.ui.folding")
 
     flemma.setup({})
 
@@ -41,7 +44,7 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- Line 2 is <thinking>
-      local fold_level = ui_preview.get_fold_level(2)
+      local fold_level = folding.get_fold_level(2)
       assert.are.equal(">2", fold_level)
     end)
 
@@ -59,7 +62,7 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- Line 2 is <thinking vertex:signature="...">
-      local fold_level = ui_preview.get_fold_level(2)
+      local fold_level = folding.get_fold_level(2)
       assert.are.equal(">2", fold_level)
     end)
 
@@ -77,7 +80,7 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- Line 2 is <thinking redacted>
-      local fold_level = ui_preview.get_fold_level(2)
+      local fold_level = folding.get_fold_level(2)
       assert.are.equal(">2", fold_level)
     end)
 
@@ -95,10 +98,10 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- Line 2 is opening tag, should start a fold
-      local fold_level = ui_preview.get_fold_level(2)
+      local fold_level = folding.get_fold_level(2)
       assert.are.equal(">2", fold_level)
       -- Line 3 is closing tag, should end the fold
-      fold_level = ui_preview.get_fold_level(3)
+      fold_level = folding.get_fold_level(3)
       assert.are.equal("<2", fold_level)
     end)
 
@@ -116,7 +119,7 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- Line 4 is </thinking>
-      local fold_level = ui_preview.get_fold_level(4)
+      local fold_level = folding.get_fold_level(4)
       assert.are.equal("<2", fold_level)
     end)
 
@@ -131,8 +134,8 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal(">1", ui_preview.get_fold_level(1))
-      assert.are.equal(">1", ui_preview.get_fold_level(2))
+      assert.are.equal(">1", folding.get_fold_level(1))
+      assert.are.equal(">1", folding.get_fold_level(2))
     end)
 
     it("should return <1 before next role marker", function()
@@ -148,7 +151,7 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- Line 2 should be <1 because line 3 starts a new message
-      local fold_level = ui_preview.get_fold_level(2)
+      local fold_level = folding.get_fold_level(2)
       assert.are.equal("<1", fold_level)
     end)
 
@@ -165,10 +168,10 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal(">1", ui_preview.get_fold_level(1))
-      assert.are.equal("=", ui_preview.get_fold_level(2))
-      assert.are.equal("<1", ui_preview.get_fold_level(3))
-      assert.are.equal(">1", ui_preview.get_fold_level(4))
+      assert.are.equal(">1", folding.get_fold_level(1))
+      assert.are.equal("=", folding.get_fold_level(2))
+      assert.are.equal("<1", folding.get_fold_level(3))
+      assert.are.equal(">1", folding.get_fold_level(4))
     end)
 
     it("should return >2 for frontmatter on line 1", function()
@@ -184,7 +187,7 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal(">2", ui_preview.get_fold_level(1))
+      assert.are.equal(">2", folding.get_fold_level(1))
     end)
 
     it("should return <2 for closing frontmatter fence", function()
@@ -200,7 +203,7 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal("<2", ui_preview.get_fold_level(3))
+      assert.are.equal("<2", folding.get_fold_level(3))
     end)
 
     it("should return >2 for completed tool_use block start", function()
@@ -225,9 +228,9 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- Tool use header line (line 3) should start a level-2 fold
-      assert.are.equal(">2", ui_preview.get_fold_level(3))
+      assert.are.equal(">2", folding.get_fold_level(3))
       -- Closing fence (line 6) should end the level-2 fold
-      assert.are.equal("<2", ui_preview.get_fold_level(6))
+      assert.are.equal("<2", folding.get_fold_level(6))
     end)
 
     it("should return >1 for inline tool_result header (graceful degradation)", function()
@@ -253,7 +256,7 @@ describe("UI Folding", function()
 
       -- Tool result header line (line 8) is also the @You: line (inline header)
       -- For inline headers, fold level stays at >1 (graceful degradation)
-      assert.are.equal(">1", ui_preview.get_fold_level(8))
+      assert.are.equal(">1", folding.get_fold_level(8))
     end)
 
     it("should return >2 for tool_result on its own line", function()
@@ -280,9 +283,9 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- Tool result header (line 10) should start level-2 fold
-      assert.are.equal(">2", ui_preview.get_fold_level(10))
+      assert.are.equal(">2", folding.get_fold_level(10))
       -- Closing fence (line 14) should end level-2 fold
-      assert.are.equal("<2", ui_preview.get_fold_level(14))
+      assert.are.equal("<2", folding.get_fold_level(14))
     end)
 
     it("should NOT fold in-flight tool_result (pending status)", function()
@@ -308,7 +311,7 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- Pending tool result should stay at message level (=), not start a fold
-      assert.are.equal("=", ui_preview.get_fold_level(10))
+      assert.are.equal("=", folding.get_fold_level(10))
     end)
 
     it("should NOT fold in-flight tool_result (approved status)", function()
@@ -333,7 +336,7 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal("=", ui_preview.get_fold_level(10))
+      assert.are.equal("=", folding.get_fold_level(10))
     end)
 
     it("should fold tool_result with denied status", function()
@@ -358,8 +361,8 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal(">2", ui_preview.get_fold_level(10))
-      assert.are.equal("<2", ui_preview.get_fold_level(13))
+      assert.are.equal(">2", folding.get_fold_level(10))
+      assert.are.equal("<2", folding.get_fold_level(13))
     end)
 
     it("should fold tool_result with rejected status", function()
@@ -384,7 +387,7 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal(">2", ui_preview.get_fold_level(10))
+      assert.are.equal(">2", folding.get_fold_level(10))
     end)
 
     it("should NOT fold tool_use without a matching tool_result", function()
@@ -403,7 +406,7 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- No matching result — tool_use stays at message level
-      assert.are.equal("=", ui_preview.get_fold_level(3))
+      assert.are.equal("=", folding.get_fold_level(3))
     end)
 
     it("should fold multiple tool blocks independently", function()
@@ -441,16 +444,16 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- Both tool_use blocks should fold independently
-      assert.are.equal(">2", ui_preview.get_fold_level(3))
-      assert.are.equal("<2", ui_preview.get_fold_level(6))
-      assert.are.equal(">2", ui_preview.get_fold_level(8))
-      assert.are.equal("<2", ui_preview.get_fold_level(11))
+      assert.are.equal(">2", folding.get_fold_level(3))
+      assert.are.equal("<2", folding.get_fold_level(6))
+      assert.are.equal(">2", folding.get_fold_level(8))
+      assert.are.equal("<2", folding.get_fold_level(11))
 
       -- Both tool_result blocks should fold independently
-      assert.are.equal(">2", ui_preview.get_fold_level(15))
-      assert.are.equal("<2", ui_preview.get_fold_level(19))
-      assert.are.equal(">2", ui_preview.get_fold_level(21))
-      assert.are.equal("<2", ui_preview.get_fold_level(25))
+      assert.are.equal(">2", folding.get_fold_level(15))
+      assert.are.equal("<2", folding.get_fold_level(19))
+      assert.are.equal(">2", folding.get_fold_level(21))
+      assert.are.equal("<2", folding.get_fold_level(25))
     end)
   end)
 
@@ -473,11 +476,11 @@ describe("UI Folding", function()
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
-      ui.fold_completed_blocks(bufnr)
+      folding.fold_completed_blocks(bufnr)
 
       -- Check that the fold exists and is closed
       -- Line 2 is the start of the thinking block
@@ -506,11 +509,11 @@ describe("UI Folding", function()
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
-      ui.fold_completed_blocks(bufnr)
+      folding.fold_completed_blocks(bufnr)
 
       -- The thinking block should not be folded since the last message is @Assistant:
       local foldclosed = vim.fn.foldclosed(3)
@@ -534,7 +537,7 @@ describe("UI Folding", function()
 
       -- Should not crash
       assert.has_no.errors(function()
-        ui.fold_completed_blocks(bufnr)
+        folding.fold_completed_blocks(bufnr)
       end)
     end)
 
@@ -549,7 +552,7 @@ describe("UI Folding", function()
 
       -- Should not crash
       assert.has_no.errors(function()
-        ui.fold_completed_blocks(bufnr)
+        folding.fold_completed_blocks(bufnr)
       end)
     end)
 
@@ -574,11 +577,11 @@ describe("UI Folding", function()
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
-      ui.fold_completed_blocks(bufnr)
+      folding.fold_completed_blocks(bufnr)
 
       -- Check that the fold exists and is closed
       -- Line 5 is the start of the thinking block
@@ -613,11 +616,11 @@ describe("UI Folding", function()
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
-      ui.fold_completed_blocks(bufnr)
+      folding.fold_completed_blocks(bufnr)
 
       -- The second thinking block (line 8) should be folded
       local foldclosed_second = vim.fn.foldclosed(8)
@@ -646,11 +649,11 @@ describe("UI Folding", function()
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
-      ui.fold_completed_blocks(bufnr)
+      folding.fold_completed_blocks(bufnr)
 
       -- Check that the fold exists and is closed
       local foldlevel = vim.fn.foldlevel(2)
@@ -678,11 +681,11 @@ describe("UI Folding", function()
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 99 -- Start with all folds open
 
       -- Call the function
-      ui.fold_completed_blocks(bufnr)
+      folding.fold_completed_blocks(bufnr)
 
       -- Check that the fold exists and is closed
       -- Line 2 is the start of the thinking block
@@ -720,8 +723,8 @@ describe("UI Folding", function()
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
-      vim.wo.foldtext = "v:lua.require('flemma.ui.preview').get_fold_text()"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
       vim.wo.foldlevel = 99
 
       -- Close fold at tool_use block (lines 3-6)
@@ -730,7 +733,7 @@ describe("UI Folding", function()
       -- Get fold text
       vim.v.foldstart = 3
       vim.v.foldend = 6
-      local fold_text = ui_preview.get_fold_text()
+      local fold_text = folding.get_fold_text()
       assert.is_truthy(fold_text:match("^... Tool Use: "), "Fold text should start with 'Tool Use: ' prefix")
       assert.is_truthy(fold_text:match("bash"), "Fold text should contain tool name")
       assert.is_truthy(fold_text:match("ls %-la"), "Fold text should contain command preview")
@@ -763,8 +766,8 @@ describe("UI Folding", function()
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
-      vim.wo.foldtext = "v:lua.require('flemma.ui.preview').get_fold_text()"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
       vim.wo.foldlevel = 99
 
       -- Close fold at tool_result block (lines 10-15)
@@ -772,7 +775,7 @@ describe("UI Folding", function()
 
       vim.v.foldstart = 10
       vim.v.foldend = 15
-      local fold_text = ui_preview.get_fold_text()
+      local fold_text = folding.get_fold_text()
       assert.is_truthy(fold_text:match("^... Tool Result: "), "Fold text should start with 'Tool Result: ' prefix")
       assert.is_truthy(fold_text:match("bash"), "Fold text should contain tool name")
       assert.is_truthy(fold_text:match("file1%.txt"), "Fold text should preview result content")
@@ -806,11 +809,11 @@ describe("UI Folding", function()
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 99
 
       -- Call auto-fold
-      ui.fold_completed_blocks(bufnr)
+      folding.fold_completed_blocks(bufnr)
 
       -- Tool use block should be folded
       local tu_foldclosed = vim.fn.foldclosed(3)
@@ -845,10 +848,10 @@ describe("UI Folding", function()
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 99
 
-      ui.fold_completed_blocks(bufnr)
+      folding.fold_completed_blocks(bufnr)
 
       -- Pending tool result should NOT be folded
       local foldclosed = vim.fn.foldclosed(10)
@@ -880,18 +883,139 @@ describe("UI Folding", function()
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 99
 
       -- Pre-close the tool_use fold
       vim.cmd("3,6 foldclose")
 
       -- Call auto-fold — should not escalate
-      ui.fold_completed_blocks(bufnr)
+      folding.fold_completed_blocks(bufnr)
 
       -- Message fold should remain open (not escalated by double-close)
       local msg_foldclosed = vim.fn.foldclosed(1)
       assert.are.equal(-1, msg_foldclosed, "Message fold should not be escalated")
+    end)
+  end)
+
+  describe("auto_close configuration", function()
+    it("should respect auto_close.thinking = false", function()
+      -- Reconfigure with thinking auto-close disabled
+      package.loaded["flemma"] = nil
+      package.loaded["flemma.ui.folding"] = nil
+      package.loaded["flemma.ui.folding.rules.frontmatter"] = nil
+      package.loaded["flemma.ui.folding.rules.thinking"] = nil
+      package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
+      package.loaded["flemma.ui.folding.rules.messages"] = nil
+      flemma = require("flemma")
+      flemma.setup({ editing = { auto_close = { thinking = false } } })
+      folding = require("flemma.ui.folding")
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: response",
+        "<thinking>",
+        "thought process here",
+        "</thinking>",
+        "actual response",
+        "@You: follow up",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99
+
+      folding.fold_completed_blocks(bufnr)
+
+      -- Thinking block should remain open
+      local foldclosed = vim.fn.foldclosed(2)
+      assert.are.equal(-1, foldclosed, "Thinking block should remain open when auto_close.thinking = false")
+    end)
+
+    it("should respect auto_close.tool_use = false", function()
+      package.loaded["flemma"] = nil
+      package.loaded["flemma.ui.folding"] = nil
+      package.loaded["flemma.ui.folding.rules.frontmatter"] = nil
+      package.loaded["flemma.ui.folding.rules.thinking"] = nil
+      package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
+      package.loaded["flemma.ui.folding.rules.messages"] = nil
+      flemma = require("flemma")
+      flemma.setup({ editing = { auto_close = { tool_use = false, tool_result = false } } })
+      folding = require("flemma.ui.folding")
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: Checking.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "file1.txt",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99
+
+      folding.fold_completed_blocks(bufnr)
+
+      -- Tool blocks should remain open
+      local tu_foldclosed = vim.fn.foldclosed(3)
+      assert.are.equal(-1, tu_foldclosed, "Tool use block should remain open when auto_close.tool_use = false")
+
+      local tr_foldclosed = vim.fn.foldclosed(10)
+      assert.are.equal(-1, tr_foldclosed, "Tool result block should remain open when auto_close.tool_result = false")
+    end)
+
+    it("should not re-close a fold that was already auto-closed", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant: response",
+        "<thinking>",
+        "thought process here",
+        "</thinking>",
+        "actual response",
+        "@You: follow up",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99
+
+      -- First call: should auto-close the thinking block
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(2, vim.fn.foldclosed(2), "Thinking block should be folded after first call")
+
+      -- User opens the fold manually
+      vim.cmd("2 foldopen")
+      assert.are.equal(-1, vim.fn.foldclosed(2), "Thinking block should be open after user opens it")
+
+      -- Second call: should NOT re-close because the ID is already in auto_closed_folds
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(-1, vim.fn.foldclosed(2), "Thinking block should stay open after second auto-close call")
     end)
   end)
 
@@ -935,7 +1059,7 @@ describe("UI Folding", function()
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require('flemma.ui.preview').get_fold_level(v:lnum)"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 1
 
       -- With foldlevel=1:
