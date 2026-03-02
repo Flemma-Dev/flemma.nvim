@@ -274,7 +274,11 @@ M.apply_syntax = function()
   set_highlight("FlemmaRuler", syntax_config.ruler.hl)
 
   -- Set per-role ruler highlights (ruler fg + role line highlight bg) for adopt_line_highlight
-  if syntax_config.ruler.adopt_line_highlight and syntax_config.line_highlights and syntax_config.line_highlights.enabled then
+  if
+    syntax_config.ruler.adopt_line_highlight
+    and syntax_config.line_highlights
+    and syntax_config.line_highlights.enabled
+  then
     local ruler_fg = get_hl_color("FlemmaRuler", "fg") or get_default_color("fg")
     local ruler_roles = { "frontmatter", "user", "system", "assistant" }
     for _, role in ipairs(ruler_roles) do
