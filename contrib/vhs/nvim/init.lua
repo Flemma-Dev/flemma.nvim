@@ -12,6 +12,9 @@ vim.opt.ttimeoutlen = 10
 vim.opt.lazyredraw = false
 
 vim.opt.scrolloff = 999
+vim.opt.listchars = {
+  eol = " ",
+}
 
 vim.opt.swapfile = false
 
@@ -62,6 +65,15 @@ require("flemma").setup({
   model = "claude-haiku-4-5",
   parameters = {
     thinking = "medium",
+  },
+  tools = {
+    modules = {
+      "extras.flemma.tools.calculator",
+    },
+    auto_approve = {
+      "$default",
+      "calculator",
+    },
   },
   highlights = {
     system = "Comment+fg:#101010",

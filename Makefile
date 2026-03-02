@@ -60,7 +60,7 @@ screencast: .vapor/catppuccin/nvim.git .vapor/NStefan002/screenkey.nvim.git
 		.vapor/poster.jpg .vapor/poster.mp4 .vapor/concat_list.txt \
 		.vapor/flemma_cast_with_poster.mp4 assets/flemma_cast.mp4
 	@mkdir -p .vapor/cache/ .vapor/state/
-	@echo -e "\`\`\`lua\nname = \"Flemma\"\n\nflemma.opt.thinking = \"medium\"\nflemma.opt.tools.auto_approve = { \"bash\" }\n\`\`\`\n@System: When deleting files use \`trash\` && \`sleep 2\`, never \`rm\`.\n" > .vapor/scratch.chat
+	@echo -e "\`\`\`lua\nname = \"Flemma\"\n\nflemma.opt.thinking = \"medium\"\n\`\`\`\n@System: When deleting files use \`trash\` && \`sleep 2\`, never \`rm\`.\n" > .vapor/scratch.chat
 	magick \
 		-size 400x200 \
 		xc:white \
