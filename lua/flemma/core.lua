@@ -360,6 +360,14 @@ end
 function M.send_or_execute(opts)
   opts = opts or {}
   local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
+
+  -- Early guard: reject immediately if a provider request is already in flight.
+  local buffer_state = state.get_buffer_state(bufnr)
+  if buffer_state.current_request then
+    vim.notify("Flemma: A request is already in progress. Use <C-c> to cancel it first.", vim.log.levels.WARN)
+    return
+  end
+
   local tool_context = require("flemma.tools.context")
 
   -- Evaluate frontmatter once per dispatch cycle. The result is threaded through
@@ -372,7 +380,6 @@ function M.send_or_execute(opts)
   local frontmatter_opts = evaluated_frontmatter.context:get_opts()
 
   -- Set per-buffer autopilot override unconditionally (nil clears a previous override)
-  local buffer_state = state.get_buffer_state(bufnr)
   buffer_state.autopilot_override = frontmatter_opts and frontmatter_opts.autopilot
 
   -- Phase 1: Categorize — find tool_use blocks without matching tool_result
