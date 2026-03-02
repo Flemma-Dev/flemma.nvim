@@ -15,6 +15,18 @@ describe("Highlight", function()
 
   after_each(function()
     vim.cmd("silent! %bdelete!")
+    -- Clear Flemma highlight groups so `default = true` doesn't leak between tests
+    for _, group in ipairs({
+      "FlemmaRoleSystem",
+      "FlemmaRoleUser",
+      "FlemmaRoleAssistant",
+      "FlemmaSystem",
+      "FlemmaUser",
+      "FlemmaAssistant",
+      "FlemmaAssistantSpinner",
+    }) do
+      vim.api.nvim_set_hl(0, group, {})
+    end
   end)
 
   describe("role marker highlights", function()
