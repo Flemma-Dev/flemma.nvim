@@ -428,13 +428,13 @@ describe("flemma.bar", function()
       local with_prefix = bar.render(segments, 120)
       local without_prefix = bar.render(segments, 120, nil, { skip_prefix = true })
 
-      -- With prefix: starts with 💬 emoji
-      assert.has_match("^\xF0\x9F\x92\xAC", with_prefix.text)
+      -- With prefix: starts with ℹ character
+      assert.has_match("^\xE2\x84\xB9", with_prefix.text)
       -- Without prefix: starts directly with content
       assert.has_match("^gpt%-4o", without_prefix.text)
     end)
 
-    it("should fit more items when prefix is skipped (3 columns reclaimed)", function()
+    it("should fit more items when prefix is skipped (2 columns reclaimed)", function()
       local segments = {
         {
           key = "identity",
@@ -452,7 +452,7 @@ describe("flemma.bar", function()
 
       -- Width that fits model + cost only without prefix:
       -- gpt-4o(6) + sep(3) + $0.01(5) = 14
-      -- With prefix that would need 14 + 3 = 17 — won't fit in 15
+      -- With prefix that would need 14 + 2 = 16 — won't fit in 15
       local with_prefix = bar.render(segments, 15)
       assert.has_no_match("%$0%.01", with_prefix.text)
 
@@ -502,7 +502,7 @@ describe("flemma.bar", function()
       assert.is_not_nil(bar.PREFIX_DISPLAY_WIDTH)
       assert.are.equal("string", type(bar.PREFIX))
       assert.are.equal("number", type(bar.PREFIX_DISPLAY_WIDTH))
-      assert.are.equal(3, bar.PREFIX_DISPLAY_WIDTH)
+      assert.are.equal(2, bar.PREFIX_DISPLAY_WIDTH)
     end)
   end)
 end)

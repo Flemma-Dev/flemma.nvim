@@ -7,9 +7,9 @@ local M = {}
 local SEPARATOR = " \xE2\x94\x82 " -- " │ " (U+2502, 5 bytes UTF-8)
 local SEPARATOR_DISPLAY_WIDTH = 3 -- " │ " is 3 display chars
 
---- Prefix shown before all content: speech bubble emoji + space
-local PREFIX = "\xF0\x9F\x92\xAC " -- "💬 " (U+1F4AC, 4 bytes + 1 space)
-local PREFIX_DISPLAY_WIDTH = 3 -- 💬 is 2 display cols + 1 space
+--- Prefix shown before all content: information source + space
+local PREFIX = "\xE2\x84\xB9 " -- "ℹ " (U+2139, 3 bytes + 1 space)
+local PREFIX_DISPLAY_WIDTH = 2 -- ℹ is 1 display col + 1 space
 
 --- Exported constants for use by notifications module
 M.PREFIX = PREFIX
@@ -34,7 +34,7 @@ M.PREFIX_DISPLAY_WIDTH = PREFIX_DISPLAY_WIDTH
 ---@field separator_highlight? string Highlight group for the separator preceding this segment
 
 ---@class flemma.bar.RenderOpts
----@field skip_prefix? boolean When true, omit the 💬 prefix from rendered output
+---@field skip_prefix? boolean When true, omit the ℹ prefix from rendered output
 
 ---@class flemma.bar.RenderResult
 ---@field text string Rendered line, right-padded with spaces to available_width
