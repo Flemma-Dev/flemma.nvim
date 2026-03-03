@@ -263,10 +263,13 @@ describe("notification bar highlights", function()
   before_each(function()
     package.loaded["flemma"] = nil
     package.loaded["flemma.highlight"] = nil
+    package.loaded["flemma.utilities.color"] = nil
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.state"] = nil
-    package.loaded["flemma.utilities.color"] = nil
-    -- Clear notification groups from prior tests so default = true can take effect
+    package.loaded["flemma.core"] = nil
+    -- Truly clear notification groups so default = true can re-define them.
+    -- nvim_set_hl(0, group, {}) leaves an empty definition that default = true
+    -- treats as "already defined"; highlight clear actually removes the group.
     for _, group in ipairs({
       "FlemmaNotificationsBar",
       "FlemmaNotificationsSecondary",
@@ -275,12 +278,14 @@ describe("notification bar highlights", function()
       "FlemmaNotificationsCacheGood",
       "FlemmaNotificationsCacheBad",
     }) do
-      vim.api.nvim_set_hl(0, group, {})
+      vim.cmd("highlight clear " .. group)
     end
-    -- Set up DiffChange so the notification bar has a base to derive from
-    vim.api.nvim_set_hl(0, "DiffChange", { bg = 0x3c3836, fg = 0xd5c4a1 })
+    -- Set up PmenuSel (the fallback in default notifications.highlight list)
+    -- so the notification bar has a base group with both fg and bg
+    vim.api.nvim_set_hl(0, "PmenuSel", { bg = 0x3c3836, fg = 0xd5c4a1 })
     vim.api.nvim_set_hl(0, "DiagnosticOk", { fg = 0x00ff00 })
     vim.api.nvim_set_hl(0, "DiagnosticWarn", { fg = 0xffff00 })
+    -- Populate config with defaults so notifications.highlight is available
     require("flemma").setup({})
     highlight = require("flemma.highlight")
     color = require("flemma.utilities.color")
@@ -297,7 +302,7 @@ describe("notification bar highlights", function()
     }) do
       vim.api.nvim_set_hl(0, group, {})
     end
-    vim.api.nvim_set_hl(0, "DiffChange", {})
+    vim.api.nvim_set_hl(0, "PmenuSel", {})
     vim.api.nvim_set_hl(0, "DiagnosticOk", {})
     vim.api.nvim_set_hl(0, "DiagnosticWarn", {})
   end)
@@ -310,15 +315,15 @@ describe("notification bar highlights", function()
     highlight.apply_syntax()
   end
 
-  it("should define FlemmaNotificationsBar with DiffChange bg", function()
+  it("should define FlemmaNotificationsBar with PmenuSel bg", function()
     setup_and_apply()
     local hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsBar", link = false })
     assert.is_not_nil(hl.bg, "FlemmaNotificationsBar should have bg")
-    -- Should match DiffChange bg (0x3c3836)
+    -- Should match PmenuSel bg (0x3c3836)
     assert.are.equal(0x3c3836, hl.bg)
   end)
 
-  it("should define FlemmaNotificationsBar with DiffChange fg", function()
+  it("should define FlemmaNotificationsBar with PmenuSel fg", function()
     setup_and_apply()
     local hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsBar", link = false })
     assert.is_not_nil(hl.fg, "FlemmaNotificationsBar should have fg")
