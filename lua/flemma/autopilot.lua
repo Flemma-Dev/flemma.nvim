@@ -155,6 +155,10 @@ function M.on_response_complete(bufnr)
     if get_state(bufnr).state ~= "armed" then
       return
     end
+    -- Guard against a parallel on_tools_complete path that already dispatched a request
+    if require("flemma.state").get_buffer_state(bufnr).current_request then
+      return
+    end
     local core = require("flemma.core")
     core.send_or_execute({ bufnr = bufnr })
   end)
@@ -214,6 +218,9 @@ function M.on_tools_complete(bufnr)
       if not vim.api.nvim_buf_is_valid(bufnr) then
         return
       end
+      if require("flemma.state").get_buffer_state(bufnr).current_request then
+        return
+      end
       local core = require("flemma.core")
       core.send_or_execute({ bufnr = bufnr })
     end)
@@ -226,6 +233,9 @@ function M.on_tools_complete(bufnr)
 
   vim.schedule(function()
     if not vim.api.nvim_buf_is_valid(bufnr) then
+      return
+    end
+    if require("flemma.state").get_buffer_state(bufnr).current_request then
       return
     end
     local core = require("flemma.core")
