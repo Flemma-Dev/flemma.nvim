@@ -447,17 +447,105 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      -- Both tool_use blocks should fold independently
+      -- Tool_use 1 fold extends to absorb trailing blank line (adjacent to tool_use 2)
       assert.are.equal(">2", folding.get_fold_level(3))
-      assert.are.equal("<2", folding.get_fold_level(6))
+      assert.are.equal("<2", folding.get_fold_level(7))
+      -- Tool_use 2 fold stays at its own end (last in sequence)
       assert.are.equal(">2", folding.get_fold_level(8))
       assert.are.equal("<2", folding.get_fold_level(11))
 
-      -- Both tool_result blocks should fold independently
+      -- Tool_result 1 fold extends to absorb trailing blank line (adjacent to tool_result 2)
       assert.are.equal(">2", folding.get_fold_level(15))
-      assert.are.equal("<2", folding.get_fold_level(19))
+      assert.are.equal("<2", folding.get_fold_level(20))
+      -- Tool_result 2 fold stays at its own end (last in sequence)
       assert.are.equal(">2", folding.get_fold_level(21))
       assert.are.equal("<2", folding.get_fold_level(25))
+    end)
+
+    it("should not extend fold when text separates tool blocks", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "Here is some text between tool blocks.",
+        "",
+        "**Tool Use:** `bash` (`toolu_02`)",
+        "```json",
+        '{ "command": "pwd" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01`",
+        "```",
+        "file1.txt",
+        "```",
+        "",
+        "Some commentary between results.",
+        "",
+        "**Tool Result:** `toolu_02`",
+        "```",
+        "/home/user",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Tool_use 1 fold should NOT extend (non-whitespace text separates from tool_use 2)
+      assert.are.equal(">2", folding.get_fold_level(3))
+      assert.are.equal("<2", folding.get_fold_level(6))
+      -- Tool_use 2 fold stays at its own end
+      assert.are.equal(">2", folding.get_fold_level(10))
+      assert.are.equal("<2", folding.get_fold_level(13))
+
+      -- Tool_result 1 fold should NOT extend (non-whitespace text separates from tool_result 2)
+      assert.are.equal(">2", folding.get_fold_level(17))
+      assert.are.equal("<2", folding.get_fold_level(20))
+      -- Tool_result 2 fold stays at its own end
+      assert.are.equal(">2", folding.get_fold_level(24))
+      assert.are.equal("<2", folding.get_fold_level(27))
+    end)
+
+    it("should not extend fold when next tool block is not foldable", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "**Tool Use:** `bash` (`toolu_02`)",
+        "```json",
+        '{ "command": "pwd" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01`",
+        "```",
+        "file1.txt",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Tool_use 1 has a terminal result, tool_use 2 does NOT
+      -- Tool_use 1 fold should NOT extend (next tool_use is not foldable)
+      assert.are.equal(">2", folding.get_fold_level(3))
+      assert.are.equal("<2", folding.get_fold_level(6))
+      -- Tool_use 2 should NOT fold at all (no terminal result)
+      assert.are.equal("=", folding.get_fold_level(8))
     end)
   end)
 
