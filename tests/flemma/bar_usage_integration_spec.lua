@@ -54,7 +54,7 @@ describe("flemma.usage segment building", function()
 
       assert.is_not_nil(model_item)
       assert.are.equal("gpt-4o", model_item.text)
-      assert.are.equal(90, model_item.priority)
+      assert.are.equal(110, model_item.priority)
     end)
 
     it("should build request segment with cost and cache", function()
@@ -201,7 +201,7 @@ describe("flemma.usage segment building", function()
 
       assert.is_not_nil(thinking_item)
       assert.has_match("\xE2\x97\x8B 25", thinking_item.text)
-      assert.are.equal(35, thinking_item.priority)
+      assert.are.equal(50, thinking_item.priority)
     end)
   end)
 end)

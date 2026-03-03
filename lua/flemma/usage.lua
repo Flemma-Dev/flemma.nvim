@@ -6,17 +6,17 @@ local M = {}
 
 --- Item priorities (higher = more important, shown first when space is scarce)
 local PRIORITY = {
-  MODEL_NAME = 90,
-  REQUEST_COST = 80,
-  CACHE_PERCENT = 75,
-  PROVIDER_NAME = 70,
-  SESSION_COST = 60,
-  REQUEST_INPUT_TOKENS = 50,
-  REQUEST_OUTPUT_TOKENS = 50,
-  SESSION_REQUEST_COUNT = 40,
-  THINKING_TOKENS = 35,
-  SESSION_INPUT_TOKENS = 20,
-  SESSION_OUTPUT_TOKENS = 20,
+  MODEL_NAME = 110,
+  SESSION_COST = 100,
+  REQUEST_INPUT_TOKENS = 90,
+  CACHE_PERCENT = 80,
+  REQUEST_COST = 70,
+  REQUEST_OUTPUT_TOKENS = 60,
+  THINKING_TOKENS = 50,
+  SESSION_INPUT_TOKENS = 35,
+  SESSION_OUTPUT_TOKENS = 35,
+  SESSION_REQUEST_COUNT = 20,
+  PROVIDER_NAME = 10,
 }
 
 --- Format a number with comma separators for thousands
