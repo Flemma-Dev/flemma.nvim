@@ -7,6 +7,7 @@ local M = {}
 local state = require("flemma.state")
 local log = require("flemma.logging")
 local loader = require("flemma.loader")
+local str = require("flemma.utilities.string")
 local preview = require("flemma.ui.preview")
 local query = require("flemma.ast.query")
 
@@ -180,13 +181,6 @@ local function get_document()
   return parser.get_parsed_document(bufnr)
 end
 
----Compute the display width of a string (handles multibyte characters correctly).
----@param s string
----@return integer
-local function strwidth(s)
-  return vim.api.nvim_strwidth(s)
-end
-
 ---Get the body text for a tool use fold (custom format_preview or generic key-value).
 ---Delegates to the shared preview helper.
 ---@param tool_seg flemma.ast.ToolUseSegment
@@ -213,7 +207,8 @@ function M.get_fold_text()
   if fm and fm.position.start_line == foldstart_lnum then
     local prefix = "```" .. fm.language .. " "
     local suffix_full = " ``` " .. suffix
-    local fold_preview = preview.format_content_preview(fm.code, text_width - strwidth(prefix) - strwidth(suffix_full))
+    local fold_preview =
+      preview.format_content_preview(fm.code, text_width - str.strwidth(prefix) - str.strwidth(suffix_full))
     if fold_preview ~= "" then
       return {
         { prefix, "Comment" },
@@ -248,11 +243,11 @@ function M.get_fold_text()
     table.insert(chunks, { "> ", "FlemmaThinkingTag" })
 
     -- Compute available width for preview
-    local chrome_width = strwidth("<thinking")
-      + (provider and strwidth(" " .. provider) or 0)
-      + strwidth("> ")
-      + strwidth(" </thinking> ")
-      + strwidth(suffix)
+    local chrome_width = str.strwidth("<thinking")
+      + (provider and str.strwidth(" " .. provider) or 0)
+      + str.strwidth("> ")
+      + str.strwidth(" </thinking> ")
+      + str.strwidth(suffix)
     local fold_preview = preview.format_content_preview(thinking_seg.content, text_width - chrome_width)
 
     if fold_preview ~= "" then
@@ -280,12 +275,12 @@ function M.get_fold_text()
         { "Tool Use: ", "FlemmaToolUseTitle" },
       }
 
-      local fixed_width = strwidth("◆ ")
-        + strwidth("Tool Use: ")
-        + strwidth(tool_seg.name)
-        + strwidth(": ")
-        + strwidth(" ")
-        + strwidth(suffix)
+      local fixed_width = str.strwidth("◆ ")
+        + str.strwidth("Tool Use: ")
+        + str.strwidth(tool_seg.name)
+        + str.strwidth(": ")
+        + str.strwidth(" ")
+        + str.strwidth(suffix)
       local available = text_width - fixed_width
       local body = get_tool_use_body(tool_seg, available)
 
@@ -309,14 +304,14 @@ function M.get_fold_text()
         { tool_name, "FlemmaToolName" },
       }
 
-      local fixed_width = strwidth("◆ ")
-        + strwidth("Tool Result: ")
-        + strwidth(tool_name)
-        + strwidth(": ")
-        + strwidth(" ")
-        + strwidth(suffix)
+      local fixed_width = str.strwidth("◆ ")
+        + str.strwidth("Tool Result: ")
+        + str.strwidth(tool_name)
+        + str.strwidth(": ")
+        + str.strwidth(" ")
+        + str.strwidth(suffix)
       if tool_seg.is_error then
-        fixed_width = fixed_width + strwidth("(error) ")
+        fixed_width = fixed_width + str.strwidth("(error) ")
       end
       local available = text_width - fixed_width
 
@@ -345,7 +340,7 @@ function M.get_fold_text()
     local role_hl = roles.highlight_group("FlemmaRole", msg.role)
     local content_hl = roles.highlight_group("Flemma", msg.role)
 
-    local chrome_width = strwidth(role_marker) + strwidth(" ") + strwidth(" ") + strwidth(suffix)
+    local chrome_width = str.strwidth(role_marker) + str.strwidth(" ") + str.strwidth(" ") + str.strwidth(suffix)
     local preview_chunks = preview.format_message_fold_preview(msg, text_width - chrome_width, doc, content_hl)
     ---@type {[1]:string, [2]:string}[]
     local chunks = {

@@ -4,6 +4,7 @@
 local M = {}
 
 local query = require("flemma.ast.query")
+local str = require("flemma.utilities.string")
 local display = require("flemma.utilities.display")
 
 -- Constants for preview text
@@ -55,15 +56,7 @@ function M.format_content_preview(content, max_length)
   -- Collapse runs of 2+ spaces/tabs to a single space (but preserve newline indicator sequences)
   preview = preview:gsub("[ \t][ \t]+", " ")
 
-  if #preview > max_length then
-    local truncated_length = max_length - #CONTENT_PREVIEW_TRUNCATION_MARKER
-    if truncated_length < 0 then
-      truncated_length = 0
-    end
-    preview = preview:sub(1, truncated_length) .. CONTENT_PREVIEW_TRUNCATION_MARKER
-  end
-
-  return preview
+  return str.truncate(preview, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
 end
 
 ---Format a compact table value preview
@@ -141,15 +134,7 @@ function M.format_tool_preview_body(input, max_length)
 
   local body = table.concat(parts, ", ")
 
-  if #body > max_length then
-    local truncated_length = max_length - #CONTENT_PREVIEW_TRUNCATION_MARKER
-    if truncated_length < 0 then
-      truncated_length = 0
-    end
-    body = body:sub(1, truncated_length) .. CONTENT_PREVIEW_TRUNCATION_MARKER
-  end
-
-  return body
+  return str.truncate(body, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
 end
 
 ---Format a compact preview string for a tool call
@@ -164,7 +149,7 @@ function M.format_tool_preview(tool_name, input, max_length)
   max_length = max_length or DEFAULT_MAX_LENGTH
 
   local name_prefix = tool_name .. ": "
-  local available = max_length - #name_prefix
+  local available = max_length - str.strwidth(name_prefix)
 
   local tools = require("flemma.tools")
   local tool_def = tools.get(tool_name)
@@ -184,15 +169,7 @@ function M.format_tool_preview(tool_name, input, max_length)
 
   local preview = name_prefix .. body
 
-  if #preview > max_length then
-    local truncated_length = max_length - #CONTENT_PREVIEW_TRUNCATION_MARKER
-    if truncated_length < 0 then
-      truncated_length = 0
-    end
-    preview = preview:sub(1, truncated_length) .. CONTENT_PREVIEW_TRUNCATION_MARKER
-  end
-
-  return preview
+  return str.truncate(preview, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
 end
 
 local SEGMENT_SEPARATOR = " | "
@@ -216,7 +193,7 @@ function M.format_tool_result_preview(tool_name, content, is_error, max_length)
   if is_error then
     name_prefix = name_prefix .. "(error) "
   end
-  local available = max_length - #name_prefix
+  local available = max_length - str.strwidth(name_prefix)
 
   local body = M.format_content_preview(content, available)
 
@@ -299,15 +276,7 @@ function M.get_tool_use_body(tool_name, input, available)
   end
 
   -- Post-hoc truncation for custom format_preview that may ignore max_length
-  if #body > available then
-    local truncated_length = available - #CONTENT_PREVIEW_TRUNCATION_MARKER
-    if truncated_length < 0 then
-      truncated_length = 0
-    end
-    body = body:sub(1, truncated_length) .. CONTENT_PREVIEW_TRUNCATION_MARKER
-  end
-
-  return body
+  return str.truncate(body, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
 end
 
 ---Build a composite fold preview from a message's segments in buffer order.
@@ -379,15 +348,15 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
         break
       end
       -- Build name + body chunks
-      local name_prefix_width = #tool_seg.name + #": "
-      local body = M.get_tool_use_body(tool_seg.name, tool_seg.input, width_for_tool - name_prefix_width)
+      local name_width = str.strwidth(tool_seg.name)
+      local body = M.get_tool_use_body(tool_seg.name, tool_seg.input, width_for_tool - name_width - #": ")
       if body ~= "" then
         table.insert(entry_chunks, { tool_seg.name, "FlemmaToolName" })
         table.insert(entry_chunks, { ": " .. body, "FlemmaFoldPreview" })
-        entry_width = #tool_seg.name + #": " + #body
+        entry_width = name_width + #": " + str.strwidth(body)
       else
         table.insert(entry_chunks, { tool_seg.name, "FlemmaToolName" })
-        entry_width = #tool_seg.name
+        entry_width = name_width
       end
     elseif entry.kind == "tool_result" then
       local result_seg = entry.segment --[[@as flemma.ast.ToolResultSegment]]
@@ -398,7 +367,8 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
         break
       end
       -- Build name + separator + optional error + body chunks
-      local prefix_width = #tool_name + #": "
+      local name_result_width = str.strwidth(tool_name)
+      local prefix_width = name_result_width + #": "
       if result_seg.is_error then
         prefix_width = prefix_width + #"(error) "
       end
@@ -406,7 +376,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       local body = M.format_content_preview(result_seg.content, body_available)
 
       table.insert(entry_chunks, { tool_name, "FlemmaToolName" })
-      entry_width = #tool_name
+      entry_width = name_result_width
 
       if body ~= "" or result_seg.is_error then
         table.insert(entry_chunks, { ": ", "FlemmaFoldPreview" })
@@ -417,7 +387,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
         end
         if body ~= "" then
           table.insert(entry_chunks, { body, "FlemmaFoldPreview" })
-          entry_width = entry_width + #body
+          entry_width = entry_width + str.strwidth(body)
         end
       end
     else
@@ -426,7 +396,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
         goto continue
       end
       table.insert(entry_chunks, { text_preview, content_hl })
-      entry_width = #text_preview
+      entry_width = str.strwidth(text_preview)
     end
 
     if #entry_chunks == 0 then

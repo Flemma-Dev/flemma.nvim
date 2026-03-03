@@ -3,6 +3,8 @@
 ---@class flemma.Bar
 local M = {}
 
+local str = require("flemma.utilities.string")
+
 --- Separator between segments: thin vertical bar with spaces
 local SEPARATOR = " \xE2\x94\x82 " -- " │ " (U+2502, 5 bytes UTF-8)
 local SEPARATOR_DISPLAY_WIDTH = 3 -- " │ " is 3 display chars
@@ -45,13 +47,6 @@ M.PREFIX_DISPLAY_WIDTH = PREFIX_DISPLAY_WIDTH
 ---@field col_start integer Byte offset from line start
 ---@field col_end integer Byte offset from line start (exclusive)
 
---- Calculate display width of an item's text
----@param text string
----@return integer
-local function display_width(text)
-  return vim.fn.strdisplaywidth(text)
-end
-
 --- Calculate the total display width of a rendered line from visible segments
 --- Each segment's items are space-separated, segments are separated by SEPARATOR
 ---@param segments flemma.bar.Segment[] Segment definitions
@@ -81,7 +76,7 @@ local function calculate_line_width(segments, visible_keys, item_widths, skip_pr
     end
 
     if segment.label then
-      segment_width = segment_width + display_width(segment.label) + 1 -- +1 for space after label
+      segment_width = segment_width + str.strwidth(segment.label) + 1 -- +1 for space after label
     end
 
     for _, item in ipairs(segment.items) do
@@ -89,7 +84,7 @@ local function calculate_line_width(segments, visible_keys, item_widths, skip_pr
         if item_count > 0 then
           segment_width = segment_width + 1 -- space between items
         end
-        local w = display_width(item.text)
+        local w = str.strwidth(item.text)
         if item_widths then
           w = math.max(w, item_widths[item.key] or 0)
         end
@@ -186,7 +181,7 @@ local function build_line(segments, visible_keys, available_width, item_widths, 
         local padded_text = item.text
         if item_widths then
           local min_width = item_widths[item.key] or 0
-          local natural_width = display_width(item.text)
+          local natural_width = str.strwidth(item.text)
           if natural_width < min_width then
             padded_text = item.text .. string.rep(" ", min_width - natural_width)
           end
@@ -247,7 +242,7 @@ local function build_line(segments, visible_keys, available_width, item_widths, 
   local line = table.concat(parts)
 
   -- Right-pad with spaces to fill available_width
-  local current_display_width = display_width(line)
+  local current_display_width = str.strwidth(line)
   if current_display_width < available_width then
     line = line .. string.rep(" ", available_width - current_display_width)
   end
@@ -262,7 +257,7 @@ function M.measure_item_widths(segments)
   local widths = {} ---@type table<string, integer>
   for _, segment in ipairs(segments) do
     for _, item in ipairs(segment.items) do
-      widths[item.key] = display_width(item.text)
+      widths[item.key] = str.strwidth(item.text)
     end
   end
   return widths

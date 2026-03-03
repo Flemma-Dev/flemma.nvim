@@ -1045,3 +1045,89 @@ describe("format_message_fold_preview with tool results", function()
     assert.is_truthy(result:match(" | "), "Should have pipe separator")
   end)
 end)
+
+describe("multibyte display-width safety", function()
+  local str = require("flemma.utilities.string")
+  local preview_mod
+
+  before_each(function()
+    package.loaded["flemma.ui.preview"] = nil
+    preview_mod = require("flemma.ui.preview")
+  end)
+
+  describe("format_content_preview", function()
+    it("truncates CJK content by display width, not bytes", function()
+      -- "你好世界很美丽" = 7 CJK chars, 14 display cols, 21 bytes
+      local result = preview_mod.format_content_preview("你好世界很美丽", 9)
+      -- Should fit in 9 display cols: 4 CJK chars (8 cols) + "…" (1 col) = 9
+      assert.are.equal(9, str.strwidth(result))
+      assert.is_truthy(result:match("…$"), "Should end with truncation marker")
+    end)
+
+    it("does not split multibyte characters", function()
+      local result = preview_mod.format_content_preview("café latte mocha", 8)
+      -- "café l" = 6 cols, "café la" = 7 cols → "café la…" = 8 cols
+      assert.are.equal(8, str.strwidth(result))
+      -- Verify valid UTF-8: strwidth would fail on invalid sequences
+      assert.is_truthy(result:match("…$"))
+    end)
+
+    it("handles mixed ASCII and CJK", function()
+      local result = preview_mod.format_content_preview("hello 你好 world", 10)
+      assert.is_truthy(str.strwidth(result) <= 10, "Should fit in 10 display cols")
+      assert.is_truthy(result:match("…$"), "Should end with truncation marker")
+    end)
+  end)
+
+  describe("format_tool_preview", function()
+    it("accounts for multibyte characters in tool body width", function()
+      local result = preview_mod.format_tool_preview("tool", { msg = "你好世界" }, 20)
+      assert.is_truthy(str.strwidth(result) <= 20, "Should fit in 20 display cols")
+    end)
+  end)
+
+  describe("format_tool_result_preview", function()
+    it("accounts for multibyte content in result preview", function()
+      local result = preview_mod.format_tool_result_preview("bash", "你好世界！完成了", false, 20)
+      assert.is_truthy(str.strwidth(result) <= 20, "Should fit in 20 display cols")
+    end)
+  end)
+
+  describe("format_message_fold_preview", function()
+    local ast = require("flemma.ast")
+
+    local function make_message(role, segments)
+      return ast.message(role, segments, { start_line = 1, end_line = 10 })
+    end
+
+    local function chunks_to_string(chunks)
+      local parts = {}
+      for _, chunk in ipairs(chunks) do
+        table.insert(parts, chunk[1])
+      end
+      return table.concat(parts)
+    end
+
+    it("respects display width for CJK text entries", function()
+      local msg = make_message("Assistant", {
+        ast.text("你好世界，这是一段很长的中文文本。"),
+      })
+      local chunks = preview_mod.format_message_fold_preview(msg, 20, nil, "FlemmaAssistant")
+      local result = chunks_to_string(chunks)
+      assert.is_truthy(str.strwidth(result) <= 20, "Should fit in 20 display cols, got " .. str.strwidth(result))
+    end)
+
+    it("tracks display width correctly for CJK tool body in fold preview", function()
+      local msg = make_message("Assistant", {
+        ast.tool_use("t1", "bash", { command = "echo 你好" }, { start_line = 2, end_line = 5 }),
+        ast.tool_use("t2", "bash", { command = "echo 世界" }, { start_line = 6, end_line = 9 }),
+      })
+      local chunks = preview_mod.format_message_fold_preview(msg, 60, nil, "FlemmaAssistant")
+      local result = chunks_to_string(chunks)
+      assert.is_truthy(
+        str.strwidth(result) <= 60,
+        "Should fit in 60 display cols, got " .. str.strwidth(result) .. ": " .. result
+      )
+    end)
+  end)
+end)
