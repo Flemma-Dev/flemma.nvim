@@ -18,7 +18,6 @@ local border_ns_id = vim.api.nvim_create_namespace("flemma_notifications_border"
 
 ---@class flemma.notifications.BufferState
 ---@field notifications flemma.notifications.Notification[] Active notifications (most recent first)
----@field last? { segments: flemma.bar.Segment[] }
 ---@field gutter_border_win? integer Floating window extending the underline into the gutter
 ---@field gutter_border_bufnr? integer Scratch buffer for the gutter underline window
 
@@ -563,9 +562,6 @@ function M.show(segments, bufnr)
       buffer_state[bufnr] = { notifications = {} }
     end
 
-    -- Store as last for recall
-    buffer_state[bufnr].last = { segments = segments }
-
     -- If buffer not visible, queue for later
     if not get_window_for_buffer(bufnr) then
       if not pending_notifications[bufnr] then
@@ -604,23 +600,44 @@ function M.show(segments, bufnr)
 end
 
 --- Recall last notification for the current buffer
+--- Derives segments from session data on demand rather than caching them locally.
+--- This enables recall after session:load() without requiring a live request first.
 function M.recall_last()
   local current_bufnr = vim.api.nvim_get_current_buf()
-  local buf = buffer_state[current_bufnr]
 
-  if not buf or not buf.last then
+  -- Check if any notification is still visible for this buffer
+  local buf = buffer_state[current_bufnr]
+  if buf then
+    for _, notif in ipairs(buf.notifications) do
+      if not notif.dismissed and vim.api.nvim_win_is_valid(notif.win_id) then
+        return -- Already visible, don't duplicate
+      end
+    end
+  end
+
+  -- Derive segments from session data
+  local filepath = vim.api.nvim_buf_get_name(current_bufnr)
+  if filepath == "" then
     vim.notify("No notification for this buffer.", vim.log.levels.WARN)
     return
   end
 
-  -- Check if any notification is still visible
-  for _, notif in ipairs(buf.notifications) do
-    if not notif.dismissed and vim.api.nvim_win_is_valid(notif.win_id) then
-      return -- Already visible, don't duplicate
-    end
+  local state = require("flemma.state")
+  local session = state.get_session()
+  local latest_request = session:get_latest_request_for_filepath(filepath)
+  if not latest_request then
+    vim.notify("No notification for this buffer.", vim.log.levels.WARN)
+    return
   end
 
-  M.show(buf.last.segments, current_bufnr)
+  local usage = require("flemma.usage")
+  local segments = usage.build_segments(latest_request, session)
+  if #segments == 0 then
+    vim.notify("No notification for this buffer.", vim.log.levels.WARN)
+    return
+  end
+
+  M.show(segments, current_bufnr)
 end
 
 --- Cleanup all notifications for a buffer
