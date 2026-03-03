@@ -60,7 +60,7 @@ function M.validate_and_get_model(model_name, provider_name)
     vim.notify(warn_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
     log.warn(warn_msg)
 
-    log.info(
+    log.debug(
       "validate_and_get_model(): Model "
         .. log.inspect(original_model)
         .. " is not valid for provider "

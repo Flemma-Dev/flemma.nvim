@@ -134,18 +134,18 @@ local function generate_access_token(service_account_json)
           return token
         else
           err = "Invalid token format received from gcloud"
-          log.debug("vertex.generate_access_token(): Invalid token format received from gcloud: " .. output)
+          log.warn("vertex.generate_access_token(): Invalid token format received from gcloud: " .. output)
         end
       else
         -- This is an error message from gcloud
         err = "gcloud error: " .. output
-        log.debug("vertex.generate_access_token(): gcloud command output: " .. output)
+        log.warn("vertex.generate_access_token(): gcloud command output: " .. output)
       end
     else
       err = "Failed to generate access token (exit code: " .. tostring(code) .. ")"
       if output and #output > 0 then
         err = err .. "\nOutput: " .. output
-        log.debug("vertex.generate_access_token(): gcloud command output: " .. output)
+        log.warn("vertex.generate_access_token(): gcloud command output: " .. output)
       end
     end
   else
@@ -662,11 +662,11 @@ function M.process_response_line(self, line, callbacks)
       -- from clobbering a valid signature (matches Pi's retainThoughtSignature logic).
       if type(part.thoughtSignature) == "string" and #part.thoughtSignature > 0 then
         self._response_buffer.extra.thought_signature = part.thoughtSignature
-        log.debug("vertex.process_response_line(): Captured thoughtSignature from part")
+        log.trace("vertex.process_response_line(): Captured thoughtSignature from part")
       end
 
       if part.thought and part.text and #part.text > 0 then
-        log.debug("vertex.process_response_line(): Accumulating thought text: " .. log.inspect(part.text))
+        log.trace("vertex.process_response_line(): Accumulating thought text: " .. log.inspect(part.text))
         self._response_buffer.extra.thinking_sink:write(part.text)
         if callbacks.on_thinking then
           callbacks.on_thinking(part.text)
@@ -714,7 +714,7 @@ function M.process_response_line(self, line, callbacks)
         -- Only emit text that contains non-whitespace (skip whitespace-only chunks
         -- that would cause prefix issues with subsequent tool use blocks)
         if part.text:match("%S") then
-          log.debug("vertex.process_response_line(): Content text: " .. log.inspect(part.text))
+          log.trace("vertex.process_response_line(): Content text: " .. log.inspect(part.text))
           base._signal_content(self, part.text, callbacks)
         end
       end

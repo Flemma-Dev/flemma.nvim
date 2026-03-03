@@ -140,7 +140,7 @@ local function do_completion(bufnr, tool_id, result, opts)
   local ui = require("flemma.ui")
   local ok, err = injector.inject_result(bufnr, tool_id, result)
   if not ok then
-    log.warn("executor: Failed to inject result for " .. tool_id .. ": " .. (err or "unknown"))
+    log.error("executor: Failed to inject result for " .. tool_id .. ": " .. (err or "unknown"))
   end
 
   -- Move cursor based on config (skip when autopilot is armed — it owns cursor positioning)

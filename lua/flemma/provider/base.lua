@@ -695,7 +695,7 @@ end
 ---@param callbacks flemma.provider.Callbacks Table of callback functions
 ---@return boolean handled True if the line was successfully parsed as an error
 function M._handle_non_sse_line(self, line, callbacks)
-  log.debug("base.handle_non_sse_line(): Received non-SSE line, buffering: " .. line)
+  log.trace("base.handle_non_sse_line(): Received non-SSE line, buffering: " .. line)
 
   -- Buffer the line for later analysis
   self:_buffer_response_line(line)

@@ -412,7 +412,7 @@ function M.process_response_line(self, line, callbacks)
 
   -- Handle event lines
   if parsed.type == "event" then
-    log.debug("anthropic.process_response_line(): Received event type: " .. parsed.event_type)
+    log.trace("anthropic.process_response_line(): Received event type: " .. parsed.event_type)
     return
   end
 
@@ -446,7 +446,7 @@ function M.process_response_line(self, line, callbacks)
 
   -- Handle ping events
   if data.type == "ping" then
-    log.debug("anthropic.process_response_line(): Received ping event")
+    log.trace("anthropic.process_response_line(): Received ping event")
     return
   end
 
@@ -670,14 +670,14 @@ function M.process_response_line(self, line, callbacks)
     end
 
     if data.delta.type == "text_delta" and data.delta.text then
-      log.debug("anthropic.process_response_line(): Content text delta: " .. log.inspect(data.delta.text))
+      log.trace("anthropic.process_response_line(): Content text delta: " .. log.inspect(data.delta.text))
       base._signal_content(self, data.delta.text, callbacks)
     elseif data.delta.type == "input_json_delta" and data.delta.partial_json ~= nil then
-      log.debug("anthropic.process_response_line(): Content input_json_delta: " .. log.inspect(data.delta.partial_json))
+      log.trace("anthropic.process_response_line(): Content input_json_delta: " .. log.inspect(data.delta.partial_json))
       -- Accumulate tool input JSON
       self._response_buffer.extra.tool_input_sink:write(data.delta.partial_json)
     elseif data.delta.type == "thinking_delta" and data.delta.thinking then
-      log.debug("anthropic.process_response_line(): Content thinking delta: " .. log.inspect(data.delta.thinking))
+      log.trace("anthropic.process_response_line(): Content thinking delta: " .. log.inspect(data.delta.thinking))
       self._response_buffer.extra.thinking_sink:write(data.delta.thinking)
       if callbacks.on_thinking then
         callbacks.on_thinking(data.delta.thinking)
@@ -685,9 +685,9 @@ function M.process_response_line(self, line, callbacks)
     elseif data.delta.type == "signature_delta" and data.delta.signature then
       self._response_buffer.extra.accumulated_signature = (self._response_buffer.extra.accumulated_signature or "")
         .. data.delta.signature
-      log.debug("anthropic.process_response_line(): Content signature delta received")
+      log.trace("anthropic.process_response_line(): Content signature delta received")
     else
-      log.error("anthropic.process_response_line(): Unknown delta type: " .. log.inspect(data.delta.type))
+      log.warn("anthropic.process_response_line(): Unknown delta type: " .. log.inspect(data.delta.type))
     end
   elseif
     data.type
@@ -700,7 +700,7 @@ function M.process_response_line(self, line, callbacks)
       or data.type == "ping"
     )
   then
-    log.error("anthropic.process_response_line(): Unknown event type: " .. log.inspect(data.type))
+    log.warn("anthropic.process_response_line(): Unknown event type: " .. log.inspect(data.type))
   end
 end
 

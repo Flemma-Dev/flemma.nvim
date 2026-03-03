@@ -507,14 +507,14 @@ function M.process_response_line(self, line, callbacks)
   local event_type = data.type
 
   if not event_type then
-    log.debug("openai.process_response_line(): Data without type field, skipping")
+    log.trace("openai.process_response_line(): Data without type field, skipping")
     return
   end
 
   -- Handle text content deltas
   if event_type == "response.output_text.delta" then
     if data.delta then
-      log.debug("openai.process_response_line(): Text delta: " .. log.inspect(data.delta))
+      log.trace("openai.process_response_line(): Text delta: " .. log.inspect(data.delta))
       base._signal_content(self, data.delta, callbacks)
     end
     return
@@ -671,7 +671,7 @@ function M.process_response_line(self, line, callbacks)
   end
 
   -- Truly unknown events get logged for debugging
-  log.debug("openai.process_response_line(): Ignoring unknown event type: " .. event_type)
+  log.warn("openai.process_response_line(): Ignoring unknown event type: " .. event_type)
 end
 
 ---Validate provider-specific parameters

@@ -111,6 +111,7 @@ require("flemma").setup({
   logging = {
     enabled = false,
     path = vim.fn.stdpath("cache") .. "/flemma.log",
+    level = "DEBUG",                         -- Minimum log level: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"
   },
   sandbox = {
     enabled = true,                          -- Enable filesystem sandboxing

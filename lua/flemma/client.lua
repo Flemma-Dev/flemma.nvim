@@ -248,7 +248,7 @@ function M.send_request(opts)
       if #line == 0 then
         return
       end
-      log.debug("send_request(): on_stdout: " .. line)
+      log.trace("send_request(): on_stdout: " .. line)
       if opts.process_response_line_fn then
         opts.process_response_line_fn(line, opts.callbacks)
       end
@@ -288,14 +288,14 @@ function M.send_request(opts)
       for i = 1, #data - 1 do
         local line = data[i]
         if line and #line > 0 then
-          log.error("send_request(): stderr: " .. line)
+          log.warn("send_request(): stderr: " .. line)
         end
       end
 
       if is_eof and #stderr_buffer > 0 then
         local line = stderr_buffer
         stderr_buffer = ""
-        log.error("send_request(): stderr: " .. line)
+        log.warn("send_request(): stderr: " .. line)
       end
     end,
     on_exit = function(_, code)
@@ -303,8 +303,12 @@ function M.send_request(opts)
       os.remove(tmp_file)
       stdout_sink:destroy()
 
-      -- Log exit code
-      log.info("send_request(): on_exit: Request completed with exit code: " .. tostring(code))
+      -- Log exit code (INFO for failures, DEBUG for expected success)
+      if code ~= 0 then
+        log.info("send_request(): on_exit: Request completed with exit code: " .. tostring(code))
+      else
+        log.debug("send_request(): on_exit: Request completed with exit code: 0")
+      end
 
       -- Finalize provider response processing
       if opts.finalize_response_fn then

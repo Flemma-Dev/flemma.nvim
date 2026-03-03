@@ -26,13 +26,25 @@ local function setup_commands()
   local presets = require("flemma.presets")
 
   ---@param enable? boolean
-  local function toggle_logging(enable)
+  ---@param level? string Optional log level to set (e.g. "TRACE", "DEBUG")
+  local function toggle_logging(enable, level)
     if enable == nil then
       enable = not log.is_enabled()
     end
+    if level then
+      if not log.is_valid_level(level) then
+        vim.notify(
+          "Flemma: Invalid log level '" .. level .. "'. Valid levels: TRACE, DEBUG, INFO, WARN, ERROR",
+          vim.log.levels.ERROR
+        )
+        return
+      end
+      log.configure({ level = level:upper() })
+    end
     log.set_enabled(enable)
     if enable then
-      vim.notify("Flemma: Logging enabled - " .. log.get_path())
+      local level_display = log.get_level()
+      vim.notify("Flemma: Logging enabled (level: " .. level_display .. ") - " .. log.get_path())
     else
       vim.notify("Flemma: Logging disabled")
     end
@@ -353,8 +365,14 @@ local function setup_commands()
   command_tree.children.logging = {
     children = {
       enable = {
-        action = function()
-          toggle_logging(true)
+        action = function(context)
+          toggle_logging(true, context.extra_args[1])
+        end,
+        complete = function(arglead)
+          local levels = { "TRACE", "DEBUG", "INFO", "WARN", "ERROR" }
+          return vim.tbl_filter(function(item)
+            return vim.startswith(item, arglead:upper())
+          end, levels)
         end,
       },
       disable = {

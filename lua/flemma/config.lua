@@ -313,6 +313,7 @@ return {
   logging = {
     enabled = false, -- Logging disabled by default
     path = vim.fn.stdpath("cache") .. "/flemma.log", -- Default log path
+    level = "DEBUG", -- Minimum log level: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"
   },
   keymaps = {
     normal = {

@@ -1046,7 +1046,7 @@ function M.send_to_provider(opts)
         if code == 0 then
           -- cURL request completed successfully (exit code 0)
           if buffer_state.api_error_occurred then
-            log.info(
+            log.debug(
               "send_to_provider(): on_request_complete: cURL success (code 0), but an API error was previously handled. Skipping new prompt."
             )
             buffer_state.api_error_occurred = false -- Reset flag for next request
