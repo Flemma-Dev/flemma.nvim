@@ -20,6 +20,7 @@ local border_ns_id = vim.api.nvim_create_namespace("flemma_notifications_border"
 ---@field notifications flemma.notifications.Notification[] Active notifications (most recent first)
 ---@field gutter_border_win? integer Floating window extending the underline into the gutter
 ---@field gutter_border_bufnr? integer Scratch buffer for the gutter underline window
+---@field last_gutter_width? integer Last observed gutter width for change detection
 
 --- Per-buffer notification state
 ---@type table<integer, flemma.notifications.BufferState>
@@ -505,6 +506,66 @@ local function rerender_notification(notif, win_width, item_widths, render_opts)
   apply_highlights(notif.bufnr, new_result.highlights)
 end
 
+--- Re-render and reposition all notifications for a buffer at the current window geometry.
+--- Called when gutter width or window size changes.
+---@param bufnr integer
+---@param winid integer
+local function rerender_and_reposition(bufnr, winid)
+  local buf = buffer_state[bufnr]
+  if not buf then
+    return
+  end
+
+  local win_width = vim.api.nvim_win_get_width(winid)
+  local gutter_width = get_gutter_width(winid)
+  local text_width = math.max(1, win_width - gutter_width)
+  local item_widths = compute_aligned_widths(bufnr)
+  local render_opts = gutter_fits_icon(gutter_width) and { skip_prefix = true } or nil
+
+  buf.last_gutter_width = gutter_width
+
+  for _, notif in ipairs(buf.notifications) do
+    rerender_notification(notif, text_width, item_widths, render_opts)
+  end
+  reposition_notifications(bufnr)
+end
+
+--- Check whether the gutter width changed for a buffer and reposition if so.
+--- Plugins that asynchronously place signs (git-signs, LSP diagnostics, etc.) can
+--- alter the gutter width after notifications are already positioned. This function
+--- detects that change and corrects the layout.
+---@param bufnr integer
+local function check_gutter_width_change(bufnr)
+  local buf = buffer_state[bufnr]
+  if not buf then
+    return
+  end
+
+  -- Only check if there are active (non-dismissed) notifications
+  local has_active = false
+  for _, notif in ipairs(buf.notifications) do
+    if not notif.dismissed then
+      has_active = true
+      break
+    end
+  end
+  if not has_active then
+    return
+  end
+
+  local winid = get_window_for_buffer(bufnr)
+  if not winid then
+    return
+  end
+
+  local gutter_width = get_gutter_width(winid)
+  if buf.last_gutter_width == gutter_width then
+    return
+  end
+
+  rerender_and_reposition(bufnr, winid)
+end
+
 --- Show pending notifications when buffer becomes visible
 ---@param bufnr integer
 local function show_pending_for_buffer(bufnr)
@@ -543,6 +604,12 @@ local function show_pending_for_buffer(bufnr)
       -- Insert at front (most recent first)
       table.insert(buffer_state[bufnr].notifications, 1, notification)
       reposition_notifications(bufnr)
+
+      -- Record gutter width and schedule deferred recheck for async sign changes
+      buffer_state[bufnr].last_gutter_width = gutter_width
+      vim.defer_fn(function()
+        check_gutter_width_change(bufnr)
+      end, 50)
     end
   end
 end
@@ -596,6 +663,18 @@ function M.show(segments, bufnr)
     table.insert(buffer_state[bufnr].notifications, 1, notification)
 
     reposition_notifications(bufnr)
+
+    -- Record gutter width and schedule a deferred recheck.
+    -- Async plugins (git-signs, LSP diagnostics) may place signs after we
+    -- position the notification, shifting the gutter. textoff only updates
+    -- after a redraw, so we check again shortly.
+    local current_winid = get_window_for_buffer(bufnr)
+    if current_winid then
+      buffer_state[bufnr].last_gutter_width = get_gutter_width(current_winid)
+    end
+    vim.defer_fn(function()
+      check_gutter_width_change(bufnr)
+    end, 50)
   end)
 end
 
@@ -682,20 +761,21 @@ function M.setup()
   vim.api.nvim_create_autocmd({ "WinResized", "VimResized" }, {
     group = augroup,
     callback = function()
-      for bufnr, buf in pairs(buffer_state) do
+      for bufnr, _ in pairs(buffer_state) do
         local winid = get_window_for_buffer(bufnr)
         if winid then
-          local win_width = vim.api.nvim_win_get_width(winid)
-          local gutter_width = get_gutter_width(winid)
-          local text_width = math.max(1, win_width - gutter_width)
-          local item_widths = compute_aligned_widths(bufnr)
-          local render_opts = gutter_fits_icon(gutter_width) and { skip_prefix = true } or nil
-          for _, notif in ipairs(buf.notifications) do
-            rerender_notification(notif, text_width, item_widths, render_opts)
-          end
-          reposition_notifications(bufnr)
+          rerender_and_reposition(bufnr, winid)
         end
       end
+    end,
+  })
+
+  -- Detect gutter width changes from async sign placement (git-signs, LSP, etc.)
+  vim.api.nvim_create_autocmd("CursorHold", {
+    group = augroup,
+    callback = function()
+      local bufnr = vim.api.nvim_get_current_buf()
+      check_gutter_width_change(bufnr)
     end,
   })
 end

@@ -94,6 +94,8 @@ require("flemma").setup({
     limit = 1,                                 -- Maximum stacked notifications per buffer
     position = "overlay",                      -- "overlay" (pinned to window top)
     zindex = 30,                               -- Floating window z-index (above nvim-treesitter-context)
+    highlight = "@text.note, PmenuSel",        -- Highlight group(s) for bar colours; first with both fg+bg wins
+    border = "underline",                      -- Bottom border style, or false to disable
   },
   pricing = { enabled = true },
   statusline = {
@@ -172,13 +174,15 @@ This lets you set `thinking = "high"` as a cross-provider default and fine-tune 
 
 The `notifications` key accepts a table with these fields:
 
-| Key        | Default     | Effect                                                                                     |
-| ---------- | ----------- | ------------------------------------------------------------------------------------------ |
-| `enabled`  | `true`      | Set `false` to suppress all notification bars.                                             |
-| `timeout`  | `10000`     | Milliseconds before auto-dismiss. Set `0` for persistent notifications.                    |
-| `limit`    | `1`         | Maximum stacked notifications per buffer. Oldest are dismissed when the limit is exceeded. |
-| `position` | `"overlay"` | Notification placement. Currently only `"overlay"` (pinned to the top of the chat window). |
-| `zindex`   | `30`        | Floating window z-index for notification bars (above nvim-treesitter-context).             |
+| Key         | Default                  | Effect                                                                                                                                                    |
+| ----------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`   | `true`                   | Set `false` to suppress all notification bars.                                                                                                            |
+| `timeout`   | `10000`                  | Milliseconds before auto-dismiss. Set `0` for persistent notifications.                                                                                   |
+| `limit`     | `1`                      | Maximum stacked notifications per buffer. Oldest are dismissed when the limit is exceeded.                                                                |
+| `position`  | `"overlay"`              | Notification placement. Currently only `"overlay"` (pinned to the top of the chat window).                                                                |
+| `zindex`    | `30`                     | Floating window z-index for notification bars (above nvim-treesitter-context).                                                                            |
+| `highlight` | `"@text.note, PmenuSel"` | Comma-separated highlight groups to derive bar colours from. The first group that provides both `fg` and `bg` is used; remaining groups act as fallbacks. |
+| `border`    | `"underline"`            | Bottom border style: `"underline"`, `"underdouble"`, `"undercurl"`, `"underdotted"`, `"underdashed"`, or `false` to disable.                              |
 
 ### Keymaps and hybrid dispatch
 

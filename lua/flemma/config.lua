@@ -52,6 +52,8 @@
 ---@field limit integer Maximum visible notifications at once.
 ---@field position "overlay" Display mode ("overlay" pins to window top).
 ---@field zindex integer Floating window stacking priority.
+---@field highlight string Comma-separated highlight groups to derive bar colors from (first with both fg+bg wins)
+---@field border false|"underline"|"underdouble"|"undercurl"|"underdotted"|"underdashed" Bottom border style, or false to disable
 
 ---@class flemma.config.Pricing
 ---@field enabled boolean
@@ -256,6 +258,8 @@ return {
     limit = 1,
     position = "overlay",
     zindex = 30,
+    highlight = "@text.note,PmenuSel", -- Highlight group(s) for the notification bar; first with both fg+bg is used
+    border = "underline", -- Bottom border: "underline", "underdouble", "undercurl", "underdotted", "underdashed", or false
   },
   pricing = {
     enabled = true, -- Whether to show pricing information in notifications

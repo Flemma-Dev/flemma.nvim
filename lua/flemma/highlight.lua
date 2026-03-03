@@ -301,11 +301,19 @@ M.apply_syntax = function()
   set_highlight("FlemmaToolError", { link = "DiagnosticError", default = true })
 
   -- Notification bar highlight groups
-  -- All derived from a single base group; change this constant to re-theme the entire bar
-  local NOTIFICATION_BASE_GROUP = "DiffChange"
-
-  local bar_bg_hex = get_hl_color(NOTIFICATION_BASE_GROUP, "bg")
-  local bar_fg_hex = get_hl_color(NOTIFICATION_BASE_GROUP, "fg")
+  -- Derived from the first group in notifications.hl that provides both fg and bg
+  local bar_bg_hex, bar_fg_hex, notification_base_group
+  for candidate in syntax_config.notifications.highlight:gmatch("[^,]+") do
+    candidate = vim.trim(candidate)
+    local bg = get_hl_color(candidate, "bg")
+    local fg = get_hl_color(candidate, "fg")
+    if bg and fg then
+      bar_bg_hex = bg
+      bar_fg_hex = fg
+      notification_base_group = candidate
+      break
+    end
+  end
 
   if bar_bg_hex and bar_fg_hex then
     -- Primary tier: base group fg + bg as-is (model name, cost)
@@ -313,7 +321,7 @@ M.apply_syntax = function()
 
     -- Secondary tier: slightly dimmed fg (cache label, token counts, request count)
     local is_dark = vim.o.background == "dark"
-    local secondary_expr = NOTIFICATION_BASE_GROUP .. (is_dark and "-fg:#222222" or "+fg:#222222")
+    local secondary_expr = notification_base_group .. (is_dark and "-fg:#222222" or "+fg:#222222")
     local secondary_resolved = parse_highlight_expression(secondary_expr)
     if secondary_resolved and secondary_resolved.fg then
       vim.api.nvim_set_hl(
@@ -324,7 +332,7 @@ M.apply_syntax = function()
     end
 
     -- Muted tier: more dimmed fg (provider, separators, session label)
-    local muted_expr = NOTIFICATION_BASE_GROUP .. (is_dark and "-fg:#444444" or "+fg:#444444")
+    local muted_expr = notification_base_group .. (is_dark and "-fg:#444444" or "+fg:#444444")
     local muted_resolved = parse_highlight_expression(muted_expr)
     if muted_resolved and muted_resolved.fg then
       vim.api.nvim_set_hl(0, "FlemmaNotificationsMuted", { bg = bar_bg_hex, fg = muted_resolved.fg, default = true })
@@ -347,26 +355,30 @@ M.apply_syntax = function()
       vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheBad", { link = "DiagnosticWarn", default = true })
     end
 
-    -- Bottom border: underline with sp derived from bar bg shifted for contrast
-    local border_shift = { r = 30, g = 30, b = 30 }
-    local bar_bg_rgb = color.hex_to_rgb(bar_bg_hex)
-    if bar_bg_rgb then
-      local adjusted = color.blend(bar_bg_rgb, border_shift, is_dark and "+" or "-")
-      vim.api.nvim_set_hl(
-        0,
-        "FlemmaNotificationsBottom",
-        { underline = true, sp = color.rgb_to_hex(adjusted), default = true }
-      )
+    -- Bottom border: sp matches the muted fg so │ separators and border look uniform
+    local border_style = syntax_config.notifications.border
+    if border_style then
+      local muted_fg = get_hl_color("FlemmaNotificationsMuted", "fg")
+      if muted_fg then
+        vim.api.nvim_set_hl(0, "FlemmaNotificationsBottom", { [border_style] = true, sp = muted_fg, default = true })
+      end
     end
   else
-    -- Fallback when base group lacks bg/fg: link to StatusLine
+    -- Fallback when no candidate group provides both bg and fg: link to StatusLine
     vim.api.nvim_set_hl(0, "FlemmaNotificationsBar", { link = "StatusLine", default = true })
     vim.api.nvim_set_hl(0, "FlemmaNotificationsSecondary", { link = "StatusLine", default = true })
     vim.api.nvim_set_hl(0, "FlemmaNotificationsMuted", { link = "Comment", default = true })
     vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheGood", { link = "DiagnosticOk", default = true })
     vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheBad", { link = "DiagnosticWarn", default = true })
-    local fallback = vim.api.nvim_get_hl(0, { name = "Comment", link = false })
-    vim.api.nvim_set_hl(0, "FlemmaNotificationsBottom", { underline = true, sp = fallback.fg, default = true })
+    local fallback_border_style = syntax_config.notifications.border
+    if fallback_border_style then
+      local muted_fallback = vim.api.nvim_get_hl(0, { name = "Comment", link = false })
+      vim.api.nvim_set_hl(
+        0,
+        "FlemmaNotificationsBottom",
+        { [fallback_border_style] = true, sp = muted_fallback.fg, default = true }
+      )
+    end
   end
 end
 

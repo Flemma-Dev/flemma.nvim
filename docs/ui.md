@@ -183,15 +183,19 @@ Completed requests show a single-line notification bar pinned to the top of the 
 
 ```lua
 notifications = {
-  enabled = true,        -- set to false to suppress all notification bars
-  timeout = 10000,       -- milliseconds before auto-dismiss (0 = persistent)
-  limit = 3,             -- maximum stacked notifications per buffer
-  position = "overlay",  -- "overlay" (pinned to window top)
-  zindex = 30,           -- floating window z-index (above nvim-treesitter-context)
+  enabled = true,                          -- set to false to suppress all notification bars
+  timeout = 10000,                         -- milliseconds before auto-dismiss (0 = persistent)
+  limit = 3,                               -- maximum stacked notifications per buffer
+  position = "overlay",                    -- "overlay" (pinned to window top)
+  zindex = 30,                             -- floating window z-index (above nvim-treesitter-context)
+  highlight = "@text.note, PmenuSel",      -- highlight group(s) for bar colours; first with both fg+bg wins
+  border = "underline",                    -- bottom border style, or false to disable
 }
 ```
 
-Notification bars derive all colours from `DiffChange` using three foreground tiers against a shared background:
+The `highlight` option accepts a comma-separated list of highlight group names. Flemma tries each in order and uses the first one that provides both `fg` and `bg` attributes. This lets you specify preferred groups with fallbacks for colorschemes that may not define them all.
+
+Notification bars derive all colours from the resolved highlight group using three foreground tiers against a shared background:
 
 | Tier      | Group                          | Used by                                  |
 | --------- | ------------------------------ | ---------------------------------------- |
@@ -199,7 +203,7 @@ Notification bars derive all colours from `DiffChange` using three foreground ti
 | Secondary | `FlemmaNotificationsSecondary` | Token counts, cache label, request count |
 | Muted     | `FlemmaNotificationsMuted`     | Provider, separators, session label      |
 
-Cache hit percentage uses semantic colours (`DiagnosticOk` / `DiagnosticWarn`) with automatic WCAG contrast enforcement against the bar background. The bottom-most bar has an underline border (`FlemmaNotificationsBottom`) derived from the bar background.
+Cache hit percentage uses semantic colours (`DiagnosticOk` / `DiagnosticWarn`) with automatic WCAG contrast enforcement against the bar background. The bottom-most bar has a border (`FlemmaNotificationsBottom`) whose style is controlled by the `border` option — set to `"underdouble"`, `"undercurl"`, `"underdotted"`, `"underdashed"`, or `false` to disable. The border colour matches the muted tier fg for a uniform appearance with the `│` separators.
 
 Bars stack vertically when multiple are active — the most recent appears at the top, older ones shift down. Each `.chat` buffer has its own notification stack. Notifications for hidden buffers are queued and shown when the buffer becomes visible. Bars re-render automatically on window resize to reflow content for the new width. Recall the most recent notification with `:Flemma notification:recall`.
 
