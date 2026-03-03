@@ -438,6 +438,89 @@ describe("flemma.session", function()
       assert.is_nil(session:get_latest_request())
     end)
 
+    it("should get the latest request for a filepath", function()
+      local session = session_module.Session.new()
+
+      session:add_request({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 3.00,
+        output_price = 15.00,
+        filepath = "/home/user/project/chat.chat",
+        started_at = 1700000000,
+        completed_at = 1700000010,
+      })
+
+      session:add_request({
+        provider = "openai",
+        model = "gpt-4o",
+        input_tokens = 200,
+        output_tokens = 75,
+        input_price = 2.50,
+        output_price = 10.00,
+        filepath = "/home/user/project/other.chat",
+        started_at = 1700000020,
+        completed_at = 1700000030,
+      })
+
+      session:add_request({
+        provider = "anthropic",
+        model = "claude-haiku-4-5",
+        input_tokens = 50,
+        output_tokens = 25,
+        input_price = 1.00,
+        output_price = 5.00,
+        filepath = "/home/user/project/chat.chat",
+        started_at = 1700000040,
+        completed_at = 1700000050,
+      })
+
+      -- Should return the latest (third) request for chat.chat, not the first
+      local latest = session:get_latest_request_for_filepath("/home/user/project/chat.chat")
+      assert.is_not_nil(latest)
+      assert.are.equal("claude-haiku-4-5", latest.model)
+      assert.are.equal(1700000040, latest.started_at)
+    end)
+
+    it("should return nil when no request matches the filepath", function()
+      local session = session_module.Session.new()
+
+      session:add_request({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 3.00,
+        output_price = 15.00,
+        filepath = "/home/user/project/chat.chat",
+      })
+
+      assert.is_nil(session:get_latest_request_for_filepath("/home/user/project/other.chat"))
+    end)
+
+    it("should return nil for filepath lookup on empty session", function()
+      local session = session_module.Session.new()
+      assert.is_nil(session:get_latest_request_for_filepath("/any/path.chat"))
+    end)
+
+    it("should skip requests without a filepath in filepath lookup", function()
+      local session = session_module.Session.new()
+
+      session:add_request({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 3.00,
+        output_price = 15.00,
+        bufnr = 5, -- Unnamed buffer, no filepath
+      })
+
+      assert.is_nil(session:get_latest_request_for_filepath("/any/path.chat"))
+    end)
+
     it("should reset the session", function()
       local session = session_module.Session.new()
 

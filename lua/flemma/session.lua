@@ -230,6 +230,19 @@ function Session:get_latest_request()
   return nil
 end
 
+--- Get the most recent request for a given filepath
+--- Scans requests in reverse order to find the latest match.
+---@param filepath string Absolute filepath to match
+---@return flemma.session.Request|nil Most recent request for the filepath, or nil
+function Session:get_latest_request_for_filepath(filepath)
+  for i = #self.requests, 1, -1 do
+    if self.requests[i].filepath == filepath then
+      return self.requests[i]
+    end
+  end
+  return nil
+end
+
 --- Reset the session (clear all requests)
 function Session:reset()
   self.requests = {}
