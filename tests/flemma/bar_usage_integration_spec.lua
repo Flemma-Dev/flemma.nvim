@@ -90,7 +90,7 @@ describe("flemma.usage segment building", function()
       assert.has_match("%$", keys["request_cost"].text)
 
       assert.is_not_nil(keys["cache_percent"])
-      assert.has_match("Cache 80%%", keys["cache_percent"].text)
+      assert.has_match("80%%", keys["cache_percent"].text)
       assert.is_not_nil(keys["cache_percent"].highlight)
       assert.are.equal("FlemmaNotificationsCacheGood", keys["cache_percent"].highlight.group)
     end)

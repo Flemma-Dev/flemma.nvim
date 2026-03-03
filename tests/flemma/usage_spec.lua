@@ -168,7 +168,7 @@ describe("flemma.usage", function()
 
       local result = usage.format_notification(request, nil, 120)
 
-      assert.has_match("Cache 80%%", result.text)
+      assert.has_match("80%%", result.text)
       local found_good = false
       for _, highlight in ipairs(result.highlights) do
         if highlight.group == "FlemmaNotificationsCacheGood" then

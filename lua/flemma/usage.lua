@@ -97,8 +97,7 @@ function M.build_segments(request, session)
     -- Cache percentage
     local cache_percent = M.calculate_cache_percent(request)
     if cache_percent ~= nil then
-      local cache_text = "Cache " .. tostring(cache_percent) .. "%"
-      local percent_str = tostring(cache_percent) .. "%"
+      local cache_text = tostring(cache_percent) .. "%"
       local group = cache_percent > 50 and "FlemmaNotificationsCacheGood" or "FlemmaNotificationsCacheBad"
       table.insert(request_items, {
         key = "cache_percent",
@@ -106,8 +105,6 @@ function M.build_segments(request, session)
         priority = PRIORITY.CACHE_PERCENT,
         highlight = {
           group = group,
-          offset = #"Cache ", -- byte offset of the percentage within the text
-          length = #percent_str,
         },
       })
     end
