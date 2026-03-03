@@ -2,4 +2,35 @@
 .vapor/
 node_modules/
 
+# Sensitive
+/IDEAS.md
 .env
+
+# Ephemeral
+/.claude/plans/*.md
+/contrib/*.git/
+/example.chat
+/file.chat
+
+# Claude sandbox
+/.bash_profile
+/.bashrc
+/.idea
+/.mcp.json
+/.nvimlog
+/.profile
+/.ripgreprc
+/.vscode
+/.zprofile
+/.zshrc
+
+/.gitconfig
+/.gitmodules
+/HEAD
+/config
+/hooks
+/objects
+/refs
+
+/.claude/agents
+/.claude/skills
