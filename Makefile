@@ -81,7 +81,7 @@ screencast: .vapor/catppuccin/nvim.git .vapor/NStefan002/screenkey.nvim.git
 		XDG_STATE_HOME=`pwd`/.vapor/state \
 	vhs contrib/vhs/flemma_cast.tape
 	ffmpeg -hide_banner -y \
-		-ss 00:00:13 \
+		-ss 00:00:17 \
 		-i assets/flemma_cast.mp4 \
 		-vframes 1 -q:v 2 \
 		.vapor/poster.jpg

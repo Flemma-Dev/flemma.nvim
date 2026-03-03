@@ -58,5 +58,9 @@ Wait+Line /@You:/
 Sleep 2000ms
 Type "GA"
 Sleep 200ms
-Type@40ms "Great stuff, all done."
+Type@40ms "All done! I'm going to fold the conversation for an overview."
+Sleep 200ms
+Ctrl+[
+Sleep 2000ms
+Type "zm"
 Sleep 10000ms
