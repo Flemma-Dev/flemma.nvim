@@ -21,7 +21,6 @@ vim.opt.swapfile = false
 vim.cmd("lcd .vapor/")
 
 vim.api.nvim_set_hl(0, "Folded", { fg = "#8f8f8f" })
-vim.api.nvim_set_hl(0, "DiffChange", { fg = "#ffcc00", bg = "#333000" })
 
 local parser_install_dir = vim.fn.stdpath("cache") .. "/treesitters"
 
