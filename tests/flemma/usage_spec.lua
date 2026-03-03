@@ -105,8 +105,8 @@ describe("flemma.usage", function()
       local result = usage.format_notification(request, session, 150)
 
       assert.has_match("gpt%-4o", result.text)
-      assert.has_match("Session", result.text)
-      assert.has_match("Requests", result.text)
+      assert.has_match("Σ", result.text)
+      assert.has_match("#", result.text)
     end)
 
     it("should return empty result when both args are nil", function()

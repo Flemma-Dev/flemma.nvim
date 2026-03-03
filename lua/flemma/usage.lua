@@ -162,7 +162,7 @@ function M.build_segments(request, session)
     -- Request count
     table.insert(session_items, {
       key = "session_request_count",
-      text = "Requests " .. tostring(session:get_request_count()),
+      text = "#" .. tostring(session:get_request_count()),
       priority = PRIORITY.SESSION_REQUEST_COUNT,
       highlight = { group = "FlemmaNotificationsSecondary" },
     })
@@ -185,7 +185,7 @@ function M.build_segments(request, session)
 
     table.insert(segments, {
       key = "session",
-      label = "Session",
+      label = "Σ",
       label_highlight = "FlemmaNotificationsMuted",
       separator_highlight = "FlemmaNotificationsMuted",
       items = session_items,
