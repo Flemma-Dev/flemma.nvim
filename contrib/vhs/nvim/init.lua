@@ -88,9 +88,6 @@ require("flemma").setup({
     system = "Comment+bg:#101010",
     assistant = "Normal+bg:#102020",
   },
-  notify = {
-    enabled = false,
-  },
   editing = {
     auto_write = true,
   },

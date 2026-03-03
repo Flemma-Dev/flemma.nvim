@@ -56,11 +56,12 @@ develop:
 # Create a VHS screencast demonstrating Flemma's capabilities, with a poster frame prepended
 screencast: .vapor/catppuccin/nvim.git .vapor/NStefan002/screenkey.nvim.git
 	@-rm -R \
-		.vapor/cache/ .vapor/state/ .vapor/scratch.chat .vapor/math.png \
+		.vapor/cache/ .vapor/state/ .vapor/scratch.chat .vapor/templates/example .vapor/math.png \
 		.vapor/poster.jpg .vapor/poster.mp4 .vapor/concat_list.txt \
 		.vapor/flemma_cast_with_poster.mp4 assets/flemma_cast.mp4
-	@mkdir -p .vapor/cache/ .vapor/state/
-	@echo -e "\`\`\`lua\nname = \"Flemma\"\n\nflemma.opt.thinking = \"medium\"\n\`\`\`\n@System: When deleting files use \`trash\` && \`sleep 2\`, never \`rm\`.\n" > .vapor/scratch.chat
+	@mkdir -p .vapor/cache/ .vapor/state/ .vapor/templates/
+	@echo -en "- When deleting files use \`trash\` && \`sleep 2\`, never \`rm\`\n- PC memory can be checked with \`free -h\`" > .vapor/templates/example
+	@echo -en "\`\`\`lua\nname = \"Flemma\"\n\nflemma.opt.thinking = \"medium\"\n\`\`\`\n@System: {{ include('templates/example') }}\n\n" > .vapor/scratch.chat
 	magick \
 		-size 400x200 \
 		xc:white \
