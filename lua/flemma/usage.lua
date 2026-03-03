@@ -64,14 +64,14 @@ function M.build_segments(request, session)
       key = "model_name",
       text = request.model,
       priority = PRIORITY.MODEL_NAME,
-      highlight = { group = "FlemmaNotificationsModel" },
+      highlight = { group = "FlemmaNotificationsBar" },
     })
 
     table.insert(identity_items, {
       key = "provider_name",
       text = "(" .. request.provider .. ")",
       priority = PRIORITY.PROVIDER_NAME,
-      highlight = { group = "FlemmaNotificationsProvider" },
+      highlight = { group = "FlemmaNotificationsMuted" },
     })
 
     table.insert(segments, {
@@ -90,7 +90,7 @@ function M.build_segments(request, session)
         key = "request_cost",
         text = string.format("$%.2f", request:get_total_cost()),
         priority = PRIORITY.REQUEST_COST,
-        highlight = { group = "FlemmaNotificationsCost" },
+        highlight = { group = "FlemmaNotificationsBar" },
       })
     end
 
@@ -117,7 +117,7 @@ function M.build_segments(request, session)
       key = "request_input_tokens",
       text = "\xE2\x86\x91 " .. M.format_number(request.input_tokens),
       priority = PRIORITY.REQUEST_INPUT_TOKENS,
-      highlight = { group = "FlemmaNotificationsTokens" },
+      highlight = { group = "FlemmaNotificationsSecondary" },
     })
 
     -- Output tokens
@@ -126,7 +126,7 @@ function M.build_segments(request, session)
       key = "request_output_tokens",
       text = "\xE2\x86\x93 " .. M.format_number(total_output_tokens),
       priority = PRIORITY.REQUEST_OUTPUT_TOKENS,
-      highlight = { group = "FlemmaNotificationsTokens" },
+      highlight = { group = "FlemmaNotificationsSecondary" },
     })
 
     -- Thinking tokens
@@ -135,7 +135,7 @@ function M.build_segments(request, session)
         key = "thinking_tokens",
         text = "\xE2\x97\x8B " .. M.format_number(request.thoughts_tokens),
         priority = PRIORITY.THINKING_TOKENS,
-        highlight = { group = "FlemmaNotificationsTokens" },
+        highlight = { group = "FlemmaNotificationsSecondary" },
       })
     end
 
@@ -143,7 +143,7 @@ function M.build_segments(request, session)
       table.insert(segments, {
         key = "request",
         items = request_items,
-        separator_highlight = "FlemmaNotificationsSeparator",
+        separator_highlight = "FlemmaNotificationsMuted",
       })
     end
   end
@@ -158,7 +158,7 @@ function M.build_segments(request, session)
         key = "session_cost",
         text = string.format("$%.2f", session:get_total_cost()),
         priority = PRIORITY.SESSION_COST,
-        highlight = { group = "FlemmaNotificationsCost" },
+        highlight = { group = "FlemmaNotificationsBar" },
       })
     end
 
@@ -167,7 +167,7 @@ function M.build_segments(request, session)
       key = "session_request_count",
       text = "Requests " .. tostring(session:get_request_count()),
       priority = PRIORITY.SESSION_REQUEST_COUNT,
-      highlight = { group = "FlemmaNotificationsTokens" },
+      highlight = { group = "FlemmaNotificationsSecondary" },
     })
 
     -- Session input tokens
@@ -175,7 +175,7 @@ function M.build_segments(request, session)
       key = "session_input_tokens",
       text = "\xE2\x86\x91 " .. M.format_number(session:get_total_input_tokens()),
       priority = PRIORITY.SESSION_INPUT_TOKENS,
-      highlight = { group = "FlemmaNotificationsTokens" },
+      highlight = { group = "FlemmaNotificationsSecondary" },
     })
 
     -- Session output tokens
@@ -183,14 +183,14 @@ function M.build_segments(request, session)
       key = "session_output_tokens",
       text = "\xE2\x86\x93 " .. M.format_number(session:get_total_output_tokens()),
       priority = PRIORITY.SESSION_OUTPUT_TOKENS,
-      highlight = { group = "FlemmaNotificationsTokens" },
+      highlight = { group = "FlemmaNotificationsSecondary" },
     })
 
     table.insert(segments, {
       key = "session",
       label = "Session",
-      label_highlight = "FlemmaNotificationsLabel",
-      separator_highlight = "FlemmaNotificationsSeparator",
+      label_highlight = "FlemmaNotificationsMuted",
+      separator_highlight = "FlemmaNotificationsMuted",
       items = session_items,
     })
   end

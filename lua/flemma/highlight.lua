@@ -3,78 +3,10 @@
 ---@class flemma.Highlight
 local M = {}
 
+local color = require("flemma.utilities.color")
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local roles = require("flemma.utilities.roles")
-
----@class flemma.highlight.RGB
----@field r integer 0-255
----@field g integer 0-255
----@field b integer 0-255
-
----Convert hex color string to RGB table
----@param hex? string Hex color (e.g., "#ff0000" or "ff0000")
----@return flemma.highlight.RGB|nil
-local function hex_to_rgb(hex)
-  if not hex then
-    return nil
-  end
-  hex = hex:gsub("^#", "")
-  if #hex ~= 6 then
-    return nil
-  end
-  local r = tonumber(hex:sub(1, 2), 16)
-  local g = tonumber(hex:sub(3, 4), 16)
-  local b = tonumber(hex:sub(5, 6), 16)
-  if not (r and g and b) then
-    return nil
-  end
-  return { r = r, g = g, b = b }
-end
-
----Convert RGB table to hex color string
----@param rgb flemma.highlight.RGB
----@return string hex Hex color (e.g., "#ff0000")
-local function rgb_to_hex(rgb)
-  return string.format("#%02x%02x%02x", math.floor(rgb.r), math.floor(rgb.g), math.floor(rgb.b))
-end
-
----Blend two colors by adding their RGB values (clamped to 0-255)
----@param base_rgb flemma.highlight.RGB
----@param mod_rgb flemma.highlight.RGB
----@param direction "+" | "-"
----@return flemma.highlight.RGB
-local function blend_colors(base_rgb, mod_rgb, direction)
-  local clamp = function(v)
-    return math.max(0, math.min(255, v))
-  end
-  if direction == "+" then
-    return {
-      r = clamp(base_rgb.r + mod_rgb.r),
-      g = clamp(base_rgb.g + mod_rgb.g),
-      b = clamp(base_rgb.b + mod_rgb.b),
-    }
-  else
-    return {
-      r = clamp(base_rgb.r - mod_rgb.r),
-      g = clamp(base_rgb.g - mod_rgb.g),
-      b = clamp(base_rgb.b - mod_rgb.b),
-    }
-  end
-end
-
----Mix two colors by linear interpolation
----@param color_a flemma.highlight.RGB
----@param color_b flemma.highlight.RGB
----@param factor number 0.0 = all color_a, 1.0 = all color_b
----@return flemma.highlight.RGB
-local function mix_colors(color_a, color_b, factor)
-  return {
-    r = math.floor(color_a.r * (1 - factor) + color_b.r * factor + 0.5),
-    g = math.floor(color_a.g * (1 - factor) + color_b.g * factor + 0.5),
-    b = math.floor(color_a.b * (1 - factor) + color_b.b * factor + 0.5),
-  }
-end
 
 ---Get color from a highlight group attribute
 ---@param group_name string Highlight group name (e.g., "Normal")
@@ -134,18 +66,22 @@ local VALID_ATTRIBUTES = {
 ---@field bg? string Hex color
 ---@field sp? string Hex color
 
----Try to resolve a single highlight expression like "Normal+bg:#101010"
+---Try to resolve a single highlight expression like "Normal+bg:#101010" or "DiagnosticOk^fg:4.5"
 ---@param expr string Single expression (no commas)
 ---@param use_defaults boolean Whether to use defaults when group lacks attribute
+---@param contrast_bg? string Hex bg color for ^ contrast enforcement (nil = ignore ^ operators)
 ---@return flemma.highlight.ResolvedAttrs|nil
-local function try_expression(expr, use_defaults)
-  local base_group = expr:match("^(.-)[%+%-][fbs][gp]:")
+local function try_expression(expr, use_defaults, contrast_bg)
+  -- Match base group: everything before the first operator (+, -, or ^)
+  local base_group = expr:match("^(.-)[%+%-^][fbs][gp]:")
   if not base_group or base_group == "" then
     return nil
   end
 
   local result = {}
-  for op, attr, color in expr:gmatch("([%+%-])([fbs][gp]):(#%x%x%x%x%x%x)") do
+
+  -- Pass 1: process +/- blend operations
+  for op, attr, hex_value in expr:gmatch("([%+%-])([fbs][gp]):(#%x%x%x%x%x%x)") do
     if VALID_ATTRIBUTES[attr] then
       local base_hex = get_hl_color(base_group, attr)
       if not base_hex then
@@ -154,13 +90,38 @@ local function try_expression(expr, use_defaults)
         end
         base_hex = get_default_color(attr)
       end
-      local base_rgb = hex_to_rgb(base_hex)
-      local mod_rgb = hex_to_rgb(color)
+      local base_rgb = color.hex_to_rgb(base_hex)
+      local mod_rgb = color.hex_to_rgb(hex_value)
       if base_rgb and mod_rgb then
-        result[attr] = rgb_to_hex(blend_colors(base_rgb, mod_rgb, op))
+        result[attr] = color.rgb_to_hex(color.blend(base_rgb, mod_rgb, op))
       end
     end
   end
+
+  -- Pass 2: process ^ contrast operations (applied after blending)
+  for attr, ratio_str in expr:gmatch("%^([fbs][gp]):([%d%.]+)") do
+    if VALID_ATTRIBUTES[attr] then
+      local target_ratio = tonumber(ratio_str)
+      if target_ratio then
+        -- Use already-blended result, or fall back to base group's attribute
+        local current_hex = result[attr] or get_hl_color(base_group, attr)
+        if not current_hex then
+          if use_defaults then
+            current_hex = get_default_color(attr)
+          end
+        end
+        if current_hex then
+          if contrast_bg then
+            result[attr] = color.ensure_contrast(current_hex, contrast_bg, target_ratio)
+          else
+            -- No contrast context: resolve attribute but skip adjustment
+            result[attr] = current_hex
+          end
+        end
+      end
+    end
+  end
+
   return next(result) and result or nil
 end
 
@@ -168,9 +129,10 @@ end
 ---Format: "Group+attr:#color,FallbackGroup+attr:#color,...".
 ---Comma-separated expressions are tried in order; only last uses defaults.
 ---@param value string The highlight expression(s)
+---@param contrast_bg? string Hex bg color for ^ contrast enforcement
 ---@return flemma.highlight.ResolvedAttrs|nil
-local function parse_highlight_expression(value)
-  if not value:match("[%+%-][fbs][gp]:") then
+local function parse_highlight_expression(value, contrast_bg)
+  if not value:match("[%+%-^][fbs][gp]:") then
     return nil
   end
 
@@ -180,7 +142,7 @@ local function parse_highlight_expression(value)
   end
 
   for i, expr in ipairs(expressions) do
-    local result = try_expression(expr, i == #expressions)
+    local result = try_expression(expr, i == #expressions, contrast_bg)
     if result then
       return result
     end
@@ -194,14 +156,15 @@ end
 ---@param group_name string
 ---@param value string|table
 ---@param type_? string For bare hex colors, which attribute to use ("fg" or "bg")
-local function set_highlight(group_name, value, type_)
+---@param contrast_bg? string Hex bg color for ^ contrast enforcement in expressions
+local function set_highlight(group_name, value, type_, contrast_bg)
   if type(value) == "table" then
     if value.light ~= nil or value.dark ~= nil then
       -- Handle theme-specific definitions
       local is_dark = vim.o.background == "dark"
       local theme_value = is_dark and value.dark or value.light
       if theme_value then
-        set_highlight(group_name, theme_value, type_)
+        set_highlight(group_name, theme_value, type_, contrast_bg)
       end
     else
       local hl_opts = vim.tbl_extend("force", {}, value)
@@ -210,11 +173,11 @@ local function set_highlight(group_name, value, type_)
       vim.api.nvim_set_hl(0, group_name, hl_opts)
     end
   elseif type(value) == "string" then
-    if value:match("[%+%-][fbs][gp]:") then
-      -- Highlight expression (e.g., "Normal+fg:#101010-bg:#303030")
-      local hl_opts = parse_highlight_expression(value)
+    if value:match("[%+%-^][fbs][gp]:") then
+      -- Highlight expression (e.g., "Normal+fg:#101010-bg:#303030" or "Group^fg:4.5")
+      local hl_opts = parse_highlight_expression(value, contrast_bg)
       if hl_opts then
-        set_highlight(group_name, hl_opts, type_)
+        set_highlight(group_name, hl_opts, type_, contrast_bg)
       else
         log.error(
           string.format("set_highlight(): Failed to parse highlight expression for group %s: %s", group_name, value)
@@ -224,25 +187,34 @@ local function set_highlight(group_name, value, type_)
       -- Bare hex color - use type_ to determine attribute (defaults to fg)
       local hl_opts = {}
       hl_opts[type_ or "fg"] = value
-      set_highlight(group_name, hl_opts, type_)
+      set_highlight(group_name, hl_opts, type_, contrast_bg)
     elseif type_ then
       -- Highlight group name with specific attribute requested (e.g., for line highlights)
       -- Extract only the specified attribute to avoid overriding other highlights
-      local color = get_hl_color(value, type_)
-      if not color then
+      local resolved_color = get_hl_color(value, type_)
+      if not resolved_color then
         -- Group doesn't have the attribute - use default color (tries Normal first, then config defaults)
-        color = get_default_color(type_)
+        resolved_color = get_default_color(type_)
       end
       local hl_opts = {}
-      hl_opts[type_] = color
-      set_highlight(group_name, hl_opts, type_)
+      hl_opts[type_] = resolved_color
+      set_highlight(group_name, hl_opts, type_, contrast_bg)
     else
       -- Assume it's a highlight group name to link
-      set_highlight(group_name, { link = value }, type_)
+      set_highlight(group_name, { link = value }, type_, contrast_bg)
     end
   else
     log.error(string.format("set_highlight(): Invalid value type for group %s: %s", group_name, type(value)))
   end
+end
+
+---Public API for resolving a highlight expression with optional contrast context.
+---Primarily for testing; internal code uses set_highlight() which calls this indirectly.
+---@param value string Highlight expression string
+---@param contrast_bg? string Hex bg color for ^ contrast enforcement
+---@return flemma.highlight.ResolvedAttrs|nil
+function M.resolve_expression(value, contrast_bg)
+  return parse_highlight_expression(value, contrast_bg)
 end
 
 ---Apply syntax highlighting and Tree-sitter configuration
@@ -329,63 +301,73 @@ M.apply_syntax = function()
   set_highlight("FlemmaToolError", { link = "DiagnosticError", default = true })
 
   -- Notification bar highlight groups
-  -- Blend: Normal bg → mix 30% StatusLine bg → mix 20% DiffChange fg
-  local normal_bg_hex = get_hl_color("Normal", "bg")
-  local normal_fg_hex = get_hl_color("Normal", "fg")
-  local statusline_bg_hex = get_hl_color("StatusLine", "bg")
-  local diffchange_fg_hex = get_hl_color("DiffChange", "fg")
+  -- All derived from a single base group; change this constant to re-theme the entire bar
+  local NOTIFICATION_BASE_GROUP = "DiffChange"
 
-  local bar_bg_rgb
-  local normal_bg_rgb = normal_bg_hex and hex_to_rgb(normal_bg_hex)
-  if normal_bg_rgb then
-    bar_bg_rgb = normal_bg_rgb
-    local statusline_bg_rgb = statusline_bg_hex and hex_to_rgb(statusline_bg_hex)
-    if statusline_bg_rgb then
-      bar_bg_rgb = mix_colors(bar_bg_rgb, statusline_bg_rgb, 0.3)
+  local bar_bg_hex = get_hl_color(NOTIFICATION_BASE_GROUP, "bg")
+  local bar_fg_hex = get_hl_color(NOTIFICATION_BASE_GROUP, "fg")
+
+  if bar_bg_hex and bar_fg_hex then
+    -- Primary tier: base group fg + bg as-is (model name, cost)
+    vim.api.nvim_set_hl(0, "FlemmaNotificationsBar", { bg = bar_bg_hex, fg = bar_fg_hex, default = true })
+
+    -- Secondary tier: slightly dimmed fg (cache label, token counts, request count)
+    local is_dark = vim.o.background == "dark"
+    local secondary_expr = NOTIFICATION_BASE_GROUP .. (is_dark and "-fg:#222222" or "+fg:#222222")
+    local secondary_resolved = parse_highlight_expression(secondary_expr)
+    if secondary_resolved and secondary_resolved.fg then
+      vim.api.nvim_set_hl(
+        0,
+        "FlemmaNotificationsSecondary",
+        { bg = bar_bg_hex, fg = secondary_resolved.fg, default = true }
+      )
     end
-    local diffchange_fg_rgb = diffchange_fg_hex and hex_to_rgb(diffchange_fg_hex)
-    if diffchange_fg_rgb then
-      bar_bg_rgb = mix_colors(bar_bg_rgb, diffchange_fg_rgb, 0.2)
+
+    -- Muted tier: more dimmed fg (provider, separators, session label)
+    local muted_expr = NOTIFICATION_BASE_GROUP .. (is_dark and "-fg:#444444" or "+fg:#444444")
+    local muted_resolved = parse_highlight_expression(muted_expr)
+    if muted_resolved and muted_resolved.fg then
+      vim.api.nvim_set_hl(0, "FlemmaNotificationsMuted", { bg = bar_bg_hex, fg = muted_resolved.fg, default = true })
     end
-    vim.api.nvim_set_hl(
-      0,
-      "FlemmaNotificationsBar",
-      { bg = rgb_to_hex(bar_bg_rgb), fg = normal_fg_hex, default = true }
-    )
+
+    -- Semantic cache highlights with contrast enforcement
+    local cache_good_fg = get_hl_color("DiagnosticOk", "fg")
+    if cache_good_fg then
+      cache_good_fg = color.ensure_contrast(cache_good_fg, bar_bg_hex, 4.5)
+      vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheGood", { bg = bar_bg_hex, fg = cache_good_fg, default = true })
+    else
+      vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheGood", { link = "DiagnosticOk", default = true })
+    end
+
+    local cache_bad_fg = get_hl_color("DiagnosticWarn", "fg")
+    if cache_bad_fg then
+      cache_bad_fg = color.ensure_contrast(cache_bad_fg, bar_bg_hex, 4.5)
+      vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheBad", { bg = bar_bg_hex, fg = cache_bad_fg, default = true })
+    else
+      vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheBad", { link = "DiagnosticWarn", default = true })
+    end
+
+    -- Bottom border: underline with sp derived from bar bg shifted for contrast
+    local border_shift = { r = 30, g = 30, b = 30 }
+    local bar_bg_rgb = color.hex_to_rgb(bar_bg_hex)
+    if bar_bg_rgb then
+      local adjusted = color.blend(bar_bg_rgb, border_shift, is_dark and "+" or "-")
+      vim.api.nvim_set_hl(
+        0,
+        "FlemmaNotificationsBottom",
+        { underline = true, sp = color.rgb_to_hex(adjusted), default = true }
+      )
+    end
   else
+    -- Fallback when base group lacks bg/fg: link to StatusLine
     vim.api.nvim_set_hl(0, "FlemmaNotificationsBar", { link = "StatusLine", default = true })
-  end
-
-  -- Derive border underline color from bar bg — shift to create visible contrast
-  local border_sp
-  if bar_bg_rgb then
-    local is_dark = (bar_bg_rgb.r + bar_bg_rgb.g + bar_bg_rgb.b) < 384
-    local shift = { r = 30, g = 30, b = 30 }
-    local adjusted = blend_colors(bar_bg_rgb, shift, is_dark and "+" or "-")
-    border_sp = tonumber(rgb_to_hex(adjusted):gsub("^#", ""), 16)
-  end
-  if not border_sp and normal_bg_hex then
-    local fallback_bg_rgb = hex_to_rgb(normal_bg_hex)
-    if fallback_bg_rgb then
-      local is_dark = (fallback_bg_rgb.r + fallback_bg_rgb.g + fallback_bg_rgb.b) < 384
-      local shift = { r = 40, g = 40, b = 40 }
-      local adjusted = blend_colors(fallback_bg_rgb, shift, is_dark and "+" or "-")
-      border_sp = tonumber(rgb_to_hex(adjusted):gsub("^#", ""), 16)
-    end
-  end
-  if not border_sp then
+    vim.api.nvim_set_hl(0, "FlemmaNotificationsSecondary", { link = "StatusLine", default = true })
+    vim.api.nvim_set_hl(0, "FlemmaNotificationsMuted", { link = "Comment", default = true })
+    vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheGood", { link = "DiagnosticOk", default = true })
+    vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheBad", { link = "DiagnosticWarn", default = true })
     local fallback = vim.api.nvim_get_hl(0, { name = "Comment", link = false })
-    border_sp = fallback.fg
+    vim.api.nvim_set_hl(0, "FlemmaNotificationsBottom", { underline = true, sp = fallback.fg, default = true })
   end
-  vim.api.nvim_set_hl(0, "FlemmaNotificationsBottom", { underline = true, sp = border_sp, default = true })
-  vim.api.nvim_set_hl(0, "FlemmaNotificationsModel", { link = "Special", default = true })
-  vim.api.nvim_set_hl(0, "FlemmaNotificationsProvider", { link = "Comment", default = true })
-  vim.api.nvim_set_hl(0, "FlemmaNotificationsSeparator", { fg = border_sp, default = true })
-  vim.api.nvim_set_hl(0, "FlemmaNotificationsCost", { bold = true, default = true })
-  vim.api.nvim_set_hl(0, "FlemmaNotificationsLabel", { link = "Type", default = true })
-  vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheGood", { link = "DiagnosticOk", default = true })
-  vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheBad", { link = "DiagnosticWarn", default = true })
-  vim.api.nvim_set_hl(0, "FlemmaNotificationsTokens", { link = "Comment", default = true })
 end
 
 ---Setup line highlight groups for full-line background highlighting

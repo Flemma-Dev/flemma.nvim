@@ -57,6 +57,25 @@ ruler = { hl = { light = "Normal-fg:#303030" } }
 "Normal+bg:#101010-fg:#202020"
 ```
 
+### Contrast enforcement
+
+The `^` operator ensures a minimum WCAG 2.1 contrast ratio between a colour attribute and a background context:
+
+```
+"HighlightGroup^attr:ratio"
+```
+
+Where `ratio` is a decimal contrast target (e.g., `4.5` for WCAG AA). The operator auto-detects direction: against a dark background it lightens toward white, against a light background it darkens toward black.
+
+Composes with blend operations — blends are applied first, then contrast is enforced:
+
+```lua
+-- Dim DiffChange fg, then ensure result meets 4.5:1 against the bar bg
+"DiffChange-fg:#222222^fg:4.5"
+```
+
+> **Scope:** The `^` operator requires a background context provided by the caller. Currently only the notification bar highlight setup provides this context. Using `^` in user-facing config values (e.g., `ruler.hl`) has no effect — the operator is silently ignored when no background context is available.
+
 **Fallback chains** try groups in order, separated by commas. Only the last group in the chain uses the configured `defaults` when the attribute is missing:
 
 ```lua
@@ -172,7 +191,15 @@ notifications = {
 }
 ```
 
-Notification bars use dedicated highlight groups (`FlemmaNotificationsBar`, `FlemmaNotificationsModel`, `FlemmaNotificationsCost`, etc.) for distinct styling of each segment. The bottom-most bar has an underline border (`FlemmaNotificationsBottom`) to visually separate notifications from buffer content.
+Notification bars derive all colours from `DiffChange` using three foreground tiers against a shared background:
+
+| Tier      | Group                          | Used by                                  |
+| --------- | ------------------------------ | ---------------------------------------- |
+| Primary   | `FlemmaNotificationsBar`       | Model name, cost                         |
+| Secondary | `FlemmaNotificationsSecondary` | Token counts, cache label, request count |
+| Muted     | `FlemmaNotificationsMuted`     | Provider, separators, session label      |
+
+Cache hit percentage uses semantic colours (`DiagnosticOk` / `DiagnosticWarn`) with automatic WCAG contrast enforcement against the bar background. The bottom-most bar has an underline border (`FlemmaNotificationsBottom`) derived from the bar background.
 
 Bars stack vertically when multiple are active — the most recent appears at the top, older ones shift down. Each `.chat` buffer has its own notification stack. Notifications for hidden buffers are queued and shown when the buffer becomes visible. Bars re-render automatically on window resize to reflow content for the new width. Recall the most recent notification with `:Flemma notification:recall`.
 

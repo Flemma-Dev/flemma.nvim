@@ -195,3 +195,176 @@ describe("Highlight", function()
     end)
   end)
 end)
+
+describe("^ contrast operator in expressions", function()
+  local highlight
+  local color
+
+  before_each(function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.highlight"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.utilities.color"] = nil
+    require("flemma").setup({})
+    highlight = require("flemma.highlight")
+    color = require("flemma.utilities.color")
+    -- Set up known highlight groups for testing
+    vim.api.nvim_set_hl(0, "TestDarkBg", { bg = 0x111111, fg = 0x222222 })
+    vim.api.nvim_set_hl(0, "TestLightFg", { fg = 0xffffff })
+  end)
+
+  after_each(function()
+    vim.api.nvim_set_hl(0, "TestDarkBg", {})
+    vim.api.nvim_set_hl(0, "TestLightFg", {})
+  end)
+
+  it("should pass through fg that already meets contrast", function()
+    -- White fg against dark bg: already high contrast
+    local result = highlight.resolve_expression("TestLightFg^fg:4.5", "#111111")
+    assert.is_not_nil(result)
+    assert.is_not_nil(result.fg)
+    assert.are.equal("#ffffff", result.fg)
+  end)
+
+  it("should adjust fg when contrast is insufficient", function()
+    -- Dark fg against dark bg: insufficient contrast
+    local result = highlight.resolve_expression("TestDarkBg^fg:4.5", "#111111")
+    assert.is_not_nil(result)
+    assert.is_not_nil(result.fg)
+    -- Should be lighter than the original #222222
+    local ratio = color.contrast_ratio(result.fg, "#111111")
+    assert.is_true(ratio >= 4.5, "adjusted fg should meet 4.5:1 contrast: got " .. tostring(ratio))
+  end)
+
+  it("should compose with blend operations: blend first then contrast", function()
+    -- Blend first, then ensure contrast
+    local result = highlight.resolve_expression("TestLightFg-fg:#dddddd^fg:4.5", "#111111")
+    assert.is_not_nil(result)
+    assert.is_not_nil(result.fg)
+    local ratio = color.contrast_ratio(result.fg, "#111111")
+    assert.is_true(ratio >= 4.5, "composed expression should meet contrast: got " .. tostring(ratio))
+  end)
+
+  it("should ignore ^ operator when no contrast_bg provided", function()
+    -- Without contrast_bg, ^ is a no-op (doesn't crash, returns blended result)
+    local result = highlight.resolve_expression("TestDarkBg^fg:4.5", nil)
+    assert.is_not_nil(result)
+    assert.is_not_nil(result.fg)
+    -- Should be the original value, unadjusted
+    assert.are.equal("#222222", result.fg)
+  end)
+end)
+
+describe("notification bar highlights", function()
+  local highlight
+  local color
+
+  before_each(function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.highlight"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.utilities.color"] = nil
+    -- Clear notification groups from prior tests so default = true can take effect
+    for _, group in ipairs({
+      "FlemmaNotificationsBar",
+      "FlemmaNotificationsSecondary",
+      "FlemmaNotificationsMuted",
+      "FlemmaNotificationsBottom",
+      "FlemmaNotificationsCacheGood",
+      "FlemmaNotificationsCacheBad",
+    }) do
+      vim.api.nvim_set_hl(0, group, {})
+    end
+    -- Set up DiffChange so the notification bar has a base to derive from
+    vim.api.nvim_set_hl(0, "DiffChange", { bg = 0x3c3836, fg = 0xd5c4a1 })
+    vim.api.nvim_set_hl(0, "DiagnosticOk", { fg = 0x00ff00 })
+    vim.api.nvim_set_hl(0, "DiagnosticWarn", { fg = 0xffff00 })
+    require("flemma").setup({})
+    highlight = require("flemma.highlight")
+    color = require("flemma.utilities.color")
+  end)
+
+  after_each(function()
+    for _, group in ipairs({
+      "FlemmaNotificationsBar",
+      "FlemmaNotificationsSecondary",
+      "FlemmaNotificationsMuted",
+      "FlemmaNotificationsBottom",
+      "FlemmaNotificationsCacheGood",
+      "FlemmaNotificationsCacheBad",
+    }) do
+      vim.api.nvim_set_hl(0, group, {})
+    end
+    vim.api.nvim_set_hl(0, "DiffChange", {})
+    vim.api.nvim_set_hl(0, "DiagnosticOk", {})
+    vim.api.nvim_set_hl(0, "DiagnosticWarn", {})
+  end)
+
+  local function setup_and_apply()
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.bo[bufnr].filetype = "chat"
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant: test" })
+    highlight.apply_syntax()
+  end
+
+  it("should define FlemmaNotificationsBar with DiffChange bg", function()
+    setup_and_apply()
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsBar", link = false })
+    assert.is_not_nil(hl.bg, "FlemmaNotificationsBar should have bg")
+    -- Should match DiffChange bg (0x3c3836)
+    assert.are.equal(0x3c3836, hl.bg)
+  end)
+
+  it("should define FlemmaNotificationsBar with DiffChange fg", function()
+    setup_and_apply()
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsBar", link = false })
+    assert.is_not_nil(hl.fg, "FlemmaNotificationsBar should have fg")
+    assert.are.equal(0xd5c4a1, hl.fg)
+  end)
+
+  it("should define FlemmaNotificationsSecondary with same bg as bar", function()
+    setup_and_apply()
+    local bar_hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsBar", link = false })
+    local sec_hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsSecondary", link = false })
+    assert.is_not_nil(sec_hl.bg)
+    assert.are.equal(bar_hl.bg, sec_hl.bg)
+  end)
+
+  it("should define FlemmaNotificationsMuted with same bg as bar", function()
+    setup_and_apply()
+    local bar_hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsBar", link = false })
+    local muted_hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsMuted", link = false })
+    assert.is_not_nil(muted_hl.bg)
+    assert.are.equal(bar_hl.bg, muted_hl.bg)
+  end)
+
+  it("should define FlemmaNotificationsBottom with underline", function()
+    setup_and_apply()
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsBottom", link = false })
+    assert.is_true(hl.underline, "FlemmaNotificationsBottom should have underline")
+    assert.is_not_nil(hl.sp, "FlemmaNotificationsBottom should have sp")
+  end)
+
+  it("should define FlemmaNotificationsCacheGood with sufficient contrast", function()
+    setup_and_apply()
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsCacheGood", link = false })
+    assert.is_not_nil(hl.fg, "FlemmaNotificationsCacheGood should have fg")
+    local fg_hex = string.format("#%06x", hl.fg)
+    local bg_hex = string.format("#%06x", 0x3c3836)
+    local ratio = color.contrast_ratio(fg_hex, bg_hex)
+    assert.is_true(ratio >= 4.5, "cache good fg should have >= 4.5:1 contrast against bar bg: got " .. tostring(ratio))
+  end)
+
+  it("should define FlemmaNotificationsCacheBad with sufficient contrast", function()
+    setup_and_apply()
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsCacheBad", link = false })
+    assert.is_not_nil(hl.fg, "FlemmaNotificationsCacheBad should have fg")
+    local fg_hex = string.format("#%06x", hl.fg)
+    local bg_hex = string.format("#%06x", 0x3c3836)
+    local ratio = color.contrast_ratio(fg_hex, bg_hex)
+    assert.is_true(ratio >= 4.5, "cache bad fg should have >= 4.5:1 contrast against bar bg: got " .. tostring(ratio))
+  end)
+end)
