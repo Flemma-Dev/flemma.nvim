@@ -217,6 +217,86 @@ function M.resolve_expression(value, contrast_bg)
   return parse_highlight_expression(value, contrast_bg)
 end
 
+---Setup CursorLine blend highlight groups for line-highlighted chat buffers.
+---Creates FlemmaLine*CursorLine variants that combine role backgrounds with CursorLine styling,
+---so the cursor line remains visible on top of role-based line highlights.
+local function setup_cursorline_highlights()
+  local current_config = state.get_config()
+  if not current_config.line_highlights or not current_config.line_highlights.enabled then
+    return
+  end
+
+  local cl_hl = vim.api.nvim_get_hl(0, { name = "CursorLine", link = false })
+  if not cl_hl or not next(cl_hl) then
+    return
+  end
+
+  -- Compute the bg delta: how CursorLine differs from Normal
+  local cl_bg_hex = cl_hl.bg and string.format("#%06x", cl_hl.bg)
+  local normal_bg_hex = get_hl_color("Normal", "bg") or get_default_color("bg")
+
+  ---@type {r: integer, g: integer, b: integer}|nil
+  local delta_rgb
+  if cl_bg_hex then
+    local cl_rgb = color.hex_to_rgb(cl_bg_hex)
+    local normal_rgb = color.hex_to_rgb(normal_bg_hex)
+    if cl_rgb and normal_rgb then
+      -- Delta = CursorLine_bg - Normal_bg (per channel, may be negative)
+      delta_rgb = {
+        r = cl_rgb.r - normal_rgb.r,
+        g = cl_rgb.g - normal_rgb.g,
+        b = cl_rgb.b - normal_rgb.b,
+      }
+    end
+  end
+
+  -- Collect non-color CursorLine attributes (bold, underline, italic, etc.)
+  ---@type table<string, boolean|integer>
+  local cl_decorations = {}
+  for attr, value in pairs(cl_hl) do
+    if attr ~= "bg" and attr ~= "fg" and attr ~= "sp" and attr ~= "link" then
+      cl_decorations[attr] = value
+    end
+  end
+
+  -- Create CursorLine variant for each line highlight group
+  local base_groups = {
+    "FlemmaLineFrontmatter",
+    "FlemmaLineSystem",
+    "FlemmaLineUser",
+    "FlemmaLineAssistant",
+    "FlemmaThinkingBlock",
+  }
+  for _, base_group in ipairs(base_groups) do
+    local role_bg_hex = get_hl_color(base_group, "bg")
+    local cl_group_name = base_group .. "CursorLine"
+
+    ---@type vim.api.keyset.highlight
+    local hl_opts = vim.tbl_extend("force", {}, cl_decorations)
+
+    if role_bg_hex and delta_rgb then
+      -- Blend: apply CursorLine's bg delta onto the role bg
+      local role_rgb = color.hex_to_rgb(role_bg_hex)
+      if role_rgb then
+        local clamp = function(v)
+          return math.max(0, math.min(255, v))
+        end
+        hl_opts.bg = color.rgb_to_hex({
+          r = clamp(role_rgb.r + delta_rgb.r),
+          g = clamp(role_rgb.g + delta_rgb.g),
+          b = clamp(role_rgb.b + delta_rgb.b),
+        })
+      end
+    elseif cl_bg_hex then
+      -- No role bg or no delta; use CursorLine bg directly
+      hl_opts.bg = cl_bg_hex
+    end
+
+    hl_opts.default = true
+    vim.api.nvim_set_hl(0, cl_group_name, hl_opts)
+  end
+end
+
 ---Apply syntax highlighting and Tree-sitter configuration
 M.apply_syntax = function()
   local syntax_config = state.get_config()
@@ -281,6 +361,15 @@ M.apply_syntax = function()
   -- Set highlight for thinking tags and blocks
   set_highlight("FlemmaThinkingTag", syntax_config.highlights.thinking_tag)
   set_highlight("FlemmaThinkingBlock", syntax_config.highlights.thinking_block)
+
+  -- fg-only variant for fold text preview: bg comes from line_hl_group extmarks,
+  -- allowing CursorLine overlay to blend correctly on folded thinking blocks
+  local thinking_fg = get_hl_color("FlemmaThinkingBlock", "fg") or get_hl_color("Comment", "fg")
+  if thinking_fg then
+    vim.api.nvim_set_hl(0, "FlemmaThinkingFoldPreview", { fg = thinking_fg, default = true })
+  else
+    vim.api.nvim_set_hl(0, "FlemmaThinkingFoldPreview", { link = "Comment", default = true })
+  end
 
   -- Set highlight for tool use and tool result syntax
   -- Note: Tool names and IDs in backticks are handled by treesitter markdown_inline
@@ -380,6 +469,9 @@ M.apply_syntax = function()
       )
     end
   end
+
+  -- Create CursorLine blend variants after all base groups are defined
+  setup_cursorline_highlights()
 end
 
 ---Setup line highlight groups for full-line background highlighting

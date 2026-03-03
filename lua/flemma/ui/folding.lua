@@ -251,7 +251,7 @@ function M.get_fold_text()
     local fold_preview = preview.format_content_preview(thinking_seg.content, text_width - chrome_width)
 
     if fold_preview ~= "" then
-      table.insert(chunks, { fold_preview .. " ", "FlemmaThinkingBlock" })
+      table.insert(chunks, { fold_preview .. " ", "FlemmaThinkingFoldPreview" })
       table.insert(chunks, { "</thinking> ", "FlemmaThinkingTag" })
       table.insert(chunks, { suffix, "FlemmaFoldMeta" })
     else

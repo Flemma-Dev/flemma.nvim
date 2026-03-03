@@ -368,3 +368,164 @@ describe("notification bar highlights", function()
     assert.is_true(ratio >= 4.5, "cache bad fg should have >= 4.5:1 contrast against bar bg: got " .. tostring(ratio))
   end)
 end)
+
+describe("CursorLine overlay highlights", function()
+  local highlight
+
+  -- Known highlight groups for predictable testing
+  local NORMAL_BG = 0x1a1a2e
+  local CURSORLINE_BG = 0x252540
+
+  before_each(function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.highlight"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.utilities.color"] = nil
+
+    -- Set predictable Normal and CursorLine
+    vim.api.nvim_set_hl(0, "Normal", { bg = NORMAL_BG, fg = 0xeeeeee })
+    vim.api.nvim_set_hl(0, "CursorLine", { bg = CURSORLINE_BG })
+
+    -- Clear CursorLine variant groups so default = true can take effect
+    for _, group in ipairs({
+      "FlemmaLineFrontmatterCursorLine",
+      "FlemmaLineSystemCursorLine",
+      "FlemmaLineUserCursorLine",
+      "FlemmaLineAssistantCursorLine",
+      "FlemmaThinkingBlockCursorLine",
+      "FlemmaThinkingFoldPreview",
+    }) do
+      vim.api.nvim_set_hl(0, group, {})
+    end
+
+    require("flemma").setup({})
+    highlight = require("flemma.highlight")
+  end)
+
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+    vim.api.nvim_set_hl(0, "Normal", {})
+    vim.api.nvim_set_hl(0, "CursorLine", {})
+    for _, group in ipairs({
+      "FlemmaLineFrontmatterCursorLine",
+      "FlemmaLineSystemCursorLine",
+      "FlemmaLineUserCursorLine",
+      "FlemmaLineAssistantCursorLine",
+      "FlemmaThinkingBlockCursorLine",
+      "FlemmaThinkingFoldPreview",
+      "FlemmaLineAssistant",
+      "FlemmaLineUser",
+      "FlemmaLineSystem",
+      "FlemmaLineFrontmatter",
+      "FlemmaThinkingBlock",
+    }) do
+      vim.api.nvim_set_hl(0, group, {})
+    end
+  end)
+
+  local function setup_and_apply()
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.bo[bufnr].filetype = "chat"
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant: test" })
+    highlight.apply_syntax()
+  end
+
+  it("should create CursorLine variant for each line highlight group", function()
+    setup_and_apply()
+    for _, group in ipairs({
+      "FlemmaLineFrontmatterCursorLine",
+      "FlemmaLineSystemCursorLine",
+      "FlemmaLineUserCursorLine",
+      "FlemmaLineAssistantCursorLine",
+      "FlemmaThinkingBlockCursorLine",
+    }) do
+      local hl = vim.api.nvim_get_hl(0, { name = group, link = false })
+      assert.is_not_nil(hl.bg, group .. " should have bg")
+    end
+  end)
+
+  it("should apply CursorLine bg delta to role bg", function()
+    setup_and_apply()
+
+    -- CursorLine delta from Normal: (0x25-0x1a, 0x25-0x1a, 0x40-0x2e) = (11, 11, 18)
+    -- FlemmaLineAssistant bg = Normal bg + #102020 = (0x1a+0x10, 0x1a+0x20, 0x2e+0x20) = (0x2a, 0x3a, 0x4e)
+    -- Expected CursorLine variant = assistant bg + delta = (0x2a+11, 0x3a+11, 0x4e+18) = (0x35, 0x45, 0x60)
+    local assistant_cl = vim.api.nvim_get_hl(0, { name = "FlemmaLineAssistantCursorLine", link = false })
+    local assistant_base = vim.api.nvim_get_hl(0, { name = "FlemmaLineAssistant", link = false })
+
+    -- The CursorLine variant bg should differ from the base by the CursorLine delta
+    assert.are_not.equal(assistant_base.bg, assistant_cl.bg, "CursorLine variant should differ from base")
+
+    -- Verify the delta is consistent: both should shift by the same amount as CursorLine shifts from Normal
+    local normal_bg = vim.api.nvim_get_hl(0, { name = "Normal", link = false }).bg
+    local cl_bg = vim.api.nvim_get_hl(0, { name = "CursorLine", link = false }).bg
+
+    -- Extract red channel from each to verify the delta math
+    local normal_r = math.floor(normal_bg / 0x10000) % 256
+    local cl_r = math.floor(cl_bg / 0x10000) % 256
+    local expected_delta_r = cl_r - normal_r
+
+    local base_r = math.floor(assistant_base.bg / 0x10000) % 256
+    local variant_r = math.floor(assistant_cl.bg / 0x10000) % 256
+    local actual_delta_r = variant_r - base_r
+
+    assert.are.equal(expected_delta_r, actual_delta_r, "red channel delta should match CursorLine-Normal delta")
+  end)
+
+  it("should carry CursorLine decoration attributes to variants", function()
+    -- Set CursorLine with underline
+    vim.api.nvim_set_hl(0, "CursorLine", { bg = CURSORLINE_BG, underline = true })
+    -- Clear variants so they get recreated
+    for _, group in ipairs({
+      "FlemmaLineAssistantCursorLine",
+      "FlemmaLineUserCursorLine",
+    }) do
+      vim.api.nvim_set_hl(0, group, {})
+    end
+
+    setup_and_apply()
+
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaLineAssistantCursorLine", link = false })
+    assert.is_true(hl.underline, "CursorLine variant should inherit underline from CursorLine")
+  end)
+
+  it("should not create variants when CursorLine is empty", function()
+    vim.api.nvim_set_hl(0, "CursorLine", {})
+    -- Clear variants
+    for _, group in ipairs({
+      "FlemmaLineAssistantCursorLine",
+    }) do
+      vim.api.nvim_set_hl(0, group, {})
+    end
+
+    setup_and_apply()
+
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaLineAssistantCursorLine", link = false })
+    assert.is_nil(hl.bg, "should not create variant when CursorLine has no attributes")
+  end)
+
+  describe("FlemmaThinkingFoldPreview", function()
+    it("should have fg but no bg", function()
+      setup_and_apply()
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaThinkingFoldPreview", link = false })
+      assert.is_not_nil(hl.fg, "FlemmaThinkingFoldPreview should have fg")
+      assert.is_nil(hl.bg, "FlemmaThinkingFoldPreview should NOT have bg (let line_hl_group provide it)")
+    end)
+
+    it("should derive fg from FlemmaThinkingBlock", function()
+      setup_and_apply()
+      local thinking_hl = vim.api.nvim_get_hl(0, { name = "FlemmaThinkingBlock", link = false })
+      local fold_hl = vim.api.nvim_get_hl(0, { name = "FlemmaThinkingFoldPreview", link = false })
+
+      if thinking_hl.fg then
+        assert.are.equal(thinking_hl.fg, fold_hl.fg, "FlemmaThinkingFoldPreview fg should match FlemmaThinkingBlock fg")
+      else
+        -- Falls back to Comment fg
+        local comment_hl = vim.api.nvim_get_hl(0, { name = "Comment", link = false })
+        assert.are.equal(comment_hl.fg, fold_hl.fg, "FlemmaThinkingFoldPreview fg should fall back to Comment fg")
+      end
+    end)
+  end)
+end)

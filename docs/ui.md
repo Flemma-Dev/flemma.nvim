@@ -174,7 +174,7 @@ Collapsed folds show a preview of their content with per-segment syntax highligh
 - **Messages:** `@Role: preview... (N lines)` — role prefix uses the role's highlight group (e.g., `FlemmaAssistant`), preview uses `FlemmaFoldPreview`, line count uses `FlemmaFoldMeta`.
 - **Tool Use:** `◆ Tool Use: name: params... (N lines)` — icon uses `FlemmaToolIcon`, title uses `FlemmaToolUseTitle`, name uses `FlemmaToolName`, preview uses `FlemmaFoldPreview`, meta uses `FlemmaFoldMeta`.
 - **Tool Result:** `◇ Tool Result: name: preview... (N lines)` — same structure as tool use but with `FlemmaToolResultTitle`. Errors show `(error)` with `FlemmaToolResultError`.
-- **Thinking blocks:** `<thinking preview...> (N lines)` — shows `<thinking redacted>` for redacted blocks, or `<thinking provider>` for blocks with a provider signature. Uses `FlemmaThinkingTag` for delimiters and `FlemmaFoldPreview` for content.
+- **Thinking blocks:** `<thinking preview...> (N lines)` — shows `<thinking redacted>` for redacted blocks, or `<thinking provider>` for blocks with a provider signature. Uses `FlemmaThinkingTag` for delimiters and `FlemmaThinkingFoldPreview` for content (fg-only, so the background comes from the line highlight extmark and correctly blends with CursorLine).
 - **Frontmatter:** ` ```language preview... ``` (N lines) ` — uses `FlemmaFoldMeta` for fences and `FlemmaFoldPreview` for content.
 
 ## Notifications
@@ -217,6 +217,7 @@ Flemma uses a priority hierarchy to layer visual elements correctly when they ov
 | -------- | --------------- | --------------------------------------------- |
 | 50       | Line highlights | Base backgrounds for messages and frontmatter |
 | 100      | Thinking blocks | Overrides message line highlights             |
+| 125      | CursorLine      | Blended overlay so CursorLine shows through   |
 | 200      | Thinking tags   | `<thinking>` / `</thinking>` styling          |
 | 250      | Tool indicators | Execution spinners and status                 |
 | 300      | Spinner         | Highest priority; suppresses spell checking   |
