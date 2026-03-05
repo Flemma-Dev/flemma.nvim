@@ -103,15 +103,17 @@ describe("UI Line Highlights", function()
 
       -- Query interior row (row 2) with overlap=true
       local marks_at_row2 = vim.api.nvim_buf_get_extmarks(
-        bufnr, line_hl_ns, { 2, 0 }, { 2, 0 }, { details = true, overlap = true }
+        bufnr,
+        line_hl_ns,
+        { 2, 0 },
+        { 2, 0 },
+        { details = true, overlap = true }
       )
       assert.are.equal(1, #marks_at_row2, "overlap query should find range extmark at interior row")
       assert.is_truthy(string.find(marks_at_row2[1][4].line_hl_group, "User"))
 
       -- Without overlap, interior row returns nothing
-      local marks_no_overlap = vim.api.nvim_buf_get_extmarks(
-        bufnr, line_hl_ns, { 2, 0 }, { 2, 0 }, { details = true }
-      )
+      local marks_no_overlap = vim.api.nvim_buf_get_extmarks(bufnr, line_hl_ns, { 2, 0 }, { 2, 0 }, { details = true })
       assert.are.equal(0, #marks_no_overlap, "non-overlap query should not find range extmark at interior row")
     end)
 
