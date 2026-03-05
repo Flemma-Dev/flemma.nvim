@@ -37,10 +37,6 @@ local thinking_ns = vim.api.nvim_create_namespace("flemma_thinking_tags")
 local tool_exec_ns = vim.api.nvim_create_namespace("flemma_tool_execution")
 local tool_preview_ns = vim.api.nvim_create_namespace("flemma_tool_preview")
 
--- CursorLine overlay: tracks previous cursor row per buffer to avoid redundant updates
----@type table<integer, integer>
-local cursorline_prev_row = {}
-
 ---@class flemma.ui.ToolIndicator
 ---@field extmark_id integer
 ---@field timer integer|nil
@@ -378,57 +374,112 @@ function M.apply_line_highlights(bufnr, doc)
     end
   end
 
-  -- Invalidate cursorline cache so it re-evaluates on next CursorMoved
-  cursorline_prev_row[bufnr] = nil
+  -- Invalidate cursorline cache so update_cursorline() (called later in
+  -- update_ui) re-evaluates with the new highlight groups instead of
+  -- hitting the same-row early return.
+  state.get_buffer_state(bufnr).cursorline_prev_row = nil
+end
+
+---Remove the CursorLine overlay extmark for a buffer.
+---@param bufnr integer
+local function remove_cursorline(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  local eid = buffer_state.cursorline_extmark_id
+  if eid then
+    pcall(vim.api.nvim_buf_del_extmark, bufnr, cursorline_ns, eid)
+    buffer_state.cursorline_extmark_id = nil
+  end
+  buffer_state.cursorline_prev_row = nil
+end
+
+---Check whether a window is a floating window.
+---@param winid integer
+---@return boolean
+local function is_floating_window(winid)
+  local ok, win_config = pcall(vim.api.nvim_win_get_config, winid)
+  return ok and win_config.relative ~= nil and win_config.relative ~= ""
 end
 
 ---Update the CursorLine overlay extmark for the current cursor position.
 ---Finds the line highlight (or thinking block) under the cursor and places
 ---a higher-priority extmark with the blended CursorLine variant.
+---Uses a stable extmark ID to update in-place (no clear-and-recreate).
+---Queries the buffer's own window for cursor position and cursorline state,
+---so it works correctly even when focus is in a floating window.
+---NOTE: bufwinid() returns only the first window displaying the buffer;
+---if the same .chat buffer is open in multiple splits, only one gets the overlay.
 ---@param bufnr integer
 local function update_cursorline(bufnr)
-  local row = vim.api.nvim_win_get_cursor(0)[1] - 1 -- 0-indexed
-
-  if not vim.wo.cursorline then
-    if cursorline_prev_row[bufnr] then
-      vim.api.nvim_buf_clear_namespace(bufnr, cursorline_ns, 0, -1)
-      cursorline_prev_row[bufnr] = nil
-    end
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid == -1 then
     return
   end
+
+  local row = vim.api.nvim_win_get_cursor(winid)[1] - 1 -- 0-indexed
+
+  -- Check cursorline on the buffer's own window, not whichever window has focus
+  if not vim.wo[winid].cursorline then
+    remove_cursorline(bufnr)
+    return
+  end
+
+  -- Only show overlay when the buffer's window is "active": either focused directly
+  -- or focus is in a transient floating window (completion menu, hover, etc.)
+  local current_win = vim.api.nvim_get_current_win()
+  if current_win ~= winid then
+    if not is_floating_window(current_win) then
+      remove_cursorline(bufnr)
+      return
+    end
+  end
+
+  local buffer_state = state.get_buffer_state(bufnr)
 
   -- Skip if cursor hasn't moved to a different line
-  if row == cursorline_prev_row[bufnr] then
+  if row == buffer_state.cursorline_prev_row then
     return
   end
-  cursorline_prev_row[bufnr] = row
+  buffer_state.cursorline_prev_row = row
 
-  vim.api.nvim_buf_clear_namespace(bufnr, cursorline_ns, 0, -1)
+  -- Find the line highlight group at the cursor row
+  ---@type string|nil
+  local target_hl_group
 
   -- Check thinking blocks namespace first (higher visual priority)
   local thinking_marks = vim.api.nvim_buf_get_extmarks(bufnr, thinking_ns, { row, 0 }, { row, 0 }, { details = true })
   for _, mark in ipairs(thinking_marks) do
     local details = mark[4]
     if details and details.line_hl_group then
-      vim.api.nvim_buf_set_extmark(bufnr, cursorline_ns, row, 0, {
-        line_hl_group = details.line_hl_group .. "CursorLine",
-        priority = PRIORITY.CURSORLINE,
-      })
-      return
+      target_hl_group = details.line_hl_group .. "CursorLine"
+      break
     end
   end
 
   -- Check line highlights namespace
-  local line_marks = vim.api.nvim_buf_get_extmarks(bufnr, line_hl_ns, { row, 0 }, { row, 0 }, { details = true })
-  for _, mark in ipairs(line_marks) do
-    local details = mark[4]
-    if details and details.line_hl_group then
-      vim.api.nvim_buf_set_extmark(bufnr, cursorline_ns, row, 0, {
-        line_hl_group = details.line_hl_group .. "CursorLine",
-        priority = PRIORITY.CURSORLINE,
-      })
-      return
+  if not target_hl_group then
+    local line_marks = vim.api.nvim_buf_get_extmarks(bufnr, line_hl_ns, { row, 0 }, { row, 0 }, { details = true })
+    for _, mark in ipairs(line_marks) do
+      local details = mark[4]
+      if details and details.line_hl_group then
+        target_hl_group = details.line_hl_group .. "CursorLine"
+        break
+      end
     end
+  end
+
+  if target_hl_group then
+    ---@type vim.api.keyset.set_extmark
+    local opts = {
+      line_hl_group = target_hl_group,
+      priority = PRIORITY.CURSORLINE,
+    }
+    local eid = buffer_state.cursorline_extmark_id
+    if eid then
+      opts.id = eid
+    end
+    buffer_state.cursorline_extmark_id = vim.api.nvim_buf_set_extmark(bufnr, cursorline_ns, row, 0, opts)
+  else
+    remove_cursorline(bufnr)
   end
 end
 
@@ -543,7 +594,6 @@ function M.setup_chat_filetype_autocmds()
       callback = function(ev)
         local bufnr = ev.buf
         updatetime_state.active_chat_buffers[bufnr] = nil
-        cursorline_prev_row[bufnr] = nil
 
         -- Use vim.schedule here too for consistency
         vim.schedule(function()
@@ -568,17 +618,8 @@ function M.setup_chat_filetype_autocmds()
       end,
     })
 
-    -- Clear overlay when leaving a chat window (CursorLine doesn't render in unfocused windows)
-    vim.api.nvim_create_autocmd("WinLeave", {
-      group = augroup,
-      pattern = "*.chat",
-      callback = function(ev)
-        vim.api.nvim_buf_clear_namespace(ev.buf, cursorline_ns, 0, -1)
-        cursorline_prev_row[ev.buf] = nil
-      end,
-    })
-
-    -- Re-apply overlay when entering a chat window
+    -- Re-apply overlay when entering a chat window (including first entry
+    -- where cursorline_prev_row is nil and the global WinEnter would skip it).
     vim.api.nvim_create_autocmd("WinEnter", {
       group = augroup,
       pattern = "*.chat",
@@ -587,33 +628,41 @@ function M.setup_chat_filetype_autocmds()
       end,
     })
 
-    -- React to :set cursorline / :set nocursorline / :setlocal variants
+    -- Global WinEnter: re-evaluate cursorline overlays for chat buffers that have one.
+    -- When entering a regular (non-float) window, overlays on unfocused chat windows
+    -- are cleared. When entering a floating window (completion menu, hover, etc.),
+    -- overlays persist — the user is still conceptually in the chat window.
+    -- No WinLeave handler is needed: the overlay persists untouched until WinEnter
+    -- re-evaluates, avoiding any rendering frame where it's missing.
+    vim.api.nvim_create_autocmd("WinEnter", {
+      group = augroup,
+      callback = function()
+        for bufnr, buffer_state in state.each_buffer_state() do
+          if buffer_state.cursorline_prev_row and vim.api.nvim_buf_is_valid(bufnr) then
+            update_cursorline(bufnr)
+          end
+        end
+      end,
+    })
+
+    -- React to :set cursorline / :set nocursorline / :setlocal variants.
+    -- Ignore changes originating from floating windows (e.g., blink-cmp
+    -- setting cursorline on its completion menu), which fire OptionSet
+    -- but don't affect the chat window's cursorline state.
     vim.api.nvim_create_autocmd("OptionSet", {
       group = augroup,
       pattern = "cursorline",
       callback = function()
-        -- Global change (:set) affects all windows without local overrides;
-        -- local change (:setlocal) affects only the current window.
-        -- Clear all chat overlays to avoid stale extmarks, then re-apply for the current window.
-        if vim.v.option_type == "global" then
-          for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-            if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].filetype == "chat" then
-              vim.api.nvim_buf_clear_namespace(bufnr, cursorline_ns, 0, -1)
-              cursorline_prev_row[bufnr] = nil
-            end
-          end
-        else
-          local bufnr = vim.api.nvim_get_current_buf()
-          if vim.bo[bufnr].filetype == "chat" then
-            vim.api.nvim_buf_clear_namespace(bufnr, cursorline_ns, 0, -1)
-            cursorline_prev_row[bufnr] = nil
-          end
+        if is_floating_window(vim.api.nvim_get_current_win()) then
+          return -- Change originated from a floating window; ignore
         end
 
-        -- If cursorline is now on in this window, immediately re-apply
-        local bufnr = vim.api.nvim_get_current_buf()
-        if vim.bo[bufnr].filetype == "chat" then
-          update_cursorline(bufnr)
+        -- Re-evaluate overlays for all chat buffers (not just those with an
+        -- active overlay — :set cursorline needs to CREATE overlays too)
+        for bufnr in state.each_buffer_state() do
+          if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].filetype == "chat" then
+            update_cursorline(bufnr)
+          end
         end
       end,
     })
@@ -695,6 +744,10 @@ function M.update_ui(bufnr)
   M.apply_line_highlights(bufnr, doc)
   M.add_tool_previews(bufnr, doc)
   -- Note: spinner extmark (with suppression) is managed by start_loading_spinner and its timer
+
+  -- Re-apply CursorLine overlay now that line highlights are refreshed,
+  -- so the blend reflects the current AST state instead of the pre-edit state.
+  update_cursorline(bufnr)
 
   folding.invalidate_folds(bufnr)
   folding.fold_completed_blocks(bufnr)

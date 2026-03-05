@@ -31,6 +31,8 @@ local session_module = require("flemma.session")
 ---@field autopilot? flemma.autopilot.BufferState Per-buffer autopilot state machine
 ---@field tool_indicators? table<string, flemma.ui.ToolIndicator> Per-tool execution indicator state
 ---@field pending_executions? table<string, flemma.tools.PendingExecution> In-flight tool executions keyed by tool_id
+---@field cursorline_prev_row? integer Last cursor row (0-indexed) where the CursorLine overlay was placed
+---@field cursorline_extmark_id? integer Stable extmark ID for the CursorLine overlay
 
 ---@diagnostic disable-next-line: missing-fields
 local config = {} ---@type flemma.Config
