@@ -118,22 +118,23 @@ function M.highlight_thinking_tags(bufnr, doc)
   -- Clear existing thinking tag highlights
   vim.api.nvim_buf_clear_namespace(bufnr, thinking_ns, 0, -1)
 
-  local line_count = vim.api.nvim_buf_line_count(bufnr)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
   -- Iterate through messages and their segments to find thinking blocks
   for _, msg in ipairs(doc.messages) do
     if msg.segments then
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "thinking" and seg.position then
-          -- Apply line background highlight to the entire thinking block
-          for lnum = seg.position.start_line, seg.position.end_line do
-            local line_idx = lnum - 1
-            if line_idx >= 0 and line_idx < line_count then
-              vim.api.nvim_buf_set_extmark(bufnr, thinking_ns, line_idx, 0, {
-                line_hl_group = "FlemmaThinkingBlock",
-                priority = PRIORITY.THINKING_BLOCK,
-              })
-            end
+          -- Apply range extmark for thinking block background
+          local start_idx = seg.position.start_line - 1
+          local end_idx = (seg.position.end_line or seg.position.start_line) - 1
+          if start_idx >= 0 and end_idx < #lines then
+            vim.api.nvim_buf_set_extmark(bufnr, thinking_ns, start_idx, 0, {
+              end_row = end_idx,
+              end_col = #lines[end_idx + 1],
+              line_hl_group = "FlemmaThinkingBlock",
+              priority = PRIORITY.THINKING_BLOCK,
+            })
           end
 
           -- Highlight opening tag text
@@ -143,11 +144,13 @@ function M.highlight_thinking_tags(bufnr, doc)
             priority = PRIORITY.THINKING_TAG,
           })
           -- Highlight closing tag text
-          vim.api.nvim_buf_set_extmark(bufnr, thinking_ns, seg.position.end_line - 1, 0, {
-            end_line = seg.position.end_line,
-            hl_group = "FlemmaThinkingTag",
-            priority = PRIORITY.THINKING_TAG,
-          })
+          if seg.position.end_line then
+            vim.api.nvim_buf_set_extmark(bufnr, thinking_ns, seg.position.end_line - 1, 0, {
+              end_line = seg.position.end_line,
+              hl_group = "FlemmaThinkingTag",
+              priority = PRIORITY.THINKING_TAG,
+            })
+          end
         end
       end
     end
