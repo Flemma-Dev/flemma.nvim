@@ -449,7 +449,13 @@ local function update_cursorline(bufnr)
   local target_hl_group
 
   -- Check thinking blocks namespace first (higher visual priority)
-  local thinking_marks = vim.api.nvim_buf_get_extmarks(bufnr, thinking_ns, { row, 0 }, { row, 0 }, { details = true, overlap = true })
+  local thinking_marks = vim.api.nvim_buf_get_extmarks(
+    bufnr,
+    thinking_ns,
+    { row, 0 },
+    { row, 0 },
+    { details = true, overlap = true }
+  )
   for _, mark in ipairs(thinking_marks) do
     local details = mark[4]
     if details and details.line_hl_group then
@@ -460,7 +466,13 @@ local function update_cursorline(bufnr)
 
   -- Check line highlights namespace
   if not target_hl_group then
-    local line_marks = vim.api.nvim_buf_get_extmarks(bufnr, line_hl_ns, { row, 0 }, { row, 0 }, { details = true, overlap = true })
+    local line_marks = vim.api.nvim_buf_get_extmarks(
+      bufnr,
+      line_hl_ns,
+      { row, 0 },
+      { row, 0 },
+      { details = true, overlap = true }
+    )
     for _, mark in ipairs(line_marks) do
       local details = mark[4]
       if details and details.line_hl_group then

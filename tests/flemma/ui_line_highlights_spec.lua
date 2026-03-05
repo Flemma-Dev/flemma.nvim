@@ -70,10 +70,9 @@ describe("UI Line Highlights", function()
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-        "---",
-        "model: gpt-4",
-        "---",
-        "",
+        "```lua",
+        'model = "gpt-4"',
+        "```",
         "@You:",
         "hello",
       })
