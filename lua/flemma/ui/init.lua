@@ -342,35 +342,35 @@ function M.apply_line_highlights(bufnr, doc)
   -- Clear existing line highlights
   vim.api.nvim_buf_clear_namespace(bufnr, line_hl_ns, 0, -1)
 
-  local line_count = vim.api.nvim_buf_line_count(bufnr)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
   -- Highlight frontmatter if present
   if doc.frontmatter and doc.frontmatter.position then
-    for lnum = doc.frontmatter.position.start_line, doc.frontmatter.position.end_line do
-      local line_idx = lnum - 1
-      if line_idx >= 0 and line_idx < line_count then
-        vim.api.nvim_buf_set_extmark(bufnr, line_hl_ns, line_idx, 0, {
-          line_hl_group = "FlemmaLineFrontmatter",
-          priority = PRIORITY.LINE_HIGHLIGHT,
-        })
-      end
+    local start_idx = doc.frontmatter.position.start_line - 1
+    local end_idx = (doc.frontmatter.position.end_line or doc.frontmatter.position.start_line) - 1
+    if start_idx >= 0 and end_idx < #lines then
+      vim.api.nvim_buf_set_extmark(bufnr, line_hl_ns, start_idx, 0, {
+        end_row = end_idx,
+        end_col = #lines[end_idx + 1],
+        line_hl_group = "FlemmaLineFrontmatter",
+        priority = PRIORITY.LINE_HIGHLIGHT,
+      })
     end
   end
 
-  -- Highlight messages
+  -- Highlight messages with range extmarks (one per message)
   for _, msg in ipairs(doc.messages) do
-    -- Construct highlight group name (e.g., "FlemmaLineUser")
     local hl_group = roles.highlight_group("FlemmaLine", msg.role)
-
-    -- Apply line highlight to each line in the message
-    for lnum = msg.position.start_line, msg.position.end_line do
-      local line_idx = lnum - 1 -- Convert to 0-indexed
-      if line_idx >= 0 and line_idx < line_count then
-        vim.api.nvim_buf_set_extmark(bufnr, line_hl_ns, line_idx, 0, {
-          line_hl_group = hl_group,
-          priority = PRIORITY.LINE_HIGHLIGHT,
-        })
-      end
+    local start_idx = msg.position.start_line - 1
+    local end_idx = (msg.position.end_line or msg.position.start_line) - 1
+    if start_idx >= 0 and end_idx < #lines then
+      vim.api.nvim_buf_set_extmark(bufnr, line_hl_ns, start_idx, 0, {
+        end_row = end_idx,
+        end_col = #lines[end_idx + 1],
+        end_right_gravity = true,
+        line_hl_group = hl_group,
+        priority = PRIORITY.LINE_HIGHLIGHT,
+      })
     end
   end
 
