@@ -174,19 +174,24 @@ function M.start_loading_spinner(bufnr)
       vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
       vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)
 
-      -- Check if we need to add a blank line before the spinner
+      -- Write @Assistant: on its own line so the parser recognises it as a message
       local last_line = buffer_utils.get_last_line(bufnr)
       if last_line:match("%S") then
-        vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "", "@Assistant: Thinking…" })
+        vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "", "@Assistant:" })
       else
-        vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "@Assistant: Thinking…" })
+        vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "@Assistant:" })
       end
 
-      -- Track the spinner line position and create the animated extmark
+      -- Track the spinner line position and create the animated extmark.
+      -- "Thinking…" is virtual text so the buffer line stays as just "@Assistant:"
+      -- which the parser can recognise as a role marker.
       -- hl_mode="combine" lets the spinner inherit line highlights (from apply_line_highlights, cursorline, etc.)
       spinner_line_idx0 = vim.api.nvim_buf_line_count(bufnr) - 1
       spinner_extmark_id = vim.api.nvim_buf_set_extmark(bufnr, spinner_ns, spinner_line_idx0, 0, {
-        virt_text = { { " " .. spinner_frames[frame], "FlemmaAssistantSpinner" } },
+        virt_text = {
+          { " Thinking…", "FlemmaAssistantSpinner" },
+          { " " .. spinner_frames[frame], "FlemmaAssistantSpinner" },
+        },
         virt_text_pos = "eol",
         hl_mode = "combine",
         priority = PRIORITY.SPINNER,
@@ -215,7 +220,10 @@ function M.start_loading_spinner(bufnr)
       frame = (frame % #spinner_frames) + 1
       pcall(vim.api.nvim_buf_set_extmark, bufnr, spinner_ns, spinner_line_idx0, 0, {
         id = spinner_extmark_id,
-        virt_text = { { " " .. spinner_frames[frame], "FlemmaAssistantSpinner" } },
+        virt_text = {
+          { " Thinking…", "FlemmaAssistantSpinner" },
+          { " " .. spinner_frames[frame], "FlemmaAssistantSpinner" },
+        },
         virt_text_pos = "eol",
         hl_mode = "combine",
         priority = PRIORITY.SPINNER,
@@ -255,11 +263,12 @@ function M.cleanup_spinner(bufnr)
       return
     end
 
-    -- Only modify lines if the last line is exactly the thinking message (spinner is now virtual text)
-    if last_line_content and last_line_content == "@Assistant: Thinking…" then
+    -- Only modify lines if the last line is the empty @Assistant: spinner placeholder.
+    -- "Thinking…" is now virtual text, so the buffer line is just "@Assistant:".
+    if last_line_content and last_line_content == "@Assistant:" then
       M.buffer_cmd(bufnr, "undojoin") -- Group changes for undo
 
-      -- Get the line before the "Thinking…" message (if it exists)
+      -- Get the line before the "@Assistant:" marker (if it exists)
       local prev_line_actual_content = nil
       if line_count > 1 then
         prev_line_actual_content = buffer_utils.get_line(bufnr, line_count - 1)
@@ -274,7 +283,7 @@ function M.cleanup_spinner(bufnr)
         vim.api.nvim_buf_set_lines(bufnr, line_count - 1, line_count, false, {})
       end
     else
-      log.debug("cleanup_spinner(): Last line is not the 'Thinking…' message, not modifying lines.")
+      log.debug("cleanup_spinner(): Last line is not the spinner placeholder, not modifying lines.")
     end
 
     M.update_ui(bufnr) -- Force UI update after cleaning up spinner

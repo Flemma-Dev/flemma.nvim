@@ -152,9 +152,9 @@ function M.cancel_request()
       -- Clean up the buffer
       local last_line_content = buffer_utils.get_last_line(bufnr)
 
-      if last_line_content == "@Assistant: Thinking…" then
-        -- No content received — clean up spinner placeholder
-        log.debug("cancel_request(): ... Cleaning up 'Thinking…' message")
+      if last_line_content == "@Assistant:" then
+        -- No content received — clean up spinner placeholder (empty @Assistant: block)
+        log.debug("cancel_request(): ... Cleaning up empty @Assistant: spinner placeholder")
         ui.cleanup_spinner(bufnr)
       else
         -- Content was received — mark the response as aborted
