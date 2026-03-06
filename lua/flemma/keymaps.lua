@@ -3,6 +3,31 @@
 ---@class flemma.Keymaps
 local M = {}
 
+local ROLE_NAMES = { ["@System"] = true, ["@You"] = true, ["@Assistant"] = true }
+local SPACE_CANCEL_MS = 800
+
+---Handle colon insertion in insert mode.
+---If the text before the cursor is a valid role marker at the start of
+---the line and the cursor is at end of line, appends ":" and a newline.
+---@return boolean handled True if the role marker was completed
+function M.handle_colon_insert()
+  local line = vim.api.nvim_get_current_line()
+  local col = vim.api.nvim_win_get_cursor(0)[2]
+
+  -- In insert mode cursor can be at col == #line (after last char),
+  -- in normal mode it clamps to col == #line - 1 (on last char).
+  -- Accept both: the line itself must be a valid role name.
+  if ROLE_NAMES[line] and col >= #line - 1 then
+    -- Complete the role marker and add a blank line below
+    local row = vim.api.nvim_win_get_cursor(0)[1]
+    vim.api.nvim_buf_set_lines(0, row - 1, row, false, { line .. ":", "" })
+    vim.api.nvim_win_set_cursor(0, { row + 1, 0 })
+    return true
+  end
+
+  return false
+end
+
 ---Setup function to initialize all keymaps
 M.setup = function()
   local core = require("flemma.core")
@@ -70,6 +95,39 @@ M.setup = function()
 
         -- Set up text objects with configured key
         textobject.setup({ text_object = config.text_object })
+
+        -- Insert-mode : auto-newline for role markers
+        vim.keymap.set("i", ":", function()
+          if not M.handle_colon_insert() then
+            vim.api.nvim_feedkeys(":", "n", false)
+            return
+          end
+
+          -- Space cancellation: eat a space typed within 800ms (muscle memory protection)
+          local completion_time = vim.uv.now()
+          local autocmd_id
+          autocmd_id = vim.api.nvim_create_autocmd("InsertCharPre", {
+            buffer = 0,
+            callback = function()
+              if vim.v.char == " " and (vim.uv.now() - completion_time) < SPACE_CANCEL_MS then
+                vim.v.char = ""
+              end
+              -- Clean up after first character (space or not)
+              if autocmd_id then
+                pcall(vim.api.nvim_del_autocmd, autocmd_id)
+                autocmd_id = nil
+              end
+            end,
+          })
+
+          -- Safety timer: clean up if no character typed within timeout
+          vim.defer_fn(function()
+            if autocmd_id then
+              pcall(vim.api.nvim_del_autocmd, autocmd_id)
+              autocmd_id = nil
+            end
+          end, SPACE_CANCEL_MS)
+        end, { buffer = true, desc = "Auto-newline after role markers" })
 
         -- Insert mode mapping - send and return to insert mode
         if config.keymaps.insert.send then

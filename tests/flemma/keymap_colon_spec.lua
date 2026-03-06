@@ -1,17 +1,16 @@
+-- Force load keymaps from working directory (vim-pack-dir copy may shadow)
+local project_root = os.getenv("PROJECT_ROOT")
+local keymaps
+if project_root then
+  keymaps = dofile(project_root .. "/lua/flemma/keymaps.lua")
+else
+  keymaps = require("flemma.keymaps")
+end
+
 describe("insert-mode colon auto-newline", function()
   local bufnr
-  local keymaps
 
   before_each(function()
-    package.loaded["flemma.keymaps"] = nil
-    package.loaded["flemma.state"] = nil
-    package.loaded["flemma.config"] = nil
-
-    local state = require("flemma.state")
-    state.get_config()
-
-    keymaps = require("flemma.keymaps")
-
     bufnr = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_set_current_buf(bufnr)
     vim.bo[bufnr].filetype = "chat"
