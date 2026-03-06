@@ -104,7 +104,7 @@ describe("migration", function()
     it("does not split tool use headers", function()
       local lines = {
         "@Assistant:",
-        '**Tool Use:** `calc` (`id123`)',
+        "**Tool Use:** `calc` (`id123`)",
       }
       assert.same(lines, migration.migrate_lines(lines))
     end)

@@ -64,8 +64,10 @@ describe("UI Sign Placement", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@You:", "first message",
-        "@Assistant:", "response",
+        "@You:",
+        "first message",
+        "@Assistant:",
+        "response",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -92,10 +94,12 @@ describe("UI Sign Placement", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@You:", "first line",
+        "@You:",
+        "first line",
         "second line",
         "third line",
-        "@Assistant:", "response line 1",
+        "@Assistant:",
+        "response line 1",
         "response line 2",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
@@ -133,9 +137,12 @@ describe("UI Sign Placement", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@System:", "system prompt",
-        "@You:", "user message",
-        "@Assistant:", "assistant response",
+        "@System:",
+        "system prompt",
+        "@You:",
+        "user message",
+        "@Assistant:",
+        "assistant response",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -171,8 +178,10 @@ describe("UI Sign Placement", function()
         "```lua",
         "x = 5",
         "```",
-        "@You:", "first message",
-        "@Assistant:", "response",
+        "@You:",
+        "first message",
+        "@Assistant:",
+        "response",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -204,8 +213,10 @@ describe("UI Sign Placement", function()
         "```json",
         '{"key": "value"}',
         "```",
-        "@You:", "first message",
-        "@Assistant:", "response",
+        "@You:",
+        "first message",
+        "@Assistant:",
+        "response",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -234,7 +245,8 @@ describe("UI Sign Placement", function()
         "end",
         "x = 42",
         "```",
-        "@You:", "message after frontmatter",
+        "@You:",
+        "message after frontmatter",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -261,10 +273,12 @@ describe("UI Sign Placement", function()
         "```json",
         '{"name": "test"}',
         "```",
-        "@You:", "first line",
+        "@You:",
+        "first line",
         "second line",
         "third line",
-        "@Assistant:", "response line 1",
+        "@Assistant:",
+        "response line 1",
         "response line 2",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
@@ -305,9 +319,12 @@ describe("UI Sign Placement", function()
         "```lua",
         "model = 'gpt-4'",
         "```",
-        "@System:", "system prompt",
-        "@You:", "user message",
-        "@Assistant:", "assistant response",
+        "@System:",
+        "system prompt",
+        "@You:",
+        "user message",
+        "@Assistant:",
+        "assistant response",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -343,7 +360,8 @@ describe("UI Sign Placement", function()
         "```lua",
         "x = 5",
         "```",
-        "@You:", "first message",
+        "@You:",
+        "first message",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
       ui.update_ui(bufnr)
@@ -381,8 +399,10 @@ describe("UI Sign Placement", function()
         "```lua",
         "x = 5",
         "```",
-        "@You:", "question",
-        "@Assistant:", "line 1",
+        "@You:",
+        "question",
+        "@Assistant:",
+        "line 1",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
       ui.update_ui(bufnr)
@@ -414,8 +434,10 @@ describe("UI Sign Placement", function()
   describe("parser position verification", function()
     it("should return correct positions without frontmatter", function()
       local lines = {
-        "@You:", "first message",
-        "@Assistant:", "response",
+        "@You:",
+        "first message",
+        "@Assistant:",
+        "response",
       }
       local doc = parser.parse_lines(lines)
 
@@ -431,8 +453,10 @@ describe("UI Sign Placement", function()
         "```lua",
         "x = 5",
         "```",
-        "@You:", "first message",
-        "@Assistant:", "response",
+        "@You:",
+        "first message",
+        "@Assistant:",
+        "response",
       }
       local doc = parser.parse_lines(lines)
 
@@ -449,10 +473,12 @@ describe("UI Sign Placement", function()
         "```json",
         '{"key": "value"}',
         "```",
-        "@You:", "line 1",
+        "@You:",
+        "line 1",
         "line 2",
         "line 3",
-        "@Assistant:", "response",
+        "@Assistant:",
+        "response",
       }
       local doc = parser.parse_lines(lines)
 

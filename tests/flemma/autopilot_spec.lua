@@ -137,9 +137,11 @@ describe("Autopilot on_response_complete", function()
   it("arms when last assistant message has tool_use", function()
     state.set_config({ tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
-      "@You:", "Run the calculator",
+      "@You:",
+      "Run the calculator",
       "",
-      "@Assistant:", "Sure, let me calculate.",
+      "@Assistant:",
+      "Sure, let me calculate.",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
@@ -157,9 +159,11 @@ describe("Autopilot on_response_complete", function()
   it("stays idle when last assistant message has no tool_use", function()
     state.set_config({ tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
-      "@You:", "Hello",
+      "@You:",
+      "Hello",
       "",
-      "@Assistant:", "Hi there!",
+      "@Assistant:",
+      "Hi there!",
       "",
       "@You: ",
     })
@@ -172,9 +176,11 @@ describe("Autopilot on_response_complete", function()
   it("does nothing when autopilot is disabled", function()
     state.set_config({ tools = { autopilot = { enabled = false } } })
     local bufnr = create_buffer({
-      "@You:", "Run",
+      "@You:",
+      "Run",
       "",
-      "@Assistant:", "tool call",
+      "@Assistant:",
+      "tool call",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
@@ -195,9 +201,11 @@ describe("Autopilot on_response_complete", function()
   it("increments iteration counter", function()
     state.set_config({ tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
-      "@You:", "Run",
+      "@You:",
+      "Run",
       "",
-      "@Assistant:", "tool call",
+      "@Assistant:",
+      "tool call",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
@@ -220,9 +228,11 @@ describe("Autopilot on_response_complete", function()
   it("stops after exceeding max_turns", function()
     state.set_config({ tools = { autopilot = { enabled = true, max_turns = 2 } } })
     local bufnr = create_buffer({
-      "@You:", "Run",
+      "@You:",
+      "Run",
       "",
-      "@Assistant:", "tool call",
+      "@Assistant:",
+      "tool call",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
@@ -248,9 +258,11 @@ describe("Autopilot on_response_complete", function()
   it("disarm resets iteration counter", function()
     state.set_config({ tools = { autopilot = { enabled = true, max_turns = 2 } } })
     local bufnr = create_buffer({
-      "@You:", "Run",
+      "@You:",
+      "Run",
       "",
-      "@Assistant:", "tool call",
+      "@Assistant:",
+      "tool call",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
@@ -289,16 +301,19 @@ describe("Autopilot on_tools_complete", function()
   it("sets sending when no pending or awaiting remain", function()
     state.set_config({ tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
-      "@You:", "Run the calculator",
+      "@You:",
+      "Run the calculator",
       "",
-      "@Assistant:", "Sure.",
+      "@Assistant:",
+      "Sure.",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You:", "**Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```",
       "4",
@@ -314,16 +329,19 @@ describe("Autopilot on_tools_complete", function()
   it("pauses when flemma:tool status=pending blocks remain", function()
     state.set_config({ tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
-      "@You:", "Run the calculator",
+      "@You:",
+      "Run the calculator",
       "",
-      "@Assistant:", "Sure.",
+      "@Assistant:",
+      "Sure.",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You:", "**Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=pending",
       "```",
@@ -338,16 +356,19 @@ describe("Autopilot on_tools_complete", function()
   it("schedules send when flemma:tool status=approved blocks remain", function()
     state.set_config({ tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
-      "@You:", "Run the calculator",
+      "@You:",
+      "Run the calculator",
       "",
-      "@Assistant:", "Sure.",
+      "@Assistant:",
+      "Sure.",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You:", "**Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=approved",
       "```",
@@ -362,16 +383,19 @@ describe("Autopilot on_tools_complete", function()
   it("no-ops when not in armed state", function()
     state.set_config({ tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
-      "@You:", "Run",
+      "@You:",
+      "Run",
       "",
-      "@Assistant:", "Sure.",
+      "@Assistant:",
+      "Sure.",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You:", "**Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```",
       "4",
@@ -387,9 +411,11 @@ describe("Autopilot on_tools_complete", function()
   it("waits when unprocessed tool_use blocks remain", function()
     state.set_config({ tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
-      "@You:", "Run both",
+      "@You:",
+      "Run both",
       "",
-      "@Assistant:", "Two tools.",
+      "@Assistant:",
+      "Two tools.",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
@@ -401,7 +427,8 @@ describe("Autopilot on_tools_complete", function()
       '{ "command": "echo hi" }',
       "```",
       "",
-      "@You:", "**Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```",
       "4",
@@ -429,14 +456,16 @@ describe("Autopilot conflict detection", function()
 
   it("parser sets content on flemma:tool with user-edited content", function()
     local bufnr = create_buffer({
-      "@Assistant:", "Tool call.",
+      "@Assistant:",
+      "Tool call.",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You:", "**Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=pending",
       "User typed something here",
@@ -454,14 +483,16 @@ describe("Autopilot conflict detection", function()
 
   it("parser sets empty content on empty flemma:tool", function()
     local bufnr = create_buffer({
-      "@Assistant:", "Tool call.",
+      "@Assistant:",
+      "Tool call.",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You:", "**Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=approved",
       "```",
@@ -477,7 +508,8 @@ describe("Autopilot conflict detection", function()
 
   it("get_awaiting_execution excludes results with user content", function()
     local bufnr = create_buffer({
-      "@Assistant:", "Two tools.",
+      "@Assistant:",
+      "Two tools.",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
@@ -489,7 +521,8 @@ describe("Autopilot conflict detection", function()
       '{ "command": "echo hi" }',
       "```",
       "",
-      "@You:", "**Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=pending",
       "I edited this one",
@@ -509,14 +542,16 @@ describe("Autopilot conflict detection", function()
 
   it("get_awaiting_execution returns empty when all have user content", function()
     local bufnr = create_buffer({
-      "@Assistant:", "Tool call.",
+      "@Assistant:",
+      "Tool call.",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You:", "**Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=pending",
       "Edited content",
@@ -548,16 +583,19 @@ describe("Autopilot all-denied edge case", function()
     -- Simulate buffer state after all tools were denied: tool_results are present
     -- with error content, no flemma:tool markers
     local bufnr = create_buffer({
-      "@You:", "Run the calculator",
+      "@You:",
+      "Run the calculator",
       "",
-      "@Assistant:", "Sure.",
+      "@Assistant:",
+      "Sure.",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You:", "**Tool Result:** `toolu_01` (error)",
+      "@You:",
+      "**Tool Result:** `toolu_01` (error)",
       "",
       "```",
       "The tool was denied by a policy.",
@@ -592,16 +630,19 @@ describe("Autopilot on_tools_complete ignored when not armed", function()
     -- and a tool completion fires, it should not advance the state.
     state.set_config({ tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
-      "@You:", "Run",
+      "@You:",
+      "Run",
       "",
-      "@Assistant:", "Sure.",
+      "@Assistant:",
+      "Sure.",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You:", "**Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```",
       "4",
@@ -616,16 +657,19 @@ describe("Autopilot on_tools_complete ignored when not armed", function()
     -- paused state (e.g., a lingering callback)
     -- Force paused via on_tools_complete seeing pending blocks
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-      "@You:", "Run",
+      "@You:",
+      "Run",
       "",
-      "@Assistant:", "Sure.",
+      "@Assistant:",
+      "Sure.",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You:", "**Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=pending",
       "```",
@@ -635,16 +679,19 @@ describe("Autopilot on_tools_complete ignored when not armed", function()
 
     -- Now replace the buffer to have the tool resolved
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-      "@You:", "Run",
+      "@You:",
+      "Run",
       "",
-      "@Assistant:", "Sure.",
+      "@Assistant:",
+      "Sure.",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You:", "**Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```",
       "4",
@@ -662,16 +709,19 @@ describe("Autopilot on_tools_complete ignored when not armed", function()
     -- which re-arms autopilot. Now on_tools_complete should advance.
     state.set_config({ tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
-      "@You:", "Run",
+      "@You:",
+      "Run",
       "",
-      "@Assistant:", "Sure.",
+      "@Assistant:",
+      "Sure.",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You:", "**Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```",
       "4",
@@ -713,16 +763,19 @@ describe("Autopilot all-sync tool completion", function()
   it("on_tools_complete called before arm is ignored", function()
     state.set_config({ tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
-      "@You:", "Run",
+      "@You:",
+      "Run",
       "",
-      "@Assistant:", "Sure.",
+      "@Assistant:",
+      "Sure.",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You:", "**Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```",
       "4",

@@ -64,14 +64,16 @@ describe("Tool Indicator Extmark Placement", function()
   describe("initial placement", function()
     it("places extmark on the tool result header line", function()
       local bufnr = create_buffer({
-        "@Assistant:", "Running tool:",
+        "@Assistant:",
+        "Running tool:",
         "",
         "**Tool Use:** `calculator` (`toolu_01`)",
         "```json",
         '{ "expression": "1+1" }',
         "```",
         "",
-        "@You:", "**Tool Result:** `toolu_01`",
+        "@You:",
+        "**Tool Result:** `toolu_01`",
         "",
         "```",
         "```",
@@ -90,7 +92,8 @@ describe("Tool Indicator Extmark Placement", function()
 
     it("places two extmarks on separate lines for two tools", function()
       local bufnr = create_buffer({
-        "@Assistant:", "Running tools:",
+        "@Assistant:",
+        "Running tools:",
         "",
         "**Tool Use:** `calculator` (`toolu_01`)",
         "```json",
@@ -102,7 +105,8 @@ describe("Tool Indicator Extmark Placement", function()
         '{ "expression": "2+2" }',
         "```",
         "",
-        "@You:", "**Tool Result:** `toolu_01`",
+        "@You:",
+        "**Tool Result:** `toolu_01`",
         "",
         "```",
         "```",
@@ -127,14 +131,16 @@ describe("Tool Indicator Extmark Placement", function()
   describe("extmark follows buffer modifications", function()
     it("extmark shifts down when lines are inserted above it", function()
       local bufnr = create_buffer({
-        "@Assistant:", "Running tools:",
+        "@Assistant:",
+        "Running tools:",
         "",
         "**Tool Use:** `calculator` (`toolu_01`)",
         "```json",
         '{ "expression": "1+1" }',
         "```",
         "",
-        "@You:", "**Tool Result:** `toolu_01`", -- line 8, 0-based 7
+        "@You:",
+        "**Tool Result:** `toolu_01`", -- line 8, 0-based 7
         "",
         "```",
         "```",
@@ -159,14 +165,16 @@ describe("Tool Indicator Extmark Placement", function()
 
     it("update_tool_indicator uses current extmark position, not stale", function()
       local bufnr = create_buffer({
-        "@Assistant:", "Running tools:",
+        "@Assistant:",
+        "Running tools:",
         "",
         "**Tool Use:** `calculator` (`toolu_01`)",
         "```json",
         '{ "expression": "1+1" }',
         "```",
         "",
-        "@You:", "**Tool Result:** `toolu_01`", -- line 8, 0-based 7
+        "@You:",
+        "**Tool Result:** `toolu_01`", -- line 8, 0-based 7
         "",
         "```",
         "```",
@@ -193,7 +201,8 @@ describe("Tool Indicator Extmark Placement", function()
   describe("reposition_tool_indicators", function()
     it("corrects displaced extmark after line replacement", function()
       local bufnr = create_buffer({
-        "@Assistant:", "Running tools:",
+        "@Assistant:",
+        "Running tools:",
         "",
         "**Tool Use:** `calculator` (`toolu_01`)",
         "```json",
@@ -246,7 +255,8 @@ describe("Tool Indicator Extmark Placement", function()
 
     it("corrects displaced extmark after result injection shifts lines", function()
       local bufnr = create_buffer({
-        "@Assistant:", "Running tools:",
+        "@Assistant:",
+        "Running tools:",
         "",
         "**Tool Use:** `calculator` (`toolu_01`)",
         "```json",

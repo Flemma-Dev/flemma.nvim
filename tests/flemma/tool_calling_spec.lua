@@ -470,8 +470,10 @@ describe("Anthropic Provider Tool Support", function()
     local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
 
     local lines = {
-      "@System:", "You have access to a calculator.",
-      "@You:", "What is 15 * 7?",
+      "@System:",
+      "You have access to a calculator.",
+      "@You:",
+      "What is 15 * 7?",
     }
     local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
     local req = provider:build_request(prompt, {})
@@ -705,16 +707,19 @@ describe("Anthropic Streaming Tool Use Response (integration)", function()
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-      "@You:", "Calculate 15 * 7",
+      "@You:",
+      "Calculate 15 * 7",
       "",
-      "@Assistant:", "Sure!",
+      "@Assistant:",
+      "Sure!",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "15 * 7" }',
       "```",
       "",
-      "@You:", "**Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```",
       "105",
@@ -1659,7 +1664,8 @@ describe("Vertex AI Thought Signature Support", function()
 
   it("parses self-closing thinking tag with vertex:signature", function()
     local lines = {
-      "@Assistant:", "Here's the result.",
+      "@Assistant:",
+      "Here's the result.",
       "",
       '<thinking vertex:signature="sig-self-closing-123"/>',
     }
@@ -1762,9 +1768,11 @@ describe("Vertex AI Thought Signature Support", function()
 
     -- Conversation with thinking+vertex:signature but no tool use
     local lines = {
-      "@You:", "What is 2+2?",
+      "@You:",
+      "What is 2+2?",
       "",
-      "@Assistant:", "The answer is 4.",
+      "@Assistant:",
+      "The answer is 4.",
       "",
       '<thinking vertex:signature="sig-no-tool-use">',
       "Simple arithmetic.",

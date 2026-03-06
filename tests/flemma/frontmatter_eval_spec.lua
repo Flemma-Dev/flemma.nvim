@@ -81,7 +81,8 @@ describe("Frontmatter evaluation caching", function()
       "return { parameters = { temperature = 0.5 } }",
       "```",
       "",
-      "@You:", "Hello",
+      "@You:",
+      "Hello",
     })
 
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
@@ -116,7 +117,8 @@ describe("Frontmatter evaluation caching", function()
       '{ "parameters": { "temperature": 0.3 } }',
       "```",
       "",
-      "@You:", "Hello",
+      "@You:",
+      "Hello",
     })
 
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
@@ -148,7 +150,8 @@ describe("Frontmatter evaluation caching", function()
       "flemma.opt.tools.autopilot = false",
       "```",
       "",
-      "@You:", "Hello",
+      "@You:",
+      "Hello",
     })
 
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
@@ -183,7 +186,8 @@ describe("Frontmatter evaluation caching", function()
       "return { parameters = { temperature = 0.5 } }",
       "```",
       "",
-      "@You:", "Hello",
+      "@You:",
+      "Hello",
     })
 
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
@@ -218,7 +222,8 @@ describe("Frontmatter evaluation caching", function()
       "flemma.opt.tools.autopilot = true",
       "```",
       "",
-      "@You:", "Hello",
+      "@You:",
+      "Hello",
     })
 
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
@@ -257,7 +262,8 @@ describe("Frontmatter evaluation caching", function()
       'return { tools = { auto_approve = { "calculator" } } }',
       "```",
       "",
-      "@You:", "Calculate 15 * 7",
+      "@You:",
+      "Calculate 15 * 7",
     })
 
     -- First turn: LLM returns a tool_use for calculator
@@ -332,7 +338,8 @@ describe("Frontmatter evaluation caching", function()
       "return { parameters = { temperature = 0.9 } }",
       "```",
       "",
-      "@You:", "Hello",
+      "@You:",
+      "Hello",
     })
 
     local doc = parser.get_parsed_document(bufnr)
@@ -364,7 +371,8 @@ describe("Frontmatter evaluation caching", function()
       "return { parameters = { temperature = 0.9 } }",
       "```",
       "",
-      "@You:", "Hello",
+      "@You:",
+      "Hello",
     })
 
     local doc = parser.get_parsed_document(bufnr)
@@ -398,7 +406,8 @@ describe("Frontmatter evaluation caching", function()
       "return { parameters = { temperature = 0.7 } }",
       "```",
       "",
-      "@You:", "Hello",
+      "@You:",
+      "Hello",
     })
 
     local eval_spy = spy.on(processor, "evaluate_frontmatter")
