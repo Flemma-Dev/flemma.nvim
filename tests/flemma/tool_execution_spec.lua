@@ -472,7 +472,7 @@ describe("Tool Context Resolver", function()
         "```",
       })
 
-      local ctx, err = context.resolve(bufnr, { row = 8 })
+      local ctx, err = context.resolve(bufnr, { row = 9 })
       assert.is_nil(err)
       assert.equals("toolu_second", ctx.tool_id)
       assert.equals("calculator", ctx.tool_name)
@@ -551,15 +551,15 @@ describe("Tool Context Resolver", function()
         "```",
       })
 
-      -- Cursor on first tool_result header (line 14)
-      local ctx1, err1 = context.resolve(bufnr, { row = 14 })
+      -- Cursor on first tool_result header (line 15)
+      local ctx1, err1 = context.resolve(bufnr, { row = 15 })
       assert.is_nil(err1)
       assert.is_not_nil(ctx1)
       assert.equals("toolu_multi_first", ctx1.tool_id)
       assert.equals("bash", ctx1.tool_name)
 
-      -- Cursor on second tool_result header (line 20)
-      local ctx2, err2 = context.resolve(bufnr, { row = 20 })
+      -- Cursor on second tool_result header (line 21)
+      local ctx2, err2 = context.resolve(bufnr, { row = 21 })
       assert.is_nil(err2)
       assert.is_not_nil(ctx2)
       assert.equals("toolu_multi_second", ctx2.tool_id)
@@ -780,7 +780,7 @@ describe("Result Injector", function()
       assert.is_nil(err)
       assert.is_not_nil(header_line)
       -- Should return the existing line, not create a new one
-      assert.equals(8, header_line)
+      assert.equals(10, header_line)
     end)
 
     it("inserts placeholder before existing user text in @You: message", function()

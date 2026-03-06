@@ -47,8 +47,8 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      -- Line 2 is <thinking>
-      local fold_level = folding.get_fold_level(2)
+      -- Line 3 is <thinking>
+      local fold_level = folding.get_fold_level(3)
       assert.are.equal(">2", fold_level)
     end)
 
@@ -65,8 +65,8 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      -- Line 2 is <thinking vertex:signature="...">
-      local fold_level = folding.get_fold_level(2)
+      -- Line 3 is <thinking vertex:signature="...">
+      local fold_level = folding.get_fold_level(3)
       assert.are.equal(">2", fold_level)
     end)
 
@@ -83,8 +83,8 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      -- Line 2 is <thinking redacted>
-      local fold_level = folding.get_fold_level(2)
+      -- Line 3 is <thinking redacted>
+      local fold_level = folding.get_fold_level(3)
       assert.are.equal(">2", fold_level)
     end)
 
@@ -101,11 +101,11 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      -- Line 2 is opening tag, should start a fold
-      local fold_level = folding.get_fold_level(2)
+      -- Line 3 is opening tag, should start a fold
+      local fold_level = folding.get_fold_level(3)
       assert.are.equal(">2", fold_level)
-      -- Line 3 is closing tag, should end the fold
-      fold_level = folding.get_fold_level(3)
+      -- Line 4 is closing tag, should end the fold
+      fold_level = folding.get_fold_level(4)
       assert.are.equal("<2", fold_level)
     end)
 
@@ -122,8 +122,8 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      -- Line 4 is </thinking>
-      local fold_level = folding.get_fold_level(4)
+      -- Line 5 is </thinking>
+      local fold_level = folding.get_fold_level(5)
       assert.are.equal("<2", fold_level)
     end)
 
@@ -139,7 +139,7 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       assert.are.equal(">1", folding.get_fold_level(1))
-      assert.are.equal(">1", folding.get_fold_level(2))
+      assert.are.equal(">1", folding.get_fold_level(3))
     end)
 
     it("should return <1 before next role marker", function()
@@ -154,8 +154,8 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      -- Line 2 should be <1 because line 3 starts a new message
-      local fold_level = folding.get_fold_level(2)
+      -- Line 3 should be <1 because line 4 starts a new message
+      local fold_level = folding.get_fold_level(3)
       assert.are.equal("<1", fold_level)
     end)
 
@@ -165,17 +165,18 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@You:", "question", -- line 1: >1
-        "more content", -- line 2: =
-        "", -- line 3: <1 (end of message, trailing empty line)
-        "@Assistant:", "answer", -- line 4: >1
+        "@You:", "question", -- lines 1-2: >1, =
+        "more content", -- line 3: =
+        "", -- line 4: <1 (end of message, trailing empty line)
+        "@Assistant:", "answer", -- lines 5-6: >1
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       assert.are.equal(">1", folding.get_fold_level(1))
       assert.are.equal("=", folding.get_fold_level(2))
-      assert.are.equal("<1", folding.get_fold_level(3))
-      assert.are.equal(">1", folding.get_fold_level(4))
+      assert.are.equal("=", folding.get_fold_level(3))
+      assert.are.equal("<1", folding.get_fold_level(4))
+      assert.are.equal(">1", folding.get_fold_level(5))
     end)
 
     it("should return >2 for frontmatter on line 1", function()
@@ -231,10 +232,10 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      -- Tool use header line (line 3) should start a level-2 fold
-      assert.are.equal(">2", folding.get_fold_level(3))
-      -- Closing fence (line 6) should end the level-2 fold
-      assert.are.equal("<2", folding.get_fold_level(6))
+      -- Tool use header line (line 4) should start a level-2 fold
+      assert.are.equal(">2", folding.get_fold_level(4))
+      -- Closing fence (line 7) should end the level-2 fold
+      assert.are.equal("<2", folding.get_fold_level(7))
     end)
 
     it("should return >1 for inline tool_result header (graceful degradation)", function()
@@ -258,9 +259,10 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      -- Tool result header line (line 8) is also the @You: line (inline header)
-      -- For inline headers, fold level stays at >1 (graceful degradation)
-      assert.are.equal(">1", folding.get_fold_level(8))
+      -- @You: role marker on line 9 starts a message fold
+      assert.are.equal(">1", folding.get_fold_level(9))
+      -- Tool result header on line 10 (now on its own line) starts a level-2 fold
+      assert.are.equal(">2", folding.get_fold_level(10))
     end)
 
     it("should return >2 for tool_result on its own line", function()
@@ -286,10 +288,10 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      -- Tool result header (line 10) should start level-2 fold
-      assert.are.equal(">2", folding.get_fold_level(10))
-      -- Closing fence (line 14) should end level-2 fold
-      assert.are.equal("<2", folding.get_fold_level(14))
+      -- Tool result header (line 11) should start level-2 fold
+      assert.are.equal(">2", folding.get_fold_level(11))
+      -- Closing fence (line 15) should end level-2 fold
+      assert.are.equal("<2", folding.get_fold_level(15))
     end)
 
     it("should NOT fold in-flight tool_result (pending status)", function()
@@ -365,8 +367,8 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal(">2", folding.get_fold_level(10))
-      assert.are.equal("<2", folding.get_fold_level(13))
+      assert.are.equal(">2", folding.get_fold_level(11))
+      assert.are.equal("<2", folding.get_fold_level(14))
     end)
 
     it("should fold tool_result with rejected status", function()
@@ -391,7 +393,7 @@ describe("UI Folding", function()
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-      assert.are.equal(">2", folding.get_fold_level(10))
+      assert.are.equal(">2", folding.get_fold_level(11))
     end)
 
     it("should NOT fold tool_use without a matching tool_result", function()
@@ -448,18 +450,18 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- Tool_use 1 fold extends to absorb trailing blank line (adjacent to tool_use 2)
-      assert.are.equal(">2", folding.get_fold_level(3))
-      assert.are.equal("<2", folding.get_fold_level(7))
+      assert.are.equal(">2", folding.get_fold_level(4))
+      assert.are.equal("<2", folding.get_fold_level(8))
       -- Tool_use 2 fold stays at its own end (last in sequence)
-      assert.are.equal(">2", folding.get_fold_level(8))
-      assert.are.equal("<2", folding.get_fold_level(11))
+      assert.are.equal(">2", folding.get_fold_level(9))
+      assert.are.equal("<2", folding.get_fold_level(12))
 
       -- Tool_result 1 fold extends to absorb trailing blank line (adjacent to tool_result 2)
-      assert.are.equal(">2", folding.get_fold_level(15))
-      assert.are.equal("<2", folding.get_fold_level(20))
+      assert.are.equal(">2", folding.get_fold_level(16))
+      assert.are.equal("<2", folding.get_fold_level(21))
       -- Tool_result 2 fold stays at its own end (last in sequence)
-      assert.are.equal(">2", folding.get_fold_level(21))
-      assert.are.equal("<2", folding.get_fold_level(25))
+      assert.are.equal(">2", folding.get_fold_level(22))
+      assert.are.equal("<2", folding.get_fold_level(26))
     end)
 
     it("should not extend fold when text separates tool blocks", function()
@@ -575,12 +577,12 @@ describe("UI Folding", function()
       folding.fold_completed_blocks(bufnr)
 
       -- Check that the fold exists and is closed
-      -- Line 2 is the start of the thinking block
-      local foldlevel = vim.fn.foldlevel(2)
+      -- Line 3 is the start of the thinking block
+      local foldlevel = vim.fn.foldlevel(3)
       assert.is_true(foldlevel > 0, "Fold should exist at thinking block")
 
-      local foldclosed = vim.fn.foldclosed(2)
-      assert.are.equal(2, foldclosed, "Thinking block should be folded at line 2")
+      local foldclosed = vim.fn.foldclosed(3)
+      assert.are.equal(3, foldclosed, "Thinking block should be folded at line 3")
     end)
 
     it("should not fold when last message is not @You:", function()
@@ -608,7 +610,7 @@ describe("UI Folding", function()
       folding.fold_completed_blocks(bufnr)
 
       -- The thinking block should not be folded since the last message is @Assistant:
-      local foldclosed = vim.fn.foldclosed(3)
+      local foldclosed = vim.fn.foldclosed(5)
       assert.are.equal(-1, foldclosed, "Thinking block should not be folded")
     end)
 
@@ -676,12 +678,12 @@ describe("UI Folding", function()
       folding.fold_completed_blocks(bufnr)
 
       -- Check that the fold exists and is closed
-      -- Line 5 is the start of the thinking block
-      local foldlevel = vim.fn.foldlevel(5)
+      -- Line 6 is the start of the thinking block
+      local foldlevel = vim.fn.foldlevel(6)
       assert.is_true(foldlevel > 0, "Fold should exist at thinking block")
 
-      local foldclosed = vim.fn.foldclosed(5)
-      assert.are.equal(5, foldclosed, "Thinking block should be folded at line 5")
+      local foldclosed = vim.fn.foldclosed(6)
+      assert.are.equal(6, foldclosed, "Thinking block should be folded at line 6")
     end)
 
     it("should handle multiple thinking blocks and only fold the last one", function()
@@ -714,12 +716,12 @@ describe("UI Folding", function()
       -- Call the function
       folding.fold_completed_blocks(bufnr)
 
-      -- The second thinking block (line 8) should be folded
-      local foldclosed_second = vim.fn.foldclosed(8)
-      assert.are.equal(8, foldclosed_second, "Second thinking block should be folded")
+      -- The second thinking block (line 11) should be folded
+      local foldclosed_second = vim.fn.foldclosed(11)
+      assert.are.equal(11, foldclosed_second, "Second thinking block should be folded")
 
-      -- The first thinking block (line 2) should remain open
-      local foldclosed_first = vim.fn.foldclosed(2)
+      -- The first thinking block (line 3) should remain open
+      local foldclosed_first = vim.fn.foldclosed(3)
       assert.are.equal(-1, foldclosed_first, "First thinking block should remain open")
     end)
 
@@ -748,11 +750,11 @@ describe("UI Folding", function()
       folding.fold_completed_blocks(bufnr)
 
       -- Check that the fold exists and is closed
-      local foldlevel = vim.fn.foldlevel(2)
+      local foldlevel = vim.fn.foldlevel(3)
       assert.is_true(foldlevel > 0, "Fold should exist at redacted thinking block")
 
-      local foldclosed = vim.fn.foldclosed(2)
-      assert.are.equal(2, foldclosed, "Redacted thinking block should be folded at line 2")
+      local foldclosed = vim.fn.foldclosed(3)
+      assert.are.equal(3, foldclosed, "Redacted thinking block should be folded at line 3")
     end)
 
     it("should fold thinking block with vertex:signature attribute", function()
@@ -780,12 +782,12 @@ describe("UI Folding", function()
       folding.fold_completed_blocks(bufnr)
 
       -- Check that the fold exists and is closed
-      -- Line 2 is the start of the thinking block
-      local foldlevel = vim.fn.foldlevel(2)
+      -- Line 3 is the start of the thinking block
+      local foldlevel = vim.fn.foldlevel(3)
       assert.is_true(foldlevel > 0, "Fold should exist at thinking block with signature")
 
-      local foldclosed = vim.fn.foldclosed(2)
-      assert.are.equal(2, foldclosed, "Thinking block with signature should be folded at line 2")
+      local foldclosed = vim.fn.foldclosed(3)
+      assert.are.equal(3, foldclosed, "Thinking block with signature should be folded at line 3")
     end)
   end)
 
@@ -843,11 +845,11 @@ describe("UI Folding", function()
       vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
       vim.wo.foldlevel = 99
 
-      -- Close fold at tool_use block (lines 3-6)
-      vim.cmd("3,6 foldclose")
+      -- Close fold at tool_use block (lines 4-7)
+      vim.cmd("4,7 foldclose")
 
-      vim.v.foldstart = 3
-      vim.v.foldend = 6
+      vim.v.foldstart = 4
+      vim.v.foldend = 7
       local chunks = folding.get_fold_text()
 
       -- Should return a list of chunks, not a string
@@ -908,11 +910,11 @@ describe("UI Folding", function()
       vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
       vim.wo.foldlevel = 99
 
-      -- Close fold at tool_result block (lines 10-15)
-      vim.cmd("10,15 foldclose")
+      -- Close fold at tool_result block (lines 11-16)
+      vim.cmd("11,16 foldclose")
 
-      vim.v.foldstart = 10
-      vim.v.foldend = 15
+      vim.v.foldstart = 11
+      vim.v.foldend = 16
       local chunks = folding.get_fold_text()
 
       assert.is_table(chunks, "get_fold_text should return a table of chunks")
@@ -954,8 +956,8 @@ describe("UI Folding", function()
       vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
       vim.wo.foldlevel = 99
 
-      vim.v.foldstart = 2
-      vim.v.foldend = 2
+      vim.v.foldstart = 3
+      vim.v.foldend = 4
       local chunks = folding.get_fold_text()
 
       assert.is_table(chunks, "get_fold_text should return a table of chunks")
@@ -992,10 +994,10 @@ describe("UI Folding", function()
       vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
       vim.wo.foldlevel = 99
 
-      vim.cmd("2,4 foldclose")
+      vim.cmd("3,5 foldclose")
 
-      vim.v.foldstart = 2
-      vim.v.foldend = 4
+      vim.v.foldstart = 3
+      vim.v.foldend = 5
       local chunks = folding.get_fold_text()
 
       assert.is_table(chunks, "get_fold_text should return a table of chunks")
@@ -1049,12 +1051,12 @@ describe("UI Folding", function()
       folding.fold_completed_blocks(bufnr)
 
       -- Tool use block should be folded
-      local tu_foldclosed = vim.fn.foldclosed(3)
-      assert.are.equal(3, tu_foldclosed, "Tool use block should be folded at line 3")
+      local tu_foldclosed = vim.fn.foldclosed(4)
+      assert.are.equal(4, tu_foldclosed, "Tool use block should be folded at line 4")
 
       -- Tool result block should be folded
-      local tr_foldclosed = vim.fn.foldclosed(10)
-      assert.are.equal(10, tr_foldclosed, "Tool result block should be folded at line 10")
+      local tr_foldclosed = vim.fn.foldclosed(11)
+      assert.are.equal(11, tr_foldclosed, "Tool result block should be folded at line 11")
     end)
 
     it("should not fold pending tool blocks", function()
@@ -1120,7 +1122,7 @@ describe("UI Folding", function()
       vim.wo.foldlevel = 99
 
       -- Pre-close the tool_use fold
-      vim.cmd("3,6 foldclose")
+      vim.cmd("4,7 foldclose")
 
       -- Call auto-fold — should not escalate
       folding.fold_completed_blocks(bufnr)
@@ -1248,15 +1250,15 @@ describe("UI Folding", function()
 
       -- First call: should auto-close the thinking block
       folding.fold_completed_blocks(bufnr)
-      assert.are.equal(2, vim.fn.foldclosed(2), "Thinking block should be folded after first call")
+      assert.are.equal(3, vim.fn.foldclosed(3), "Thinking block should be folded after first call")
 
       -- User opens the fold manually
-      vim.cmd("2 foldopen")
-      assert.are.equal(-1, vim.fn.foldclosed(2), "Thinking block should be open after user opens it")
+      vim.cmd("3 foldopen")
+      assert.are.equal(-1, vim.fn.foldclosed(3), "Thinking block should be open after user opens it")
 
       -- Second call: should NOT re-close because the ID is already in auto_closed_folds
       folding.fold_completed_blocks(bufnr)
-      assert.are.equal(-1, vim.fn.foldclosed(2), "Thinking block should stay open after second auto-close call")
+      assert.are.equal(-1, vim.fn.foldclosed(3), "Thinking block should stay open after second auto-close call")
     end)
   end)
 
@@ -1342,7 +1344,7 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       -- Prime the cache — only builtins are registered at this point
-      assert.are.equal(">1", folding.get_fold_level(2))
+      assert.are.equal(">1", folding.get_fold_level(1))
 
       -- Register a rule that overrides line 2 AFTER cache was built
       folding.register({
@@ -1437,15 +1439,15 @@ describe("UI Folding", function()
       -- Frontmatter should be folded (level 2)
       assert.are_not.equal(-1, vim.fn.foldclosed(1), "Frontmatter should be folded")
       -- Thinking should be folded (level 2)
-      assert.are_not.equal(-1, vim.fn.foldclosed(8), "Thinking should be folded")
+      assert.are_not.equal(-1, vim.fn.foldclosed(10), "Thinking should be folded")
       -- Tool use should be folded (level 2)
-      assert.are_not.equal(-1, vim.fn.foldclosed(12), "Tool use should be folded")
+      assert.are_not.equal(-1, vim.fn.foldclosed(14), "Tool use should be folded")
       -- Tool result should be folded (level 2)
-      assert.are_not.equal(-1, vim.fn.foldclosed(19), "Tool result should be folded")
+      assert.are_not.equal(-1, vim.fn.foldclosed(21), "Tool result should be folded")
       -- Messages should be open (level 1)
       assert.are.equal(-1, vim.fn.foldclosed(5), "User message should be open")
-      assert.are.equal(-1, vim.fn.foldclosed(7), "Assistant message should be open")
-      assert.are.equal(-1, vim.fn.foldclosed(26), "Final assistant message should be open")
+      assert.are.equal(-1, vim.fn.foldclosed(8), "Assistant message should be open")
+      assert.are.equal(-1, vim.fn.foldclosed(28), "Final assistant message should be open")
     end)
   end)
 
@@ -1631,12 +1633,12 @@ describe("UI Folding", function()
 
       -- First call: should process folds normally
       folding.fold_completed_blocks(bufnr)
-      local tool_use_folded = vim.fn.foldclosed(3)
-      assert.are.equal(3, tool_use_folded, "Tool use should be folded after first call")
+      local tool_use_folded = vim.fn.foldclosed(4)
+      assert.are.equal(4, tool_use_folded, "Tool use should be folded after first call")
 
       -- Open the fold manually and clear auto_closed_folds tracking
       -- This isolates the changedtick guard from the per-fold dedup
-      vim.cmd("3 foldopen")
+      vim.cmd("4 foldopen")
       local buffer_state = state.get_buffer_state(bufnr)
       buffer_state.auto_closed_folds = {}
 
@@ -1647,7 +1649,7 @@ describe("UI Folding", function()
 
       -- If the guard works, the fold stays open (function returned early)
       -- If guard is missing, the fold gets re-closed (function re-executed fully)
-      assert.are.equal(-1, vim.fn.foldclosed(3), "fold_completed_blocks should skip when changedtick has not changed")
+      assert.are.equal(-1, vim.fn.foldclosed(4), "fold_completed_blocks should skip when changedtick has not changed")
     end)
   end)
 end)

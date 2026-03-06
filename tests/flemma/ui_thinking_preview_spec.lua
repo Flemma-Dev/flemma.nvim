@@ -57,10 +57,11 @@ describe("thinking preview with leading whitespace content", function()
     end
 
     assert.is_not_nil(assistant_line_idx, "Should have an @Assistant: line")
+    assert.equals("@Assistant:", lines[assistant_line_idx])
     assert.equals(
-      "@Assistant:", "Here is the answer.",
-      lines[assistant_line_idx],
-      "Response text should be on the @Assistant: line, not separated by whitespace-only content"
+      "Here is the answer.",
+      lines[assistant_line_idx + 1],
+      "Response text should be on the line after @Assistant:, not separated by whitespace-only content"
     )
   end)
 end)

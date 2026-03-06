@@ -13,9 +13,8 @@ function M.find_next_message()
   local doc = parser.get_parsed_document(bufnr)
 
   for _, msg in ipairs(doc.messages) do
-    local content_line = msg.position.start_line + 1
-    if content_line > cur_line then
-      vim.api.nvim_win_set_cursor(0, { content_line, 0 })
+    if msg.position.start_line > cur_line then
+      vim.api.nvim_win_set_cursor(0, { msg.position.start_line + 1, 0 })
       return true
     end
   end

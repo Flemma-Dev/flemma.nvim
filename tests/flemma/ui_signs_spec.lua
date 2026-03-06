@@ -74,11 +74,15 @@ describe("UI Sign Placement", function()
 
       -- Assert
       local sign_info = get_sign_info(bufnr)
-      assert.are.equal(2, #sign_info)
+      assert.are.equal(4, #sign_info)
       assert.are.equal(1, sign_info[1].line)
       assert.are.equal("flemma_user", sign_info[1].name)
       assert.are.equal(2, sign_info[2].line)
-      assert.are.equal("flemma_assistant", sign_info[2].name)
+      assert.are.equal("flemma_user", sign_info[2].name)
+      assert.are.equal(3, sign_info[3].line)
+      assert.are.equal("flemma_assistant", sign_info[3].name)
+      assert.are.equal(4, sign_info[4].line)
+      assert.are.equal("flemma_assistant", sign_info[4].name)
     end)
 
     it("should place signs on all lines of multi-line messages", function()
@@ -101,21 +105,25 @@ describe("UI Sign Placement", function()
 
       -- Assert
       local sign_info = get_sign_info(bufnr)
-      assert.are.equal(5, #sign_info)
+      assert.are.equal(7, #sign_info)
 
-      -- User message on lines 1-3
+      -- User message on lines 1-4
       assert.are.equal(1, sign_info[1].line)
       assert.are.equal("flemma_user", sign_info[1].name)
       assert.are.equal(2, sign_info[2].line)
       assert.are.equal("flemma_user", sign_info[2].name)
       assert.are.equal(3, sign_info[3].line)
       assert.are.equal("flemma_user", sign_info[3].name)
-
-      -- Assistant message on lines 4-5
       assert.are.equal(4, sign_info[4].line)
-      assert.are.equal("flemma_assistant", sign_info[4].name)
+      assert.are.equal("flemma_user", sign_info[4].name)
+
+      -- Assistant message on lines 5-7
       assert.are.equal(5, sign_info[5].line)
       assert.are.equal("flemma_assistant", sign_info[5].name)
+      assert.are.equal(6, sign_info[6].line)
+      assert.are.equal("flemma_assistant", sign_info[6].name)
+      assert.are.equal(7, sign_info[7].line)
+      assert.are.equal("flemma_assistant", sign_info[7].name)
     end)
 
     it("should handle System role messages", function()
@@ -136,10 +144,19 @@ describe("UI Sign Placement", function()
 
       -- Assert
       local sign_info = get_sign_info(bufnr)
-      assert.are.equal(3, #sign_info)
+      assert.are.equal(6, #sign_info)
+      assert.are.equal(1, sign_info[1].line)
       assert.are.equal("flemma_system", sign_info[1].name)
-      assert.are.equal("flemma_user", sign_info[2].name)
-      assert.are.equal("flemma_assistant", sign_info[3].name)
+      assert.are.equal(2, sign_info[2].line)
+      assert.are.equal("flemma_system", sign_info[2].name)
+      assert.are.equal(3, sign_info[3].line)
+      assert.are.equal("flemma_user", sign_info[3].name)
+      assert.are.equal(4, sign_info[4].line)
+      assert.are.equal("flemma_user", sign_info[4].name)
+      assert.are.equal(5, sign_info[5].line)
+      assert.are.equal("flemma_assistant", sign_info[5].name)
+      assert.are.equal(6, sign_info[6].line)
+      assert.are.equal("flemma_assistant", sign_info[6].name)
     end)
   end)
 
@@ -164,12 +181,17 @@ describe("UI Sign Placement", function()
 
       -- Assert
       local sign_info = get_sign_info(bufnr)
-      assert.are.equal(2, #sign_info)
-      -- Signs should be at lines 4 and 5, NOT lines 1 and 2
-      assert.are.equal(4, sign_info[1].line, "User message should be at line 4")
+      assert.are.equal(4, #sign_info)
+      -- User message spans lines 4-5
+      assert.are.equal(4, sign_info[1].line, "User message marker should be at line 4")
       assert.are.equal("flemma_user", sign_info[1].name)
-      assert.are.equal(5, sign_info[2].line, "Assistant message should be at line 5")
-      assert.are.equal("flemma_assistant", sign_info[2].name)
+      assert.are.equal(5, sign_info[2].line, "User message content should be at line 5")
+      assert.are.equal("flemma_user", sign_info[2].name)
+      -- Assistant message spans lines 6-7
+      assert.are.equal(6, sign_info[3].line, "Assistant message marker should be at line 6")
+      assert.are.equal("flemma_assistant", sign_info[3].name)
+      assert.are.equal(7, sign_info[4].line, "Assistant message content should be at line 7")
+      assert.are.equal("flemma_assistant", sign_info[4].name)
     end)
 
     it("should correctly offset sign positions for JSON frontmatter", function()
@@ -192,9 +214,11 @@ describe("UI Sign Placement", function()
 
       -- Assert
       local sign_info = get_sign_info(bufnr)
-      assert.are.equal(2, #sign_info)
+      assert.are.equal(4, #sign_info)
       assert.are.equal(4, sign_info[1].line)
       assert.are.equal(5, sign_info[2].line)
+      assert.are.equal(6, sign_info[3].line)
+      assert.are.equal(7, sign_info[4].line)
     end)
 
     it("should handle multi-line frontmatter correctly", function()
@@ -219,10 +243,12 @@ describe("UI Sign Placement", function()
 
       -- Assert
       local sign_info = get_sign_info(bufnr)
-      assert.are.equal(1, #sign_info)
-      -- Message should be at line 7, NOT line 1
-      assert.are.equal(7, sign_info[1].line, "User message should be at line 7 after 6-line frontmatter block")
+      assert.are.equal(2, #sign_info)
+      -- Message spans lines 7-8
+      assert.are.equal(7, sign_info[1].line, "User message marker should be at line 7 after 6-line frontmatter block")
       assert.are.equal("flemma_user", sign_info[1].name)
+      assert.are.equal(8, sign_info[2].line, "User message content should be at line 8")
+      assert.are.equal("flemma_user", sign_info[2].name)
     end)
 
     it("should handle multi-line messages with frontmatter", function()
@@ -248,21 +274,25 @@ describe("UI Sign Placement", function()
 
       -- Assert
       local sign_info = get_sign_info(bufnr)
-      assert.are.equal(5, #sign_info)
+      assert.are.equal(7, #sign_info)
 
-      -- User message should be on lines 4-6
+      -- User message should be on lines 4-7
       assert.are.equal(4, sign_info[1].line)
       assert.are.equal("flemma_user", sign_info[1].name)
       assert.are.equal(5, sign_info[2].line)
       assert.are.equal("flemma_user", sign_info[2].name)
       assert.are.equal(6, sign_info[3].line)
       assert.are.equal("flemma_user", sign_info[3].name)
-
-      -- Assistant message should be on lines 7-8
       assert.are.equal(7, sign_info[4].line)
-      assert.are.equal("flemma_assistant", sign_info[4].name)
+      assert.are.equal("flemma_user", sign_info[4].name)
+
+      -- Assistant message should be on lines 8-10
       assert.are.equal(8, sign_info[5].line)
       assert.are.equal("flemma_assistant", sign_info[5].name)
+      assert.are.equal(9, sign_info[6].line)
+      assert.are.equal("flemma_assistant", sign_info[6].name)
+      assert.are.equal(10, sign_info[7].line)
+      assert.are.equal("flemma_assistant", sign_info[7].name)
     end)
 
     it("should handle frontmatter with System messages", function()
@@ -286,13 +316,19 @@ describe("UI Sign Placement", function()
 
       -- Assert
       local sign_info = get_sign_info(bufnr)
-      assert.are.equal(3, #sign_info)
+      assert.are.equal(6, #sign_info)
       assert.are.equal(4, sign_info[1].line)
       assert.are.equal("flemma_system", sign_info[1].name)
       assert.are.equal(5, sign_info[2].line)
-      assert.are.equal("flemma_user", sign_info[2].name)
+      assert.are.equal("flemma_system", sign_info[2].name)
       assert.are.equal(6, sign_info[3].line)
-      assert.are.equal("flemma_assistant", sign_info[3].name)
+      assert.are.equal("flemma_user", sign_info[3].name)
+      assert.are.equal(7, sign_info[4].line)
+      assert.are.equal("flemma_user", sign_info[4].name)
+      assert.are.equal(8, sign_info[5].line)
+      assert.are.equal("flemma_assistant", sign_info[5].name)
+      assert.are.equal(9, sign_info[6].line)
+      assert.are.equal("flemma_assistant", sign_info[6].name)
     end)
   end)
 
@@ -314,8 +350,9 @@ describe("UI Sign Placement", function()
 
       -- Verify initial state
       local initial_signs = get_sign_info(bufnr)
-      assert.are.equal(1, #initial_signs)
+      assert.are.equal(2, #initial_signs)
       assert.are.equal(4, initial_signs[1].line)
+      assert.are.equal(5, initial_signs[2].line)
 
       -- Act - Simulate streaming by adding assistant response
       vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "@Assistant:", "streaming response" })
@@ -323,11 +360,15 @@ describe("UI Sign Placement", function()
 
       -- Assert - Signs should be at correct positions
       local updated_signs = get_sign_info(bufnr)
-      assert.are.equal(2, #updated_signs)
-      assert.are.equal(4, updated_signs[1].line, "User message should still be at line 4")
+      assert.are.equal(4, #updated_signs)
+      assert.are.equal(4, updated_signs[1].line, "User message marker should still be at line 4")
       assert.are.equal("flemma_user", updated_signs[1].name)
-      assert.are.equal(5, updated_signs[2].line, "Assistant message should be at line 5")
-      assert.are.equal("flemma_assistant", updated_signs[2].name)
+      assert.are.equal(5, updated_signs[2].line, "User message content should be at line 5")
+      assert.are.equal("flemma_user", updated_signs[2].name)
+      assert.are.equal(6, updated_signs[3].line, "Assistant message marker should be at line 6")
+      assert.are.equal("flemma_assistant", updated_signs[3].name)
+      assert.are.equal(7, updated_signs[4].line, "Assistant message content should be at line 7")
+      assert.are.equal("flemma_assistant", updated_signs[4].name)
     end)
 
     it("should handle multi-line streaming content", function()
@@ -352,17 +393,21 @@ describe("UI Sign Placement", function()
 
       -- Assert
       local signs = get_sign_info(bufnr)
-      assert.are.equal(4, #signs)
-      -- User at line 4
+      assert.are.equal(6, #signs)
+      -- User at lines 4-5
       assert.are.equal(4, signs[1].line)
       assert.are.equal("flemma_user", signs[1].name)
-      -- Assistant at lines 5-7
       assert.are.equal(5, signs[2].line)
-      assert.are.equal("flemma_assistant", signs[2].name)
+      assert.are.equal("flemma_user", signs[2].name)
+      -- Assistant at lines 6-9
       assert.are.equal(6, signs[3].line)
       assert.are.equal("flemma_assistant", signs[3].name)
       assert.are.equal(7, signs[4].line)
       assert.are.equal("flemma_assistant", signs[4].name)
+      assert.are.equal(8, signs[5].line)
+      assert.are.equal("flemma_assistant", signs[5].name)
+      assert.are.equal(9, signs[6].line)
+      assert.are.equal("flemma_assistant", signs[6].name)
     end)
   end)
 
@@ -376,9 +421,9 @@ describe("UI Sign Placement", function()
 
       assert.are.equal(2, #doc.messages)
       assert.are.equal(1, doc.messages[1].position.start_line)
-      assert.are.equal(1, doc.messages[1].position.end_line)
-      assert.are.equal(2, doc.messages[2].position.start_line)
-      assert.are.equal(2, doc.messages[2].position.end_line)
+      assert.are.equal(2, doc.messages[1].position.end_line)
+      assert.are.equal(3, doc.messages[2].position.start_line)
+      assert.are.equal(4, doc.messages[2].position.end_line)
     end)
 
     it("should return correct positions with frontmatter", function()
@@ -394,9 +439,9 @@ describe("UI Sign Placement", function()
       assert.are.equal(2, #doc.messages)
       -- Messages should start at line 4, not line 1
       assert.are.equal(4, doc.messages[1].position.start_line)
-      assert.are.equal(4, doc.messages[1].position.end_line)
-      assert.are.equal(5, doc.messages[2].position.start_line)
-      assert.are.equal(5, doc.messages[2].position.end_line)
+      assert.are.equal(5, doc.messages[1].position.end_line)
+      assert.are.equal(6, doc.messages[2].position.start_line)
+      assert.are.equal(7, doc.messages[2].position.end_line)
     end)
 
     it("should return correct positions for multi-line messages with frontmatter", function()
@@ -412,12 +457,12 @@ describe("UI Sign Placement", function()
       local doc = parser.parse_lines(lines)
 
       assert.are.equal(2, #doc.messages)
-      -- User message spans lines 4-6
+      -- User message spans lines 4-7
       assert.are.equal(4, doc.messages[1].position.start_line)
-      assert.are.equal(6, doc.messages[1].position.end_line)
-      -- Assistant message at line 7
-      assert.are.equal(7, doc.messages[2].position.start_line)
-      assert.are.equal(7, doc.messages[2].position.end_line)
+      assert.are.equal(7, doc.messages[1].position.end_line)
+      -- Assistant message at lines 8-9
+      assert.are.equal(8, doc.messages[2].position.start_line)
+      assert.are.equal(9, doc.messages[2].position.end_line)
     end)
   end)
 end)

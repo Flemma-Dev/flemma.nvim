@@ -285,9 +285,9 @@ describe("Tool Preview", function()
       ui.add_tool_previews(bufnr, doc)
 
       local marks = get_preview_extmarks(bufnr)
-      -- Opening fence is line 12 (1-based) = 0-based 11
-      assert.is_not_nil(marks[11], "Should have preview extmark on opening fence line")
-      local text = table.concat(marks[11], "")
+      -- Opening fence is line 13 (1-based) = 0-based 12
+      assert.is_not_nil(marks[12], "Should have preview extmark on opening fence line")
+      local text = table.concat(marks[12], "")
       assert.is_truthy(text:match("bash"), "Preview should contain tool name")
       assert.is_truthy(text:match("ls %-la"), "Preview should contain command value")
     end)
