@@ -232,52 +232,37 @@ function M.inject_placeholder(bufnr, tool_id, inject_opts)
         local first_start = first_result.position.start_line
         local you_start = you_msg.position.start_line
 
-        if first_start == you_start then
-          -- First result header is inline with @You: line - split it
-          local old_line = buffer.get_line(bufnr, you_start)
-          local old_header = old_line:match("^@You:%s*(.+)$")
-          set_lines(bufnr, you_start - 1, you_start, {
-            "@You: " .. header_text,
-            "",
-            fence_open,
-            "```",
-            "",
-            old_header or "",
-          })
-          return you_start, nil, { modified = true }
-        else
-          -- First result is on a separate line - insert before it
-          set_lines(bufnr, first_start - 1, first_start - 1, { header_text, "", fence_open, "```", "" })
-          return first_start, nil, { modified = true }
-        end
+        -- Insert before the first result
+        set_lines(bufnr, first_start - 1, first_start - 1, { header_text, "", fence_open, "```", "" })
+        return first_start, nil, { modified = true }
       end
     else
       -- @You: exists but has no tool results - insert at start of content
       -- The @You: role line is at you_msg.position.start_line
       local you_start = you_msg.position.start_line
-      -- Insert header right after the @You: line marker, shifting content down
-      -- Get the current @You: line text
-      local you_line = buffer.get_line(bufnr, you_start)
-      -- Extract the content after "@You: " or "@You:"
-      local role_prefix = you_line:match("^@You:%s*")
-      local remaining_content = you_line:sub(#role_prefix + 1)
+      -- Insert header after @You: marker line, before any existing content
+      local content_start = you_start + 1
+      local has_content = false
+      local total_lines = vim.api.nvim_buf_line_count(bufnr)
+      if content_start <= total_lines then
+        local next_line = buffer.get_line(bufnr, content_start)
+        has_content = next_line:match("%S") ~= nil
+      end
 
-      if remaining_content and remaining_content:match("%S") then
-        -- @You: has inline content - put header on separate line, move content down
-        set_lines(bufnr, you_start - 1, you_start, {
-          "@You:",
+      if has_content then
+        -- @You: has content on the next line — insert placeholder before it
+        set_lines(bufnr, content_start - 1, content_start - 1, {
           "",
           header_text,
           "",
           fence_open,
           "```",
           "",
-          remaining_content,
         })
-        return you_start + 2, nil, { modified = true }
+        return content_start + 1, nil, { modified = true }
       else
-        -- @You: line is empty or whitespace-only - replace it, header on separate line
-        set_lines(bufnr, you_start - 1, you_start, { "@You:", "", header_text, "", fence_open, "```" })
+        -- @You: line is followed by empty/no content — insert after marker
+        set_lines(bufnr, you_start, you_start, { "", header_text, "", fence_open, "```" })
         return you_start + 2, nil, { modified = true }
       end
     end
@@ -318,12 +303,6 @@ function M.inject_result(bufnr, tool_id, result)
     local header_text = ("**Tool Result:** `%s`"):format(tool_id)
     if is_error then
       header_text = header_text .. " (error)"
-    end
-
-    -- Check if header is on a @You: line
-    local current_header = buffer.get_line(bufnr, header_line)
-    if current_header:match("^@You:") then
-      header_text = "@You: " .. header_text
     end
 
     -- Replace from header to end of existing block
