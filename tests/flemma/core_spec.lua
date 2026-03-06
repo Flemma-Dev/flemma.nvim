@@ -126,7 +126,7 @@ describe(":Flemma send command", function()
     vim.cmd("Flemma send")
     vim.wait(1000, function()
       local lines = vim.api.nvim_buf_get_lines(named_bufnr, 0, -1, false)
-      return #lines >= 7 and lines[7] == "@You: "
+      return #lines >= 7 and lines[7] == "@You:"
     end)
 
     local session = state.get_session()
@@ -144,7 +144,7 @@ describe(":Flemma send command", function()
     vim.cmd("Flemma send")
     vim.wait(1000, function()
       local lines = vim.api.nvim_buf_get_lines(unnamed_bufnr, 0, -1, false)
-      return #lines >= 7 and lines[7] == "@You: "
+      return #lines >= 7 and lines[7] == "@You:"
     end)
 
     local unnamed_request = session:get_latest_request()
@@ -171,7 +171,7 @@ describe(":Flemma send command", function()
     -- Wait for the response to be processed and the new prompt to be added
     vim.wait(1000, function()
       local final_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-      return #final_lines == 7 and final_lines[7] == "@You: "
+      return #final_lines == 8 and final_lines[7] == "@You:"
     end)
 
     -- Assert: Check the final buffer content
@@ -183,7 +183,8 @@ describe(":Flemma send command", function()
       "@Assistant:",
       "Hello! How can I help you today?",
       "",
-      "@You: ",
+      "@You:",
+      "",
     }
     assert.are.same(expected_lines, final_lines)
   end)

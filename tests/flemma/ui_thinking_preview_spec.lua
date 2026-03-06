@@ -36,7 +36,7 @@ describe("thinking preview with leading whitespace content", function()
     vim.wait(2000, function()
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
       for _, line in ipairs(lines) do
-        if line == "@You: " then
+        if line == "@You:" and lines[_ + 1] == "" then
           return true
         end
       end

@@ -53,7 +53,7 @@ local function wait_for_response(bufnr, timeout)
   vim.wait(timeout, function()
     local buf_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     for i = #buf_lines, 1, -1 do
-      if buf_lines[i] == "@You: " then
+      if buf_lines[i] == "@You:" and buf_lines[i + 1] == "" then
         return true
       end
     end

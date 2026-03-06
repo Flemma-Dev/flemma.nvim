@@ -17,13 +17,6 @@ local ABORT_MESSAGE = "Response interrupted by the user."
 -- For testing purposes
 local last_request_body_for_testing = nil
 
----Get the 0-indexed column where content starts after a role prefix (@Role: )
----@param role string
----@return integer
-local function content_col(role)
-  return #("@" .. role .. ": ")
-end
-
 ---Initialize or switch provider based on configuration
 ---@param provider_name string
 ---@param model_name? string
@@ -1071,20 +1064,20 @@ function M.send_to_provider(opts)
           local lines_to_insert
           local cursor_line_offset
           if last_line_content == "" then
-            lines_to_insert = { "@You: " }
-            cursor_line_offset = 1
-          else
-            lines_to_insert = { "", "@You: " }
+            lines_to_insert = { "@You:", "" }
             cursor_line_offset = 2
+          else
+            lines_to_insert = { "", "@You:", "" }
+            cursor_line_offset = 3
           end
 
           ui.buffer_cmd(bufnr, "undojoin")
           vim.api.nvim_buf_set_lines(bufnr, last_line_idx, last_line_idx, false, lines_to_insert)
 
-          -- Position cursor after "@You: " on the new prompt line
+          -- Position cursor on the blank content line after @You:
           local new_prompt_line = last_line_idx + cursor_line_offset
           if vim.api.nvim_get_current_buf() == bufnr then
-            ui.set_cursor(new_prompt_line, content_col("You"), bufnr)
+            ui.set_cursor(new_prompt_line, 0, bufnr)
           end
           ui.move_to_bottom(bufnr)
 

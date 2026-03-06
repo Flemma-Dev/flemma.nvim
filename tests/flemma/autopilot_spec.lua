@@ -148,7 +148,8 @@ describe("Autopilot on_response_complete", function()
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: ",
+      "@You:",
+      "",
     })
 
     autopilot.on_response_complete(bufnr)
@@ -165,7 +166,8 @@ describe("Autopilot on_response_complete", function()
       "@Assistant:",
       "Hi there!",
       "",
-      "@You: ",
+      "@You:",
+      "",
     })
 
     autopilot.on_response_complete(bufnr)
@@ -187,7 +189,8 @@ describe("Autopilot on_response_complete", function()
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: ",
+      "@You:",
+      "",
     })
 
     autopilot.on_response_complete(bufnr)
@@ -212,7 +215,8 @@ describe("Autopilot on_response_complete", function()
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: ",
+      "@You:",
+      "",
     })
 
     autopilot.on_response_complete(bufnr)
@@ -239,7 +243,8 @@ describe("Autopilot on_response_complete", function()
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: ",
+      "@You:",
+      "",
     })
 
     -- First two calls should arm
@@ -269,7 +274,8 @@ describe("Autopilot on_response_complete", function()
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: ",
+      "@You:",
+      "",
     })
 
     autopilot.on_response_complete(bufnr)
@@ -847,7 +853,7 @@ describe("Autopilot integration", function()
     vim.wait(2000, function()
       local buf_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
       for _, line in ipairs(buf_lines) do
-        if line == "@You: " then
+        if line == "@You:" and buf_lines[_ + 1] == "" then
           return true
         end
       end
