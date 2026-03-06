@@ -230,7 +230,6 @@ function M.inject_placeholder(bufnr, tool_id, inject_opts)
         -- Our tool comes before all existing results - insert before the first one
         local first_result = existing_results[1]
         local first_start = first_result.position.start_line
-        local you_start = you_msg.position.start_line
 
         -- Insert before the first result
         set_lines(bufnr, first_start - 1, first_start - 1, { header_text, "", fence_open, "```", "" })

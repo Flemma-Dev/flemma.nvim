@@ -949,8 +949,7 @@ function M.send_to_provider(opts)
               ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
               last_line = vim.api.nvim_buf_line_count(bufnr)
 
-              -- Number of extra lines inserted for the header (beyond one)
-              local header_lines = 1
+              local header_lines
 
               if content_lines[1]:match("^%*%*Tool Use:%*%*") then
                 -- Tool use header on its own line so the block is independently foldable
