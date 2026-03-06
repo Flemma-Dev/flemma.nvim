@@ -176,13 +176,9 @@ function M.start_loading_spinner(bufnr)
       vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
       vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)
 
-      -- Write @Assistant: on its own line so the parser recognises it as a message
-      local last_line = buffer_utils.get_last_line(bufnr)
-      if last_line:match("%S") then
-        vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "", "@Assistant:" })
-      else
-        vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "@Assistant:" })
-      end
+      -- Write @Assistant: on its own line so the parser recognises it as a message.
+      -- No blank separator — the ruler provides visual separation between messages.
+      vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "@Assistant:" })
 
       -- Track the spinner line position and create the animated extmark.
       -- "Thinking…" is virtual text so the buffer line stays as just "@Assistant:"
@@ -275,21 +271,8 @@ function M.cleanup_spinner(bufnr)
     -- "Thinking…" is now virtual text, so the buffer line is just "@Assistant:".
     if last_line_content and last_line_content == "@Assistant:" then
       M.buffer_cmd(bufnr, "undojoin") -- Group changes for undo
-
-      -- Get the line before the "@Assistant:" marker (if it exists)
-      local prev_line_actual_content = nil
-      if line_count > 1 then
-        prev_line_actual_content = buffer_utils.get_line(bufnr, line_count - 1)
-      end
-
-      -- Ensure we maintain a blank line if needed, or remove the spinner line
-      if prev_line_actual_content and prev_line_actual_content:match("%S") then
-        -- Previous line has content, replace spinner line with a blank line
-        vim.api.nvim_buf_set_lines(bufnr, line_count - 1, line_count, false, { "" })
-      else
-        -- Previous line is blank or doesn't exist, remove the spinner line entirely
-        vim.api.nvim_buf_set_lines(bufnr, line_count - 1, line_count, false, {})
-      end
+      -- Remove the spinner placeholder line entirely
+      vim.api.nvim_buf_set_lines(bufnr, line_count - 1, line_count, false, {})
     else
       log.debug("cleanup_spinner(): Last line is not the spinner placeholder, not modifying lines.")
     end

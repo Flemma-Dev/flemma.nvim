@@ -171,7 +171,7 @@ describe(":Flemma send command", function()
     -- Wait for the response to be processed and the new prompt to be added
     vim.wait(1000, function()
       local final_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-      return #final_lines == 8 and final_lines[7] == "@You:"
+      return #final_lines == 7 and final_lines[6] == "@You:"
     end)
 
     -- Assert: Check the final buffer content
@@ -179,7 +179,6 @@ describe(":Flemma send command", function()
     local expected_lines = {
       "@You:",
       "Hello",
-      "",
       "@Assistant:",
       "Hello! How can I help you today?",
       "",
@@ -241,7 +240,7 @@ describe(":Flemma send command", function()
     assert.is_true(vim.bo[bufnr].modifiable, "Buffer should be modifiable after an error")
     assert.is_false(state.get_buffer_state(bufnr).locked, "Buffer state should not be locked after an error")
     local final_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    assert.are.same({ "@You:", "This will fail", "" }, final_lines, "Buffer content should not have spinner artifacts")
+    assert.are.same({ "@You:", "This will fail" }, final_lines, "Buffer content should not have spinner artifacts")
 
     -- Cleanup
     notify_spy:revert()
