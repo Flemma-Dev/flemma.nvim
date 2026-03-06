@@ -733,7 +733,6 @@ function M.send_to_provider(opts)
   local spinner_timer = ui.start_loading_spinner(bufnr) -- Handles its own modifiable toggles for writes
   local response_started = false
   local thinking_char_count = 0
-  local thinking_preview_active = false
 
   -- Reset in-flight usage tracking for this buffer
   -- Include the provider's output_has_thoughts flag so usage.lua can display correctly
@@ -892,13 +891,6 @@ function M.send_to_provider(opts)
     on_thinking = function(delta)
       vim.schedule(function()
         thinking_char_count = thinking_char_count + #delta
-
-        -- Stop the spinning animation on first thinking delta (keep extmark for preview)
-        if spinner_timer and not thinking_preview_active then
-          vim.fn.timer_stop(spinner_timer)
-          spinner_timer = nil
-          thinking_preview_active = true
-        end
 
         local display
         if thinking_char_count >= 1000 then

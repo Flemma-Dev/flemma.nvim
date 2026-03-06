@@ -24,6 +24,7 @@ local session_module = require("flemma.session")
 ---@field ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached parsed AST
 ---@field spinner_extmark_id integer|nil Extmark ID for the spinner/thinking preview
 ---@field spinner_line_idx0 integer|nil 0-indexed line of the spinner extmark
+---@field spinner_preview_text string|nil Thinking preview text for the spinner timer to render
 ---@field autopilot_override? boolean Per-buffer autopilot override (set from frontmatter, nil = use global config)
 ---@field auto_closed_folds? table<string, boolean>
 ---@field fold_completed_tick? integer Last changedtick processed by fold_completed_blocks (prevents redundant folding)

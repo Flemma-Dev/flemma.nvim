@@ -191,8 +191,7 @@ function M.start_loading_spinner(bufnr)
       spinner_line_idx0 = vim.api.nvim_buf_line_count(bufnr) - 1
       spinner_extmark_id = vim.api.nvim_buf_set_extmark(bufnr, spinner_ns, spinner_line_idx0, 0, {
         virt_text = {
-          { SPINNER_LABEL, "FlemmaAssistantSpinner" },
-          { " " .. spinner_frames[frame], "FlemmaAssistantSpinner" },
+          { spinner_frames[frame] .. " " .. SPINNER_LABEL, "FlemmaAssistantSpinner" },
         },
         virt_text_pos = "eol",
         hl_mode = "combine",
@@ -200,9 +199,10 @@ function M.start_loading_spinner(bufnr)
         spell = false,
       })
 
-      -- Expose extmark info so update_thinking_preview can update it
+      -- Expose extmark info so the timer and update_thinking_preview can coordinate
       buffer_state.spinner_extmark_id = spinner_extmark_id
       buffer_state.spinner_line_idx0 = spinner_line_idx0
+      buffer_state.spinner_preview_text = nil
 
       -- Immediately update UI after adding the thinking message
       M.update_ui(bufnr)
@@ -217,14 +217,19 @@ function M.start_loading_spinner(bufnr)
       return
     end
 
-    -- Only update the extmark - no buffer modification needed
+    -- Only update the extmark — no buffer modification needed.
+    -- The timer owns all extmark updates; update_thinking_preview just sets
+    -- buffer_state.spinner_preview_text for the timer to pick up.
     if spinner_line_idx0 ~= nil and spinner_extmark_id ~= nil then
       frame = (frame % #spinner_frames) + 1
+      local preview_text = buffer_state.spinner_preview_text
+      local label = preview_text
+          and SPINNER_LABEL .. "  (" .. preview_text .. ")"
+        or SPINNER_LABEL
       pcall(vim.api.nvim_buf_set_extmark, bufnr, spinner_ns, spinner_line_idx0, 0, {
         id = spinner_extmark_id,
         virt_text = {
-          { SPINNER_LABEL, "FlemmaAssistantSpinner" },
-          { " " .. spinner_frames[frame], "FlemmaAssistantSpinner" },
+          { spinner_frames[frame] .. " " .. label, "FlemmaAssistantSpinner" },
         },
         virt_text_pos = "eol",
         hl_mode = "combine",
@@ -252,9 +257,10 @@ function M.cleanup_spinner(bufnr)
       buffer_state.spinner_timer = nil
     end
 
-    -- Clear thinking preview extmark references
+    -- Clear spinner/thinking preview state
     buffer_state.spinner_extmark_id = nil
     buffer_state.spinner_line_idx0 = nil
+    buffer_state.spinner_preview_text = nil
 
     vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1) -- Clear rulers/virtual text
     vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1) -- Remove spinner suppression
@@ -292,28 +298,13 @@ function M.cleanup_spinner(bufnr)
   end)
 end
 
----Update the spinner extmark with a live thinking preview
----Replaces the spinning animation with a rolling snippet of thinking content
+---Store thinking preview text for the spinner timer to render.
+---The timer owns all extmark updates so the animation stays smooth.
 ---@param bufnr integer
----@param preview_text string Truncated preview to display
+---@param preview_text string Truncated preview to display (e.g. "329 characters")
 function M.update_thinking_preview(bufnr, preview_text)
   local buffer_state = state.get_buffer_state(bufnr)
-  local extmark_id = buffer_state.spinner_extmark_id
-  local line_idx0 = buffer_state.spinner_line_idx0
-  if not extmark_id or not line_idx0 then
-    return
-  end
-
-  pcall(vim.api.nvim_buf_set_extmark, bufnr, spinner_ns, line_idx0, 0, {
-    id = extmark_id,
-    virt_text = {
-      { SPINNER_LABEL .. "  (" .. preview_text .. ")", "FlemmaAssistantSpinner" },
-    },
-    virt_text_pos = "eol",
-    hl_mode = "combine",
-    priority = PRIORITY.SPINNER,
-    spell = false,
-  })
+  buffer_state.spinner_preview_text = preview_text
 end
 
 ---Place signs for a message
