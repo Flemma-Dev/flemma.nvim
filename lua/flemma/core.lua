@@ -963,9 +963,9 @@ function M.send_to_provider(opts)
                 vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant:", content_lines[1] })
                 header_lines = 2
               else
-                -- Start with @Assistant: prefix as normal
                 ui.buffer_cmd(bufnr, "undojoin")
-                vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant: " .. content_lines[1] })
+                vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant:", content_lines[1] })
+                header_lines = 2
               end
 
               -- Add remaining lines if any
