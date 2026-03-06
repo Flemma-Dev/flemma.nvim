@@ -545,6 +545,7 @@ function M.setup_chat_filetype_autocmds()
     group = augroup,
     pattern = "*.chat",
     callback = function(ev)
+      require("flemma.migration").migrate_buffer(ev.buf)
       vim.bo[ev.buf].filetype = "chat"
       apply_chat_buffer_settings(ev.buf)
     end,
