@@ -1,8 +1,11 @@
-@System: You are a helpful assistant with access to tools.
+@System:
+You are a helpful assistant with access to tools.
 
-@You: Run the command
+@You:
+Run the command
 
-@Assistant: I'll run that for you.
+@Assistant:
+I'll run that for you.
 
 **Tool Use:** `run_command` (`toolu_01PLAIN123`)
 
@@ -12,11 +15,13 @@
 }
 ```
 
-@You: **Tool Result:** `toolu_01PLAIN123`
+@You:
+**Tool Result:** `toolu_01PLAIN123`
 
 ```
 this is a result of a tool
 with multiple lines
 ```
 
-@Assistant: The command ran successfully.
+@Assistant:
+The command ran successfully.

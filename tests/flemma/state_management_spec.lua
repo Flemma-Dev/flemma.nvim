@@ -190,8 +190,8 @@ describe("State Management", function()
 
       -- Add content for rulers
       vim.api.nvim_buf_set_lines(chat_buf, 0, -1, false, {
-        "@You: Hello",
-        "@Assistant: Hi there",
+        "@You:", "Hello",
+        "@Assistant:", "Hi there",
       })
 
       -- Stay in wide window and trigger UI update on chat buffer
@@ -212,7 +212,7 @@ describe("State Management", function()
       vim.api.nvim_buf_set_name(chat_buf, "/tmp/test.chat")
       vim.bo[chat_buf].filetype = "chat"
       vim.api.nvim_buf_set_lines(chat_buf, 0, -1, false, {
-        "@You: Hello",
+        "@You:", "Hello",
         "Line 2",
         "Line 3",
         "Line 4",

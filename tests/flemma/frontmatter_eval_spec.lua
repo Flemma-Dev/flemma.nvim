@@ -47,7 +47,7 @@ describe("Frontmatter evaluation caching", function()
 
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Hello" })
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Hello" })
 
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
     core.send_or_execute({ bufnr = bufnr })
@@ -81,7 +81,7 @@ describe("Frontmatter evaluation caching", function()
       "return { parameters = { temperature = 0.5 } }",
       "```",
       "",
-      "@You: Hello",
+      "@You:", "Hello",
     })
 
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
@@ -116,7 +116,7 @@ describe("Frontmatter evaluation caching", function()
       '{ "parameters": { "temperature": 0.3 } }',
       "```",
       "",
-      "@You: Hello",
+      "@You:", "Hello",
     })
 
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
@@ -148,7 +148,7 @@ describe("Frontmatter evaluation caching", function()
       "flemma.opt.tools.autopilot = false",
       "```",
       "",
-      "@You: Hello",
+      "@You:", "Hello",
     })
 
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
@@ -183,7 +183,7 @@ describe("Frontmatter evaluation caching", function()
       "return { parameters = { temperature = 0.5 } }",
       "```",
       "",
-      "@You: Hello",
+      "@You:", "Hello",
     })
 
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
@@ -218,7 +218,7 @@ describe("Frontmatter evaluation caching", function()
       "flemma.opt.tools.autopilot = true",
       "```",
       "",
-      "@You: Hello",
+      "@You:", "Hello",
     })
 
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
@@ -257,7 +257,7 @@ describe("Frontmatter evaluation caching", function()
       'return { tools = { auto_approve = { "calculator" } } }',
       "```",
       "",
-      "@You: Calculate 15 * 7",
+      "@You:", "Calculate 15 * 7",
     })
 
     -- First turn: LLM returns a tool_use for calculator
@@ -299,7 +299,7 @@ describe("Frontmatter evaluation caching", function()
       local content = table.concat(lines, "\n")
       -- The final response should end with @You: prompt after a second @Assistant message
       local last_line = lines[#lines]
-      return last_line == "@You: " and content:match("105") ~= nil
+      return last_line == "@You:", "" and content:match("105") ~= nil
     end)
 
     -- Each dispatch cycle evaluates frontmatter exactly once.
@@ -332,7 +332,7 @@ describe("Frontmatter evaluation caching", function()
       "return { parameters = { temperature = 0.9 } }",
       "```",
       "",
-      "@You: Hello",
+      "@You:", "Hello",
     })
 
     local doc = parser.get_parsed_document(bufnr)
@@ -364,7 +364,7 @@ describe("Frontmatter evaluation caching", function()
       "return { parameters = { temperature = 0.9 } }",
       "```",
       "",
-      "@You: Hello",
+      "@You:", "Hello",
     })
 
     local doc = parser.get_parsed_document(bufnr)
@@ -398,7 +398,7 @@ describe("Frontmatter evaluation caching", function()
       "return { parameters = { temperature = 0.7 } }",
       "```",
       "",
-      "@You: Hello",
+      "@You:", "Hello",
     })
 
     local eval_spy = spy.on(processor, "evaluate_frontmatter")

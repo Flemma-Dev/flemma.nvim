@@ -40,7 +40,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: response",
+        "@Assistant:", "response",
         "<thinking>",
         "thinking content",
         "</thinking>",
@@ -58,7 +58,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: response",
+        "@Assistant:", "response",
         '<thinking vertex:signature="abc123/def+ghi==">',
         "thinking content",
         "</thinking>",
@@ -76,7 +76,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: response",
+        "@Assistant:", "response",
         "<thinking redacted>",
         "encrypted-data-here",
         "</thinking>",
@@ -94,7 +94,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: response",
+        "@Assistant:", "response",
         '<thinking vertex:signature="abc123">',
         "</thinking>",
         "more content",
@@ -115,7 +115,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: response",
+        "@Assistant:", "response",
         "<thinking>",
         "thinking content",
         "</thinking>",
@@ -133,8 +133,8 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@You: question",
-        "@Assistant: response",
+        "@You:", "question",
+        "@Assistant:", "response",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -148,9 +148,9 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@You: question",
+        "@You:", "question",
         "more content",
-        "@Assistant: response",
+        "@Assistant:", "response",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -165,10 +165,10 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@You: question", -- line 1: >1
+        "@You:", "question", -- line 1: >1
         "more content", -- line 2: =
         "", -- line 3: <1 (end of message, trailing empty line)
-        "@Assistant: answer", -- line 4: >1
+        "@Assistant:", "answer", -- line 4: >1
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -187,7 +187,7 @@ describe("UI Folding", function()
         "```lua",
         "x = 5",
         "```",
-        "@You: question",
+        "@You:", "question",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -203,7 +203,7 @@ describe("UI Folding", function()
         "```lua",
         "x = 5",
         "```",
-        "@You: question",
+        "@You:", "question",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -216,14 +216,14 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: I'll check that.",
+        "@Assistant:", "I'll check that.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
         '{ "command": "ls" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_01`",
+        "@You:", "**Tool Result:** `toolu_01`",
         "",
         "```",
         "file1.txt",
@@ -243,14 +243,14 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: I'll check that.",
+        "@Assistant:", "I'll check that.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
         '{ "command": "ls" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_01`",
+        "@You:", "**Tool Result:** `toolu_01`",
         "",
         "```",
         "file1.txt",
@@ -269,7 +269,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: I'll check that.",
+        "@Assistant:", "I'll check that.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -298,7 +298,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: Running a tool.",
+        "@Assistant:", "Running a tool.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -324,7 +324,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: Running a tool.",
+        "@Assistant:", "Running a tool.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -349,7 +349,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: Running a tool.",
+        "@Assistant:", "Running a tool.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -375,7 +375,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: Running a tool.",
+        "@Assistant:", "Running a tool.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -400,7 +400,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: I'll check that.",
+        "@Assistant:", "I'll check that.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -419,7 +419,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: Two tools.",
+        "@Assistant:", "Two tools.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -555,12 +555,12 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: response",
+        "@Assistant:", "response",
         "<thinking>",
         "thought process here",
         "</thinking>",
         "actual response",
-        "@You: follow up",
+        "@You:", "follow up",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -588,8 +588,8 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@You: question",
-        "@Assistant: response",
+        "@You:", "question",
+        "@Assistant:", "response",
         "<thinking>",
         "thought process",
         "</thinking>",
@@ -618,8 +618,8 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: response without thinking",
-        "@You: follow up",
+        "@Assistant:", "response without thinking",
+        "@You:", "follow up",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -656,12 +656,12 @@ describe("UI Folding", function()
         "```lua",
         "model = 'claude-sonnet-4-5'",
         "```",
-        "@Assistant: response",
+        "@Assistant:", "response",
         "<thinking>",
         "thought process",
         "</thinking>",
         "answer",
-        "@You: follow up",
+        "@You:", "follow up",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -689,18 +689,18 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: first response",
+        "@Assistant:", "first response",
         "<thinking>",
         "first thought",
         "</thinking>",
         "first answer",
-        "@You: another question",
-        "@Assistant: second response",
+        "@You:", "another question",
+        "@Assistant:", "second response",
         "<thinking>",
         "second thought",
         "</thinking>",
         "second answer",
-        "@You: follow up",
+        "@You:", "follow up",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -728,12 +728,12 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: response",
+        "@Assistant:", "response",
         "<thinking redacted>",
         "encrypted-data-here",
         "</thinking>",
         "actual response",
-        "@You: follow up",
+        "@You:", "follow up",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -760,12 +760,12 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: response",
+        "@Assistant:", "response",
         '<thinking vertex:signature="abc123/def+ghi==">',
         "thought process here",
         "</thinking>",
         "actual response",
-        "@You: follow up",
+        "@You:", "follow up",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -819,7 +819,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: I'll check that.",
+        "@Assistant:", "I'll check that.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -883,7 +883,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: Checking.",
+        "@Assistant:", "Checking.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -942,8 +942,8 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@You: What files are here?",
-        "@Assistant: Let me check those files for you.",
+        "@You:", "What files are here?",
+        "@Assistant:", "Let me check those files for you.",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -977,7 +977,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: response",
+        "@Assistant:", "response",
         "<thinking>",
         "thinking content here",
         "</thinking>",
@@ -1022,7 +1022,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: Checking.",
+        "@Assistant:", "Checking.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -1062,7 +1062,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: Running.",
+        "@Assistant:", "Running.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -1096,7 +1096,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: Checking.",
+        "@Assistant:", "Checking.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -1152,12 +1152,12 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: response",
+        "@Assistant:", "response",
         "<thinking>",
         "thought process here",
         "</thinking>",
         "actual response",
-        "@You: follow up",
+        "@You:", "follow up",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -1193,7 +1193,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: Checking.",
+        "@Assistant:", "Checking.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -1231,12 +1231,12 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: response",
+        "@Assistant:", "response",
         "<thinking>",
         "thought process here",
         "</thinking>",
         "actual response",
-        "@You: follow up",
+        "@You:", "follow up",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -1307,8 +1307,8 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@You: question",
-        "@Assistant: response",
+        "@You:", "question",
+        "@Assistant:", "response",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -1336,8 +1336,8 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@You: question",
-        "@Assistant: response",
+        "@You:", "question",
+        "@Assistant:", "response",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -1379,8 +1379,8 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@You: question",
-        "@Assistant: response",
+        "@You:", "question",
+        "@Assistant:", "response",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -1400,9 +1400,9 @@ describe("UI Folding", function()
         "model = 'claude-sonnet-4-5'",
         "```",
         "",
-        "@You: What files are in this directory?",
+        "@You:", "What files are in this directory?",
         "",
-        "@Assistant: Let me check.",
+        "@Assistant:", "Let me check.",
         "<thinking>",
         "User wants a directory listing.",
         "</thinking>",
@@ -1421,9 +1421,9 @@ describe("UI Folding", function()
         "file2.txt",
         "```",
         "",
-        "@Assistant: There are two files: file1.txt and file2.txt.",
+        "@Assistant:", "There are two files: file1.txt and file2.txt.",
         "",
-        "@You: Thanks!",
+        "@You:", "Thanks!",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -1502,7 +1502,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: Checking.",
+        "@Assistant:", "Checking.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -1517,7 +1517,7 @@ describe("UI Folding", function()
         "file1.txt",
         "```",
         "",
-        "@Assistant: Here are the files.",
+        "@Assistant:", "Here are the files.",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
@@ -1549,7 +1549,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: Checking.",
+        "@Assistant:", "Checking.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -1608,7 +1608,7 @@ describe("UI Folding", function()
       vim.bo[bufnr].filetype = "chat"
 
       local lines = {
-        "@Assistant: Checking.",
+        "@Assistant:", "Checking.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",

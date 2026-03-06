@@ -11,7 +11,7 @@ describe("Aborted response handling", function()
   describe("parser", function()
     it("recognizes flemma:aborted comment as AbortedSegment with message", function()
       local lines = {
-        "@Assistant: Hello",
+        "@Assistant:", "Hello",
         ABORT_COMMENT,
       }
       local doc = parser.parse_lines(lines)
@@ -24,7 +24,7 @@ describe("Aborted response handling", function()
         if seg.kind == "aborted" then
           found = true
           assert.equals(ABORT_MESSAGE, seg.message)
-          assert.equals(2, seg.position.start_line)
+          assert.equals(3, seg.position.start_line)
           break
         end
       end
@@ -33,7 +33,7 @@ describe("Aborted response handling", function()
 
     it("captures custom abort message", function()
       local lines = {
-        "@Assistant: Hello",
+        "@Assistant:", "Hello",
         "<!-- flemma:aborted: Custom abort reason here. -->",
       }
       local doc = parser.parse_lines(lines)
@@ -51,7 +51,7 @@ describe("Aborted response handling", function()
 
     it("trims whitespace around the message", function()
       local lines = {
-        "@Assistant: Hello",
+        "@Assistant:", "Hello",
         "<!--  flemma:aborted:   Some message   -->",
       }
       local doc = parser.parse_lines(lines)
@@ -69,7 +69,8 @@ describe("Aborted response handling", function()
 
     it("does not recognize abort comment in @You: messages", function()
       local lines = {
-        "@You: " .. ABORT_COMMENT,
+        "@You:",
+        ABORT_COMMENT,
       }
       local doc = parser.parse_lines(lines)
       local msg = doc.messages[1]
@@ -80,13 +81,13 @@ describe("Aborted response handling", function()
 
     it("parses flemma:tool status=aborted fence correctly", function()
       local lines = {
-        "@Assistant: Hello",
+        "@Assistant:", "Hello",
         "**Tool Use:** `bash` (`tool_123`)",
         "",
         "```json",
         '{"command": "ls"}',
         "```",
-        "@You: **Tool Result:** `tool_123`",
+        "@You:", "**Tool Result:** `tool_123`",
         "",
         "```flemma:tool status=aborted",
         "```",
@@ -118,7 +119,7 @@ describe("Aborted response handling", function()
 
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-        "@Assistant: Let me help",
+        "@Assistant:", "Let me help",
         "**Tool Use:** `bash` (`tool_abc`)",
         "",
         "```json",
@@ -144,7 +145,7 @@ describe("Aborted response handling", function()
 
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-        "@Assistant: Let me help",
+        "@Assistant:", "Let me help",
         "**Tool Use:** `bash` (`tool_def`)",
         "",
         "```json",
@@ -169,7 +170,7 @@ describe("Aborted response handling", function()
 
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-        "@Assistant: Let me do two things",
+        "@Assistant:", "Let me do two things",
         "**Tool Use:** `bash` (`tool_1`)",
         "",
         "```json",
@@ -201,7 +202,7 @@ describe("Aborted response handling", function()
 
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-        "@Assistant: Let me help",
+        "@Assistant:", "Let me help",
         "**Tool Use:** `bash` (`tool_mid`)",
         "",
         "```json",
@@ -227,7 +228,7 @@ describe("Aborted response handling", function()
 
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-        "@Assistant: Let me help",
+        "@Assistant:", "Let me help",
         "**Tool Use:** `bash` (`tool_trail`)",
         "",
         "```json",
@@ -252,7 +253,7 @@ describe("Aborted response handling", function()
     it("emits aborted segment as aborted part with message", function()
       local processor = require("flemma.processor")
       local doc = parser.parse_lines({
-        "@Assistant: Hello",
+        "@Assistant:", "Hello",
         ABORT_COMMENT,
       })
 
@@ -273,7 +274,7 @@ describe("Aborted response handling", function()
     it("preserves custom message through processor", function()
       local processor = require("flemma.processor")
       local doc = parser.parse_lines({
-        "@Assistant: Hello",
+        "@Assistant:", "Hello",
         "<!-- flemma:aborted: My custom abort reason. -->",
       })
 
@@ -295,10 +296,10 @@ describe("Aborted response handling", function()
   describe("pipeline", function()
     it("strips abort marker from historical assistant messages", function()
       local doc = parser.parse_lines({
-        "@Assistant: First response",
+        "@Assistant:", "First response",
         ABORT_COMMENT,
-        "@You: Thanks",
-        "@Assistant: Second response",
+        "@You:", "Thanks",
+        "@Assistant:", "Second response",
         ABORT_COMMENT,
       })
       local base_context = ctx.from_file("/tmp/test.chat")
@@ -328,7 +329,7 @@ describe("Aborted response handling", function()
 
     it("preserves abort marker when only one assistant message", function()
       local doc = parser.parse_lines({
-        "@Assistant: Only response",
+        "@Assistant:", "Only response",
         ABORT_COMMENT,
       })
       local base_context = ctx.from_file("/tmp/test.chat")
@@ -348,10 +349,10 @@ describe("Aborted response handling", function()
 
     it("strips abort marker when followed by user and another assistant", function()
       local doc = parser.parse_lines({
-        "@Assistant: First",
+        "@Assistant:", "First",
         ABORT_COMMENT,
-        "@You: Continue",
-        "@Assistant: Second",
+        "@You:", "Continue",
+        "@Assistant:", "Second",
         ABORT_COMMENT,
       })
       local base_context = ctx.from_file("/tmp/test.chat")
@@ -379,14 +380,14 @@ describe("Aborted response handling", function()
 
     it("strips abort marker from last assistant when it contains tool_use", function()
       local doc = parser.parse_lines({
-        "@Assistant: Let me help",
+        "@Assistant:", "Let me help",
         "**Tool Use:** `bash` (`tool_abc`)",
         "",
         "```json",
         '{"command": "ls"}',
         "```",
         ABORT_COMMENT,
-        "@You: **Tool Result:** `tool_abc`",
+        "@You:", "**Tool Result:** `tool_abc`",
         "",
         "```",
         ABORT_MESSAGE,
@@ -426,7 +427,7 @@ describe("Aborted response handling", function()
 
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-        "@Assistant: Let me help",
+        "@Assistant:", "Let me help",
         "**Tool Use:** `bash` (`tool_normal`)",
         "",
         "```json",

@@ -769,13 +769,14 @@ local function import_generate_chat(data)
 
   -- Add system message if present
   if data.system then
-    table.insert(output, "@System: " .. data.system)
+    table.insert(output, "@System:")
+    table.insert(output, data.system)
     table.insert(output, "")
   end
 
   -- Process messages
   for _, msg in ipairs(data.messages or {}) do
-    local role_type = msg.role == "user" and "@You: " or "@Assistant: "
+    local role_marker = msg.role == "user" and "@You:" or "@Assistant:"
     local text = import_get_message_text(msg.content)
 
     -- Add blank line before message if needed
@@ -783,7 +784,8 @@ local function import_generate_chat(data)
       table.insert(output, "")
     end
 
-    table.insert(output, role_type .. text)
+    table.insert(output, role_marker)
+    table.insert(output, text)
   end
 
   return table.concat(output, "\n")

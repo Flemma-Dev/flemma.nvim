@@ -265,7 +265,7 @@ describe("Tool Preview", function()
 
     it("places virtual line inside empty pending tool block", function()
       local bufnr = create_buffer({
-        "@Assistant: I'll run a command.",
+        "@Assistant:", "I'll run a command.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -294,7 +294,7 @@ describe("Tool Preview", function()
 
     it("does NOT place virtual line when tool block has content", function()
       local bufnr = create_buffer({
-        "@Assistant: I'll run a command.",
+        "@Assistant:", "I'll run a command.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -320,7 +320,7 @@ describe("Tool Preview", function()
 
     it("places previews for multiple tool blocks", function()
       local bufnr = create_buffer({
-        "@Assistant: Running two tools.",
+        "@Assistant:", "Running two tools.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -355,7 +355,7 @@ describe("Tool Preview", function()
 
     it("clears previews on re-run (idempotent)", function()
       local bufnr = create_buffer({
-        "@Assistant: Tool call.",
+        "@Assistant:", "Tool call.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",
@@ -381,7 +381,7 @@ describe("Tool Preview", function()
 
     it("skips tool_result without status (resolved results)", function()
       local bufnr = create_buffer({
-        "@Assistant: Tool call.",
+        "@Assistant:", "Tool call.",
         "",
         "**Tool Use:** `bash` (`toolu_01`)",
         "```json",

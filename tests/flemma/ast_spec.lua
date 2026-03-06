@@ -86,8 +86,10 @@ describe("Parser", function()
 
   it("parses messages and segments", function()
     local lines = {
-      "@You: Hello {{1+1}} world @./a.txt.",
-      "@Assistant: Ok",
+      "@You:",
+      "Hello {{1+1}} world @./a.txt.",
+      "@Assistant:",
+      "Ok",
     }
     local doc = parser.parse_lines(lines)
     local m1 = doc.messages[1]
@@ -106,7 +108,8 @@ describe("Parser", function()
 
   it("parses MIME override and URL-encoded filenames", function()
     local lines = {
-      "@You: See @./my%20file.bin;type=image/png!",
+      "@You:",
+      "See @./my%20file.bin;type=image/png!",
     }
     local doc = parser.parse_lines(lines)
     -- After desugaring, @./file becomes an ExpressionSegment with include() code
@@ -124,7 +127,8 @@ describe("Parser", function()
 
   it("parses thinking tags in Assistant messages", function()
     local lines = {
-      "@Assistant: I think",
+      "@Assistant:",
+      "I think",
       "<thinking>",
       "this is my internal thought",
       "</thinking>",
@@ -147,7 +151,8 @@ describe("Parser", function()
 
   it("parses redacted thinking tags in Assistant messages", function()
     local lines = {
-      "@Assistant: Here is my response.",
+      "@Assistant:",
+      "Here is my response.",
       "",
       "<thinking redacted>",
       "encrypted-data-abc123",
@@ -173,7 +178,8 @@ describe("Parser", function()
 
   it("parses thinking tags with line positions when on separate lines", function()
     local lines = {
-      "@Assistant: Here is my response",
+      "@Assistant:",
+      "Here is my response",
       "<thinking>",
       "internal thought process",
       "more thinking",
@@ -196,8 +202,8 @@ describe("Parser", function()
     assert.is_not_nil(thinking_seg, "Should have thinking segment")
     assert.equals("internal thought process\nmore thinking", thinking_seg.content)
     assert.is_not_nil(thinking_seg.position, "Thinking segment should have position")
-    assert.equals(2, thinking_seg.position.start_line, "Thinking should start at line 2")
-    assert.equals(5, thinking_seg.position.end_line, "Thinking should end at line 5")
+    assert.equals(3, thinking_seg.position.start_line, "Thinking should start at line 3")
+    assert.equals(6, thinking_seg.position.end_line, "Thinking should end at line 6")
   end)
 end)
 
@@ -225,7 +231,8 @@ describe("Processor", function()
   it("evaluates expressions and resolves file refs", function()
     local base = ctx.from_file("tests/fixtures/doc.chat")
     local lines = {
-      "@You: File1: {{ 'hello' }} and File2: @./a.txt.",
+      "@You:",
+      "File1: {{ 'hello' }} and File2: @./a.txt.",
     }
     local doc = parser.parse_lines(lines)
     local out = processor.evaluate(doc, base)
@@ -248,7 +255,8 @@ describe("Processor", function()
   it("handles URL-encoded filename and trailing punctuation", function()
     local base = ctx.from_file("tests/fixtures/doc.chat")
     local lines = {
-      "@You: See @./my%20file.txt!",
+      "@You:",
+      "See @./my%20file.txt!",
     }
     local doc = parser.parse_lines(lines)
     local out = processor.evaluate(doc, base)
@@ -264,7 +272,8 @@ describe("Processor", function()
     f:close()
     local base2 = ctx.from_file("tests/fixtures/sample.bin")
     local lines = {
-      "@You: Img: @./sample.bin;type=image/png",
+      "@You:",
+      "Img: @./sample.bin;type=image/png",
     }
     local doc = parser.parse_lines(lines)
     local out = processor.evaluate(doc, base2)
@@ -275,7 +284,8 @@ describe("Processor", function()
 
   it("handles circular includes gracefully", function()
     local lines = {
-      "@You: {{ include('tests/fixtures/loop1.txt') }}",
+      "@You:",
+      "{{ include('tests/fixtures/loop1.txt') }}",
     }
     local b = ctx.from_file("tests/fixtures/loop1.txt")
     local doc = parser.parse_lines(lines)
@@ -289,7 +299,8 @@ describe("Processor", function()
     f:close()
 
     local lines = {
-      "@You: {{ include('./with_ref.txt') }}",
+      "@You:",
+      "{{ include('./with_ref.txt') }}",
     }
     local b = ctx.from_file("tests/fixtures/doc.chat")
     local doc = parser.parse_lines(lines)
@@ -314,7 +325,8 @@ describe("Processor", function()
   it("does not process expressions or file refs in @Assistant messages", function()
     local base = ctx.from_file("tests/fixtures/doc.chat")
     local lines = {
-      "@Assistant: {{ 1 + 1 }} and @./a.txt should be literal",
+      "@Assistant:",
+      "{{ 1 + 1 }} and @./a.txt should be literal",
     }
     local doc = parser.parse_lines(lines)
     local out = processor.evaluate(doc, base)
@@ -328,7 +340,8 @@ describe("Processor", function()
   it("collects expression errors", function()
     local base = ctx.from_file("tests/fixtures/doc.chat")
     local lines = {
-      "@You: {{ 1 / 'x' }}",
+      "@You:",
+      "{{ 1 / 'x' }}",
     }
     local doc = parser.parse_lines(lines)
     local out = processor.evaluate(doc, base)
@@ -346,7 +359,8 @@ describe("Processor", function()
 
   it("preserves thinking nodes in evaluation", function()
     local lines = {
-      "@Assistant: I think",
+      "@Assistant:",
+      "I think",
       "<thinking>",
       "internal thought",
       "</thinking>",
@@ -438,9 +452,12 @@ end)
 describe("Pipeline Integration", function()
   it("runs full pipeline with system message", function()
     local lines = {
-      "@System: You are helpful.",
-      "@You: Hello",
-      "@Assistant: Hi there!",
+      "@System:",
+      "You are helpful.",
+      "@You:",
+      "Hello",
+      "@Assistant:",
+      "Hi there!",
     }
     local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
     assert.equals("You are helpful.", prompt.system)
@@ -452,8 +469,10 @@ describe("Pipeline Integration", function()
       "```lua",
       "name = 'World'",
       "```",
-      "@You: Hello {{ name }}! See @./tests/fixtures/a.txt",
-      "@Assistant: Got it",
+      "@You:",
+      "Hello {{ name }}! See @./tests/fixtures/a.txt",
+      "@Assistant:",
+      "Got it",
     }
 
     local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
@@ -484,9 +503,12 @@ describe("Provider Integration", function()
     local provider = anthropic.new({ model = "claude-3-haiku-20240307", max_tokens = 256, temperature = 0 })
 
     local lines = {
-      "@System: You are helpful.",
-      "@You: Hello",
-      "@Assistant: Hi there!",
+      "@System:",
+      "You are helpful.",
+      "@You:",
+      "Hello",
+      "@Assistant:",
+      "Hi there!",
     }
     local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
     local req = provider:build_request(prompt, {})
@@ -503,8 +525,10 @@ describe("Provider Integration", function()
       "```lua",
       "name = 'World'",
       "```",
-      "@You: Hello {{ name }}! See @./tests/fixtures/a.txt",
-      "@Assistant: Got it",
+      "@You:",
+      "Hello {{ name }}! See @./tests/fixtures/a.txt",
+      "@Assistant:",
+      "Got it",
     }
 
     local context = ctx.from_file("tests/fixtures/doc.chat")

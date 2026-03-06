@@ -10,11 +10,11 @@ local parser = require("flemma.parser")
 ---@field inner_start_col integer
 ---@field inner_end integer
 
----Get the 0-indexed column where content starts after a role prefix (@Role: )
----@param role string
+---Get the 0-indexed column where content starts (always 0 with new format)
+---@param _ string
 ---@return integer
-local function content_col(role)
-  return #("@" .. role .. ": ")
+local function content_col(_)
+  return 0
 end
 
 ---Build a line-level content map by walking positioned segments directly.

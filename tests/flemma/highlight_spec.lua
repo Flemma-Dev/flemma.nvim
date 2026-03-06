@@ -42,7 +42,7 @@ describe("Highlight", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant: test" })
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant:", "test" })
 
       -- Apply syntax to define the highlight groups
       highlight.apply_syntax()
@@ -60,7 +60,7 @@ describe("Highlight", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: test" })
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "test" })
 
       highlight.apply_syntax()
 
@@ -82,7 +82,7 @@ describe("Highlight", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@System: test" })
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@System:", "test" })
 
       highlight.apply_syntax()
 
@@ -102,7 +102,7 @@ describe("Highlight", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant: test" })
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant:", "test" })
 
       highlight.apply_syntax()
 
@@ -117,7 +117,7 @@ describe("Highlight", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant: test" })
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant:", "test" })
 
       highlight.apply_syntax()
 
@@ -132,7 +132,7 @@ describe("Highlight", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant: test" })
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant:", "test" })
       highlight.apply_syntax()
     end
 
@@ -173,7 +173,7 @@ describe("Highlight", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant: test" })
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant:", "test" })
       highlight.apply_syntax()
 
       local hl = vim.api.nvim_get_hl(0, { name = "FlemmaToolUseTitle" })
@@ -187,7 +187,7 @@ describe("Highlight", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant: test" })
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant:", "test" })
       highlight.apply_syntax()
 
       local hl = vim.api.nvim_get_hl(0, { name = "FlemmaToolResultTitle" })
@@ -311,7 +311,7 @@ describe("notification bar highlights", function()
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
     vim.bo[bufnr].filetype = "chat"
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant: test" })
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant:", "test" })
     highlight.apply_syntax()
   end
 
@@ -433,7 +433,7 @@ describe("CursorLine overlay highlights", function()
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
     vim.bo[bufnr].filetype = "chat"
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant: test" })
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant:", "test" })
     highlight.apply_syntax()
   end
 
