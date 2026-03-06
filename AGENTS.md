@@ -85,7 +85,7 @@ All tool IDs and metadata are embedded in buffer text so `.chat` files are porta
 
 ## Build, Test, and Development Commands
 
-- **`make test`** — run the full Plenary+Busted test suite. Use `make test >/dev/null 2>&1` mid-session to check exit codes without flooding the transcript; run plain `make test` when debugging failures or before ending a session.
+- **`make test`** — run the full Plenary+Busted test suite. Use `make test >/dev/null 2>&1` mid-session to check exit codes without flooding the transcript. To see just the failure details, use: `make test 2>&1 | grep -vE '^.....(Success|Failed|Errors)' | grep -v '^Scheduling' | grep -v '^Flemma: Switched to' | grep -v '^===='`
 - **`make lint`** — run `luacheck` on `lua/` and `tests/`.
 - **`make check`** — run `lua-language-server --check` on production code.
 - **`make changeset`** — interactive changeset creation (for human use; agents write changeset files directly).
