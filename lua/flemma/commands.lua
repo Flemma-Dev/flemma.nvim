@@ -472,6 +472,12 @@ local function setup_commands()
     end,
   }
 
+  command_tree.children.format = {
+    action = function()
+      require("flemma.migration").migrate_buffer(vim.api.nvim_get_current_buf())
+    end,
+  }
+
   command_tree.children.tool = {
     children = {
       execute = {
