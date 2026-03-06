@@ -191,7 +191,7 @@ function M.start_loading_spinner(bufnr)
       spinner_line_idx0 = vim.api.nvim_buf_line_count(bufnr) - 1
       spinner_extmark_id = vim.api.nvim_buf_set_extmark(bufnr, spinner_ns, spinner_line_idx0, 0, {
         virt_text = {
-          { " " .. SPINNER_LABEL, "FlemmaAssistantSpinner" },
+          { SPINNER_LABEL, "FlemmaAssistantSpinner" },
           { " " .. spinner_frames[frame], "FlemmaAssistantSpinner" },
         },
         virt_text_pos = "eol",
@@ -223,7 +223,7 @@ function M.start_loading_spinner(bufnr)
       pcall(vim.api.nvim_buf_set_extmark, bufnr, spinner_ns, spinner_line_idx0, 0, {
         id = spinner_extmark_id,
         virt_text = {
-          { " " .. SPINNER_LABEL, "FlemmaAssistantSpinner" },
+          { SPINNER_LABEL, "FlemmaAssistantSpinner" },
           { " " .. spinner_frames[frame], "FlemmaAssistantSpinner" },
         },
         virt_text_pos = "eol",
@@ -307,8 +307,7 @@ function M.update_thinking_preview(bufnr, preview_text)
   pcall(vim.api.nvim_buf_set_extmark, bufnr, spinner_ns, line_idx0, 0, {
     id = extmark_id,
     virt_text = {
-      { " " .. SPINNER_LABEL, "FlemmaAssistantSpinner" },
-      { " " .. config.spinner.thinking_char .. " (" .. preview_text .. ")", "FlemmaAssistantSpinner" },
+      { SPINNER_LABEL .. "  (" .. preview_text .. ")", "FlemmaAssistantSpinner" },
     },
     virt_text_pos = "eol",
     hl_mode = "combine",

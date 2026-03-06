@@ -36,9 +36,6 @@
 ---@field user flemma.config.SignRole
 ---@field assistant flemma.config.SignRole
 
----@class flemma.config.Spinner
----@field thinking_char string Character shown next to the thinking character count
-
 ---@class flemma.config.LineHighlights
 ---@field enabled boolean
 ---@field frontmatter flemma.config.HighlightValue
@@ -154,7 +151,6 @@
 ---@field role_style? string
 ---@field ruler? flemma.config.Ruler
 ---@field signs? flemma.config.Signs
----@field spinner? flemma.config.Spinner
 ---@field line_highlights? flemma.config.LineHighlights
 ---@field notifications? flemma.Config.Notifications
 ---@field pricing? flemma.config.Pricing
@@ -177,7 +173,6 @@
 ---@field role_style string
 ---@field ruler flemma.config.Ruler
 ---@field signs flemma.config.Signs
----@field spinner flemma.config.Spinner
 ---@field line_highlights flemma.config.LineHighlights
 ---@field notifications flemma.Config.Notifications
 ---@field pricing flemma.config.Pricing
@@ -241,9 +236,6 @@ return {
       char = nil, -- Use default char
       hl = true, -- Inherit from highlights.assistant, set false to disable, or provide specific group/hex color
     },
-  },
-  spinner = {
-    thinking_char = "❖", -- Character shown next to the thinking character count (e.g. "❖ (3.2k characters)")
   },
   line_highlights = {
     enabled = true, -- Enable full-line background highlighting to distinguish roles
