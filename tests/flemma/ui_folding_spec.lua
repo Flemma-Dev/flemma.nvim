@@ -1007,10 +1007,10 @@ describe("UI Folding", function()
       assert.is_table(chunks, "get_fold_text should return a table of chunks")
 
       local text = chunks_to_string(chunks)
-      assert.is_truthy(text:match("@Assistant:"), "Fold text should contain role marker")
+      assert.is_truthy(text:match("Assistant"), "Fold text should contain role name")
 
-      -- Verify role highlight groups
-      local role_chunk = find_chunk(chunks, "@Assistant:")
+      -- Verify role highlight groups — with rulers enabled, the role name is a separate chunk
+      local role_chunk = find_chunk(chunks, "Assistant")
       assert.is_not_nil(role_chunk, "Should have role chunk")
       assert.are.equal("FlemmaRoleAssistant", role_chunk[2])
 

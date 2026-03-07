@@ -65,7 +65,7 @@ function M.buffer_cmd(bufnr, cmd)
   vim.fn.win_execute(winid, "noautocmd " .. cmd)
 end
 
----Add rulers between messages
+---Add rulers merged with role marker lines
 ---@param bufnr integer
 ---@param doc flemma.ast.DocumentNode
 function M.add_rulers(bufnr, doc)
@@ -81,7 +81,6 @@ function M.add_rulers(bufnr, doc)
   -- Get the window displaying this buffer to calculate correct ruler width
   local winid = vim.fn.bufwinid(bufnr)
   if winid == -1 then
-    -- Buffer not displayed in any window, skip rulers
     return
   end
 
@@ -92,21 +91,46 @@ function M.add_rulers(bufnr, doc)
     and current_config.line_highlights
     and current_config.line_highlights.enabled
 
-  for i, msg in ipairs(doc.messages) do
-    -- Add a ruler before each message after the first, and before the first if frontmatter exists
-    if i > 1 or (i == 1 and doc.frontmatter ~= nil) then
-      local line_idx = msg.position.start_line - 1
-      if line_idx >= 0 and line_idx < vim.api.nvim_buf_line_count(bufnr) then
-        -- Determine ruler highlight: per-role variant if adopting line highlights
-        local ruler_hl = "FlemmaRuler"
-        if adopt then
-          ruler_hl = roles.highlight_group("FlemmaRuler", msg.role)
-        end
-        -- Create virtual line with ruler
-        local ruler_text = string.rep(ruler_config.char, win_width)
-        vim.api.nvim_buf_set_extmark(bufnr, ns_id, line_idx, 0, {
-          virt_lines = { { { ruler_text, ruler_hl } } },
-          virt_lines_above = true,
+  local spinner_line = state.get_buffer_state(bufnr).spinner_line_idx0
+
+  for _, msg in ipairs(doc.messages) do
+    local line_idx = msg.position.start_line - 1
+    if line_idx >= 0 and line_idx < vim.api.nvim_buf_line_count(bufnr) then
+      -- Use the AST role directly — only recognized roles (You, System, Assistant) get rulers
+      local role_name = msg.role
+      local ruler_hl = "FlemmaRuler"
+      if adopt then
+        ruler_hl = roles.highlight_group("FlemmaRuler", role_name)
+      end
+
+      local colon_col = 1 + #role_name -- position of ':' in @Role:
+
+      -- Replace @ with ruler char
+      vim.api.nvim_buf_set_extmark(bufnr, ns_id, line_idx, 0, {
+        virt_text = { { ruler_config.char, ruler_hl } },
+        virt_text_pos = "overlay",
+      })
+
+      -- Insert a non-editable space between ruler char and the role name
+      vim.api.nvim_buf_set_extmark(bufnr, ns_id, line_idx, 1, {
+        virt_text = { { " ", ruler_hl } },
+        virt_text_pos = "inline",
+      })
+
+      -- On the spinner line, only replace : with a space (no ruler extension)
+      -- so the EOL spinner text isn't covered by overlay chars.
+      -- On all other lines, extend ruler chars to the window edge.
+      if line_idx == spinner_line then
+        vim.api.nvim_buf_set_extmark(bufnr, ns_id, line_idx, colon_col, {
+          virt_text = { { " ", ruler_hl } },
+          virt_text_pos = "overlay",
+        })
+      else
+        local inline_space = 1 -- inserted space between ━ and role name
+        local remaining = math.max(0, win_width - colon_col - 1 - inline_space)
+        vim.api.nvim_buf_set_extmark(bufnr, ns_id, line_idx, colon_col, {
+          virt_text = { { " " .. string.rep(ruler_config.char, remaining), ruler_hl } },
+          virt_text_pos = "overlay",
         })
       end
     end
@@ -159,6 +183,40 @@ function M.highlight_thinking_tags(bufnr, doc)
   end
 end
 
+---Build spinner virt_text chunks, appending ruler chars when rulers are enabled.
+---@param spinner_text string The spinner frame + label text
+---@param bufnr integer
+---@return {[1]:string, [2]:string}[]
+local function build_spinner_virt_text(spinner_text, bufnr)
+  local current_config = state.get_config()
+  local ruler_config = current_config.ruler
+  local rulers_enabled = ruler_config and ruler_config.enabled ~= false
+
+  -- When rulers are off, the colon overlay isn't present, so add a leading space
+  local prefix = rulers_enabled and "" or " "
+  ---@type {[1]:string, [2]:string}[]
+  local chunks = { { prefix .. spinner_text, "FlemmaAssistantSpinner" } }
+
+  if rulers_enabled then
+    local winid = vim.fn.bufwinid(bufnr)
+    if winid ~= -1 then
+      local ruler_hl = "FlemmaRuler"
+      if
+        ruler_config.adopt_line_highlight
+        and current_config.line_highlights
+        and current_config.line_highlights.enabled
+      then
+        ruler_hl = roles.highlight_group("FlemmaRuler", "Assistant")
+      end
+      -- Use win_width chars — the window clips excess, so overshoot is fine
+      local win_width = vim.api.nvim_win_get_width(winid)
+      table.insert(chunks, { " " .. string.rep(ruler_config.char, win_width), ruler_hl })
+    end
+  end
+
+  return chunks
+end
+
 ---Show loading spinner
 ---@param bufnr integer
 ---@return integer timer_id
@@ -189,10 +247,9 @@ function M.start_loading_spinner(bufnr)
       -- which the parser can recognise as a role marker.
       -- hl_mode="combine" lets the spinner inherit line highlights (from apply_line_highlights, cursorline, etc.)
       spinner_line_idx0 = vim.api.nvim_buf_line_count(bufnr) - 1
+      local spinner_text = spinner_frames[frame] .. " " .. SPINNER_LABEL
       spinner_extmark_id = vim.api.nvim_buf_set_extmark(bufnr, spinner_ns, spinner_line_idx0, 0, {
-        virt_text = {
-          { spinner_frames[frame] .. " " .. SPINNER_LABEL, "FlemmaAssistantSpinner" },
-        },
+        virt_text = build_spinner_virt_text(spinner_text, bufnr),
         virt_text_pos = "eol",
         hl_mode = "combine",
         priority = PRIORITY.SPINNER,
@@ -223,14 +280,11 @@ function M.start_loading_spinner(bufnr)
     if spinner_line_idx0 ~= nil and spinner_extmark_id ~= nil then
       frame = (frame % #spinner_frames) + 1
       local preview_text = buffer_state.spinner_preview_text
-      local label = preview_text
-          and SPINNER_LABEL .. "  (" .. preview_text .. ")"
-        or SPINNER_LABEL
+      local label = preview_text and SPINNER_LABEL .. "  (" .. preview_text .. ")" or SPINNER_LABEL
+      local spinner_text = spinner_frames[frame] .. " " .. label
       pcall(vim.api.nvim_buf_set_extmark, bufnr, spinner_ns, spinner_line_idx0, 0, {
         id = spinner_extmark_id,
-        virt_text = {
-          { spinner_frames[frame] .. " " .. label, "FlemmaAssistantSpinner" },
-        },
+        virt_text = build_spinner_virt_text(spinner_text, bufnr),
         virt_text_pos = "eol",
         hl_mode = "combine",
         priority = PRIORITY.SPINNER,

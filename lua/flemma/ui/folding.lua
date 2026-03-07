@@ -336,17 +336,39 @@ function M.get_fold_text()
   -- Message folds (level 1)
   local msg = query.find_message_at_line(doc, foldstart_lnum)
   if msg then
-    local role_marker = "@" .. msg.role .. ":"
     local role_hl = roles.highlight_group("FlemmaRole", msg.role)
     local content_hl = roles.highlight_group("Flemma", msg.role)
 
-    local chrome_width = str.strwidth(role_marker) + str.strwidth(" ") + str.strwidth(" ") + str.strwidth(suffix)
-    local preview_chunks = preview.format_message_fold_preview(msg, text_width - chrome_width, doc, content_hl)
+    -- When rulers are enabled, match the unfolded visual: ━ Role content (N lines)
+    -- Otherwise fall back to the standard @Role: prefix
+    local ruler_config = state.get_config().ruler
+    local use_ruler_prefix = ruler_config and ruler_config.enabled ~= false
+
     ---@type {[1]:string, [2]:string}[]
-    local chunks = {
-      { role_marker, role_hl },
-      { " ", content_hl },
-    }
+    local chunks
+    local chrome_width
+    if use_ruler_prefix then
+      local ruler_hl = "FlemmaRuler"
+      local ruler_prefix = ruler_config.char .. " "
+      chunks = {
+        { ruler_prefix, ruler_hl },
+        { msg.role, role_hl },
+        { " ", content_hl },
+      }
+      chrome_width = str.strwidth(ruler_prefix)
+        + str.strwidth(msg.role)
+        + str.strwidth(" ")
+        + str.strwidth(" ")
+        + str.strwidth(suffix)
+    else
+      local role_marker = "@" .. msg.role .. ":"
+      chunks = {
+        { role_marker, role_hl },
+        { " ", content_hl },
+      }
+      chrome_width = str.strwidth(role_marker) + str.strwidth(" ") + str.strwidth(" ") + str.strwidth(suffix)
+    end
+    local preview_chunks = preview.format_message_fold_preview(msg, text_width - chrome_width, doc, content_hl)
     vim.list_extend(chunks, preview_chunks)
     table.insert(chunks, { " ", content_hl })
     table.insert(chunks, { suffix, "FlemmaFoldMeta" })
