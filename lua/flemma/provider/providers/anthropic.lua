@@ -383,6 +383,15 @@ function M.build_request(self, prompt, _context)
   return request_body
 end
 
+--- Trailing keys for cache-friendly JSON serialization.
+--- Static config keys are sorted alphabetically first; system, tools, and messages
+--- trail because messages grow each turn (and tools/system are semi-static).
+---@param self flemma.provider.Anthropic
+---@return string[]
+function M.get_trailing_keys(self)
+  return { "system", "tools", "messages" }
+end
+
 ---@param self flemma.provider.Anthropic
 ---@return string[]
 function M.get_request_headers(self)

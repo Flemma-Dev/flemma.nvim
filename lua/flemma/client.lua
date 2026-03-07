@@ -46,9 +46,9 @@ function M.find_fixture_for_endpoint(endpoint)
 end
 
 ---Create temporary file for request body
----@param request_body table<string, any>
+---@param opts flemma.client.RequestOptions
 ---@return string|nil tmp_file, string|nil err, string|nil raw_json
-local function create_temp_file(request_body)
+local function create_temp_file(opts)
   -- Create temporary file for request body
   local tmp_file = os.tmpname()
   -- Handle both Unix and Windows paths
@@ -63,7 +63,7 @@ local function create_temp_file(request_body)
     return nil, "Failed to create temporary file"
   end
 
-  local raw_json = json.encode(request_body)
+  local raw_json = json.encode_ordered(opts.request_body, opts.trailing_keys)
   f:write(raw_json)
   f:close()
 
@@ -167,6 +167,7 @@ end
 ---@field endpoint string The API endpoint URL
 ---@field parameters flemma.provider.Parameters Provider parameters (for timeouts, model name, etc.)
 ---@field callbacks flemma.client.RequestCallbacks Callback functions for handling responses
+---@field trailing_keys? string[] Keys to place last in JSON serialization for cache-friendly ordering
 ---@field process_response_line_fn? fun(line: string, callbacks: flemma.client.RequestCallbacks) Function to process each response line
 ---@field finalize_response_fn? fun(code: number, callbacks: flemma.client.RequestCallbacks) Function to finalize provider response processing
 ---@field reset_fn? fun() Optional function to reset provider state
@@ -189,7 +190,7 @@ function M.send_request(opts)
   -- The provider's get_request_headers() already handles API key validation
 
   -- Create temporary file for request body
-  local tmp_file, err, raw_json = create_temp_file(opts.request_body)
+  local tmp_file, err, raw_json = create_temp_file(opts)
   if not tmp_file then
     if opts.callbacks.on_error then
       opts.callbacks.on_error(err or "Failed to create temporary file")

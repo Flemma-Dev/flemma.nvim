@@ -567,6 +567,14 @@ function M.build_request(self, prompt, _context)
   return request_body
 end
 
+--- Trailing keys for cache-friendly JSON serialization.
+--- Vertex uses `contents` as its messages array.
+---@param self flemma.provider.Vertex
+---@return string[]
+function M.get_trailing_keys(self)
+  return { "tools", "contents" }
+end
+
 ---@param self flemma.provider.Vertex
 ---@return string[]
 function M.get_request_headers(self)

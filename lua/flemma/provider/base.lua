@@ -333,6 +333,17 @@ function M.get_endpoint(self)
   return self.endpoint
 end
 
+--- Return keys that should appear last in the serialized JSON request body.
+--- Providers override this to place dynamic content (messages, tools) after
+--- static config keys, maximizing prefix-based prompt cache hits.
+--- Non-trailing keys are sorted alphabetically; trailing keys appear in the
+--- order returned by this method.
+---@param self flemma.provider.Base
+---@return string[]
+function M.get_trailing_keys(self)
+  return {}
+end
+
 --- Legacy prompt normalization from raw messages.
 --- Normalizes messages into a provider-agnostic Prompt structure with canonical
 --- roles ('user' and 'assistant'). Used only by tests; production code uses

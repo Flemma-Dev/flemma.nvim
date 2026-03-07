@@ -378,6 +378,14 @@ function M.build_request(self, prompt, context)
   return request_body
 end
 
+--- Trailing keys for cache-friendly JSON serialization.
+--- OpenAI uses `input` (Responses API) as its messages array.
+---@param self flemma.provider.OpenAI
+---@return string[]
+function M.get_trailing_keys(self)
+  return { "tools", "input" }
+end
+
 ---@param self flemma.provider.OpenAI
 ---@return string[]
 function M.get_request_headers(self)

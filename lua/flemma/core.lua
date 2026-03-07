@@ -704,7 +704,8 @@ function M.send_to_provider(opts)
     end
 
     local request_body = current_provider:build_request(prompt, context)
-    return { endpoint = endpoint, headers = headers, request_body = request_body }
+    local trailing_keys = current_provider:get_trailing_keys()
+    return { endpoint = endpoint, headers = headers, request_body = request_body, trailing_keys = trailing_keys }
   end)
 
   if not prep_ok then
@@ -716,6 +717,7 @@ function M.send_to_provider(opts)
   local endpoint = prep_result.endpoint
   local headers = prep_result.headers
   local request_body = prep_result.request_body
+  local trailing_keys = prep_result.trailing_keys
   last_request_body_for_testing = request_body -- Store for testing
 
   -- Capture timeout now so the on_request_complete closure doesn't read stale proxy state
@@ -1139,6 +1141,7 @@ function M.send_to_provider(opts)
     endpoint = endpoint,
     parameters = current_provider.parameters,
     callbacks = callbacks,
+    trailing_keys = trailing_keys,
     process_response_line_fn = function(line, cb)
       return current_provider:process_response_line(line, cb)
     end,
