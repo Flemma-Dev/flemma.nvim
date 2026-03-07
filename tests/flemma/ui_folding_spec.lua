@@ -1012,7 +1012,7 @@ describe("UI Folding", function()
       -- Verify role highlight groups — with rulers enabled, the role name is a separate chunk
       local role_chunk = find_chunk(chunks, "Assistant")
       assert.is_not_nil(role_chunk, "Should have role chunk")
-      assert.are.equal("FlemmaRoleAssistant", role_chunk[2])
+      assert.are.equal("FlemmaRoleAssistantName", role_chunk[2])
 
       local meta_chunk = chunks[#chunks]
       assert.are.equal("FlemmaFoldMeta", meta_chunk[2])

@@ -323,16 +323,21 @@ M.apply_syntax = function()
     { source = "FlemmaUser", target = "FlemmaRoleUser" },
     { source = "FlemmaAssistant", target = "FlemmaRoleAssistant" },
   }
+  ---@type table<string, boolean>
+  local role_style_attrs = {}
+  for style in syntax_config.role_style:gmatch("[^,]+") do
+    role_style_attrs[vim.trim(style)] = true
+  end
   for _, role in ipairs(role_groups) do
     local fg = get_hl_color(role.source, "fg") or get_default_color("fg")
+    -- Syntax group: fg-only (covers whole @Role: line; style would bleed into ruler via hl_mode=combine)
+    vim.api.nvim_set_hl(0, role.target, { fg = fg, default = true })
+    -- Name group: fg + style (applied via extmark on just the role name text)
     ---@type vim.api.keyset.highlight
-    local hl_opts = {}
-    for style in syntax_config.role_style:gmatch("[^,]+") do
-      hl_opts[vim.trim(style)] = true
-    end
-    hl_opts.fg = fg
-    hl_opts.default = true
-    vim.api.nvim_set_hl(0, role.target, hl_opts)
+    local name_opts = vim.tbl_extend("force", {}, role_style_attrs)
+    name_opts.fg = fg
+    name_opts.default = true
+    vim.api.nvim_set_hl(0, role.target .. "Name", name_opts)
   end
 
   -- Set ruler highlight group

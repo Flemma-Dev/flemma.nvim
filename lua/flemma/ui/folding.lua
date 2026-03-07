@@ -337,6 +337,7 @@ function M.get_fold_text()
   local msg = query.find_message_at_line(doc, foldstart_lnum)
   if msg then
     local role_hl = roles.highlight_group("FlemmaRole", msg.role)
+    local role_name_hl = role_hl .. "Name"
     local content_hl = roles.highlight_group("Flemma", msg.role)
 
     -- When rulers are enabled, match the unfolded visual: ─ Role content (N lines)
@@ -352,7 +353,7 @@ function M.get_fold_text()
       local ruler_prefix = ruler_config.char .. " "
       chunks = {
         { ruler_prefix, ruler_hl },
-        { msg.role, role_hl },
+        { msg.role, role_name_hl },
         { " ", content_hl },
       }
       chrome_width = str.strwidth(ruler_prefix)
@@ -363,7 +364,7 @@ function M.get_fold_text()
     else
       local role_marker = "@" .. msg.role .. ":"
       chunks = {
-        { role_marker, role_hl },
+        { role_marker, role_name_hl },
         { " ", content_hl },
       }
       chrome_width = str.strwidth(role_marker) + str.strwidth(" ") + str.strwidth(" ") + str.strwidth(suffix)

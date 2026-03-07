@@ -109,6 +109,13 @@ function M.add_rulers(bufnr, doc)
         hl_mode = "combine",
       })
 
+      -- Apply role style to just the name text (not the ruler chars)
+      vim.api.nvim_buf_set_extmark(bufnr, ns_id, line_idx, 1, {
+        end_col = colon_col,
+        hl_group = roles.highlight_group("FlemmaRole", role_name) .. "Name",
+        hl_mode = "combine",
+      })
+
       -- On the spinner line, only replace : with a space (no ruler extension)
       -- so the EOL spinner text isn't covered by overlay chars.
       -- On all other lines, extend ruler chars to the window edge.

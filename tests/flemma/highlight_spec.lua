@@ -20,6 +20,9 @@ describe("Highlight", function()
       "FlemmaRoleSystem",
       "FlemmaRoleUser",
       "FlemmaRoleAssistant",
+      "FlemmaRoleSystemName",
+      "FlemmaRoleUserName",
+      "FlemmaRoleAssistantName",
       "FlemmaSystem",
       "FlemmaUser",
       "FlemmaAssistant",
@@ -64,9 +67,15 @@ describe("Highlight", function()
 
       highlight.apply_syntax()
 
+      -- Style attrs are on the Name variant (used by extmark on just the role name text)
+      local name_hl = vim.api.nvim_get_hl(0, { name = "FlemmaRoleUserName", link = false })
+      assert.is_true(name_hl.bold, "FlemmaRoleUserName should have bold")
+      assert.is_true(name_hl.underline, "FlemmaRoleUserName should have underline")
+      -- Base group (used by syntax) should have fg but no style attrs
       local role_hl = vim.api.nvim_get_hl(0, { name = "FlemmaRoleUser", link = false })
-      assert.is_true(role_hl.bold, "FlemmaRoleUser should have bold")
-      assert.is_true(role_hl.underline, "FlemmaRoleUser should have underline")
+      assert.is_not_nil(role_hl.fg, "FlemmaRoleUser should have fg")
+      assert.is_nil(role_hl.bold, "FlemmaRoleUser should not have bold")
+      assert.is_nil(role_hl.underline, "FlemmaRoleUser should not have underline")
     end)
 
     it("should use fg from base highlight group when available", function()
