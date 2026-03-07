@@ -4,7 +4,7 @@
 local M = {}
 
 local ROLE_NAMES = { ["@System"] = true, ["@You"] = true, ["@Assistant"] = true }
-local SPACE_CANCEL_MS = 800
+local CANCEL_WINDOW_MS = 800
 
 ---Handle colon insertion in insert mode.
 ---If the text before the cursor is a valid role marker at the start of
@@ -103,30 +103,40 @@ M.setup = function()
             return
           end
 
-          -- Space cancellation: eat a space typed within 800ms (muscle memory protection)
+          -- Eat one Space or Enter typed within 800ms (muscle memory protection).
+          -- Space triggers InsertCharPre; Enter does not, so we catch it via
+          -- a temporary keymap. Both share one idempotent cleanup.
           local completion_time = vim.uv.now()
+          local cleaned_up = false
           local autocmd_id
+
+          local function cleanup()
+            if cleaned_up then return end
+            cleaned_up = true
+            if autocmd_id then
+              pcall(vim.api.nvim_del_autocmd, autocmd_id)
+            end
+            pcall(vim.keymap.del, "i", "<CR>", { buffer = true })
+          end
+
+          -- Catch Space (printable char → InsertCharPre fires)
           autocmd_id = vim.api.nvim_create_autocmd("InsertCharPre", {
             buffer = 0,
             callback = function()
-              if vim.v.char == " " and (vim.uv.now() - completion_time) < SPACE_CANCEL_MS then
+              if vim.v.char == " " and (vim.uv.now() - completion_time) < CANCEL_WINDOW_MS then
                 vim.v.char = ""
               end
-              -- Clean up after first character (space or not)
-              if autocmd_id then
-                pcall(vim.api.nvim_del_autocmd, autocmd_id)
-                autocmd_id = nil
-              end
+              cleanup()
             end,
           })
 
-          -- Safety timer: clean up if no character typed within timeout
-          vim.defer_fn(function()
-            if autocmd_id then
-              pcall(vim.api.nvim_del_autocmd, autocmd_id)
-              autocmd_id = nil
-            end
-          end, SPACE_CANCEL_MS)
+          -- Catch Enter (special key → needs a temporary keymap)
+          vim.keymap.set("i", "<CR>", function()
+            cleanup()
+          end, { buffer = true })
+
+          -- Safety timer: clean up if nothing typed within the window
+          vim.defer_fn(cleanup, CANCEL_WINDOW_MS)
         end, { buffer = true, desc = "Auto-newline after role markers" })
 
         -- Insert mode mapping - send and return to insert mode
