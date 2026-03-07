@@ -357,8 +357,7 @@ describe("flemma.diagnostics", function()
 
       -- tools come before messages — appending tools breaks the prefix for messages
       local turn1 = '{"tools":[{"name":"bash"}],"messages":[{"role":"user","content":"hi"}]}'
-      local turn2 =
-        '{"tools":[{"name":"bash"},{"name":"read"}],"messages":[{"role":"user","content":"hi"}]}'
+      local turn2 = '{"tools":[{"name":"bash"},{"name":"read"}],"messages":[{"role":"user","content":"hi"}]}'
 
       diagnostics.record_and_compare(bufnr, turn1)
       diagnostics.record_and_compare(bufnr, turn2)
