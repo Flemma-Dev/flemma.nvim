@@ -870,6 +870,16 @@ function M.send_to_provider(opts)
           end
         end
 
+        -- Diagnostics: compare request with previous
+        if config.diagnostics and config.diagnostics.enabled then
+          local diagnostics_module = require("flemma.diagnostics")
+          local raw_json_str = buffer_state._diagnostics_raw_json
+          if raw_json_str then
+            diagnostics_module.record_and_compare(bufnr, raw_json_str)
+            buffer_state._diagnostics_raw_json = nil
+          end
+        end
+
         -- Auto-write when response is complete
         writequeue.enqueue(bufnr, function()
           editing.auto_write(bufnr)
@@ -1140,6 +1150,13 @@ function M.send_to_provider(opts)
     end,
     on_response_headers_fn = function(response_headers)
       current_provider:set_response_headers(response_headers)
+    end,
+    on_raw_json = function(raw_json_str)
+      -- Store for diagnostics — will be compared after response completes
+      local cfg = state.get_config()
+      if cfg.diagnostics and cfg.diagnostics.enabled then
+        buffer_state._diagnostics_raw_json = raw_json_str
+      end
     end,
   })
 

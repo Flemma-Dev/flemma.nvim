@@ -388,6 +388,49 @@ local function setup_commands()
     },
   }
 
+  command_tree.children.diagnostics = {
+    children = {
+      open = {
+        action = function(context)
+          local diagnostics = require("flemma.diagnostics")
+          local bufnr = vim.api.nvim_get_current_buf()
+          local normalized = context.extra_args[1] == "normalized"
+          diagnostics.open_diff(bufnr, normalized)
+        end,
+        complete = function(arglead)
+          local options = { "normalized" }
+          return vim.tbl_filter(function(item)
+            return vim.startswith(item, arglead)
+          end, options)
+        end,
+      },
+      enable = {
+        action = function()
+          local state = require("flemma.state")
+          local config = state.get_config()
+          if not config.diagnostics then
+            config.diagnostics = { enabled = true }
+          else
+            config.diagnostics.enabled = true
+          end
+          vim.notify("Flemma: Diagnostics enabled", vim.log.levels.INFO)
+        end,
+      },
+      disable = {
+        action = function()
+          local state = require("flemma.state")
+          local config = state.get_config()
+          if not config.diagnostics then
+            config.diagnostics = { enabled = false }
+          else
+            config.diagnostics.enabled = false
+          end
+          vim.notify("Flemma: Diagnostics disabled", vim.log.levels.INFO)
+        end,
+      },
+    },
+  }
+
   command_tree.children.notification = {
     children = {
       recall = {

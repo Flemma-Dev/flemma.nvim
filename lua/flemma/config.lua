@@ -54,6 +54,9 @@
 ---@class flemma.config.Pricing
 ---@field enabled boolean
 
+---@class flemma.config.Diagnostics
+---@field enabled boolean
+
 ---@class flemma.config.Statusline
 ---@field thinking_format string Format string when thinking is active. {model} = model name, {level} = thinking level
 
@@ -164,6 +167,7 @@
 ---@field logging? flemma.logging.Config
 ---@field keymaps? flemma.config.Keymaps
 ---@field sandbox? flemma.config.SandboxConfig
+---@field diagnostics? flemma.config.Diagnostics
 
 ---Full resolved config (all fields present after merging with defaults).
 ---@class flemma.Config : flemma.Config.Opts
@@ -185,6 +189,7 @@
 ---@field logging flemma.logging.Config
 ---@field keymaps flemma.config.Keymaps
 ---@field sandbox flemma.config.SandboxConfig
+---@field diagnostics flemma.config.Diagnostics
 
 ---@type flemma.Config
 return {
@@ -316,6 +321,9 @@ return {
       send = "<C-]>",
     },
     enabled = true, -- Set to false to disable all keymaps
+  },
+  diagnostics = {
+    enabled = false, -- Enable request diagnostics for debugging prompt caching issues
   },
   sandbox = {
     enabled = true, -- Enable filesystem sandboxing

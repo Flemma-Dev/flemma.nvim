@@ -35,6 +35,9 @@ local session_module = require("flemma.session")
 ---@field pending_executions? table<string, flemma.tools.PendingExecution> In-flight tool executions keyed by tool_id
 ---@field cursorline_prev_row? integer Last cursor row (0-indexed) where the CursorLine overlay was placed
 ---@field cursorline_extmark_id? integer Stable extmark ID for the CursorLine overlay
+---@field diagnostics_previous_request? string Raw JSON of the previous request sent from this buffer
+---@field diagnostics_current_request? string Raw JSON of the most recent request sent from this buffer
+---@field _diagnostics_raw_json? string Temporary storage for raw JSON during request lifecycle
 
 ---@diagnostic disable-next-line: missing-fields
 local config = {} ---@type flemma.Config

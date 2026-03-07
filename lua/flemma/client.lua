@@ -47,7 +47,7 @@ end
 
 ---Create temporary file for request body
 ---@param request_body table<string, any>
----@return string|nil tmp_file, string|nil err
+---@return string|nil tmp_file, string|nil err, string|nil raw_json
 local function create_temp_file(request_body)
   -- Create temporary file for request body
   local tmp_file = os.tmpname()
@@ -63,10 +63,11 @@ local function create_temp_file(request_body)
     return nil, "Failed to create temporary file"
   end
 
-  f:write(json.encode(request_body))
+  local raw_json = json.encode(request_body)
+  f:write(raw_json)
   f:close()
 
-  return tmp_file
+  return tmp_file, nil, raw_json
 end
 
 ---Redact sensitive information from headers
@@ -170,6 +171,7 @@ end
 ---@field finalize_response_fn? fun(code: number, callbacks: flemma.client.RequestCallbacks) Function to finalize provider response processing
 ---@field reset_fn? fun() Optional function to reset provider state
 ---@field on_response_headers_fn? fun(headers: table<string, string[]>) Called with parsed HTTP response headers (lowercase keys)
+---@field on_raw_json? fun(raw_json: string) Called with the serialized JSON request body
 
 -- Send request to API using curl or a test fixture
 ---@param opts flemma.client.RequestOptions Request configuration
@@ -187,12 +189,16 @@ function M.send_request(opts)
   -- The provider's get_request_headers() already handles API key validation
 
   -- Create temporary file for request body
-  local tmp_file, err = create_temp_file(opts.request_body)
+  local tmp_file, err, raw_json = create_temp_file(opts.request_body)
   if not tmp_file then
     if opts.callbacks.on_error then
       opts.callbacks.on_error(err or "Failed to create temporary file")
     end
     return nil
+  end
+
+  if raw_json and opts.on_raw_json then
+    opts.on_raw_json(raw_json)
   end
 
   local cmd
