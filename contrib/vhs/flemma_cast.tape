@@ -29,7 +29,7 @@ Type "G"
 Sleep 1000ms
 Type "Gi"
 Enter
-Type@40ms "@You: "
+Type@40ms "@You:"
 Ctrl+[
 Sleep 200ms
 Type@40ms "aHello, My name's {{ name }}!"
@@ -44,7 +44,7 @@ Ctrl+[
 Sleep 1000ms
 Ctrl+]
 Sleep 1000ms
-Wait+Line /@You:/
+Wait+Screen /Tool Result: calculator:/
 Sleep 3000ms
 Type "GA"
 Sleep 200ms
@@ -54,7 +54,7 @@ Ctrl+[
 Sleep 1000ms
 Ctrl+]
 Sleep 1000ms
-Wait+Line /@You:/
+Wait+Screen /Tool Result: bash:/
 Sleep 2000ms
 Type "GA"
 Sleep 200ms

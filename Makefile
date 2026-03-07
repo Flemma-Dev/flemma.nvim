@@ -60,16 +60,16 @@ screencast: .vapor/catppuccin/nvim.git .vapor/NStefan002/screenkey.nvim.git
 		.vapor/poster.jpg .vapor/poster.mp4 .vapor/concat_list.txt \
 		.vapor/flemma_cast_with_poster.mp4 assets/flemma_cast.mp4
 	@mkdir -p .vapor/cache/ .vapor/state/ .vapor/templates/
-	@echo -en "- When deleting files use \`trash\` && \`sleep 2\`, never \`rm\`\n- PC memory can be checked with \`free -h\`" > .vapor/templates/example
-	@echo -en "\`\`\`lua\nname = \"Flemma\"\n\nflemma.opt.thinking = \"medium\"\n\`\`\`\n@System: {{ include('templates/example') }}\n\n" > .vapor/scratch.chat
+	@echo -en "* Delete files via \`trash\` avoid \`rm\`\n* PC memory can be checked via \`free -h\`\n* When passing OCR content to tools use the exact syntax from the image without modifications\n* Never break down calculations to the user, only display the calculator result" > .vapor/templates/example
+	@echo -en "\`\`\`lua\nname = \"Flemma Jr.\"\n\nflemma.opt.thinking = \"medium\"\n\`\`\`\n@System:\n{{ include('templates/example') }}\n\n" > .vapor/scratch.chat
 	magick \
-		-size 400x200 \
+		-size 1500x200 \
 		xc:white \
 		-font DejaVu-Sans \
 		-pointsize 48 \
 		-fill black \
 		-gravity center \
-		-annotate +0+0 '(20+30)/2' \
+		-annotate +0+0 '1000000 - (456 * 789 - (456 * 789 %% 123)) / 123 + 4567' \
 		-bordercolor white \
 		-border 20 \
 		.vapor/math.png
