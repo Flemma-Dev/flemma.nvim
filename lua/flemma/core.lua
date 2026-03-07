@@ -828,27 +828,6 @@ function M.send_to_provider(opts)
         local pricing_info = model_info and model_info.pricing
 
         if pricing_info then
-          -- Per-model absolute cache pricing (preferred)
-          local cache_read_price = pricing_info.cache_read
-          local cache_write_price = pricing_info.cache_write
-
-          -- Fall back to provider-level multipliers when per-model pricing absent
-          local cache_retention = current_provider.parameters.cache_retention
-          local cache_write_multiplier
-          local cache_read_multiplier
-          if not cache_read_price and provider_data and provider_data.cache_read_multiplier then
-            cache_read_multiplier = provider_data.cache_read_multiplier
-          end
-          if
-            not cache_write_price
-            and provider_data
-            and provider_data.cache_write_multipliers
-            and cache_retention
-            and cache_retention ~= "none"
-          then
-            cache_write_multiplier = provider_data.cache_write_multipliers[cache_retention]
-          end
-
           local session = state.get_session()
           session:add_request({
             provider = config.provider,
@@ -865,10 +844,8 @@ function M.send_to_provider(opts)
             output_has_thoughts = provider_capabilities and provider_capabilities.output_has_thoughts or false,
             cache_read_input_tokens = buffer_state.inflight_usage.cache_read_input_tokens,
             cache_creation_input_tokens = buffer_state.inflight_usage.cache_creation_input_tokens,
-            cache_read_price = cache_read_price,
-            cache_write_price = cache_write_price,
-            cache_write_multiplier = cache_write_multiplier,
-            cache_read_multiplier = cache_read_multiplier,
+            cache_read_price = pricing_info.cache_read,
+            cache_write_price = pricing_info.cache_write,
           })
 
           -- Use the just-created Request for the notification

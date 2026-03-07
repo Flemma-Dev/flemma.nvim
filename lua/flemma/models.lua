@@ -50,8 +50,6 @@
 ---@class flemma.models.ProviderModels
 ---@field default string Default model name for this provider
 ---@field models table<string, flemma.models.ModelInfo>
----@field cache_read_multiplier? number Cache read cost as fraction of base input price (e.g. 0.1 = 10%)
----@field cache_write_multipliers? table<string, number> Cache write cost multipliers keyed by retention ("short", "long")
 
 ---@class flemma.models.Data
 ---@field providers table<string, flemma.models.ProviderModels>
@@ -61,11 +59,6 @@ return {
   providers = {
     anthropic = {
       default = "claude-sonnet-4-6",
-      cache_read_multiplier = 0.1, -- Cache reads cost 10% of base input price
-      cache_write_multipliers = {
-        short = 1.25, -- 5-minute TTL: 1.25× base input price
-        long = 2.0, -- 1-hour TTL: 2.0× base input price
-      },
       models = {
         -- Claude Opus 4.6
         ["claude-opus-4-6"] = {
@@ -282,13 +275,13 @@ return {
 
     vertex = {
       default = "gemini-2.5-pro",
-      cache_read_multiplier = 0.1, -- Implicit cache reads cost 10% of base input price (Gemini 2.5+)
       models = {
         -- Gemini 3.1 Pro Preview
         ["gemini-3.1-pro-preview"] = {
           pricing = {
             input = 2.0,
             output = 12.0,
+            cache_read = 0.20,
           },
           max_input_tokens = 1048576,
           max_output_tokens = 65536,
@@ -312,6 +305,7 @@ return {
           pricing = {
             input = 0.50,
             output = 3.0,
+            cache_read = 0.05,
           },
           max_input_tokens = 1048576,
           max_output_tokens = 65536,
@@ -325,6 +319,7 @@ return {
           pricing = {
             input = 2.0,
             output = 12.0,
+            cache_read = 0.20,
           },
           max_input_tokens = 1048576,
           max_output_tokens = 65536,
@@ -338,6 +333,7 @@ return {
           pricing = {
             input = 1.25,
             output = 10.0,
+            cache_read = 0.125,
           },
           max_input_tokens = 1048576,
           max_output_tokens = 65536,
@@ -351,6 +347,7 @@ return {
           pricing = {
             input = 0.30,
             output = 2.50,
+            cache_read = 0.03,
           },
           max_input_tokens = 1048576,
           max_output_tokens = 65536,
@@ -364,6 +361,7 @@ return {
           pricing = {
             input = 0.10,
             output = 0.40,
+            cache_read = 0.01,
           },
           max_input_tokens = 1048576,
           max_output_tokens = 65536,
@@ -377,6 +375,7 @@ return {
           pricing = {
             input = 0.15,
             output = 0.60,
+            cache_read = 0.015,
           },
           max_input_tokens = 1048576,
           max_output_tokens = 8192,
@@ -385,6 +384,7 @@ return {
           pricing = {
             input = 0.15,
             output = 0.60,
+            cache_read = 0.015,
           },
           max_input_tokens = 1048576,
           max_output_tokens = 8192,
@@ -395,6 +395,7 @@ return {
           pricing = {
             input = 0.075,
             output = 0.30,
+            cache_read = 0.0075,
           },
           max_input_tokens = 1048576,
           max_output_tokens = 8192,
@@ -403,6 +404,7 @@ return {
           pricing = {
             input = 0.075,
             output = 0.30,
+            cache_read = 0.0075,
           },
           max_input_tokens = 1048576,
           max_output_tokens = 8192,
@@ -412,7 +414,6 @@ return {
 
     openai = {
       default = "gpt-5",
-      cache_read_multiplier = 0.5, -- Cached input tokens cost 50% of base input price
       models = {
         -- GPT-5.4 models
         ["gpt-5.4"] = {

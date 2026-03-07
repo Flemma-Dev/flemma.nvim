@@ -39,8 +39,6 @@ local models_data = require("flemma.models")
 ---@field default_parameters? table<string, any> Provider-specific param defaults
 ---@field default_model? string Default model name
 ---@field models? table<string, flemma.models.ModelInfo> Model definitions with pricing
----@field cache_read_multiplier? number
----@field cache_write_multipliers? table<string, number>
 
 ---@type table<string, flemma.provider.ProviderEntry>
 local providers = {}
@@ -136,12 +134,6 @@ function M.register(source, entry)
           models_data.providers[name].models[model_name] = model_info
         end
       end
-    end
-    if definition.cache_read_multiplier then
-      models_data.providers[name].cache_read_multiplier = definition.cache_read_multiplier
-    end
-    if definition.cache_write_multipliers then
-      models_data.providers[name].cache_write_multipliers = definition.cache_write_multipliers
     end
   end
 

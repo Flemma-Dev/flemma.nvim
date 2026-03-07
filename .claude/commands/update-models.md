@@ -131,16 +131,13 @@ Models with `supports_reasoning_effort = true`:
 - All gpt-5.x models (except gpt-5-pro variants)
 - o1, o3, o3-mini, o4-mini, o4-mini-deep-research, o3-deep-research
 
-### Provider-level cache multipliers
+### Per-model cache pricing is mandatory
 
-Keep these on the provider blocks (NOT per-model):
-- Anthropic: `cache_read_multiplier = 0.1`, `cache_write_multipliers = { short = 1.25, long = 2.0 }`
-- Vertex: `cache_read_multiplier = 0.1` (implicit caching, no per-model cache pricing)
-- OpenAI: `cache_read_multiplier = 0.5`
+**Every model MUST have an explicit `cache_read` value in its pricing block.** The cost calculation code falls back to the full input price when `cache_read` is absent, which would overcharge for cached reads. When a provider pricing page shows "-" (no cache discount) for a model, set `cache_read` equal to the input price (1× = no discount).
 
-### Per-model cache_read is mandatory (OpenAI)
+For Anthropic models, also set `cache_write` (the short/5-minute TTL price). The code automatically adjusts for long retention.
 
-**Every OpenAI model MUST have an explicit `cache_read` value in its pricing block.** When a provider pricing page shows "-" (no cache discount) for a model, set `cache_read` equal to the input price (1x = no discount). Do NOT omit `cache_read` — the cost calculation code falls back to the provider-level `cache_read_multiplier` (0.5) when per-model `cache_read` is absent, which would incorrectly halve the cache read cost for models that have no discount.
+For Vertex models, `cache_read` is typically 10% of the input price (implicit caching discount).
 
 ## Phase 4: Generate models.lua
 

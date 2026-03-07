@@ -73,26 +73,6 @@ describe("provider registration", function()
       assert.is_true(registry.is_provider_model("my-model-2", "custom"))
       assert.is_false(registry.is_provider_model("unknown-model", "custom"))
     end)
-
-    it("stores cache multipliers in models_data", function()
-      registry.register("custom", {
-        module = "flemma.provider.providers.openai",
-        capabilities = {
-          supports_reasoning = false,
-          supports_thinking_budget = false,
-          outputs_thinking = false,
-        },
-        display_name = "Custom",
-        default_model = "my-model",
-        models = { ["my-model"] = { pricing = { input = 0, output = 0 } } },
-        cache_read_multiplier = 0.25,
-        cache_write_multipliers = { short = 1.5 },
-      })
-
-      local models_data = require("flemma.models")
-      assert.are.equal(0.25, models_data.providers["custom"].cache_read_multiplier)
-      assert.are.same({ short = 1.5 }, models_data.providers["custom"].cache_write_multipliers)
-    end)
   end)
 
   describe("is_provider_model() without models", function()
