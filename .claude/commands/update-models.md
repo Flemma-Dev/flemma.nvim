@@ -1,5 +1,5 @@
 ---
-description: Update models and pricing in models.lua by scraping provider documentation
+description: Update models and pricing in models.lua using models.dev API and provider documentation
 disable-model-invocation: true
 ---
 
@@ -7,24 +7,72 @@ disable-model-invocation: true
 
 Update the following file (and only this file!): `lua/flemma/models.lua` — with up-to-date information about the models and pricing of Google Gemini (via Vertex AI), Anthropic Claude, and OpenAI.
 
-## Data Sources — CLOSED SET, NO EXCEPTIONS
+## Phase 1: Fetch models.dev API data
 
-The URLs listed below are the **only** authoritative sources for this task. Model pricing and availability change constantly — random web pages, blogs, cached search results, and third-party aggregators are **stale and wrong**.
+Download the models.dev API and extract relevant data using jq:
 
-**You MUST NOT:**
-- Use WebSearch at any point during this task — not for verification, not for "filling gaps", not for anything.
-- Fetch any URL outside the domains of the listed pages (`cloud.google.com`, `docs.claude.com`, `platform.openai.com`). Following links within these domains is fine when needed to find model details.
-- Use your training data or prior knowledge to add, remove, or price models — only use what the fetched pages say.
+```bash
+curl -sL 'https://models.dev/api.json' -o /tmp/models-dev.json
+```
 
-**If a model appears on these pages, it goes in. If it doesn't, it stays out.** Do not second-guess the official docs with outside information.
+Then extract what we need:
 
-You will need to read and parse the following web pages:
+```bash
+jq '
+{
+  anthropic: [.anthropic.models | to_entries[]
+    | select(.value.tool_call == true)
+    | {
+        id: .key,
+        name: .value.name,
+        input: .value.cost.input,
+        output: .value.cost.output,
+        cache_read: .value.cost.cache_read,
+        cache_write: .value.cost.cache_write,
+        context: .value.limit.context,
+        max_input: .value.limit.input,
+        max_output: .value.limit.output,
+        reasoning: .value.reasoning
+      }
+  ],
+  google: [.google.models | to_entries[]
+    | select(.value.tool_call == true)
+    | {
+        id: .key,
+        name: .value.name,
+        input: .value.cost.input,
+        output: .value.cost.output,
+        cache_read: .value.cost.cache_read,
+        cache_write: .value.cost.cache_write,
+        context: .value.limit.context,
+        max_input: .value.limit.input,
+        max_output: .value.limit.output,
+        reasoning: .value.reasoning
+      }
+  ],
+  openai: [.openai.models | to_entries[]
+    | select(.value.tool_call == true)
+    | {
+        id: .key,
+        name: .value.name,
+        input: .value.cost.input,
+        output: .value.cost.output,
+        cache_read: .value.cost.cache_read,
+        cache_write: .value.cost.cache_write,
+        context: .value.limit.context,
+        max_input: .value.limit.input,
+        max_output: .value.limit.output,
+        reasoning: .value.reasoning
+      }
+  ]
+}' /tmp/models-dev.json
+```
 
-### Google Gemini (via Vertex AI)
+Review the extracted data before proceeding.
 
-- https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions
-- https://cloud.google.com/vertex-ai/generative-ai/docs/provisioned-throughput/supported-models
-- https://cloud.google.com/vertex-ai/generative-ai/pricing
+## Phase 2: Cross-reference provider documentation
+
+Fetch provider docs to verify freshness, find deprecation dates, and catch models not in models.dev. Use WebFetch first, then `links -dump` as fallback, then ask the user.
 
 ### Anthropic Claude
 
@@ -32,42 +80,92 @@ You will need to read and parse the following web pages:
 - https://docs.claude.com/en/docs/about-claude/pricing
 - https://docs.claude.com/en/docs/about-claude/model-deprecations
 
+### Google Gemini (via Vertex AI)
+
+- https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions
+- https://cloud.google.com/vertex-ai/generative-ai/docs/provisioned-throughput/supported-models
+- https://cloud.google.com/vertex-ai/generative-ai/pricing
+
 ### OpenAI
 
 - https://platform.openai.com/docs/pricing?latest-pricing=standard
 - https://platform.openai.com/docs/deprecations
-- https://platform.openai.com/docs/models — this page requires you to scan the "Frontier models" section then recursively follow links to get the full list of OpenAI models and aliases.
+- https://platform.openai.com/docs/models — scan "Frontier models" section and follow links for the full list.
 
-## Rules
-
-Today's date is !`date +%Y-%m-%d`. You will need this when assessing model retirement dates and deprecation notices — note a model that is deprecated but also still not retired is not to be removed. You should, however, leave a comment about its future retirement date, e.g., `-- Provider Model 1.2.3 (deprecated, retiring Jan 2030)`.
-
-When parsing these pages, pay attention to model names as well as model aliases (usually include version numbers or dates).
-If any model names imply non-text capabilities (e.g., "vision", "image", "video", "audio", etc.), ignore those models and do not include them in the local file.
-
-**IMPORTANT!** Some providers (notably OpenAI) block AI-agent web fetchers. If WebFetch returns a 403, a bot-detection challenge, content that doesn't match what the URL implies, or an empty/garbage page — **fall back to the `links` text-mode browser** which is available on `$PATH`:
+**IMPORTANT!** Some providers (notably OpenAI) block AI-agent web fetchers. If WebFetch returns a 403, a bot-detection challenge, or empty content — fall back to the `links` text-mode browser:
 
 ```bash
 links -dump 'https://example.com/page'
 ```
 
-This bypasses JavaScript challenges and bot-detection walls. Use `links -dump` for any page that WebFetch cannot retrieve. If even `links` fails (e.g., the page is behind a login wall or truly requires JavaScript rendering), ask the user to provide the Markdown source of the failing page(s) and proceed from there.
+## Phase 3: Apply hardcoded overrides
 
-Think hard to avoid making mistakes as you parse the web pages and update the models file. **Every addition, removal, or price change must be traceable to a specific line on one of the listed pages.** If you are unsure about a value, ask the user — do not guess or search the web.
+These values come from provider documentation and API error messages, NOT from models.dev. Apply them after merging the API data.
 
-- If a model is present in the local file, but retired or past its deprecation date according to the listed pages, drop it from the local file.
-- If a new model is present on the listed pages, but not in the local file, add it with all relevant information.
-- If a model is in the local file but absent from the listed pages, ask the user before removing it — the page may have failed to load completely.
+### Thinking budgets
+
+| Provider | Model family | minimal | low | medium | high | min | max |
+|----------|-------------|---------|-----|--------|------|-----|-----|
+| Anthropic | All thinking models | 1024 | 2048 | 8192 | 16384 | 1024 | (max_tokens - 1) |
+| Vertex | gemini-2.5-pro | 128 | 2048 | 8192 | 32768 | 1 | 32768 |
+| Vertex | gemini-2.5-flash | 128 | 2048 | 8192 | 24576 | 1 | 24576 |
+| Vertex | gemini-2.5-flash-lite | 512 | 2048 | 8192 | 24576 | 512 | 24576 |
+| Vertex | gemini-3-flash-preview | 128 | 2048 | 8192 | 24576 | 1 | 24576 |
+| Vertex | gemini-3-pro-preview | 128 | 2048 | 8192 | 32768 | 1 | 32768 |
+| Vertex | gemini-3.1-pro-preview | 128 | 2048 | 8192 | 32768 | 1 | 32768 |
+| Vertex | gemini-2.0-flash* | — | — | — | — | — | — (no thinking) |
+| OpenAI | o-series / gpt-5* | — | — | — | — | — | — (effort-based, not budget) |
+
+### Cache minimums (Anthropic only)
+
+| Model | min_cache_tokens |
+|-------|-----------------|
+| claude-3-haiku-20240307 | 1024 |
+| claude-haiku-4-5* | 4096 |
+| claude-sonnet-* | 2048 |
+| claude-opus-* | 2048 |
+
+### OpenAI reasoning effort
+
+Models with `supports_reasoning_effort = true`:
+- All gpt-5.x models (except gpt-5-pro variants)
+- o1, o3, o3-mini, o4-mini, o4-mini-deep-research, o3-deep-research
+
+### Provider-level cache multipliers
+
+Keep these on the provider blocks (NOT per-model):
+- Anthropic: `cache_read_multiplier = 0.1`, `cache_write_multipliers = { short = 1.25, long = 2.0 }`
+- Vertex: `cache_read_multiplier = 0.1` (implicit caching, no per-model cache pricing)
+- OpenAI: `cache_read_multiplier = 0.5`
+
+## Phase 4: Generate models.lua
+
+Update `lua/flemma/models.lua` with the merged data. Follow the existing structure exactly:
+
+- Preserve the file header comment block and type annotations unchanged
+- Group models by family with comments
+- Include deprecation/retirement comments where applicable
+- Today's date is !`date +%Y-%m-%d` — use this for assessing retirement dates
+
+## Rules
+
+- **Every addition, removal, or price change must be traceable** to the models.dev API or a specific line on a listed provider page.
+- Do NOT use WebSearch at any point.
+- Do NOT use training data to add, remove, or price models.
+- If a model appears on these sources, it goes in. If it doesn't, it stays out.
+- If a model is retired or past its deprecation date, drop it.
+- If a model is deprecated but not yet retired, keep it with a retirement date comment.
+- If a model is in the local file but absent from all sources, ask the user before removing it.
+- If any model names imply non-text capabilities (vision, image, video, audio, tts, embedding, moderation), exclude them.
 
 ## Special Handling for New Sonnet Versions
 
-Should you discover that during the update of Anthropic Claude models there is a new Sonnet version, this will require extra attention in other places of the codebase. If, and only if, there is a newer Sonnet version, scan the codebase for references of the previous Sonnet version and update them accordingly. Do this using a search pattern that captures all possible variations, casing and punctuation of Sonnet, e.g., instead of searching for punctuation, prefer using a wildcard. Example: "Sonnet 4.0" can be searched as /sonnet.?4(.?0)?/i
+If you discover a newer Sonnet version during the update, scan the codebase for references to the previous Sonnet version and update them accordingly. Search with a flexible pattern like `/sonnet.?4(.?0)?/i`.
 
 ## Workflow
 
-You will work in a step-by-step manner:
-
-1. **Fetch all data sources first.** For each URL listed above, try WebFetch first, then `links -dump` as a fallback, then ask the user for content as a last resort. **Do not proceed to step 2 until you have successfully captured content from every URL** — you need complete data from all three providers to produce an accurate `models.lua`.
-2. **Parse and extract** model names, aliases, pricing, deprecation dates, and retirement dates from the captured content.
-3. **Update** `lua/flemma/models.lua` with the extracted information.
-4. **Run `make test`** to check for tests that MAY reference retired or deprecated models.
+1. **Fetch models.dev API** and extract data via jq.
+2. **Fetch provider docs** for cross-referencing.
+3. **Merge data**, applying hardcoded overrides.
+4. **Update `lua/flemma/models.lua`**.
+5. **Run `make test`** to check for tests that may reference retired models.
