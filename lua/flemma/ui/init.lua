@@ -126,7 +126,7 @@ function M.add_rulers(bufnr, doc)
           virt_text_pos = "overlay",
         })
       else
-        local inline_space = 1 -- inserted space between ━ and role name
+        local inline_space = 1 -- inserted space between ruler char and role name
         local remaining = math.max(0, win_width - colon_col - 1 - inline_space)
         vim.api.nvim_buf_set_extmark(bufnr, ns_id, line_idx, colon_col, {
           virt_text = { { " " .. string.rep(ruler_config.char, remaining), ruler_hl } },

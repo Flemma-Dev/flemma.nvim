@@ -339,7 +339,7 @@ function M.get_fold_text()
     local role_hl = roles.highlight_group("FlemmaRole", msg.role)
     local content_hl = roles.highlight_group("Flemma", msg.role)
 
-    -- When rulers are enabled, match the unfolded visual: ━ Role content (N lines)
+    -- When rulers are enabled, match the unfolded visual: ─ Role content (N lines)
     -- Otherwise fall back to the standard @Role: prefix
     local ruler_config = state.get_config().ruler
     local use_ruler_prefix = ruler_config and ruler_config.enabled ~= false
