@@ -496,7 +496,8 @@ function M.build_request(self, prompt, _context)
   }
 
   -- Add thinking configuration using unified resolution
-  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities)
+  local model_info = require("flemma.provider.registry").get_model_info("vertex", self.parameters.model)
+  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
 
   if thinking.enabled then
     local thinking_config = { includeThoughts = true }

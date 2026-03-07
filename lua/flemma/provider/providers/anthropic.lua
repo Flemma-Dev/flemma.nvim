@@ -331,7 +331,8 @@ function M.build_request(self, prompt, _context)
   end
 
   -- Add thinking configuration using unified resolution
-  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities)
+  local model_info = require("flemma.provider.registry").get_model_info("anthropic", self.parameters.model)
+  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
 
   if thinking.enabled then
     -- 4.6 models use adaptive thinking (effort level) instead of budget_tokens
