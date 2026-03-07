@@ -297,6 +297,70 @@ local function setup_cursorline_highlights()
   end
 end
 
+-- Valid boolean style attributes for nvim_set_hl (used in role_style validation)
+local VALID_STYLE_ATTRIBUTES = {
+  bold = true,
+  italic = true,
+  underline = true,
+  undercurl = true,
+  underdouble = true,
+  underdotted = true,
+  underdashed = true,
+  strikethrough = true,
+  reverse = true,
+  standout = true,
+  nocombine = true,
+  altfont = true,
+}
+
+---Parse and validate a role_style string, warning about invalid attributes.
+---@param role_style string Comma-separated style attributes (e.g., "bold,underline")
+---@return table<string, boolean>
+local function validate_role_style(role_style)
+  ---@type table<string, boolean>
+  local attrs = {}
+  for token in role_style:gmatch("[^,]+") do
+    local style = vim.trim(token)
+    if style ~= "" then
+      if VALID_STYLE_ATTRIBUTES[style] then
+        attrs[style] = true
+      else
+        local best, best_dist = nil, math.huge
+        for candidate in pairs(VALID_STYLE_ATTRIBUTES) do
+          local la, lb = #style, #candidate
+          local dist
+          if math.abs(la - lb) <= 3 then
+            local prev = {}
+            for j = 0, lb do
+              prev[j] = j
+            end
+            for i = 1, la do
+              local curr = { [0] = i }
+              for j = 1, lb do
+                local cost = style:byte(i) == candidate:byte(j) and 0 or 1
+                curr[j] = math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
+              end
+              prev = curr
+            end
+            dist = prev[lb]
+          else
+            dist = math.max(la, lb)
+          end
+          if dist < best_dist then
+            best, best_dist = candidate, dist
+          end
+        end
+        local msg = string.format("flemma: invalid role_style '%s'", style)
+        if best and best_dist <= 3 then
+          msg = msg .. string.format(". Did you mean '%s'?", best)
+        end
+        vim.notify_once(msg, vim.log.levels.WARN)
+      end
+    end
+  end
+  return attrs
+end
+
 ---Apply syntax highlighting and Tree-sitter configuration
 M.apply_syntax = function()
   local syntax_config = state.get_config()
@@ -323,11 +387,7 @@ M.apply_syntax = function()
     { source = "FlemmaUser", target = "FlemmaRoleUser" },
     { source = "FlemmaAssistant", target = "FlemmaRoleAssistant" },
   }
-  ---@type table<string, boolean>
-  local role_style_attrs = {}
-  for style in syntax_config.role_style:gmatch("[^,]+") do
-    role_style_attrs[vim.trim(style)] = true
-  end
+  local role_style_attrs = validate_role_style(syntax_config.role_style)
   for _, role in ipairs(role_groups) do
     local fg = get_hl_color(role.source, "fg") or get_default_color("fg")
     -- Syntax group: fg-only (covers whole @Role: line; style would bleed into ruler via hl_mode=combine)

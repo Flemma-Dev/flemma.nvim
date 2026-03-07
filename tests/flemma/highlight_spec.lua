@@ -78,6 +78,42 @@ describe("Highlight", function()
       assert.is_nil(role_hl.underline, "FlemmaRoleUser should not have underline")
     end)
 
+    it("should warn on invalid role_style with 'Did you mean' suggestion", function()
+      local notifications = {}
+      local original_notify_once = vim.notify_once
+      vim.notify_once = function(msg, level)
+        table.insert(notifications, { msg = msg, level = level })
+      end
+
+      flemma.setup({
+        role_style = "bold,italics",
+      })
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "test" })
+
+      highlight.apply_syntax()
+
+      vim.notify_once = original_notify_once
+
+      -- Should have warned about 'italics' and suggested 'italic'
+      local found = false
+      for _, n in ipairs(notifications) do
+        if n.msg:match("invalid role_style 'italics'") and n.msg:match("Did you mean 'italic'") then
+          found = true
+          break
+        end
+      end
+      assert.is_true(found, "Should warn about 'italics' with suggestion 'italic'")
+
+      -- Valid 'bold' should still be applied
+      local name_hl = vim.api.nvim_get_hl(0, { name = "FlemmaRoleUserName", link = false })
+      assert.is_true(name_hl.bold, "FlemmaRoleUserName should still have bold")
+      assert.is_nil(name_hl.underline, "FlemmaRoleUserName should not have underline (italics was invalid)")
+    end)
+
     it("should use fg from base highlight group when available", function()
       -- Set a known fg on a test group
       vim.api.nvim_set_hl(0, "TestHighlight", { fg = "#ff0000" })
