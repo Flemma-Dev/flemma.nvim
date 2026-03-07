@@ -253,7 +253,7 @@ return {
     position = "overlay",
     zindex = 30,
     highlight = "@text.note,PmenuSel", -- Highlight group(s) for the notification bar; first with both fg+bg is used
-    border = "underline", -- Bottom border: "underline", "underdouble", "undercurl", "underdotted", "underdashed", or false
+    border = false, -- Bottom border: "underline", "underdouble", "undercurl", "underdotted", "underdashed", or false
   },
   pricing = {
     enabled = true, -- Whether to show pricing information in notifications

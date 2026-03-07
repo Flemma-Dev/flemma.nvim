@@ -189,7 +189,7 @@ notifications = {
   position = "overlay",                    -- "overlay" (pinned to window top)
   zindex = 30,                             -- floating window z-index (above nvim-treesitter-context)
   highlight = "@text.note, PmenuSel",      -- highlight group(s) for bar colours; first with both fg+bg wins
-  border = "underline",                    -- bottom border style, or false to disable
+  border = false,                          -- bottom border style, or false to disable
 }
 ```
 

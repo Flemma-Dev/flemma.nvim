@@ -93,7 +93,7 @@ require("flemma").setup({
     position = "overlay",                      -- "overlay" (pinned to window top)
     zindex = 30,                               -- Floating window z-index (above nvim-treesitter-context)
     highlight = "@text.note, PmenuSel",        -- Highlight group(s) for bar colours; first with both fg+bg wins
-    border = "underline",                      -- Bottom border style, or false to disable
+    border = false,                            -- Bottom border style, or false to disable
   },
   pricing = { enabled = true },
   statusline = {
