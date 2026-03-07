@@ -36,6 +36,7 @@ develop:
 				[\"\$$haiku\"] = \"anthropic claude-haiku-4-5\",						\
 				[\"\$$gpt\"] = \"openai gpt-5.2\",										\
 			},																			\
+			diagnostics = { enabled = true },											\
 			logging = { enabled = true },												\
 			editing = { auto_write = true },											\
 			tools = { modules = { \"extras.flemma.tools.calculator\" } },				\
