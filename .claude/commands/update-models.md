@@ -138,6 +138,10 @@ Keep these on the provider blocks (NOT per-model):
 - Vertex: `cache_read_multiplier = 0.1` (implicit caching, no per-model cache pricing)
 - OpenAI: `cache_read_multiplier = 0.5`
 
+### Per-model cache_read is mandatory (OpenAI)
+
+**Every OpenAI model MUST have an explicit `cache_read` value in its pricing block.** When a provider pricing page shows "-" (no cache discount) for a model, set `cache_read` equal to the input price (1x = no discount). Do NOT omit `cache_read` — the cost calculation code falls back to the provider-level `cache_read_multiplier` (0.5) when per-model `cache_read` is absent, which would incorrectly halve the cache read cost for models that have no discount.
+
 ## Phase 4: Generate models.lua
 
 Update `lua/flemma/models.lua` with the merged data. Follow the existing structure exactly:
