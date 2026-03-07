@@ -67,14 +67,14 @@ The `^` operator ensures a minimum WCAG 2.1 contrast ratio between a colour attr
 
 Where `ratio` is a decimal contrast target (e.g., `4.5` for WCAG AA). The operator auto-detects direction: against a dark background it lightens toward white, against a light background it darkens toward black.
 
-Composes with blend operations — blends are applied first, then contrast is enforced:
+Composes with blend operations – blends are applied first, then contrast is enforced:
 
 ```lua
 -- Dim DiffChange fg, then ensure result meets 4.5:1 against the bar bg
 "DiffChange-fg:#222222^fg:4.5"
 ```
 
-> **Scope:** The `^` operator requires a background context provided by the caller. Currently only the notification bar highlight setup provides this context. Using `^` in user-facing config values (e.g., `ruler.hl`) has no effect — the operator is silently ignored when no background context is available.
+> **Scope:** The `^` operator requires a background context provided by the caller. Currently only the notification bar highlight setup provides this context. Using `^` in user-facing config values (e.g., `ruler.hl`) has no effect – the operator is silently ignored when no background context is available.
 
 **Fallback chains** try groups in order, separated by commas. Only the last group in the chain uses the configured `defaults` when the attribute is missing:
 
@@ -106,21 +106,21 @@ line_highlights = {
 }
 ```
 
-Role markers (`@You:`, `@System:`, `@Assistant:`) inherit `role_style` (comma-separated GUI attributes such as `"bold,underline"`) so marker styling tracks your message colours.
+Role markers (`@You:`, `@System:`, `@Assistant:`) must appear on their own line – content starts on the next line. The `role_style` option (comma-separated GUI attributes such as `"bold,underline"`, default `"bold"`) applies styling to the role name text only (not the ruler), and Flemma validates the attributes on startup, warning on invalid values with typo suggestions.
 
 ## Rulers
 
-Rulers are horizontal separator lines drawn between messages using virtual-line extmarks. They span the full window width and resize automatically when the window is resized.
+Rulers are drawn directly on each role marker line (`@System:`, `@You:`, `@Assistant:`) using overlay extmarks. The ruler character replaces the `@` symbol and extends across the remaining window width, producing a visual separator that doesn't consume extra vertical space. Rulers resize automatically when the window is resized.
 
 ```lua
 ruler = {
   enabled = true,       -- default: true
-  char = "─",           -- repeated to fill the window width
+  char = "─",           -- drawn over the role marker and repeated to fill the line
   hl = { dark = "Comment-fg:#303030", light = "Comment+fg:#303030" },
 }
 ```
 
-Rulers appear above the first message when frontmatter exists, and above every subsequent message.
+With rulers enabled, a role marker line like `@You:` renders as `─ You ────────...` spanning the full window width. The first message also gets a ruler when frontmatter is present.
 
 ## Sign column indicators
 
@@ -140,9 +140,9 @@ When `hl = true`, the sign colour is derived from the corresponding `highlights.
 
 ## Spinner behaviour
 
-While a request is in flight, Flemma appends `@Assistant: Thinking...` with an animated braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`) rendered as end-of-line virtual text. The spinner animates at 100ms intervals and is removed once streaming starts.
+While a request is in flight, Flemma writes an `@Assistant:` marker on its own line and renders "Thinking…" as end-of-line virtual text with an animated braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`). The spinner animates at 100ms intervals and is removed once streaming starts.
 
-When the model enters a thinking/reasoning phase, the spinner animation is replaced with a live character count – e.g., `❖ (3.2k characters)` – so you can gauge progress. The symbol is configurable via `spinner.thinking_char` (default: `"❖"`).
+When the model enters a thinking/reasoning phase, the spinner animation is replaced with a live character count – e.g., `Thinking… (3.2k characters)` – so you can gauge progress at a glance.
 
 ### Tool execution indicators
 
@@ -171,21 +171,21 @@ The initial fold level is controlled by `editing.foldlevel` (default: `1`, which
 
 Collapsed folds show a preview of their content with per-segment syntax highlighting. Neovim's `foldtext` returns `{text, hl_group}` tuples so each part of the fold line uses its own highlight group. The format varies by content type:
 
-- **Messages:** `@Role: preview... (N lines)` — role prefix uses the role's highlight group (e.g., `FlemmaAssistant`), preview uses `FlemmaFoldPreview`, line count uses `FlemmaFoldMeta`.
-- **Tool Use:** `◆ Tool Use: name: params... (N lines)` — icon uses `FlemmaToolIcon`, title uses `FlemmaToolUseTitle`, name uses `FlemmaToolName`, preview uses `FlemmaFoldPreview`, meta uses `FlemmaFoldMeta`.
-- **Tool Result:** `◇ Tool Result: name: preview... (N lines)` — same structure as tool use but with `FlemmaToolResultTitle`. Errors show `(error)` with `FlemmaToolResultError`.
-- **Thinking blocks:** `<thinking preview...> (N lines)` — shows `<thinking redacted>` for redacted blocks, or `<thinking provider>` for blocks with a provider signature. Uses `FlemmaThinkingTag` for delimiters and `FlemmaThinkingFoldPreview` for content (fg-only, so the background comes from the line highlight extmark and correctly blends with CursorLine).
-- **Frontmatter:** ` ```language preview... ``` (N lines) ` — uses `FlemmaFoldMeta` for fences and `FlemmaFoldPreview` for content.
+- **Messages:** `─ Role preview... (N lines)` when rulers are enabled (default), or `@Role: preview... (N lines)` otherwise – role name uses `FlemmaRole{Role}Name`, preview uses `FlemmaFoldPreview`, line count uses `FlemmaFoldMeta`, ruler char uses `FlemmaRuler`.
+- **Tool Use:** `◆ Tool Use: name: params... (N lines)` – icon uses `FlemmaToolIcon`, title uses `FlemmaToolUseTitle`, name uses `FlemmaToolName`, preview uses `FlemmaFoldPreview`, meta uses `FlemmaFoldMeta`.
+- **Tool Result:** `◇ Tool Result: name: preview... (N lines)` – same structure as tool use but with `FlemmaToolResultTitle`. Errors show `(error)` with `FlemmaToolResultError`.
+- **Thinking blocks:** `<thinking preview...> (N lines)` – shows `<thinking redacted>` for redacted blocks, or `<thinking provider>` for blocks with a provider signature. Uses `FlemmaThinkingTag` for delimiters and `FlemmaThinkingFoldPreview` for content (fg-only, so the background comes from the line highlight extmark and correctly blends with CursorLine).
+- **Frontmatter:** ` ```language preview... ``` (N lines) ` – uses `FlemmaFoldMeta` for fences and `FlemmaFoldPreview` for content.
 
 ## Notifications
 
-Completed requests show a single-line notification bar pinned to the top of the chat window. The bar displays model, provider, token counts, cost, and cache statistics — all rendered using priority-based truncation so content degrades gracefully in narrow terminals. Higher-priority items (model name, cost) survive; lower-priority items (individual token breakdowns) are dropped first.
+Completed requests show a single-line notification bar pinned to the top of the chat window. The bar displays model, provider, token counts, cost, and cache statistics – all rendered using priority-based truncation so content degrades gracefully in narrow terminals. Higher-priority items (model name, cost) survive; lower-priority items (individual token breakdowns) are dropped first.
 
 ```lua
 notifications = {
   enabled = true,                          -- set to false to suppress all notification bars
   timeout = 10000,                         -- milliseconds before auto-dismiss (0 = persistent)
-  limit = 3,                               -- maximum stacked notifications per buffer
+  limit = 1,                               -- maximum stacked notifications per buffer
   position = "overlay",                    -- "overlay" (pinned to window top)
   zindex = 30,                             -- floating window z-index (above nvim-treesitter-context)
   highlight = "@text.note, PmenuSel",      -- highlight group(s) for bar colours; first with both fg+bg wins
@@ -203,9 +203,9 @@ Notification bars derive all colours from the resolved highlight group using thr
 | Secondary | `FlemmaNotificationsSecondary` | Token counts, cache label, request count |
 | Muted     | `FlemmaNotificationsMuted`     | Provider, separators, session label      |
 
-Cache hit percentage uses semantic colours (`DiagnosticOk` / `DiagnosticWarn`) with automatic WCAG contrast enforcement against the bar background. The bottom-most bar has a border (`FlemmaNotificationsBottom`) whose style is controlled by the `border` option — set to `"underdouble"`, `"undercurl"`, `"underdotted"`, `"underdashed"`, or `false` to disable. The border colour matches the muted tier fg for a uniform appearance with the `│` separators.
+Cache hit percentage uses semantic colours (`DiagnosticOk` / `DiagnosticWarn`) with automatic WCAG contrast enforcement against the bar background. The bottom-most bar has a border (`FlemmaNotificationsBottom`) whose style is controlled by the `border` option – set to `"underdouble"`, `"undercurl"`, `"underdotted"`, `"underdashed"`, or `false` to disable. The border colour matches the muted tier fg for a uniform appearance with the `│` separators.
 
-Bars stack vertically when multiple are active — the most recent appears at the top, older ones shift down. Each `.chat` buffer has its own notification stack. Notifications for hidden buffers are queued and shown when the buffer becomes visible. Bars re-render automatically on window resize to reflow content for the new width. Recall the most recent notification with `:Flemma notification:recall`.
+Bars stack vertically when multiple are active – the most recent appears at the top, older ones shift down. Each `.chat` buffer has its own notification stack. Notifications for hidden buffers are queued and shown when the buffer becomes visible. Bars re-render automatically on window resize to reflow content for the new width. Recall the most recent notification with `:Flemma notification:recall`.
 
 See `lua/flemma/notifications.lua` for the full implementation.
 

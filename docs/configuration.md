@@ -7,7 +7,7 @@ require("flemma").setup({
   provider = "anthropic",                    -- "anthropic" | "openai" | "vertex"
   model = nil,                               -- nil = provider default
   parameters = {
-    max_tokens = 4000,
+    max_tokens = "50%",                           -- Percentage of model's max_output_tokens, or integer
     temperature = 0.7,
     timeout = 120,                           -- Response timeout (seconds)
     connect_timeout = 10,                    -- Connection timeout (seconds)
@@ -39,9 +39,10 @@ require("flemma").setup({
     },
     bash = {
       shell = nil,                           -- Shell binary (default: bash)
-      cwd = nil,                             -- Working directory (nil = buffer dir)
+      cwd = "$FLEMMA_BUFFER_PATH",           -- Working directory; resolves to .chat file's directory (set nil for Neovim cwd)
       env = nil,                             -- Extra environment variables
     },
+    modules = {},                            -- Lua module paths for third-party tool sources (e.g., "3rd.tools.todos")
   },
   defaults = {
     dark = { bg = "#000000", fg = "#ffffff" },
@@ -65,7 +66,7 @@ require("flemma").setup({
     fold_preview = "Comment",
     fold_meta = "Comment",
   },
-  role_style = "bold,underline",
+  role_style = "bold",
   ruler = {
     enabled = true,
     char = "─",
@@ -77,9 +78,6 @@ require("flemma").setup({
     system = { char = nil, hl = true },
     user = { char = "▏", hl = true },
     assistant = { char = nil, hl = true },
-  },
-  spinner = {
-    thinking_char = "❖",
   },
   line_highlights = {
     enabled = true,
@@ -150,7 +148,7 @@ require("flemma").setup({
 
 ## Option details
 
-This section explains options that benefit from more context than an inline comment provides. For UI-related options (highlights, line highlights, signs, ruler, spinner, notifications), see [docs/ui.md](ui.md) for detailed explanations and examples.
+This section explains options that benefit from more context than an inline comment provides. For UI-related options (highlights, line highlights, signs, ruler, notifications), see [docs/ui.md](ui.md) for detailed explanations and examples.
 
 ### Thinking parameter priority
 
@@ -196,6 +194,14 @@ The `send` keymap (<kbd>Ctrl-]</kbd>) is a hybrid dispatch with a three-phase cy
 Each press of <kbd>Ctrl-]</kbd> advances to the next applicable phase. In insert mode, <kbd>Ctrl-]</kbd> behaves identically but re-enters insert mode when the operation finishes.
 
 Set `keymaps.enabled = false` to disable all built-in mappings. For send-only behaviour (skipping the tool dispatch phases), bind directly to `require("flemma.core").send_to_provider()`.
+
+#### Insert-mode colon auto-newline
+
+When keymaps are enabled, typing `:` after a role name (`@You`, `@System`, `@Assistant`) in insert mode automatically completes the marker, inserts a blank content line below, and positions the cursor there. A **grace period** of 800ms absorbs any immediately following Space or Enter keypress – this protects muscle memory from the previous inline format where you'd type `@You: ` with a trailing space.
+
+#### Format migration
+
+Old `.chat` files that use the previous inline role marker format (e.g., `@You: content on same line`) are **automatically migrated** to the new own-line format when opened. The migration is non-destructive: it splits inline content onto a new line without altering the text. Run `:Flemma format` to trigger migration manually on the current buffer.
 
 ### Autopilot
 
