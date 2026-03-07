@@ -429,39 +429,51 @@ end
 -- ============================================================================
 
 ---Close a fold range in a buffer's window, guarding against already-closed folds.
+---Returns true only if the fold was verified as closed after the attempt.
 ---@param winid integer
 ---@param start_lnum integer 1-indexed start line
 ---@param end_lnum integer 1-indexed end line
+---@return boolean closed True if the fold is confirmed closed
 local function safe_foldclose(winid, start_lnum, end_lnum)
-  local fold_level_str = vim.fn.win_execute(winid, string.format("echo foldlevel(%d)", start_lnum))
-  local fold_level = tonumber(vim.trim(fold_level_str))
+  local fold_level = vim.api.nvim_win_call(winid, function()
+    return vim.fn.foldlevel(start_lnum)
+  end)
   if not fold_level or fold_level <= 0 then
-    return
+    return false
   end
-  local fold_closed_str = vim.fn.win_execute(winid, string.format("echo foldclosed(%d)", start_lnum))
-  if tonumber(vim.trim(fold_closed_str)) ~= -1 then
-    return
+  local fold_closed = vim.api.nvim_win_call(winid, function()
+    return vim.fn.foldclosed(start_lnum)
+  end)
+  if fold_closed ~= -1 then
+    return true -- Already closed (possibly inside a parent fold)
   end
   vim.fn.win_execute(winid, string.format("%d,%d foldclose", start_lnum, end_lnum))
+  -- Verify the fold actually closed
+  local verified = vim.api.nvim_win_call(winid, function()
+    return vim.fn.foldclosed(start_lnum)
+  end)
+  return verified ~= -1
 end
 
 ---Fold all completed/terminal blocks using rules and auto_close configuration.
 ---Uses ephemeral auto_closed_folds set for new-fold detection.
----Skips when the buffer has not changed since the last call (changedtick guard in buffer state).
+---Skips when the buffer has not changed since the last call, unless there
+---are pending folds that failed to close on a previous attempt.
 ---@param bufnr integer
 function M.fold_completed_blocks(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
   local tick = vim.api.nvim_buf_get_changedtick(bufnr)
-  if buffer_state.fold_completed_tick == tick then
+  local has_pending = buffer_state.pending_folds and next(buffer_state.pending_folds) ~= nil
+  if buffer_state.fold_completed_tick == tick and not has_pending then
     return
   end
-  buffer_state.fold_completed_tick = tick
 
   local winid = vim.fn.bufwinid(bufnr)
   if winid == -1 then
     log.debug("fold_completed_blocks(): Buffer " .. bufnr .. " has no window. Cannot close folds.")
     return
   end
+  buffer_state.fold_completed_tick = tick
 
   local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
@@ -478,6 +490,7 @@ function M.fold_completed_blocks(bufnr)
   end
 
   local new_folds = {}
+  local pending = {}
 
   ensure_rules_loaded()
   for _, rule in ipairs(rules) do
@@ -491,12 +504,18 @@ function M.fold_completed_blocks(bufnr)
       end
 
       if should_auto_close and not buffer_state.auto_closed_folds[range.id] then
-        safe_foldclose(winid, range.start_line, range.end_line)
-        buffer_state.auto_closed_folds[range.id] = true
-        table.insert(new_folds, range.id)
+        if safe_foldclose(winid, range.start_line, range.end_line) then
+          buffer_state.auto_closed_folds[range.id] = true
+          table.insert(new_folds, range.id)
+        else
+          pending[range.id] = true
+        end
       end
     end
   end
+
+  -- Track pending folds for retry on subsequent calls
+  buffer_state.pending_folds = next(pending) ~= nil and pending or nil
 
   if #new_folds > 0 then
     log.debug("fold_completed_blocks(): Auto-closed " .. #new_folds .. " fold(s) in buffer " .. bufnr)

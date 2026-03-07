@@ -1719,4 +1719,178 @@ describe("UI Folding", function()
       assert.are.equal(-1, vim.fn.foldclosed(4), "fold_completed_blocks should skip when changedtick has not changed")
     end)
   end)
+
+  describe("fold auto-close retry on failure", function()
+    -- These tests simulate the race condition where fold evaluation hasn't
+    -- completed when safe_foldclose runs. We set foldmethod=manual right
+    -- before calling fold_completed_blocks — this drops all fold
+    -- information (foldlevel() returns 0), simulating the state between
+    -- when Neovim receives "set foldmethod=expr" and when fold evaluation
+    -- actually completes for off-screen lines.
+
+    it("should not mark a fold as closed when foldclose silently fails", function()
+      local state = require("flemma.state")
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "response",
+        "<thinking>",
+        "thought process here",
+        "</thinking>",
+        "actual response",
+        "@You:",
+        "follow up",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      folding.setup_folding()
+      vim.wo.foldlevel = 99
+
+      -- Sabotage: switch to manual foldmethod and delete all folds.
+      -- This simulates the race where fold evaluation hasn't completed
+      -- yet — foldlevel() returns 0 for all lines.
+      vim.wo.foldmethod = "manual"
+      vim.cmd("normal! zE")
+      assert.are.equal(0, vim.fn.foldlevel(3), "Sanity: manual foldmethod should have foldlevel 0")
+
+      -- Call fold_completed_blocks — safe_foldclose should bail because
+      -- foldlevel() returns 0 (no evaluated folds)
+      folding.fold_completed_blocks(bufnr)
+
+      -- The fold is NOT closed (no folds exist in manual mode)
+      assert.are.equal(-1, vim.fn.foldclosed(3), "Fold should not be closed (no fold evaluation)")
+
+      -- Critical: the fold should NOT be in auto_closed_folds
+      local buffer_state = state.get_buffer_state(bufnr)
+      local fold_id = "thinking:1" -- message_index for second-to-last message
+      assert.is_falsy(
+        buffer_state.auto_closed_folds and buffer_state.auto_closed_folds[fold_id],
+        "Failed foldclose should NOT mark fold as closed in auto_closed_folds"
+      )
+    end)
+
+    it("should retry pending folds on subsequent calls even on the same changedtick", function()
+      local state = require("flemma.state")
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "response",
+        "<thinking>",
+        "thought process here",
+        "</thinking>",
+        "actual response",
+        "@You:",
+        "follow up",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      folding.setup_folding()
+      vim.wo.foldlevel = 99
+
+      -- Sabotage: drop fold information to simulate the race condition
+      vim.wo.foldmethod = "manual"
+      vim.cmd("normal! zE")
+
+      -- First call: foldlevel() returns 0, safe_foldclose bails
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(-1, vim.fn.foldclosed(3), "Fold should not be closed (no fold evaluation)")
+
+      -- Restore foldmethod=expr (simulating fold evaluation completing)
+      -- Keep foldlevel=99 so folds stay OPEN — we need fold_completed_blocks
+      -- to close them, not Neovim's foldlevel mechanism.
+      folding.setup_folding()
+      vim.wo.foldlevel = 99
+      assert.are.equal(-1, vim.fn.foldclosed(3), "Sanity: fold should be open after setup with foldlevel=99")
+
+      -- Second call on same changedtick: should RETRY because the fold is still pending
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(3, vim.fn.foldclosed(3), "Pending fold should be retried and closed on subsequent call")
+
+      -- Now it should be in auto_closed_folds
+      local buffer_state = state.get_buffer_state(bufnr)
+      local fold_id = "thinking:1"
+      assert.is_truthy(
+        buffer_state.auto_closed_folds and buffer_state.auto_closed_folds[fold_id],
+        "Successfully closed fold should be marked in auto_closed_folds"
+      )
+    end)
+
+    it("should still skip same-tick calls when all folds are successfully closed", function()
+      local state = require("flemma.state")
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "response",
+        "<thinking>",
+        "thought process here",
+        "</thinking>",
+        "actual response",
+        "@You:",
+        "follow up",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      folding.setup_folding()
+
+      -- First call: folds close successfully
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(3, vim.fn.foldclosed(3), "Thinking block should be folded")
+
+      -- User opens the fold manually and clear tracking to isolate the tick guard
+      vim.cmd("3 foldopen")
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.auto_closed_folds = {}
+
+      -- Second call on same changedtick: should skip because no pending folds
+      -- (all folds succeeded on the first call, pending set was cleared)
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(-1, vim.fn.foldclosed(3), "Same-tick call should skip when no pending folds exist")
+    end)
+
+    it("should fold when returning to a buffer that had no window during streaming", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "response",
+        "<thinking>",
+        "thought process here",
+        "</thinking>",
+        "actual response",
+        "@You:",
+        "follow up",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- Simulate: fold_completed_blocks is called while buffer has NO window
+      -- (user switched tabs during streaming). bufwinid returns -1.
+      -- Don't display the buffer in any window — just call fold_completed_blocks.
+      folding.fold_completed_blocks(bufnr)
+
+      -- Now simulate returning to the tab: show the buffer in a window
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      folding.setup_folding()
+      vim.wo.foldlevel = 99
+
+      -- Call fold_completed_blocks again on the SAME changedtick.
+      -- This simulates BufWinEnter -> update_ui -> fold_completed_blocks.
+      -- It should NOT skip even though changedtick hasn't changed.
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(3, vim.fn.foldclosed(3), "Thinking fold should be closed after returning to buffer")
+    end)
+  end)
 end)

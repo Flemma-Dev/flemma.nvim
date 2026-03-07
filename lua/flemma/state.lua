@@ -27,6 +27,7 @@ local session_module = require("flemma.session")
 ---@field spinner_preview_text string|nil Thinking preview text for the spinner timer to render
 ---@field autopilot_override? boolean Per-buffer autopilot override (set from frontmatter, nil = use global config)
 ---@field auto_closed_folds? table<string, boolean>
+---@field pending_folds? table<string, boolean> Fold IDs that were attempted but failed to close (eligible for retry)
 ---@field fold_completed_tick? integer Last changedtick processed by fold_completed_blocks (prevents redundant folding)
 ---@field ui_update_tick? integer Last changedtick processed by update_ui (gates CursorHold redundancy)
 ---@field autopilot? flemma.autopilot.BufferState Per-buffer autopilot state machine
