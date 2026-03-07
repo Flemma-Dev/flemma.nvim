@@ -58,6 +58,75 @@ describe("flemma.usage", function()
     end)
   end)
 
+  --- Find an item by key across all segments
+  ---@param segments table[]
+  ---@param key string
+  ---@return table|nil
+  local function find_item(segments, key)
+    for _, segment in ipairs(segments) do
+      for _, item in ipairs(segment.items or {}) do
+        if item.key == key then
+          return item
+        end
+      end
+    end
+    return nil
+  end
+
+  describe("cache percentage with min_cache_tokens threshold", function()
+    it("should omit cache_percent when 0% and below min_cache_tokens", function()
+      -- Anthropic haiku-4-5 has min_cache_tokens = 4096
+      -- Total input = 2000 (below 4096), cache = 0%
+      local request = session_module.Request.new({
+        provider = "anthropic",
+        model = "claude-haiku-4-5",
+        input_tokens = 2000,
+        output_tokens = 500,
+        input_price = 1.00,
+        output_price = 5.00,
+        cache_read_input_tokens = 0,
+        cache_creation_input_tokens = 0,
+      })
+      local segments = usage.build_segments(request, nil)
+      local cache_item = find_item(segments, "cache_percent")
+      assert.is_nil(cache_item)
+    end)
+
+    it("should show cache_percent when 0% but above min_cache_tokens", function()
+      -- Total input = 10000 (above 4096), cache = 0%
+      local request = session_module.Request.new({
+        provider = "anthropic",
+        model = "claude-haiku-4-5",
+        input_tokens = 10000,
+        output_tokens = 500,
+        input_price = 1.00,
+        output_price = 5.00,
+        cache_read_input_tokens = 0,
+        cache_creation_input_tokens = 0,
+      })
+      local segments = usage.build_segments(request, nil)
+      local cache_item = find_item(segments, "cache_percent")
+      assert.is_not_nil(cache_item)
+    end)
+
+    it("should show cache_percent when nonzero regardless of threshold", function()
+      -- Total input = 2000 (below 4096), but cache_read > 0
+      local request = session_module.Request.new({
+        provider = "anthropic",
+        model = "claude-haiku-4-5",
+        input_tokens = 1000,
+        output_tokens = 500,
+        input_price = 1.00,
+        output_price = 5.00,
+        cache_read_input_tokens = 1000,
+        cache_creation_input_tokens = 0,
+      })
+      local segments = usage.build_segments(request, nil)
+      local cache_item = find_item(segments, "cache_percent")
+      assert.is_not_nil(cache_item)
+    end)
+  end)
+
   describe("format_notification", function()
     it("should render request data as a single line", function()
       local request = session_module.Request.new({

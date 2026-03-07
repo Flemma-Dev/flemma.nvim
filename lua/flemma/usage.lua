@@ -97,16 +97,29 @@ function M.build_segments(request, session)
     -- Cache percentage
     local cache_percent = M.calculate_cache_percent(request)
     if cache_percent ~= nil then
-      local cache_text = tostring(cache_percent) .. "%"
-      local group = cache_percent > 50 and "FlemmaNotificationsCacheGood" or "FlemmaNotificationsCacheBad"
-      table.insert(request_items, {
-        key = "cache_percent",
-        text = cache_text,
-        priority = PRIORITY.CACHE_PERCENT,
-        highlight = {
-          group = group,
-        },
-      })
+      -- Suppress cache indicator when 0% is expected (below minimum cacheable tokens)
+      local below_threshold = false
+      if cache_percent == 0 then
+        local registry = require("flemma.provider.registry")
+        local model_info = registry.get_model_info(request.provider, request.model)
+        if model_info and model_info.min_cache_tokens then
+          local total_input = request.input_tokens + request.cache_read_input_tokens + request.cache_creation_input_tokens
+          below_threshold = total_input < model_info.min_cache_tokens
+        end
+      end
+
+      if not below_threshold then
+        local cache_text = tostring(cache_percent) .. "%"
+        local group = cache_percent > 50 and "FlemmaNotificationsCacheGood" or "FlemmaNotificationsCacheBad"
+        table.insert(request_items, {
+          key = "cache_percent",
+          text = cache_text,
+          priority = PRIORITY.CACHE_PERCENT,
+          highlight = {
+            group = group,
+          },
+        })
+      end
     end
 
     -- Input tokens
