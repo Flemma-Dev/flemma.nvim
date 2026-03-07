@@ -200,6 +200,46 @@ describe("flemma.session", function()
       assert.are.equal(expected_output_cost, request:get_output_cost())
     end)
 
+    it("should compute cache-aware costs from absolute per-model cache pricing", function()
+      local request = session_module.Request.new({
+        provider = "anthropic",
+        model = "claude-sonnet-4-6",
+        input_tokens = 1000,
+        output_tokens = 500,
+        input_price = 3.00,
+        output_price = 15.00,
+        cache_read_input_tokens = 5000,
+        cache_creation_input_tokens = 2000,
+        cache_read_price = 0.30,
+        cache_write_price = 3.75,
+      })
+
+      -- base: 1000/1M * 3.00 = 0.003
+      -- read: 5000/1M * 0.30 = 0.0015
+      -- write: 2000/1M * 3.75 = 0.0075
+      local expected = 0.003 + 0.0015 + 0.0075
+      assert.is_near(expected, request:get_input_cost(), 0.0001)
+    end)
+
+    it("should fall back to multiplier-based pricing when absolute prices absent", function()
+      local request = session_module.Request.new({
+        provider = "openai",
+        model = "gpt-4o",
+        input_tokens = 1000,
+        output_tokens = 500,
+        input_price = 2.50,
+        output_price = 10.00,
+        cache_read_input_tokens = 5000,
+        cache_creation_input_tokens = 0,
+        cache_read_multiplier = 0.5,
+      })
+
+      -- base: 1000/1M * 2.50 = 0.0025
+      -- read: 5000/1M * (2.50 * 0.5) = 0.00625
+      local expected = 0.0025 + 0.00625
+      assert.is_near(expected, request:get_input_cost(), 0.0001)
+    end)
+
     it("should store bufnr for unnamed buffers", function()
       local request = session_module.Request.new({
         provider = "anthropic",
