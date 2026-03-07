@@ -330,8 +330,9 @@ describe("notification bar highlights", function()
     vim.api.nvim_set_hl(0, "PmenuSel", { bg = 0x3c3836, fg = 0xd5c4a1 })
     vim.api.nvim_set_hl(0, "DiagnosticOk", { fg = 0x00ff00 })
     vim.api.nvim_set_hl(0, "DiagnosticWarn", { fg = 0xffff00 })
-    -- Populate config with defaults so notifications.highlight is available
-    require("flemma").setup({})
+    -- Populate config so notifications.highlight is available; enable border
+    -- so FlemmaNotificationsBottom tests can verify underline styling.
+    require("flemma").setup({ notifications = { border = "underline" } })
     highlight = require("flemma.highlight")
     color = require("flemma.utilities.color")
   end)
