@@ -474,35 +474,54 @@ function M.record_and_compare(bufnr, raw_json)
 
   -- Structural analysis for more context
   local structural_changes = M.analyze_structural_changes(previous, raw_json)
-  local structural_summary = ""
   if structural_changes and #structural_changes > 0 then
-    -- Filter out append-only changes (those are expected)
+    -- Filter out append-only changes (those are expected in multi-turn conversations)
     local breaking_changes = {}
     for _, change in ipairs(structural_changes) do
       if not change:match("appended$") then
         table.insert(breaking_changes, change)
       end
     end
-    if #breaking_changes > 0 then
-      structural_summary = "\nChanges:\n  • " .. table.concat(breaking_changes, "\n  • ")
-    else
-      -- Only append changes — this is fine, prefix intact at structural level
-      -- but byte-level diverged, meaning key ordering or formatting changed
-      structural_summary = "\nLikely cause: JSON serialization non-determinism (key ordering)"
-    end
-  end
 
-  vim.notify(
-    "Flemma [diagnostics]: Cache break detected"
-      .. "\nPrefix diverged at byte "
-      .. divergence.byte_offset
-      .. " (in "
-      .. path
-      .. ")"
-      .. structural_summary
-      .. "\n\nRun :Flemma diagnostics:open for full diff",
-    vim.log.levels.WARN
-  )
+    if #breaking_changes == 0 then
+      -- Only appends — but only safe if the divergence is at the very tail of
+      -- the previous request (only closing brackets/braces remain after it).
+      -- This ensures appends to mid-document keys like "tools" still warn,
+      -- since substantive content (messages) follows the divergence point.
+      local previous_tail = previous:sub(divergence.byte_offset)
+      if previous_tail:match("^[%]%}%s]*$") then
+        return
+      end
+    end
+
+    -- Build notification with all changes (including appends when they're not tail-safe)
+    local change_descriptions = #breaking_changes > 0 and breaking_changes or structural_changes
+    vim.notify(
+      "Flemma [diagnostics]: Cache break detected"
+        .. "\nPrefix diverged at byte "
+        .. divergence.byte_offset
+        .. " (in "
+        .. path
+        .. ")"
+        .. "\nChanges:\n  • "
+        .. table.concat(change_descriptions, "\n  • ")
+        .. "\n\nRun :Flemma diagnostics:open for full diff",
+      vim.log.levels.WARN
+    )
+  else
+    -- No structural changes at all but bytes diverged — serialization non-determinism
+    vim.notify(
+      "Flemma [diagnostics]: Cache break detected"
+        .. "\nPrefix diverged at byte "
+        .. divergence.byte_offset
+        .. " (in "
+        .. path
+        .. ")"
+        .. "\nLikely cause: JSON serialization non-determinism (key ordering)"
+        .. "\n\nRun :Flemma diagnostics:open for full diff",
+      vim.log.levels.WARN
+    )
+  end
 end
 
 return M

@@ -310,6 +310,64 @@ describe("flemma.diagnostics", function()
 
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
+
+    it("does not warn when messages are only appended (optimal caching)", function()
+      package.loaded["flemma.state"] = nil
+      package.loaded["flemma.diagnostics"] = nil
+      require("flemma.state")
+      diagnostics = require("flemma.diagnostics")
+      local bufnr = vim.api.nvim_create_buf(false, true)
+
+      -- Intercept vim.notify to detect warnings
+      local notified = false
+      local original_notify = vim.notify
+      vim.notify = function(msg, level)
+        if level == vim.log.levels.WARN and msg:match("Cache break") then
+          notified = true
+        end
+      end
+
+      local turn1 = '{"model":"gpt-4","messages":[{"role":"user","content":"hi"}]}'
+      local turn2 =
+        '{"model":"gpt-4","messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}]}'
+
+      diagnostics.record_and_compare(bufnr, turn1)
+      diagnostics.record_and_compare(bufnr, turn2)
+
+      vim.notify = original_notify
+      assert.is_false(notified, "Should not warn when messages are only appended")
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("warns when tools are appended (mid-document divergence)", function()
+      package.loaded["flemma.state"] = nil
+      package.loaded["flemma.diagnostics"] = nil
+      require("flemma.state")
+      diagnostics = require("flemma.diagnostics")
+      local bufnr = vim.api.nvim_create_buf(false, true)
+
+      local notified = false
+      local original_notify = vim.notify
+      vim.notify = function(msg, level)
+        if level == vim.log.levels.WARN and msg:match("Cache break") then
+          notified = true
+        end
+      end
+
+      -- tools come before messages — appending tools breaks the prefix for messages
+      local turn1 = '{"tools":[{"name":"bash"}],"messages":[{"role":"user","content":"hi"}]}'
+      local turn2 =
+        '{"tools":[{"name":"bash"},{"name":"read"}],"messages":[{"role":"user","content":"hi"}]}'
+
+      diagnostics.record_and_compare(bufnr, turn1)
+      diagnostics.record_and_compare(bufnr, turn2)
+
+      vim.notify = original_notify
+      assert.is_true(notified, "Should warn when tools are appended (prefix broken for messages)")
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
   end)
 
   describe("open_diff", function()
