@@ -86,11 +86,6 @@ function M.add_rulers(bufnr, doc)
 
   local win_width = vim.api.nvim_win_get_width(winid)
 
-  -- Check if rulers should adopt the line highlight of the following block
-  local adopt = ruler_config.adopt_line_highlight
-    and current_config.line_highlights
-    and current_config.line_highlights.enabled
-
   local spinner_line = state.get_buffer_state(bufnr).spinner_line_idx0
 
   for _, msg in ipairs(doc.messages) do
@@ -98,23 +93,20 @@ function M.add_rulers(bufnr, doc)
     if line_idx >= 0 and line_idx < vim.api.nvim_buf_line_count(bufnr) then
       -- Use the AST role directly — only recognized roles (You, System, Assistant) get rulers
       local role_name = msg.role
-      local ruler_hl = "FlemmaRuler"
-      if adopt then
-        ruler_hl = roles.highlight_group("FlemmaRuler", role_name)
-      end
-
       local colon_col = 1 + #role_name -- position of ':' in @Role:
 
       -- Replace @ with ruler char
       vim.api.nvim_buf_set_extmark(bufnr, ns_id, line_idx, 0, {
-        virt_text = { { ruler_config.char, ruler_hl } },
+        virt_text = { { ruler_config.char, "FlemmaRuler" } },
         virt_text_pos = "overlay",
+        hl_mode = "combine",
       })
 
       -- Insert a non-editable space between ruler char and the role name
       vim.api.nvim_buf_set_extmark(bufnr, ns_id, line_idx, 1, {
-        virt_text = { { " ", ruler_hl } },
+        virt_text = { { " ", "FlemmaRuler" } },
         virt_text_pos = "inline",
+        hl_mode = "combine",
       })
 
       -- On the spinner line, only replace : with a space (no ruler extension)
@@ -122,15 +114,17 @@ function M.add_rulers(bufnr, doc)
       -- On all other lines, extend ruler chars to the window edge.
       if line_idx == spinner_line then
         vim.api.nvim_buf_set_extmark(bufnr, ns_id, line_idx, colon_col, {
-          virt_text = { { " ", ruler_hl } },
+          virt_text = { { " ", "FlemmaRuler" } },
           virt_text_pos = "overlay",
+          hl_mode = "combine",
         })
       else
         local inline_space = 1 -- inserted space between ruler char and role name
         local remaining = math.max(0, win_width - colon_col - 1 - inline_space)
         vim.api.nvim_buf_set_extmark(bufnr, ns_id, line_idx, colon_col, {
-          virt_text = { { " " .. string.rep(ruler_config.char, remaining), ruler_hl } },
+          virt_text = { { " " .. string.rep(ruler_config.char, remaining), "FlemmaRuler" } },
           virt_text_pos = "overlay",
+          hl_mode = "combine",
         })
       end
     end
@@ -200,17 +194,9 @@ local function build_spinner_virt_text(spinner_text, bufnr)
   if rulers_enabled then
     local winid = vim.fn.bufwinid(bufnr)
     if winid ~= -1 then
-      local ruler_hl = "FlemmaRuler"
-      if
-        ruler_config.adopt_line_highlight
-        and current_config.line_highlights
-        and current_config.line_highlights.enabled
-      then
-        ruler_hl = roles.highlight_group("FlemmaRuler", "Assistant")
-      end
       -- Use win_width chars — the window clips excess, so overshoot is fine
       local win_width = vim.api.nvim_win_get_width(winid)
-      table.insert(chunks, { " " .. string.rep(ruler_config.char, win_width), ruler_hl })
+      table.insert(chunks, { " " .. string.rep(ruler_config.char, win_width), "FlemmaRuler" })
     end
   end
 

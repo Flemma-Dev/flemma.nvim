@@ -23,7 +23,6 @@
 ---@field enabled boolean
 ---@field char string
 ---@field hl flemma.config.HighlightValue
----@field adopt_line_highlight boolean When true, rulers inherit the line highlight background of the following block
 
 ---@class flemma.config.SignRole
 ---@field char? string
@@ -209,7 +208,6 @@ return {
     tool_result_title = "Function", -- Highlight for **Tool Result:** title text
     tool_result_error = "DiagnosticError", -- Highlight for (error) marker in tool results
     tool_preview = "Comment", -- Highlight for tool preview virtual lines in pending tool blocks
-
     -- Folds
     fold_preview = "Comment", -- Highlight for tool content preview text in fold lines
     fold_meta = "Comment", -- Highlight for (N lines) suffix in fold lines
@@ -219,7 +217,6 @@ return {
     enabled = true, -- Set to false to disable rulers between messages
     char = "─", -- The character to use for the ruler
     hl = { dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }, -- Highlight group or hex color for the ruler
-    adopt_line_highlight = true, -- Ruler inherits the line highlight background of the following block
   },
   signs = {
     enabled = false, -- Enable sign column highlighting (disabled by default)
