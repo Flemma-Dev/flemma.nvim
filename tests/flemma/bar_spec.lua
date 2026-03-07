@@ -19,8 +19,8 @@ describe("flemma.bar", function()
         {
           key = "request",
           items = {
-            { key = "input_tokens", text = "\xE2\x86\x91 1,611", priority = 50 },
-            { key = "output_tokens", text = "\xE2\x86\x93 200", priority = 50 },
+            { key = "input_tokens", text = "1,611\xE2\x86\x91", priority = 50 },
+            { key = "output_tokens", text = "200\xE2\x86\x93", priority = 50 },
           },
         },
       }
@@ -29,8 +29,8 @@ describe("flemma.bar", function()
 
       assert.are.equal(6, widths.model_name) -- "gpt-4o"
       assert.are.equal(8, widths.provider_name) -- "(openai)"
-      assert.are.equal(7, widths.input_tokens) -- "↑ 1,611"
-      assert.are.equal(5, widths.output_tokens) -- "↓ 200"
+      assert.are.equal(6, widths.input_tokens) -- "1,611↑"
+      assert.are.equal(4, widths.output_tokens) -- "200↓"
     end)
   end)
 
@@ -49,7 +49,7 @@ describe("flemma.bar", function()
       local result = bar.render(segments, 120)
 
       assert.is_not_nil(result)
-      assert.has_match("gpt%-4o %(openai%)", result.text)
+      assert.has_match("gpt%-4o  %(openai%)", result.text)
     end)
 
     it("should render multiple segments with separators", function()
@@ -73,7 +73,7 @@ describe("flemma.bar", function()
       local result = bar.render(segments, 120)
 
       -- Should contain separator between segments
-      assert.has_match("gpt%-4o %(openai%) \xE2\x94\x82 %$0%.01 Cache 75%%", result.text)
+      assert.has_match("gpt%-4o  %(openai%)  \xE2\x94\x82  %$0%.01  Cache 75%%", result.text)
     end)
 
     it("should drop lowest-priority items when width is scarce", function()
@@ -113,19 +113,19 @@ describe("flemma.bar", function()
         {
           key = "request",
           items = {
-            { key = "request_input_tokens", text = "\xE2\x86\x91 1,610", priority = 50 },
-            { key = "request_output_tokens", text = "\xE2\x86\x93 600", priority = 50 },
+            { key = "request_input_tokens", text = "1,610\xE2\x86\x91", priority = 50 },
+            { key = "request_output_tokens", text = "600\xE2\x86\x93", priority = 50 },
           },
         },
       }
 
       -- Width enough for model + both tokens
       local wide_result = bar.render(segments, 120)
-      assert.has_match("\xE2\x86\x91 1,610", wide_result.text)
-      assert.has_match("\xE2\x86\x93 600", wide_result.text)
+      assert.has_match("1,610\xE2\x86\x91", wide_result.text)
+      assert.has_match("600\xE2\x86\x93", wide_result.text)
 
       -- Width too small for both tokens — both should be dropped together
-      -- prefix (3) + model (6) = 9, tokens would add sep (3) + 7 + 1 + 5 = 25 total
+      -- prefix (2) + model (6) = 8, tokens would add sep (3) + 6 + 1 + 4 = 22 total
       local narrow_result = bar.render(segments, 15)
       assert.has_no_match("\xE2\x86\x91", narrow_result.text)
       assert.has_no_match("\xE2\x86\x93", narrow_result.text)
@@ -143,8 +143,8 @@ describe("flemma.bar", function()
           key = "session",
           label = "Session",
           items = {
-            { key = "session_input_tokens", text = "\xE2\x86\x91 4,374", priority = 20 },
-            { key = "session_output_tokens", text = "\xE2\x86\x93 603", priority = 20 },
+            { key = "session_input_tokens", text = "4,374\xE2\x86\x91", priority = 20 },
+            { key = "session_output_tokens", text = "603\xE2\x86\x93", priority = 20 },
           },
         },
       }
@@ -177,7 +177,7 @@ describe("flemma.bar", function()
 
       local result = bar.render(segments, 120)
 
-      assert.has_match("Session %$0%.05", result.text)
+      assert.has_match("Session  %$0%.05", result.text)
     end)
 
     it("should track highlight positions in rendered line", function()
@@ -242,24 +242,24 @@ describe("flemma.bar", function()
         {
           key = "request",
           items = {
-            { key = "input_tokens", text = "\xE2\x86\x91 1,611", priority = 50 },
-            { key = "output_tokens", text = "\xE2\x86\x93 200", priority = 50 },
+            { key = "input_tokens", text = "1,611\xE2\x86\x91", priority = 50 },
+            { key = "output_tokens", text = "200\xE2\x86\x93", priority = 50 },
           },
         },
       }
 
       -- Render with item_widths that are wider than natural text
-      -- "↑ 1,611" is 7 display chars, "↓ 200" is 5 display chars
+      -- "1,611↑" is 6 display chars, "200↓" is 4 display chars
       -- Set minimum widths to 9 for input and 7 for output
       local result = bar.render(segments, 120, { input_tokens = 9, output_tokens = 7 })
 
       -- The rendered text should contain the original text plus padding spaces
       -- Total: 9 + 1 (space) + 7 = 17 display chars of content
       -- Verify the display width accounts for padding
-      assert.has_match("\xE2\x86\x91 1,611", result.text)
-      assert.has_match("\xE2\x86\x93 200", result.text)
+      assert.has_match("1,611\xE2\x86\x91", result.text)
+      assert.has_match("200\xE2\x86\x93", result.text)
 
-      -- Without item_widths, content would be 7 + 1 + 5 = 13 display chars
+      -- Without item_widths, content would be 6 + 1 + 4 = 11 display chars
       local unpadded = bar.render(segments, 120)
       -- Padded version should be wider in content area
       -- Both are right-padded to 120, but the content portion differs
@@ -273,7 +273,7 @@ describe("flemma.bar", function()
         {
           key = "request",
           items = {
-            { key = "input_tokens", text = "\xE2\x86\x91 1,611", priority = 50 },
+            { key = "input_tokens", text = "1,611\xE2\x86\x91", priority = 50 },
             {
               key = "cache_percent",
               text = "Cache 75%",
@@ -288,7 +288,7 @@ describe("flemma.bar", function()
         },
       }
 
-      -- Pad input_tokens to 12 display chars (natural is 7)
+      -- Pad input_tokens to 12 display chars (natural is 6)
       local result = bar.render(segments, 120, { input_tokens = 12 })
 
       assert.are.equal(1, #result.highlights)
@@ -309,16 +309,16 @@ describe("flemma.bar", function()
         {
           key = "request",
           items = {
-            { key = "input_tokens", text = "\xE2\x86\x91 100", priority = 50 },
+            { key = "input_tokens", text = "100\xE2\x86\x91", priority = 50 },
           },
         },
       }
 
-      -- Without padding: prefix(3) + gpt-4o(6) + sep(3) + ↑ 100(5) = 17 — fits in 19
+      -- Without padding: prefix(2) + gpt-4o(6) + sep(3) + 100↑(4) = 15 — fits in 19
       local fits = bar.render(segments, 19)
-      assert.has_match("\xE2\x86\x91 100", fits.text)
+      assert.has_match("100\xE2\x86\x91", fits.text)
 
-      -- With padding to 10: prefix(3) + gpt-4o(6) + sep(3) + padded(10) = 22 — exceeds 19
+      -- With padding to 10: prefix(2) + gpt-4o(6) + sep(3) + padded(10) = 21 — exceeds 19
       local overflows = bar.render(segments, 19, { input_tokens = 10 })
       assert.has_no_match("\xE2\x86\x91", overflows.text)
       assert.has_match("gpt%-4o", overflows.text)
@@ -336,8 +336,8 @@ describe("flemma.bar", function()
         {
           key = "request",
           items = {
-            { key = "input_tokens", text = "\xE2\x86\x91 1,611", priority = 50 },
-            { key = "output_tokens", text = "\xE2\x86\x93 200", priority = 50 },
+            { key = "input_tokens", text = "1,611\xE2\x86\x91", priority = 50 },
+            { key = "output_tokens", text = "200\xE2\x86\x93", priority = 50 },
           },
         },
       }
@@ -352,8 +352,8 @@ describe("flemma.bar", function()
         {
           key = "request",
           items = {
-            { key = "input_tokens", text = "\xE2\x86\x91 2,618", priority = 50 },
-            { key = "output_tokens", text = "\xE2\x86\x93 1,400", priority = 50 },
+            { key = "input_tokens", text = "2,618\xE2\x86\x91", priority = 50 },
+            { key = "output_tokens", text = "1,400\xE2\x86\x93", priority = 50 },
           },
         },
       }
@@ -493,6 +493,59 @@ describe("flemma.bar", function()
       -- Highlight should still point to "75%" — byte offset starts at 0 (no prefix)
       local highlighted_text = result.text:sub(result.highlights[1].col_start + 1, result.highlights[1].col_end)
       assert.are.equal("75%", highlighted_text)
+    end)
+  end)
+
+  describe("relaxed spacing", function()
+    it("should use double spacing when width allows", function()
+      local segments = {
+        {
+          key = "identity",
+          items = {
+            { key = "model_name", text = "gpt-4o", priority = 90 },
+            { key = "provider_name", text = "(openai)", priority = 10 },
+          },
+        },
+        {
+          key = "request",
+          items = {
+            { key = "request_cost", text = "$0.01", priority = 80 },
+          },
+        },
+      }
+
+      local result = bar.render(segments, 120)
+
+      -- Wide width: relaxed spacing with double spaces and wide separator
+      assert.has_match("gpt%-4o  %(openai%)  \xE2\x94\x82  %$0%.01", result.text)
+    end)
+
+    it("should fall back to normal spacing when width is tight", function()
+      local segments = {
+        {
+          key = "identity",
+          items = {
+            { key = "model_name", text = "gpt-4o", priority = 90 },
+          },
+        },
+        {
+          key = "request",
+          items = {
+            { key = "request_cost", text = "$0.01", priority = 80 },
+          },
+        },
+      }
+
+      -- Normal: prefix(2) + gpt-4o(6) + sep(3) + $0.01(5) = 16
+      -- Relaxed: prefix(2) + gpt-4o(6) + sep(5) + $0.01(5) = 18
+      -- Width 17: fits normal but not relaxed
+      local result = bar.render(segments, 17)
+
+      assert.has_match("gpt%-4o", result.text)
+      assert.has_match("%$0%.01", result.text)
+      -- Should use normal separator (3 display chars), not relaxed (5)
+      assert.has_match(" \xE2\x94\x82 ", result.text)
+      assert.has_no_match("  \xE2\x94\x82  ", result.text)
     end)
   end)
 

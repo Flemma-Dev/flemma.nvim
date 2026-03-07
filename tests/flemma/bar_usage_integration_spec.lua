@@ -157,7 +157,7 @@ describe("flemma.usage segment building", function()
       end
 
       assert.is_not_nil(session_segment)
-      assert.are.equal("Σ", session_segment.label)
+      assert.has_match("^Σ%d+$", session_segment.label)
     end)
 
     it("should return empty table when both request and session are nil", function()

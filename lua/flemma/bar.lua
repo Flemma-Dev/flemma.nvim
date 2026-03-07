@@ -9,6 +9,10 @@ local str = require("flemma.utilities.string")
 local SEPARATOR = " \xE2\x94\x82 " -- " │ " (U+2502, 5 bytes UTF-8)
 local SEPARATOR_DISPLAY_WIDTH = 3 -- " │ " is 3 display chars
 
+--- Relaxed separator: double-spaced variant used when all items fit with extra breathing room
+local SEPARATOR_RELAXED = "  \xE2\x94\x82  " -- "  │  "
+local SEPARATOR_RELAXED_DISPLAY_WIDTH = 5
+
 --- Prefix shown before all content: information source + space
 local PREFIX = "\xE2\x84\xB9 " -- "ℹ " (U+2139, 3 bytes + 1 space)
 local PREFIX_DISPLAY_WIDTH = 2 -- ℹ is 1 display col + 1 space
@@ -53,8 +57,11 @@ M.PREFIX_DISPLAY_WIDTH = PREFIX_DISPLAY_WIDTH
 ---@param visible_keys table<string, boolean> Set of visible item keys
 ---@param item_widths? table<string, integer> Optional minimum display widths per item key
 ---@param skip_prefix? boolean When true, omit the prefix from width calculation
+---@param relaxed? boolean When true, use double spacing between items and wider separators
 ---@return integer width Total display width
-local function calculate_line_width(segments, visible_keys, item_widths, skip_prefix)
+local function calculate_line_width(segments, visible_keys, item_widths, skip_prefix, relaxed)
+  local item_spacing = relaxed and 2 or 1
+  local sep_width = relaxed and SEPARATOR_RELAXED_DISPLAY_WIDTH or SEPARATOR_DISPLAY_WIDTH
   local total = 0
   local segment_count = 0
 
@@ -76,13 +83,13 @@ local function calculate_line_width(segments, visible_keys, item_widths, skip_pr
     end
 
     if segment.label then
-      segment_width = segment_width + str.strwidth(segment.label) + 1 -- +1 for space after label
+      segment_width = segment_width + str.strwidth(segment.label) + item_spacing
     end
 
     for _, item in ipairs(segment.items) do
       if visible_keys[item.key] then
         if item_count > 0 then
-          segment_width = segment_width + 1 -- space between items
+          segment_width = segment_width + item_spacing
         end
         local w = str.strwidth(item.text)
         if item_widths then
@@ -95,7 +102,7 @@ local function calculate_line_width(segments, visible_keys, item_widths, skip_pr
 
     if item_count > 0 then
       if segment_count > 0 then
-        total = total + SEPARATOR_DISPLAY_WIDTH
+        total = total + sep_width
       end
       total = total + segment_width
       segment_count = segment_count + 1
@@ -118,8 +125,11 @@ end
 ---@param available_width integer
 ---@param item_widths? table<string, integer> Optional minimum display widths per item key
 ---@param skip_prefix? boolean When true, omit the prefix from rendered output
+---@param relaxed? boolean When true, use double spacing between items and wider separators
 ---@return flemma.bar.RenderResult
-local function build_line(segments, visible_keys, available_width, item_widths, skip_prefix)
+local function build_line(segments, visible_keys, available_width, item_widths, skip_prefix, relaxed)
+  local joiner = relaxed and "  " or " "
+  local sep = relaxed and SEPARATOR_RELAXED or SEPARATOR
   local parts = {} ---@type string[]
   local highlights = {} ---@type flemma.bar.RenderedHighlight[]
   local byte_offset = 0
@@ -190,8 +200,8 @@ local function build_line(segments, visible_keys, available_width, item_widths, 
         table.insert(segment_parts, padded_text)
         -- Track highlight if present
         if item.highlight then
-          -- Calculate byte position: current segment parts joined by spaces
-          local prefix_text = table.concat(segment_parts, " ")
+          -- Calculate byte position: current segment parts joined with same joiner
+          local prefix_text = table.concat(segment_parts, joiner)
           -- The highlight offset is relative to the item text, which ends at the end of prefix_text
           local item_start_in_segment = #prefix_text - #padded_text
           local hl_offset = item.highlight.offset or 0
@@ -213,14 +223,14 @@ local function build_line(segments, visible_keys, available_width, item_widths, 
           table.insert(highlights, {
             group = segment.separator_highlight,
             col_start = byte_offset,
-            col_end = byte_offset + #SEPARATOR,
+            col_end = byte_offset + #sep,
           })
         end
-        table.insert(parts, SEPARATOR)
-        byte_offset = byte_offset + #SEPARATOR
+        table.insert(parts, sep)
+        byte_offset = byte_offset + #sep
       end
 
-      local segment_text = table.concat(segment_parts, " ")
+      local segment_text = table.concat(segment_parts, joiner)
       table.insert(parts, segment_text)
 
       -- Adjust highlight byte offsets to be relative to line start
@@ -329,7 +339,10 @@ function M.render(segments, available_width, item_widths, opts)
     end
   end
 
-  return build_line(segments, visible_keys, available_width, item_widths, skip_prefix)
+  -- Use relaxed (double) spacing if all visible items still fit
+  local relaxed = calculate_line_width(segments, visible_keys, item_widths, skip_prefix, true) <= available_width
+
+  return build_line(segments, visible_keys, available_width, item_widths, skip_prefix, relaxed)
 end
 
 return M

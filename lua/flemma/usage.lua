@@ -112,7 +112,7 @@ function M.build_segments(request, session)
     -- Input tokens
     table.insert(request_items, {
       key = "request_input_tokens",
-      text = "\xE2\x86\x91 " .. M.format_number(request.input_tokens),
+      text = M.format_number(request.input_tokens) .. "\xE2\x86\x91", -- ↑
       priority = PRIORITY.REQUEST_INPUT_TOKENS,
       highlight = { group = "FlemmaNotificationsSecondary" },
     })
@@ -121,7 +121,7 @@ function M.build_segments(request, session)
     local total_output_tokens = request:get_total_output_tokens()
     table.insert(request_items, {
       key = "request_output_tokens",
-      text = "\xE2\x86\x93 " .. M.format_number(total_output_tokens),
+      text = M.format_number(total_output_tokens) .. "\xE2\x86\x93", -- ↓
       priority = PRIORITY.REQUEST_OUTPUT_TOKENS,
       highlight = { group = "FlemmaNotificationsSecondary" },
     })
@@ -130,7 +130,7 @@ function M.build_segments(request, session)
     if request.thoughts_tokens > 0 then
       table.insert(request_items, {
         key = "thinking_tokens",
-        text = "\xE2\x97\x8B " .. M.format_number(request.thoughts_tokens),
+        text = "\xE2\x97\x8B " .. M.format_number(request.thoughts_tokens), -- ○
         priority = PRIORITY.THINKING_TOKENS,
         highlight = { group = "FlemmaNotificationsSecondary" },
       })
@@ -159,18 +159,10 @@ function M.build_segments(request, session)
       })
     end
 
-    -- Request count
-    table.insert(session_items, {
-      key = "session_request_count",
-      text = "#" .. tostring(session:get_request_count()),
-      priority = PRIORITY.SESSION_REQUEST_COUNT,
-      highlight = { group = "FlemmaNotificationsSecondary" },
-    })
-
     -- Session input tokens
     table.insert(session_items, {
       key = "session_input_tokens",
-      text = "\xE2\x86\x91 " .. M.format_number(session:get_total_input_tokens()),
+      text = M.format_number(session:get_total_input_tokens()) .. "\xE2\x86\x91", -- ↑
       priority = PRIORITY.SESSION_INPUT_TOKENS,
       highlight = { group = "FlemmaNotificationsSecondary" },
     })
@@ -178,14 +170,14 @@ function M.build_segments(request, session)
     -- Session output tokens
     table.insert(session_items, {
       key = "session_output_tokens",
-      text = "\xE2\x86\x93 " .. M.format_number(session:get_total_output_tokens()),
+      text = M.format_number(session:get_total_output_tokens()) .. "\xE2\x86\x93", -- ↓
       priority = PRIORITY.SESSION_OUTPUT_TOKENS,
       highlight = { group = "FlemmaNotificationsSecondary" },
     })
 
     table.insert(segments, {
       key = "session",
-      label = "Σ",
+      label = "Σ" .. tostring(session:get_request_count()),
       label_highlight = "FlemmaNotificationsMuted",
       separator_highlight = "FlemmaNotificationsMuted",
       items = session_items,
