@@ -779,10 +779,26 @@ local function budget_to_effort(budget)
   end
 end
 
---- Map a named effort level to a thinking budget
+--- Map a named effort level to a thinking budget, using per-model data when available
 ---@param level string "minimal"|"low"|"medium"|"high"|"max"
+---@param model_info? flemma.models.ModelInfo
 ---@return integer budget
-local function effort_to_budget(level)
+local function effort_to_budget(level, model_info)
+  if model_info and model_info.thinking_budgets then
+    ---@cast model_info -nil
+    local budgets = model_info.thinking_budgets --[[@as table<string, integer>]]
+    if level == "max" then
+      if model_info.max_thinking_budget then
+        return model_info.max_thinking_budget
+      end
+      return budgets.high or 32768
+    end
+    local model_budget = budgets[level]
+    if model_budget then
+      return model_budget
+    end
+  end
+  -- Hardcoded fallback (current behavior)
   if level == "minimal" then
     return 128
   elseif level == "low" then
@@ -804,16 +820,22 @@ end
 ---
 ---@param params flemma.provider.Parameters The parameter proxy
 ---@param caps flemma.provider.Capabilities The provider's capabilities
+---@param model_info? flemma.models.ModelInfo Per-model metadata for budget/clamping
 ---@return flemma.provider.ThinkingResolution
-function M.resolve_thinking(params, caps)
+function M.resolve_thinking(params, caps, model_info)
   -- For budget-based providers (Anthropic, Vertex)
   if caps.supports_thinking_budget then
+    local min = (model_info and model_info.min_thinking_budget) or caps.min_thinking_budget or 1
+    local max = model_info and model_info.max_thinking_budget
+
     -- Priority: provider-specific thinking_budget > unified thinking
     local raw_budget = params.thinking_budget
     if raw_budget ~= nil then
       if type(raw_budget) == "number" and raw_budget > 0 then
-        local min = caps.min_thinking_budget or 1
         local budget = math.max(math.floor(raw_budget), min)
+        if max then
+          budget = math.min(budget, max)
+        end
         return { enabled = true, budget = budget, level = budget_to_effort(budget) }
       else
         return { enabled = false }
@@ -826,12 +848,17 @@ function M.resolve_thinking(params, caps)
       return { enabled = false }
     end
     if type(thinking) == "string" then
-      local budget = math.max(effort_to_budget(thinking), caps.min_thinking_budget or 1)
+      local budget = math.max(effort_to_budget(thinking, model_info), min)
+      if max then
+        budget = math.min(budget, max)
+      end
       return { enabled = true, budget = budget, level = budget_to_effort(budget) }
     end
     if type(thinking) == "number" and thinking > 0 then
-      local min = caps.min_thinking_budget or 1
       local budget = math.max(math.floor(thinking), min)
+      if max then
+        budget = math.min(budget, max)
+      end
       return { enabled = true, budget = budget, level = budget_to_effort(budget) }
     end
     return { enabled = false }
