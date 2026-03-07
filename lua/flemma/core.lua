@@ -104,6 +104,11 @@ function M.switch_provider(provider_name, model_name, parameters)
   -- Force the new provider to clear its API key cache
   new_provider:reset({ auth = true })
 
+  -- Clear diagnostics request history — cache state doesn't carry across providers,
+  -- so comparing requests from different providers would produce spurious warnings.
+  buffer_state.diagnostics_previous_request = nil
+  buffer_state.diagnostics_current_request = nil
+
   -- Notify the user
   local model_info = updated_config.model and (" with model '" .. updated_config.model .. "'") or ""
   vim.notify("Flemma: Switched to '" .. updated_config.provider .. "'" .. model_info .. ".", vim.log.levels.INFO)
