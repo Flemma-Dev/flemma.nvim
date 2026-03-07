@@ -111,7 +111,9 @@ M.setup = function()
           local autocmd_id
 
           local function cleanup()
-            if cleaned_up then return end
+            if cleaned_up then
+              return
+            end
             cleaned_up = true
             if autocmd_id then
               pcall(vim.api.nvim_del_autocmd, autocmd_id)
