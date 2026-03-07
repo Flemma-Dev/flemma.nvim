@@ -103,7 +103,9 @@ function M.build_segments(request, session)
         local registry = require("flemma.provider.registry")
         local model_info = registry.get_model_info(request.provider, request.model)
         if model_info and model_info.min_cache_tokens then
-          local total_input = request.input_tokens + request.cache_read_input_tokens + request.cache_creation_input_tokens
+          local total_input = request.input_tokens
+            + request.cache_read_input_tokens
+            + request.cache_creation_input_tokens
           below_threshold = total_input < model_info.min_cache_tokens
         end
       end
