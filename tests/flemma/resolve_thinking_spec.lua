@@ -253,6 +253,77 @@ describe("base.resolve_thinking", function()
     end)
   end)
 
+  describe("per-model thinking budgets", function()
+    local caps = {
+      supports_thinking_budget = true,
+      supports_reasoning = false,
+      outputs_thinking = true,
+      output_has_thoughts = true,
+      min_thinking_budget = 1024,
+    }
+
+    it("uses model thinking_budgets when available", function()
+      local model_info = {
+        thinking_budgets = { minimal = 512, low = 2048, medium = 8192, high = 24576 },
+        min_thinking_budget = 512,
+        max_thinking_budget = 24576,
+      }
+      local result = base.resolve_thinking({ thinking = "minimal" }, caps, model_info)
+      assert.is_true(result.enabled)
+      assert.are.equal(512, result.budget)
+    end)
+
+    it("falls back to hardcoded budgets when model_info is nil", function()
+      local result = base.resolve_thinking({ thinking = "minimal" }, caps, nil)
+      assert.is_true(result.enabled)
+      assert.are.equal(1024, result.budget) -- clamped to caps.min_thinking_budget
+    end)
+
+    it("clamps numeric budget to model max_thinking_budget", function()
+      local model_info = {
+        thinking_budgets = { minimal = 512, low = 2048, medium = 8192, high = 24576 },
+        min_thinking_budget = 512,
+        max_thinking_budget = 24576,
+      }
+      local result = base.resolve_thinking({ thinking = 50000 }, caps, model_info)
+      assert.is_true(result.enabled)
+      assert.are.equal(24576, result.budget)
+    end)
+
+    it("clamps numeric budget to model min_thinking_budget", function()
+      local model_info = {
+        thinking_budgets = { minimal = 512, low = 2048, medium = 8192, high = 24576 },
+        min_thinking_budget = 512,
+        max_thinking_budget = 24576,
+      }
+      local result = base.resolve_thinking({ thinking = 100 }, caps, model_info)
+      assert.is_true(result.enabled)
+      assert.are.equal(512, result.budget)
+    end)
+
+    it("uses model max_thinking_budget for 'max' level", function()
+      local model_info = {
+        thinking_budgets = { minimal = 512, low = 2048, medium = 8192, high = 24576 },
+        min_thinking_budget = 512,
+        max_thinking_budget = 24576,
+      }
+      local result = base.resolve_thinking({ thinking = "max" }, caps, model_info)
+      assert.is_true(result.enabled)
+      assert.are.equal(24576, result.budget)
+    end)
+
+    it("clamps thinking_budget to model max", function()
+      local model_info = {
+        thinking_budgets = { minimal = 512, low = 2048, medium = 8192, high = 24576 },
+        min_thinking_budget = 512,
+        max_thinking_budget = 24576,
+      }
+      local result = base.resolve_thinking({ thinking_budget = 99999 }, caps, model_info)
+      assert.is_true(result.enabled)
+      assert.are.equal(24576, result.budget)
+    end)
+  end)
+
   describe("provider with neither capability", function()
     local caps = {
       supports_reasoning = false,

@@ -8,6 +8,7 @@ local injector = require("flemma.tools.injector")
 local editing = require("flemma.buffer.editing")
 local state = require("flemma.state")
 local log = require("flemma.logging")
+local roles = require("flemma.utilities.roles")
 
 ---@class flemma.tools.PendingExecution
 ---@field tool_id string
@@ -20,17 +21,15 @@ local log = require("flemma.logging")
 ---@field completed boolean
 ---@field placeholder_modified boolean
 
--- Per-buffer pending executions: bufnr -> { tool_id -> flemma.tools.PendingExecution }
-local pending_by_buffer = {}
-
----Get or initialize the pending map for a buffer
+---Get or initialize the pending executions map for a buffer
 ---@param bufnr integer
 ---@return table<string, flemma.tools.PendingExecution>
 local function get_buffer_pending(bufnr)
-  if not pending_by_buffer[bufnr] then
-    pending_by_buffer[bufnr] = {}
+  local buffer_state = state.get_buffer_state(bufnr)
+  if not buffer_state.pending_executions then
+    buffer_state.pending_executions = {}
   end
-  return pending_by_buffer[bufnr]
+  return buffer_state.pending_executions
 end
 
 ---Count executions that have not been cleaned up yet for a buffer.
@@ -39,7 +38,8 @@ end
 ---@param bufnr integer
 ---@return integer
 local function count_pending(bufnr)
-  local pending = pending_by_buffer[bufnr]
+  local buffer_state = state.get_buffer_state(bufnr)
+  local pending = buffer_state.pending_executions
   if not pending then
     return 0
   end
@@ -71,9 +71,9 @@ end
 ---@param bufnr integer
 ---@param tool_id string
 local function cleanup_pending(bufnr, tool_id)
-  local pending = pending_by_buffer[bufnr]
-  if pending then
-    pending[tool_id] = nil
+  local buffer_state = state.get_buffer_state(bufnr)
+  if buffer_state.pending_executions then
+    buffer_state.pending_executions[tool_id] = nil
   end
 end
 
@@ -87,7 +87,7 @@ local function move_cursor_after_result(bufnr, tool_id, mode)
 
   local target_line = nil
   for _, msg in ipairs(doc.messages) do
-    if msg.role == "You" then
+    if roles.is_user(msg.role) then
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "tool_result" and seg.tool_use_id == tool_id then
           if mode == "result" then
@@ -140,7 +140,7 @@ local function do_completion(bufnr, tool_id, result, opts)
   local ui = require("flemma.ui")
   local ok, err = injector.inject_result(bufnr, tool_id, result)
   if not ok then
-    log.warn("executor: Failed to inject result for " .. tool_id .. ": " .. (err or "unknown"))
+    log.error("executor: Failed to inject result for " .. tool_id .. ": " .. (err or "unknown"))
   end
 
   -- Move cursor based on config (skip when autopilot is armed — it owns cursor positioning)
@@ -265,7 +265,7 @@ function M.build_execution_context(params)
         rawset(self, "sandbox", sandbox_namespace)
         return sandbox_namespace
       elseif key == "truncate" then
-        local truncate_module = require("flemma.tools.truncate")
+        local truncate_module = require("flemma.utilities.truncate")
         rawset(self, "truncate", truncate_module)
         return truncate_module
       elseif key == "path" then
@@ -444,7 +444,11 @@ end
 ---@param tool_id string
 ---@return boolean cancelled true if cancelled, false if not found
 function M.cancel(tool_id)
-  for bufnr, pending in pairs(pending_by_buffer) do
+  for bufnr, buffer_state in state.each_buffer_state() do
+    local pending = buffer_state.pending_executions
+    if not pending then
+      goto continue
+    end
     local entry = pending[tool_id]
     if entry and not entry.completed then
       -- Call cancel function if available
@@ -459,6 +463,7 @@ function M.cancel(tool_id)
       }, { async = false })
       return true
     end
+    ::continue::
   end
   return false
 end
@@ -466,7 +471,8 @@ end
 ---Cancel all pending executions for a buffer
 ---@param bufnr integer
 function M.cancel_all(bufnr)
-  local pending = pending_by_buffer[bufnr]
+  local buffer_state = state.get_buffer_state(bufnr)
+  local pending = buffer_state.pending_executions
   if not pending then
     return
   end
@@ -491,7 +497,8 @@ end
 ---@param bufnr integer
 ---@return flemma.tools.PendingExecution[]
 function M.get_pending(bufnr)
-  local pending = pending_by_buffer[bufnr]
+  local buffer_state = state.get_buffer_state(bufnr)
+  local pending = buffer_state.pending_executions
   if not pending then
     return {}
   end
@@ -566,7 +573,7 @@ function M.execute_at_cursor(bufnr)
   local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
   for _, msg in ipairs(doc.messages) do
-    if msg.role == "You" then
+    if roles.is_user(msg.role) then
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "tool_result" and seg.tool_use_id == ctx.tool_id and seg.status then
           if seg.status == "rejected" or seg.status == "denied" then
@@ -609,7 +616,8 @@ end
 ---Clean up all state for a buffer (called on buffer close)
 ---@param bufnr integer
 function M.cleanup_buffer(bufnr)
-  local pending = pending_by_buffer[bufnr]
+  local buffer_state = state.get_buffer_state(bufnr)
+  local pending = buffer_state.pending_executions
   if pending then
     for _, entry in pairs(pending) do
       if entry.cancel_fn and not entry.completed then
@@ -617,7 +625,7 @@ function M.cleanup_buffer(bufnr)
       end
     end
   end
-  pending_by_buffer[bufnr] = nil
+  buffer_state.pending_executions = nil
 end
 
 return M

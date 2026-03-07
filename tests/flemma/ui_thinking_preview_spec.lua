@@ -27,7 +27,7 @@ describe("thinking preview with leading whitespace content", function()
 
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Hello" })
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Hello" })
 
     -- Act
     vim.cmd("Flemma send")
@@ -36,7 +36,7 @@ describe("thinking preview with leading whitespace content", function()
     vim.wait(2000, function()
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
       for _, line in ipairs(lines) do
-        if line == "@You: " then
+        if line == "@You:" and lines[_ + 1] == "" then
           return true
         end
       end
@@ -57,10 +57,11 @@ describe("thinking preview with leading whitespace content", function()
     end
 
     assert.is_not_nil(assistant_line_idx, "Should have an @Assistant: line")
+    assert.equals("@Assistant:", lines[assistant_line_idx])
     assert.equals(
-      "@Assistant: Here is the answer.",
-      lines[assistant_line_idx],
-      "Response text should be on the @Assistant: line, not separated by whitespace-only content"
+      "Here is the answer.",
+      lines[assistant_line_idx + 1],
+      "Response text should be on the line after @Assistant:, not separated by whitespace-only content"
     )
   end)
 end)

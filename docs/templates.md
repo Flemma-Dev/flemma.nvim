@@ -30,7 +30,7 @@ require("flemma.codeblock.parsers").register("yaml", function(code, context)
   -- `code` is the raw fenced block content (string)
   -- `context` is an optional table with __filename, __dirname, and user variables
   -- Must return a table of variables; errors are caught and reported as diagnostics
-  return require("flemma.json").decode(vim.fn.system("yq -o json", code))
+  return require("flemma.utilities.json").decode(vim.fn.system("yq -o json", code))
 end)
 ```
 
@@ -129,7 +129,8 @@ Key built-ins:
 - `include()` – inline another file (see below).
 
 ```markdown
-@You: Draft a short update for {{recipient}} covering:
+@You:
+Draft a short update for {{recipient}} covering:
 {{notes}}
 ```
 
@@ -137,7 +138,7 @@ Key built-ins:
 
 - Expressions without an explicit `return` are auto-wrapped: `{{ 1 + 1 }}` becomes `return 1 + 1` internally.
 - `nil` results produce no output (empty string).
-- Tables are automatically JSON-encoded via `flemma.json.encode()`.
+- Tables are automatically JSON-encoded via `flemma.utilities.json.encode()`.
 - Errors are downgraded to warnings. The request still sends, and the literal `{{ expression }}` remains in the prompt so you can see what failed.
 
 ## `include()` helper
@@ -147,7 +148,8 @@ Call `include("relative/or/absolute/path")` inside frontmatter or an expression 
 **Text mode** (default) – the included file is parsed for `{{ }}` expressions and `@./` file references, which are evaluated recursively. The result is inlined as text. Each included file gets its own `__filename` and `__dirname`, isolated from the parent's variables – the parent's frontmatter variables are not inherited.
 
 ```markdown
-@System: {{ include("system-prompt.md") }}
+@System:
+{{ include("system-prompt.md") }}
 ```
 
 **Binary mode** – the file is read as raw bytes and attached as a structured content part (image, PDF, etc.), just like `@./path`:
@@ -158,7 +160,8 @@ screenshot = include('./latest.png', { binary = true })
 ```
 
 ```markdown
-@You: What do you see? {{ screenshot }}
+@You:
+What do you see? {{ screenshot }}
 ```
 
 The `binary` flag and an optional `mime` override are passed as a second argument:
@@ -193,9 +196,14 @@ Embed local context with `@./relative/path` (or `@../up-one/path`). Flemma handl
 3. Formatting the attachment in the provider-specific structure.
 
 ```markdown
-@You: Critique @./patches/fix.lua;type=text/x-lua.
-@You: OCR this screenshot @./artifacts/failure.png.
-@You: Compare these specs: @./specs/v1.pdf and @./specs/v2.pdf.
+@You:
+Critique @./patches/fix.lua;type=text/x-lua.
+
+@You:
+OCR this screenshot @./artifacts/failure.png.
+
+@You:
+Compare these specs: @./specs/v1.pdf and @./specs/v2.pdf.
 ```
 
 ### Syntax details

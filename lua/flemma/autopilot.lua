@@ -11,17 +11,16 @@ local log = require("flemma.logging")
 ---@field state flemma.autopilot.State
 ---@field iteration integer
 
----@type table<integer, flemma.autopilot.BufferState>
-local buffer_states = {}
-
 ---Get or initialize autopilot state for a buffer
 ---@param bufnr integer
 ---@return flemma.autopilot.BufferState
 local function get_state(bufnr)
-  if not buffer_states[bufnr] then
-    buffer_states[bufnr] = { state = "idle", iteration = 0 }
+  local state = require("flemma.state")
+  local buffer_state = state.get_buffer_state(bufnr)
+  if not buffer_state.autopilot then
+    buffer_state.autopilot = { state = "idle", iteration = 0 }
   end
-  return buffer_states[bufnr]
+  return buffer_state.autopilot
 end
 
 ---Check whether autopilot is enabled, with per-buffer frontmatter override.
@@ -156,6 +155,10 @@ function M.on_response_complete(bufnr)
     if get_state(bufnr).state ~= "armed" then
       return
     end
+    -- Guard against a parallel on_tools_complete path that already dispatched a request
+    if require("flemma.state").get_buffer_state(bufnr).current_request then
+      return
+    end
     local core = require("flemma.core")
     core.send_or_execute({ bufnr = bufnr })
   end)
@@ -215,6 +218,9 @@ function M.on_tools_complete(bufnr)
       if not vim.api.nvim_buf_is_valid(bufnr) then
         return
       end
+      if require("flemma.state").get_buffer_state(bufnr).current_request then
+        return
+      end
       local core = require("flemma.core")
       core.send_or_execute({ bufnr = bufnr })
     end)
@@ -229,15 +235,19 @@ function M.on_tools_complete(bufnr)
     if not vim.api.nvim_buf_is_valid(bufnr) then
       return
     end
+    if require("flemma.state").get_buffer_state(bufnr).current_request then
+      return
+    end
     local core = require("flemma.core")
     core.send_or_execute({ bufnr = bufnr })
   end)
 end
 
----Remove all autopilot tracking for a buffer
+---Reset autopilot tracking for a buffer (used by tests for isolation)
 ---@param bufnr integer
 function M.cleanup_buffer(bufnr)
-  buffer_states[bufnr] = nil
+  local state = require("flemma.state")
+  state.get_buffer_state(bufnr).autopilot = nil
 end
 
 return M

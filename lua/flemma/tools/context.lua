@@ -3,6 +3,8 @@
 ---@class flemma.tools.Context
 local M = {}
 
+local roles = require("flemma.utilities.roles")
+
 ---@class flemma.tools.ToolContext
 ---@field tool_id string The unique ID of the tool call
 ---@field tool_name string The name of the tool to execute
@@ -105,7 +107,7 @@ function M.resolve_all_pending(bufnr)
   -- Collect all tool_result IDs across the entire document
   local result_ids = {}
   for _, msg in ipairs(doc.messages) do
-    if msg.role == "You" then
+    if roles.is_user(msg.role) then
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "tool_result" then
           result_ids[seg.tool_use_id] = true
@@ -163,7 +165,7 @@ function M.resolve_all_tool_blocks(bufnr)
   ---@type table<string, { status: flemma.ast.ToolStatus, content: string, is_error: boolean, tool_result_start_line: integer, fence_line?: integer }>
   local status_results = {}
   for _, msg in ipairs(doc.messages) do
-    if msg.role == "You" then
+    if roles.is_user(msg.role) then
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "tool_result" and seg.status then
           status_results[seg.tool_use_id] = {
@@ -284,7 +286,7 @@ function M.resolve(bufnr, cursor_pos)
   -- Tool calls only exist in assistant messages
   if msg.role ~= "Assistant" then
     -- If cursor is in a user message, check if the previous message is an assistant with tools
-    if msg.role == "You" and msg_idx and msg_idx > 1 then
+    if roles.is_user(msg.role) and msg_idx and msg_idx > 1 then
       local prev_msg = doc.messages[msg_idx - 1]
       if prev_msg.role == "Assistant" then
         local tool_uses = get_tool_use_segments(prev_msg)

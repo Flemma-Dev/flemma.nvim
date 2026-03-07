@@ -3,7 +3,7 @@
 ---@class flemma.Tools
 local M = {}
 
-local json = require("flemma.json")
+local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
 local registry = require("flemma.tools.registry")
 
@@ -65,7 +65,7 @@ function M.register_async(resolve_fn, opts)
   ---@param name string
   ---@param def flemma.tools.ToolDefinition
   local function register(name, def)
-    registry.define(name, def)
+    registry.register(name, def)
   end
 
   -- Set up timeout
@@ -231,7 +231,7 @@ function M.register(source, definition)
   if type(source) == "string" then
     if definition then
       -- register(name, def) — single definition
-      registry.define(source, definition)
+      registry.register(source, definition)
     else
       -- register("module.name") — load module
       local mod = require(source)
@@ -239,7 +239,7 @@ function M.register(source, definition)
         M.register_async(mod.resolve, { timeout = mod.timeout })
       elseif mod.definitions then
         for _, def in ipairs(mod.definitions) do
-          registry.define(def.name, def)
+          registry.register(def.name, def)
         end
       end
     end
@@ -250,11 +250,11 @@ function M.register(source, definition)
       M.register_async(source.resolve, { timeout = source.timeout })
     elseif source.name then
       -- Single definition table
-      registry.define(source.name, source)
+      registry.register(source.name, source)
     else
       -- Array of definitions
       for _, def in ipairs(source) do
-        registry.define(def.name, def)
+        registry.register(def.name, def)
       end
     end
   end
@@ -274,7 +274,13 @@ function M.clear()
   loaded_modules = {}
 end
 
-M.get = registry.get
+---Get a tool definition by name, ensuring lazy modules are loaded first.
+---@param name string
+---@return flemma.tools.ToolDefinition|nil
+function M.get(name)
+  ensure_modules_loaded()
+  return registry.get(name)
+end
 M.count = registry.count
 M.is_executable = registry.is_executable
 M.get_executor = registry.get_executor

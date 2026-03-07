@@ -76,7 +76,7 @@ describe("Anthropic Provider", function()
 
       -- Expected output in chat format
       local expected_chat =
-        "@System: Be brief!\n\n@You: Hello, World!\n\n@Assistant: Hello! Nice to meet you! How are you doing today?\n\n@You: Fin."
+        "@System:\nBe brief!\n\n@You:\nHello, World!\n\n@Assistant:\nHello! Nice to meet you! How are you doing today?\n\n@You:\nFin."
 
       -- Call the import function
       local result = provider:try_import_from_buffer(input_lines)
@@ -131,7 +131,7 @@ describe("Anthropic Provider", function()
         "});",
       }
 
-      local expected_chat = "@System: You are helpful\n\n@You: Simple string message"
+      local expected_chat = "@System:\nYou are helpful\n\n@You:\nSimple string message"
 
       local result = provider:try_import_from_buffer(input_lines)
 

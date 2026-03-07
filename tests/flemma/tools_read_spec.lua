@@ -4,7 +4,7 @@ package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.registry"] = nil
 package.loaded["flemma.tools.executor"] = nil
 package.loaded["flemma.tools.definitions.read"] = nil
-package.loaded["flemma.tools.truncate"] = nil
+package.loaded["flemma.utilities.truncate"] = nil
 
 local tools = require("flemma.tools")
 local registry = require("flemma.tools.registry")
@@ -138,7 +138,7 @@ describe("Read Tool", function()
   describe("truncation", function()
     it("truncates large files by line count", function()
       -- Write more lines than MAX_LINES
-      local truncate = require("flemma.tools.truncate")
+      local truncate = require("flemma.utilities.truncate")
       local lines = {}
       for i = 1, truncate.MAX_LINES + 100 do
         lines[i] = "line " .. i

@@ -64,19 +64,19 @@ describe("flemma.status", function()
 
       local registry = require("flemma.tools.registry")
       registry.clear()
-      registry.define("alpha_tool", {
+      registry.register("alpha_tool", {
         name = "alpha_tool",
         description = "An enabled tool",
         input_schema = { type = "object" },
         enabled = true,
       })
-      registry.define("beta_tool", {
+      registry.register("beta_tool", {
         name = "beta_tool",
         description = "A disabled tool",
         input_schema = { type = "object" },
         enabled = false,
       })
-      registry.define("gamma_tool", {
+      registry.register("gamma_tool", {
         name = "gamma_tool",
         description = "Another enabled tool",
         input_schema = { type = "object" },
@@ -173,6 +173,41 @@ describe("flemma.status", function()
     end)
   end)
 
+  describe("collect — model_info", function()
+    it("includes model_info for known models", function()
+      local state = require("flemma.state")
+      ---@diagnostic disable-next-line: missing-fields
+      state.set_config({
+        provider = "anthropic",
+        model = "claude-sonnet-4-6",
+        parameters = {},
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect(0)
+      assert.is_table(data.provider.model_info)
+      assert.is_table(data.provider.model_info.pricing)
+      assert.are.equal(3.0, data.provider.model_info.pricing.input)
+      assert.are.equal(200000, data.provider.model_info.max_input_tokens)
+    end)
+
+    it("returns nil model_info for unknown models", function()
+      local state = require("flemma.state")
+      ---@diagnostic disable-next-line: missing-fields
+      state.set_config({
+        provider = "anthropic",
+        model = "claude-unknown-99",
+        parameters = {},
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect(0)
+      assert.is_nil(data.provider.model_info)
+    end)
+  end)
+
   describe("format", function()
     it("returns lines with section headers", function()
       ---@type flemma.status.Data
@@ -245,6 +280,122 @@ describe("flemma.status", function()
       local lines = status.format(data, true)
       local text = table.concat(lines, "\n")
       assert.truthy(text:find("Config %(full%)"), "expected Config (full) header")
+    end)
+
+    it("shows compact model metadata when model_info is present", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = {
+          name = "anthropic",
+          model = "claude-sonnet-4-6",
+          initialized = true,
+          model_info = {
+            pricing = { input = 3.0, output = 15.0, cache_read = 0.30, cache_write = 3.75 },
+            max_input_tokens = 200000,
+            max_output_tokens = 64000,
+            thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+            min_thinking_budget = 1024,
+            max_thinking_budget = 16384,
+            min_cache_tokens = 2048,
+          },
+        },
+        parameters = { merged = { max_tokens = 8192 } },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+        },
+        tools = { enabled = {}, disabled = {} },
+        approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local lines = status.format(data, false)
+      local text = table.concat(lines, "\n")
+      assert.truthy(text:find("context:"), "expected context line")
+      assert.truthy(text:find("200K"), "expected 200K input tokens")
+      assert.truthy(text:find("64K"), "expected 64K output tokens")
+      assert.truthy(text:find("pricing:"), "expected pricing line")
+      assert.truthy(text:find("%$3.00"), "expected input price")
+      assert.truthy(text:find("%$15.00"), "expected output price")
+      assert.truthy(text:find("thinking:"), "expected thinking line")
+      assert.truthy(text:find("1024"), "expected min thinking budget")
+    end)
+
+    it("omits model metadata lines when model_info is nil", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "claude-unknown-99", initialized = true },
+        parameters = { merged = {} },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+        },
+        tools = { enabled = {}, disabled = {} },
+        approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local lines = status.format(data, false)
+      local text = table.concat(lines, "\n")
+      assert.falsy(text:find("context:"), "expected no context line")
+      assert.falsy(text:find("pricing:"), "expected no pricing line")
+      assert.falsy(text:find("thinking:"), "expected no thinking line")
+    end)
+
+    it("shows full model_info dump in verbose mode", function()
+      local state = require("flemma.state")
+      ---@diagnostic disable-next-line: missing-fields
+      state.set_config({
+        provider = "anthropic",
+        model = "claude-sonnet-4-6",
+        parameters = {},
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      ---@type flemma.status.Data
+      local data = {
+        provider = {
+          name = "anthropic",
+          model = "claude-sonnet-4-6",
+          initialized = true,
+          model_info = {
+            pricing = { input = 3.0, output = 15.0, cache_read = 0.30, cache_write = 3.75 },
+            max_input_tokens = 200000,
+            max_output_tokens = 64000,
+            thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+            min_thinking_budget = 1024,
+            max_thinking_budget = 16384,
+            min_cache_tokens = 2048,
+          },
+        },
+        parameters = { merged = {} },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+        },
+        tools = { enabled = {}, disabled = {} },
+        approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local lines = status.format(data, true)
+      local text = table.concat(lines, "\n")
+      assert.truthy(text:find("Model Info"), "expected Model Info header in verbose")
+      assert.truthy(text:find("min_cache_tokens"), "expected min_cache_tokens in verbose dump")
+      assert.truthy(text:find("thinking_budgets"), "expected thinking_budgets in verbose dump")
     end)
 
     it("shows frontmatter override annotations", function()
@@ -425,17 +576,17 @@ describe("flemma.status", function()
 
       local registry = require("flemma.tools.registry")
       registry.clear()
-      registry.define("read", {
+      registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
       })
-      registry.define("bash", {
+      registry.register("bash", {
         name = "bash",
         description = "Bash tool",
         input_schema = { type = "object" },
       })
-      registry.define("edit", {
+      registry.register("edit", {
         name = "edit",
         description = "Edit tool",
         input_schema = { type = "object" },
@@ -460,7 +611,7 @@ describe("flemma.status", function()
 
       local registry = require("flemma.tools.registry")
       registry.clear()
-      registry.define("read", {
+      registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
@@ -487,12 +638,12 @@ describe("flemma.status", function()
 
       local registry = require("flemma.tools.registry")
       registry.clear()
-      registry.define("bash", {
+      registry.register("bash", {
         name = "bash",
         description = "Bash tool",
         input_schema = { type = "object" },
       })
-      registry.define("read", {
+      registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
@@ -520,7 +671,7 @@ describe("flemma.status", function()
 
       local registry = require("flemma.tools.registry")
       registry.clear()
-      registry.define("read", {
+      registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
@@ -564,7 +715,7 @@ describe("flemma.status", function()
 
       local registry = require("flemma.tools.registry")
       registry.clear()
-      registry.define("read", {
+      registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },

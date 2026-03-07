@@ -24,7 +24,20 @@ local session_module = require("flemma.session")
 ---@field ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached parsed AST
 ---@field spinner_extmark_id integer|nil Extmark ID for the spinner/thinking preview
 ---@field spinner_line_idx0 integer|nil 0-indexed line of the spinner extmark
+---@field spinner_preview_text string|nil Thinking preview text for the spinner timer to render
 ---@field autopilot_override? boolean Per-buffer autopilot override (set from frontmatter, nil = use global config)
+---@field auto_closed_folds? table<string, boolean>
+---@field pending_folds? table<string, boolean> Fold IDs that were attempted but failed to close (eligible for retry)
+---@field fold_completed_tick? integer Last changedtick processed by fold_completed_blocks (prevents redundant folding)
+---@field ui_update_tick? integer Last changedtick processed by update_ui (gates CursorHold redundancy)
+---@field autopilot? flemma.autopilot.BufferState Per-buffer autopilot state machine
+---@field tool_indicators? table<string, flemma.ui.ToolIndicator> Per-tool execution indicator state
+---@field pending_executions? table<string, flemma.tools.PendingExecution> In-flight tool executions keyed by tool_id
+---@field cursorline_prev_row? integer Last cursor row (0-indexed) where the CursorLine overlay was placed
+---@field cursorline_extmark_id? integer Stable extmark ID for the CursorLine overlay
+---@field diagnostics_previous_request? string Raw JSON of the previous request sent from this buffer
+---@field diagnostics_current_request? string Raw JSON of the most recent request sent from this buffer
+---@field _diagnostics_raw_json? string Temporary storage for raw JSON during request lifecycle
 
 ---@diagnostic disable-next-line: missing-fields
 local config = {} ---@type flemma.Config
@@ -98,6 +111,14 @@ function M.get_buffer_state(bufnr)
   return buffer_states[bufnr]
 end
 
+---Iterate all active buffer states (bufnr, state pairs).
+---Does NOT initialize missing entries — only visits buffers that already have state.
+---@return fun(t: table<integer, flemma.state.BufferState>, k?: integer): integer, flemma.state.BufferState
+---@return table<integer, flemma.state.BufferState>
+function M.each_buffer_state()
+  return pairs(buffer_states)
+end
+
 ---Set a specific key in buffer state
 ---@param bufnr integer Buffer number
 ---@param key string State key
@@ -124,17 +145,15 @@ function M.cleanup_buffer_state(bufnr)
     if st.spinner_timer then
       vim.fn.timer_stop(st.spinner_timer)
     end
+    -- Cancel in-flight tool executions before nilling buffer state
+    local ok, executor = pcall(require, "flemma.tools.executor")
+    if ok then
+      executor.cleanup_buffer(bufnr)
+    end
     buffer_states[bufnr] = nil
   end
-  -- Clean up tool executor state
-  local ok, executor = pcall(require, "flemma.tools.executor")
-  if ok then
-    executor.cleanup_buffer(bufnr)
-  end
-  -- Clean up autopilot state
-  require("flemma.autopilot").cleanup_buffer(bufnr)
   -- Clean up any notifications associated with this buffer
-  require("flemma.notify").cleanup_buffer(bufnr)
+  require("flemma.notifications").cleanup_buffer(bufnr)
   -- Discard any pending write queue operations
   local writequeue = require("flemma.buffer.writequeue")
   writequeue.clear(bufnr)

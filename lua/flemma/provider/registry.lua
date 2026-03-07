@@ -39,8 +39,6 @@ local models_data = require("flemma.models")
 ---@field default_parameters? table<string, any> Provider-specific param defaults
 ---@field default_model? string Default model name
 ---@field models? table<string, flemma.models.ModelInfo> Model definitions with pricing
----@field cache_read_multiplier? number
----@field cache_write_multipliers? table<string, number>
 
 ---@type table<string, flemma.provider.ProviderEntry>
 local providers = {}
@@ -88,10 +86,8 @@ function M.register(source, entry)
   if entry then
     -- Two-arg form: register("name", entry)
     name = source
-    local loader = require("flemma.loader")
-    if loader.is_module_path(name) then
-      error(string.format("flemma: provider name '%s' must not contain dots (dots indicate module paths)", name), 2)
-    end
+    local registry_utils = require("flemma.registry")
+    registry_utils.validate_name(name, "provider")
     definition = entry
   else
     -- Single-arg form: register("module.path") — load module and read metadata
@@ -139,12 +135,6 @@ function M.register(source, entry)
         end
       end
     end
-    if definition.cache_read_multiplier then
-      models_data.providers[name].cache_read_multiplier = definition.cache_read_multiplier
-    end
-    if definition.cache_write_multipliers then
-      models_data.providers[name].cache_write_multipliers = definition.cache_write_multipliers
-    end
   end
 
   -- Refresh defaults and models for this provider
@@ -162,11 +152,40 @@ function M.setup()
   end
 end
 
+---Unregister a provider by name
+---@param name string The provider identifier
+---@return boolean removed True if a provider was found and removed
+function M.unregister(name)
+  if not providers[name] then
+    return false
+  end
+  providers[name] = nil
+  M.defaults[name] = nil
+  M.models[name] = nil
+  return true
+end
+
 ---Clear all registered providers (for test isolation)
 function M.clear()
   providers = {}
   M.defaults = {}
   M.models = {}
+end
+
+---Get all registered provider entries
+---@return table<string, flemma.provider.ProviderEntry>
+function M.get_all()
+  return vim.deepcopy(providers)
+end
+
+---Get the count of registered providers
+---@return integer
+function M.count()
+  local n = 0
+  for _ in pairs(providers) do
+    n = n + 1
+  end
+  return n
 end
 
 --------------------------------------------------------------------------------
@@ -304,7 +323,7 @@ end
 ---@field has_explicit_model boolean
 
 --- Extract provider/model parameters from parsed modeline tokens
----@param parsed flemma.modeline.ParsedTokens Parsed tokens from modeline.parse/modeline.parse_args
+---@param parsed flemma.utilities.modeline.ParsedTokens Parsed tokens from modeline.parse/modeline.parse_args
 ---@return flemma.provider.SwitchArgs
 function M.extract_switch_arguments(parsed)
   local info = {

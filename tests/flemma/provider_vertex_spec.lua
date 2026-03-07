@@ -381,7 +381,7 @@ describe("Vertex AI Provider", function()
         thinking = "high",
       })
 
-      local lines = { "@You: Hello" }
+      local lines = { "@You:", "Hello" }
       local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
       local req = provider:build_request(prompt, {})
 
@@ -400,7 +400,7 @@ describe("Vertex AI Provider", function()
         thinking = "high",
       })
 
-      local lines = { "@You: Hello" }
+      local lines = { "@You:", "Hello" }
       local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
       local req = provider:build_request(prompt, {})
 
@@ -419,7 +419,7 @@ describe("Vertex AI Provider", function()
         thinking = "low",
       })
 
-      local lines = { "@You: Hello" }
+      local lines = { "@You:", "Hello" }
       local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
       local req = provider:build_request(prompt, {})
 
@@ -435,7 +435,7 @@ describe("Vertex AI Provider", function()
         thinking = "medium",
       })
 
-      local lines = { "@You: Hello" }
+      local lines = { "@You:", "Hello" }
       local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
       local req = provider:build_request(prompt, {})
 
@@ -451,7 +451,7 @@ describe("Vertex AI Provider", function()
         thinking = "medium",
       })
 
-      local lines = { "@You: Hello" }
+      local lines = { "@You:", "Hello" }
       local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
       local req = provider:build_request(prompt, {})
 
@@ -467,7 +467,7 @@ describe("Vertex AI Provider", function()
         thinking = "low",
       })
 
-      local lines = { "@You: Hello" }
+      local lines = { "@You:", "Hello" }
       local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
       local req = provider:build_request(prompt, {})
 
@@ -483,7 +483,7 @@ describe("Vertex AI Provider", function()
         thinking = "minimal",
       })
 
-      local lines = { "@You: Hello" }
+      local lines = { "@You:", "Hello" }
       local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
       local req = provider:build_request(prompt, {})
 
@@ -499,7 +499,7 @@ describe("Vertex AI Provider", function()
         thinking = "max",
       })
 
-      local lines = { "@You: Hello" }
+      local lines = { "@You:", "Hello" }
       local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
       local req = provider:build_request(prompt, {})
 
@@ -515,7 +515,7 @@ describe("Vertex AI Provider", function()
         thinking = "minimal",
       })
 
-      local lines = { "@You: Hello" }
+      local lines = { "@You:", "Hello" }
       local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
       local req = provider:build_request(prompt, {})
 
@@ -531,7 +531,7 @@ describe("Vertex AI Provider", function()
         thinking = 4096,
       })
 
-      local lines = { "@You: Hello" }
+      local lines = { "@You:", "Hello" }
       local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
       local req = provider:build_request(prompt, {})
 
@@ -549,7 +549,7 @@ describe("Vertex AI Provider", function()
         thinking = 4096,
       })
 
-      local lines = { "@You: Hello" }
+      local lines = { "@You:", "Hello" }
       local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
       local req = provider:build_request(prompt, {})
 

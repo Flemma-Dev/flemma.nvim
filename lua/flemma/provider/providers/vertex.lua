@@ -1,7 +1,7 @@
 --- Google Vertex AI provider for Flemma
 --- Implements the Google Vertex AI API integration
 local base = require("flemma.provider.base")
-local json = require("flemma.json")
+local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 
 local TOKEN_TTL_SECONDS = 3600
@@ -134,18 +134,18 @@ local function generate_access_token(service_account_json)
           return token
         else
           err = "Invalid token format received from gcloud"
-          log.debug("vertex.generate_access_token(): Invalid token format received from gcloud: " .. output)
+          log.warn("vertex.generate_access_token(): Invalid token format received from gcloud: " .. output)
         end
       else
         -- This is an error message from gcloud
         err = "gcloud error: " .. output
-        log.debug("vertex.generate_access_token(): gcloud command output: " .. output)
+        log.warn("vertex.generate_access_token(): gcloud command output: " .. output)
       end
     else
       err = "Failed to generate access token (exit code: " .. tostring(code) .. ")"
       if output and #output > 0 then
         err = err .. "\nOutput: " .. output
-        log.debug("vertex.generate_access_token(): gcloud command output: " .. output)
+        log.warn("vertex.generate_access_token(): gcloud command output: " .. output)
       end
     end
   else
@@ -429,7 +429,7 @@ function M.build_request(self, prompt, _context)
         end
       end
       -- Add text if any
-      local combined_text = table.concat(text_parts, "")
+      local combined_text = vim.trim(table.concat(text_parts, ""))
       if #combined_text > 0 then
         local text_part = { text = combined_text }
         -- If we have a signature but no function calls, attach signature to the text part
@@ -496,7 +496,8 @@ function M.build_request(self, prompt, _context)
   }
 
   -- Add thinking configuration using unified resolution
-  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities)
+  local model_info = require("flemma.provider.registry").get_model_info("vertex", self.parameters.model)
+  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
 
   if thinking.enabled then
     local thinking_config = { includeThoughts = true }
@@ -565,6 +566,14 @@ function M.build_request(self, prompt, _context)
   end
 
   return request_body
+end
+
+--- Trailing keys for cache-friendly JSON serialization.
+--- Vertex uses `contents` as its messages array.
+---@param self flemma.provider.Vertex
+---@return string[]
+function M.get_trailing_keys(self)
+  return { "tools", "contents" }
 end
 
 ---@param self flemma.provider.Vertex
@@ -662,11 +671,11 @@ function M.process_response_line(self, line, callbacks)
       -- from clobbering a valid signature (matches Pi's retainThoughtSignature logic).
       if type(part.thoughtSignature) == "string" and #part.thoughtSignature > 0 then
         self._response_buffer.extra.thought_signature = part.thoughtSignature
-        log.debug("vertex.process_response_line(): Captured thoughtSignature from part")
+        log.trace("vertex.process_response_line(): Captured thoughtSignature from part")
       end
 
       if part.thought and part.text and #part.text > 0 then
-        log.debug("vertex.process_response_line(): Accumulating thought text: " .. log.inspect(part.text))
+        log.trace("vertex.process_response_line(): Accumulating thought text: " .. log.inspect(part.text))
         self._response_buffer.extra.thinking_sink:write(part.text)
         if callbacks.on_thinking then
           callbacks.on_thinking(part.text)
@@ -714,7 +723,7 @@ function M.process_response_line(self, line, callbacks)
         -- Only emit text that contains non-whitespace (skip whitespace-only chunks
         -- that would cause prefix issues with subsequent tool use blocks)
         if part.text:match("%S") then
-          log.debug("vertex.process_response_line(): Content text: " .. log.inspect(part.text))
+          log.trace("vertex.process_response_line(): Content text: " .. log.inspect(part.text))
           base._signal_content(self, part.text, callbacks)
         end
       end

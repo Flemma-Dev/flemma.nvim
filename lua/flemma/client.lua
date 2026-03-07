@@ -1,6 +1,6 @@
 --- HTTP client for Flemma
 --- Handles all HTTP requests and transport mechanisms
-local json = require("flemma.json")
+local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 
 ---@class flemma.Client
@@ -46,9 +46,9 @@ function M.find_fixture_for_endpoint(endpoint)
 end
 
 ---Create temporary file for request body
----@param request_body table<string, any>
----@return string|nil tmp_file, string|nil err
-local function create_temp_file(request_body)
+---@param opts flemma.client.RequestOptions
+---@return string|nil tmp_file, string|nil err, string|nil raw_json
+local function create_temp_file(opts)
   -- Create temporary file for request body
   local tmp_file = os.tmpname()
   -- Handle both Unix and Windows paths
@@ -63,10 +63,11 @@ local function create_temp_file(request_body)
     return nil, "Failed to create temporary file"
   end
 
-  f:write(json.encode(request_body))
+  local raw_json = json.encode_ordered(opts.request_body, opts.trailing_keys)
+  f:write(raw_json)
   f:close()
 
-  return tmp_file
+  return tmp_file, nil, raw_json
 end
 
 ---Redact sensitive information from headers
@@ -166,10 +167,12 @@ end
 ---@field endpoint string The API endpoint URL
 ---@field parameters flemma.provider.Parameters Provider parameters (for timeouts, model name, etc.)
 ---@field callbacks flemma.client.RequestCallbacks Callback functions for handling responses
+---@field trailing_keys? string[] Keys to place last in JSON serialization for cache-friendly ordering
 ---@field process_response_line_fn? fun(line: string, callbacks: flemma.client.RequestCallbacks) Function to process each response line
 ---@field finalize_response_fn? fun(code: number, callbacks: flemma.client.RequestCallbacks) Function to finalize provider response processing
 ---@field reset_fn? fun() Optional function to reset provider state
 ---@field on_response_headers_fn? fun(headers: table<string, string[]>) Called with parsed HTTP response headers (lowercase keys)
+---@field on_raw_json? fun(raw_json: string) Called with the serialized JSON request body
 
 -- Send request to API using curl or a test fixture
 ---@param opts flemma.client.RequestOptions Request configuration
@@ -187,12 +190,16 @@ function M.send_request(opts)
   -- The provider's get_request_headers() already handles API key validation
 
   -- Create temporary file for request body
-  local tmp_file, err = create_temp_file(opts.request_body)
+  local tmp_file, err, raw_json = create_temp_file(opts)
   if not tmp_file then
     if opts.callbacks.on_error then
       opts.callbacks.on_error(err or "Failed to create temporary file")
     end
     return nil
+  end
+
+  if raw_json and opts.on_raw_json then
+    opts.on_raw_json(raw_json)
   end
 
   local cmd
@@ -248,7 +255,7 @@ function M.send_request(opts)
       if #line == 0 then
         return
       end
-      log.debug("send_request(): on_stdout: " .. line)
+      log.trace("send_request(): on_stdout: " .. line)
       if opts.process_response_line_fn then
         opts.process_response_line_fn(line, opts.callbacks)
       end
@@ -288,14 +295,14 @@ function M.send_request(opts)
       for i = 1, #data - 1 do
         local line = data[i]
         if line and #line > 0 then
-          log.error("send_request(): stderr: " .. line)
+          log.warn("send_request(): stderr: " .. line)
         end
       end
 
       if is_eof and #stderr_buffer > 0 then
         local line = stderr_buffer
         stderr_buffer = ""
-        log.error("send_request(): stderr: " .. line)
+        log.warn("send_request(): stderr: " .. line)
       end
     end,
     on_exit = function(_, code)
@@ -303,8 +310,12 @@ function M.send_request(opts)
       os.remove(tmp_file)
       stdout_sink:destroy()
 
-      -- Log exit code
-      log.info("send_request(): on_exit: Request completed with exit code: " .. tostring(code))
+      -- Log exit code (INFO for failures, DEBUG for expected success)
+      if code ~= 0 then
+        log.info("send_request(): on_exit: Request completed with exit code: " .. tostring(code))
+      else
+        log.debug("send_request(): on_exit: Request completed with exit code: 0")
+      end
 
       -- Finalize provider response processing
       if opts.finalize_response_fn then

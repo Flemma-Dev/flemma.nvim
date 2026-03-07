@@ -1,5 +1,5 @@
-describe("flemma.modeline", function()
-  local modeline = require("flemma.modeline")
+describe("flemma.utilities.modeline", function()
+  local modeline = require("flemma.utilities.modeline")
 
   describe("parse", function()
     it("coerces primitive types from a string line", function()

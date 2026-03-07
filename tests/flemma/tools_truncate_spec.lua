@@ -1,8 +1,8 @@
 --- Tests for truncation utilities
 
-package.loaded["flemma.tools.truncate"] = nil
+package.loaded["flemma.utilities.truncate"] = nil
 
-local truncate = require("flemma.tools.truncate")
+local truncate = require("flemma.utilities.truncate")
 
 describe("Truncation Utilities", function()
   describe("format_size", function()

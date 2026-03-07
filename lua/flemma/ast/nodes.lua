@@ -1,4 +1,5 @@
----@class flemma.Ast
+--- AST node types, constructors, and conversion utilities
+---@class flemma.ast.Nodes
 local M = {}
 
 ---@class flemma.ast.Position

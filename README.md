@@ -9,7 +9,7 @@ Flemma turns Neovim into an AI agent. Give it a task, and it works – calling t
 
 Streaming conversations, reusable prompt templates, file attachments, cost tracking, and ergonomic commands for Anthropic, OpenAI, and Google Vertex AI.
 
-https://github.com/user-attachments/assets/c4c1ab0d-a83c-4a19-86f4-926f52ee2026
+https://github.com/user-attachments/assets/586bdd15-8edb-41aa-be4d-64fed4290232
 
 - **Autonomous agent loop** – Flemma executes approved tool calls and re-sends results automatically, repeating until the task is done or your approval is needed. One keypress can kick off an entire multi-step workflow.
 - **Tool calling** – bash, file read/edit/write, with approval policies, parallel execution, and inline previews that show what each tool will do before you approve it. Register your own tools, approval resolvers, and preview formatters.
@@ -120,13 +120,14 @@ secret-tool store --label="Vertex AI Service Account" service vertex key api pro
 3. Type a message, for example:
 
    ```markdown
-   @You: Turn the notes below into a short project update.
+   @You:
+   Turn the notes below into a short project update.
    - Added Vertex thinking budget support.
    - Refactored :Flemma command routing.
    - Documented presets in the README.
    ```
 
-4. Press <kbd>Ctrl-]</kbd> (normal or insert mode) or run `:Flemma send`. Flemma freezes the buffer while the request is streaming and shows `@Assistant: Thinking...`. With [autopilot](#autopilot) enabled (the default), tool calls are executed and re-sent automatically – you only need to intervene when a tool requires manual approval.
+4. Press <kbd>Ctrl-]</kbd> (normal or insert mode) or run `:Flemma send`. Flemma freezes the buffer while the request is streaming and shows a spinner on the `@Assistant:` line. With [autopilot](#autopilot) enabled (the default), tool calls are executed and re-sent automatically – you only need to intervene when a tool requires manual approval.
 5. When the reply finishes, a floating notification lists token counts and cost for the request and the session.
 
 Cancel an in-flight response with <kbd>Ctrl-C</kbd> or `:Flemma cancel`.
@@ -156,9 +157,11 @@ notes = [[
 ]]
 ```
 
-@System: You turn engineering notes into concise changelog entries.
+@System:
+You turn engineering notes into concise changelog entries.
 
-@You: Summarise {{release.version}} with emphasis on {{release.focus}} using the points below:
+@You:
+Summarise {{release.version}} with emphasis on {{release.focus}} using the points below:
 {{notes}}
 
 @Assistant:
@@ -171,7 +174,7 @@ Model thoughts stream here and auto-fold.
 ````
 
 - **Frontmatter** sits on the first line and must be fenced with triple backticks. Lua and JSON parsers ship with Flemma; you can register more via `flemma.codeblock.parsers.register("yaml", parser_fn)`. Lua frontmatter also exposes `flemma.opt` for [per-buffer tool selection, approval, and provider parameter overrides](docs/tools.md#per-buffer-tool-selection).
-- **Messages** begin with `@System:`, `@You:`, or `@Assistant:`. The parser is whitespace-tolerant and handles blank lines between messages.
+- **Messages** begin with `@System:`, `@You:`, or `@Assistant:` on their own line. Content starts on the next line. Typing `:` after a role name in insert mode auto-completes the marker and moves the cursor to the content line.
 - **Thinking blocks** appear only in assistant messages. When thinking is enabled (default `"high"`), Anthropic and Vertex AI models stream `<thinking>` sections; Flemma folds them automatically and keeps dedicated highlights for the tags and body.
 
 > [!NOTE]
@@ -187,7 +190,7 @@ Model thoughts stream here and auto-fold.
 
 Toggle folds with your usual mappings (`za`, `zc`, etc.). The fold text shows a snippet of the hidden content so you know whether to expand it. The initial fold level is configurable via `editing.foldlevel` (default `1`, which collapses thinking blocks).
 
-Between messages, Flemma draws a ruler using the configured `ruler.char` and highlight. This keeps multi-step chats legible even with folds open.
+Flemma draws a ruler on each role marker line using the configured `ruler.char` and highlight, visually separating messages without consuming extra vertical space.
 
 ### Navigation and text objects
 
@@ -205,22 +208,23 @@ Disable or remap these through the `keymaps` section (see [Configuration Referen
 
 Use the single entry point `:Flemma {command}`. Autocompletion lists every available sub-command.
 
-| Command                                                     | Purpose                                                                                                                                                  | Example                                                                     |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `:Flemma status [verbose]`                                  | Show runtime status (provider, parameters, autopilot, sandbox, tools) in a scratch buffer. `verbose` appends the full config dump with Lua highlighting. | `:Flemma status verbose`                                                    |
-| `:Flemma send [key=value ...]`                              | Send the current buffer. Optional callbacks run before/after the request.                                                                                | `:Flemma send on_request_start=stopinsert on_request_complete=startinsert!` |
-| `:Flemma cancel`                                            | Abort the active request and clean up the spinner.                                                                                                       |                                                                             |
-| `:Flemma switch ...`                                        | Choose or override provider/model parameters.                                                                                                            | See below.                                                                  |
-| `:Flemma import`                                            | Convert Claude Workbench code snippets into `.chat` format ([guide](docs/importing.md)).                                                                 |                                                                             |
-| `:Flemma message:next` / `:Flemma message:previous`         | Jump through message headers.                                                                                                                            |                                                                             |
-| `:Flemma tool:execute`                                      | Execute the tool at the cursor position.                                                                                                                 |                                                                             |
-| `:Flemma tool:cancel`                                       | Cancel the tool execution at the cursor.                                                                                                                 |                                                                             |
-| `:Flemma tool:cancel-all`                                   | Cancel all pending tool executions in the buffer.                                                                                                        |                                                                             |
-| `:Flemma tool:list`                                         | List pending tool executions with IDs and elapsed time.                                                                                                  |                                                                             |
-| `:Flemma autopilot:enable` / `:...:disable` / `:...:status` | Toggle autopilot or view its state (status opens the full status buffer).                                                                                |                                                                             |
-| `:Flemma sandbox:enable` / `:...:disable` / `:...:status`   | Toggle sandboxing or view its state (status opens the full status buffer).                                                                               |                                                                             |
-| `:Flemma logging:enable` / `:...:disable` / `:...:open`     | Toggle structured logging and open the log file.                                                                                                         |                                                                             |
-| `:Flemma notification:recall`                               | Reopen the last usage/cost notification.                                                                                                                 |                                                                             |
+| Command                                                         | Purpose                                                                                                                                                  | Example                                                                     |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `:Flemma status [verbose]`                                      | Show runtime status (provider, parameters, autopilot, sandbox, tools) in a scratch buffer. `verbose` appends the full config dump with Lua highlighting. | `:Flemma status verbose`                                                    |
+| `:Flemma send [key=value ...]`                                  | Send the current buffer. Optional callbacks run before/after the request.                                                                                | `:Flemma send on_request_start=stopinsert on_request_complete=startinsert!` |
+| `:Flemma cancel`                                                | Abort the active request and clean up the spinner.                                                                                                       |                                                                             |
+| `:Flemma switch ...`                                            | Choose or override provider/model parameters.                                                                                                            | See below.                                                                  |
+| `:Flemma format`                                                | Migrate old inline-format `.chat` buffers to the current own-line role marker format.                                                                    |
+| `:Flemma import`                                                | Convert Claude Workbench code snippets into `.chat` format ([guide](docs/importing.md)).                                                                 |                                                                             |
+| `:Flemma message:next` / `:Flemma message:previous`             | Jump through message headers.                                                                                                                            |                                                                             |
+| `:Flemma tool:execute`                                          | Execute the tool at the cursor position.                                                                                                                 |                                                                             |
+| `:Flemma tool:cancel`                                           | Cancel the tool execution at the cursor.                                                                                                                 |                                                                             |
+| `:Flemma tool:cancel-all`                                       | Cancel all pending tool executions in the buffer.                                                                                                        |                                                                             |
+| `:Flemma tool:list`                                             | List pending tool executions with IDs and elapsed time.                                                                                                  |                                                                             |
+| `:Flemma autopilot:enable` / `:...:disable` / `:...:status`     | Toggle autopilot or view its state (status opens the full status buffer).                                                                                |                                                                             |
+| `:Flemma sandbox:enable` / `:...:disable` / `:...:status`       | Toggle sandboxing or view its state (status opens the full status buffer).                                                                               |                                                                             |
+| `:Flemma logging:enable [level]` / `:...:disable` / `:...:open` | Toggle structured logging and open the log file. Optional level: `TRACE`, `DEBUG` (default), `INFO`, `WARN`, `ERROR`.                                    |                                                                             |
+| `:Flemma notification:recall`                                   | Reopen the last usage/cost notification.                                                                                                                 |                                                                             |
 
 ### Switching providers and models
 
@@ -425,13 +429,13 @@ Flemma works without arguments – `require("flemma").setup({})` uses sensible d
 
 Key defaults:
 
-| Parameter         | Default       | Description                                             |
-| ----------------- | ------------- | ------------------------------------------------------- |
-| `provider`        | `"anthropic"` | `"anthropic"` / `"openai"` / `"vertex"`                 |
-| `thinking`        | `"high"`      | Unified thinking level across providers                 |
-| `cache_retention` | `"short"`     | Prompt caching strategy                                 |
-| `max_tokens`      | `4000`        | Maximum response tokens                                 |
-| `temperature`     | `0.7`         | Sampling temperature (disabled when thinking is active) |
+| Parameter         | Default       | Description                                                   |
+| ----------------- | ------------- | ------------------------------------------------------------- |
+| `provider`        | `"anthropic"` | `"anthropic"` / `"openai"` / `"vertex"`                       |
+| `thinking`        | `"high"`      | Unified thinking level across providers                       |
+| `cache_retention` | `"short"`     | Prompt caching strategy                                       |
+| `max_tokens`      | `"50%"`       | Maximum response tokens (percentage of model max, or integer) |
+| `temperature`     | `0.7`         | Sampling temperature (disabled when thinking is active)       |
 
 ---
 
@@ -525,7 +529,7 @@ On a personal level, I've used Flemma to generate bedtime stories with recurring
 
 ## Troubleshooting Checklist
 
-- **Nothing happens when I send:** confirm the buffer name ends with `.chat` and the first message starts with `@You:` or `@System:`.
+- **Nothing happens when I send:** confirm the buffer name ends with `.chat` and the first message uses a role marker (`@You:` or `@System:`) on its own line with content below it.
 - **Frontmatter errors:** notifications list the exact line and file. Fix the error and resend; Flemma will not contact the provider until the frontmatter parses cleanly.
 - **Attachments ignored:** ensure the file exists relative to the `.chat` file and that the provider supports its MIME type. Use `;type=` to override when necessary.
 - **Temperature ignored:** when thinking is enabled (default `"high"`), Anthropic and OpenAI disable temperature. Set `thinking = false` if you need temperature control.

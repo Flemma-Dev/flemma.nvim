@@ -12,6 +12,9 @@ vim.opt.ttimeoutlen = 10
 vim.opt.lazyredraw = false
 
 vim.opt.scrolloff = 999
+vim.opt.listchars = {
+  eol = " ",
+}
 
 vim.opt.swapfile = false
 
@@ -63,21 +66,27 @@ require("flemma").setup({
   parameters = {
     thinking = "medium",
   },
+  tools = {
+    modules = {
+      "extras.flemma.tools.calculator",
+    },
+    auto_approve = {
+      "$default",
+      "calculator",
+    },
+  },
   highlights = {
     system = "Comment+fg:#101010",
     assistant = "Normal+bg:#102020",
-    thinking_block = "Normal+bg:#102020-fg:#606060",
+    thinking_block = "Normal+bg:#102020-fg:#505050",
   },
   ruler = {
-    hl = "Normal-fg:#808080",
+    hl = "Normal-fg:#606060",
   },
   line_highlights = {
     user = "Normal",
     system = "Comment+bg:#101010",
     assistant = "Normal+bg:#102020",
-  },
-  notify = {
-    enabled = false,
   },
   editing = {
     auto_write = true,

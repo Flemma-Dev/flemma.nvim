@@ -193,6 +193,21 @@ describe("Approval Resolver Registry", function()
       assert.equals(0, approval.count())
     end)
   end)
+
+  describe("has", function()
+    it("returns true for a registered resolver", function()
+      approval.register("my-resolver", {
+        resolve = function()
+          return "approve"
+        end,
+      })
+      assert.is_true(approval.has("my-resolver"))
+    end)
+
+    it("returns false for an unknown resolver", function()
+      assert.is_false(approval.has("nonexistent"))
+    end)
+  end)
 end)
 
 -- ============================================================================
@@ -717,14 +732,16 @@ describe("Parser plain tool_result support", function()
 
   it("does not set status on tool_result with plain empty fence", function()
     local bufnr = create_buffer({
-      "@Assistant: Running tool",
+      "@Assistant:",
+      "Running tool",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```",
       "```",
@@ -740,14 +757,16 @@ describe("Parser plain tool_result support", function()
 
   it("does not set status on tool_result with content", function()
     local bufnr = create_buffer({
-      "@Assistant: Running tool",
+      "@Assistant:",
+      "Running tool",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```",
       "4",
@@ -774,14 +793,16 @@ describe("Awaiting Execution Resolver", function()
 
   it("finds tool_use with flemma:tool status=pending tool_result", function()
     local bufnr = create_buffer({
-      "@Assistant: Running tool",
+      "@Assistant:",
+      "Running tool",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=pending",
       "```",
@@ -796,14 +817,16 @@ describe("Awaiting Execution Resolver", function()
 
   it("does NOT detect plain empty tool_result as awaiting", function()
     local bufnr = create_buffer({
-      "@Assistant: Running tool",
+      "@Assistant:",
+      "Running tool",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```",
       "```",
@@ -815,14 +838,16 @@ describe("Awaiting Execution Resolver", function()
 
   it("ignores tool_result with content", function()
     local bufnr = create_buffer({
-      "@Assistant: Running tool",
+      "@Assistant:",
+      "Running tool",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```",
       "4",
@@ -835,14 +860,16 @@ describe("Awaiting Execution Resolver", function()
 
   it("ignores error tool_result", function()
     local bufnr = create_buffer({
-      "@Assistant: Running tool",
+      "@Assistant:",
+      "Running tool",
       "",
       "**Tool Use:** `bash` (`toolu_01`)",
       "```json",
       '{ "command": "fail" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01` (error)",
+      "@You:",
+      "**Tool Result:** `toolu_01` (error)",
       "",
       "```flemma:tool status=pending",
       "```",
@@ -854,7 +881,8 @@ describe("Awaiting Execution Resolver", function()
 
   it("handles mixed pending and user-overridden results", function()
     local bufnr = create_buffer({
-      "@Assistant: Two tools",
+      "@Assistant:",
+      "Two tools",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
@@ -866,7 +894,8 @@ describe("Awaiting Execution Resolver", function()
       '{ "command": "echo hi" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=pending",
       "```",
@@ -886,7 +915,8 @@ describe("Awaiting Execution Resolver", function()
 
   it("returns empty when no tool_results exist at all", function()
     local bufnr = create_buffer({
-      "@Assistant: Running tool",
+      "@Assistant:",
+      "Running tool",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
@@ -900,9 +930,11 @@ describe("Awaiting Execution Resolver", function()
 
   it("returns empty when buffer has no tool_use at all", function()
     local bufnr = create_buffer({
-      "@You: Hello",
+      "@You:",
+      "Hello",
       "",
-      "@Assistant: Hi there!",
+      "@Assistant:",
+      "Hi there!",
     })
 
     local awaiting = get_awaiting_execution(bufnr)
@@ -911,7 +943,8 @@ describe("Awaiting Execution Resolver", function()
 
   it("handles multiple pending placeholders", function()
     local bufnr = create_buffer({
-      "@Assistant: Two tools",
+      "@Assistant:",
+      "Two tools",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
@@ -923,7 +956,8 @@ describe("Awaiting Execution Resolver", function()
       '{ "command": "echo hi" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=pending",
       "```",
@@ -952,7 +986,8 @@ describe("Approval Placeholder Injection", function()
 
   it("inject_placeholder with status=pending uses flemma:tool fence", function()
     local bufnr = create_buffer({
-      "@Assistant: Here is the tool:",
+      "@Assistant:",
+      "Here is the tool:",
       "",
       "**Tool Use:** `calculator` (`toolu_approval`)",
       "```json",
@@ -988,7 +1023,8 @@ describe("Approval Placeholder Injection", function()
 
   it("inject_placeholder without status option uses plain fence", function()
     local bufnr = create_buffer({
-      "@Assistant: Here is the tool:",
+      "@Assistant:",
+      "Here is the tool:",
       "",
       "**Tool Use:** `calculator` (`toolu_plain`)",
       "```json",
@@ -1011,7 +1047,8 @@ describe("Approval Placeholder Injection", function()
 
   it("user overriding flemma:tool by editing the fence removes pending detection", function()
     local bufnr = create_buffer({
-      "@Assistant: Here is the tool:",
+      "@Assistant:",
+      "Here is the tool:",
       "",
       "**Tool Use:** `bash` (`toolu_manual`)",
       "```json",
@@ -1043,7 +1080,8 @@ describe("Approval Placeholder Injection", function()
 
   it("inject_result replaces flemma:tool marker with actual content", function()
     local bufnr = create_buffer({
-      "@Assistant: Here is the tool:",
+      "@Assistant:",
+      "Here is the tool:",
       "",
       "**Tool Use:** `calculator` (`toolu_exec`)",
       "```json",
@@ -1091,7 +1129,8 @@ describe("Approval Placeholder Injection", function()
 
   it("denied tool result is not detected as awaiting", function()
     local bufnr = create_buffer({
-      "@Assistant: Here is the tool:",
+      "@Assistant:",
+      "Here is the tool:",
       "",
       "**Tool Use:** `bash` (`toolu_deny`)",
       "```json",
@@ -1150,7 +1189,8 @@ describe("Frontmatter Approval Resolver", function()
         "```lua",
         'flemma.opt.tools.auto_approve = { "calculator", "read" }',
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       })
       local opts = evaluate_opts(bufnr)
 
@@ -1165,7 +1205,8 @@ describe("Frontmatter Approval Resolver", function()
         "```lua",
         'flemma.opt.tools.auto_approve = { "calculator" }',
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       })
       local opts = evaluate_opts(bufnr)
 
@@ -1179,7 +1220,8 @@ describe("Frontmatter Approval Resolver", function()
         "```lua",
         "flemma.opt.tools.auto_approve = {}",
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       })
       local opts = evaluate_opts(bufnr)
 
@@ -1202,7 +1244,8 @@ describe("Frontmatter Approval Resolver", function()
         "  return false",
         "end",
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       })
       local opts = evaluate_opts(bufnr)
 
@@ -1218,7 +1261,8 @@ describe("Frontmatter Approval Resolver", function()
         "```lua",
         "flemma.opt.tools.auto_approve = function() end",
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       })
       local opts = evaluate_opts(bufnr)
 
@@ -1232,7 +1276,8 @@ describe("Frontmatter Approval Resolver", function()
         "```lua",
         'flemma.opt.tools.auto_approve = function() error("boom") end',
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       })
       local opts = evaluate_opts(bufnr)
 
@@ -1245,7 +1290,8 @@ describe("Frontmatter Approval Resolver", function()
       set_config_and_setup({})
 
       local bufnr = create_buffer({
-        "@You: test",
+        "@You:",
+        "test",
       })
       local opts = evaluate_opts(bufnr)
 
@@ -1259,7 +1305,8 @@ describe("Frontmatter Approval Resolver", function()
         "```lua",
         "x = 5",
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       })
       local opts = evaluate_opts(bufnr)
 
@@ -1292,7 +1339,8 @@ describe("Frontmatter Approval Resolver", function()
         "```lua",
         'flemma.opt.tools.auto_approve = { "calculator" }',
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       })
       local opts = evaluate_opts(bufnr)
 
@@ -1333,7 +1381,8 @@ describe("Frontmatter Approval Resolver", function()
         "```lua",
         'flemma.opt.tools.auto_approve = { "calculator" }',
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       })
       local opts = evaluate_opts(bufnr)
 
@@ -1360,7 +1409,8 @@ describe("Frontmatter Approval Resolver", function()
         "```lua",
         'flemma.opt.tools.auto_approve = { "$readonly" }',
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       })
       local opts = evaluate_opts(bufnr)
 
@@ -1377,7 +1427,8 @@ describe("Frontmatter Approval Resolver", function()
         'flemma.opt.tools.auto_approve = { "$default" }',
         'flemma.opt.tools.auto_approve:remove("$default")',
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       })
       local opts = evaluate_opts(bufnr)
 
@@ -1392,7 +1443,8 @@ describe("Frontmatter Approval Resolver", function()
         'flemma.opt.tools.auto_approve = { "$default" }',
         'flemma.opt.tools.auto_approve:remove("write")',
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       })
       local opts = evaluate_opts(bufnr)
 
@@ -1409,7 +1461,8 @@ describe("Frontmatter Approval Resolver", function()
         'flemma.opt.tools.auto_approve = { "$default" }',
         'flemma.opt.tools.auto_approve:append("bash")',
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       })
       local opts = evaluate_opts(bufnr)
 
@@ -1430,14 +1483,16 @@ describe("Parser flemma:tool support", function()
 
   it("parses status=pending from flemma:tool info string", function()
     local bufnr = create_buffer({
-      "@Assistant: Running tool",
+      "@Assistant:",
+      "Running tool",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=pending",
       "```",
@@ -1459,14 +1514,16 @@ describe("Parser flemma:tool support", function()
 
   it("parses status=approved from flemma:tool info string", function()
     local bufnr = create_buffer({
-      "@Assistant: Running tool",
+      "@Assistant:",
+      "Running tool",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=approved",
       "```",
@@ -1482,14 +1539,16 @@ describe("Parser flemma:tool support", function()
 
   it("parses status=rejected with user content", function()
     local bufnr = create_buffer({
-      "@Assistant: Running tool",
+      "@Assistant:",
+      "Running tool",
       "",
       "**Tool Use:** `bash` (`toolu_01`)",
       "```json",
       '{ "command": "rm -rf /" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=rejected",
       "I don't want to run this dangerous command.",
@@ -1506,14 +1565,16 @@ describe("Parser flemma:tool support", function()
 
   it("parses status=denied", function()
     local bufnr = create_buffer({
-      "@Assistant: Running tool",
+      "@Assistant:",
+      "Running tool",
       "",
       "**Tool Use:** `bash` (`toolu_01`)",
       "```json",
       '{ "command": "rm -rf /" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=denied",
       "```",
@@ -1529,14 +1590,16 @@ describe("Parser flemma:tool support", function()
 
   it("defaults to status=pending when no info string", function()
     local bufnr = create_buffer({
-      "@Assistant: Running tool",
+      "@Assistant:",
+      "Running tool",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool",
       "```",
@@ -1551,14 +1614,16 @@ describe("Parser flemma:tool support", function()
 
   it("falls back to pending for invalid status values", function()
     local bufnr = create_buffer({
-      "@Assistant: Running tool",
+      "@Assistant:",
+      "Running tool",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=xyz",
       "```",
@@ -1573,14 +1638,16 @@ describe("Parser flemma:tool support", function()
 
   it("coerces 'reject' to 'rejected'", function()
     local bufnr = create_buffer({
-      "@Assistant: Running tool",
+      "@Assistant:",
+      "Running tool",
       "",
       "**Tool Use:** `bash` (`toolu_01`)",
       "```json",
       '{ "command": "rm -rf /" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=reject",
       "```",
@@ -1593,14 +1660,16 @@ describe("Parser flemma:tool support", function()
 
   it("coerces 'deny' to 'denied'", function()
     local bufnr = create_buffer({
-      "@Assistant: Running tool",
+      "@Assistant:",
+      "Running tool",
       "",
       "**Tool Use:** `bash` (`toolu_01`)",
       "```json",
       '{ "command": "rm -rf /" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=deny",
       "```",
@@ -1623,14 +1692,16 @@ describe("Pipeline flemma:tool exclusion", function()
 
   it("flemma:tool blocks do not clear pending_tool_uses in validation", function()
     local lines = {
-      "@Assistant: Running tool",
+      "@Assistant:",
+      "Running tool",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=pending",
       "```",
@@ -1647,14 +1718,16 @@ describe("Pipeline flemma:tool exclusion", function()
 
   it("resolved tool_result clears pending_tool_calls", function()
     local lines = {
-      "@Assistant: Running tool",
+      "@Assistant:",
+      "Running tool",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```",
       "4",
@@ -1680,14 +1753,16 @@ describe("Processor flemma:tool exclusion", function()
 
   it("flemma:tool blocks are not included in evaluated parts", function()
     local lines = {
-      "@Assistant: Running tool",
+      "@Assistant:",
+      "Running tool",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=approved",
       "```",
@@ -1728,7 +1803,8 @@ describe("Context resolve_all_tool_blocks", function()
 
   it("groups tool blocks by status", function()
     local bufnr = create_buffer({
-      "@Assistant: Three tools",
+      "@Assistant:",
+      "Three tools",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
@@ -1745,7 +1821,8 @@ describe("Context resolve_all_tool_blocks", function()
       '{ "path": "/tmp/x" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=approved",
       "```",
@@ -1772,9 +1849,11 @@ describe("Context resolve_all_tool_blocks", function()
 
   it("returns empty table when no tool blocks exist", function()
     local bufnr = create_buffer({
-      "@You: Hello",
+      "@You:",
+      "Hello",
       "",
-      "@Assistant: Hi there!",
+      "@Assistant:",
+      "Hi there!",
     })
 
     local groups = context.resolve_all_tool_blocks(bufnr)
@@ -1783,14 +1862,16 @@ describe("Context resolve_all_tool_blocks", function()
 
   it("excludes approved blocks with user-edited content (content-overwrite protection)", function()
     local bufnr = create_buffer({
-      "@Assistant: Tool call",
+      "@Assistant:",
+      "Tool call",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=approved",
       "User edited this content",
@@ -1804,14 +1885,16 @@ describe("Context resolve_all_tool_blocks", function()
 
   it("includes rejected blocks with user content (content for error message)", function()
     local bufnr = create_buffer({
-      "@Assistant: Tool call",
+      "@Assistant:",
+      "Tool call",
       "",
       "**Tool Use:** `bash` (`toolu_01`)",
       "```json",
       '{ "command": "rm -rf /" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=rejected",
       "I refuse to run this command.",
@@ -1832,7 +1915,8 @@ describe("Context resolve_all_tool_blocks", function()
     -- This test verifies that resolve_all_tool_blocks returns accurate positions
     -- for a pending block both before and after a denied block above it is replaced.
     local bufnr = create_buffer({
-      "@Assistant: Two tools",
+      "@Assistant:",
+      "Two tools",
       "",
       "**Tool Use:** `bash` (`toolu_denied`)",
       "```json",
@@ -1844,7 +1928,8 @@ describe("Context resolve_all_tool_blocks", function()
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_denied`",
+      "@You:",
+      "**Tool Result:** `toolu_denied`",
       "",
       "```flemma:tool status=denied",
       "```",
@@ -1911,14 +1996,16 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
 
   it("pending blocks with content are in groups['pending']", function()
     local bufnr = create_buffer({
-      "@Assistant: Tool call",
+      "@Assistant:",
+      "Tool call",
       "",
       "**Tool Use:** `bash` (`toolu_01`)",
       "```json",
       '{ "command": "echo hello" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=pending",
       "hello",
@@ -1934,14 +2021,16 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
 
   it("empty pending blocks are also in groups['pending']", function()
     local bufnr = create_buffer({
-      "@Assistant: Tool call",
+      "@Assistant:",
+      "Tool call",
       "",
       "**Tool Use:** `bash` (`toolu_01`)",
       "```json",
       '{ "command": "echo hello" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=pending",
       "```",
@@ -1955,7 +2044,8 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
 
   it("mixed: pending with and without content both in groups['pending']", function()
     local bufnr = create_buffer({
-      "@Assistant: Two tools",
+      "@Assistant:",
+      "Two tools",
       "",
       "**Tool Use:** `bash` (`toolu_01`)",
       "```json",
@@ -1967,7 +2057,8 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
       '{ "command": "echo b" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=pending",
       "user output here",
@@ -1994,14 +2085,16 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
 
   it("approved with content still excluded (content-overwrite protection)", function()
     local bufnr = create_buffer({
-      "@Assistant: Tool call",
+      "@Assistant:",
+      "Tool call",
       "",
       "**Tool Use:** `bash` (`toolu_01`)",
       "```json",
       '{ "command": "echo hello" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=approved",
       "User edited content",
@@ -2024,14 +2117,16 @@ describe("Injector strip_fence_info_string", function()
 
   it("strips flemma:tool info string, preserving user content", function()
     local bufnr = create_buffer({
-      "@Assistant: Tool call",
+      "@Assistant:",
+      "Tool call",
       "",
       "**Tool Use:** `bash` (`toolu_01`)",
       "```json",
       '{ "command": "ls -la" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=pending",
       "total 42",
@@ -2070,14 +2165,16 @@ describe("Injector strip_fence_info_string", function()
 
   it("resolved block is parsed as a normal tool_result without status", function()
     local bufnr = create_buffer({
-      "@Assistant: Tool call",
+      "@Assistant:",
+      "Tool call",
       "",
       "**Tool Use:** `bash` (`toolu_01`)",
       "```json",
       '{ "command": "echo hi" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=pending",
       "hi",
@@ -2103,16 +2200,19 @@ describe("Injector strip_fence_info_string", function()
 
   it("resolved block flows through processor as normal tool_result", function()
     local bufnr = create_buffer({
-      "@You: Run this",
+      "@You:",
+      "Run this",
       "",
-      "@Assistant: Sure",
+      "@Assistant:",
+      "Sure",
       "",
       "**Tool Use:** `bash` (`toolu_01`)",
       "```json",
       '{ "command": "echo hi" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```flemma:tool status=pending",
       "hi",
@@ -2139,14 +2239,16 @@ describe("Injector strip_fence_info_string", function()
 
   it("preserves (error) suffix on header", function()
     local bufnr = create_buffer({
-      "@Assistant: Tool call",
+      "@Assistant:",
+      "Tool call",
       "",
       "**Tool Use:** `bash` (`toolu_01`)",
       "```json",
       '{ "command": "bad_cmd" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01` (error)",
+      "@You:",
+      "**Tool Result:** `toolu_01` (error)",
       "",
       "```flemma:tool status=pending",
       "command not found: bad_cmd",
@@ -2170,7 +2272,8 @@ describe("Injector strip_fence_info_string", function()
 
   it("returns error for non-existent tool_id", function()
     local bufnr = create_buffer({
-      "@You: Hello",
+      "@You:",
+      "Hello",
     })
 
     local ok, err = injector.strip_fence_info_string(bufnr, "nonexistent")
@@ -2190,7 +2293,8 @@ describe("Approval Placeholder Injection with flemma:tool", function()
 
   it("inject_placeholder with status=pending uses flemma:tool fence", function()
     local bufnr = create_buffer({
-      "@Assistant: Here is the tool:",
+      "@Assistant:",
+      "Here is the tool:",
       "",
       "**Tool Use:** `calculator` (`toolu_approval`)",
       "```json",
@@ -2216,7 +2320,8 @@ describe("Approval Placeholder Injection with flemma:tool", function()
 
   it("inject_placeholder with status=approved uses flemma:tool fence", function()
     local bufnr = create_buffer({
-      "@Assistant: Here is the tool:",
+      "@Assistant:",
+      "Here is the tool:",
       "",
       "**Tool Use:** `calculator` (`toolu_auto`)",
       "```json",
@@ -2239,7 +2344,8 @@ describe("Approval Placeholder Injection with flemma:tool", function()
 
   it("inject_placeholder with status=denied uses flemma:tool fence", function()
     local bufnr = create_buffer({
-      "@Assistant: Here is the tool:",
+      "@Assistant:",
+      "Here is the tool:",
       "",
       "**Tool Use:** `bash` (`toolu_deny`)",
       "```json",
@@ -2262,7 +2368,8 @@ describe("Approval Placeholder Injection with flemma:tool", function()
 
   it("inject_result replaces flemma:tool marker with actual content", function()
     local bufnr = create_buffer({
-      "@Assistant: Here is the tool:",
+      "@Assistant:",
+      "Here is the tool:",
       "",
       "**Tool Use:** `calculator` (`toolu_exec`)",
       "```json",
@@ -2432,14 +2539,16 @@ describe("advance_phase2 current_request guard", function()
     st.set_config({ tools = { autopilot = { enabled = false } } })
 
     local bufnr = create_buffer({
-      "@Assistant: Tool call.",
+      "@Assistant:",
+      "Tool call.",
       "",
       "**Tool Use:** `calculator` (`toolu_race_guard`)",
       "```json",
       '{ "expression": "2+2" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_race_guard`",
+      "@You:",
+      "**Tool Result:** `toolu_race_guard`",
       "",
       "```flemma:tool status=approved",
       "```",
@@ -2645,7 +2754,7 @@ describe("Sandbox auto-approval resolver", function()
 
   it("auto-approves custom tool that declares can_auto_approve_if_sandboxed", function()
     -- Register a custom tool with the sandbox capability
-    registry.define("my_sandboxed_tool", {
+    registry.register("my_sandboxed_tool", {
       name = "my_sandboxed_tool",
       description = "A custom sandboxed tool",
       capabilities = { "can_auto_approve_if_sandboxed" },
@@ -2657,7 +2766,7 @@ describe("Sandbox auto-approval resolver", function()
   end)
 
   it("does not auto-approve tool with unrelated capabilities", function()
-    registry.define("safe_tool", {
+    registry.register("safe_tool", {
       name = "safe_tool",
       description = "A tool with other capabilities",
       capabilities = { "some_other_capability" },

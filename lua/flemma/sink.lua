@@ -8,6 +8,7 @@
 local M = {}
 
 local log = require("flemma.logging")
+local writequeue = require("flemma.buffer.writequeue")
 
 local DEFAULT_FLUSH_INTERVAL = 50
 local next_buffer_id = 0
@@ -68,6 +69,7 @@ function Sink:_materialize()
   vim.bo[bufnr].swapfile = false
   vim.bo[bufnr].undolevels = -1
   vim.bo[bufnr].bufhidden = "hide"
+  vim.bo[bufnr].modifiable = false
   next_buffer_id = next_buffer_id + 1
   vim.api.nvim_buf_set_name(bufnr, "flemma://sink/" .. self._name .. "#" .. next_buffer_id)
   self._bufnr = bufnr
@@ -184,7 +186,18 @@ function Sink:write_lines(lines)
   end
 end
 
----Assemble complete content from all three sources (buffer + pending + partial)
+---Assemble complete content from all three sources (buffer + pending + partial).
+---
+---WARNING — E565 CONSISTENCY GAP: When writequeue defers a buffer write due
+---to textlock (E565), _pending has already been cleared by _drain() but the
+---buffer does not yet contain those lines. During this window (one event-loop
+---tick at most), this method will undercount — returning fewer lines than
+---were actually written. This is acceptable because:
+---  1. read()/read_lines() are called at response completion, not mid-stream
+---  2. The gap resolves on the next event-loop tick when writequeue retries
+---  3. The deferred lines are not lost — they exist in the writequeue closure
+---If you ever need to call read() in a context where the buffer might be
+---under textlock, flush first and be aware of this limitation.
 ---@return string[]
 ---@private
 function Sink:_assemble_lines()
@@ -236,12 +249,27 @@ function Sink:read_lines()
   return self:_assemble_lines()
 end
 
----Drain pending lines and current partial to the Neovim buffer
+---Drain pending lines and current partial to the Neovim buffer.
 ---
----Complete lines from `_pending` are appended. The current `_partial` is written
----as the buffer's last line for character-by-character display. The `on_line`
----callback is unaffected — it only fires in `write()` when a newline completes
----a line, never from `_drain()`.
+---State mutation (_pending clear, _first_drain, _buffer_has_partial) happens
+---synchronously. The actual nvim_buf_set_lines call is captured as a closure
+---and enqueued via writequeue for E565 textlock protection. Since writequeue
+---executes immediately when idle (the common path), behavior is identical to
+---a direct call in the normal case; only under textlock does the buffer write
+---get deferred by one event-loop tick.
+---
+---CONSISTENCY NOTE: When writequeue defers a buffer write due to E565
+---textlock, there is a brief window (one event-loop tick) where _pending has
+---been cleared but the buffer does not yet contain the lines. During this
+---gap, _assemble_lines() reads buffer + _pending + _partial — since _pending
+---is empty and the buffer is stale, read()/read_lines() will undercount.
+---This is harmless in practice: reads happen at response completion (not
+---mid-stream), and the gap resolves on the next event-loop tick when
+---writequeue retries. The next timer-triggered _drain() sees empty _pending
+---and returns early, so no duplicate writes occur.
+---
+---The on_line callback is unaffected — it only fires in write() when a
+---newline completes a line, never from _drain().
 ---@private
 function Sink:_drain()
   if self._destroyed or not self._materialized then
@@ -276,20 +304,33 @@ function Sink:_drain()
     lines_to_write[#lines_to_write + 1] = self._partial
   end
 
-  if self._first_drain then
-    -- Replace the default empty first line instead of appending
-    self._first_drain = false
-    if #lines_to_write > 0 then
-      vim.api.nvim_buf_set_lines(self._bufnr, 0, -1, false, lines_to_write)
-    end
-  elseif self._buffer_has_partial then
-    -- Replace the old partial (last line) and append new content after it
-    vim.api.nvim_buf_set_lines(self._bufnr, -2, -1, false, lines_to_write)
-  elseif #lines_to_write > 0 then
-    vim.api.nvim_buf_set_lines(self._bufnr, -1, -1, false, lines_to_write)
-  end
+  -- Capture state for the writequeue closure before updating fields
+  local is_first_drain = self._first_drain
+  local had_buffer_partial = self._buffer_has_partial
+  local bufnr = self._bufnr
 
+  -- Update state synchronously (writequeue closure uses captured values)
+  if is_first_drain then
+    self._first_drain = false
+  end
   self._buffer_has_partial = has_partial
+
+  -- Enqueue the actual buffer write through writequeue for E565 protection.
+  -- The closure toggles modifiable around the write; writequeue's own
+  -- save/restore handles the E565 rollback case.
+  writequeue.enqueue(bufnr, function()
+    vim.bo[bufnr].modifiable = true
+    if is_first_drain then
+      if #lines_to_write > 0 then
+        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines_to_write)
+      end
+    elseif had_buffer_partial then
+      vim.api.nvim_buf_set_lines(bufnr, -2, -1, false, lines_to_write)
+    elseif #lines_to_write > 0 then
+      vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, lines_to_write)
+    end
+    vim.bo[bufnr].modifiable = false
+  end)
 end
 
 ---Flush all pending data (including partial) to the Neovim buffer
@@ -299,10 +340,17 @@ function Sink:flush()
     return
   end
 
-  -- Flush partial as a line
+  -- Flush partial as a complete line, firing on_line so consumers see it
   if self._partial ~= "" then
-    table.insert(self._pending, self._partial)
+    local flushed = self._partial
     self._partial = ""
+    if self._on_line then
+      local ok, err = pcall(self._on_line, flushed)
+      if not ok then
+        log.error("sink on_line callback error: " .. tostring(err))
+      end
+    end
+    table.insert(self._pending, flushed)
   end
 
   self:_drain()
@@ -319,6 +367,12 @@ function Sink:destroy()
   end
 
   self:flush()
+
+  -- Cancel any pending writequeue operations for this buffer to prevent
+  -- them from executing against a buffer we are about to delete/wipe.
+  if self._materialized and vim.api.nvim_buf_is_valid(self._bufnr) then
+    writequeue.clear(self._bufnr)
+  end
 
   -- Stop and release the timer
   if self._timer then

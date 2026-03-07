@@ -73,26 +73,6 @@ describe("provider registration", function()
       assert.is_true(registry.is_provider_model("my-model-2", "custom"))
       assert.is_false(registry.is_provider_model("unknown-model", "custom"))
     end)
-
-    it("stores cache multipliers in models_data", function()
-      registry.register("custom", {
-        module = "flemma.provider.providers.openai",
-        capabilities = {
-          supports_reasoning = false,
-          supports_thinking_budget = false,
-          outputs_thinking = false,
-        },
-        display_name = "Custom",
-        default_model = "my-model",
-        models = { ["my-model"] = { pricing = { input = 0, output = 0 } } },
-        cache_read_multiplier = 0.25,
-        cache_write_multipliers = { short = 1.5 },
-      })
-
-      local models_data = require("flemma.models")
-      assert.are.equal(0.25, models_data.providers["custom"].cache_read_multiplier)
-      assert.are.same({ short = 1.5 }, models_data.providers["custom"].cache_write_multipliers)
-    end)
   end)
 
   describe("is_provider_model() without models", function()
@@ -210,6 +190,74 @@ describe("provider registration", function()
 
       assert.are.equal("my.custom.anthropic", registry.get("anthropic"))
       assert.are.equal("My Anthropic", registry.get_display_name("anthropic"))
+    end)
+  end)
+
+  describe("unregister()", function()
+    it("removes a provider and returns true", function()
+      registry.register("custom", {
+        module = "flemma.provider.providers.openai",
+        capabilities = {
+          supports_reasoning = false,
+          supports_thinking_budget = false,
+          outputs_thinking = false,
+        },
+        display_name = "Custom",
+      })
+
+      assert.is_true(registry.unregister("custom"))
+      assert.is_false(registry.has("custom"))
+      assert.is_nil(registry.get("custom"))
+    end)
+
+    it("returns false for unknown provider", function()
+      assert.is_false(registry.unregister("nonexistent"))
+    end)
+
+    it("cleans up defaults and models", function()
+      registry.register("custom", {
+        module = "flemma.provider.providers.openai",
+        capabilities = {
+          supports_reasoning = false,
+          supports_thinking_budget = false,
+          outputs_thinking = false,
+        },
+        display_name = "Custom",
+        default_model = "my-model",
+        models = { ["my-model"] = { pricing = { input = 1.0, output = 2.0 } } },
+      })
+
+      assert.is_not_nil(registry.defaults["custom"])
+      registry.unregister("custom")
+      assert.is_nil(registry.defaults["custom"])
+      assert.is_nil(registry.models["custom"])
+    end)
+  end)
+
+  describe("get_all()", function()
+    it("returns a copy of all provider entries", function()
+      local all = registry.get_all()
+      assert.is_not_nil(all["anthropic"])
+      assert.is_not_nil(all["openai"])
+      assert.is_not_nil(all["vertex"])
+      assert.are.equal("flemma.provider.providers.anthropic", all["anthropic"].module)
+    end)
+
+    it("returns a deep copy (mutations do not affect registry)", function()
+      local all = registry.get_all()
+      all["anthropic"] = nil
+      assert.is_true(registry.has("anthropic"))
+    end)
+  end)
+
+  describe("count()", function()
+    it("returns the number of registered providers", function()
+      assert.are.equal(3, registry.count())
+    end)
+
+    it("returns 0 after clear", function()
+      registry.clear()
+      assert.are.equal(0, registry.count())
     end)
   end)
 

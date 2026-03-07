@@ -1,7 +1,7 @@
 --- OpenAI provider for Flemma
 --- Implements the OpenAI Responses API integration
 local base = require("flemma.provider.base")
-local json = require("flemma.json")
+local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local models = require("flemma.models")
 
@@ -231,7 +231,7 @@ function M.build_request(self, prompt, context)
         elseif p.kind == "tool_use" then
           -- Flush any accumulated text before the tool call
           if #text_parts > 0 then
-            local text = table.concat(text_parts, "")
+            local text = vim.trim(table.concat(text_parts, ""))
             if #text > 0 then
               item_index = item_index + 1
               table.insert(input_items, {
@@ -260,7 +260,7 @@ function M.build_request(self, prompt, context)
 
       -- Flush remaining text
       if #text_parts > 0 then
-        local text = table.concat(text_parts, "")
+        local text = vim.trim(table.concat(text_parts, ""))
         if #text > 0 then
           item_index = item_index + 1
           table.insert(input_items, {
@@ -376,6 +376,14 @@ function M.build_request(self, prompt, context)
   end
 
   return request_body
+end
+
+--- Trailing keys for cache-friendly JSON serialization.
+--- OpenAI uses `input` (Responses API) as its messages array.
+---@param self flemma.provider.OpenAI
+---@return string[]
+function M.get_trailing_keys(self)
+  return { "tools", "input" }
 end
 
 ---@param self flemma.provider.OpenAI
@@ -507,14 +515,14 @@ function M.process_response_line(self, line, callbacks)
   local event_type = data.type
 
   if not event_type then
-    log.debug("openai.process_response_line(): Data without type field, skipping")
+    log.trace("openai.process_response_line(): Data without type field, skipping")
     return
   end
 
   -- Handle text content deltas
   if event_type == "response.output_text.delta" then
     if data.delta then
-      log.debug("openai.process_response_line(): Text delta: " .. log.inspect(data.delta))
+      log.trace("openai.process_response_line(): Text delta: " .. log.inspect(data.delta))
       base._signal_content(self, data.delta, callbacks)
     end
     return
@@ -671,7 +679,7 @@ function M.process_response_line(self, line, callbacks)
   end
 
   -- Truly unknown events get logged for debugging
-  log.debug("openai.process_response_line(): Ignoring unknown event type: " .. event_type)
+  log.warn("openai.process_response_line(): Ignoring unknown event type: " .. event_type)
 end
 
 ---Validate provider-specific parameters

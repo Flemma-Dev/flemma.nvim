@@ -10,13 +10,6 @@ local parser = require("flemma.parser")
 ---@field inner_start_col integer
 ---@field inner_end integer
 
----Get the 0-indexed column where content starts after a role prefix (@Role: )
----@param role string
----@return integer
-local function content_col(role)
-  return #("@" .. role .. ": ")
-end
-
 ---Build a line-level content map by walking positioned segments directly.
 ---@param msg flemma.ast.MessageNode
 ---@return table<integer, boolean> line_has_content Lines with non-whitespace content
@@ -76,11 +69,10 @@ local function get_message_bounds()
   end
 
   -- Find inner_start
-  local role_col = content_col(current_msg.role)
   local has_content_on_first_line = line_has_content[start_line] or false
 
   local inner_start_line = start_line
-  local inner_start_col = role_col + 1 -- 1-indexed for cursor positioning
+  local inner_start_col = 1
   if not has_content_on_first_line then
     inner_start_line = start_line + 1
     while

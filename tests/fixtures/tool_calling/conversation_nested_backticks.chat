@@ -1,8 +1,11 @@
-@System: You are a helpful assistant with access to a code generator tool.
+@System:
+You are a helpful assistant with access to a code generator tool.
 
-@You: Generate a simple Python hello world in markdown format.
+@You:
+Generate a simple Python hello world in markdown format.
 
-@Assistant: I'll generate that code for you.
+@Assistant:
+I'll generate that code for you.
 
 **Tool Use:** `generate_code` (`toolu_02XYZ123abc`)
 
@@ -14,7 +17,8 @@
 }
 ````
 
-@You: **Tool Result:** `toolu_02XYZ123abc`
+@You:
+**Tool Result:** `toolu_02XYZ123abc`
 
 ````json
 {
@@ -23,4 +27,5 @@
 }
 ````
 
-@Assistant: Here's your Python hello world in markdown format!
+@Assistant:
+Here's your Python hello world in markdown format!

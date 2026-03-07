@@ -7,17 +7,17 @@
 --- - Byte limit (default: 50KB)
 ---
 --- Never returns partial lines (except bash tail truncation edge case).
----@class flemma.tools.Truncate
+---@class flemma.utilities.Truncate
 local M = {}
 
 M.MAX_LINES = 2000
 M.MAX_BYTES = 50 * 1024 -- 50KB
 
----@class flemma.tools.TruncationOptions
+---@class flemma.utilities.TruncationOptions
 ---@field max_lines? integer Maximum number of lines (default: 2000)
 ---@field max_bytes? integer Maximum number of bytes (default: 50KB)
 
----@class flemma.tools.TruncationResult
+---@class flemma.utilities.TruncationResult
 ---@field content string The truncated content
 ---@field truncated boolean Whether truncation occurred
 ---@field truncated_by "lines"|"bytes"|nil Which limit was hit
@@ -44,8 +44,8 @@ end
 ---Truncate content from the head (keep first N lines/bytes).
 ---Suitable for file reads where you want to see the beginning.
 ---@param content string
----@param opts? flemma.tools.TruncationOptions
----@return flemma.tools.TruncationResult
+---@param opts? flemma.utilities.TruncationOptions
+---@return flemma.utilities.TruncationResult
 function M.truncate_head(content, opts)
   opts = opts or {}
   local max_lines = opts.max_lines or M.MAX_LINES
@@ -128,8 +128,8 @@ end
 ---Truncate content from the tail (keep last N lines/bytes).
 ---Suitable for bash output where you want to see the end (errors, final results).
 ---@param content string
----@param opts? flemma.tools.TruncationOptions
----@return flemma.tools.TruncationResult
+---@param opts? flemma.utilities.TruncationOptions
+---@return flemma.utilities.TruncationResult
 function M.truncate_tail(content, opts)
   opts = opts or {}
   local max_lines = opts.max_lines or M.MAX_LINES

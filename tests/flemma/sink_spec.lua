@@ -246,6 +246,35 @@ describe("flemma.sink", function()
       sink:destroy()
     end)
 
+    it("fires on_line for remaining partial", function()
+      local lines_seen = {}
+      local sink = sink_module.create({
+        name = "test/flush-partial-online",
+        on_line = function(line)
+          table.insert(lines_seen, line)
+        end,
+      })
+      sink:write("hello\npartial")
+      assert.are.same({ "hello" }, lines_seen) -- only "hello" fired so far
+      sink:flush()
+      assert.are.same({ "hello", "partial" }, lines_seen) -- "partial" should fire on flush
+      sink:destroy()
+    end)
+
+    it("fires on_line for remaining partial on destroy", function()
+      local lines_seen = {}
+      local sink = sink_module.create({
+        name = "test/flush-partial-online-destroy",
+        on_line = function(line)
+          table.insert(lines_seen, line)
+        end,
+      })
+      sink:write("hello\npartial")
+      assert.are.same({ "hello" }, lines_seen)
+      sink:destroy()
+      assert.are.same({ "hello", "partial" }, lines_seen) -- destroy() calls flush(), should fire on_line
+    end)
+
     it("is a no-op when nothing is pending", function()
       local sink = sink_module.create({ name = "test/flush-noop" })
       assert.has_no.errors(function()
@@ -481,6 +510,64 @@ describe("flemma.sink", function()
         sink:destroy()
       end)
       assert.is_true(sink:is_destroyed())
+    end)
+  end)
+
+  describe("writequeue integration", function()
+    it("sets sink buffer as nomodifiable", function()
+      local sink = sink_module.create({ name = "test/wq-nomod" })
+      sink:write("data\n")
+      assert.is_false(vim.bo[sink._bufnr].modifiable)
+      sink:destroy()
+    end)
+
+    it("drain writes through nomodifiable buffer successfully", function()
+      local sink = sink_module.create({ name = "test/wq-drain-nomod" })
+      sink:write("hello\nworld\n")
+      sink:_drain()
+      local buf_lines = vim.api.nvim_buf_get_lines(sink._bufnr, 0, -1, false)
+      assert.are.same({ "hello", "world" }, buf_lines)
+      -- Buffer should still be nomodifiable after drain
+      assert.is_false(vim.bo[sink._bufnr].modifiable)
+      sink:destroy()
+    end)
+
+    it("flush writes through nomodifiable buffer successfully", function()
+      local sink = sink_module.create({ name = "test/wq-flush-nomod" })
+      sink:write("hello\npartial")
+      sink:flush()
+      assert.are.equal("hello\npartial", sink:read())
+      assert.is_false(vim.bo[sink._bufnr].modifiable)
+      sink:destroy()
+    end)
+
+    it("buffer stays nomodifiable after destroy with visible window", function()
+      local sink = sink_module.create({ name = "test/wq-visible-nomod" })
+      sink:write("data\n")
+      sink:_drain()
+      -- Open the sink buffer in a window (simulates sink_viewer)
+      local win = vim.api.nvim_open_win(sink._bufnr, false, {
+        split = "below",
+        win = vim.api.nvim_get_current_win(),
+        height = 3,
+      })
+      sink:destroy()
+      -- Buffer should still be nomodifiable even when deferred via bufhidden=wipe
+      if vim.api.nvim_buf_is_valid(sink._bufnr) then
+        assert.is_false(vim.bo[sink._bufnr].modifiable)
+      end
+      if vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_win_close(win, true)
+      end
+    end)
+
+    it("destroy clears writequeue to prevent post-deletion writes", function()
+      local sink = sink_module.create({ name = "test/wq-destroy-clear" })
+      sink:write("data\n")
+      -- Verify destroy doesn't error (writequeue.clear is called internally)
+      assert.has_no.errors(function()
+        sink:destroy()
+      end)
     end)
   end)
 end)

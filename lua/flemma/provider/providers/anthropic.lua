@@ -1,7 +1,7 @@
 --- Anthropic provider for Flemma
 --- Implements the Anthropic (Claude) API integration
 local base = require("flemma.provider.base")
-local json = require("flemma.json")
+local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 
 ---@class flemma.provider.Anthropic : flemma.provider.Base
@@ -331,7 +331,8 @@ function M.build_request(self, prompt, _context)
   end
 
   -- Add thinking configuration using unified resolution
-  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities)
+  local model_info = require("flemma.provider.registry").get_model_info("anthropic", self.parameters.model)
+  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
 
   if thinking.enabled then
     -- 4.6 models use adaptive thinking (effort level) instead of budget_tokens
@@ -383,6 +384,15 @@ function M.build_request(self, prompt, _context)
   return request_body
 end
 
+--- Trailing keys for cache-friendly JSON serialization.
+--- Static config keys are sorted alphabetically first; system, tools, and messages
+--- trail because messages grow each turn (and tools/system are semi-static).
+---@param self flemma.provider.Anthropic
+---@return string[]
+function M.get_trailing_keys(self)
+  return { "system", "tools", "messages" }
+end
+
 ---@param self flemma.provider.Anthropic
 ---@return string[]
 function M.get_request_headers(self)
@@ -412,7 +422,7 @@ function M.process_response_line(self, line, callbacks)
 
   -- Handle event lines
   if parsed.type == "event" then
-    log.debug("anthropic.process_response_line(): Received event type: " .. parsed.event_type)
+    log.trace("anthropic.process_response_line(): Received event type: " .. parsed.event_type)
     return
   end
 
@@ -446,7 +456,7 @@ function M.process_response_line(self, line, callbacks)
 
   -- Handle ping events
   if data.type == "ping" then
-    log.debug("anthropic.process_response_line(): Received ping event")
+    log.trace("anthropic.process_response_line(): Received ping event")
     return
   end
 
@@ -670,14 +680,14 @@ function M.process_response_line(self, line, callbacks)
     end
 
     if data.delta.type == "text_delta" and data.delta.text then
-      log.debug("anthropic.process_response_line(): Content text delta: " .. log.inspect(data.delta.text))
+      log.trace("anthropic.process_response_line(): Content text delta: " .. log.inspect(data.delta.text))
       base._signal_content(self, data.delta.text, callbacks)
     elseif data.delta.type == "input_json_delta" and data.delta.partial_json ~= nil then
-      log.debug("anthropic.process_response_line(): Content input_json_delta: " .. log.inspect(data.delta.partial_json))
+      log.trace("anthropic.process_response_line(): Content input_json_delta: " .. log.inspect(data.delta.partial_json))
       -- Accumulate tool input JSON
       self._response_buffer.extra.tool_input_sink:write(data.delta.partial_json)
     elseif data.delta.type == "thinking_delta" and data.delta.thinking then
-      log.debug("anthropic.process_response_line(): Content thinking delta: " .. log.inspect(data.delta.thinking))
+      log.trace("anthropic.process_response_line(): Content thinking delta: " .. log.inspect(data.delta.thinking))
       self._response_buffer.extra.thinking_sink:write(data.delta.thinking)
       if callbacks.on_thinking then
         callbacks.on_thinking(data.delta.thinking)
@@ -685,9 +695,9 @@ function M.process_response_line(self, line, callbacks)
     elseif data.delta.type == "signature_delta" and data.delta.signature then
       self._response_buffer.extra.accumulated_signature = (self._response_buffer.extra.accumulated_signature or "")
         .. data.delta.signature
-      log.debug("anthropic.process_response_line(): Content signature delta received")
+      log.trace("anthropic.process_response_line(): Content signature delta received")
     else
-      log.error("anthropic.process_response_line(): Unknown delta type: " .. log.inspect(data.delta.type))
+      log.warn("anthropic.process_response_line(): Unknown delta type: " .. log.inspect(data.delta.type))
     end
   elseif
     data.type
@@ -700,7 +710,7 @@ function M.process_response_line(self, line, callbacks)
       or data.type == "ping"
     )
   then
-    log.error("anthropic.process_response_line(): Unknown event type: " .. log.inspect(data.type))
+    log.warn("anthropic.process_response_line(): Unknown event type: " .. log.inspect(data.type))
   end
 end
 
@@ -769,13 +779,14 @@ local function import_generate_chat(data)
 
   -- Add system message if present
   if data.system then
-    table.insert(output, "@System: " .. data.system)
+    table.insert(output, "@System:")
+    table.insert(output, data.system)
     table.insert(output, "")
   end
 
   -- Process messages
   for _, msg in ipairs(data.messages or {}) do
-    local role_type = msg.role == "user" and "@You: " or "@Assistant: "
+    local role_marker = msg.role == "user" and "@You:" or "@Assistant:"
     local text = import_get_message_text(msg.content)
 
     -- Add blank line before message if needed
@@ -783,7 +794,8 @@ local function import_generate_chat(data)
       table.insert(output, "")
     end
 
-    table.insert(output, role_type .. text)
+    table.insert(output, role_marker)
+    table.insert(output, text)
   end
 
   return table.concat(output, "\n")

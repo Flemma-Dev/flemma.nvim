@@ -31,7 +31,7 @@ describe("File References and Path Parsing", function()
 
   -- Helper function to parse content and extract file parts
   local function parse_and_get_file_parts(content, context)
-    local lines = { "@You: " .. content }
+    local lines = { "@You:", content }
     local doc = parser.parse_lines(lines)
     local result = processor.evaluate(doc, context or {})
 
@@ -443,7 +443,8 @@ describe("File References and Path Parsing", function()
         -- Create chat content and use pipeline
         local pipeline = require("flemma.pipeline")
         local lines = {
-          "@You: Look at @./image.png",
+          "@You:",
+          "Look at @./image.png",
         }
         local prompt = pipeline.run(parser.parse_lines(lines), {})
 
@@ -508,7 +509,8 @@ describe("File References and Path Parsing", function()
         -- Create chat content and use pipeline
         local pipeline = require("flemma.pipeline")
         local lines = {
-          "@You: Review @./document.pdf",
+          "@You:",
+          "Review @./document.pdf",
         }
         local prompt = pipeline.run(parser.parse_lines(lines), {})
 
@@ -562,7 +564,8 @@ describe("File References and Path Parsing", function()
         -- Create chat content and use pipeline
         local pipeline = require("flemma.pipeline")
         local lines = {
-          "@You: Read @./notes.txt",
+          "@You:",
+          "Read @./notes.txt",
         }
         local prompt = pipeline.run(parser.parse_lines(lines), {})
 
@@ -615,7 +618,8 @@ describe("File References and Path Parsing", function()
         -- Create chat content and use pipeline
         local pipeline = require("flemma.pipeline")
         local lines = {
-          "@You: Analyze @./chart.png",
+          "@You:",
+          "Analyze @./chart.png",
         }
         local prompt = pipeline.run(parser.parse_lines(lines), {})
 
@@ -682,7 +686,8 @@ describe("File References and Path Parsing", function()
         -- Create chat content and use pipeline
         local pipeline = require("flemma.pipeline")
         local lines = {
-          "@You: Summarize @./report.pdf",
+          "@You:",
+          "Summarize @./report.pdf",
         }
         local prompt = pipeline.run(parser.parse_lines(lines), {})
 
@@ -739,7 +744,8 @@ describe("File References and Path Parsing", function()
         -- Create chat content and use pipeline
         local pipeline = require("flemma.pipeline")
         local lines = {
-          "@You: Process @./data.txt",
+          "@You:",
+          "Process @./data.txt",
         }
         local prompt = pipeline.run(parser.parse_lines(lines), {})
 
@@ -799,7 +805,8 @@ describe("File References and Path Parsing", function()
         -- Create chat content and use pipeline
         local pipeline = require("flemma.pipeline")
         local lines = {
-          "@You: Describe @./photo.png",
+          "@You:",
+          "Describe @./photo.png",
         }
         local prompt = pipeline.run(parser.parse_lines(lines), {})
 
@@ -863,7 +870,8 @@ describe("File References and Path Parsing", function()
         -- Create chat content and use pipeline
         local pipeline = require("flemma.pipeline")
         local lines = {
-          "@You: Analyze @./study.pdf",
+          "@You:",
+          "Analyze @./study.pdf",
         }
         local prompt = pipeline.run(parser.parse_lines(lines), {})
 
@@ -916,7 +924,8 @@ describe("File References and Path Parsing", function()
         -- Create chat content and use pipeline
         local pipeline = require("flemma.pipeline")
         local lines = {
-          "@You: Check @./config.txt",
+          "@You:",
+          "Check @./config.txt",
         }
         local prompt = pipeline.run(parser.parse_lines(lines), {})
 
@@ -960,7 +969,8 @@ describe("File References and Path Parsing", function()
       -- Use pipeline to process the file reference
       local pipeline = require("flemma.pipeline")
       local lines = {
-        "@You: File @./symlink-file.sh",
+        "@You:",
+        "File @./symlink-file.sh",
       }
       local _, evaluated = pipeline.run(parser.parse_lines(lines), {})
 
@@ -1017,7 +1027,8 @@ describe("File References and Path Parsing", function()
       -- Use pipeline to process the file reference
       local pipeline = require("flemma.pipeline")
       local lines = {
-        "@You: Binary file @./binary.bin",
+        "@You:",
+        "Binary file @./binary.bin",
       }
       local _, evaluated = pipeline.run(parser.parse_lines(lines), {})
 
