@@ -4,6 +4,8 @@
 local M = {}
 
 local session_module = require("flemma.session")
+local client = require("flemma.client")
+local writequeue = require("flemma.buffer.writequeue")
 
 ---@class flemma.state.InflightUsage
 ---@field input_tokens number
@@ -43,10 +45,20 @@ local session_module = require("flemma.session")
 local config = {} ---@type flemma.Config
 ---@type flemma.provider.Base|nil
 local provider = nil
-local session = session_module.Session.new()
 
 ---@type table<integer, flemma.state.BufferState>
 local buffer_states = {}
+
+---@type table<string, fun(bufnr: integer)>
+local cleanup_hooks = {}
+
+---Register a buffer cleanup hook. Called during cleanup_buffer_state().
+---Used by modules that state cannot require directly (circular dependency).
+---@param name string Hook identifier (for idempotent registration)
+---@param fn fun(bufnr: integer) Cleanup function
+function M.register_cleanup(name, fn)
+  cleanup_hooks[name] = fn
+end
 
 ---Set the global plugin configuration
 ---@param conf flemma.Config
@@ -75,7 +87,7 @@ end
 ---Get the global session (tracks all requests across buffers)
 ---@return flemma.session.Session
 function M.get_session()
-  return session
+  return session_module.get()
 end
 
 -- Buffer state management
@@ -137,25 +149,19 @@ function M.cleanup_buffer_state(bufnr)
   local st = buffer_states[bufnr]
   if st then
     if st.current_request then
-      -- Mark as cancelled and use client to terminate the job cleanly
       st.request_cancelled = true
-      local client = require("flemma.client")
       client.cancel_request(st.current_request)
     end
     if st.spinner_timer then
       vim.fn.timer_stop(st.spinner_timer)
     end
-    -- Cancel in-flight tool executions before nilling buffer state
-    local ok, executor = pcall(require, "flemma.tools.executor")
-    if ok then
-      executor.cleanup_buffer(bufnr)
-    end
-    buffer_states[bufnr] = nil
   end
-  -- Clean up any notifications associated with this buffer
-  require("flemma.notifications").cleanup_buffer(bufnr)
-  -- Discard any pending write queue operations
-  local writequeue = require("flemma.buffer.writequeue")
+  -- Run registered cleanup hooks (executor, notifications) before clearing state.
+  -- Hooks may access buffer state (e.g., executor), so this runs before nil.
+  for _, fn in pairs(cleanup_hooks) do
+    pcall(fn, bufnr)
+  end
+  buffer_states[bufnr] = nil
   writequeue.clear(bufnr)
 end
 

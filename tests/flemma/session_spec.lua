@@ -796,4 +796,19 @@ describe("flemma.session", function()
       assert.are.equal(output_cost_before, session:get_total_output_cost())
     end)
   end)
+
+  describe("singleton", function()
+    it("returns the same Session instance across calls", function()
+      local s1 = session_module.get()
+      local s2 = session_module.get()
+      assert.are.equal(s1, s2)
+    end)
+
+    it("does not require flemma.state", function()
+      package.loaded["flemma.session"] = nil
+      package.loaded["flemma.state"] = nil
+      local fresh = require("flemma.session")
+      assert.is_not_nil(fresh.get())
+    end)
+  end)
 end)

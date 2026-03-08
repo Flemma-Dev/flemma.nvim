@@ -257,11 +257,12 @@ function Session:load(requests_data)
   end
 end
 
+local session_instance = Session.new()
+
 --- Get the global session instance (tracks all requests across buffers)
---- Lazy-requires state to avoid circular dependency (state.lua requires session.lua at load time).
 ---@return flemma.session.Session
 function M.get()
-  return require("flemma.state").get_session()
+  return session_instance
 end
 
 M.Request = Request
