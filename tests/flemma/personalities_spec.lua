@@ -311,3 +311,48 @@ describe("flemma.personalities.coding-assistant", function()
     assert.falsy(result:find("Project Context"))
   end)
 end)
+
+describe("URN dispatch in include()", function()
+  local eval
+
+  before_each(function()
+    package.loaded["flemma.eval"] = nil
+    package.loaded["flemma.personalities"] = nil
+    package.loaded["flemma.personalities.coding-assistant"] = nil
+    eval = require("flemma.eval")
+    local pers = require("flemma.personalities")
+    pers.setup()
+  end)
+
+  it("dispatches urn:flemma:personality: to personality registry", function()
+    local env = eval.create_safe_env()
+    env.__dirname = vim.fn.getcwd()
+
+    local result = eval.eval_expression(
+      "include('urn:flemma:personality:coding-assistant')",
+      env
+    )
+    assert.is_table(result)
+    assert.is_function(result.emit)
+  end)
+
+  it("errors on unknown personality URN", function()
+    local env = eval.create_safe_env()
+    env.__dirname = vim.fn.getcwd()
+
+    assert.has_error(function()
+      eval.eval_expression(
+        "include('urn:flemma:personality:nonexistent')",
+        env
+      )
+    end)
+  end)
+
+  it("still resolves file paths normally", function()
+    local env = eval.create_safe_env()
+    env.__dirname = vim.fn.fnamemodify("tests/fixtures", ":p")
+
+    local ok = pcall(eval.eval_expression, "include('nonexistent.txt')", env)
+    assert.is_false(ok)
+  end)
+end)

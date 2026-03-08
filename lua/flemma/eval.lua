@@ -12,6 +12,8 @@ local M = {}
 local emittable = require("flemma.emittable")
 local mime_util = require("flemma.mime")
 local parser = require("flemma.parser")
+local personality_builder = require("flemma.personalities.builder")
+local personality_registry = require("flemma.personalities")
 
 ---@alias flemma.eval.Environment table<string, any>
 
@@ -62,6 +64,28 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
   ---@return table emittable An IncludePart with an emit() method
   env.include = function(relative_path, opts)
     opts = opts or {}
+
+    -- URN dispatch: personality system
+    local PERSONALITY_URN_PREFIX = "urn:flemma:personality:"
+    if relative_path:sub(1, #PERSONALITY_URN_PREFIX) == PERSONALITY_URN_PREFIX then
+      local personality_name = relative_path:sub(#PERSONALITY_URN_PREFIX + 1)
+      local personality = personality_registry.get(personality_name)
+      if not personality then
+        error({
+          type = "expression",
+          error = string.format("Unknown personality: '%s'", personality_name),
+        })
+      end
+      local render_opts = personality_builder.build(
+        personality_name,
+        env.__opts,
+        env.__dirname or vim.fn.getcwd(),
+        env.__bufnr
+      )
+      local rendered = personality.render(render_opts)
+      return emittable.composite_include_part({ rendered })
+    end
+
     local dirname = env.__dirname
 
     -- Resolve path: use __dirname if set, otherwise use relative path as-is
