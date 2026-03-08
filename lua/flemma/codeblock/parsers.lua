@@ -48,6 +48,45 @@ function M.has(language)
   return PARSER_MODULES[lang_lower] ~= nil or parsers[lang_lower] ~= nil
 end
 
+---Unregister a parser for a language.
+---@param language string The language identifier
+---@return boolean removed True if a parser was found and removed
+function M.unregister(language)
+  local lang_lower = language:lower()
+  if parsers[lang_lower] then
+    parsers[lang_lower] = nil
+    return true
+  end
+  return false
+end
+
+---Get all registered parsers (eagerly loads lazy modules).
+---@return table<string, fun(code: string, context?: table<string, any>): any>
+function M.get_all()
+  for lang, module_path in pairs(PARSER_MODULES) do
+    if not parsers[lang] then
+      local parser_module = require(module_path)
+      parsers[lang] = parser_module.parse
+    end
+  end
+  return vim.deepcopy(parsers)
+end
+
+---Clear all registered parsers.
+function M.clear()
+  parsers = {}
+end
+
+---Get the count of registered parsers (only those already loaded or explicitly registered).
+---@return integer
+function M.count()
+  local n = 0
+  for _ in pairs(parsers) do
+    n = n + 1
+  end
+  return n
+end
+
 ---Parse content with the appropriate parser
 ---@param language string|nil The language identifier (defaults to json)
 ---@param content string The content to parse

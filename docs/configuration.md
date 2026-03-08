@@ -7,7 +7,7 @@ require("flemma").setup({
   provider = "anthropic",                    -- "anthropic" | "openai" | "vertex"
   model = nil,                               -- nil = provider default
   parameters = {
-    max_tokens = 4000,
+    max_tokens = "50%",                           -- Percentage of model's max_output_tokens, or integer
     temperature = 0.7,
     timeout = 120,                           -- Response timeout (seconds)
     connect_timeout = 10,                    -- Connection timeout (seconds)
@@ -39,9 +39,10 @@ require("flemma").setup({
     },
     bash = {
       shell = nil,                           -- Shell binary (default: bash)
-      cwd = nil,                             -- Working directory (nil = buffer dir)
+      cwd = "$FLEMMA_BUFFER_PATH",           -- Working directory; resolves to .chat file's directory (set nil for Neovim cwd)
       env = nil,                             -- Extra environment variables
     },
+    modules = {},                            -- Lua module paths for third-party tool sources (e.g., "3rd.tools.todos")
   },
   defaults = {
     dark = { bg = "#000000", fg = "#ffffff" },
@@ -56,12 +57,16 @@ require("flemma").setup({
     thinking_tag = "Comment",
     thinking_block = { dark = "Comment+bg:#102020-fg:#111111",
                        light = "Comment-bg:#102020+fg:#111111" },
-    tool_use = "Function",
-    tool_result = "Function",
+    tool_icon = "FlemmaToolUseTitle",
+    tool_name = "Function",
+    tool_use_title = "Function",
+    tool_result_title = "Function",
     tool_result_error = "DiagnosticError",
     tool_preview = "Comment",
+    fold_preview = "Comment",
+    fold_meta = "Comment",
   },
-  role_style = "bold,underline",
+  role_style = "bold",
   ruler = {
     enabled = true,
     char = "─",
@@ -74,9 +79,6 @@ require("flemma").setup({
     user = { char = "▏", hl = true },
     assistant = { char = nil, hl = true },
   },
-  spinner = {
-    thinking_char = "❖",
-  },
   line_highlights = {
     enabled = true,
     frontmatter = { dark = "Normal+bg:#201020", light = "Normal-bg:#201020" },
@@ -84,7 +86,15 @@ require("flemma").setup({
     user = { dark = "Normal", light = "Normal" },
     assistant = { dark = "Normal+bg:#102020", light = "Normal-bg:#102020" },
   },
-  notify = require("flemma.notify").default_opts,
+  notifications = {
+    enabled = true,                            -- Set false to suppress all notifications
+    timeout = 10000,                           -- Milliseconds before auto-dismiss (0 = persistent)
+    limit = 1,                                 -- Maximum stacked notifications per buffer
+    position = "overlay",                      -- "overlay" (pinned to window top)
+    zindex = 30,                               -- Floating window z-index (above nvim-treesitter-context)
+    highlight = "@text.note, PmenuSel",        -- Highlight group(s) for bar colours; first with both fg+bg wins
+    border = false,                            -- Bottom border style, or false to disable
+  },
   pricing = { enabled = true },
   statusline = {
     thinking_format = "{model} ({level})",   -- Format when thinking is active
@@ -99,6 +109,7 @@ require("flemma").setup({
   logging = {
     enabled = false,
     path = vim.fn.stdpath("cache") .. "/flemma.log",
+    level = "DEBUG",                         -- Minimum log level: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"
   },
   sandbox = {
     enabled = true,                          -- Enable filesystem sandboxing
@@ -137,7 +148,7 @@ require("flemma").setup({
 
 ## Option details
 
-This section explains options that benefit from more context than an inline comment provides. For UI-related options (highlights, line highlights, signs, ruler, spinner, notifications), see [docs/ui.md](ui.md) for detailed explanations and examples.
+This section explains options that benefit from more context than an inline comment provides. For UI-related options (highlights, line highlights, signs, ruler, notifications), see [docs/ui.md](ui.md) for detailed explanations and examples.
 
 ### Thinking parameter priority
 
@@ -160,16 +171,17 @@ This lets you set `thinking = "high"` as a cross-provider default and fine-tune 
 
 ### Notification options
 
-The `notify` key accepts a table with these fields (defaults shown from `lua/flemma/notify.lua`):
+The `notifications` key accepts a table with these fields:
 
-| Key         | Default     | Effect                                                  |
-| ----------- | ----------- | ------------------------------------------------------- |
-| `enabled`   | `true`      | Set `false` to suppress all floating notifications.     |
-| `timeout`   | `8000`      | Milliseconds before auto-dismiss.                       |
-| `max_width` | `60`        | Character width cap; longer lines are word-wrapped.     |
-| `padding`   | `1`         | Spaces around content inside the floating window.       |
-| `border`    | `"rounded"` | Any Neovim border style (`"single"`, `"double"`, etc.). |
-| `title`     | `nil`       | Optional window title string.                           |
+| Key         | Default                  | Effect                                                                                                                                                    |
+| ----------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`   | `true`                   | Set `false` to suppress all notification bars.                                                                                                            |
+| `timeout`   | `10000`                  | Milliseconds before auto-dismiss. Set `0` for persistent notifications.                                                                                   |
+| `limit`     | `1`                      | Maximum stacked notifications per buffer. Oldest are dismissed when the limit is exceeded.                                                                |
+| `position`  | `"overlay"`              | Notification placement. Currently only `"overlay"` (pinned to the top of the chat window).                                                                |
+| `zindex`    | `30`                     | Floating window z-index for notification bars (above nvim-treesitter-context).                                                                            |
+| `highlight` | `"@text.note, PmenuSel"` | Comma-separated highlight groups to derive bar colours from. The first group that provides both `fg` and `bg` is used; remaining groups act as fallbacks. |
+| `border`    | `"underline"`            | Bottom border style: `"underline"`, `"underdouble"`, `"undercurl"`, `"underdotted"`, `"underdashed"`, or `false` to disable.                              |
 
 ### Keymaps and hybrid dispatch
 
@@ -182,6 +194,14 @@ The `send` keymap (<kbd>Ctrl-]</kbd>) is a hybrid dispatch with a three-phase cy
 Each press of <kbd>Ctrl-]</kbd> advances to the next applicable phase. In insert mode, <kbd>Ctrl-]</kbd> behaves identically but re-enters insert mode when the operation finishes.
 
 Set `keymaps.enabled = false` to disable all built-in mappings. For send-only behaviour (skipping the tool dispatch phases), bind directly to `require("flemma.core").send_to_provider()`.
+
+#### Insert-mode colon auto-newline
+
+When keymaps are enabled, typing `:` after a role name (`@You`, `@System`, `@Assistant`) in insert mode automatically completes the marker, inserts a blank content line below, and positions the cursor there. A **grace period** of 800ms absorbs any immediately following Space or Enter keypress – this protects muscle memory from the previous inline format where you'd type `@You: ` with a trailing space.
+
+#### Format migration
+
+Old `.chat` files that use the previous inline role marker format (e.g., `@You: content on same line`) are **automatically migrated** to the new own-line format when opened. The migration is non-destructive: it splits inline content onto a new line without altering the text. Run `:Flemma format` to trigger migration manually on the current buffer.
 
 ### Autopilot
 

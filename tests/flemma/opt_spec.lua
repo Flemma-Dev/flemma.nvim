@@ -353,7 +353,8 @@ describe("flemma.opt", function()
         "```lua",
         'flemma.opt.tools:remove("calculator")',
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       }
       local context = ctx.from_file("test.chat")
       local prompt = pipeline.run(parser.parse_lines(lines), context)
@@ -375,7 +376,8 @@ describe("flemma.opt", function()
         "```lua",
         'flemma.opt.tools = {"bash"}',
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       }
       local context = ctx.from_file("test.chat")
       local prompt = pipeline.run(parser.parse_lines(lines), context)
@@ -386,7 +388,8 @@ describe("flemma.opt", function()
 
     it("no frontmatter leaves prompt.opts nil", function()
       local lines = {
-        "@You: test",
+        "@You:",
+        "test",
       }
       local context = ctx.from_file("test.chat")
       local prompt = pipeline.run(parser.parse_lines(lines), context)
@@ -399,7 +402,8 @@ describe("flemma.opt", function()
         "```lua",
         "x = 5",
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       }
       local context = ctx.from_file("test.chat")
       local prompt = pipeline.run(parser.parse_lines(lines), context)
@@ -412,7 +416,8 @@ describe("flemma.opt", function()
         "```lua",
         'flemma.opt.tools:remove("calculator")',
         "```",
-        "@You: type is {{ type(flemma) }}",
+        "@You:",
+        "type is {{ type(flemma) }}",
       }
       local context = ctx.from_file("test.chat")
       local prompt = pipeline.run(parser.parse_lines(lines), context)
@@ -554,7 +559,8 @@ describe("flemma.opt", function()
         "```lua",
         'flemma.opt.anthropic.cache_retention = "long"',
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       }
       local context = ctx.from_file("test.chat")
       local prompt = pipeline.run(parser.parse_lines(lines), context)
@@ -641,7 +647,8 @@ describe("flemma.opt", function()
         "```lua",
         'flemma.opt.tools.auto_approve = { "calculator" }',
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       }
       local context = ctx.from_file("test.chat")
       local prompt = pipeline.run(parser.parse_lines(lines), context)
@@ -657,7 +664,8 @@ describe("flemma.opt", function()
         '  if tool_name == "calculator" then return true end',
         "end",
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       }
       local context = ctx.from_file("test.chat")
       local prompt = pipeline.run(parser.parse_lines(lines), context)
@@ -710,7 +718,8 @@ describe("flemma.opt", function()
         "```lua",
         'flemma.opt.cache_retention = "long"',
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       }
       local context = ctx.from_file("test.chat")
       local prompt = pipeline.run(parser.parse_lines(lines), context)
@@ -797,7 +806,8 @@ describe("flemma.opt", function()
         "```lua",
         "flemma.opt.sandbox = true",
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       }
       local context = ctx.from_file("test.chat")
       local prompt = pipeline.run(parser.parse_lines(lines), context)
@@ -811,7 +821,8 @@ describe("flemma.opt", function()
         "```lua",
         'flemma.opt.sandbox = { enabled = true, policy = { rw_paths = { "$CWD" } } }',
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       }
       local context = ctx.from_file("test.chat")
       local prompt = pipeline.run(parser.parse_lines(lines), context)

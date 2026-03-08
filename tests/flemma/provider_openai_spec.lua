@@ -443,7 +443,7 @@ describe("OpenAI Provider", function()
 
       -- Register a user-defined tool without strict
       local registry = require("flemma.tools.registry")
-      registry.define("custom_tool", {
+      registry.register("custom_tool", {
         name = "custom_tool",
         description = "A custom tool",
         input_schema = {
@@ -476,7 +476,7 @@ describe("OpenAI Provider", function()
       assert.is_nil(custom.strict, "User-defined tool without strict should not have strict field")
 
       -- Cleanup
-      registry.define("custom_tool", nil)
+      registry.register("custom_tool", nil)
     end)
 
     it("should replay reasoning items from thinking blocks with signature", function()

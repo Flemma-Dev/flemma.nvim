@@ -21,18 +21,30 @@ local function setup_commands()
   local navigation = require("flemma.navigation")
   local log = require("flemma.logging")
   local registry = require("flemma.provider.registry")
-  local notify_module = require("flemma.notify")
-  local modeline = require("flemma.modeline")
+  local notifications_module = require("flemma.notifications")
+  local modeline = require("flemma.utilities.modeline")
   local presets = require("flemma.presets")
 
   ---@param enable? boolean
-  local function toggle_logging(enable)
+  ---@param level? string Optional log level to set (e.g. "TRACE", "DEBUG")
+  local function toggle_logging(enable, level)
     if enable == nil then
       enable = not log.is_enabled()
     end
+    if level then
+      if not log.is_valid_level(level) then
+        vim.notify(
+          "Flemma: Invalid log level '" .. level .. "'. Valid levels: TRACE, DEBUG, INFO, WARN, ERROR",
+          vim.log.levels.ERROR
+        )
+        return
+      end
+      log.configure({ level = level:upper() })
+    end
     log.set_enabled(enable)
     if enable then
-      vim.notify("Flemma: Logging enabled - " .. log.get_path())
+      local level_display = log.get_level()
+      vim.notify("Flemma: Logging enabled (level: " .. level_display .. ") - " .. log.get_path())
     else
       vim.notify("Flemma: Logging disabled")
     end
@@ -353,8 +365,14 @@ local function setup_commands()
   command_tree.children.logging = {
     children = {
       enable = {
-        action = function()
-          toggle_logging(true)
+        action = function(context)
+          toggle_logging(true, context.extra_args[1])
+        end,
+        complete = function(arglead)
+          local levels = { "TRACE", "DEBUG", "INFO", "WARN", "ERROR" }
+          return vim.tbl_filter(function(item)
+            return vim.startswith(item, arglead:upper())
+          end, levels)
         end,
       },
       disable = {
@@ -370,11 +388,54 @@ local function setup_commands()
     },
   }
 
+  command_tree.children.diagnostics = {
+    children = {
+      open = {
+        action = function(context)
+          local diagnostics = require("flemma.diagnostics")
+          local bufnr = vim.api.nvim_get_current_buf()
+          local normalized = context.extra_args[1] == "normalized"
+          diagnostics.open_diff(bufnr, normalized)
+        end,
+        complete = function(arglead)
+          local options = { "normalized" }
+          return vim.tbl_filter(function(item)
+            return vim.startswith(item, arglead)
+          end, options)
+        end,
+      },
+      enable = {
+        action = function()
+          local state = require("flemma.state")
+          local config = state.get_config()
+          if not config.diagnostics then
+            config.diagnostics = { enabled = true }
+          else
+            config.diagnostics.enabled = true
+          end
+          vim.notify("Flemma: Diagnostics enabled", vim.log.levels.INFO)
+        end,
+      },
+      disable = {
+        action = function()
+          local state = require("flemma.state")
+          local config = state.get_config()
+          if not config.diagnostics then
+            config.diagnostics = { enabled = false }
+          else
+            config.diagnostics.enabled = false
+          end
+          vim.notify("Flemma: Diagnostics disabled", vim.log.levels.INFO)
+        end,
+      },
+    },
+  }
+
   command_tree.children.notification = {
     children = {
       recall = {
         action = function()
-          notify_module.recall_last()
+          notifications_module.recall_last()
         end,
       },
     },
@@ -451,6 +512,12 @@ local function setup_commands()
       return vim.tbl_filter(function(item)
         return vim.startswith(item, arglead)
       end, suggestions)
+    end,
+  }
+
+  command_tree.children.format = {
+    action = function()
+      require("flemma.migration").migrate_buffer(vim.api.nvim_get_current_buf())
     end,
   }
 

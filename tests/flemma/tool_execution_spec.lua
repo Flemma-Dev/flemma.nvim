@@ -12,7 +12,7 @@ package.loaded["flemma.tools.definitions.bash"] = nil
 package.loaded["flemma.tools.definitions.read"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
 package.loaded["flemma.tools.definitions.write"] = nil
-package.loaded["flemma.tools.truncate"] = nil
+package.loaded["flemma.utilities.truncate"] = nil
 
 local tools = require("flemma.tools")
 local registry = require("flemma.tools.registry")
@@ -46,7 +46,7 @@ describe("Tool Registry Extensions", function()
 
   describe("is_executable", function()
     it("returns true for tool with execute function", function()
-      registry.define("test", {
+      registry.register("test", {
         name = "test",
         execute = function() end,
       })
@@ -54,7 +54,7 @@ describe("Tool Registry Extensions", function()
     end)
 
     it("returns false for tool without execute function", function()
-      registry.define("schema_only", {
+      registry.register("schema_only", {
         name = "schema_only",
         description = "No executor",
       })
@@ -62,7 +62,7 @@ describe("Tool Registry Extensions", function()
     end)
 
     it("returns false for tool with executable=false", function()
-      registry.define("disabled", {
+      registry.register("disabled", {
         name = "disabled",
         execute = function() end,
         executable = false,
@@ -78,7 +78,7 @@ describe("Tool Registry Extensions", function()
   describe("get_executor", function()
     it("returns executor and false for sync tool", function()
       local fn = function() end
-      registry.define("sync_tool", {
+      registry.register("sync_tool", {
         name = "sync_tool",
         async = false,
         execute = fn,
@@ -90,7 +90,7 @@ describe("Tool Registry Extensions", function()
 
     it("returns executor and true for async tool", function()
       local fn = function() end
-      registry.define("async_tool", {
+      registry.register("async_tool", {
         name = "async_tool",
         async = true,
         execute = fn,
@@ -101,7 +101,7 @@ describe("Tool Registry Extensions", function()
     end)
 
     it("returns nil for non-executable tool", function()
-      registry.define("disabled", {
+      registry.register("disabled", {
         name = "disabled",
         execute = function() end,
         executable = false,
@@ -112,7 +112,7 @@ describe("Tool Registry Extensions", function()
     end)
 
     it("returns nil for tool without execute", function()
-      registry.define("no_exec", { name = "no_exec" })
+      registry.register("no_exec", { name = "no_exec" })
       local executor, is_async = registry.get_executor("no_exec")
       assert.is_nil(executor)
       assert.is_false(is_async)
@@ -127,8 +127,8 @@ describe("Tool Registry Extensions", function()
 
   describe("enabled flag", function()
     it("excludes disabled tools from get_all()", function()
-      registry.define("visible", { name = "visible", execute = function() end })
-      registry.define("secret", { name = "secret", enabled = false, execute = function() end })
+      registry.register("visible", { name = "visible", execute = function() end })
+      registry.register("secret", { name = "secret", enabled = false, execute = function() end })
 
       local all = registry.get_all()
       assert.is_not_nil(all.visible)
@@ -136,8 +136,8 @@ describe("Tool Registry Extensions", function()
     end)
 
     it("includes disabled tools when include_disabled is true", function()
-      registry.define("visible", { name = "visible", execute = function() end })
-      registry.define("secret", { name = "secret", enabled = false, execute = function() end })
+      registry.register("visible", { name = "visible", execute = function() end })
+      registry.register("secret", { name = "secret", enabled = false, execute = function() end })
 
       local all = registry.get_all({ include_disabled = true })
       assert.is_not_nil(all.visible)
@@ -145,7 +145,7 @@ describe("Tool Registry Extensions", function()
     end)
 
     it("allows disabled tools to be executed", function()
-      registry.define("secret", { name = "secret", enabled = false, execute = function() end })
+      registry.register("secret", { name = "secret", enabled = false, execute = function() end })
 
       assert.is_true(registry.is_executable("secret"))
       local exec, is_async = registry.get_executor("secret")
@@ -154,9 +154,46 @@ describe("Tool Registry Extensions", function()
     end)
 
     it("allows disabled tools to be looked up by name", function()
-      registry.define("secret", { name = "secret", enabled = false, execute = function() end })
+      registry.register("secret", { name = "secret", enabled = false, execute = function() end })
 
       assert.is_not_nil(registry.get("secret"))
+    end)
+  end)
+
+  describe("has", function()
+    it("returns true for a registered tool", function()
+      registry.register("test", { name = "test", execute = function() end })
+      assert.is_true(registry.has("test"))
+    end)
+
+    it("returns false for a non-existent tool", function()
+      assert.is_false(registry.has("nonexistent"))
+    end)
+
+    it("returns true for a disabled tool", function()
+      registry.register("secret", { name = "secret", enabled = false })
+      assert.is_true(registry.has("secret"))
+    end)
+  end)
+
+  describe("unregister", function()
+    it("removes a registered tool and returns true", function()
+      registry.register("test", { name = "test", execute = function() end })
+      assert.is_true(registry.unregister("test"))
+      assert.is_nil(registry.get("test"))
+      assert.is_false(registry.has("test"))
+    end)
+
+    it("returns false for a non-existent tool", function()
+      assert.is_false(registry.unregister("nonexistent"))
+    end)
+
+    it("decrements count after removal", function()
+      registry.register("a", { name = "a" })
+      registry.register("b", { name = "b" })
+      assert.equals(2, registry.count())
+      registry.unregister("a")
+      assert.equals(1, registry.count())
     end)
   end)
 end)
@@ -314,7 +351,8 @@ describe("Tool Context Resolver", function()
   describe("basic resolution", function()
     it("resolves context when cursor is on tool header line", function()
       local bufnr = create_buffer({
-        "@Assistant: Here is the result:",
+        "@Assistant:",
+        "Here is the result:",
         "",
         "**Tool Use:** `bash` (`toolu_abc123`)",
         "```json",
@@ -331,7 +369,8 @@ describe("Tool Context Resolver", function()
 
     it("resolves context when cursor is inside fenced block", function()
       local bufnr = create_buffer({
-        "@Assistant: Here is the result:",
+        "@Assistant:",
+        "Here is the result:",
         "",
         "**Tool Use:** `bash` (`toolu_abc123`)",
         "```json",
@@ -347,7 +386,8 @@ describe("Tool Context Resolver", function()
 
     it("resolves context when cursor is on closing fence", function()
       local bufnr = create_buffer({
-        "@Assistant: Here is the result:",
+        "@Assistant:",
+        "Here is the result:",
         "",
         "**Tool Use:** `bash` (`toolu_abc123`)",
         "```json",
@@ -363,7 +403,8 @@ describe("Tool Context Resolver", function()
 
     it("resolves context when cursor is after tool block", function()
       local bufnr = create_buffer({
-        "@Assistant: Here is the result:",
+        "@Assistant:",
+        "Here is the result:",
         "",
         "**Tool Use:** `bash` (`toolu_abc123`)",
         "```json",
@@ -381,7 +422,8 @@ describe("Tool Context Resolver", function()
 
     it("returns parsed input table", function()
       local bufnr = create_buffer({
-        "@Assistant: Running command:",
+        "@Assistant:",
+        "Running command:",
         "",
         "**Tool Use:** `bash` (`toolu_input_test`)",
         "```json",
@@ -401,7 +443,8 @@ describe("Tool Context Resolver", function()
   describe("multiple tools in message", function()
     it("resolves first tool when cursor is on first tool", function()
       local bufnr = create_buffer({
-        "@Assistant: Running tools:",
+        "@Assistant:",
+        "Running tools:",
         "",
         "**Tool Use:** `bash` (`toolu_first`)",
         "```json",
@@ -422,7 +465,8 @@ describe("Tool Context Resolver", function()
 
     it("resolves second tool when cursor is on second tool", function()
       local bufnr = create_buffer({
-        "@Assistant: Running tools:",
+        "@Assistant:",
+        "Running tools:",
         "",
         "**Tool Use:** `bash` (`toolu_first`)",
         "```json",
@@ -435,7 +479,7 @@ describe("Tool Context Resolver", function()
         "```",
       })
 
-      local ctx, err = context.resolve(bufnr, { row = 8 })
+      local ctx, err = context.resolve(bufnr, { row = 9 })
       assert.is_nil(err)
       assert.equals("toolu_second", ctx.tool_id)
       assert.equals("calculator", ctx.tool_name)
@@ -443,7 +487,8 @@ describe("Tool Context Resolver", function()
 
     it("resolves nearest tool when cursor is between tools", function()
       local bufnr = create_buffer({
-        "@Assistant: Running tools:",
+        "@Assistant:",
+        "Running tools:",
         "",
         "**Tool Use:** `bash` (`toolu_first`)",
         "```json",
@@ -469,14 +514,16 @@ describe("Tool Context Resolver", function()
   describe("cursor in user message", function()
     it("falls back to previous assistant message tools", function()
       local bufnr = create_buffer({
-        "@Assistant: Running tool:",
+        "@Assistant:",
+        "Running tool:",
         "",
         "**Tool Use:** `bash` (`toolu_fallback`)",
         "```json",
         '{ "command": "echo hello" }',
         "```",
         "",
-        "@You: Here is the result:",
+        "@You:",
+        "Here is the result:",
       })
 
       local ctx, err = context.resolve(bufnr, { row = 8 })
@@ -489,7 +536,8 @@ describe("Tool Context Resolver", function()
   describe("multi-tool cursor in user message", function()
     it("resolves correct tool when cursor is on specific tool_result", function()
       local bufnr = create_buffer({
-        "@Assistant: Running tools:",
+        "@Assistant:",
+        "Running tools:",
         "",
         "**Tool Use:** `bash` (`toolu_multi_first`)",
         "```json",
@@ -501,7 +549,8 @@ describe("Tool Context Resolver", function()
         '{ "expression": "1+1" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_multi_first`",
+        "@You:",
+        "**Tool Result:** `toolu_multi_first`",
         "",
         "```",
         "first result",
@@ -514,15 +563,15 @@ describe("Tool Context Resolver", function()
         "```",
       })
 
-      -- Cursor on first tool_result header (line 14)
-      local ctx1, err1 = context.resolve(bufnr, { row = 14 })
+      -- Cursor on first tool_result header (line 15)
+      local ctx1, err1 = context.resolve(bufnr, { row = 15 })
       assert.is_nil(err1)
       assert.is_not_nil(ctx1)
       assert.equals("toolu_multi_first", ctx1.tool_id)
       assert.equals("bash", ctx1.tool_name)
 
-      -- Cursor on second tool_result header (line 20)
-      local ctx2, err2 = context.resolve(bufnr, { row = 20 })
+      -- Cursor on second tool_result header (line 21)
+      local ctx2, err2 = context.resolve(bufnr, { row = 21 })
       assert.is_nil(err2)
       assert.is_not_nil(ctx2)
       assert.equals("toolu_multi_second", ctx2.tool_id)
@@ -531,7 +580,8 @@ describe("Tool Context Resolver", function()
 
     it("resolves correct tool when cursor is inside tool_result content", function()
       local bufnr = create_buffer({
-        "@Assistant: Running tools:",
+        "@Assistant:",
+        "Running tools:",
         "",
         "**Tool Use:** `bash` (`toolu_content_first`)",
         "```json",
@@ -543,7 +593,8 @@ describe("Tool Context Resolver", function()
         '{ "expression": "2+2" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_content_first`",
+        "@You:",
+        "**Tool Result:** `toolu_content_first`",
         "",
         "```",
         "first output",
@@ -571,7 +622,8 @@ describe("Tool Context Resolver", function()
 
     it("falls back to nearest tool_result when cursor is between results", function()
       local bufnr = create_buffer({
-        "@Assistant: Running tools:",
+        "@Assistant:",
+        "Running tools:",
         "",
         "**Tool Use:** `bash` (`toolu_between_first`)",
         "```json",
@@ -583,7 +635,8 @@ describe("Tool Context Resolver", function()
         '{ "expression": "3+3" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_between_first`",
+        "@You:",
+        "**Tool Result:** `toolu_between_first`",
         "",
         "```",
         "first",
@@ -611,7 +664,8 @@ describe("Tool Context Resolver", function()
   describe("edge cases and errors", function()
     it("returns error when no tools in assistant message", function()
       local bufnr = create_buffer({
-        "@Assistant: Just some text, no tools here.",
+        "@Assistant:",
+        "Just some text, no tools here.",
       })
 
       local ctx, err = context.resolve(bufnr, { row = 1 })
@@ -626,7 +680,8 @@ describe("Tool Context Resolver", function()
         "model: claude-sonnet-4-20250514",
         "---",
         "",
-        "@You: Hello",
+        "@You:",
+        "Hello",
       })
 
       local ctx, err = context.resolve(bufnr, { row = 2 })
@@ -637,9 +692,11 @@ describe("Tool Context Resolver", function()
 
     it("returns error when cursor is in system message", function()
       local bufnr = create_buffer({
-        "@System: You are helpful.",
+        "@System:",
+        "You are helpful.",
         "",
-        "@You: Hello",
+        "@You:",
+        "Hello",
       })
 
       local ctx, err = context.resolve(bufnr, { row = 1 })
@@ -649,7 +706,8 @@ describe("Tool Context Resolver", function()
 
     it("returns error for user message without preceding assistant tools", function()
       local bufnr = create_buffer({
-        "@You: Hello",
+        "@You:",
+        "Hello",
       })
 
       local ctx, err = context.resolve(bufnr, { row = 1 })
@@ -659,14 +717,16 @@ describe("Tool Context Resolver", function()
 
     it("falls back to assistant tools when cursor is on tool_result in @You:", function()
       local bufnr = create_buffer({
-        "@Assistant: Running tool:",
+        "@Assistant:",
+        "Running tool:",
         "",
         "**Tool Use:** `bash` (`toolu_result_cursor`)",
         "```json",
         '{ "command": "echo hello" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_result_cursor`",
+        "@You:",
+        "**Tool Result:** `toolu_result_cursor`",
         "",
         "```",
         "old result",
@@ -695,7 +755,8 @@ describe("Result Injector", function()
   describe("inject_placeholder", function()
     it("creates @You: message when none exists after assistant", function()
       local bufnr = create_buffer({
-        "@Assistant: Here is the tool:",
+        "@Assistant:",
+        "Here is the tool:",
         "",
         "**Tool Use:** `bash` (`toolu_ph_test`)",
         "```json",
@@ -708,27 +769,33 @@ describe("Result Injector", function()
       assert.is_not_nil(header_line)
 
       local lines = get_lines(bufnr)
-      -- Should have added @You: **Tool Result:** `toolu_ph_test` after the assistant message
-      local found = false
+      -- Should have added @You: and **Tool Result:** `toolu_ph_test` (on separate lines)
+      local found_you = false
+      local found_header = false
       for _, line in ipairs(lines) do
-        if line:match("@You:") and line:match("Tool Result") and line:match("toolu_ph_test") then
-          found = true
-          break
+        if line:match("^@You:") then
+          found_you = true
+        end
+        if line:match("Tool Result") and line:match("toolu_ph_test") then
+          found_header = true
         end
       end
-      assert.is_true(found, "Should have inserted @You: Tool Result header")
+      assert.is_true(found_you, "Should have inserted @You: line")
+      assert.is_true(found_header, "Should have inserted Tool Result header")
     end)
 
     it("reuses existing tool_result position on re-execution", function()
       local bufnr = create_buffer({
-        "@Assistant: Here is the tool:",
+        "@Assistant:",
+        "Here is the tool:",
         "",
         "**Tool Use:** `bash` (`toolu_reexec`)",
         "```json",
         '{ "command": "echo hello" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_reexec`",
+        "@You:",
+        "**Tool Result:** `toolu_reexec`",
         "",
         "```",
         "old result",
@@ -739,19 +806,21 @@ describe("Result Injector", function()
       assert.is_nil(err)
       assert.is_not_nil(header_line)
       -- Should return the existing line, not create a new one
-      assert.equals(8, header_line)
+      assert.equals(10, header_line)
     end)
 
     it("inserts placeholder before existing user text in @You: message", function()
       local bufnr = create_buffer({
-        "@Assistant: Here is the tool:",
+        "@Assistant:",
+        "Here is the tool:",
         "",
         "**Tool Use:** `bash` (`toolu_before_text`)",
         "```json",
         '{ "command": "echo hello" }',
         "```",
         "",
-        "@You: I'll run this.",
+        "@You:",
+        "I'll run this.",
       })
 
       local header_line, err = injector.inject_placeholder(bufnr, "toolu_before_text")
@@ -776,14 +845,16 @@ describe("Result Injector", function()
   describe("inject_result", function()
     it("injects success result with fenced content", function()
       local bufnr = create_buffer({
-        "@Assistant: Running tool:",
+        "@Assistant:",
+        "Running tool:",
         "",
         "**Tool Use:** `bash` (`toolu_success`)",
         "```json",
         '{ "command": "echo hello" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_success`",
+        "@You:",
+        "**Tool Result:** `toolu_success`",
       })
 
       local ok, err = injector.inject_result(bufnr, "toolu_success", {
@@ -801,14 +872,16 @@ describe("Result Injector", function()
 
     it("injects error result with (error) marker", function()
       local bufnr = create_buffer({
-        "@Assistant: Running tool:",
+        "@Assistant:",
+        "Running tool:",
         "",
         "**Tool Use:** `bash` (`toolu_err`)",
         "```json",
         '{ "command": "false" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_err`",
+        "@You:",
+        "**Tool Result:** `toolu_err`",
       })
 
       local ok, err = injector.inject_result(bufnr, "toolu_err", {
@@ -826,14 +899,16 @@ describe("Result Injector", function()
 
     it("injects table result as JSON", function()
       local bufnr = create_buffer({
-        "@Assistant: Computing:",
+        "@Assistant:",
+        "Computing:",
         "",
         "**Tool Use:** `calculator` (`toolu_json`)",
         "```json",
         '{ "expression": "1+1" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_json`",
+        "@You:",
+        "**Tool Result:** `toolu_json`",
       })
 
       local ok, err = injector.inject_result(bufnr, "toolu_json", {
@@ -850,14 +925,16 @@ describe("Result Injector", function()
 
     it("handles error with partial output", function()
       local bufnr = create_buffer({
-        "@Assistant: Running:",
+        "@Assistant:",
+        "Running:",
         "",
         "**Tool Use:** `bash` (`toolu_partial`)",
         "```json",
         '{ "command": "test" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_partial`",
+        "@You:",
+        "**Tool Result:** `toolu_partial`",
       })
 
       local ok, err = injector.inject_result(bufnr, "toolu_partial", {
@@ -876,7 +953,8 @@ describe("Result Injector", function()
 
     it("injects when no placeholder exists (creates one)", function()
       local bufnr = create_buffer({
-        "@Assistant: Running tool:",
+        "@Assistant:",
+        "Running tool:",
         "",
         "**Tool Use:** `bash` (`toolu_noph`)",
         "```json",
@@ -901,14 +979,16 @@ describe("Result Injector", function()
   describe("format and fence sizing", function()
     it("uses triple backticks for simple content", function()
       local bufnr = create_buffer({
-        "@Assistant: Run:",
+        "@Assistant:",
+        "Run:",
         "",
         "**Tool Use:** `bash` (`toolu_fence3`)",
         "```json",
         '{ "command": "echo hi" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_fence3`",
+        "@You:",
+        "**Tool Result:** `toolu_fence3`",
       })
 
       injector.inject_result(bufnr, "toolu_fence3", {
@@ -925,14 +1005,16 @@ describe("Result Injector", function()
 
     it("uses extra backticks when content contains triple backticks", function()
       local bufnr = create_buffer({
-        "@Assistant: Run:",
+        "@Assistant:",
+        "Run:",
         "",
         "**Tool Use:** `bash` (`toolu_fence4`)",
         "```json",
         '{ "command": "echo test" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_fence4`",
+        "@You:",
+        "**Tool Result:** `toolu_fence4`",
       })
 
       injector.inject_result(bufnr, "toolu_fence4", {
@@ -948,14 +1030,16 @@ describe("Result Injector", function()
 
     it("uses 5-tick fence when content contains 4 backticks", function()
       local bufnr = create_buffer({
-        "@Assistant: Run:",
+        "@Assistant:",
+        "Run:",
         "",
         "**Tool Use:** `bash` (`toolu_fence5`)",
         "```json",
         '{ "command": "echo test" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_fence5`",
+        "@You:",
+        "**Tool Result:** `toolu_fence5`",
       })
 
       injector.inject_result(bufnr, "toolu_fence5", {
@@ -970,14 +1054,16 @@ describe("Result Injector", function()
 
     it("uses 5-tick fence when content has mixed 3 and 4 backtick sequences", function()
       local bufnr = create_buffer({
-        "@Assistant: Run:",
+        "@Assistant:",
+        "Run:",
         "",
         "**Tool Use:** `bash` (`toolu_fence_mixed`)",
         "```json",
         '{ "command": "echo test" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_fence_mixed`",
+        "@You:",
+        "**Tool Result:** `toolu_fence_mixed`",
       })
 
       injector.inject_result(bufnr, "toolu_fence_mixed", {
@@ -992,14 +1078,16 @@ describe("Result Injector", function()
 
     it("uses triple backticks when content has only single/double backticks", function()
       local bufnr = create_buffer({
-        "@Assistant: Run:",
+        "@Assistant:",
+        "Run:",
         "",
         "**Tool Use:** `bash` (`toolu_fence_low`)",
         "```json",
         '{ "command": "echo test" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_fence_low`",
+        "@You:",
+        "**Tool Result:** `toolu_fence_low`",
       })
 
       injector.inject_result(bufnr, "toolu_fence_low", {
@@ -1017,14 +1105,16 @@ describe("Result Injector", function()
   describe("re-execution", function()
     it("replaces existing result on re-execution", function()
       local bufnr = create_buffer({
-        "@Assistant: Run:",
+        "@Assistant:",
+        "Run:",
         "",
         "**Tool Use:** `bash` (`toolu_rerun`)",
         "```json",
         '{ "command": "echo hello" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_rerun`",
+        "@You:",
+        "**Tool Result:** `toolu_rerun`",
         "",
         "```",
         "old result",
@@ -1052,7 +1142,8 @@ describe("Result Injector", function()
     it("inserts placeholders in tool_use order (sequential in-order)", function()
       -- Three tool_uses in assistant message, inject placeholders in order
       local bufnr = create_buffer({
-        "@Assistant: Running multiple tools:",
+        "@Assistant:",
+        "Running multiple tools:",
         "",
         "**Tool Use:** `calculator` (`toolu_a`)",
         "```json",
@@ -1108,7 +1199,8 @@ describe("Result Injector", function()
     it("inserts placeholders in tool_use order (out-of-order injection)", function()
       -- Three tool_uses, but inject c first, then a, then b
       local bufnr = create_buffer({
-        "@Assistant: Running multiple tools:",
+        "@Assistant:",
+        "Running multiple tools:",
         "",
         "**Tool Use:** `calculator` (`toolu_d`)",
         "```json",
@@ -1161,7 +1253,8 @@ describe("Result Injector", function()
     it("inserts before first result when our tool comes first", function()
       -- Two tool_uses, inject second one first, then first
       local bufnr = create_buffer({
-        "@Assistant: Running tools:",
+        "@Assistant:",
+        "Running tools:",
         "",
         "**Tool Use:** `calculator` (`toolu_first`)",
         "```json",
@@ -1201,7 +1294,8 @@ describe("Result Injector", function()
     it("inserts between existing results in correct position", function()
       -- Three tool_uses, inject first and third, then middle
       local bufnr = create_buffer({
-        "@Assistant: Running tools:",
+        "@Assistant:",
+        "Running tools:",
         "",
         "**Tool Use:** `calculator` (`toolu_g`)",
         "```json",
@@ -1253,7 +1347,8 @@ describe("Result Injector", function()
     it("maintains order with full result injection (not just placeholders)", function()
       -- Two tool_uses, inject full results out of order
       local bufnr = create_buffer({
-        "@Assistant: Running tools:",
+        "@Assistant:",
+        "Running tools:",
         "",
         "**Tool Use:** `calculator` (`toolu_j`)",
         "```json",
@@ -1325,7 +1420,8 @@ describe("Cancel Priority Logic", function()
 
   it("cancels API request when API is active (priority 1)", function()
     local bufnr = create_buffer({
-      "@Assistant: Running tool:",
+      "@Assistant:",
+      "Running tool:",
       "",
       "**Tool Use:** `calculator` (`toolu_cancel_api`)",
       "```json",
@@ -1353,7 +1449,8 @@ describe("Cancel Priority Logic", function()
 
   it("cancels first tool by start time when no API active (priority 2)", function()
     local bufnr = create_buffer({
-      "@Assistant: Running tools:",
+      "@Assistant:",
+      "Running tools:",
       "",
       "**Tool Use:** `calculator` (`toolu_cancel_first`)",
       "```json",
@@ -1404,7 +1501,8 @@ describe("Cancel Priority Logic", function()
 
   it("notifies when nothing is pending (priority 3)", function()
     local bufnr = create_buffer({
-      "@Assistant: Just text, no tools.",
+      "@Assistant:",
+      "Just text, no tools.",
     })
 
     local st = require("flemma.state")
@@ -1460,7 +1558,8 @@ describe("Tool Executor", function()
   describe("execute validation", function()
     it("rejects execution of unknown tool", function()
       local bufnr = create_buffer({
-        "@Assistant: Tool:",
+        "@Assistant:",
+        "Tool:",
         "",
         "**Tool Use:** `nonexistent` (`toolu_unknown`)",
         "```json",
@@ -1483,7 +1582,8 @@ describe("Tool Executor", function()
     it("rejects execution while API request is in flight", function()
       local state = require("flemma.state")
       local bufnr = create_buffer({
-        "@Assistant: Tool:",
+        "@Assistant:",
+        "Tool:",
         "",
         "**Tool Use:** `calculator` (`toolu_blocked`)",
         "```json",
@@ -1511,7 +1611,7 @@ describe("Tool Executor", function()
 
     it("rejects duplicate execution of same tool_id", function()
       -- Use an async tool that never completes, so the pending slot stays occupied
-      registry.define("slow_async_dup", {
+      registry.register("slow_async_dup", {
         name = "slow_async_dup",
         description = "Async tool that never completes",
         async = true,
@@ -1522,7 +1622,8 @@ describe("Tool Executor", function()
       })
 
       local bufnr = create_buffer({
-        "@Assistant: Tool:",
+        "@Assistant:",
+        "Tool:",
         "",
         "**Tool Use:** `slow_async_dup` (`toolu_dup`)",
         "```json",
@@ -1554,7 +1655,7 @@ describe("Tool Executor", function()
     end)
 
     it("rejects execution of non-executable tool", function()
-      registry.define("schema_only", {
+      registry.register("schema_only", {
         name = "schema_only",
         description = "No executor",
         input_schema = {},
@@ -1563,7 +1664,8 @@ describe("Tool Executor", function()
       })
 
       local bufnr = create_buffer({
-        "@Assistant: Tool:",
+        "@Assistant:",
+        "Tool:",
         "",
         "**Tool Use:** `schema_only` (`toolu_noexec`)",
         "```json",
@@ -1587,7 +1689,8 @@ describe("Tool Executor", function()
   describe("sync execution", function()
     it("creates pending entry during execution", function()
       local bufnr = create_buffer({
-        "@Assistant: Computing:",
+        "@Assistant:",
+        "Computing:",
         "",
         "**Tool Use:** `calculator` (`toolu_pending_test`)",
         "```json",
@@ -1645,14 +1748,16 @@ describe("Tool Executor", function()
       ap_state.set_config({ tools = { autopilot = { enabled = true } } })
 
       local bufnr = create_buffer({
-        "@Assistant: Computing:",
+        "@Assistant:",
+        "Computing:",
         "",
         "**Tool Use:** `calculator` (`toolu_arm_test`)",
         "```json",
         '{ "expression": "2+2" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_arm_test`",
+        "@You:",
+        "**Tool Result:** `toolu_arm_test`",
         "",
         "```flemma:tool status=pending",
         "```",
@@ -1700,14 +1805,16 @@ describe("Tool Executor", function()
       ap_state.set_config({ tools = { autopilot = { enabled = true } } })
 
       local bufnr = create_buffer({
-        "@Assistant: Computing:",
+        "@Assistant:",
+        "Computing:",
         "",
         "**Tool Use:** `calculator` (`toolu_no_arm`)",
         "```json",
         '{ "expression": "2+2" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_no_arm`",
+        "@You:",
+        "**Tool Result:** `toolu_no_arm`",
         "",
         "```flemma:tool status=pending",
         "```",
@@ -1744,14 +1851,16 @@ describe("Tool Executor", function()
 
       -- Start with pending block to get autopilot into paused state
       local bufnr = create_buffer({
-        "@Assistant: Doing something:",
+        "@Assistant:",
+        "Doing something:",
         "",
         "**Tool Use:** `calculator` (`toolu_reject_arm`)",
         "```json",
         '{ "expression": "2+2" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_reject_arm`",
+        "@You:",
+        "**Tool Result:** `toolu_reject_arm`",
         "",
         "```flemma:tool status=pending",
         "```",
@@ -1772,14 +1881,16 @@ describe("Tool Executor", function()
 
       -- Now swap to rejected status (user changed it in buffer)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-        "@Assistant: Doing something:",
+        "@Assistant:",
+        "Doing something:",
         "",
         "**Tool Use:** `calculator` (`toolu_reject_arm`)",
         "```json",
         '{ "expression": "2+2" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_reject_arm`",
+        "@You:",
+        "**Tool Result:** `toolu_reject_arm`",
         "",
         "```flemma:tool status=rejected",
         "User does not want this.",
@@ -1811,14 +1922,16 @@ describe("Tool Executor", function()
 
       -- Start with pending block to get autopilot into paused state
       local bufnr = create_buffer({
-        "@Assistant: Doing something:",
+        "@Assistant:",
+        "Doing something:",
         "",
         "**Tool Use:** `calculator` (`toolu_deny_arm`)",
         "```json",
         '{ "expression": "2+2" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_deny_arm`",
+        "@You:",
+        "**Tool Result:** `toolu_deny_arm`",
         "",
         "```flemma:tool status=pending",
         "```",
@@ -1839,14 +1952,16 @@ describe("Tool Executor", function()
 
       -- Now swap to denied status
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-        "@Assistant: Doing something:",
+        "@Assistant:",
+        "Doing something:",
         "",
         "**Tool Use:** `calculator` (`toolu_deny_arm`)",
         "```json",
         '{ "expression": "2+2" }',
         "```",
         "",
-        "@You: **Tool Result:** `toolu_deny_arm`",
+        "@You:",
+        "**Tool Result:** `toolu_deny_arm`",
         "",
         "```flemma:tool status=denied",
         "```",
@@ -1869,7 +1984,8 @@ describe("Tool Executor", function()
   describe("cleanup_buffer", function()
     it("cleans up all state for buffer", function()
       local bufnr = create_buffer({
-        "@Assistant: Tool:",
+        "@Assistant:",
+        "Tool:",
         "",
         "**Tool Use:** `calculator` (`toolu_cleanup`)",
         "```json",
@@ -1896,7 +2012,7 @@ describe("Tool Executor", function()
       local cancel_called = false
 
       -- Register an async tool that returns a cancel function
-      registry.define("slow_async", {
+      registry.register("slow_async", {
         name = "slow_async",
         description = "Slow async tool for testing",
         async = true,
@@ -1909,7 +2025,8 @@ describe("Tool Executor", function()
       })
 
       local bufnr = create_buffer({
-        "@Assistant: Tool:",
+        "@Assistant:",
+        "Tool:",
         "",
         "**Tool Use:** `slow_async` (`toolu_cancel_fn`)",
         "```json",

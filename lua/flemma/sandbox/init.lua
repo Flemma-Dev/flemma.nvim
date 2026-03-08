@@ -55,13 +55,8 @@ end
 ---@param name string Unique backend name
 ---@param definition flemma.sandbox.BackendDefinition
 function M.register(name, definition)
-  local loader = require("flemma.loader")
-  if loader.is_module_path(name) then
-    error(
-      string.format("flemma: sandbox backend name '%s' must not contain dots (dots indicate module paths)", name),
-      2
-    )
-  end
+  local registry_utils = require("flemma.registry")
+  registry_utils.validate_name(name, "sandbox backend")
   for i, entry in ipairs(backends) do
     if entry.name == name then
       table.remove(backends, i)
@@ -104,6 +99,18 @@ function M.get(name)
     end
   end
   return nil
+end
+
+---Check if a backend exists by name.
+---@param name string
+---@return boolean
+function M.has(name)
+  for _, entry in ipairs(backends) do
+    if entry.name == name then
+      return true
+    end
+  end
+  return false
 end
 
 ---Get all registered backends, sorted by priority (highest first).

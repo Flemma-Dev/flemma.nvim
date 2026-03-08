@@ -3,9 +3,9 @@ if exists("b:current_syntax")
 endif
 
 " Define the role marker matches (e.g., @System:)
-syntax match FlemmaRoleSystem '^@System:' contained
-syntax match FlemmaRoleUser '^@You:' contained
-syntax match FlemmaRoleAssistant '^@Assistant:' contained
+syntax match FlemmaRoleSystem '^@System:\s*$' contained
+syntax match FlemmaRoleUser '^@You:\s*$' contained
+syntax match FlemmaRoleAssistant '^@Assistant:\s*$' contained
 
 " Define the Lua expression match for User messages
 syntax match FlemmaUserLuaExpression "{{.\{-}}}" contained
@@ -56,9 +56,9 @@ syntax region FlemmaFrontmatterBlockLua start="\%1l^```lua$" end="^```$" keepend
 syntax region FlemmaFrontmatterBlockJson start="\%1l^```json$" end="^```$" keepend contains=FlemmaFrontmatterTag,@JSON
 
 " System region
-syntax region FlemmaSystem start='^@System:' end='\(^@\(You\|Assistant\):\)\@=\|\%$' contains=FlemmaRoleSystem,@Markdown
+syntax region FlemmaSystem start='^@System:\s*$' end='\(^@\(You\|Assistant\):\s*$\)\@=\|\%$' contains=FlemmaRoleSystem,@Markdown
 " User region (contains tool results)
-syntax region FlemmaUser start='^@You:' end='\(^@\(System\|Assistant\):\)\@=\|\%$' contains=FlemmaRoleUser,FlemmaUserLuaExpression,FlemmaUserFileReference,FlemmaToolResult,@Markdown
+syntax region FlemmaUser start='^@You:\s*$' end='\(^@\(System\|Assistant\):\s*$\)\@=\|\%$' contains=FlemmaRoleUser,FlemmaUserLuaExpression,FlemmaUserFileReference,FlemmaToolResult,@Markdown
 
 " Thinking Block Region (nested inside Assistant)
 " This region starts with <thinking> or <thinking provider:signature="..."> and ends with </thinking>.
@@ -67,6 +67,6 @@ syntax region FlemmaUser start='^@You:' end='\(^@\(System\|Assistant\):\)\@=\|\%
 syntax region FlemmaThinkingBlock start="^<thinking\(\s.*[^/>]\)\?>$" end="^</thinking>$" keepend contains=FlemmaThinkingTag,@Markdown
 
 " Assistant region contains role markers, markdown, thinking blocks, and tool use
-syntax region FlemmaAssistant start='^@Assistant:' end='\(^@\(System\|You\):\)\@=\|\%$' contains=FlemmaRoleAssistant,FlemmaThinkingBlock,FlemmaToolUse,@Markdown
+syntax region FlemmaAssistant start='^@Assistant:\s*$' end='\(^@\(System\|You\):\s*$\)\@=\|\%$' contains=FlemmaRoleAssistant,FlemmaThinkingBlock,FlemmaToolUse,@Markdown
 
 let b:current_syntax = "chat"

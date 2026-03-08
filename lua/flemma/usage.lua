@@ -4,20 +4,20 @@
 ---@class flemma.Usage
 local M = {}
 
----@class flemma.usage.FormatResult
----@field text string
----@field highlights flemma.usage.Highlight[]
-
----@class flemma.usage.Highlight
----@field line integer 0-indexed line number in the text
----@field col_start integer byte offset
----@field col_end integer byte offset
----@field group string highlight group name
-
---- Minimum number of middle-dot leaders between label and value
-local MIN_LEADER_DOTS = 3
---- Spacing between columns (two spaces)
-local COLUMN_GAP = "  "
+--- Item priorities (higher = more important, shown first when space is scarce)
+local PRIORITY = {
+  MODEL_NAME = 110,
+  SESSION_COST = 100,
+  REQUEST_INPUT_TOKENS = 90,
+  CACHE_PERCENT = 80,
+  REQUEST_COST = 70,
+  REQUEST_OUTPUT_TOKENS = 60,
+  THINKING_TOKENS = 50,
+  SESSION_INPUT_TOKENS = 35,
+  SESSION_OUTPUT_TOKENS = 35,
+  SESSION_REQUEST_COUNT = 20,
+  PROVIDER_NAME = 10,
+}
 
 --- Format a number with comma separators for thousands
 ---@param number number The number to format
@@ -45,270 +45,176 @@ function M.calculate_cache_percent(request)
   return math.floor(request.cache_read_input_tokens / total_input * 100)
 end
 
---- Build a dotted-leader pair: "label ··· value" padded to target_width display characters
---- Uses U+00B7 MIDDLE DOT (2 bytes in UTF-8) as the leader character
----@param label string Left-aligned label text
----@param value string Right-aligned value text
----@param target_width integer Target display width in characters
----@return string pair The formatted leader pair
-function M.build_leader_pair(label, value, target_width)
-  local label_width = vim.fn.strdisplaywidth(label)
-  local value_width = vim.fn.strdisplaywidth(value)
-  -- 2 accounts for spaces flanking the dots: "label ··· value"
-  local dot_count = target_width - label_width - value_width - 2
-  if dot_count < MIN_LEADER_DOTS then
-    dot_count = MIN_LEADER_DOTS
-  end
-  -- U+00B7 MIDDLE DOT is 2 bytes in UTF-8 (0xC2 0xB7)
-  local dots = string.rep("\xC2\xB7", dot_count)
-  return label .. " " .. dots .. " " .. value
-end
-
---- Compute the minimum column width that fits a label and value with at least MIN_LEADER_DOTS dots
----@param label_width integer Display width of the label
----@param value_width integer Display width of the value
----@return integer width Minimum target_width for build_leader_pair
-local function minimum_column_width(label_width, value_width)
-  -- label + space + dots + space + value
-  return label_width + 2 + MIN_LEADER_DOTS + value_width
-end
-
---- Build the request detail line showing token counts
----@param request flemma.session.Request The request to format
----@param indent integer Number of leading spaces
----@return string line The formatted detail line
-local function build_request_detail_line(request, indent)
-  local total_output_tokens = request:get_total_output_tokens()
-  local parts = {}
-  table.insert(parts, "\xE2\x86\x91 " .. M.format_number(request.input_tokens))
-  table.insert(parts, "\xE2\x86\x93 " .. M.format_number(total_output_tokens))
-  if request.thoughts_tokens > 0 then
-    table.insert(parts, "\xE2\x97\x8B " .. M.format_number(request.thoughts_tokens) .. " thinking")
-  else
-    -- Append "tokens" suffix when no thinking tokens are shown
-    parts[#parts] = parts[#parts] .. " tokens"
-  end
-  return string.rep(" ", indent) .. table.concat(parts, "  ")
-end
-
---- Build the session detail line showing aggregate token counts
----@param session flemma.session.Session The session to format
----@param indent integer Number of leading spaces
----@return string line The formatted detail line
-local function build_session_detail_line(session, indent)
-  local total_input = session:get_total_input_tokens()
-  local total_output = session:get_total_output_tokens()
-  local parts = {
-    "\xE2\x86\x91 " .. M.format_number(total_input),
-    "\xE2\x86\x93 " .. M.format_number(total_output),
-  }
-  return string.rep(" ", indent) .. table.concat(parts, "  ")
-end
-
---- Format usage information for notification display
+--- Build structured segments from request and session data for bar rendering
 ---@param request? flemma.session.Request Most recent completed request
 ---@param session? flemma.session.Session Session instance
----@return flemma.usage.FormatResult
-function M.format_notification(request, session)
+---@return flemma.bar.Segment[]
+function M.build_segments(request, session)
   local state = require("flemma.state")
   local config = state.get_config()
   local pricing_enabled = config.pricing.enabled
 
-  local lines = {} ---@type string[]
-  local highlights = {} ---@type flemma.usage.Highlight[]
+  local segments = {} ---@type flemma.bar.Segment[]
 
+  -- Identity segment (from request)
   if request then
-    -- Model line: ` `model` (provider) `
-    table.insert(lines, " `" .. request.model .. "` (" .. request.provider .. ")")
-    -- Blank separator
-    table.insert(lines, "")
+    local identity_items = {} ---@type flemma.bar.Item[]
 
-    local request_cost = pricing_enabled and string.format("$%.2f", request:get_total_cost()) or nil
+    table.insert(identity_items, {
+      key = "model_name",
+      text = request.model,
+      priority = PRIORITY.MODEL_NAME,
+      highlight = { group = "FlemmaNotificationsBar" },
+    })
+
+    table.insert(identity_items, {
+      key = "provider_name",
+      text = "(" .. request.provider .. ")",
+      priority = PRIORITY.PROVIDER_NAME,
+      highlight = { group = "FlemmaNotificationsMuted" },
+    })
+
+    table.insert(segments, {
+      key = "identity",
+      items = identity_items,
+    })
+  end
+
+  -- Request segment
+  if request then
+    local request_items = {} ---@type flemma.bar.Item[]
+
+    -- Cost
+    if pricing_enabled then
+      table.insert(request_items, {
+        key = "request_cost",
+        text = string.format("$%.2f", request:get_total_cost()),
+        priority = PRIORITY.REQUEST_COST,
+        highlight = { group = "FlemmaNotificationsBar" },
+      })
+    end
+
+    -- Cache percentage
     local cache_percent = M.calculate_cache_percent(request)
-
-    -- Determine whether cache column is shown
-    local show_cache = cache_percent ~= nil
-
-    if pricing_enabled then
-      -- With pricing: two-column primary line
-      -- Column 1: "Request ··· $X.XX"
-      local request_label = "Request"
-      local request_value = request_cost --[[@as string]]
-      local col1_min = minimum_column_width(#request_label, #request_value)
-
-      -- Compute column 1 width: also consider session row if present
-      local col1_width = col1_min
-      if session and session:get_request_count() > 0 then
-        local session_cost = string.format("$%.2f", session:get_total_cost())
-        local session_col1_min = minimum_column_width(#"Session", #session_cost)
-        if session_col1_min > col1_width then
-          col1_width = session_col1_min
+    if cache_percent ~= nil then
+      -- Suppress cache indicator when 0% is expected (below minimum cacheable tokens)
+      local below_threshold = false
+      if cache_percent == 0 then
+        local registry = require("flemma.provider.registry")
+        local model_info = registry.get_model_info(request.provider, request.model)
+        if model_info and model_info.min_cache_tokens then
+          local total_input = request.input_tokens
+            + request.cache_read_input_tokens
+            + request.cache_creation_input_tokens
+          below_threshold = total_input < model_info.min_cache_tokens
         end
       end
 
-      local col1 = M.build_leader_pair(request_label, request_value, col1_width)
-      local primary_line = " " .. col1
-
-      if show_cache then
-        local cache_value = tostring(cache_percent) .. "%"
-        local cache_label = "Cache"
-        local col2_width = minimum_column_width(#cache_label, #cache_value)
-        -- Also consider session col2 width for consistency
-        if session and session:get_request_count() > 0 then
-          local requests_value = tostring(session:get_request_count())
-          local requests_col2_min = minimum_column_width(#"Requests", #requests_value)
-          if requests_col2_min > col2_width then
-            col2_width = requests_col2_min
-          end
-        end
-        local col2 = M.build_leader_pair(cache_label, cache_value, col2_width)
-        primary_line = primary_line .. COLUMN_GAP .. col2
-
-        -- Add cache highlight
-        local cache_percent_str = tostring(cache_percent) .. "%"
-        -- Find the byte position of the cache percentage in the primary line
-        -- The cache value is at the end of col2, which is at the end of primary_line
-        local line_byte_len = #primary_line
-        local cache_percent_byte_len = #cache_percent_str
-        local col_end = line_byte_len
-        local col_start = col_end - cache_percent_byte_len
-
-        local group = cache_percent > 50 and "FlemmaNotifyCacheGood" or "FlemmaNotifyCacheBad"
-        table.insert(highlights, {
-          line = #lines, -- 0-indexed: current line count = index of next line
-          col_start = col_start,
-          col_end = col_end,
-          group = group,
+      if not below_threshold then
+        local cache_text = tostring(cache_percent) .. "%"
+        local group = cache_percent > 50 and "FlemmaNotificationsCacheGood" or "FlemmaNotificationsCacheBad"
+        table.insert(request_items, {
+          key = "cache_percent",
+          text = cache_text,
+          priority = PRIORITY.CACHE_PERCENT,
+          highlight = {
+            group = group,
+          },
         })
       end
+    end
 
-      table.insert(lines, primary_line)
+    -- Input tokens
+    table.insert(request_items, {
+      key = "request_input_tokens",
+      text = M.format_number(request.input_tokens) .. "\xE2\x86\x91", -- ↑
+      priority = PRIORITY.REQUEST_INPUT_TOKENS,
+      highlight = { group = "FlemmaNotificationsSecondary" },
+    })
 
-      -- Align ↑ under the cost value start in " Request ··· $X.XX"
-      local detail_indent = 1 + col1_width - #request_value
-      table.insert(lines, build_request_detail_line(request, detail_indent))
-    else
-      -- Without pricing: no cost column
-      -- Primary line: "Request" then optionally "Cache ··· NN%"
-      if show_cache then
-        local cache_value = tostring(cache_percent) .. "%"
-        local cache_label = "Cache"
-        local col2_width = minimum_column_width(#cache_label, #cache_value)
-        -- Consider session col2 width
-        if session and session:get_request_count() > 0 then
-          local requests_value = tostring(session:get_request_count())
-          local requests_col2_min = minimum_column_width(#"Requests", #requests_value)
-          if requests_col2_min > col2_width then
-            col2_width = requests_col2_min
-          end
-        end
-        local col2 = M.build_leader_pair(cache_label, cache_value, col2_width)
-        local primary_line = " Request" .. COLUMN_GAP .. col2
+    -- Output tokens
+    local total_output_tokens = request:get_total_output_tokens()
+    table.insert(request_items, {
+      key = "request_output_tokens",
+      text = M.format_number(total_output_tokens) .. "\xE2\x86\x93", -- ↓
+      priority = PRIORITY.REQUEST_OUTPUT_TOKENS,
+      highlight = { group = "FlemmaNotificationsSecondary" },
+    })
 
-        -- Add cache highlight
-        local cache_percent_str = tostring(cache_percent) .. "%"
-        local line_byte_len = #primary_line
-        local cache_percent_byte_len = #cache_percent_str
-        local col_end = line_byte_len
-        local col_start = col_end - cache_percent_byte_len
+    -- Thinking tokens
+    if request.thoughts_tokens > 0 then
+      table.insert(request_items, {
+        key = "thinking_tokens",
+        text = "\xE2\x97\x8B " .. M.format_number(request.thoughts_tokens), -- ○
+        priority = PRIORITY.THINKING_TOKENS,
+        highlight = { group = "FlemmaNotificationsSecondary" },
+      })
+    end
 
-        local group = cache_percent > 50 and "FlemmaNotifyCacheGood" or "FlemmaNotifyCacheBad"
-        table.insert(highlights, {
-          line = #lines,
-          col_start = col_start,
-          col_end = col_end,
-          group = group,
-        })
-
-        table.insert(lines, primary_line)
-
-        -- Detail indent: align under second column start (after "Request  ")
-        local detail_indent = 1 + #"Request" + #COLUMN_GAP
-        table.insert(lines, build_request_detail_line(request, detail_indent))
-      else
-        -- No cache, no pricing: just "Request" label with detail below
-        table.insert(lines, " Request")
-        local detail_indent = 1 + #"Request" + #COLUMN_GAP
-        table.insert(lines, build_request_detail_line(request, detail_indent))
-      end
+    if #request_items > 0 then
+      table.insert(segments, {
+        key = "request",
+        items = request_items,
+        separator_highlight = "FlemmaNotificationsMuted",
+      })
     end
   end
 
-  -- Session block
+  -- Session segment
   if session and session:get_request_count() > 0 then
-    -- Blank separator between request and session blocks
-    if #lines > 0 then
-      table.insert(lines, "")
-    end
+    local session_items = {} ---@type flemma.bar.Item[]
 
-    local request_count_value = tostring(session:get_request_count())
-
+    -- Session cost
     if pricing_enabled then
-      local session_cost = string.format("$%.2f", session:get_total_cost())
-      local session_label = "Session"
-
-      -- Column 1 width: must be consistent with request block col1
-      local col1_width = minimum_column_width(#session_label, #session_cost)
-      if request then
-        local request_cost_str = string.format("$%.2f", request:get_total_cost())
-        local request_col1_min = minimum_column_width(#"Request", #request_cost_str)
-        if request_col1_min > col1_width then
-          col1_width = request_col1_min
-        end
-      end
-
-      local col1 = M.build_leader_pair(session_label, session_cost, col1_width)
-
-      -- Column 2: "Requests · NN"
-      local requests_label = "Requests"
-      local col2_width = minimum_column_width(#requests_label, #request_count_value)
-      -- Consider request block col2 width for consistency
-      if request then
-        local cache_percent = M.calculate_cache_percent(request)
-        if cache_percent ~= nil then
-          local cache_value = tostring(cache_percent) .. "%"
-          local cache_col2_min = minimum_column_width(#"Cache", #cache_value)
-          if cache_col2_min > col2_width then
-            col2_width = cache_col2_min
-          end
-        end
-      end
-      local col2 = M.build_leader_pair(requests_label, request_count_value, col2_width)
-
-      table.insert(lines, " " .. col1 .. COLUMN_GAP .. col2)
-
-      -- Detail line indent: same logic as request block
-      local detail_indent = 1 + col1_width - #session_cost
-      table.insert(lines, build_session_detail_line(session, detail_indent))
-    else
-      -- Without pricing: no cost column
-      local requests_label = "Requests"
-      local col2_width = minimum_column_width(#requests_label, #request_count_value)
-      -- Consider request block col2 for consistency
-      if request then
-        local cache_percent = M.calculate_cache_percent(request)
-        if cache_percent ~= nil then
-          local cache_value = tostring(cache_percent) .. "%"
-          local cache_col2_min = minimum_column_width(#"Cache", #cache_value)
-          if cache_col2_min > col2_width then
-            col2_width = cache_col2_min
-          end
-        end
-      end
-      local col2 = M.build_leader_pair(requests_label, request_count_value, col2_width)
-
-      table.insert(lines, " Session" .. COLUMN_GAP .. col2)
-
-      -- Detail indent: align under second column start
-      local detail_indent = 1 + #"Session" + #COLUMN_GAP
-      table.insert(lines, build_session_detail_line(session, detail_indent))
+      table.insert(session_items, {
+        key = "session_cost",
+        text = string.format("$%.2f", session:get_total_cost()),
+        priority = PRIORITY.SESSION_COST,
+        highlight = { group = "FlemmaNotificationsBar" },
+      })
     end
+
+    -- Session input tokens
+    table.insert(session_items, {
+      key = "session_input_tokens",
+      text = M.format_number(session:get_total_input_tokens()) .. "\xE2\x86\x91", -- ↑
+      priority = PRIORITY.SESSION_INPUT_TOKENS,
+      highlight = { group = "FlemmaNotificationsSecondary" },
+    })
+
+    -- Session output tokens
+    table.insert(session_items, {
+      key = "session_output_tokens",
+      text = M.format_number(session:get_total_output_tokens()) .. "\xE2\x86\x93", -- ↓
+      priority = PRIORITY.SESSION_OUTPUT_TOKENS,
+      highlight = { group = "FlemmaNotificationsSecondary" },
+    })
+
+    table.insert(segments, {
+      key = "session",
+      label = "Σ" .. tostring(session:get_request_count()),
+      label_highlight = "FlemmaNotificationsMuted",
+      separator_highlight = "FlemmaNotificationsMuted",
+      items = session_items,
+    })
   end
 
-  return {
-    text = table.concat(lines, "\n"),
-    highlights = highlights,
-  }
+  return segments
+end
+
+--- Format usage information for notification bar display
+--- Builds segments from request/session data and renders via the bar layout engine.
+---@param request? flemma.session.Request Most recent completed request
+---@param session? flemma.session.Session Session instance
+---@param available_width integer Window width in display characters
+---@return flemma.bar.RenderResult
+function M.format_notification(request, session, available_width)
+  local bar = require("flemma.bar")
+  local segments = M.build_segments(request, session)
+  if #segments == 0 then
+    return { text = "", highlights = {} }
+  end
+  return bar.render(segments, available_width)
 end
 
 return M

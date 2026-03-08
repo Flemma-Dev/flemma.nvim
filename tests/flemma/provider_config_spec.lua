@@ -1,5 +1,5 @@
 local registry = require("flemma.provider.registry")
-local modeline = require("flemma.modeline")
+local modeline = require("flemma.utilities.modeline")
 
 describe("provider.registry.extract_switch_arguments", function()
   it("detects provider and model from positional tokens", function()

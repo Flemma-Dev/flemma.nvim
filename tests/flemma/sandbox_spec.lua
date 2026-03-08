@@ -393,6 +393,23 @@ describe("sandbox policy layer", function()
       local entry = sandbox.get("bwrap")
       assert.are.equal(42, entry.priority)
     end)
+
+    it("has() returns true for a registered backend", function()
+      sandbox.clear()
+      sandbox.register("test_has", {
+        available = function()
+          return true, nil
+        end,
+        wrap = function(_, _, inner)
+          return inner, nil
+        end,
+      })
+      assert.is_true(sandbox.has("test_has"))
+    end)
+
+    it("has() returns false for an unknown backend", function()
+      assert.is_false(sandbox.has("nonexistent_backend"))
+    end)
   end)
 
   describe("auto-detection", function()

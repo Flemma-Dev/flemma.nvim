@@ -9,6 +9,7 @@ local autopilot = require("flemma.autopilot")
 local sandbox = require("flemma.sandbox")
 local tools_registry = require("flemma.tools.registry")
 local tool_presets = require("flemma.tools.presets")
+local registry = require("flemma.provider.registry")
 
 local MARKER_FRONTMATTER = "✲"
 
@@ -18,7 +19,7 @@ local MARKER_FRONTMATTER = "✲"
 ---@field source_bufnr? integer Buffer to collect status from (defaults to current)
 
 ---@class flemma.status.Data
----@field provider { name: string, model: string|nil, initialized: boolean }
+---@field provider { name: string, model: string|nil, initialized: boolean, model_info: flemma.models.ModelInfo|nil }
 ---@field parameters { merged: table<string, any>, frontmatter_overrides: table<string, any>|nil, resolved_max_tokens: integer|nil }
 ---@field autopilot { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, frontmatter_override: boolean|nil }
 ---@field sandbox { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil }
@@ -28,13 +29,15 @@ local MARKER_FRONTMATTER = "✲"
 
 ---Collect provider section data
 ---@param config flemma.Config
----@return { name: string, model: string|nil, initialized: boolean }
+---@return { name: string, model: string|nil, initialized: boolean, model_info: flemma.models.ModelInfo|nil }
 local function collect_provider(config)
   local provider_instance = state.get_provider()
+  local model_info = config.model and registry.get_model_info(config.provider, config.model) or nil
   return {
     name = config.provider,
     model = config.model,
     initialized = provider_instance ~= nil,
+    model_info = model_info,
   }
 end
 
@@ -356,6 +359,18 @@ local function format_name_list(names, frontmatter_items)
   return table.concat(parts, ", ")
 end
 
+---Format a token count as a compact string (e.g. 200000 → "200K", 1000000 → "1M")
+---@param tokens integer
+---@return string
+local function format_tokens(tokens)
+  if tokens >= 1000000 and tokens % 1000000 == 0 then
+    return tostring(tokens / 1000000) .. "M"
+  elseif tokens >= 1000 and tokens % 1000 == 0 then
+    return tostring(tokens / 1000) .. "K"
+  end
+  return tostring(tokens)
+end
+
 ---Format a scalar or table value as a display string
 ---@param value any
 ---@return string
@@ -389,6 +404,41 @@ function M.format(data, verbose)
   add("  name: " .. data.provider.name)
   add("  model: " .. (data.provider.model or "(none)"))
   add("  initialized: " .. tostring(data.provider.initialized))
+  local model_info = data.provider.model_info
+  if model_info then
+    if model_info.max_input_tokens or model_info.max_output_tokens then
+      local parts = {}
+      if model_info.max_input_tokens then
+        table.insert(parts, format_tokens(model_info.max_input_tokens) .. " input")
+      end
+      if model_info.max_output_tokens then
+        table.insert(parts, format_tokens(model_info.max_output_tokens) .. " output")
+      end
+      add("  context: " .. table.concat(parts, ", "))
+    end
+    local pricing = model_info.pricing
+    local price_line = string.format("$%.2f/$%.2f", pricing.input, pricing.output)
+    if pricing.cache_read or pricing.cache_write then
+      local cache_parts = {}
+      if pricing.cache_read then
+        table.insert(cache_parts, string.format("$%.2f read", pricing.cache_read))
+      end
+      if pricing.cache_write then
+        table.insert(cache_parts, string.format("$%.2f write", pricing.cache_write))
+      end
+      price_line = price_line .. " (cache: " .. table.concat(cache_parts, ", ") .. ")"
+    end
+    add("  pricing: " .. price_line)
+    if model_info.thinking_budgets then
+      local min = model_info.min_thinking_budget
+      local max = model_info.max_thinking_budget
+      if min and max then
+        add("  thinking: " .. tostring(min) .. "–" .. tostring(max) .. " budget range")
+      end
+    elseif model_info.supports_reasoning_effort then
+      add("  thinking: reasoning_effort (provider-managed)")
+    end
+  end
   add("")
 
   -- Parameters (merged) section
@@ -413,7 +463,7 @@ function M.format(data, verbose)
           .. resolved_suffix
           .. "~~ "
           .. format_value(data.parameters.frontmatter_overrides[key])
-          .. "  "
+          .. " "
           .. MARKER_FRONTMATTER
       )
     else
@@ -434,7 +484,7 @@ function M.format(data, verbose)
         .. autopilot_status
         .. " ("
         .. data.autopilot.buffer_state
-        .. ")  "
+        .. ") "
         .. MARKER_FRONTMATTER
     )
   else
@@ -500,11 +550,22 @@ function M.format(data, verbose)
     or data.approval.frontmatter_items
   if has_frontmatter_marker then
     add("")
-    add(MARKER_FRONTMATTER .. " = set by buffer frontmatter")
+    add(MARKER_FRONTMATTER .. " set by buffer frontmatter")
   end
 
-  -- Verbose: full config dump
+  -- Verbose: model info dump and full config dump
   if verbose then
+    if model_info then
+      add("")
+      add("Model Info")
+      add(string.rep("─", 40))
+      add("")
+      local info_text = vim.inspect(model_info)
+      for line in info_text:gmatch("[^\n]+") do
+        add(line)
+      end
+    end
+
     add("")
     add("Config (full)")
     add(string.rep("─", 40))

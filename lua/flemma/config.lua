@@ -10,10 +10,14 @@
 ---@field user_file_reference flemma.config.HighlightValue
 ---@field thinking_tag flemma.config.HighlightValue
 ---@field thinking_block flemma.config.HighlightValue
----@field tool_use flemma.config.HighlightValue
----@field tool_result flemma.config.HighlightValue
+---@field tool_icon flemma.config.HighlightValue
+---@field tool_name flemma.config.HighlightValue
+---@field tool_use_title flemma.config.HighlightValue
+---@field tool_result_title flemma.config.HighlightValue
 ---@field tool_result_error flemma.config.HighlightValue
 ---@field tool_preview flemma.config.HighlightValue
+---@field fold_preview flemma.config.HighlightValue
+---@field fold_meta flemma.config.HighlightValue
 
 ---@class flemma.config.Ruler
 ---@field enabled boolean
@@ -31,9 +35,6 @@
 ---@field user flemma.config.SignRole
 ---@field assistant flemma.config.SignRole
 
----@class flemma.config.Spinner
----@field thinking_char string Character shown next to the thinking character count
-
 ---@class flemma.config.LineHighlights
 ---@field enabled boolean
 ---@field frontmatter flemma.config.HighlightValue
@@ -41,7 +42,19 @@
 ---@field user flemma.config.HighlightValue
 ---@field assistant flemma.config.HighlightValue
 
+---@class flemma.Config.Notifications
+---@field enabled boolean Whether notifications are shown
+---@field timeout integer Milliseconds before auto-dismiss. 0 for persistent.
+---@field limit integer Maximum visible notifications at once.
+---@field position "overlay" Display mode ("overlay" pins to window top).
+---@field zindex integer Floating window stacking priority.
+---@field highlight string Comma-separated highlight groups to derive bar colors from (first with both fg+bg wins)
+---@field border false|"underline"|"underdouble"|"undercurl"|"underdotted"|"underdashed" Bottom border style, or false to disable
+
 ---@class flemma.config.Pricing
+---@field enabled boolean
+
+---@class flemma.config.Diagnostics
 ---@field enabled boolean
 
 ---@class flemma.config.Statusline
@@ -105,11 +118,18 @@
 ---@field bash flemma.config.BashToolConfig
 ---@field modules? string[] Lua module paths for third-party tool sources
 
+---@class flemma.config.AutoClose
+---@field thinking boolean
+---@field tool_use boolean
+---@field tool_result boolean
+---@field frontmatter boolean
+
 ---@class flemma.config.Editing
 ---@field disable_textwidth boolean
 ---@field auto_write boolean
 ---@field manage_updatetime boolean
 ---@field foldlevel integer
+---@field auto_close flemma.config.AutoClose
 
 ---@class flemma.config.NormalKeymaps
 ---@field send string
@@ -133,9 +153,8 @@
 ---@field role_style? string
 ---@field ruler? flemma.config.Ruler
 ---@field signs? flemma.config.Signs
----@field spinner? flemma.config.Spinner
 ---@field line_highlights? flemma.config.LineHighlights
----@field notify? flemma.notify.Options
+---@field notifications? flemma.Config.Notifications
 ---@field pricing? flemma.config.Pricing
 ---@field statusline? flemma.config.Statusline
 ---@field provider? string
@@ -148,6 +167,7 @@
 ---@field logging? flemma.logging.Config
 ---@field keymaps? flemma.config.Keymaps
 ---@field sandbox? flemma.config.SandboxConfig
+---@field diagnostics? flemma.config.Diagnostics
 
 ---Full resolved config (all fields present after merging with defaults).
 ---@class flemma.Config : flemma.Config.Opts
@@ -156,9 +176,8 @@
 ---@field role_style string
 ---@field ruler flemma.config.Ruler
 ---@field signs flemma.config.Signs
----@field spinner flemma.config.Spinner
 ---@field line_highlights flemma.config.LineHighlights
----@field notify flemma.notify.Options
+---@field notifications flemma.Config.Notifications
 ---@field pricing flemma.config.Pricing
 ---@field statusline flemma.config.Statusline
 ---@field provider string
@@ -170,6 +189,7 @@
 ---@field logging flemma.logging.Config
 ---@field keymaps flemma.config.Keymaps
 ---@field sandbox flemma.config.SandboxConfig
+---@field diagnostics flemma.config.Diagnostics
 
 ---@type flemma.Config
 return {
@@ -186,12 +206,18 @@ return {
     user_file_reference = "Include", -- Highlight group or hex color for @./file references in user messages
     thinking_tag = "Comment", -- Highlight group or hex color for <thinking> and </thinking> tags
     thinking_block = { dark = "Comment+bg:#102020-fg:#111111", light = "Comment-bg:#102020+fg:#111111" }, -- Highlight group or hex color for content inside <thinking> blocks
-    tool_use = "Function", -- Highlight group or hex color for **Tool Use:** title
-    tool_result = "Function", -- Highlight group or hex color for **Tool Result:** title
-    tool_result_error = "DiagnosticError", -- Highlight group or hex color for (error) marker in tool results
-    tool_preview = "Comment", -- Highlight group or hex color for tool preview virtual lines in pending tool blocks
+    -- Tools
+    tool_icon = "FlemmaToolUseTitle", -- Highlight for ◆ symbol in tool fold lines
+    tool_name = "Function", -- Highlight for tool name in fold lines and headers
+    tool_use_title = "Function", -- Highlight for **Tool Use:** title text
+    tool_result_title = "Function", -- Highlight for **Tool Result:** title text
+    tool_result_error = "DiagnosticError", -- Highlight for (error) marker in tool results
+    tool_preview = "Comment", -- Highlight for tool preview virtual lines in pending tool blocks
+    -- Folds
+    fold_preview = "Comment", -- Highlight for tool content preview text in fold lines
+    fold_meta = "Comment", -- Highlight for (N lines) suffix in fold lines
   },
-  role_style = "bold,underline", -- style applied to role markers like @You:
+  role_style = "bold", -- style applied to role markers like @You:
   ruler = {
     enabled = true, -- Set to false to disable rulers between messages
     char = "─", -- The character to use for the ruler
@@ -213,9 +239,6 @@ return {
       hl = true, -- Inherit from highlights.assistant, set false to disable, or provide specific group/hex color
     },
   },
-  spinner = {
-    thinking_char = "❖", -- Character shown next to the thinking character count (e.g. "❖ (3.2k characters)")
-  },
   line_highlights = {
     enabled = true, -- Enable full-line background highlighting to distinguish roles
     frontmatter = { dark = "Normal+bg:#201020", light = "Normal-bg:#201020" }, -- Background color for frontmatter lines
@@ -223,7 +246,15 @@ return {
     user = { dark = "Normal", light = "Normal" }, -- Background color for user message lines
     assistant = { dark = "Normal+bg:#102020", light = "Normal-bg:#102020" }, -- Background color for assistant message lines
   },
-  notify = require("flemma.notify").default_opts,
+  notifications = {
+    enabled = true,
+    timeout = 10000,
+    limit = 1,
+    position = "overlay",
+    zindex = 30,
+    highlight = "@text.note,PmenuSel", -- Highlight group(s) for the notification bar; first with both fg+bg is used
+    border = false, -- Bottom border: "underline", "underdouble", "undercurl", "underdotted", "underdashed", or false
+  },
   pricing = {
     enabled = true, -- Whether to show pricing information in notifications
   },
@@ -266,10 +297,17 @@ return {
     auto_write = false, -- Whether to automatically write the buffer after changes
     manage_updatetime = true, -- Whether to set updatetime to 100 in chat buffers and restore original value when leaving
     foldlevel = 1, -- Default fold level: 0=all closed, 1=thinking/frontmatter collapsed, 99=all open
+    auto_close = {
+      thinking = true, -- Auto-close thinking blocks when they become terminal
+      tool_use = true, -- Auto-close tool_use blocks when completed
+      tool_result = true, -- Auto-close tool_result blocks when terminal
+      frontmatter = false, -- Auto-close frontmatter blocks (disabled by default)
+    },
   },
   logging = {
     enabled = false, -- Logging disabled by default
     path = vim.fn.stdpath("cache") .. "/flemma.log", -- Default log path
+    level = "DEBUG", -- Minimum log level: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"
   },
   keymaps = {
     normal = {
@@ -283,6 +321,9 @@ return {
       send = "<C-]>",
     },
     enabled = true, -- Set to false to disable all keymaps
+  },
+  diagnostics = {
+    enabled = false, -- Enable request diagnostics for debugging prompt caching issues
   },
   sandbox = {
     enabled = true, -- Enable filesystem sandboxing

@@ -69,7 +69,7 @@ Capabilities contract (registered via `registry.register`)
 Missing boolean capabilities default to `false` at registration time.
 ]]
 
-local json = require("flemma.json")
+local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 
 -- ============================================================================
@@ -331,6 +331,17 @@ end
 ---@return string|nil
 function M.get_endpoint(self)
   return self.endpoint
+end
+
+--- Return keys that should appear last in the serialized JSON request body.
+--- Providers override this to place dynamic content (messages, tools) after
+--- static config keys, maximizing prefix-based prompt cache hits.
+--- Non-trailing keys are sorted alphabetically; trailing keys appear in the
+--- order returned by this method.
+---@param self flemma.provider.Base
+---@return string[]
+function M.get_trailing_keys(self)
+  return {}
 end
 
 --- Legacy prompt normalization from raw messages.
@@ -649,7 +660,10 @@ function M._mark_response_successful(self)
   self._response_buffer.successful = true
 end
 
---- Check buffered response lines for JSON errors
+--- Check buffered response lines for errors.
+--- Tries JSON parsing first; if that fails, surfaces the raw body as an error.
+--- This handles non-JSON error responses (HTML pages, plain text) from proxies,
+--- CDNs, or misconfigured endpoints.
 ---@param self flemma.provider.Base
 ---@param callbacks flemma.provider.Callbacks
 ---@return boolean
@@ -663,14 +677,24 @@ function M._check_buffered_response(self, callbacks)
     return false
   end
 
+  -- Try JSON first — most API errors use structured JSON
   local ok, data = pcall(json.decode, body)
-  if not ok then
-    return false
+  if ok and type(data) == "table" then
+    local msg = self:extract_json_response_error(data)
+    if msg and callbacks.on_error then
+      callbacks.on_error(msg)
+      return true
+    end
   end
 
-  local msg = self:extract_json_response_error(data)
-  if msg and callbacks.on_error then
-    callbacks.on_error(msg)
+  -- Non-JSON or unrecognized JSON structure — surface the raw body
+  if callbacks.on_error then
+    local MAX_BODY_LENGTH = 300
+    local truncated = #body > MAX_BODY_LENGTH and body:sub(1, MAX_BODY_LENGTH) .. "..." or body
+    -- Collapse whitespace for readability (HTML can be verbose)
+    truncated = truncated:gsub("%s+", " "):gsub("^ ", ""):gsub(" $", "")
+    log.error("base._check_buffered_response(): Non-JSON or unrecognized error response: " .. truncated)
+    callbacks.on_error("Unexpected API response: " .. truncated)
     return true
   end
   return false
@@ -682,7 +706,7 @@ end
 ---@param callbacks flemma.provider.Callbacks Table of callback functions
 ---@return boolean handled True if the line was successfully parsed as an error
 function M._handle_non_sse_line(self, line, callbacks)
-  log.debug("base.handle_non_sse_line(): Received non-SSE line, buffering: " .. line)
+  log.trace("base.handle_non_sse_line(): Received non-SSE line, buffering: " .. line)
 
   -- Buffer the line for later analysis
   self:_buffer_response_line(line)
@@ -755,10 +779,26 @@ local function budget_to_effort(budget)
   end
 end
 
---- Map a named effort level to a thinking budget
+--- Map a named effort level to a thinking budget, using per-model data when available
 ---@param level string "minimal"|"low"|"medium"|"high"|"max"
+---@param model_info? flemma.models.ModelInfo
 ---@return integer budget
-local function effort_to_budget(level)
+local function effort_to_budget(level, model_info)
+  if model_info and model_info.thinking_budgets then
+    ---@cast model_info -nil
+    local budgets = model_info.thinking_budgets --[[@as table<string, integer>]]
+    if level == "max" then
+      if model_info.max_thinking_budget then
+        return model_info.max_thinking_budget
+      end
+      return budgets.high or 32768
+    end
+    local model_budget = budgets[level]
+    if model_budget then
+      return model_budget
+    end
+  end
+  -- Hardcoded fallback (current behavior)
   if level == "minimal" then
     return 128
   elseif level == "low" then
@@ -780,16 +820,22 @@ end
 ---
 ---@param params flemma.provider.Parameters The parameter proxy
 ---@param caps flemma.provider.Capabilities The provider's capabilities
+---@param model_info? flemma.models.ModelInfo Per-model metadata for budget/clamping
 ---@return flemma.provider.ThinkingResolution
-function M.resolve_thinking(params, caps)
+function M.resolve_thinking(params, caps, model_info)
   -- For budget-based providers (Anthropic, Vertex)
   if caps.supports_thinking_budget then
+    local min = (model_info and model_info.min_thinking_budget) or caps.min_thinking_budget or 1
+    local max = model_info and model_info.max_thinking_budget
+
     -- Priority: provider-specific thinking_budget > unified thinking
     local raw_budget = params.thinking_budget
     if raw_budget ~= nil then
       if type(raw_budget) == "number" and raw_budget > 0 then
-        local min = caps.min_thinking_budget or 1
         local budget = math.max(math.floor(raw_budget), min)
+        if max then
+          budget = math.min(budget, max)
+        end
         return { enabled = true, budget = budget, level = budget_to_effort(budget) }
       else
         return { enabled = false }
@@ -802,12 +848,17 @@ function M.resolve_thinking(params, caps)
       return { enabled = false }
     end
     if type(thinking) == "string" then
-      local budget = math.max(effort_to_budget(thinking), caps.min_thinking_budget or 1)
+      local budget = math.max(effort_to_budget(thinking, model_info), min)
+      if max then
+        budget = math.min(budget, max)
+      end
       return { enabled = true, budget = budget, level = budget_to_effort(budget) }
     end
     if type(thinking) == "number" and thinking > 0 then
-      local min = caps.min_thinking_budget or 1
       local budget = math.max(math.floor(thinking), min)
+      if max then
+        budget = math.min(budget, max)
+      end
       return { enabled = true, budget = budget, level = budget_to_effort(budget) }
     end
     return { enabled = false }

@@ -24,6 +24,7 @@ pkgs.mkShell rec {
     libsecret
     links2
     nodejs_lts.pkgs.pnpm
+    socat
     vhs
     # Neovim plug-ins
     plenary-nvim

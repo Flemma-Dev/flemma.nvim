@@ -29,7 +29,7 @@ Type "G"
 Sleep 1000ms
 Type "Gi"
 Enter
-Type@40ms "@You: "
+Type@40ms "@You:"
 Ctrl+[
 Sleep 200ms
 Type@40ms "aHello, My name's {{ name }}!"
@@ -44,55 +44,23 @@ Ctrl+[
 Sleep 1000ms
 Ctrl+]
 Sleep 1000ms
-Wait+Line /@You:/
+Wait+Screen /Tool Result: calculator:/
 Sleep 3000ms
-Type@40ms ":Okay, quick review of tool use…"
-Sleep 2000ms
-Type@40ms " looks okay to approve!"
-Sleep 2000ms
+Type "GA"
+Sleep 200ms
+Type@40ms "Is that more or less than the GB of RAM I have?"
+Sleep 200ms
 Ctrl+[
 Sleep 1000ms
-Alt+Enter
-Sleep 1000ms
-Wait+Line /@You:/
-Sleep 4000ms
-Type@40ms "amath.png is not needed anymore, get rid of it."
-Sleep 500ms
-Ctrl+[
-Type "mm"
-Type@40ms "?math.png"
-Enter
-Sleep 1000ms
-Type "n"
-Sleep 2000ms
-Type "dd"
-Sleep 1000ms
-Type "`m"
-Sleep 1000ms
-Type "a"
-Enter
-Type@40ms "(Got rid of the file reference so Flemma won't complain it's missing)"
-Enter
-Sleep 1000ms
-Type@40ms "(Oh... and Bash is in auto-approve mode, YOLO!)"
-Enter
-Ctrl+[
-Sleep 2000ms
-Hide
-Type ":nohlsearch"
-Enter
-Type ":call clearmatches()"
-Enter
-Ctrl+L
-Sleep 5000ms
-Show
 Ctrl+]
 Sleep 1000ms
-Wait+Line /@You:/
-Sleep 100ms
-Wait+Line /@Assistant: Thinking…/
-Sleep 100ms
-Wait+Line /@You:/
+Wait+Screen /Tool Result: bash:/
 Sleep 2000ms
-Type@40ms "GAGreat stuff, all done."
+Type "GA"
+Sleep 200ms
+Type@40ms "All done! I'm going to fold the conversation for an overview."
+Sleep 200ms
+Ctrl+[
+Sleep 2000ms
+Type "zm"
 Sleep 10000ms

@@ -46,6 +46,7 @@ M.setup = function(user_opts)
   log.configure({
     enabled = state.get_config().logging.enabled,
     path = state.get_config().logging.path,
+    level = state.get_config().logging.level,
   })
 
   -- Associate .chat files with the markdown treesitter parser
@@ -114,7 +115,7 @@ M.setup = function(user_opts)
   highlight.setup()
 
   -- Set up notifications
-  require("flemma.notify").setup()
+  require("flemma.notifications").setup()
 
   -- Set up chat filetype handling
   ui.setup_chat_filetype_autocmds()
@@ -155,7 +156,7 @@ M.setup = function(user_opts)
               )
             else
               -- "auto" mode: log quietly, don't bother the user
-              log.info("Sandbox: no compatible backend found, running unsandboxed. " .. (err or ""))
+              log.warn("Sandbox: no compatible backend found, running unsandboxed. " .. (err or ""))
             end
           end
         end,

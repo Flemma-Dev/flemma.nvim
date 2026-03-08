@@ -29,8 +29,8 @@ function M.setup(opts)
   opts = opts or {}
   local patterns = type(opts.pattern) == "table" and opts.pattern or { opts.pattern or "^anthropic/thinking" }
   local height = opts.height or 10
-  local separator = opts.separator or "━"
-  local separator_fg = opts.separator_fg or "#ff9e64"
+  local separator = opts.separator or "╌"
+  local separator_fg = opts.separator_fg or "#8f8f8f"
 
   local separator_hl = "FlemmaSinkViewerSeparator"
   local hl_def = { fg = separator_fg, bold = true }

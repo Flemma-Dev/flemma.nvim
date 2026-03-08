@@ -10,7 +10,8 @@ describe("flemma.codeblock", function()
         "```lua",
         "x = 5",
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       }
       local doc = parser.parse_lines(lines)
       assert.is_not_nil(doc.frontmatter)
@@ -23,7 +24,8 @@ describe("flemma.codeblock", function()
         "```json",
         '{"name": "Alice", "age": 30}',
         "```",
-        "@You: test",
+        "@You:",
+        "test",
       }
       local doc = parser.parse_lines(lines)
       assert.is_not_nil(doc.frontmatter)
@@ -33,7 +35,8 @@ describe("flemma.codeblock", function()
 
     it("should return nil frontmatter when none present", function()
       local lines = {
-        "@You: test",
+        "@You:",
+        "test",
       }
       local doc = parser.parse_lines(lines)
       assert.is_nil(doc.frontmatter)
@@ -43,7 +46,8 @@ describe("flemma.codeblock", function()
       local lines = {
         "```lua",
         "x = 5",
-        "@You: test",
+        "@You:",
+        "test",
       }
       local doc = parser.parse_lines(lines)
       assert.is_nil(doc.frontmatter)
@@ -57,7 +61,8 @@ describe("flemma.codeblock", function()
         "my_var = 'hello'",
         "my_num = 42",
         "```",
-        "@You: Value is {{ my_var }} and number is {{ my_num }}",
+        "@You:",
+        "Value is {{ my_var }} and number is {{ my_num }}",
       }
       local base_context = ctx.from_file("test.chat")
       local prompt = pipeline.run(parser.parse_lines(lines), base_context)
@@ -80,7 +85,8 @@ describe("flemma.codeblock", function()
         "```lua",
         "greet = function(name) return 'Hello, ' .. name end",
         "```",
-        "@You: {{ greet('World') }}",
+        "@You:",
+        "{{ greet('World') }}",
       }
       local base_context = ctx.from_file("test.chat")
       local prompt = pipeline.run(parser.parse_lines(lines), base_context)
@@ -105,7 +111,8 @@ describe("flemma.codeblock", function()
         "```json",
         '{"name": "Alice", "age": 30}',
         "```",
-        "@You: Name is {{ name }} and age is {{ age }}",
+        "@You:",
+        "Name is {{ name }} and age is {{ age }}",
       }
       local base_context = ctx.from_file("test.chat")
       local prompt = pipeline.run(parser.parse_lines(lines), base_context)
@@ -128,7 +135,8 @@ describe("flemma.codeblock", function()
         "```json",
         '{"user": {"name": "Bob", "role": "admin"}}',
         "```",
-        "@You: User {{ user.name }} has role {{ user.role }}",
+        "@You:",
+        "User {{ user.name }} has role {{ user.role }}",
       }
       local base_context = ctx.from_file("test.chat")
       local prompt = pipeline.run(parser.parse_lines(lines), base_context)
@@ -151,7 +159,8 @@ describe("flemma.codeblock", function()
         "```json",
         '{"tags": ["important", "urgent"]}',
         "```",
-        "@You: First tag is {{ tags[1] }} and second is {{ tags[2] }}",
+        "@You:",
+        "First tag is {{ tags[1] }} and second is {{ tags[2] }}",
       }
       local base_context = ctx.from_file("test.chat")
       local prompt = pipeline.run(parser.parse_lines(lines), base_context)
@@ -261,7 +270,8 @@ describe("flemma.codeblock", function()
         "```json",
         '{"greeting": "Hello", "name": "World"}',
         "```",
-        "@You: {{ greeting .. ', ' .. name }}!",
+        "@You:",
+        "{{ greeting .. ', ' .. name }}!",
       }
 
       local context = ctx.from_file("test.chat")

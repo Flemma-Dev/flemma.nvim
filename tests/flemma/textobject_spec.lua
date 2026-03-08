@@ -21,16 +21,19 @@ describe("Flemma Text Objects", function()
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-      "@System: System prompt.", -- line 1
-      "", -- line 2
-      "@You: First line of message.", -- line 3
-      "Second line of message.", -- line 4
-      "Third line of message.", -- line 5
-      "", -- line 6
-      "@Assistant: Another message.", -- line 7
+      "@System:", -- line 1
+      "System prompt.", -- line 2
+      "", -- line 3
+      "@You:", -- line 4
+      "First line of message.", -- line 5
+      "Second line of message.", -- line 6
+      "Third line of message.", -- line 7
+      "", -- line 8
+      "@Assistant:", -- line 9
+      "Another message.", -- line 10
     })
     -- Place cursor in the middle of the "You" message
-    vim.api.nvim_win_set_cursor(0, { 4, 5 })
+    vim.api.nvim_win_set_cursor(0, { 6, 5 })
     vim.bo[bufnr].filetype = "chat"
     return bufnr
   end
@@ -47,10 +50,10 @@ describe("Flemma Text Objects", function()
     local start_pos = vim.fn.getpos("v")
     local end_pos = vim.fn.getpos(".")
 
-    -- Expected start: line 3, column 7 (after "@You: ")
-    assert.are.same({ 3, 7 }, { start_pos[2], start_pos[3] })
-    -- Expected end: line 5, last non-blank character (g_ excludes newline)
-    assert.are.same({ 5, 22 }, { end_pos[2], end_pos[3] })
+    -- Expected start: line 5, column 1 (first content line after "@You:")
+    assert.are.same({ 5, 1 }, { start_pos[2], start_pos[3] })
+    -- Expected end: line 7, last non-blank character (g_ excludes newline)
+    assert.are.same({ 7, 22 }, { end_pos[2], end_pos[3] })
   end)
 
   it("selects around message with 'am' linewise including trailing empty lines", function()
@@ -68,10 +71,10 @@ describe("Flemma Text Objects", function()
 
     -- Should be linewise mode
     assert.are.same("V", mode)
-    -- Expected start: line 3 (beginning of @You message)
-    assert.are.same(3, start_pos[2])
-    -- Expected end: line 6 (includes trailing empty line before @Assistant)
-    assert.are.same(6, end_pos[2])
+    -- Expected start: line 4 (beginning of @You message)
+    assert.are.same(4, start_pos[2])
+    -- Expected end: line 8 (includes trailing empty line before @Assistant)
+    assert.are.same(8, end_pos[2])
   end)
 
   it("selects inner message with 'im' on single-line message", function()
@@ -79,11 +82,13 @@ describe("Flemma Text Objects", function()
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-      "@You: Single line message",
+      "@You:",
+      "Single line message",
       "",
-      "@Assistant: Response",
+      "@Assistant:",
+      "Response",
     })
-    vim.api.nvim_win_set_cursor(0, { 1, 10 })
+    vim.api.nvim_win_set_cursor(0, { 2, 10 })
     vim.bo[bufnr].filetype = "chat"
 
     -- Act
@@ -94,8 +99,8 @@ describe("Flemma Text Objects", function()
     local start_pos = vim.fn.getpos("v")
     local end_pos = vim.fn.getpos(".")
 
-    assert.are.same({ 1, 7 }, { start_pos[2], start_pos[3] })
-    assert.are.same({ 1, 25 }, { end_pos[2], end_pos[3] })
+    assert.are.same({ 2, 1 }, { start_pos[2], start_pos[3] })
+    assert.are.same({ 2, 19 }, { end_pos[2], end_pos[3] })
   end)
 
   it("selects inner message with 'im' skipping leading empty lines", function()
@@ -109,7 +114,8 @@ describe("Flemma Text Objects", function()
       "Content starts here",
       "More content",
       "",
-      "@You: Next message",
+      "@You:",
+      "Next message",
     })
     vim.api.nvim_win_set_cursor(0, { 4, 5 })
     vim.bo[bufnr].filetype = "chat"
@@ -133,13 +139,15 @@ describe("Flemma Text Objects", function()
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-      "@You: Message with trailing empty lines",
+      "@You:",
+      "Message with trailing empty lines",
       "Second line",
       "",
       "",
-      "@Assistant: Response",
+      "@Assistant:",
+      "Response",
     })
-    vim.api.nvim_win_set_cursor(0, { 1, 10 })
+    vim.api.nvim_win_set_cursor(0, { 2, 10 })
     vim.bo[bufnr].filetype = "chat"
 
     -- Act
@@ -155,8 +163,8 @@ describe("Flemma Text Objects", function()
     assert.are.same("V", mode)
     -- Should start at beginning of message (line 1)
     assert.are.same(1, start_pos[2])
-    -- Should end at last line of message including trailing empty lines (line 4)
-    assert.are.same(4, end_pos[2])
+    -- Should end at last line of message including trailing empty lines (line 5)
+    assert.are.same(5, end_pos[2])
   end)
 
   it("selects inner message with 'im' excluding <thinking> blocks", function()
@@ -172,7 +180,8 @@ describe("Flemma Text Objects", function()
       "Actual response starts here",
       "More content",
       "",
-      "@You: Next message",
+      "@You:",
+      "Next message",
     })
     vim.api.nvim_win_set_cursor(0, { 6, 5 })
     vim.bo[bufnr].filetype = "chat"
@@ -196,16 +205,18 @@ describe("Flemma Text Objects", function()
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-      "@Assistant: Some intro",
+      "@Assistant:",
+      "Some intro",
       "<thinking>",
       "Internal thoughts",
       "</thinking>",
       "Main response",
       "More response",
       "",
-      "@You: Next message",
+      "@You:",
+      "Next message",
     })
-    vim.api.nvim_win_set_cursor(0, { 5, 5 })
+    vim.api.nvim_win_set_cursor(0, { 6, 5 })
     vim.bo[bufnr].filetype = "chat"
 
     -- Act
@@ -221,8 +232,8 @@ describe("Flemma Text Objects", function()
     assert.are.same("V", mode)
     -- Should start at beginning of message (line 1)
     assert.are.same(1, start_pos[2])
-    -- Should end at last line of message including thinking blocks and trailing empty (line 7)
-    assert.are.same(7, end_pos[2])
+    -- Should end at last line of message including thinking blocks and trailing empty (line 8)
+    assert.are.same(8, end_pos[2])
   end)
 
   it("selects inner message with 'im' when cursor is on content after thinking block", function()
@@ -242,7 +253,8 @@ describe("Flemma Text Objects", function()
       "</thinking>",
       "Final content",
       "",
-      "@You: Next",
+      "@You:",
+      "Next",
     })
     vim.api.nvim_win_set_cursor(0, { 11, 5 })
     vim.bo[bufnr].filetype = "chat"

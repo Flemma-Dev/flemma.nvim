@@ -67,7 +67,7 @@ describe("flemma.session", function()
       assert.are.equal(10.50, request:get_total_cost())
     end)
 
-    it("should compute cache-aware costs from raw pricing data", function()
+    it("should compute cache-aware costs from per-model pricing", function()
       local request = session_module.Request.new({
         provider = "anthropic",
         model = "claude-sonnet-4-5",
@@ -77,13 +77,13 @@ describe("flemma.session", function()
         output_price = 15.00,
         cache_read_input_tokens = 300000,
         cache_creation_input_tokens = 100000,
-        cache_read_multiplier = 0.1,
-        cache_write_multiplier = 1.25,
+        cache_read_price = 0.30,
+        cache_write_price = 3.75,
       })
 
       -- Input base: 500000 / 1000000 * 3.00 = 1.50
-      -- Cache read: 300000 / 1000000 * (3.00 * 0.1) = 0.09
-      -- Cache write: 100000 / 1000000 * (3.00 * 1.25) = 0.375
+      -- Cache read: 300000 / 1000000 * 0.30 = 0.09
+      -- Cache write: 100000 / 1000000 * 3.75 = 0.375
       local expected_input = 1.50 + 0.09 + 0.375
       assert.is_true(math.abs(request:get_input_cost() - expected_input) < 0.0001)
     end)
@@ -198,6 +198,45 @@ describe("flemma.session", function()
       -- Output cost should only include output_tokens
       local expected_output_cost = (200 / 1000000) * 15.00
       assert.are.equal(expected_output_cost, request:get_output_cost())
+    end)
+
+    it("should compute cache-aware costs from absolute per-model cache pricing", function()
+      local request = session_module.Request.new({
+        provider = "anthropic",
+        model = "claude-sonnet-4-6",
+        input_tokens = 1000,
+        output_tokens = 500,
+        input_price = 3.00,
+        output_price = 15.00,
+        cache_read_input_tokens = 5000,
+        cache_creation_input_tokens = 2000,
+        cache_read_price = 0.30,
+        cache_write_price = 3.75,
+      })
+
+      -- base: 1000/1M * 3.00 = 0.003
+      -- read: 5000/1M * 0.30 = 0.0015
+      -- write: 2000/1M * 3.75 = 0.0075
+      local expected = 0.003 + 0.0015 + 0.0075
+      assert.is_near(expected, request:get_input_cost(), 0.0001)
+    end)
+
+    it("should fall back to input_price when cache prices absent", function()
+      local request = session_module.Request.new({
+        provider = "openai",
+        model = "gpt-4o",
+        input_tokens = 1000,
+        output_tokens = 500,
+        input_price = 2.50,
+        output_price = 10.00,
+        cache_read_input_tokens = 5000,
+        cache_creation_input_tokens = 0,
+      })
+
+      -- base: 1000/1M * 2.50 = 0.0025
+      -- read: 5000/1M * 2.50 = 0.0125 (falls back to input_price)
+      local expected = 0.0025 + 0.0125
+      assert.is_near(expected, request:get_input_cost(), 0.0001)
     end)
 
     it("should store bufnr for unnamed buffers", function()
@@ -438,6 +477,89 @@ describe("flemma.session", function()
       assert.is_nil(session:get_latest_request())
     end)
 
+    it("should get the latest request for a filepath", function()
+      local session = session_module.Session.new()
+
+      session:add_request({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 3.00,
+        output_price = 15.00,
+        filepath = "/home/user/project/chat.chat",
+        started_at = 1700000000,
+        completed_at = 1700000010,
+      })
+
+      session:add_request({
+        provider = "openai",
+        model = "gpt-4o",
+        input_tokens = 200,
+        output_tokens = 75,
+        input_price = 2.50,
+        output_price = 10.00,
+        filepath = "/home/user/project/other.chat",
+        started_at = 1700000020,
+        completed_at = 1700000030,
+      })
+
+      session:add_request({
+        provider = "anthropic",
+        model = "claude-haiku-4-5",
+        input_tokens = 50,
+        output_tokens = 25,
+        input_price = 1.00,
+        output_price = 5.00,
+        filepath = "/home/user/project/chat.chat",
+        started_at = 1700000040,
+        completed_at = 1700000050,
+      })
+
+      -- Should return the latest (third) request for chat.chat, not the first
+      local latest = session:get_latest_request_for_filepath("/home/user/project/chat.chat")
+      assert.is_not_nil(latest)
+      assert.are.equal("claude-haiku-4-5", latest.model)
+      assert.are.equal(1700000040, latest.started_at)
+    end)
+
+    it("should return nil when no request matches the filepath", function()
+      local session = session_module.Session.new()
+
+      session:add_request({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 3.00,
+        output_price = 15.00,
+        filepath = "/home/user/project/chat.chat",
+      })
+
+      assert.is_nil(session:get_latest_request_for_filepath("/home/user/project/other.chat"))
+    end)
+
+    it("should return nil for filepath lookup on empty session", function()
+      local session = session_module.Session.new()
+      assert.is_nil(session:get_latest_request_for_filepath("/any/path.chat"))
+    end)
+
+    it("should skip requests without a filepath in filepath lookup", function()
+      local session = session_module.Session.new()
+
+      session:add_request({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 3.00,
+        output_price = 15.00,
+        bufnr = 5, -- Unnamed buffer, no filepath
+      })
+
+      assert.is_nil(session:get_latest_request_for_filepath("/any/path.chat"))
+    end)
+
     it("should reset the session", function()
       local session = session_module.Session.new()
 
@@ -531,8 +653,8 @@ describe("flemma.session", function()
           completed_at = 1700000010,
           cache_read_input_tokens = 500,
           cache_creation_input_tokens = 200,
-          cache_read_multiplier = 0.1,
-          cache_write_multiplier = 1.25,
+          cache_read_price = 0.30,
+          cache_write_price = 3.75,
         },
         {
           provider = "openai",
@@ -557,7 +679,7 @@ describe("flemma.session", function()
       assert.are.equal(1700000000, first.started_at)
       assert.are.equal(1700000010, first.completed_at)
       assert.are.equal(500, first.cache_read_input_tokens)
-      assert.are.equal(0.1, first.cache_read_multiplier)
+      assert.are.equal(0.30, first.cache_read_price)
 
       -- Verify second request
       local second = session.requests[2]
@@ -611,8 +733,8 @@ describe("flemma.session", function()
         output_has_thoughts = false,
         cache_read_input_tokens = 5000,
         cache_creation_input_tokens = 2000,
-        cache_read_multiplier = 0.1,
-        cache_write_multiplier = 1.25,
+        cache_read_price = 0.30,
+        cache_write_price = 3.75,
       })
 
       -- Add a request with optional fields left nil and output_has_thoughts = true
@@ -657,8 +779,8 @@ describe("flemma.session", function()
       assert.are.equal(false, first.output_has_thoughts)
       assert.are.equal(5000, first.cache_read_input_tokens)
       assert.are.equal(2000, first.cache_creation_input_tokens)
-      assert.are.equal(0.1, first.cache_read_multiplier)
-      assert.are.equal(1.25, first.cache_write_multiplier)
+      assert.are.equal(0.30, first.cache_read_price)
+      assert.are.equal(3.75, first.cache_write_price)
 
       -- Second request: check key fields and that nil optionals survive
       local second = session.requests[2]

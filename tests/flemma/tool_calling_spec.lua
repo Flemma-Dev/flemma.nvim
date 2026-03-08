@@ -5,7 +5,7 @@ package.loaded["flemma.tools.definitions.bash"] = nil
 package.loaded["flemma.tools.definitions.read"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
 package.loaded["flemma.tools.definitions.write"] = nil
-package.loaded["flemma.tools.truncate"] = nil
+package.loaded["flemma.utilities.truncate"] = nil
 
 local ast = require("flemma.ast")
 local client = require("flemma.client")
@@ -53,7 +53,7 @@ local function wait_for_response(bufnr, timeout)
   vim.wait(timeout, function()
     local buf_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     for i = #buf_lines, 1, -1 do
-      if buf_lines[i] == "@You: " then
+      if buf_lines[i] == "@You:" and buf_lines[i + 1] == "" then
         return true
       end
     end
@@ -470,8 +470,10 @@ describe("Anthropic Provider Tool Support", function()
     local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
 
     local lines = {
-      "@System: You have access to a calculator.",
-      "@You: What is 15 * 7?",
+      "@System:",
+      "You have access to a calculator.",
+      "@You:",
+      "What is 15 * 7?",
     }
     local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
     local req = provider:build_request(prompt, {})
@@ -485,7 +487,7 @@ describe("Anthropic Provider Tool Support", function()
   it("includes tool_choice with auto mode (parallel tool use enabled)", function()
     local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
 
-    local lines = { "@You: Calculate something" }
+    local lines = { "@You:", "Calculate something" }
     local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
     local req = provider:build_request(prompt, {})
 
@@ -689,7 +691,7 @@ describe("Anthropic Streaming Tool Use Response (integration)", function()
   it("streams tool_use block into buffer", function()
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Calculate 15 * 7" })
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Calculate 15 * 7" })
 
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/tool_calling/anthropic_tool_use_streaming.txt")
     vim.cmd("Flemma send")
@@ -705,16 +707,19 @@ describe("Anthropic Streaming Tool Use Response (integration)", function()
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-      "@You: Calculate 15 * 7",
+      "@You:",
+      "Calculate 15 * 7",
       "",
-      "@Assistant: Sure!",
+      "@Assistant:",
+      "Sure!",
       "",
       "**Tool Use:** `calculator` (`toolu_01`)",
       "```json",
       '{ "expression": "15 * 7" }',
       "```",
       "",
-      "@You: **Tool Result:** `toolu_01`",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
       "",
       "```",
       "105",
@@ -817,7 +822,7 @@ describe("OpenAI Provider Request Building with Tools", function()
   it("includes tools array in OpenAI format", function()
     local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
 
-    local lines = { "@You: Calculate something" }
+    local lines = { "@You:", "Calculate something" }
     local context = ctx.from_file("tests/fixtures/doc.chat")
     local prompt = pipeline.run(parser.parse_lines(lines), context)
     local req = provider:build_request(prompt, context)
@@ -835,7 +840,7 @@ describe("OpenAI Provider Request Building with Tools", function()
   it("includes tool_choice auto (parallel tool use enabled)", function()
     local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 1024, temperature = 0 })
 
-    local lines = { "@You: Calculate something" }
+    local lines = { "@You:", "Calculate something" }
     local context = ctx.from_file("tests/fixtures/doc.chat")
     local prompt = pipeline.run(parser.parse_lines(lines), context)
     local req = provider:build_request(prompt, context)
@@ -1044,7 +1049,7 @@ describe("OpenAI Streaming Tool Use Response (integration)", function()
     core.switch_provider("openai", "gpt-4o-mini", {})
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Calculate 15 * 7" })
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Calculate 15 * 7" })
 
     client.register_fixture("api%.openai%.com", "tests/fixtures/tool_calling/openai_tool_use_streaming.txt")
     vim.cmd("Flemma send")
@@ -1059,7 +1064,7 @@ describe("OpenAI Streaming Tool Use Response (integration)", function()
     core.switch_provider("openai", "gpt-4o-mini", {})
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Calculate" })
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Calculate" })
 
     client.register_fixture("api%.openai%.com", "tests/fixtures/tool_calling/openai_text_before_tool_streaming.txt")
     vim.cmd("Flemma send")
@@ -1148,7 +1153,7 @@ describe("Vertex AI Provider Request Building with Tools", function()
       location = "global",
     })
 
-    local lines = { "@You: Calculate something" }
+    local lines = { "@You:", "Calculate something" }
     local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
     local req = provider:build_request(prompt, {})
 
@@ -1171,7 +1176,7 @@ describe("Vertex AI Provider Request Building with Tools", function()
       location = "global",
     })
 
-    local lines = { "@You: Calculate something" }
+    local lines = { "@You:", "Calculate something" }
     local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
     local req = provider:build_request(prompt, {})
 
@@ -1409,7 +1414,7 @@ describe("Vertex AI Streaming Function Call Response (integration)", function()
     core.switch_provider("vertex", "gemini-2.0-flash", { project_id = "test-project", location = "global" })
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Calculate 15 * 7" })
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Calculate 15 * 7" })
 
     client.register_fixture(
       "aiplatform%.googleapis%.com",
@@ -1427,7 +1432,7 @@ describe("Vertex AI Streaming Function Call Response (integration)", function()
     core.switch_provider("vertex", "gemini-2.0-flash", { project_id = "test-project", location = "global" })
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Calculate 23 + 45" })
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Calculate 23 + 45" })
 
     client.register_fixture(
       "aiplatform%.googleapis%.com",
@@ -1659,7 +1664,8 @@ describe("Vertex AI Thought Signature Support", function()
 
   it("parses self-closing thinking tag with vertex:signature", function()
     local lines = {
-      "@Assistant: Here's the result.",
+      "@Assistant:",
+      "Here's the result.",
       "",
       '<thinking vertex:signature="sig-self-closing-123"/>',
     }
@@ -1762,9 +1768,11 @@ describe("Vertex AI Thought Signature Support", function()
 
     -- Conversation with thinking+vertex:signature but no tool use
     local lines = {
-      "@You: What is 2+2?",
+      "@You:",
+      "What is 2+2?",
       "",
-      "@Assistant: The answer is 4.",
+      "@Assistant:",
+      "The answer is 4.",
       "",
       '<thinking vertex:signature="sig-no-tool-use">',
       "Simple arithmetic.",

@@ -3,7 +3,7 @@
 ---@class flemma.codeblock.parsers.Json
 local M = {}
 
-local json = require("flemma.json")
+local json = require("flemma.utilities.json")
 
 ---Parse JSON code and return decoded table
 ---@param code string The JSON code to parse

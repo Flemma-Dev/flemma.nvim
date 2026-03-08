@@ -35,7 +35,7 @@ describe(":Flemma send command", function()
     -- Arrange: The default provider is Anthropic. We just need to set up the buffer.
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@System: Be brief.", "@You: Hello" })
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@System:", "Be brief.", "@You:", "Hello" })
 
     -- Arrange: Register a dummy fixture to prevent actual network calls.
     -- The content of the fixture DOES matter, as it's processed by the provider.
@@ -77,7 +77,7 @@ describe(":Flemma send command", function()
     -- Arrange: Create a new buffer, make it current, and set its content
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Hello" })
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Hello" })
 
     -- Act: Execute the Flemma send command
     vim.cmd("Flemma send")
@@ -121,12 +121,12 @@ describe(":Flemma send command", function()
     local named_bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(named_bufnr)
     vim.api.nvim_buf_set_name(named_bufnr, vim.fn.tempname() .. ".chat")
-    vim.api.nvim_buf_set_lines(named_bufnr, 0, -1, false, { "@You: Hello" })
+    vim.api.nvim_buf_set_lines(named_bufnr, 0, -1, false, { "@You:", "Hello" })
 
     vim.cmd("Flemma send")
     vim.wait(1000, function()
       local lines = vim.api.nvim_buf_get_lines(named_bufnr, 0, -1, false)
-      return #lines >= 5 and lines[5] == "@You: "
+      return #lines >= 7 and lines[7] == "@You:"
     end)
 
     local session = state.get_session()
@@ -139,12 +139,12 @@ describe(":Flemma send command", function()
     client.register_fixture("api%.openai%.com", "tests/fixtures/openai_hello_success_stream.txt")
     local unnamed_bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(unnamed_bufnr)
-    vim.api.nvim_buf_set_lines(unnamed_bufnr, 0, -1, false, { "@You: Hello" })
+    vim.api.nvim_buf_set_lines(unnamed_bufnr, 0, -1, false, { "@You:", "Hello" })
 
     vim.cmd("Flemma send")
     vim.wait(1000, function()
       local lines = vim.api.nvim_buf_get_lines(unnamed_bufnr, 0, -1, false)
-      return #lines >= 5 and lines[5] == "@You: "
+      return #lines >= 7 and lines[7] == "@You:"
     end)
 
     local unnamed_request = session:get_latest_request()
@@ -163,7 +163,7 @@ describe(":Flemma send command", function()
     -- Arrange: Set up the buffer with an initial prompt
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: Hello" })
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Hello" })
 
     -- Act: Execute the command
     vim.cmd("Flemma send")
@@ -171,17 +171,20 @@ describe(":Flemma send command", function()
     -- Wait for the response to be processed and the new prompt to be added
     vim.wait(1000, function()
       local final_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-      return #final_lines == 5 and final_lines[5] == "@You: "
+      return #final_lines == 8 and final_lines[7] == "@You:"
     end)
 
     -- Assert: Check the final buffer content
     local final_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local expected_lines = {
-      "@You: Hello",
+      "@You:",
+      "Hello",
       "",
-      "@Assistant: Hello! How can I help you today?",
+      "@Assistant:",
+      "Hello! How can I help you today?",
       "",
-      "@You: ",
+      "@You:",
+      "",
     }
     assert.are.same(expected_lines, final_lines)
   end)
@@ -196,7 +199,7 @@ describe(":Flemma send command", function()
     -- Arrange: Set up the buffer
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You: This will fail" })
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "This will fail" })
 
     -- Arrange: Stub vim.notify to prevent UI and capture calls
     local notify_spy = stub(vim, "notify")
@@ -238,9 +241,86 @@ describe(":Flemma send command", function()
     assert.is_true(vim.bo[bufnr].modifiable, "Buffer should be modifiable after an error")
     assert.is_false(state.get_buffer_state(bufnr).locked, "Buffer state should not be locked after an error")
     local final_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    assert.are.same({ "@You: This will fail", "" }, final_lines, "Buffer content should not have spinner artifacts")
+    assert.are.same({ "@You:", "This will fail", "" }, final_lines, "Buffer content should not have spinner artifacts")
 
     -- Cleanup
+    notify_spy:revert()
+  end)
+
+  it("surfaces an error when the API returns non-JSON HTML", function()
+    -- Arrange: Switch to OpenAI and register HTML error fixture
+    core.switch_provider("openai", "o3", {})
+    client.register_fixture("api%.openai%.com", "tests/fixtures/openai_html_error.txt")
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "This will get HTML back" })
+
+    local notify_spy = stub(vim, "notify")
+
+    vim.cmd("Flemma send")
+
+    -- Wait for error notification
+    vim.wait(2000, function()
+      for _, call in ipairs(notify_spy.calls) do
+        local msg = call.refs[1]
+        if msg and msg:match("^Flemma:") and call.refs[2] == vim.log.levels.ERROR then
+          return true
+        end
+      end
+      return false
+    end, 10, false)
+
+    -- Should have notified an error, not silently added a new @You: prompt
+    local error_seen = false
+    for _, call in ipairs(notify_spy.calls) do
+      local msg = call.refs[1]
+      if msg and msg:match("^Flemma:") and call.refs[2] == vim.log.levels.ERROR then
+        error_seen = true
+      end
+    end
+
+    assert.is_true(error_seen, "Expected error notification for non-JSON HTML response")
+    assert.is_true(vim.bo[bufnr].modifiable, "Buffer should be modifiable after an error")
+
+    notify_spy:revert()
+  end)
+
+  it("surfaces an error when the API returns plain text", function()
+    -- Arrange: Switch to OpenAI and register plain text error fixture
+    core.switch_provider("openai", "o3", {})
+    client.register_fixture("api%.openai%.com", "tests/fixtures/openai_plain_text_error.txt")
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "This will get plain text back" })
+
+    local notify_spy = stub(vim, "notify")
+
+    vim.cmd("Flemma send")
+
+    -- Wait for error notification
+    vim.wait(2000, function()
+      for _, call in ipairs(notify_spy.calls) do
+        local msg = call.refs[1]
+        if msg and msg:match("^Flemma:") and call.refs[2] == vim.log.levels.ERROR then
+          return true
+        end
+      end
+      return false
+    end, 10, false)
+
+    local error_seen = false
+    for _, call in ipairs(notify_spy.calls) do
+      local msg = call.refs[1]
+      if msg and msg:match("^Flemma:") and call.refs[2] == vim.log.levels.ERROR then
+        error_seen = true
+      end
+    end
+
+    assert.is_true(error_seen, "Expected error notification for plain text response")
+    assert.is_true(vim.bo[bufnr].modifiable, "Buffer should be modifiable after an error")
+
     notify_spy:revert()
   end)
 

@@ -6,6 +6,7 @@ local M = {}
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local config_manager = require("flemma.core.config.manager")
+local buffer_utils = require("flemma.utilities.buffer")
 local editing = require("flemma.buffer.editing")
 local writequeue = require("flemma.buffer.writequeue")
 local ui = require("flemma.ui")
@@ -15,13 +16,6 @@ local ABORT_MESSAGE = "Response interrupted by the user."
 
 -- For testing purposes
 local last_request_body_for_testing = nil
-
----Get the 0-indexed column where content starts after a role prefix (@Role: )
----@param role string
----@return integer
-local function content_col(role)
-  return #("@" .. role .. ": ")
-end
 
 ---Initialize or switch provider based on configuration
 ---@param provider_name string
@@ -110,6 +104,11 @@ function M.switch_provider(provider_name, model_name, parameters)
   -- Force the new provider to clear its API key cache
   new_provider:reset({ auth = true })
 
+  -- Clear diagnostics request history — cache state doesn't carry across providers,
+  -- so comparing requests from different providers would produce spurious warnings.
+  buffer_state.diagnostics_previous_request = nil
+  buffer_state.diagnostics_current_request = nil
+
   -- Notify the user
   local model_info = updated_config.model and (" with model '" .. updated_config.model .. "'") or ""
   vim.notify("Flemma: Switched to '" .. updated_config.provider .. "'" .. model_info .. ".", vim.log.levels.INFO)
@@ -149,30 +148,27 @@ function M.cancel_request()
       buffer_state.current_request = nil
 
       -- Clean up the buffer
-      local last_line = vim.api.nvim_buf_line_count(bufnr)
-      local last_line_content = vim.api.nvim_buf_get_lines(bufnr, last_line - 1, last_line, false)[1]
+      local last_line_content = buffer_utils.get_last_line(bufnr)
 
-      if last_line_content == "@Assistant: Thinking…" then
-        -- No content received — clean up spinner placeholder
-        log.debug("cancel_request(): ... Cleaning up 'Thinking…' message")
+      if last_line_content == "@Assistant:" then
+        -- No content received — clean up spinner placeholder (empty @Assistant: block)
+        log.debug("cancel_request(): ... Cleaning up empty @Assistant: spinner placeholder")
         ui.cleanup_spinner(bufnr)
       else
         -- Content was received — mark the response as aborted
         ui.cleanup_spinner(bufnr)
-        local original_modifiable = vim.bo[bufnr].modifiable
-        vim.bo[bufnr].modifiable = true
-        local line_count = vim.api.nvim_buf_line_count(bufnr)
-        local last_content = vim.api.nvim_buf_get_lines(bufnr, line_count - 1, line_count, false)[1]
-        local separator = (last_content == "") and {} or { "" }
-        ui.buffer_cmd(bufnr, "undojoin")
-        vim.api.nvim_buf_set_lines(
-          bufnr,
-          line_count,
-          line_count,
-          false,
-          vim.list_extend(separator, { "<!-- flemma:aborted: " .. ABORT_MESSAGE .. " -->" })
-        )
-        vim.bo[bufnr].modifiable = original_modifiable
+        buffer_utils.with_modifiable(bufnr, function()
+          local last_content, line_count = buffer_utils.get_last_line(bufnr)
+          local separator = (last_content == "") and {} or { "" }
+          ui.buffer_cmd(bufnr, "undojoin")
+          vim.api.nvim_buf_set_lines(
+            bufnr,
+            line_count,
+            line_count,
+            false,
+            vim.list_extend(separator, { "<!-- flemma:aborted: " .. ABORT_MESSAGE .. " -->" })
+          )
+        end)
         editing.auto_write(bufnr)
       end
 
@@ -362,6 +358,14 @@ end
 function M.send_or_execute(opts)
   opts = opts or {}
   local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
+
+  -- Early guard: reject immediately if a provider request is already in flight.
+  local buffer_state = state.get_buffer_state(bufnr)
+  if buffer_state.current_request then
+    vim.notify("Flemma: A request is already in progress. Use <C-c> to cancel it first.", vim.log.levels.WARN)
+    return
+  end
+
   local tool_context = require("flemma.tools.context")
 
   -- Evaluate frontmatter once per dispatch cycle. The result is threaded through
@@ -374,7 +378,6 @@ function M.send_or_execute(opts)
   local frontmatter_opts = evaluated_frontmatter.context:get_opts()
 
   -- Set per-buffer autopilot override unconditionally (nil clears a previous override)
-  local buffer_state = state.get_buffer_state(bufnr)
   buffer_state.autopilot_override = frontmatter_opts and frontmatter_opts.autopilot
 
   -- Phase 1: Categorize — find tool_use blocks without matching tool_result
@@ -706,7 +709,8 @@ function M.send_to_provider(opts)
     end
 
     local request_body = current_provider:build_request(prompt, context)
-    return { endpoint = endpoint, headers = headers, request_body = request_body }
+    local trailing_keys = current_provider:get_trailing_keys()
+    return { endpoint = endpoint, headers = headers, request_body = request_body, trailing_keys = trailing_keys }
   end)
 
   if not prep_ok then
@@ -718,6 +722,7 @@ function M.send_to_provider(opts)
   local endpoint = prep_result.endpoint
   local headers = prep_result.headers
   local request_body = prep_result.request_body
+  local trailing_keys = prep_result.trailing_keys
   last_request_body_for_testing = request_body -- Store for testing
 
   -- Capture timeout now so the on_request_complete closure doesn't read stale proxy state
@@ -735,7 +740,6 @@ function M.send_to_provider(opts)
   local spinner_timer = ui.start_loading_spinner(bufnr) -- Handles its own modifiable toggles for writes
   local response_started = false
   local thinking_char_count = 0
-  local thinking_preview_active = false
 
   -- Reset in-flight usage tracking for this buffer
   -- Include the provider's output_has_thoughts flag so usage.lua can display correctly
@@ -829,22 +833,6 @@ function M.send_to_provider(opts)
         local pricing_info = model_info and model_info.pricing
 
         if pricing_info then
-          -- Look up cache multipliers from provider model data
-          local cache_retention = current_provider.parameters.cache_retention
-          local cache_write_multiplier
-          local cache_read_multiplier
-          if
-            provider_data
-            and provider_data.cache_write_multipliers
-            and cache_retention
-            and cache_retention ~= "none"
-          then
-            cache_write_multiplier = provider_data.cache_write_multipliers[cache_retention]
-          end
-          if provider_data and provider_data.cache_read_multiplier then
-            cache_read_multiplier = provider_data.cache_read_multiplier
-          end
-
           local session = state.get_session()
           session:add_request({
             provider = config.provider,
@@ -861,18 +849,25 @@ function M.send_to_provider(opts)
             output_has_thoughts = provider_capabilities and provider_capabilities.output_has_thoughts or false,
             cache_read_input_tokens = buffer_state.inflight_usage.cache_read_input_tokens,
             cache_creation_input_tokens = buffer_state.inflight_usage.cache_creation_input_tokens,
-            cache_write_multiplier = cache_write_multiplier,
-            cache_read_multiplier = cache_read_multiplier,
+            cache_read_price = pricing_info.cache_read,
+            cache_write_price = pricing_info.cache_write,
           })
 
           -- Use the just-created Request for the notification
           local latest_request = session:get_latest_request()
-          local usage_result = usage.format_notification(latest_request, session)
-          if usage_result.text ~= "" then
-            local notify_opts = vim.tbl_deep_extend("force", config.notify, {
-              title = "Usage",
-            })
-            require("flemma.notify").show(usage_result.text, notify_opts, bufnr, usage_result.highlights)
+          local segments = usage.build_segments(latest_request, session)
+          if #segments > 0 then
+            require("flemma.notifications").show(segments, bufnr)
+          end
+        end
+
+        -- Diagnostics: compare request with previous
+        if config.diagnostics and config.diagnostics.enabled then
+          local diagnostics_module = require("flemma.diagnostics")
+          local raw_json_str = buffer_state._diagnostics_raw_json
+          if raw_json_str then
+            diagnostics_module.record_and_compare(bufnr, raw_json_str)
+            buffer_state._diagnostics_raw_json = nil
           end
         end
 
@@ -898,13 +893,6 @@ function M.send_to_provider(opts)
       vim.schedule(function()
         thinking_char_count = thinking_char_count + #delta
 
-        -- Stop the spinning animation on first thinking delta (keep extmark for preview)
-        if spinner_timer and not thinking_preview_active then
-          vim.fn.timer_stop(spinner_timer)
-          spinner_timer = nil
-          thinking_preview_active = true
-        end
-
         local display
         if thinking_char_count >= 1000 then
           display = string.format("%.1fk characters", thinking_char_count / 1000)
@@ -928,80 +916,90 @@ function M.send_to_provider(opts)
           return
         end
 
-        local original_modifiable_for_on_content = vim.bo[bufnr].modifiable -- Expected to be false
-        vim.bo[bufnr].modifiable = true -- Temporarily allow plugin modifications
-
-        -- Stop spinner on first content
-        if not response_started then
-          if spinner_timer then
-            vim.fn.timer_stop(spinner_timer)
-            -- spinner_timer = nil -- Not strictly needed here as it's local to send_to_provider
-          end
-        end
-
-        -- Split content into lines
-        local content_lines = vim.split(text, "\n", { plain = true })
-
-        if #content_lines > 0 then
-          local last_line = vim.api.nvim_buf_line_count(bufnr)
-
+        buffer_utils.with_modifiable(bufnr, function()
+          -- Stop spinner on first content
           if not response_started then
-            -- Clean up spinner and ensure blank line
-            ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
-            last_line = vim.api.nvim_buf_line_count(bufnr)
-
-            -- Check if response starts with a code fence
-            if content_lines[1]:match("^```") then
-              -- Add a newline before the code fence
-              ui.buffer_cmd(bufnr, "undojoin")
-              vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant:", content_lines[1] })
-            else
-              -- Start with @Assistant: prefix as normal
-              ui.buffer_cmd(bufnr, "undojoin")
-              vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant: " .. content_lines[1] })
-            end
-
-            -- Add remaining lines if any
-            if #content_lines > 1 then
-              ui.buffer_cmd(bufnr, "undojoin")
-              vim.api.nvim_buf_set_lines(bufnr, last_line + 1, last_line + 1, false, { unpack(content_lines, 2) })
-            end
-          else
-            -- Get the last line's content
-            local last_line_content = vim.api.nvim_buf_get_lines(bufnr, last_line - 1, last_line, false)[1]
-
-            if #content_lines == 1 then
-              -- Just append to the last line
-              ui.buffer_cmd(bufnr, "undojoin")
-              vim.api.nvim_buf_set_lines(
-                bufnr,
-                last_line - 1,
-                last_line,
-                false,
-                { last_line_content .. content_lines[1] }
-              )
-            else
-              -- First chunk goes to the end of the last line
-              ui.buffer_cmd(bufnr, "undojoin")
-              vim.api.nvim_buf_set_lines(
-                bufnr,
-                last_line - 1,
-                last_line,
-                false,
-                { last_line_content .. content_lines[1] }
-              )
-
-              -- Remaining lines get added as new lines
-              ui.buffer_cmd(bufnr, "undojoin")
-              vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { unpack(content_lines, 2) })
+            if spinner_timer then
+              vim.fn.timer_stop(spinner_timer)
             end
           end
 
-          response_started = true
-          -- Force UI update after appending content
-          ui.update_ui(bufnr)
-        end
-        vim.bo[bufnr].modifiable = original_modifiable_for_on_content -- Restore to likely false
+          -- Split content into lines
+          local content_lines = vim.split(text, "\n", { plain = true })
+
+          if #content_lines > 0 then
+            local last_line = vim.api.nvim_buf_line_count(bufnr)
+
+            if not response_started then
+              -- Clean up spinner and ensure blank line
+              ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
+              last_line = vim.api.nvim_buf_line_count(bufnr)
+
+              local header_lines
+
+              if content_lines[1]:match("^%*%*Tool Use:%*%*") then
+                -- Tool use header on its own line so the block is independently foldable
+                ui.buffer_cmd(bufnr, "undojoin")
+                vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant:", "", content_lines[1] })
+                header_lines = 3
+              elseif content_lines[1]:match("^```") then
+                -- Code fence on its own line (no blank separator needed)
+                ui.buffer_cmd(bufnr, "undojoin")
+                vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant:", content_lines[1] })
+                header_lines = 2
+              else
+                ui.buffer_cmd(bufnr, "undojoin")
+                vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant:", content_lines[1] })
+                header_lines = 2
+              end
+
+              -- Add remaining lines if any
+              if #content_lines > 1 then
+                ui.buffer_cmd(bufnr, "undojoin")
+                vim.api.nvim_buf_set_lines(
+                  bufnr,
+                  last_line + header_lines,
+                  last_line + header_lines,
+                  false,
+                  { unpack(content_lines, 2) }
+                )
+              end
+            else
+              -- Get the last line's content
+              local last_line_content = buffer_utils.get_line(bufnr, last_line)
+
+              if #content_lines == 1 then
+                -- Just append to the last line
+                ui.buffer_cmd(bufnr, "undojoin")
+                vim.api.nvim_buf_set_lines(
+                  bufnr,
+                  last_line - 1,
+                  last_line,
+                  false,
+                  { last_line_content .. content_lines[1] }
+                )
+              else
+                -- First chunk goes to the end of the last line
+                ui.buffer_cmd(bufnr, "undojoin")
+                vim.api.nvim_buf_set_lines(
+                  bufnr,
+                  last_line - 1,
+                  last_line,
+                  false,
+                  { last_line_content .. content_lines[1] }
+                )
+
+                -- Remaining lines get added as new lines
+                ui.buffer_cmd(bufnr, "undojoin")
+                vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { unpack(content_lines, 2) })
+              end
+            end
+
+            response_started = true
+            -- Force UI update after appending content
+            ui.update_ui(bufnr)
+          end
+        end)
       end)
     end,
 
@@ -1033,7 +1031,7 @@ function M.send_to_provider(opts)
         if code == 0 then
           -- cURL request completed successfully (exit code 0)
           if buffer_state.api_error_occurred then
-            log.info(
+            log.debug(
               "send_to_provider(): on_request_complete: cURL success (code 0), but an API error was previously handled. Skipping new prompt."
             )
             buffer_state.api_error_occurred = false -- Reset flag for next request
@@ -1046,42 +1044,38 @@ function M.send_to_provider(opts)
           end
 
           if not response_started then
-            log.info(
+            log.warn(
               "send_to_provider(): on_request_complete: cURL success (code 0), no API error, but no response content was processed."
             )
             ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
+            vim.notify("Flemma: Request completed but no response was received.", vim.log.levels.WARN)
           end
 
           -- Add new "@You:" prompt for the next message (buffer is already modifiable)
-          local last_line_idx = vim.api.nvim_buf_line_count(bufnr)
-          local last_line_content = ""
-          if last_line_idx > 0 then
-            last_line_content = vim.api.nvim_buf_get_lines(bufnr, last_line_idx - 1, last_line_idx, false)[1] or ""
-          end
+          local last_line_content, last_line_idx = buffer_utils.get_last_line(bufnr)
 
           local lines_to_insert
           local cursor_line_offset
           if last_line_content == "" then
-            lines_to_insert = { "@You: " }
-            cursor_line_offset = 1
-          else
-            lines_to_insert = { "", "@You: " }
+            lines_to_insert = { "@You:", "" }
             cursor_line_offset = 2
+          else
+            lines_to_insert = { "", "@You:", "" }
+            cursor_line_offset = 3
           end
 
           ui.buffer_cmd(bufnr, "undojoin")
           vim.api.nvim_buf_set_lines(bufnr, last_line_idx, last_line_idx, false, lines_to_insert)
 
-          -- Position cursor after "@You: " on the new prompt line
+          -- Position cursor on the blank content line after @You:
           local new_prompt_line = last_line_idx + cursor_line_offset
           if vim.api.nvim_get_current_buf() == bufnr then
-            ui.set_cursor(new_prompt_line, content_col("You"), bufnr)
+            ui.set_cursor(new_prompt_line, 0, bufnr)
           end
           ui.move_to_bottom(bufnr)
 
           editing.auto_write(bufnr)
           ui.update_ui(bufnr)
-          ui.fold_last_thinking_block(bufnr) -- Attempt to fold the last thinking block
 
           if opts.on_request_complete then
             opts.on_request_complete()
@@ -1136,6 +1130,7 @@ function M.send_to_provider(opts)
     endpoint = endpoint,
     parameters = current_provider.parameters,
     callbacks = callbacks,
+    trailing_keys = trailing_keys,
     process_response_line_fn = function(line, cb)
       return current_provider:process_response_line(line, cb)
     end,
@@ -1147,6 +1142,13 @@ function M.send_to_provider(opts)
     end,
     on_response_headers_fn = function(response_headers)
       current_provider:set_response_headers(response_headers)
+    end,
+    on_raw_json = function(raw_json_str)
+      -- Store for diagnostics — will be compared after response completes
+      local cfg = state.get_config()
+      if cfg.diagnostics and cfg.diagnostics.enabled then
+        buffer_state._diagnostics_raw_json = raw_json_str
+      end
     end,
   })
 

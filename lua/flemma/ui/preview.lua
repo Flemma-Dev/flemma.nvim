@@ -1,12 +1,15 @@
---- Preview and fold text generation for Flemma UI
---- Houses all formatting, preview generation, and fold text/level computation.
+--- Preview formatting for Flemma UI
+--- Shared formatters for fold text, tool indicators, and compact previews.
 ---@class flemma.ui.Preview
 local M = {}
+
+local query = require("flemma.ast.query")
+local str = require("flemma.utilities.string")
+local display = require("flemma.utilities.display")
 
 -- Constants for preview text
 local MAX_CONTENT_PREVIEW_LINES = 10
 local DEFAULT_MAX_LENGTH = 80
-local CONTENT_PREVIEW_NEWLINE_CHAR = "⤶"
 local CONTENT_PREVIEW_TRUNCATION_MARKER = "…"
 
 ---Get the available text area width for a window (total width minus signcolumn, numbercolumn, foldcolumn)
@@ -48,20 +51,12 @@ function M.format_content_preview(content, max_length)
     table.insert(lines, vim.trim(line))
   end
 
-  local preview = table.concat(lines, CONTENT_PREVIEW_NEWLINE_CHAR)
+  local preview = table.concat(lines, display.get_newline_char())
   preview = vim.trim(preview)
-  -- Collapse runs of 2+ spaces/tabs to a single space (but preserve ⤶ sequences)
+  -- Collapse runs of 2+ spaces/tabs to a single space (but preserve newline indicator sequences)
   preview = preview:gsub("[ \t][ \t]+", " ")
 
-  if #preview > max_length then
-    local truncated_length = max_length - #CONTENT_PREVIEW_TRUNCATION_MARKER
-    if truncated_length < 0 then
-      truncated_length = 0
-    end
-    preview = preview:sub(1, truncated_length) .. CONTENT_PREVIEW_TRUNCATION_MARKER
-  end
-
-  return preview
+  return str.truncate(preview, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
 end
 
 ---Format a compact table value preview
@@ -96,7 +91,7 @@ end
 ---@param input table<string, any>
 ---@param max_length? integer Maximum body length (defaults to DEFAULT_MAX_LENGTH)
 ---@return string
-local function format_tool_preview_body(input, max_length)
+function M.format_tool_preview_body(input, max_length)
   max_length = max_length or DEFAULT_MAX_LENGTH
 
   local keys = vim.tbl_keys(input)
@@ -127,7 +122,7 @@ local function format_tool_preview_body(input, max_length)
     local value = input[key]
     local formatted
     if type(value) == "string" then
-      local display_value = value:gsub("\n", CONTENT_PREVIEW_NEWLINE_CHAR):gsub('"', '\\"')
+      local display_value = value:gsub("\n", display.get_newline_char()):gsub('"', '\\"')
       formatted = key .. '="' .. display_value .. '"'
     elseif type(value) == "table" then
       formatted = key .. "=" .. format_table_value(value)
@@ -139,15 +134,7 @@ local function format_tool_preview_body(input, max_length)
 
   local body = table.concat(parts, ", ")
 
-  if #body > max_length then
-    local truncated_length = max_length - #CONTENT_PREVIEW_TRUNCATION_MARKER
-    if truncated_length < 0 then
-      truncated_length = 0
-    end
-    body = body:sub(1, truncated_length) .. CONTENT_PREVIEW_TRUNCATION_MARKER
-  end
-
-  return body
+  return str.truncate(body, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
 end
 
 ---Format a compact preview string for a tool call
@@ -162,64 +149,27 @@ function M.format_tool_preview(tool_name, input, max_length)
   max_length = max_length or DEFAULT_MAX_LENGTH
 
   local name_prefix = tool_name .. ": "
-  local available = max_length - #name_prefix
+  local available = max_length - str.strwidth(name_prefix)
 
-  local registry = require("flemma.tools.registry")
-  local tool_def = registry.get(tool_name)
+  local tools = require("flemma.tools")
+  local tool_def = tools.get(tool_name)
 
   local body
   if tool_def and tool_def.format_preview then
     body = tool_def.format_preview(input, available)
     -- Collapse newlines for single-line display
-    body = body:gsub("\n", CONTENT_PREVIEW_NEWLINE_CHAR)
+    body = body:gsub("\n", display.get_newline_char())
   else
     local keys = vim.tbl_keys(input)
     if #keys == 0 then
       return tool_name
     end
-    body = format_tool_preview_body(input, available)
+    body = M.format_tool_preview_body(input, available)
   end
 
   local preview = name_prefix .. body
 
-  if #preview > max_length then
-    local truncated_length = max_length - #CONTENT_PREVIEW_TRUNCATION_MARKER
-    if truncated_length < 0 then
-      truncated_length = 0
-    end
-    preview = preview:sub(1, truncated_length) .. CONTENT_PREVIEW_TRUNCATION_MARKER
-  end
-
-  return preview
-end
-
----Get the cached AST document for the current buffer
----@return flemma.ast.DocumentNode
-local function get_document()
-  local bufnr = vim.api.nvim_get_current_buf()
-  local parser = require("flemma.parser")
-  return parser.get_parsed_document(bufnr)
-end
-
----Find a thinking segment whose start or end line matches the given line number
----@param doc flemma.ast.DocumentNode
----@param lnum integer 1-indexed line number
----@return flemma.ast.ThinkingSegment|nil segment
----@return "start"|"end"|nil boundary Whether lnum is the start or end of the segment
-local function find_thinking_at_line(doc, lnum)
-  for _, msg in ipairs(doc.messages) do
-    for _, seg in ipairs(msg.segments) do
-      if seg.kind == "thinking" and seg.position then
-        ---@cast seg flemma.ast.ThinkingSegment
-        if seg.position.start_line == lnum then
-          return seg, "start"
-        elseif seg.position.end_line == lnum then
-          return seg, "end"
-        end
-      end
-    end
-  end
-  return nil, nil
+  return str.truncate(preview, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
 end
 
 local SEGMENT_SEPARATOR = " | "
@@ -243,7 +193,7 @@ function M.format_tool_result_preview(tool_name, content, is_error, max_length)
   if is_error then
     name_prefix = name_prefix .. "(error) "
   end
-  local available = max_length - #name_prefix
+  local available = max_length - str.strwidth(name_prefix)
 
   local body = M.format_content_preview(content, available)
 
@@ -253,24 +203,6 @@ function M.format_tool_result_preview(tool_name, content, is_error, max_length)
   end
 
   return name_prefix .. body
-end
-
----Build a tool_use_id → tool_name lookup from all Assistant messages in a document.
----@param doc flemma.ast.DocumentNode
----@return table<string, string>
-local function build_tool_name_map(doc)
-  local map = {}
-  for _, msg in ipairs(doc.messages) do
-    if msg.role == "Assistant" then
-      for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_use" then
-          local tool_seg = seg --[[@as flemma.ast.ToolUseSegment]]
-          map[tool_seg.id] = tool_seg.name
-        end
-      end
-    end
-  end
-  return map
 end
 
 ---@alias flemma.ui.preview.CoalescedEntry {kind: "text"|"tool_use"|"tool_result", value: string|nil, segment: flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|nil}
@@ -321,18 +253,46 @@ local function coalesce_segments(segments)
   return entries
 end
 
+---Get the body text for a tool use (custom format_preview or generic key-value).
+---Handles newline collapsing and post-hoc truncation for custom formatters.
+---@param tool_name string
+---@param input table<string, any>
+---@param available integer Available width for the body
+---@return string
+function M.get_tool_use_body(tool_name, input, available)
+  local tools = require("flemma.tools")
+  local tool_def = tools.get(tool_name)
+
+  local body
+  if tool_def and tool_def.format_preview then
+    body = tool_def.format_preview(input, available)
+    body = body:gsub("\n", display.get_newline_char())
+  else
+    local keys = vim.tbl_keys(input)
+    if #keys == 0 then
+      return ""
+    end
+    body = M.format_tool_preview_body(input, available)
+  end
+
+  -- Post-hoc truncation for custom format_preview that may ignore max_length
+  return str.truncate(body, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
+end
+
 ---Build a composite fold preview from a message's segments in buffer order.
 ---Consecutive text segments are merged; tool_use and tool_result segments produce
----tool previews. Entries are joined with ' | ' and truncated to fit max_length.
+---per-segment highlighted chunks. Entries are joined with ' | ' separators.
 ---@param msg flemma.ast.MessageNode
 ---@param max_length integer Available width for the preview body (excluding role prefix and suffix)
 ---@param doc? flemma.ast.DocumentNode Document for resolving tool names from tool_result IDs
----@return string
-function M.format_message_fold_preview(msg, max_length, doc)
+---@param content_hl? string Highlight group for text entries (default: "FlemmaFoldPreview")
+---@return {[1]:string, [2]:string}[]
+function M.format_message_fold_preview(msg, max_length, doc, content_hl)
+  content_hl = content_hl or "FlemmaFoldPreview"
   local entries = coalesce_segments(msg.segments)
 
   if #entries == 0 then
-    return ""
+    return {}
   end
 
   -- Build tool name lookup only when there are tool_result entries and a doc is available
@@ -341,14 +301,25 @@ function M.format_message_fold_preview(msg, max_length, doc)
   if doc then
     for _, entry in ipairs(entries) do
       if entry.kind == "tool_result" then
-        tool_name_map = build_tool_name_map(doc)
+        tool_name_map = query.build_tool_name_map(doc)
         break
       end
     end
   end
 
-  local parts = {}
+  ---@type {[1]:string, [2]:string}[]
+  local chunks = {}
   local used = 0
+
+  ---Append an overflow indicator and stop iteration
+  ---@param remaining integer Number of remaining entries
+  local function add_overflow(remaining)
+    if used > 0 then
+      table.insert(chunks, { SEGMENT_SEPARATOR, "FlemmaFoldMeta" })
+    end
+    local text = remaining == 1 and "(+1 tool)" or string.format("(+%d more)", remaining)
+    table.insert(chunks, { text, "FlemmaFoldMeta" })
+  end
 
   for i, entry in ipairs(entries) do
     local remaining_entries = #entries - i
@@ -356,12 +327,7 @@ function M.format_message_fold_preview(msg, max_length, doc)
     local available = max_length - used - separator_cost
 
     if available <= 0 then
-      local overflow = #entries - i + 1
-      if overflow == 1 then
-        table.insert(parts, "(+1 tool)")
-      else
-        table.insert(parts, string.format("(+%d more)", overflow))
-      end
+      add_overflow(#entries - i + 1)
       break
     end
 
@@ -370,162 +336,84 @@ function M.format_message_fold_preview(msg, max_length, doc)
       remainder_reserve = #SEGMENT_SEPARATOR + #string.format("(+%d more)", remaining_entries)
     end
 
-    local preview
+    ---@type {[1]:string, [2]:string}[]
+    local entry_chunks = {}
+    local entry_width
+
     if entry.kind == "tool_use" then
       local tool_seg = entry.segment --[[@as flemma.ast.ToolUseSegment]]
       local width_for_tool = available - remainder_reserve
       if width_for_tool < MIN_TOOL_PREVIEW_WIDTH then
-        local overflow = #entries - i + 1
-        if overflow == 1 then
-          table.insert(parts, "(+1 tool)")
-        else
-          table.insert(parts, string.format("(+%d more)", overflow))
-        end
+        add_overflow(#entries - i + 1)
         break
       end
-      preview = M.format_tool_preview(tool_seg.name, tool_seg.input, width_for_tool)
+      -- Build name + body chunks
+      local name_width = str.strwidth(tool_seg.name)
+      local body = M.get_tool_use_body(tool_seg.name, tool_seg.input, width_for_tool - name_width - #": ")
+      if body ~= "" then
+        table.insert(entry_chunks, { tool_seg.name, "FlemmaToolName" })
+        table.insert(entry_chunks, { ": " .. body, "FlemmaFoldPreview" })
+        entry_width = name_width + #": " + str.strwidth(body)
+      else
+        table.insert(entry_chunks, { tool_seg.name, "FlemmaToolName" })
+        entry_width = name_width
+      end
     elseif entry.kind == "tool_result" then
       local result_seg = entry.segment --[[@as flemma.ast.ToolResultSegment]]
       local tool_name = (tool_name_map and tool_name_map[result_seg.tool_use_id]) or "result"
       local width_for_result = available - remainder_reserve
       if width_for_result < MIN_TOOL_PREVIEW_WIDTH then
-        local overflow = #entries - i + 1
-        if overflow == 1 then
-          table.insert(parts, "(+1 tool)")
-        else
-          table.insert(parts, string.format("(+%d more)", overflow))
-        end
+        add_overflow(#entries - i + 1)
         break
       end
-      preview = M.format_tool_result_preview(tool_name, result_seg.content, result_seg.is_error, width_for_result)
+      -- Build name + separator + optional error + body chunks
+      local name_result_width = str.strwidth(tool_name)
+      local prefix_width = name_result_width + #": "
+      if result_seg.is_error then
+        prefix_width = prefix_width + #"(error) "
+      end
+      local body_available = width_for_result - prefix_width
+      local body = M.format_content_preview(result_seg.content, body_available)
+
+      table.insert(entry_chunks, { tool_name, "FlemmaToolName" })
+      entry_width = name_result_width
+
+      if body ~= "" or result_seg.is_error then
+        table.insert(entry_chunks, { ": ", "FlemmaFoldPreview" })
+        entry_width = entry_width + #": "
+        if result_seg.is_error then
+          table.insert(entry_chunks, { "(error) ", "FlemmaToolResultError" })
+          entry_width = entry_width + #"(error) "
+        end
+        if body ~= "" then
+          table.insert(entry_chunks, { body, "FlemmaFoldPreview" })
+          entry_width = entry_width + str.strwidth(body)
+        end
+      end
     else
-      preview = M.format_content_preview(entry.value --[[@as string]], available - remainder_reserve)
+      local text_preview = M.format_content_preview(entry.value --[[@as string]], available - remainder_reserve)
+      if text_preview == "" then
+        goto continue
+      end
+      table.insert(entry_chunks, { text_preview, content_hl })
+      entry_width = str.strwidth(text_preview)
     end
 
-    if preview == "" then
+    if #entry_chunks == 0 then
       goto continue
     end
 
     if used > 0 then
+      table.insert(chunks, { SEGMENT_SEPARATOR, "FlemmaFoldMeta" })
       used = used + #SEGMENT_SEPARATOR
     end
-    used = used + #preview
-    table.insert(parts, preview)
+    vim.list_extend(chunks, entry_chunks)
+    used = used + entry_width
 
     ::continue::
   end
 
-  return table.concat(parts, SEGMENT_SEPARATOR)
-end
-
----Find a message whose start or end line matches the given line number
----@param doc flemma.ast.DocumentNode
----@param lnum integer 1-indexed line number
----@return flemma.ast.MessageNode|nil message
----@return "start"|"end"|nil boundary
-local function find_message_at_line(doc, lnum)
-  for _, msg in ipairs(doc.messages) do
-    if msg.position.start_line == lnum then
-      return msg, "start"
-    elseif msg.position.end_line == lnum then
-      return msg, "end"
-    end
-  end
-  return nil, nil
-end
-
----Get fold level for a line number
----@param lnum integer
----@return string
-function M.get_fold_level(lnum)
-  local doc = get_document()
-
-  -- Level 2 folds: frontmatter (same level as thinking; they never overlap in position)
-  local fm = doc.frontmatter
-  if fm then
-    if fm.position.start_line == lnum then
-      return ">2"
-    elseif fm.position.end_line == lnum then
-      return "<2"
-    end
-  end
-
-  -- Level 2 folds: <thinking>...</thinking>
-  local _, thinking_boundary = find_thinking_at_line(doc, lnum)
-  if thinking_boundary == "start" then
-    return ">2"
-  elseif thinking_boundary == "end" then
-    return "<2"
-  end
-
-  -- Level 1 folds: messages
-  -- Neovim's ">1" implicitly closes a previous level-1 fold, so single-line
-  -- messages (start_line == end_line) and adjacent messages work correctly
-  -- without explicit "<1" for every end_line.
-  for _, msg in ipairs(doc.messages) do
-    if msg.position.start_line == lnum then
-      return ">1"
-    elseif msg.position.end_line == lnum then
-      return "<1"
-    end
-  end
-
-  return "="
-end
-
----Get fold text for display
----@return string
-function M.get_fold_text()
-  local foldstart_lnum = vim.v.foldstart
-  local foldend_lnum = vim.v.foldend
-  local total_fold_lines = foldend_lnum - foldstart_lnum + 1
-  local doc = get_document()
-  local text_width = M.get_text_area_width(vim.api.nvim_get_current_win())
-
-  -- Check for frontmatter fold (level 2)
-  local fm = doc.frontmatter
-  if fm and fm.position.start_line == foldstart_lnum then
-    -- Account for surrounding chrome: "```lang  ``` (N lines)"
-    local suffix = string.format(" ``` (%d lines)", total_fold_lines)
-    local prefix = "```" .. fm.language .. " "
-    local preview = M.format_content_preview(fm.code, text_width - #prefix - #suffix)
-    if preview ~= "" then
-      return prefix .. preview .. suffix
-    else
-      return string.format("```%s (%d lines)", fm.language, total_fold_lines)
-    end
-  end
-
-  -- Check if this is a thinking fold (level 2)
-  local thinking_seg = find_thinking_at_line(doc, foldstart_lnum)
-  if thinking_seg then
-    if thinking_seg.redacted then
-      return string.format("<thinking redacted> (%d lines)", total_fold_lines)
-    end
-    local provider = thinking_seg.signature and thinking_seg.signature.provider
-    -- Account for surrounding chrome: "<thinking [provider]>  </thinking> (N lines)"
-    local tag = provider and string.format("<thinking %s>", provider) or "<thinking>"
-    local suffix = string.format(" </thinking> (%d lines)", total_fold_lines)
-    local preview = M.format_content_preview(thinking_seg.content, text_width - #tag - #suffix - 1)
-    if preview ~= "" then
-      return tag .. " " .. preview .. suffix
-    else
-      local empty_tag = provider and string.format("<thinking %s/>", provider) or "<thinking/>"
-      return string.format("%s (%d lines)", empty_tag, total_fold_lines)
-    end
-  end
-
-  -- Message folds (level 1)
-  local msg = find_message_at_line(doc, foldstart_lnum)
-  if msg then
-    local role_prefix = "@" .. msg.role .. ":"
-    -- Account for surrounding chrome: "@Role:  (N lines)"
-    local suffix = string.format(" (%d lines)", total_fold_lines)
-    local preview = M.format_message_fold_preview(msg, text_width - #role_prefix - #suffix - 1, doc)
-    return role_prefix .. " " .. preview .. suffix
-  end
-
-  return vim.fn.getline(foldstart_lnum)
+  return chunks
 end
 
 return M

@@ -3,21 +3,36 @@
 ---@class flemma.Logging
 local M = {}
 
+---@alias flemma.logging.Level "TRACE"|"DEBUG"|"INFO"|"WARN"|"ERROR"
+
 ---@class flemma.logging.Config
 ---@field enabled boolean Whether logging is active
 ---@field path string Filesystem path for the log file
+---@field level flemma.logging.Level Minimum severity to write (default: "DEBUG")
+
+---Numeric severity for level filtering (lower = more verbose)
+---@type table<flemma.logging.Level, integer>
+local LEVELS = { TRACE = 0, DEBUG = 1, INFO = 2, WARN = 3, ERROR = 4 }
 
 ---@type flemma.logging.Config
 local config = {
   enabled = false,
   path = vim.fn.stdpath("cache") .. "/flemma.log",
+  level = "DEBUG",
 }
 
 ---Write a log message to the log file
----@param level string Log level label (e.g. "INFO", "ERROR")
+---@param level flemma.logging.Level Log level label
 ---@param msg string The message to log
 local function write_log(level, msg)
   if not config.enabled then
+    return
+  end
+
+  -- Filter by minimum level
+  local min = LEVELS[config.level] or LEVELS.DEBUG
+  local current = LEVELS[level]
+  if current and current < min then
     return
   end
 
@@ -45,28 +60,34 @@ function M.inspect(obj)
   })
 end
 
+---Log a trace message (most verbose — per-delta, per-line, per-event)
+---@param msg string
+function M.trace(msg)
+  write_log("TRACE", msg)
+end
+
+---Log a debug message (state transitions, decisions, lifecycle)
+---@param msg string
+function M.debug(msg)
+  write_log("DEBUG", msg)
+end
+
 ---Log an info message
 ---@param msg string
 function M.info(msg)
   write_log("INFO", msg)
 end
 
----Log an error message
----@param msg string
-function M.error(msg)
-  write_log("ERROR", msg)
-end
-
----Log a debug message
----@param msg string
-function M.debug(msg)
-  write_log("DEBUG", msg)
-end
-
 ---Log a warning message
 ---@param msg string
 function M.warn(msg)
   write_log("WARN", msg)
+end
+
+---Log an error message
+---@param msg string
+function M.error(msg)
+  write_log("ERROR", msg)
 end
 
 ---Enable or disable logging
@@ -87,8 +108,21 @@ function M.get_path()
   return config.path
 end
 
+---Get the current minimum log level
+---@return flemma.logging.Level
+function M.get_level()
+  return config.level
+end
+
+---Check whether a string is a valid log level name
+---@param name string
+---@return boolean
+function M.is_valid_level(name)
+  return LEVELS[name:upper()] ~= nil
+end
+
 ---Configure the logging module
----@param opts? { enabled?: boolean, path?: string }
+---@param opts? { enabled?: boolean, path?: string, level?: flemma.logging.Level }
 function M.configure(opts)
   if opts then
     if opts.enabled ~= nil then
@@ -96,6 +130,9 @@ function M.configure(opts)
     end
     if opts.path then
       config.path = opts.path
+    end
+    if opts.level then
+      config.level = opts.level
     end
   end
 end

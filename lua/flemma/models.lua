@@ -24,21 +24,32 @@
 --- tool-use tax, multiply by the per-token price, and show it live. Something for
 --- a rainy day.
 
+---@class flemma.models.ThinkingBudgets
+---@field minimal? integer Token budget for "minimal" effort level
+---@field low? integer Token budget for "low" effort level
+---@field medium? integer Token budget for "medium" effort level
+---@field high? integer Token budget for "high" effort level
+
 ---@class flemma.models.Pricing
 ---@field input number USD per million input tokens
 ---@field output number USD per million output tokens
+---@field cache_read? number USD per million cache-read tokens
+---@field cache_write? number USD per million cache-write tokens
 
 ---@class flemma.models.ModelInfo
 ---@field pricing flemma.models.Pricing
 ---@field max_input_tokens? integer Maximum context window size (input tokens)
 ---@field max_output_tokens? integer Maximum tokens the model can generate in a single response
+---@field min_output_tokens? integer Minimum max_tokens the API accepts for this model
 ---@field supports_reasoning_effort? boolean Whether the model supports reasoning_effort parameter
+---@field thinking_budgets? flemma.models.ThinkingBudgets Per-model token budgets for each thinking level
+---@field min_thinking_budget? integer Minimum thinking budget the API accepts
+---@field max_thinking_budget? integer Maximum thinking budget the API accepts
+---@field min_cache_tokens? integer Minimum tokens for cache prefix to be accepted (informational)
 
 ---@class flemma.models.ProviderModels
 ---@field default string Default model name for this provider
 ---@field models table<string, flemma.models.ModelInfo>
----@field cache_read_multiplier? number Cache read cost as fraction of base input price (e.g. 0.1 = 10%)
----@field cache_write_multipliers? table<string, number> Cache write cost multipliers keyed by retention ("short", "long")
 
 ---@class flemma.models.Data
 ---@field providers table<string, flemma.models.ProviderModels>
@@ -48,20 +59,20 @@ return {
   providers = {
     anthropic = {
       default = "claude-sonnet-4-6",
-      cache_read_multiplier = 0.1, -- Cache reads cost 10% of base input price
-      cache_write_multipliers = {
-        short = 1.25, -- 5-minute TTL: 1.25× base input price
-        long = 2.0, -- 1-hour TTL: 2.0× base input price
-      },
       models = {
         -- Claude Opus 4.6
         ["claude-opus-4-6"] = {
           pricing = {
             input = 5.0,
             output = 25.0,
+            cache_read = 0.50,
+            cache_write = 6.25,
           },
-          max_input_tokens = 1000000,
+          max_input_tokens = 200000,
           max_output_tokens = 128000,
+          thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+          min_thinking_budget = 1024,
+          min_cache_tokens = 2048,
         },
 
         -- Claude Sonnet 4.6
@@ -69,9 +80,14 @@ return {
           pricing = {
             input = 3.0,
             output = 15.0,
+            cache_read = 0.30,
+            cache_write = 3.75,
           },
           max_input_tokens = 200000,
           max_output_tokens = 64000,
+          thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+          min_thinking_budget = 1024,
+          min_cache_tokens = 2048,
         },
 
         -- Claude Sonnet 4.5
@@ -79,17 +95,27 @@ return {
           pricing = {
             input = 3.0,
             output = 15.0,
+            cache_read = 0.30,
+            cache_write = 3.75,
           },
           max_input_tokens = 200000,
           max_output_tokens = 64000,
+          thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+          min_thinking_budget = 1024,
+          min_cache_tokens = 2048,
         },
         ["claude-sonnet-4-5-20250929"] = {
           pricing = {
             input = 3.0,
             output = 15.0,
+            cache_read = 0.30,
+            cache_write = 3.75,
           },
           max_input_tokens = 200000,
           max_output_tokens = 64000,
+          thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+          min_thinking_budget = 1024,
+          min_cache_tokens = 2048,
         },
 
         -- Claude Haiku 4.5
@@ -97,17 +123,27 @@ return {
           pricing = {
             input = 1.0,
             output = 5.0,
+            cache_read = 0.10,
+            cache_write = 1.25,
           },
           max_input_tokens = 200000,
           max_output_tokens = 64000,
+          thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+          min_thinking_budget = 1024,
+          min_cache_tokens = 4096,
         },
         ["claude-haiku-4-5-20251001"] = {
           pricing = {
             input = 1.0,
             output = 5.0,
+            cache_read = 0.10,
+            cache_write = 1.25,
           },
           max_input_tokens = 200000,
           max_output_tokens = 64000,
+          thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+          min_thinking_budget = 1024,
+          min_cache_tokens = 4096,
         },
 
         -- Claude Opus 4.5
@@ -115,17 +151,27 @@ return {
           pricing = {
             input = 5.0,
             output = 25.0,
+            cache_read = 0.50,
+            cache_write = 6.25,
           },
           max_input_tokens = 200000,
           max_output_tokens = 64000,
+          thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+          min_thinking_budget = 1024,
+          min_cache_tokens = 2048,
         },
         ["claude-opus-4-5-20251101"] = {
           pricing = {
             input = 5.0,
             output = 25.0,
+            cache_read = 0.50,
+            cache_write = 6.25,
           },
           max_input_tokens = 200000,
           max_output_tokens = 64000,
+          thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+          min_thinking_budget = 1024,
+          min_cache_tokens = 2048,
         },
 
         -- Claude Opus 4.1 (as of Aug 2025)
@@ -133,17 +179,27 @@ return {
           pricing = {
             input = 15.0,
             output = 75.0,
+            cache_read = 1.50,
+            cache_write = 18.75,
           },
           max_input_tokens = 200000,
           max_output_tokens = 32000,
+          thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+          min_thinking_budget = 1024,
+          min_cache_tokens = 2048,
         },
         ["claude-opus-4-1-20250805"] = {
           pricing = {
             input = 15.0,
             output = 75.0,
+            cache_read = 1.50,
+            cache_write = 18.75,
           },
           max_input_tokens = 200000,
           max_output_tokens = 32000,
+          thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+          min_thinking_budget = 1024,
+          min_cache_tokens = 2048,
         },
 
         -- Claude Opus 4
@@ -151,17 +207,27 @@ return {
           pricing = {
             input = 15.0,
             output = 75.0,
+            cache_read = 1.50,
+            cache_write = 18.75,
           },
           max_input_tokens = 200000,
           max_output_tokens = 32000,
+          thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+          min_thinking_budget = 1024,
+          min_cache_tokens = 2048,
         },
         ["claude-opus-4-20250514"] = {
           pricing = {
             input = 15.0,
             output = 75.0,
+            cache_read = 1.50,
+            cache_write = 18.75,
           },
           max_input_tokens = 200000,
           max_output_tokens = 32000,
+          thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+          min_thinking_budget = 1024,
+          min_cache_tokens = 2048,
         },
 
         -- Claude Sonnet 4
@@ -169,40 +235,67 @@ return {
           pricing = {
             input = 3.0,
             output = 15.0,
+            cache_read = 0.30,
+            cache_write = 3.75,
           },
-          max_input_tokens = 1000000,
+          max_input_tokens = 200000,
           max_output_tokens = 64000,
+          thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+          min_thinking_budget = 1024,
+          min_cache_tokens = 2048,
         },
         ["claude-sonnet-4-20250514"] = {
           pricing = {
             input = 3.0,
             output = 15.0,
+            cache_read = 0.30,
+            cache_write = 3.75,
           },
-          max_input_tokens = 1000000,
+          max_input_tokens = 200000,
           max_output_tokens = 64000,
+          thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+          min_thinking_budget = 1024,
+          min_cache_tokens = 2048,
         },
 
-        -- Claude Haiku 3 (deprecated, retiring Apr 2026)
+        -- Claude Haiku 3 (deprecated, retiring Apr 20, 2026)
         ["claude-3-haiku-20240307"] = {
           pricing = {
             input = 0.25,
             output = 1.25,
+            cache_read = 0.03,
+            cache_write = 0.30,
           },
           max_input_tokens = 200000,
           max_output_tokens = 4096,
+          min_cache_tokens = 1024,
         },
       },
     },
 
     vertex = {
       default = "gemini-2.5-pro",
-      cache_read_multiplier = 0.1, -- Implicit cache reads cost 10% of base input price (Gemini 2.5+)
       models = {
         -- Gemini 3.1 Pro Preview
         ["gemini-3.1-pro-preview"] = {
           pricing = {
             input = 2.0,
             output = 12.0,
+            cache_read = 0.20,
+          },
+          max_input_tokens = 1048576,
+          max_output_tokens = 65536,
+          thinking_budgets = { minimal = 128, low = 2048, medium = 8192, high = 32768 },
+          min_thinking_budget = 1,
+          max_thinking_budget = 32768,
+        },
+
+        -- Gemini 3.1 Flash Lite Preview
+        ["gemini-3.1-flash-lite-preview"] = {
+          pricing = {
+            input = 0.25,
+            output = 1.50,
+            cache_read = 0.025,
           },
           max_input_tokens = 1048576,
           max_output_tokens = 65536,
@@ -213,9 +306,13 @@ return {
           pricing = {
             input = 0.50,
             output = 3.0,
+            cache_read = 0.05,
           },
           max_input_tokens = 1048576,
-          max_output_tokens = 65535,
+          max_output_tokens = 65536,
+          thinking_budgets = { minimal = 128, low = 2048, medium = 8192, high = 24576 },
+          min_thinking_budget = 1,
+          max_thinking_budget = 24576,
         },
 
         -- Gemini 3 Pro Preview
@@ -223,9 +320,13 @@ return {
           pricing = {
             input = 2.0,
             output = 12.0,
+            cache_read = 0.20,
           },
           max_input_tokens = 1048576,
-          max_output_tokens = 65535,
+          max_output_tokens = 65536,
+          thinking_budgets = { minimal = 128, low = 2048, medium = 8192, high = 32768 },
+          min_thinking_budget = 1,
+          max_thinking_budget = 32768,
         },
 
         -- Gemini 2.5 Pro models
@@ -233,9 +334,13 @@ return {
           pricing = {
             input = 1.25,
             output = 10.0,
+            cache_read = 0.125,
           },
           max_input_tokens = 1048576,
-          max_output_tokens = 65535,
+          max_output_tokens = 65536,
+          thinking_budgets = { minimal = 128, low = 2048, medium = 8192, high = 32768 },
+          min_thinking_budget = 1,
+          max_thinking_budget = 32768,
         },
 
         -- Gemini 2.5 Flash models
@@ -243,9 +348,13 @@ return {
           pricing = {
             input = 0.30,
             output = 2.50,
+            cache_read = 0.03,
           },
           max_input_tokens = 1048576,
-          max_output_tokens = 65535,
+          max_output_tokens = 65536,
+          thinking_budgets = { minimal = 128, low = 2048, medium = 8192, high = 24576 },
+          min_thinking_budget = 1,
+          max_thinking_budget = 24576,
         },
 
         -- Gemini 2.5 Flash Lite models
@@ -253,16 +362,21 @@ return {
           pricing = {
             input = 0.10,
             output = 0.40,
+            cache_read = 0.01,
           },
           max_input_tokens = 1048576,
-          max_output_tokens = 65535,
+          max_output_tokens = 65536,
+          thinking_budgets = { minimal = 512, low = 2048, medium = 8192, high = 24576 },
+          min_thinking_budget = 512,
+          max_thinking_budget = 24576,
         },
 
-        -- Gemini 2.0 Flash models (retiring Jun 2026)
+        -- Gemini 2.0 Flash models (retiring Jun 2026, no context caching on Vertex)
         ["gemini-2.0-flash"] = {
           pricing = {
             input = 0.15,
             output = 0.60,
+            cache_read = 0.15,
           },
           max_input_tokens = 1048576,
           max_output_tokens = 8192,
@@ -271,16 +385,18 @@ return {
           pricing = {
             input = 0.15,
             output = 0.60,
+            cache_read = 0.15,
           },
           max_input_tokens = 1048576,
           max_output_tokens = 8192,
         },
 
-        -- Gemini 2.0 Flash Lite models (retiring Jun 2026)
+        -- Gemini 2.0 Flash Lite models (retiring Jun 2026, no context caching on Vertex)
         ["gemini-2.0-flash-lite"] = {
           pricing = {
             input = 0.075,
             output = 0.30,
+            cache_read = 0.075,
           },
           max_input_tokens = 1048576,
           max_output_tokens = 8192,
@@ -289,6 +405,7 @@ return {
           pricing = {
             input = 0.075,
             output = 0.30,
+            cache_read = 0.075,
           },
           max_input_tokens = 1048576,
           max_output_tokens = 8192,
@@ -298,22 +415,66 @@ return {
 
     openai = {
       default = "gpt-5",
-      cache_read_multiplier = 0.5, -- Cached input tokens cost 50% of base input price
       models = {
-        -- GPT-5.2 models
-        ["gpt-5.2"] = {
+        -- GPT-5.4 models
+        ["gpt-5.4"] = {
           pricing = {
-            input = 1.75,
-            output = 14.0,
+            input = 2.50,
+            output = 15.0,
+            cache_read = 0.25,
           },
           max_input_tokens = 272000,
           max_output_tokens = 128000,
           supports_reasoning_effort = true,
         },
-        ["gpt-5.2-2025-12-11"] = {
+        ["gpt-5.4-pro"] = {
+          pricing = {
+            input = 30.0,
+            output = 180.0,
+            cache_read = 30.0,
+          },
+          max_input_tokens = 272000,
+          max_output_tokens = 128000,
+        },
+
+        -- GPT-5.3 models
+        ["gpt-5.3-chat-latest"] = {
           pricing = {
             input = 1.75,
             output = 14.0,
+            cache_read = 0.175,
+          },
+          max_input_tokens = 272000,
+          max_output_tokens = 128000,
+          supports_reasoning_effort = true,
+        },
+        ["gpt-5.3-codex"] = {
+          pricing = {
+            input = 1.75,
+            output = 14.0,
+            cache_read = 0.175,
+          },
+          max_input_tokens = 272000,
+          max_output_tokens = 128000,
+          supports_reasoning_effort = true,
+        },
+        ["gpt-5.3-codex-spark"] = {
+          pricing = {
+            input = 1.75,
+            output = 14.0,
+            cache_read = 0.175,
+          },
+          max_input_tokens = 100000,
+          max_output_tokens = 32000,
+          supports_reasoning_effort = true,
+        },
+
+        -- GPT-5.2 models
+        ["gpt-5.2"] = {
+          pricing = {
+            input = 1.75,
+            output = 14.0,
+            cache_read = 0.175,
           },
           max_input_tokens = 272000,
           max_output_tokens = 128000,
@@ -323,15 +484,17 @@ return {
           pricing = {
             input = 1.75,
             output = 14.0,
+            cache_read = 0.175,
           },
-          max_input_tokens = 272000,
-          max_output_tokens = 128000,
+          max_input_tokens = 128000,
+          max_output_tokens = 16384,
           supports_reasoning_effort = true,
         },
         ["gpt-5.2-codex"] = {
           pricing = {
             input = 1.75,
             output = 14.0,
+            cache_read = 0.175,
           },
           max_input_tokens = 272000,
           max_output_tokens = 128000,
@@ -341,19 +504,10 @@ return {
           pricing = {
             input = 21.0,
             output = 168.0,
+            cache_read = 21.0,
           },
           max_input_tokens = 272000,
           max_output_tokens = 128000,
-          supports_reasoning_effort = true,
-        },
-        ["gpt-5.2-pro-2025-12-11"] = {
-          pricing = {
-            input = 21.0,
-            output = 168.0,
-          },
-          max_input_tokens = 272000,
-          max_output_tokens = 128000,
-          supports_reasoning_effort = true,
         },
 
         -- GPT-5.1 models
@@ -361,15 +515,7 @@ return {
           pricing = {
             input = 1.25,
             output = 10.0,
-          },
-          max_input_tokens = 272000,
-          max_output_tokens = 128000,
-          supports_reasoning_effort = true,
-        },
-        ["gpt-5.1-2025-11-13"] = {
-          pricing = {
-            input = 1.25,
-            output = 10.0,
+            cache_read = 0.125,
           },
           max_input_tokens = 272000,
           max_output_tokens = 128000,
@@ -379,15 +525,17 @@ return {
           pricing = {
             input = 1.25,
             output = 10.0,
+            cache_read = 0.125,
           },
-          max_input_tokens = 272000,
-          max_output_tokens = 128000,
+          max_input_tokens = 128000,
+          max_output_tokens = 16384,
           supports_reasoning_effort = true,
         },
         ["gpt-5.1-codex"] = {
           pricing = {
             input = 1.25,
             output = 10.0,
+            cache_read = 0.125,
           },
           max_input_tokens = 272000,
           max_output_tokens = 128000,
@@ -397,6 +545,7 @@ return {
           pricing = {
             input = 1.25,
             output = 10.0,
+            cache_read = 0.125,
           },
           max_input_tokens = 272000,
           max_output_tokens = 128000,
@@ -406,6 +555,7 @@ return {
           pricing = {
             input = 0.25,
             output = 2.0,
+            cache_read = 0.025,
           },
           max_input_tokens = 272000,
           max_output_tokens = 128000,
@@ -417,15 +567,7 @@ return {
           pricing = {
             input = 1.25,
             output = 10.0,
-          },
-          max_input_tokens = 272000,
-          max_output_tokens = 128000,
-          supports_reasoning_effort = true,
-        },
-        ["gpt-5-2025-08-07"] = {
-          pricing = {
-            input = 1.25,
-            output = 10.0,
+            cache_read = 0.125,
           },
           max_input_tokens = 272000,
           max_output_tokens = 128000,
@@ -435,6 +577,7 @@ return {
           pricing = {
             input = 1.25,
             output = 10.0,
+            cache_read = 0.125,
           },
           max_input_tokens = 272000,
           max_output_tokens = 128000,
@@ -444,6 +587,7 @@ return {
           pricing = {
             input = 1.25,
             output = 10.0,
+            cache_read = 0.125,
           },
           max_input_tokens = 272000,
           max_output_tokens = 128000,
@@ -453,15 +597,7 @@ return {
           pricing = {
             input = 0.25,
             output = 2.0,
-          },
-          max_input_tokens = 272000,
-          max_output_tokens = 128000,
-          supports_reasoning_effort = true,
-        },
-        ["gpt-5-mini-2025-08-07"] = {
-          pricing = {
-            input = 0.25,
-            output = 2.0,
+            cache_read = 0.025,
           },
           max_input_tokens = 272000,
           max_output_tokens = 128000,
@@ -471,15 +607,7 @@ return {
           pricing = {
             input = 0.05,
             output = 0.40,
-          },
-          max_input_tokens = 272000,
-          max_output_tokens = 128000,
-          supports_reasoning_effort = true,
-        },
-        ["gpt-5-nano-2025-08-07"] = {
-          pricing = {
-            input = 0.05,
-            output = 0.40,
+            cache_read = 0.005,
           },
           max_input_tokens = 272000,
           max_output_tokens = 128000,
@@ -489,22 +617,16 @@ return {
           pricing = {
             input = 15.0,
             output = 120.0,
+            cache_read = 15.0,
           },
           max_input_tokens = 272000,
-          max_output_tokens = 128000,
-        },
-        ["gpt-5-pro-2025-10-06"] = {
-          pricing = {
-            input = 15.0,
-            output = 120.0,
-          },
-          max_input_tokens = 272000,
-          max_output_tokens = 128000,
+          max_output_tokens = 272000,
         },
         ["gpt-5-search-api"] = {
           pricing = {
             input = 1.25,
             output = 10.0,
+            cache_read = 0.125,
           },
           max_input_tokens = 272000,
           max_output_tokens = 128000,
@@ -515,6 +637,7 @@ return {
           pricing = {
             input = 2.0,
             output = 8.0,
+            cache_read = 0.50,
           },
           max_input_tokens = 1047576,
           max_output_tokens = 32768,
@@ -523,6 +646,7 @@ return {
           pricing = {
             input = 2.0,
             output = 8.0,
+            cache_read = 0.50,
           },
           max_input_tokens = 1047576,
           max_output_tokens = 32768,
@@ -531,6 +655,7 @@ return {
           pricing = {
             input = 0.40,
             output = 1.60,
+            cache_read = 0.10,
           },
           max_input_tokens = 1047576,
           max_output_tokens = 32768,
@@ -539,6 +664,7 @@ return {
           pricing = {
             input = 0.40,
             output = 1.60,
+            cache_read = 0.10,
           },
           max_input_tokens = 1047576,
           max_output_tokens = 32768,
@@ -547,6 +673,7 @@ return {
           pricing = {
             input = 0.10,
             output = 0.40,
+            cache_read = 0.025,
           },
           max_input_tokens = 1047576,
           max_output_tokens = 32768,
@@ -555,6 +682,7 @@ return {
           pricing = {
             input = 0.10,
             output = 0.40,
+            cache_read = 0.025,
           },
           max_input_tokens = 1047576,
           max_output_tokens = 32768,
@@ -565,6 +693,7 @@ return {
           pricing = {
             input = 2.5,
             output = 10.0,
+            cache_read = 1.25,
           },
           max_input_tokens = 128000,
           max_output_tokens = 16384,
@@ -573,6 +702,7 @@ return {
           pricing = {
             input = 2.5,
             output = 10.0,
+            cache_read = 1.25,
           },
           max_input_tokens = 128000,
           max_output_tokens = 16384,
@@ -581,6 +711,7 @@ return {
           pricing = {
             input = 2.5,
             output = 10.0,
+            cache_read = 1.25,
           },
           max_input_tokens = 128000,
           max_output_tokens = 16384,
@@ -589,6 +720,7 @@ return {
           pricing = {
             input = 5.0,
             output = 15.0,
+            cache_read = 5.0,
           },
           max_input_tokens = 128000,
           max_output_tokens = 4096,
@@ -597,6 +729,7 @@ return {
           pricing = {
             input = 0.15,
             output = 0.60,
+            cache_read = 0.075,
           },
           max_input_tokens = 128000,
           max_output_tokens = 16384,
@@ -605,6 +738,7 @@ return {
           pricing = {
             input = 0.15,
             output = 0.60,
+            cache_read = 0.075,
           },
           max_input_tokens = 128000,
           max_output_tokens = 16384,
@@ -615,15 +749,7 @@ return {
           pricing = {
             input = 15.0,
             output = 60.0,
-          },
-          max_input_tokens = 200000,
-          max_output_tokens = 100000,
-          supports_reasoning_effort = true,
-        },
-        ["o1-2024-12-17"] = {
-          pricing = {
-            input = 15.0,
-            output = 60.0,
+            cache_read = 7.50,
           },
           max_input_tokens = 200000,
           max_output_tokens = 100000,
@@ -633,14 +759,7 @@ return {
           pricing = {
             input = 150.0,
             output = 600.0,
-          },
-          max_input_tokens = 200000,
-          max_output_tokens = 100000,
-        },
-        ["o1-pro-2025-03-19"] = {
-          pricing = {
-            input = 150.0,
-            output = 600.0,
+            cache_read = 150.0,
           },
           max_input_tokens = 200000,
           max_output_tokens = 100000,
@@ -649,15 +768,7 @@ return {
           pricing = {
             input = 2.0,
             output = 8.0,
-          },
-          max_input_tokens = 200000,
-          max_output_tokens = 100000,
-          supports_reasoning_effort = true,
-        },
-        ["o3-2025-04-16"] = {
-          pricing = {
-            input = 2.0,
-            output = 8.0,
+            cache_read = 0.50,
           },
           max_input_tokens = 200000,
           max_output_tokens = 100000,
@@ -667,14 +778,7 @@ return {
           pricing = {
             input = 20.0,
             output = 80.0,
-          },
-          max_input_tokens = 200000,
-          max_output_tokens = 100000,
-        },
-        ["o3-pro-2025-06-10"] = {
-          pricing = {
-            input = 20.0,
-            output = 80.0,
+            cache_read = 20.0,
           },
           max_input_tokens = 200000,
           max_output_tokens = 100000,
@@ -683,6 +787,7 @@ return {
           pricing = {
             input = 10.0,
             output = 40.0,
+            cache_read = 2.50,
           },
           max_input_tokens = 200000,
           max_output_tokens = 100000,
@@ -692,15 +797,7 @@ return {
           pricing = {
             input = 1.10,
             output = 4.40,
-          },
-          max_input_tokens = 200000,
-          max_output_tokens = 100000,
-          supports_reasoning_effort = true,
-        },
-        ["o3-mini-2025-01-31"] = {
-          pricing = {
-            input = 1.10,
-            output = 4.40,
+            cache_read = 0.55,
           },
           max_input_tokens = 200000,
           max_output_tokens = 100000,
@@ -710,15 +807,7 @@ return {
           pricing = {
             input = 1.10,
             output = 4.40,
-          },
-          max_input_tokens = 200000,
-          max_output_tokens = 100000,
-          supports_reasoning_effort = true,
-        },
-        ["o4-mini-2025-04-16"] = {
-          pricing = {
-            input = 1.10,
-            output = 4.40,
+            cache_read = 0.28,
           },
           max_input_tokens = 200000,
           max_output_tokens = 100000,
@@ -728,6 +817,7 @@ return {
           pricing = {
             input = 2.0,
             output = 8.0,
+            cache_read = 0.50,
           },
           max_input_tokens = 200000,
           max_output_tokens = 100000,
@@ -739,6 +829,7 @@ return {
           pricing = {
             input = 0.15,
             output = 0.60,
+            cache_read = 0.15,
           },
           max_input_tokens = 128000,
           max_output_tokens = 16384,
@@ -747,6 +838,7 @@ return {
           pricing = {
             input = 2.50,
             output = 10.0,
+            cache_read = 2.50,
           },
           max_input_tokens = 128000,
           max_output_tokens = 16384,
@@ -755,6 +847,7 @@ return {
           pricing = {
             input = 3.0,
             output = 12.0,
+            cache_read = 3.0,
           },
           max_input_tokens = 128000,
           max_output_tokens = 16384,
@@ -765,6 +858,7 @@ return {
           pricing = {
             input = 10.0,
             output = 30.0,
+            cache_read = 10.0,
           },
           max_input_tokens = 128000,
           max_output_tokens = 4096,
@@ -773,22 +867,25 @@ return {
           pricing = {
             input = 10.0,
             output = 30.0,
+            cache_read = 10.0,
           },
           max_input_tokens = 128000,
           max_output_tokens = 4096,
         },
-        ["gpt-4-0125-preview"] = { -- (deprecated, retiring Mar 2026)
+        ["gpt-4-0125-preview"] = { -- (deprecated, retiring Mar 26, 2026)
           pricing = {
             input = 10.0,
             output = 30.0,
+            cache_read = 10.0,
           },
           max_input_tokens = 128000,
           max_output_tokens = 4096,
         },
-        ["gpt-4-1106-preview"] = { -- (deprecated, retiring Mar 2026)
+        ["gpt-4-1106-preview"] = { -- (deprecated, retiring Mar 26, 2026)
           pricing = {
             input = 10.0,
             output = 30.0,
+            cache_read = 10.0,
           },
           max_input_tokens = 128000,
           max_output_tokens = 4096,
@@ -799,6 +896,7 @@ return {
           pricing = {
             input = 30.0,
             output = 60.0,
+            cache_read = 30.0,
           },
           max_input_tokens = 8192,
           max_output_tokens = 8192,
@@ -807,14 +905,16 @@ return {
           pricing = {
             input = 30.0,
             output = 60.0,
+            cache_read = 30.0,
           },
           max_input_tokens = 8192,
           max_output_tokens = 8192,
         },
-        ["gpt-4-0314"] = { -- (deprecated, retiring Mar 2026)
+        ["gpt-4-0314"] = { -- (deprecated, retiring Mar 26, 2026)
           pricing = {
             input = 30.0,
             output = 60.0,
+            cache_read = 30.0,
           },
           max_input_tokens = 8192,
           max_output_tokens = 8192,
@@ -825,6 +925,7 @@ return {
           pricing = {
             input = 0.50,
             output = 1.50,
+            cache_read = 0.50,
           },
           max_input_tokens = 16385,
           max_output_tokens = 4096,
@@ -833,22 +934,25 @@ return {
           pricing = {
             input = 0.50,
             output = 1.50,
+            cache_read = 0.50,
           },
           max_input_tokens = 16385,
           max_output_tokens = 4096,
         },
-        ["gpt-3.5-turbo-1106"] = { -- (deprecated, retiring Sep 2026)
+        ["gpt-3.5-turbo-1106"] = { -- (deprecated, retiring Sep 28, 2026)
           pricing = {
             input = 1.0,
             output = 2.0,
+            cache_read = 1.0,
           },
           max_input_tokens = 16385,
           max_output_tokens = 4096,
         },
-        ["gpt-3.5-turbo-instruct"] = { -- (deprecated, retiring Sep 2026)
+        ["gpt-3.5-turbo-instruct"] = { -- (deprecated, retiring Sep 28, 2026)
           pricing = {
             input = 1.50,
             output = 2.0,
+            cache_read = 1.50,
           },
           max_input_tokens = 4096,
           max_output_tokens = 4096,

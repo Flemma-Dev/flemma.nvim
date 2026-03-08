@@ -42,8 +42,8 @@ end
 ---@field output_has_thoughts boolean
 ---@field cache_read_input_tokens number
 ---@field cache_creation_input_tokens number
----@field cache_read_multiplier? number Cache read cost as fraction of input price (e.g. 0.1)
----@field cache_write_multiplier? number Cache write cost multiplier (e.g. 1.25 for short, 2.0 for long)
+---@field cache_read_price? number USD per million cache-read tokens
+---@field cache_write_price? number USD per million cache-write tokens
 local Request = {}
 Request.__index = Request
 
@@ -62,8 +62,8 @@ Request.__index = Request
 ---@field output_has_thoughts? boolean Whether output_tokens already includes thoughts (true for OpenAI/Anthropic, false for Vertex)
 ---@field cache_read_input_tokens? number Number of cache read tokens
 ---@field cache_creation_input_tokens? number Number of cache creation tokens
----@field cache_read_multiplier? number Cache read cost as fraction of input price (e.g. 0.1)
----@field cache_write_multiplier? number Cache write cost multiplier (e.g. 1.25 for short, 2.0 for long)
+---@field cache_read_price? number USD per million cache-read tokens
+---@field cache_write_price? number USD per million cache-write tokens
 
 --- Create a new Request instance
 ---@param opts flemma.session.RequestOpts Options for the request
@@ -86,23 +86,22 @@ function Request.new(opts)
   self.output_has_thoughts = opts.output_has_thoughts or false
   self.cache_read_input_tokens = opts.cache_read_input_tokens or 0
   self.cache_creation_input_tokens = opts.cache_creation_input_tokens or 0
-  self.cache_read_multiplier = opts.cache_read_multiplier
-  self.cache_write_multiplier = opts.cache_write_multiplier
+  self.cache_read_price = opts.cache_read_price
+  self.cache_write_price = opts.cache_write_price
 
   return self
 end
 
 --- Calculate input cost for this request (cache-aware)
---- When cache multipliers are available, cache reads/writes use discounted rates.
---- When multipliers are nil (no pricing data), cache tokens are charged at full input price.
+--- Uses per-model absolute cache prices when available; falls back to full input price.
 ---@return number Cost in USD
 function Request:get_input_cost()
   local base = (self.input_tokens / 1000000) * self.input_price
-  local read_mult = self.cache_read_multiplier or 1
-  local read = (self.cache_read_input_tokens / 1000000) * (self.input_price * read_mult)
-  local write_mult = self.cache_write_multiplier or 1
-  local write = (self.cache_creation_input_tokens / 1000000) * (self.input_price * write_mult)
-  return base + read + write
+  local read_price = self.cache_read_price or self.input_price
+  local read_cost = (self.cache_read_input_tokens / 1000000) * read_price
+  local write_price = self.cache_write_price or self.input_price
+  local write_cost = (self.cache_creation_input_tokens / 1000000) * write_price
+  return base + read_cost + write_cost
 end
 
 --- Calculate output cost for this request
@@ -226,6 +225,19 @@ end
 function Session:get_latest_request()
   if #self.requests > 0 then
     return self.requests[#self.requests]
+  end
+  return nil
+end
+
+--- Get the most recent request for a given filepath
+--- Scans requests in reverse order to find the latest match.
+---@param filepath string Absolute filepath to match
+---@return flemma.session.Request|nil Most recent request for the filepath, or nil
+function Session:get_latest_request_for_filepath(filepath)
+  for i = #self.requests, 1, -1 do
+    if self.requests[i].filepath == filepath then
+      return self.requests[i]
+    end
   end
   return nil
 end

@@ -53,15 +53,17 @@ require("flemma.session").get():reset()
 `Session:load()` accepts a list of option tables in the same format as `add_request()` and replaces the current session contents. Combined with reading `session.requests`, this enables crude persistence:
 
 ```lua
--- Save to a JSON file (use vim.json for full numeric precision)
+local json = require("flemma.utilities.json")
+
+-- Save to a JSON file
 local session = require("flemma.session").get()
-local json = vim.json.encode(session.requests)
-vim.fn.writefile({ json }, vim.fn.stdpath("data") .. "/flemma_session.json")
+local encoded = json.encode(session.requests)
+vim.fn.writefile({ encoded }, vim.fn.stdpath("data") .. "/flemma_session.json")
 
 -- Restore from a saved file
 local path = vim.fn.stdpath("data") .. "/flemma_session.json"
 local lines = vim.fn.readfile(path)
 if #lines > 0 then
-  require("flemma.session").get():load(vim.json.decode(table.concat(lines, "\n")))
+  require("flemma.session").get():load(json.decode(table.concat(lines, "\n")))
 end
 ```

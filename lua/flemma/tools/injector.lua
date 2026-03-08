@@ -3,6 +3,8 @@
 ---@class flemma.tools.Injector
 local M = {}
 
+local roles = require("flemma.utilities.roles")
+
 --- Error messages for tool status resolution
 M.DENIED_MESSAGE = "The tool was denied by a policy."
 M.REJECTED_MESSAGE = "This tool has been rejected by the user."
@@ -20,8 +22,9 @@ function M.resolve_error_message(status, content)
   return M.DENIED_MESSAGE
 end
 
+local buffer = require("flemma.utilities.buffer")
 local codeblock = require("flemma.codeblock")
-local json = require("flemma.json")
+local json = require("flemma.utilities.json")
 
 --- Find the assistant message containing a tool_use with the given ID
 --- @param doc table Parsed document AST
@@ -46,7 +49,7 @@ end
 --- @return table|nil segment, table|nil message
 local function find_existing_tool_result(doc, tool_id)
   for _, msg in ipairs(doc.messages) do
-    if msg.role == "You" then
+    if roles.is_user(msg.role) then
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "tool_result" and seg.tool_use_id == tool_id then
           return seg, msg
@@ -64,7 +67,7 @@ end
 local function find_you_message_after(doc, after_msg_idx)
   if after_msg_idx < #doc.messages then
     local next_msg = doc.messages[after_msg_idx + 1]
-    if next_msg.role == "You" then
+    if roles.is_user(next_msg.role) then
       return next_msg, after_msg_idx + 1
     end
   end
@@ -128,10 +131,9 @@ end
 --- @param end_idx integer 0-based end line (exclusive)
 --- @param lines string[]
 local function set_lines(bufnr, start_idx, end_idx, lines)
-  local was_modifiable = vim.bo[bufnr].modifiable
-  vim.bo[bufnr].modifiable = true
-  vim.api.nvim_buf_set_lines(bufnr, start_idx, end_idx, false, lines)
-  vim.bo[bufnr].modifiable = was_modifiable
+  buffer.with_modifiable(bufnr, function()
+    vim.api.nvim_buf_set_lines(bufnr, start_idx, end_idx, false, lines)
+  end)
 end
 
 --- Phase 1: Insert placeholder for a tool result
@@ -228,60 +230,46 @@ function M.inject_placeholder(bufnr, tool_id, inject_opts)
         -- Our tool comes before all existing results - insert before the first one
         local first_result = existing_results[1]
         local first_start = first_result.position.start_line
-        local you_start = you_msg.position.start_line
 
-        if first_start == you_start then
-          -- First result header is inline with @You: line - split it
-          local old_line = vim.api.nvim_buf_get_lines(bufnr, you_start - 1, you_start, false)[1]
-          local old_header = old_line:match("^@You:%s*(.+)$")
-          set_lines(bufnr, you_start - 1, you_start, {
-            "@You: " .. header_text,
-            "",
-            fence_open,
-            "```",
-            "",
-            old_header or "",
-          })
-          return you_start, nil, { modified = true }
-        else
-          -- First result is on a separate line - insert before it
-          set_lines(bufnr, first_start - 1, first_start - 1, { header_text, "", fence_open, "```", "" })
-          return first_start, nil, { modified = true }
-        end
+        -- Insert before the first result
+        set_lines(bufnr, first_start - 1, first_start - 1, { header_text, "", fence_open, "```", "" })
+        return first_start, nil, { modified = true }
       end
     else
       -- @You: exists but has no tool results - insert at start of content
       -- The @You: role line is at you_msg.position.start_line
       local you_start = you_msg.position.start_line
-      -- Insert header right after the @You: line marker, shifting content down
-      -- Get the current @You: line text
-      local you_line = vim.api.nvim_buf_get_lines(bufnr, you_start - 1, you_start, false)[1]
-      -- Extract the content after "@You: " or "@You:"
-      local role_prefix = you_line:match("^@You:%s*")
-      local remaining_content = you_line:sub(#role_prefix + 1)
+      -- Insert header after @You: marker line, before any existing content
+      local content_start = you_start + 1
+      local has_content = false
+      local total_lines = vim.api.nvim_buf_line_count(bufnr)
+      if content_start <= total_lines then
+        local next_line = buffer.get_line(bufnr, content_start)
+        has_content = next_line:match("%S") ~= nil
+      end
 
-      if remaining_content and remaining_content:match("%S") then
-        -- @You: has inline content - replace with header + move content down
-        set_lines(bufnr, you_start - 1, you_start, {
-          "@You: " .. header_text,
+      if has_content then
+        -- @You: has content on the next line — insert placeholder before it
+        set_lines(bufnr, content_start - 1, content_start - 1, {
+          "",
+          header_text,
           "",
           fence_open,
           "```",
           "",
-          remaining_content,
         })
-        return you_start, nil, { modified = true }
+        return content_start + 1, nil, { modified = true }
       else
-        -- @You: line is empty or whitespace-only - replace it with header
-        set_lines(bufnr, you_start - 1, you_start, { "@You: " .. header_text, "", fence_open, "```" })
-        return you_start, nil, { modified = true }
+        -- @You: line is followed by empty/no content — insert after marker
+        set_lines(bufnr, you_start, you_start, { "", header_text, "", fence_open, "```" })
+        return you_start + 2, nil, { modified = true }
       end
     end
   else
     -- No @You: message exists - create one after the assistant message
     local insert_after = assistant_msg.position.end_line
-    set_lines(bufnr, insert_after, insert_after, { "", "@You: " .. header_text, "", fence_open, "```" })
-    return insert_after + 2, nil, { modified = true } -- +1 for blank, +1 for 1-based
+    set_lines(bufnr, insert_after, insert_after, { "", "@You:", "", header_text, "", fence_open, "```" })
+    return insert_after + 4, nil, { modified = true } -- +1 blank +1 @You: +1 blank +1 header = +4
   end
 end
 
@@ -314,12 +302,6 @@ function M.inject_result(bufnr, tool_id, result)
     local header_text = ("**Tool Result:** `%s`"):format(tool_id)
     if is_error then
       header_text = header_text .. " (error)"
-    end
-
-    -- Check if header is on a @You: line
-    local current_header = vim.api.nvim_buf_get_lines(bufnr, header_line - 1, header_line, false)[1]
-    if current_header:match("^@You:") then
-      header_text = "@You: " .. header_text
     end
 
     -- Replace from header to end of existing block

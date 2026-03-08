@@ -1,6 +1,7 @@
 local ast = require("flemma.ast")
 local codeblock = require("flemma.codeblock")
-local json = require("flemma.json")
+local json = require("flemma.utilities.json")
+local roles = require("flemma.utilities.roles")
 
 ---@class flemma.Parser
 local M = {}
@@ -200,7 +201,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
       if block then
         if block.language == "flemma:tool" then
           -- Tool status placeholder — parse info string for status
-          local modeline = require("flemma.modeline")
+          local modeline = require("flemma.utilities.modeline")
           local parsed = modeline.parse(block.info or "")
           local tool_status = TOOL_STATUS_MAP[parsed.status] or "pending"
 
@@ -264,7 +265,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
         })
         -- Skip to end of message (next @Role: marker) to avoid parsing garbage
         local j = content_start + 1
-        while j <= #lines and not lines[j]:match("^@[%w]+:") do
+        while j <= #lines and not lines[j]:match("^@[%w]+:%s*$") do
           j = j + 1
         end
         i = j
@@ -390,7 +391,7 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
           })
           -- Skip to end of malformed block
           local j = block_start + 1
-          while j <= #lines and not lines[j]:match("^@[%w]+:") do
+          while j <= #lines and not lines[j]:match("^@[%w]+:%s*$") do
             j = j + 1
           end
           i = j
@@ -414,7 +415,7 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
         })
         -- Skip to end of message
         local j = block_start + 1
-        while j <= #lines and not lines[j]:match("^@[%w]+:") do
+        while j <= #lines and not lines[j]:match("^@[%w]+:%s*$") do
           j = j + 1
         end
         i = j
@@ -502,22 +503,17 @@ local function parse_message(lines, start_idx, line_offset, diagnostics)
   if not line then
     return nil, start_idx, diagnostics
   end
-  local role = line:match("^@([%w]+):")
+  local role = line:match("^@([%w]+):%s*$")
   if not role then
     return nil, start_idx, diagnostics
   end
 
-  local content_first = line:sub(#role + 3)
   local content_lines = {}
-  if content_first and content_first:match("%S") then
-    local trimmed = content_first:gsub("^%s*", "")
-    table.insert(content_lines, trimmed)
-  end
 
   local i = start_idx + 1
   while i <= #lines do
     local next_line = lines[i]
-    if next_line:match("^@[%w]+:") then
+    if next_line:match("^@[%w]+:%s*$") then
       break
     end
     table.insert(content_lines, next_line)
@@ -525,8 +521,7 @@ local function parse_message(lines, start_idx, line_offset, diagnostics)
   end
 
   local segments
-  local content_start_line = (content_first and content_first:match("%S")) and start_idx + line_offset
-    or (start_idx + 1 + line_offset)
+  local content_start_line = start_idx + 1 + line_offset
 
   if role == "Assistant" then
     -- Parse thinking tags and tool_use blocks
@@ -535,7 +530,7 @@ local function parse_message(lines, start_idx, line_offset, diagnostics)
     for _, diag in ipairs(msg_diagnostics) do
       table.insert(diagnostics, diag)
     end
-  elseif role == "You" then
+  elseif roles.is_user(role) then
     -- Parse tool_result blocks and regular content
     local msg_diagnostics
     segments, msg_diagnostics = parse_user_segments(content_lines, content_start_line, {})

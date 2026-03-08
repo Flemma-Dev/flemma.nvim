@@ -3,7 +3,7 @@
 local M = {}
 
 local log = require("flemma.logging")
-local modeline = require("flemma.modeline")
+local modeline = require("flemma.utilities.modeline")
 local registry = require("flemma.provider.registry")
 
 ---@class flemma.presets.NormalizedPreset
