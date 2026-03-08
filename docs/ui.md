@@ -244,11 +244,52 @@ The component only renders in `chat` buffers and returns an empty string otherwi
 
 ### Format string
 
-The display format when thinking is active is configurable via `statusline.thinking_format` in the [configuration reference](configuration.md). The default is `"{model} ({level})"`. Available variables:
+The display format is configurable via `statusline.format` in the [configuration reference](configuration.md) using a tmux-style format syntax. The default is:
 
-| Variable  | Example                 |
-| --------- | ----------------------- |
-| `{model}` | `claude-sonnet-4-6`     |
-| `{level}` | `high`, `medium`, `low` |
+```
+#{model}#{?#{thinking}, (#{thinking}),}
+```
 
-When thinking is disabled or the model doesn't support it, only the model name is shown. The component respects per-buffer overrides from `flemma.opt` – if frontmatter changes the thinking level, the statusline reflects it.
+Which produces `claude-sonnet-4-5 (high)` when thinking is active, or just `claude-sonnet-4-5` when it's off.
+
+#### Variables
+
+Variables are lazy-evaluated — only variables referenced by the format string trigger data lookups.
+
+| Variable      | Example                 | Description                                    |
+| ------------- | ----------------------- | ---------------------------------------------- |
+| `#{model}`    | `claude-sonnet-4-6`     | Current model name                             |
+| `#{provider}` | `anthropic`             | Current provider name                          |
+| `#{thinking}` | `high`, `medium`, `low` | Thinking/reasoning level (empty when inactive) |
+
+#### Syntax
+
+| Syntax                           | Purpose                         | Example                                           |
+| -------------------------------- | ------------------------------- | ------------------------------------------------- |
+| `#{name}`                        | Variable expansion              | `#{model}` → `o3`                                 |
+| `#{?cond,true,false}`            | Ternary conditional             | `#{?#{thinking},yes,no}`                          |
+| `#{==:a,b}`                      | String equality (returns 1/0)   | `#{==:#{provider},anthropic}`                     |
+| `#{!=:a,b}`                      | String inequality (returns 1/0) | `#{!=:#{provider},openai}`                        |
+| `#{&&:a,b}`                      | Logical AND (returns 1/0)       | `#{&&:#{thinking},#{model}}`                      |
+| <code>#{&#124;&#124;:a,b}</code> | Logical OR (returns 1/0)        | <code>#{&#124;&#124;:#{model},#{provider}}</code> |
+| `#,`                             | Literal comma                   | `a#,b` → `a,b`                                    |
+
+A value is **truthy** if it is non-empty and not `"0"`. Expressions nest freely — each branch of a conditional is expanded recursively.
+
+#### Examples
+
+```lua
+-- Default: "claude-sonnet-4-5 (high)" or "claude-sonnet-4-5"
+format = '#{model}#{?#{thinking}, (#{thinking}),}'
+
+-- Provider prefix: "anthropic:claude-sonnet-4-5"
+format = '#{provider}:#{model}'
+
+-- Square brackets for thinking: "o3 [high]" or "o3"
+format = '#{model}#{?#{thinking}, [#{thinking}],}'
+
+-- Provider-conditional label: "A: claude-sonnet-4-5" or "O: o3"
+format = '#{?#{==:#{provider},anthropic},A,O}: #{model}'
+```
+
+The component only shows data in `chat` buffers and respects per-buffer overrides from `flemma.opt` – if frontmatter changes the thinking level, the statusline reflects it.

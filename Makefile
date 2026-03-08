@@ -62,7 +62,13 @@ qa:
 # Launch Flemma.nvim from local directory
 develop:
 	@-rm ~/.cache/nvim/flemma.log
-	@nvim --cmd "set runtimepath^=`pwd`"												\
+	@nvim --cmd "lua																	\
+			local cwd = vim.uv.cwd();													\
+			vim.opt.rtp:prepend(cwd);													\
+			vim.opt.rtp = vim.tbl_filter(function(p)									\
+				return not (p:find('flemma') and p ~= cwd)								\
+			end, vim.opt.rtp:get())														\
+		"																				\
 		-c "																			\
 		lua require(\"flemma\").setup({													\
 			model = \"\$$haiku\",														\

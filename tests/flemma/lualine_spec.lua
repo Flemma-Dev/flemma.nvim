@@ -1,7 +1,5 @@
-local stub = require("luassert.stub")
-
 describe("Lualine component", function()
-  local flemma_component, flemma, core
+  local flemma_component, core
 
   before_each(function()
     -- Clean up any buffers created during previous tests
@@ -21,13 +19,14 @@ describe("Lualine component", function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
+    package.loaded["flemma.utilities.format"] = nil
     package.loaded["lualine.components.flemma"] = nil
 
     -- Load the component to be tested
     flemma_component = require("lualine.components.flemma")
 
     -- Initialize flemma with default settings
-    flemma = require("flemma")
+    local flemma = require("flemma")
     core = require("flemma.core")
     flemma.setup({})
 
@@ -51,7 +50,7 @@ describe("Lualine component", function()
     -- Act
     local status = flemma_component:update_status()
 
-    -- Assert (uses default format "{model} ({level})")
+    -- Assert (uses default format "#{model}#{?#{thinking}, (#{thinking}),}")
     assert.are.equal("o3 (high)", status)
   end)
 
@@ -156,19 +155,74 @@ describe("Lualine component", function()
   end)
 
   it("should return an empty string if model is not set", function()
-    -- Arrange
-    local s = stub.new(flemma, "get_current_model_name", function()
-      return nil
-    end)
+    -- Arrange: set model to nil via config
+    local state = require("flemma.state")
+    local config = state.get_config()
+    config.model = nil
 
     -- Act
     local status = flemma_component:update_status()
 
     -- Assert
     assert.are.equal("", status)
+  end)
 
-    -- Cleanup
-    s:revert()
+  describe("custom format strings", function()
+    it("should use provider:model format when configured", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{provider}:#{model}"
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("anthropic:claude-sonnet-4-5", status)
+    end)
+
+    it("should handle conditionals in custom format", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{model}#{?#{thinking}, [#{thinking}],}"
+      core.switch_provider("openai", "o3", { reasoning = "high", temperature = 1 })
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("o3 [high]", status)
+    end)
+
+    it("should collapse conditional when thinking is off", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{model}#{?#{thinking}, [#{thinking}],}"
+      core.switch_provider("openai", "gpt-4o", {})
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("gpt-4o", status)
+    end)
+
+    it("should support provider-conditional format", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{?#{==:#{provider},anthropic},A,O}: #{model}"
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("A: claude-sonnet-4-5", status)
+    end)
   end)
 
   describe("frontmatter overrides", function()

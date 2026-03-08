@@ -58,7 +58,7 @@
 ---@field enabled boolean
 
 ---@class flemma.config.Statusline
----@field thinking_format string Format string when thinking is active. {model} = model name, {level} = thinking level
+---@field format string tmux-style format string for the lualine component. Variables: #{model}, #{provider}, #{thinking}. Supports conditionals: #{?cond,true,false}
 
 ---@class flemma.config.Parameters
 ---@field max_tokens? integer|string Integer token count or percentage string (e.g. "50%") of model's max_output_tokens
@@ -259,7 +259,7 @@ return {
     enabled = true, -- Whether to show pricing information in notifications
   },
   statusline = {
-    thinking_format = "{model} ({level})", -- Format string when thinking is active. {model} = model name, {level} = low/medium/high.
+    format = "#{model}#{?#{thinking}, (#{thinking}),}", -- tmux-style format string. Variables: #{model}, #{provider}, #{thinking}
   },
   provider = "anthropic", -- Default provider: "anthropic", "openai", or "vertex"
   model = nil, -- Will use provider-specific default if nil

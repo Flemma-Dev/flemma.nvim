@@ -97,7 +97,7 @@ require("flemma").setup({
   },
   pricing = { enabled = true },
   statusline = {
-    thinking_format = "{model} ({level})",   -- Format when thinking is active
+    format = '#{model}#{?#{thinking}, (#{thinking}),}', -- tmux-style format string (see docs/ui.md)
   },
   text_object = "m",                         -- "m" or false to disable
   editing = {
