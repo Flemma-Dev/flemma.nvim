@@ -162,6 +162,7 @@ Pure refactors with no behavior change, CI/tooling changes, test-only changes, a
 - **After committing a user-facing change, always write a changeset file** (see Changesets & Versioning above). Include it in the same commit or as an immediate follow-up commit.
 - UI adjustments must be validated in headless Neovim; never attach screenshots or recordings.
 - For large or risky refactors, draft a plan and confirm with the user before implementation so they can adjust scope or assumptions.
+- **Never commit plan or design documents** (`docs/plans/`). Plans are working artifacts for the current session — they live on disk but stay out of version control.
 
 ## Keeping This File Current
 
