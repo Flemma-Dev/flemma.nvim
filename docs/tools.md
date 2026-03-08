@@ -393,7 +393,7 @@ local result = ctx.truncate.truncate_tail(full_output)
 local result = ctx.truncate.truncate_head(content)
 
 -- Format byte counts for display
-local size_str = ctx.truncate.format_size(12345)  -- "12.1 KB"
+local size_str = ctx.truncate.format_size(12345)  -- "12.1KB"
 
 -- Constants
 ctx.truncate.MAX_LINES  -- 2000
