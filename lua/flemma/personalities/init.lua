@@ -7,10 +7,6 @@ local M = {}
 local loader = require("flemma.loader")
 local registry_utils = require("flemma.registry")
 
---- Forward declaration — full type defined in flemma.personalities.types (Task 3)
----@class flemma.personalities.Personality
----@field render fun(opts: table): string
-
 ---@type table<string, string>
 local BUILTIN_PERSONALITIES = {
   ["coding-assistant"] = "flemma.personalities.coding-assistant",
