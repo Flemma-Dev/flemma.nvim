@@ -53,7 +53,6 @@ describe("flemma.personalities", function()
     end)
 
     it("registers built-in coding-assistant personality", function()
-      -- Enabled after coding-assistant module is created (Task 5)
       personalities.setup()
       assert.is_true(personalities.has("coding-assistant"))
     end)
