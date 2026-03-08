@@ -2,12 +2,14 @@
 
 -- Ensure tools module loads fresh
 package.loaded["flemma.tools"] = nil
+package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.registry"] = nil
 package.loaded["extras.flemma.tools.calculator"] = nil
 package.loaded["flemma.tools.definitions.bash"] = nil
 package.loaded["flemma.tools.definitions.read"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
 package.loaded["flemma.tools.definitions.write"] = nil
+package.loaded["flemma.provider.providers.vertex"] = nil
 
 describe("Vertex AI Provider", function()
   local vertex = require("flemma.provider.providers.vertex")

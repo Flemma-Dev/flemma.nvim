@@ -1,4 +1,5 @@
 package.loaded["flemma.tools"] = nil
+package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.registry"] = nil
 package.loaded["flemma.tools.presets"] = nil
 package.loaded["extras.flemma.tools.calculator"] = nil
@@ -7,6 +8,9 @@ package.loaded["flemma.tools.definitions.read"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
 package.loaded["flemma.tools.definitions.write"] = nil
 package.loaded["flemma.buffer.opt"] = nil
+package.loaded["flemma.provider.providers.anthropic"] = nil
+package.loaded["flemma.provider.providers.openai"] = nil
+package.loaded["flemma.provider.providers.vertex"] = nil
 
 local tools = require("flemma.tools")
 local opt = require("flemma.buffer.opt")
