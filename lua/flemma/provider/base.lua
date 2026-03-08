@@ -111,6 +111,7 @@ local log = require("flemma.logging")
 ---@field state flemma.provider.ProviderState
 ---@field endpoint? string
 ---@field api_version? string
+---@field metadata? flemma.provider.Metadata
 ---@field _response_buffer? flemma.provider.ResponseBuffer
 ---@field _response_headers? table<string, string[]>
 ---@field set_parameter_overrides fun(self, overrides: table<string, any>|nil)
@@ -750,6 +751,156 @@ end
 function M._content_ends_with_newline(self)
   local content = self._response_buffer.content or ""
   return content:sub(-1) == "\n"
+end
+
+-- ============================================================================
+-- Shared emission helpers — used by providers to format response blocks
+-- ============================================================================
+
+--- Get the appropriate content prefix for the next block.
+--- Returns "" if no content, "\n" if content ends with newline, "\n\n" otherwise.
+---@param self flemma.provider.Base
+---@return string prefix
+function M._get_content_prefix(self)
+  if not self:_has_content() then
+    return ""
+  end
+  return self:_content_ends_with_newline() and "\n" or "\n\n"
+end
+
+--- Emit a formatted tool use block to the buffer.
+--- Handles dynamic fence sizing, content prefix, and the standard format string.
+---@param self flemma.provider.Base
+---@param name string Tool name
+---@param id string Tool call ID
+---@param arguments_json string JSON string of tool arguments
+---@param callbacks flemma.provider.Callbacks
+function M._emit_tool_use_block(self, name, id, arguments_json, callbacks)
+  local max_ticks = 0
+  for ticks in arguments_json:gmatch("`+") do
+    max_ticks = math.max(max_ticks, #ticks)
+  end
+  local fence = string.rep("`", math.max(3, max_ticks + 1))
+
+  local prefix = self:_get_content_prefix()
+  local formatted = string.format(
+    "%s**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n",
+    prefix,
+    name,
+    id,
+    fence,
+    arguments_json,
+    fence
+  )
+
+  M._signal_content(self, formatted, callbacks)
+  log.debug(self.metadata.name .. ".process_response_line(): Emitted tool_use block for " .. name)
+end
+
+--- Emit a thinking block to the buffer.
+--- Handles content trimming, content prefix, signature attributes, and the fold-only empty tag case.
+---@param self flemma.provider.Base
+---@param content string Accumulated thinking text (may be empty)
+---@param signature string|nil Signature value (provider-prepared)
+---@param provider_prefix string Provider namespace for the signature attribute ("anthropic", "openai", "vertex")
+---@param callbacks flemma.provider.Callbacks
+function M._emit_thinking_block(self, content, signature, provider_prefix, callbacks)
+  local stripped = vim.trim(content)
+  local has_content = #stripped > 0
+  local has_signature = signature ~= nil and signature ~= ""
+
+  if not has_content and not has_signature then
+    return
+  end
+
+  local prefix = self:_get_content_prefix()
+  local open_tag
+  if has_signature then
+    open_tag = '<thinking ' .. provider_prefix .. ':signature="' .. signature .. '">'
+  else
+    open_tag = "<thinking>"
+  end
+
+  local block
+  if has_content then
+    block = prefix .. open_tag .. "\n" .. stripped .. "\n</thinking>\n"
+  else
+    -- Signature but no content — emit open/close tag (enables folding)
+    block = prefix .. open_tag .. "\n</thinking>\n"
+  end
+
+  M._signal_content(self, block, callbacks)
+  log.debug(self.metadata.name .. "._emit_thinking_block(): Emitted thinking block")
+end
+
+--- Emit a redacted thinking block to the buffer.
+---@param self flemma.provider.Base
+---@param data string Opaque redacted thinking data
+---@param callbacks flemma.provider.Callbacks
+function M._emit_redacted_thinking(self, data, callbacks)
+  local prefix = self:_content_ends_with_newline() and "" or "\n"
+  local block = prefix .. "<thinking redacted>\n" .. data .. "\n</thinking>\n"
+  M._signal_content(self, block, callbacks)
+  log.debug(self.metadata.name .. "._emit_redacted_thinking(): Emitted redacted thinking block")
+end
+
+--- Warn the user about a truncated response and signal completion.
+---@param self flemma.provider.Base
+---@param callbacks flemma.provider.Callbacks
+function M._warn_truncated(self, callbacks)
+  log.warn(self.metadata.name .. ".process_response_line(): Response truncated (max_tokens)")
+  vim.schedule(function()
+    vim.notify("Flemma: Response truncated \u{2013} model reached max output tokens", vim.log.levels.WARN)
+  end)
+  if callbacks.on_response_complete then
+    callbacks.on_response_complete()
+  end
+end
+
+--- Signal that the response was blocked by content policy.
+---@param self flemma.provider.Base
+---@param reason string The block reason (e.g., "refusal", "SAFETY")
+---@param callbacks flemma.provider.Callbacks
+function M._signal_blocked(self, reason, callbacks)
+  local message = "Response blocked by " .. self.metadata.display_name .. " (" .. reason .. ")"
+  log.error(self.metadata.name .. ".process_response_line(): " .. message)
+  if callbacks.on_error then
+    callbacks.on_error(message)
+  end
+end
+
+--- Default error response detection. Override in providers with different error shapes.
+--- Default checks for `data.error` (covers OpenAI and Vertex).
+---@param self flemma.provider.Base
+---@param data table The parsed JSON response data
+---@return boolean is_error True if the data represents an error response
+function M._is_error_response(self, data)
+  return data.error ~= nil
+end
+
+--- Inject synthetic error results for orphaned tool calls.
+--- Providers supply a format function returning the provider-specific block shape.
+---@param self flemma.provider.Base
+---@param pending flemma.pipeline.UnresolvedTool[]|nil List of orphaned tool calls
+---@param format_fn fun(orphan: flemma.pipeline.UnresolvedTool): table Returns a provider-specific synthetic result block
+---@return table[]|nil results Array of formatted results, or nil if no orphans
+function M._inject_orphan_results(self, pending, format_fn)
+  if not pending or #pending == 0 then
+    return nil
+  end
+  local results = {}
+  for _, orphan in ipairs(pending) do
+    table.insert(results, format_fn(orphan))
+    log.debug(
+      self.metadata.name
+        .. ".build_request: Injected synthetic result for orphaned "
+        .. orphan.name
+        .. " ("
+        .. orphan.id
+        .. ")"
+    )
+  end
+  return results
 end
 
 -- ============================================================================
