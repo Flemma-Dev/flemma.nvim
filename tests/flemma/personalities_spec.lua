@@ -52,7 +52,7 @@ describe("flemma.personalities", function()
       assert.is_false(personalities.has("temp"))
     end)
 
-    pending("registers built-in coding-assistant personality", function()
+    it("registers built-in coding-assistant personality", function()
       -- Enabled after coding-assistant module is created (Task 5)
       personalities.setup()
       assert.is_true(personalities.has("coding-assistant"))
@@ -190,5 +190,124 @@ describe("flemma.personalities.builder", function()
 
       vim.fn.delete(tmpdir, "rf")
     end)
+  end)
+end)
+
+local coding_assistant
+
+describe("flemma.personalities.coding-assistant", function()
+  before_each(function()
+    package.loaded["flemma.personalities.coding-assistant"] = nil
+    coding_assistant = require("flemma.personalities.coding-assistant")
+  end)
+
+  it("has a render function", function()
+    assert.is_function(coding_assistant.render)
+  end)
+
+  it("renders core persona", function()
+    local result = coding_assistant.render({
+      tools = {},
+      environment = { cwd = "/test", date = "Monday, March 8, 2026", time = "02:15 PM" },
+      project_context = {},
+    })
+    assert.truthy(result:find("coding assistant"))
+    assert.truthy(result:find("Neovim"))
+  end)
+
+  it("renders tools with snippets", function()
+    local result = coding_assistant.render({
+      tools = {
+        { name = "bash", parts = { snippet = { "Execute shell commands" } } },
+        { name = "read", parts = {} },
+      },
+      environment = { cwd = "/test", date = "Monday", time = "12:00 PM" },
+      project_context = {},
+    })
+    assert.truthy(result:find("bash: Execute shell commands"))
+    assert.truthy(result:find("- read\n"))
+  end)
+
+  it("renders guidelines from tool parts", function()
+    local result = coding_assistant.render({
+      tools = {
+        { name = "bash", parts = { guidelines = { "Be careful", "Check first" } } },
+      },
+      environment = { cwd = "/test", date = "Monday", time = "12:00 PM" },
+      project_context = {},
+    })
+    assert.truthy(result:find("- Be careful"))
+    assert.truthy(result:find("- Check first"))
+  end)
+
+  it("omits tools section when no tools", function()
+    local result = coding_assistant.render({
+      tools = {},
+      environment = { cwd = "/test", date = "Monday", time = "12:00 PM" },
+      project_context = {},
+    })
+    assert.falsy(result:find("Available tools"))
+  end)
+
+  it("omits guidelines section when no guidelines", function()
+    local result = coding_assistant.render({
+      tools = {
+        { name = "bash", parts = { snippet = { "Execute commands" } } },
+      },
+      environment = { cwd = "/test", date = "Monday", time = "12:00 PM" },
+      project_context = {},
+    })
+    assert.falsy(result:find("Guidelines"))
+  end)
+
+  it("renders environment context", function()
+    local result = coding_assistant.render({
+      tools = {},
+      environment = {
+        cwd = "/home/user/project",
+        current_file = "src/main.lua",
+        filetype = "lua",
+        git_branch = "feature/foo",
+        date = "Monday, March 8, 2026",
+        time = "02:15 PM",
+      },
+      project_context = {},
+    })
+    assert.truthy(result:find("Monday, March 8, 2026"))
+    assert.truthy(result:find("/home/user/project"))
+    assert.truthy(result:find("src/main.lua"))
+    assert.truthy(result:find("lua"))
+    assert.truthy(result:find("feature/foo"))
+  end)
+
+  it("omits optional environment fields when nil", function()
+    local result = coding_assistant.render({
+      tools = {},
+      environment = { cwd = "/test", date = "Monday", time = "12:00 PM" },
+      project_context = {},
+    })
+    assert.falsy(result:find("Current file"))
+    assert.falsy(result:find("Git branch"))
+  end)
+
+  it("renders project context files", function()
+    local result = coding_assistant.render({
+      tools = {},
+      environment = { cwd = "/test", date = "Monday", time = "12:00 PM" },
+      project_context = {
+        { path = "AGENTS.md", content = "Project rules here" },
+      },
+    })
+    assert.truthy(result:find("### AGENTS.md"))
+    assert.truthy(result:find("Project rules here"))
+  end)
+
+  it("omits project context section when empty", function()
+    local result = coding_assistant.render({
+      tools = {},
+      environment = { cwd = "/test", date = "Monday", time = "12:00 PM" },
+      project_context = {},
+    })
+    assert.falsy(result:find("Project Context"))
   end)
 end)
