@@ -1,6 +1,7 @@
 --- Tests for write tool definition
 
 package.loaded["flemma.tools"] = nil
+package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.registry"] = nil
 package.loaded["flemma.tools.executor"] = nil
 package.loaded["flemma.tools.definitions.write"] = nil
@@ -155,6 +156,7 @@ describe("Write Tool", function()
     before_each(function()
       package.loaded["flemma.sandbox"] = nil
       package.loaded["flemma.sandbox.backends.bwrap"] = nil
+      package.loaded["flemma.tools.approval"] = nil
       sandbox = require("flemma.sandbox")
       sandbox.reset_enabled()
       sandbox.clear()

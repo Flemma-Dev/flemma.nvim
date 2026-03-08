@@ -256,6 +256,8 @@ describe("Tool Preview", function()
       package.loaded["flemma.ui"] = nil
       package.loaded["flemma.ui.preview"] = nil
       package.loaded["flemma.parser"] = nil
+      package.loaded["flemma.tools.context"] = nil
+      package.loaded["flemma.tools.injector"] = nil
       ui = require("flemma.ui")
     end)
 
@@ -416,6 +418,7 @@ describe("Tool Preview", function()
     before_each(function()
       package.loaded["flemma"] = nil
       package.loaded["flemma.ui.preview"] = nil
+      package.loaded["flemma.tools.approval"] = nil
       package.loaded["flemma.tools.registry"] = nil
       package.loaded["flemma.tools"] = nil
       package.loaded["extras.flemma.tools.calculator"] = nil

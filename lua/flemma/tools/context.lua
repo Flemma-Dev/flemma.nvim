@@ -3,6 +3,7 @@
 ---@class flemma.tools.Context
 local M = {}
 
+local parser = require("flemma.parser")
 local roles = require("flemma.utilities.roles")
 
 ---@class flemma.tools.ToolContext
@@ -101,7 +102,6 @@ end
 ---@param bufnr integer Buffer number
 ---@return flemma.tools.ToolContext[] pending_contexts
 function M.resolve_all_pending(bufnr)
-  local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
 
   -- Collect all tool_result IDs across the entire document
@@ -158,7 +158,6 @@ end
 ---@param bufnr integer Buffer number
 ---@return table<flemma.ast.ToolStatus, flemma.tools.ToolBlockContext[]> groups
 function M.resolve_all_tool_blocks(bufnr)
-  local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
 
   -- Collect tool_result segments with status, keyed by tool_use_id
@@ -265,7 +264,6 @@ end
 ---@param cursor_pos {row: integer, col: integer} 1-based cursor position
 ---@return flemma.tools.ToolContext|nil context, string|nil error_message
 function M.resolve(bufnr, cursor_pos)
-  local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
 
   local cursor_line = cursor_pos.row

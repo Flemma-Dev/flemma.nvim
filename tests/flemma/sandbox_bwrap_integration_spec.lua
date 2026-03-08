@@ -105,6 +105,7 @@ describe("bash tool sandbox integration", function()
   before_each(function()
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
+    package.loaded["flemma.tools.approval"] = nil
     package.loaded["flemma.tools.executor"] = nil
     local sandbox = require("flemma.sandbox")
     sandbox.reset_enabled()
@@ -278,6 +279,7 @@ describe("sandbox runtime toggle E2E", function()
   before_each(function()
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
+    package.loaded["flemma.tools.approval"] = nil
     package.loaded["flemma.tools.executor"] = nil
     sandbox = require("flemma.sandbox")
     sandbox.reset_enabled()
@@ -359,6 +361,7 @@ describe("executor context plumbing", function()
   before_each(function()
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
+    package.loaded["flemma.tools.approval"] = nil
     package.loaded["flemma.tools.executor"] = nil
     local sandbox = require("flemma.sandbox")
     sandbox.reset_enabled()
@@ -438,6 +441,7 @@ describe("sandbox process lifecycle through bash tool", function()
   before_each(function()
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
+    package.loaded["flemma.tools.approval"] = nil
     package.loaded["flemma.tools.executor"] = nil
     local sandbox = require("flemma.sandbox")
     sandbox.reset_enabled()

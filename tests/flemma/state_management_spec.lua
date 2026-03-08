@@ -14,6 +14,9 @@ describe("State Management", function()
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.parser"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.context"] = nil
+    package.loaded["flemma.tools.injector"] = nil
 
     flemma = require("flemma")
     ui = require("flemma.ui")
@@ -387,6 +390,7 @@ describe("State Management", function()
   describe("cleanup hooks", function()
     it("register_cleanup stores and runs hooks during cleanup", function()
       package.loaded["flemma.state"] = nil
+      package.loaded["flemma.tools"] = nil
       local st = require("flemma.state")
       local buf = vim.api.nvim_create_buf(false, true)
       st.get_buffer_state(buf)
@@ -403,6 +407,7 @@ describe("State Management", function()
 
     it("hooks run even without prior buffer state", function()
       package.loaded["flemma.state"] = nil
+      package.loaded["flemma.tools"] = nil
       local st = require("flemma.state")
       local buf = vim.api.nvim_create_buf(false, true)
       -- Don't initialize buffer state

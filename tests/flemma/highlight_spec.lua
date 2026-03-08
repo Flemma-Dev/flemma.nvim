@@ -7,6 +7,7 @@ describe("Highlight", function()
     package.loaded["flemma.highlight"] = nil
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
 
     flemma = require("flemma")
@@ -250,6 +251,7 @@ describe("^ contrast operator in expressions", function()
     package.loaded["flemma.highlight"] = nil
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
     package.loaded["flemma.utilities.color"] = nil
     require("flemma").setup({})
     highlight = require("flemma.highlight")
@@ -311,6 +313,7 @@ describe("notification bar highlights", function()
     package.loaded["flemma.utilities.color"] = nil
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
     -- Truly clear notification groups so default = true can re-define them.
     -- nvim_set_hl(0, group, {}) leaves an empty definition that default = true
@@ -432,6 +435,7 @@ describe("CursorLine overlay highlights", function()
     package.loaded["flemma.highlight"] = nil
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
     package.loaded["flemma.utilities.color"] = nil
 
     -- Set predictable Normal and CursorLine

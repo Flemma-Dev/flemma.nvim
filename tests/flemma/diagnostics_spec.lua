@@ -280,6 +280,7 @@ describe("flemma.diagnostics", function()
     it("does nothing on first request", function()
       -- Clear state before diagnostics so the fresh state module is captured
       package.loaded["flemma.state"] = nil
+      package.loaded["flemma.tools"] = nil
       package.loaded["flemma.diagnostics"] = nil
       local fresh_state = require("flemma.state")
       diagnostics = require("flemma.diagnostics")
@@ -296,6 +297,7 @@ describe("flemma.diagnostics", function()
 
     it("rotates previous/current on second request", function()
       package.loaded["flemma.state"] = nil
+      package.loaded["flemma.tools"] = nil
       package.loaded["flemma.diagnostics"] = nil
       local fresh_state = require("flemma.state")
       diagnostics = require("flemma.diagnostics")
@@ -313,6 +315,7 @@ describe("flemma.diagnostics", function()
 
     it("does not warn when messages are only appended (optimal caching)", function()
       package.loaded["flemma.state"] = nil
+      package.loaded["flemma.tools"] = nil
       package.loaded["flemma.diagnostics"] = nil
       require("flemma.state")
       diagnostics = require("flemma.diagnostics")
@@ -342,6 +345,7 @@ describe("flemma.diagnostics", function()
 
     it("warns when tools are appended (mid-document divergence)", function()
       package.loaded["flemma.state"] = nil
+      package.loaded["flemma.tools"] = nil
       package.loaded["flemma.diagnostics"] = nil
       require("flemma.state")
       diagnostics = require("flemma.diagnostics")
@@ -372,6 +376,7 @@ describe("flemma.diagnostics", function()
   describe("open_diff", function()
     it("warns when no request data is available", function()
       package.loaded["flemma.state"] = nil
+      package.loaded["flemma.tools"] = nil
       package.loaded["flemma.diagnostics"] = nil
       require("flemma.state")
       diagnostics = require("flemma.diagnostics")

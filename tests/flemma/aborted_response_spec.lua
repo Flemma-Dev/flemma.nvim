@@ -115,6 +115,7 @@ describe("Aborted response handling", function()
   describe("tool context", function()
     before_each(function()
       package.loaded["flemma.tools.context"] = nil
+      package.loaded["flemma.tools.injector"] = nil
       package.loaded["flemma.parser"] = nil
     end)
 

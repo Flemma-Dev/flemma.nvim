@@ -6,6 +6,7 @@ describe("flemma.usage segment building", function()
   before_each(function()
     package.loaded["flemma.usage"] = nil
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
     package.loaded["flemma.pricing"] = nil
     package.loaded["flemma.session"] = nil
     package.loaded["flemma.bar"] = nil

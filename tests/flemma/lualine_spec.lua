@@ -19,6 +19,7 @@ describe("Lualine component", function()
     -- Invalidate caches to ensure we get fresh modules
     package.loaded["flemma"] = nil
     package.loaded["flemma.config"] = nil
+    package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
     package.loaded["lualine.components.flemma"] = nil
 

@@ -17,6 +17,9 @@ describe("Folding: empty and self-closing thinking blocks", function()
     package.loaded["flemma.ast.query"] = nil
     package.loaded["flemma.parser"] = nil
     package.loaded["flemma.config"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.context"] = nil
+    package.loaded["flemma.tools.injector"] = nil
 
     flemma = require("flemma")
     folding = require("flemma.ui.folding")

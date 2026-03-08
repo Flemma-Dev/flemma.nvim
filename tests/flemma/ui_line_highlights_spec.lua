@@ -9,6 +9,9 @@ describe("UI Line Highlights", function()
     package.loaded["flemma.parser"] = nil
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.context"] = nil
+    package.loaded["flemma.tools.injector"] = nil
 
     flemma = require("flemma")
     ui = require("flemma.ui")

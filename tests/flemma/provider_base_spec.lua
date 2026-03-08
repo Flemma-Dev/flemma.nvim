@@ -321,6 +321,7 @@ describe("flemma.tools.get_sorted_for_prompt", function()
 
   before_each(function()
     package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.approval"] = nil
     package.loaded["flemma.tools.registry"] = nil
     package.loaded["flemma.tools.definitions.bash"] = nil
     package.loaded["flemma.tools.definitions.read"] = nil

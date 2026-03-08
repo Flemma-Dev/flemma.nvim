@@ -4,6 +4,8 @@ describe("flemma.status", function()
   before_each(function()
     package.loaded["flemma.status"] = nil
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.approval"] = nil
     package.loaded["flemma.autopilot"] = nil
     package.loaded["flemma.tools.registry"] = nil
     package.loaded["flemma.sandbox"] = nil

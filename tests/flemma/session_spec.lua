@@ -807,6 +807,7 @@ describe("flemma.session", function()
     it("does not require flemma.state", function()
       package.loaded["flemma.session"] = nil
       package.loaded["flemma.state"] = nil
+      package.loaded["flemma.tools"] = nil
       local fresh = require("flemma.session")
       assert.is_not_nil(fresh.get())
     end)

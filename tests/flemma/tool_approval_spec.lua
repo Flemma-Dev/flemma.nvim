@@ -5,6 +5,7 @@
 -- Clear module caches for clean state
 package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.presets"] = nil
+package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.context"] = nil
 package.loaded["flemma.tools.injector"] = nil
 package.loaded["flemma.state"] = nil
@@ -2725,7 +2726,9 @@ describe("Sandbox auto-approval resolver", function()
   before_each(function()
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
+    package.loaded["flemma.tools.approval"] = nil
     sandbox = require("flemma.sandbox")
+    approval = require("flemma.tools.approval")
     sandbox.clear()
     sandbox.reset_enabled()
     register_mock_backend()

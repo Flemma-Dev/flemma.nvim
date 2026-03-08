@@ -9,7 +9,10 @@ local M = {}
 local loader = require("flemma.loader")
 local log = require("flemma.logging")
 local registry_utils = require("flemma.registry")
+local sandbox = require("flemma.sandbox")
 local state = require("flemma.state")
+local tool_presets = require("flemma.tools.presets")
+local tools_registry = require("flemma.tools.registry")
 
 ---@alias flemma.tools.ApprovalResult "approve"|"require_approval"|"deny"
 
@@ -173,7 +176,6 @@ end
 ---@return flemma.tools.ApprovalResult|nil
 local function resolve_auto_approve_policy(policy, tool_name, input, context, error_result)
   if type(policy) == "table" then
-    local tool_presets = require("flemma.tools.presets")
     local approved = {}
     local denied = {}
 
@@ -384,8 +386,7 @@ function M.setup()
       end
 
       -- Only handle tools that declare the sandbox auto-approve capability
-      local registry = require("flemma.tools.registry")
-      local definition = registry.get(tool_name)
+      local definition = tools_registry.get(tool_name)
       if not definition or not definition.capabilities then
         return nil
       end
@@ -402,7 +403,6 @@ function M.setup()
       -- Verify sandbox is enabled (respects runtime override from :Flemma
       -- sandbox:disable and frontmatter sandbox options) and a backend is
       -- actually available (same check as :Flemma status)
-      local sandbox = require("flemma.sandbox")
       if not sandbox.is_enabled(context.opts) then
         return nil
       end

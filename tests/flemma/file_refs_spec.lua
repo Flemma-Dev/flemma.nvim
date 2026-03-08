@@ -14,6 +14,8 @@ describe("File References and Path Parsing", function()
     -- Clear the module cache to ensure fresh state
     package.loaded["flemma.parser"] = nil
     package.loaded["flemma.processor"] = nil
+    package.loaded["flemma.tools.context"] = nil
+    package.loaded["flemma.tools.injector"] = nil
     package.loaded["flemma.context"] = nil
     parser = require("flemma.parser")
     processor = require("flemma.processor")

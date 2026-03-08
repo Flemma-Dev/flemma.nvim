@@ -6,6 +6,7 @@ describe("sandbox policy layer", function()
   before_each(function()
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
+    package.loaded["flemma.tools.approval"] = nil
     sandbox = require("flemma.sandbox")
     state = require("flemma.state")
     bwrap = require("flemma.sandbox.backends.bwrap")

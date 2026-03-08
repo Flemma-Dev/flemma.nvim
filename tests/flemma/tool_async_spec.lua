@@ -1,4 +1,5 @@
 package.loaded["flemma.tools"] = nil
+package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.registry"] = nil
 
 local tools = require("flemma.tools")

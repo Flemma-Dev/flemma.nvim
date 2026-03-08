@@ -3,9 +3,11 @@
 ---@class flemma.Tools
 local M = {}
 
+local config = require("flemma.config")
 local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
 local registry = require("flemma.tools.registry")
+local state = require("flemma.state")
 
 local BUILTIN_TOOLS = {
   "flemma.tools.definitions.bash",
@@ -69,7 +71,6 @@ function M.register_async(resolve_fn, opts)
   end
 
   -- Set up timeout
-  local config = require("flemma.config")
   local timeout_s = opts.timeout or config.tools.default_timeout or 30
   local timer = vim.uv.new_timer()
   if not timer then
@@ -156,9 +157,9 @@ function M.setup()
     M.register(module_name)
   end
 
-  local config = require("flemma.state").get_config()
-  if config.tools and config.tools.modules then
-    for _, module_path in ipairs(config.tools.modules) do
+  local resolved_config = state.get_config()
+  if resolved_config.tools and resolved_config.tools.modules then
+    for _, module_path in ipairs(resolved_config.tools.modules) do
       M.register_module(module_path)
     end
   end

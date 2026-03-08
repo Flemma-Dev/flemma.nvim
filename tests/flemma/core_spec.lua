@@ -9,6 +9,7 @@ describe(":Flemma send command", function()
     package.loaded["flemma"] = nil
     package.loaded["flemma.commands"] = nil
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.core.config.manager"] = nil
     package.loaded["flemma.provider.registry"] = nil
