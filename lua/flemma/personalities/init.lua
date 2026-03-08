@@ -27,6 +27,10 @@ local registry_utils = require("flemma.registry")
 ---@field date string
 ---@field time string
 
+---@class flemma.personalities.CachedEnvironment
+---@field date string
+---@field time string
+
 ---@class flemma.personalities.ProjectContextFile
 ---@field path string
 ---@field content string

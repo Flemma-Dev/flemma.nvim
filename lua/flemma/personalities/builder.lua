@@ -4,6 +4,7 @@
 ---@class flemma.personalities.Builder
 local M = {}
 
+local state = require("flemma.state")
 local tools = require("flemma.tools")
 
 ---@type string[]
@@ -42,10 +43,26 @@ function M.build_tools(personality_name, tool_definitions)
 end
 
 --- Build environment context from current Neovim state.
+--- Date and time are cached per-buffer (in buffer_state.personality_environment) so the
+--- system prompt stays identical across requests, enabling LLM provider prompt caching.
+--- All other fields (cwd, current_file, filetype, git_branch) are captured fresh each
+--- time since they may change between requests.
 ---@param bufnr? integer Buffer number (defaults to current buffer)
 ---@return flemma.personalities.Environment
 function M.build_environment(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
+
+  -- Cache date/time per buffer for prompt caching stability
+  local buffer_state = state.get_buffer_state(bufnr)
+  if not buffer_state.personality_environment then
+    buffer_state.personality_environment = {
+      date = os.date("%A, %B %d, %Y") --[[@as string]],
+      time = os.date("%I:%M %p") --[[@as string]],
+    }
+  end
+  ---@cast buffer_state {personality_environment: flemma.personalities.CachedEnvironment}
+  local cached = buffer_state.personality_environment
+
   local cwd = vim.fn.getcwd()
 
   -- Current file (relative to cwd if possible)
@@ -82,8 +99,8 @@ function M.build_environment(bufnr)
     current_file = current_file,
     filetype = filetype,
     git_branch = git_branch,
-    date = os.date("%A, %B %d, %Y") --[[@as string]],
-    time = os.date("%I:%M %p") --[[@as string]],
+    date = cached.date,
+    time = cached.time,
   }
 end
 

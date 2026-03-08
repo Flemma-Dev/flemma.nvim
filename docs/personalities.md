@@ -35,6 +35,9 @@ The personality scans the current directory for these files (in order):
 
 Files with identical content (e.g., symlinks) are deduplicated — only the first match is included.
 
+> [!NOTE]
+> **Prompt caching:** The date and time in the environment section are captured once per buffer session and reused for all subsequent requests. This keeps the system prompt identical across requests, enabling LLM provider prompt caching. Other environment fields (working directory, current file, git branch) are always fresh. The cached date/time is cleared automatically when the buffer is wiped.
+
 ## Creating a Personality
 
 Each personality is a Lua module at `lua/flemma/personalities/<name>.lua` that implements a `render()` function:

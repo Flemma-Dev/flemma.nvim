@@ -31,6 +31,7 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field auto_closed_folds? table<string, boolean>
 ---@field pending_folds? table<string, boolean> Fold IDs that were attempted but failed to close (eligible for retry)
 ---@field fold_completed_tick? integer Last changedtick processed by fold_completed_blocks (prevents redundant folding)
+---@field personality_environment? flemma.personalities.CachedEnvironment Cached date/time for prompt caching (captured on first request)
 ---@field ui_update_tick? integer Last changedtick processed by update_ui (gates CursorHold redundancy)
 ---@field autopilot? flemma.autopilot.BufferState Per-buffer autopilot state machine
 ---@field tool_indicators? table<string, flemma.ui.ToolIndicator> Per-tool execution indicator state
