@@ -384,6 +384,40 @@ describe("State Management", function()
     end)
   end)
 
+  describe("cleanup hooks", function()
+    it("register_cleanup stores and runs hooks during cleanup", function()
+      package.loaded["flemma.state"] = nil
+      local st = require("flemma.state")
+      local buf = vim.api.nvim_create_buf(false, true)
+      st.get_buffer_state(buf)
+
+      local hook_called_with = nil
+      st.register_cleanup("test_hook", function(bufnr)
+        hook_called_with = bufnr
+      end)
+
+      st.cleanup_buffer_state(buf)
+      assert.are.equal(buf, hook_called_with)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("hooks run even without prior buffer state", function()
+      package.loaded["flemma.state"] = nil
+      local st = require("flemma.state")
+      local buf = vim.api.nvim_create_buf(false, true)
+      -- Don't initialize buffer state
+
+      local hook_called = false
+      st.register_cleanup("test_hook2", function()
+        hook_called = true
+      end)
+
+      st.cleanup_buffer_state(buf)
+      assert.is_true(hook_called)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+  end)
+
   describe("notification per-buffer isolation", function()
     local notifications
 
