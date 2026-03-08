@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.6.0
+
+### Minor Changes
+
+- 6546355: Aligned all registry modules to a consistent API contract: every registry now exposes register(), unregister(), get(), get_all(), has(), clear(), and count(). Extracted shared name validation into a new flemma.registry utility module. Renamed tools registry define() to register() (define() kept as deprecated alias).
+- dea4561: Notification bar background is now a blend of Normal bg (base), StatusLine bg (30%), and DiffChange fg (20%), producing a subtly tinted bar that's easier to read against the editor background
+- 568fb63: Compact notification bar format: token arrows now follow numbers (129↑ 117↓), session request count is merged into the Σ label (Σ3), and the bar automatically uses relaxed double-spacing when width allows
+- bb15c08: Restore CursorLine visibility on line-highlighted chat buffer lines. Blended overlay highlights preserve role-specific backgrounds while showing the cursor line, with smart toggling via OptionSet and a fg-only thinking fold preview group.
+- 9459e97: Add deterministic key-ordered JSON encoder for prompt caching. API request bodies now serialize with sorted keys and provider-specific trailing keys (messages, tools) placed last, maximizing prefix-based cache hits across all providers.
+- 9c0f873: Added diagnostics mode for debugging prompt caching issues. When enabled via `diagnostics = { enabled = true }`, Flemma compares consecutive API requests per buffer and warns when the prefix diverges (breaking caching). Includes byte-level analysis, structural change detection, and a side-by-side diff view (`:Flemma diagnostics:open`).
+- a6618bd: Notification bar now derives all colors from DiffChange with three foreground tiers (primary, secondary, muted) and WCAG contrast enforcement on semantic cache colors. Added `^` contrast operator to highlight expressions and extracted color utilities into `flemma.utilities.color` for reuse.
+- bae5026: Extracted folding logic into dedicated `ui/folding` module with registry-based fold rules, O(1) cached fold map, and configurable `auto_close` per fold type (thinking, tool_use, tool_result, frontmatter)
+- c56f356: Added independent folding for Tool Use and Tool Result blocks at fold level 2. Completed and terminal tool blocks auto-fold after execution, reducing visual noise. In-flight tools (pending, approved, executing) remain visible. Fold summaries reuse the same preview format as pending tool extmarks.
+- 77cb82b: Added per-segment syntax highlighting to fold text lines. Fold lines now return `{text, hl_group}` tuples so each part (icon, title, tool name, preview, line count) uses its own highlight group. New config keys: `tool_icon`, `tool_name`, `fold_preview`, `fold_meta`. Renamed `tool_use` to `tool_use_title` and `tool_result` to `tool_result_title` for 1:1 correspondence with highlight groups. Added shared `roles.lua` utility for centralised role name mapping.
+- 0fc8bea: Merged ruler into role marker lines: `@Role:` now renders as `─ Role ─────...` with the ruler extending to the window edge, replacing the separate virtual line above each message
+- 078a3a2: Enriched model metadata matrix with per-model thinking budgets, cache pricing, and cache minimum thresholds. Thinking parameters are now silently clamped to model-specific bounds instead of hitting runtime API errors. Cache percentage indicator is suppressed when input tokens are below the model's minimum cacheable threshold. Session pricing now uses per-model absolute cache costs where available, with provider-level multipliers as fallback.
+- b46f3ea: Rewrite notification bar with a priority-based layout engine and gutter icon. The 💬 prefix now renders in the gutter when space allows, freeing 3 columns for content. Renamed all FlemmaNotify* highlight groups to FlemmaNotifications* for consistency.
+- 5d646e1: Added configurable `notifications.highlight` and `notifications.border` options, and fixed notification misalignment when async plugins (git-signs, LSP) change gutter width after positioning
+- fe71464: Line highlights now use per-message range extmarks instead of per-line extmarks, reducing API calls from ~500 to ~20 per update. New lines created by pressing Return in insert mode are highlighted immediately via Neovim's gravity system instead of waiting for CursorHoldI.
+- 652e9f6: Reprioritized notification bar segments: session cost and request input tokens now survive truncation at narrow widths. Replaced word labels with compact Unicode symbols (Σ for session totals, #N for request count, bare percentage for cache).
+- 0c6e898: Role markers (`@System:`, `@You:`, `@Assistant:`) now occupy their own line in `.chat` buffers. Old-format files are automatically migrated on load, and a new `:Flemma format` command is available for manual migration. Insert-mode colon auto-newline moves the cursor to a new content line after completing a role marker.
+- 29ba841: `:Flemma status` now shows model metadata (context window, pricing, thinking budget range) in the Provider section for known models. Verbose mode includes a full Model Info dump. Syntax highlighting updated with model version suffixes, dollar amounts, and token count suffixes.
+- 46e6b25: Move shared utility modules to `flemma.utilities.*` namespace and introduce `flemma.utilities.buffer` for common buffer manipulation patterns
+
+### Patch Changes
+
+- b109b62: Cancel both Space and Enter after role marker auto-newline to prevent unwanted blank lines from muscle memory
+- acc51d0: Fixed spurious "A request is already in progress" warning during autopilot tool execution loops with sync tools
+- a870175: Fixed CursorLine overlay flashing on every keystroke when blink-cmp completion menu is open
+- 5de6e77: Fixed spurious "Cache break detected" diagnostics warning when switching between providers
+- b60a533: Fix diagnostics false positive when messages grow between turns. Cache-break warnings now only fire for actual prefix-breaking changes (tools, config, system prompt), not for normal message appends at the document tail.
+- 9cc706d: Fixed fold auto-close race condition where thinking blocks and tool blocks would remain unfolded ~10% of the time due to silent foldclose failures being permanently marked as successful. Also fixed folds not being applied when returning to a chat buffer after switching tabs during streaming.
+- 5c87b26: Fixed fold_completed_blocks firing redundantly on every cursor movement, spamming the debug log
+- 6bf2ed9: Fixed tool fold previews falling back to generic key=value format for tools registered via `config.tools.modules` (e.g. extras) by ensuring lazy modules are loaded before registry lookup
+- a57a6dc: Fixed preview truncation (fold text, tool indicators) using byte length instead of display width, which caused incorrect truncation and potential UTF-8 splitting with multibyte content (CJK, accented characters, Unicode symbols)
+- e098341: Fixed notification bar icon flickering during scrolling by replacing the 💬 emoji prefix with ℹ (U+2139), which renders reliably across terminal emulators
+- 720ddab: Fixed extra space in notification bar caused by stale item width alignment from dismissed notifications
+- 8686997: Fixed role_style attributes (e.g., underline) bleeding into ruler characters on role marker lines
+- 84442f0: Fixed self-closing thinking tags (`<thinking .../>`) creating unclosed folds that swallowed subsequent buffer content
+- 300525a: Fixed missing warning when pressing `<C-]>` while a request is already in progress — the keypress was silently ignored instead of showing the "Use `<C-c>` to cancel" message
+- f59d94f: Fixed silent failure when API returns non-SSE error responses (plain JSON, HTML error pages, or plain text). Errors are now properly surfaced via vim.notify instead of being silently swallowed.
+- 46da4a0: Fixed thinking blocks not auto-folding after the first response in a session
+- 932dc68: Tool block folds now absorb trailing blank lines when the next adjacent tool block is also foldable, producing a cleaner collapsed view without vertical gaps between folded blocks
+- 9386d8f: Notification recall now derives segments from session data on demand instead of caching them locally, enabling `:Flemma notification:recall` to work after importing a session via `session:load()`
+- ea006dd: Removed `ruler.adopt_line_highlight` config option — rulers now inherit line highlight backgrounds automatically since they share the role marker line
+- 6478dc3: Sink buffer writes now go through writequeue for E565 textlock protection. Sink scratch buffers are set to nomodifiable, preventing users from accidentally editing them when viewed via sink_viewer.
+- 5caff34: Updated OpenAI model catalog and corrected cache pricing across all models. Added gpt-5.4, gpt-5.4-pro, gpt-5.3-chat-latest, gpt-5.3-codex, gpt-5.3-codex-spark, and gemini-3.1-flash-lite-preview. Fixed cache_read values to match actual per-model pricing tiers instead of assuming a uniform 50% discount.
+- 2b0bc93: Invalid role_style values (e.g., "italics") now show a helpful warning with a "Did you mean 'italic'?" suggestion instead of crashing
+
 ## 0.5.0
 
 ### Minor Changes
