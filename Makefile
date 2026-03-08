@@ -86,14 +86,6 @@ develop:
 			editing = { auto_write = true },											\
 			tools = { modules = { \"extras.flemma.tools.calculator\" } },				\
 		})																				\
-																						\
-		dofile(\"$(CURDIR)/contrib/extras/sink_viewer.lua\").setup({					\
-			pattern = {																	\
-				\"^anthropic/thinking\",												\
-				\"^openai/reasoning\",													\
-				\"^vertex/thinking\",													\
-			}																			\
-		})																				\
 		"																				\
 		-c ":edit $$HOME/.cache/nvim/flemma.log"										\
 		-c ":tabedit example.chat"
