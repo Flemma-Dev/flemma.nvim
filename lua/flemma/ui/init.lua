@@ -10,7 +10,7 @@ local buffer_utils = require("flemma.utilities.buffer")
 local preview = require("flemma.ui.preview")
 local folding = require("flemma.ui.folding")
 local roles = require("flemma.utilities.roles")
-local callbacks = require("flemma.core.callbacks")
+local bridge = require("flemma.core.bridge")
 local migration = require("flemma.migration")
 local parser = require("flemma.parser")
 local writequeue = require("flemma.buffer.writequeue")
@@ -1184,7 +1184,7 @@ function M.setup()
       if (ev.event == "CursorHold" or ev.event == "CursorHoldI") and buffer_state.ui_update_tick == tick then
         return
       end
-      callbacks.update_ui(ev.buf)
+      bridge.update_ui(ev.buf)
       buffer_state.ui_update_tick = tick
     end,
   })

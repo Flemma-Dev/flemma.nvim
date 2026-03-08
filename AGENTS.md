@@ -37,7 +37,7 @@ All `require()` calls go at the top of the file, before any function definition.
 - **Dynamic requires** — module path constructed at runtime from a variable (e.g., `require(provider_module)` in registry code)
 - **Vim string-context requires** — inside `foldexpr`, `foldtext`, or keymap strings that Vim evaluates in a separate Lua context
 
-`make lint-inline-requires` enforces this convention. If you need to call a core function from a module that core requires (circular dependency), use `flemma.core.callbacks` — see its module documentation.
+`make lint-inline-requires` enforces this convention. If you need to call a core function from a module that core requires (circular dependency), use `flemma.core.bridge` — see its module documentation.
 
 ### Type annotation patterns
 

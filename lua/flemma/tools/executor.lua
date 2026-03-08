@@ -11,7 +11,7 @@ local log = require("flemma.logging")
 local roles = require("flemma.utilities.roles")
 
 local autopilot = require("flemma.autopilot")
-local callbacks = require("flemma.core.callbacks")
+local bridge = require("flemma.core.bridge")
 local context_module = require("flemma.context")
 local parser = require("flemma.parser")
 local sandbox_module = require("flemma.sandbox")
@@ -522,7 +522,7 @@ end
 function M.cancel_for_buffer(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
   if buffer_state.current_request then
-    callbacks.cancel_request()
+    bridge.cancel_request()
     return true
   end
   local pending = M.get_pending(bufnr)

@@ -4,7 +4,7 @@
 local M = {}
 
 local log = require("flemma.logging")
-local callbacks = require("flemma.core.callbacks")
+local bridge = require("flemma.core.bridge")
 local parser = require("flemma.parser")
 local state = require("flemma.state")
 local tool_context = require("flemma.tools.context")
@@ -158,7 +158,7 @@ function M.on_response_complete(bufnr)
     if state.get_buffer_state(bufnr).current_request then
       return
     end
-    callbacks.send_or_execute({ bufnr = bufnr })
+    bridge.send_or_execute({ bufnr = bufnr })
   end)
 end
 
@@ -217,7 +217,7 @@ function M.on_tools_complete(bufnr)
       if state.get_buffer_state(bufnr).current_request then
         return
       end
-      callbacks.send_or_execute({ bufnr = bufnr })
+      bridge.send_or_execute({ bufnr = bufnr })
     end)
     return
   end
@@ -233,7 +233,7 @@ function M.on_tools_complete(bufnr)
     if state.get_buffer_state(bufnr).current_request then
       return
     end
-    callbacks.send_or_execute({ bufnr = bufnr })
+    bridge.send_or_execute({ bufnr = bufnr })
   end)
 end
 

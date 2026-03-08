@@ -4,9 +4,18 @@
 # Exits 0 if clean, 1 if violations found.
 set -euo pipefail
 
+# Files with intentional lazy loading (require at point of use)
+LAZY_LOAD_FILES="lua/flemma/commands.lua"
+
 violations=0
 
 for file in $(find lua/flemma -name '*.lua' -type f | sort); do
+  # Skip files with intentional lazy loading
+  for lazy_file in $LAZY_LOAD_FILES; do
+    if [ "$file" = "$lazy_file" ]; then
+      continue 2
+    fi
+  done
   # Find line number of first function definition
   first_fn=$(grep -n -m1 -E '^\s*(local\s+)?function\s' "$file" || true)
   if [ -z "$first_fn" ]; then
