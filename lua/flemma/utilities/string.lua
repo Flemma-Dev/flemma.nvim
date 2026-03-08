@@ -3,6 +3,10 @@
 ---@class flemma.utilities.String
 local M = {}
 
+--- Token counts below this threshold are shown as full comma-separated numbers;
+--- at or above it they collapse to a compact K suffix.
+local TOKEN_COMPACT_THRESHOLD = 4000
+
 ---Compute the display width of a string (handles multibyte and wide characters).
 ---@param text string
 ---@return integer
@@ -58,7 +62,7 @@ function M.format_number(number)
 end
 
 ---Format a token count for compact display.
----Below 4000: comma-separated number. 1000000+: M suffix. 4000+: K suffix.
+---Below TOKEN_COMPACT_THRESHOLD: comma-separated number. 1000000+: M suffix. Otherwise: K suffix.
 ---Trailing .0 is dropped from K and M values.
 ---@param tokens number
 ---@return string
@@ -70,7 +74,7 @@ function M.format_tokens(tokens)
     end
     return string.format("%.1fM", value)
   end
-  if tokens >= 4000 then
+  if tokens >= TOKEN_COMPACT_THRESHOLD then
     local value = tokens / 1000
     if tokens % 1000 == 0 then
       return string.format("%dK", value)
