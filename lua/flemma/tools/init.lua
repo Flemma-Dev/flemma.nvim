@@ -218,6 +218,23 @@ function M.get_for_prompt(opts)
   return M.get_all()
 end
 
+--- Get all enabled tools for a prompt, sorted alphabetically by name.
+--- Returns an array (not a name-keyed table) for deterministic ordering
+--- in provider API requests, which improves prompt caching hit rates.
+---@param opts flemma.opt.FrontmatterOpts|nil Per-buffer options (for tool filtering)
+---@return flemma.tools.ToolDefinition[] sorted_tools Alphabetically sorted tool definitions
+function M.get_sorted_for_prompt(opts)
+  local all = M.get_for_prompt(opts)
+  local sorted = {}
+  for _, definition in pairs(all) do
+    table.insert(sorted, definition)
+  end
+  table.sort(sorted, function(a, b)
+    return a.name < b.name
+  end)
+  return sorted
+end
+
 ---Register a tool definition or source.
 ---Dispatches on arguments:
 ---  register(name, def)       — single definition (sync)

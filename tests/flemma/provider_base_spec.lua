@@ -270,3 +270,33 @@ describe("flemma.provider.base", function()
     end)
   end)
 end)
+
+describe("flemma.tools.get_sorted_for_prompt", function()
+  local tools
+
+  before_each(function()
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.registry"] = nil
+    package.loaded["flemma.tools.definitions.bash"] = nil
+    package.loaded["flemma.tools.definitions.read"] = nil
+    package.loaded["flemma.tools.definitions.edit"] = nil
+    package.loaded["flemma.tools.definitions.write"] = nil
+    tools = require("flemma.tools")
+    tools.clear()
+    tools.setup()
+  end)
+
+  it("returns tools sorted alphabetically by name", function()
+    local sorted = tools.get_sorted_for_prompt()
+    assert.is_true(#sorted > 1)
+    for i = 2, #sorted do
+      assert.is_true(sorted[i - 1].name < sorted[i].name,
+        "Expected " .. sorted[i - 1].name .. " < " .. sorted[i].name)
+    end
+  end)
+
+  it("returns an array not a table keyed by name", function()
+    local sorted = tools.get_sorted_for_prompt()
+    assert.is_true(vim.islist(sorted))
+  end)
+end)
