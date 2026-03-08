@@ -356,3 +356,82 @@ describe("URN dispatch in include()", function()
     assert.is_false(ok)
   end)
 end)
+
+describe("personality system integration", function()
+  before_each(function()
+    package.loaded["flemma.eval"] = nil
+    package.loaded["flemma.personalities"] = nil
+    package.loaded["flemma.personalities.builder"] = nil
+    package.loaded["flemma.personalities.coding-assistant"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.registry"] = nil
+
+    local tool_registry = require("flemma.tools.registry")
+    tool_registry.clear()
+
+    tool_registry.register("bash", {
+      name = "bash",
+      description = "Execute commands",
+      input_schema = { type = "object" },
+      personalities = {
+        ["coding-assistant"] = {
+          snippet = "Execute shell commands",
+          guidelines = { "Be careful with destructive commands" },
+        },
+      },
+    })
+
+    tool_registry.register("custom", {
+      name = "custom",
+      description = "Custom tool",
+      input_schema = { type = "object" },
+    })
+
+    local pers = require("flemma.personalities")
+    pers.setup()
+  end)
+
+  it("renders a complete prompt via include URN", function()
+    local eval = require("flemma.eval")
+    local env = eval.create_safe_env()
+    env.__dirname = vim.fn.getcwd()
+
+    local result = eval.eval_expression(
+      "include('urn:flemma:personality:coding-assistant')",
+      env
+    )
+
+    -- Emit the result to get the final text
+    local emittable_mod = require("flemma.emittable")
+    local emit_ctx = emittable_mod.EmitContext.new()
+    emit_ctx:emit(result)
+
+    assert.equals(1, #emit_ctx.parts)
+    local text = emit_ctx.parts[1].text
+
+    -- Verify core sections are present
+    assert.truthy(text:find("coding assistant"), "missing persona")
+    assert.truthy(text:find("bash: Execute shell commands"), "missing bash snippet")
+    assert.truthy(text:find("- custom\n"), "missing custom tool without snippet")
+    assert.truthy(text:find("Be careful with destructive commands"), "missing guideline")
+    assert.truthy(text:find("Working directory"), "missing environment")
+  end)
+
+  it("tool definitions without personalities field appear with empty parts", function()
+    local builder_mod = require("flemma.personalities.builder")
+    local tools_mod = require("flemma.tools")
+    local sorted = tools_mod.get_sorted_for_prompt(nil)
+    local entries = builder_mod.build_tools("coding-assistant", sorted)
+
+    local custom_entry
+    for _, entry in ipairs(entries) do
+      if entry.name == "custom" then
+        custom_entry = entry
+        break
+      end
+    end
+
+    assert.is_not_nil(custom_entry)
+    assert.same({}, custom_entry.parts)
+  end)
+end)
