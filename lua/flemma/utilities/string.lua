@@ -45,4 +45,76 @@ function M.truncate(text, max_width, suffix)
   return vim.fn.strcharpart(text, 0, lo) .. suffix
 end
 
+---Format a number with comma-separated thousands.
+---@param number number
+---@return string
+function M.format_number(number)
+  local s = tostring(math.floor(number))
+  local reversed = s:reverse()
+  local with_commas = reversed:gsub("(%d%d%d)", "%1,")
+  -- Remove trailing comma if present (from the reversed perspective)
+  with_commas = with_commas:gsub(",$", "")
+  return with_commas:reverse()
+end
+
+---Format a token count for compact display.
+---Below 4000: comma-separated number. 1000000+: M suffix. 4000+: K suffix.
+---Trailing .0 is dropped from K and M values.
+---@param tokens number
+---@return string
+function M.format_tokens(tokens)
+  if tokens >= 1000000 then
+    local value = tokens / 1000000
+    if tokens % 1000000 == 0 then
+      return string.format("%dM", value)
+    end
+    return string.format("%.1fM", value)
+  end
+  if tokens >= 4000 then
+    local value = tokens / 1000
+    if tokens % 1000 == 0 then
+      return string.format("%dK", value)
+    end
+    return string.format("%.1fK", value)
+  end
+  return M.format_number(tokens)
+end
+
+---Format a cost in USD with smart precision.
+---Sub-cent values (> 0 and < 0.01) use 4 decimal places; otherwise 2.
+---@param cost number
+---@return string
+function M.format_cost(cost)
+  if cost > 0 and cost < 0.01 then
+    return string.format("$%.4f", cost)
+  end
+  return string.format("$%.2f", cost)
+end
+
+---Format a byte size for human-readable display using binary divisors.
+---No space between number and unit suffix.
+---@param bytes number
+---@return string
+function M.format_size(bytes)
+  local KB = 1024
+  local MB = 1024 * 1024
+  local GB = 1024 * 1024 * 1024
+  if bytes >= GB then
+    return string.format("%.1fGB", bytes / GB)
+  elseif bytes >= MB then
+    return string.format("%.1fMB", bytes / MB)
+  elseif bytes >= KB then
+    return string.format("%.1fKB", bytes / KB)
+  else
+    return string.format("%dB", bytes)
+  end
+end
+
+---Format a number as a percentage string.
+---@param n number
+---@return string
+function M.format_percent(n)
+  return tostring(n) .. "%"
+end
+
 return M
