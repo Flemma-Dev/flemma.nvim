@@ -84,6 +84,14 @@ function M.format_tokens(tokens)
   return M.format_number(tokens)
 end
 
+---Format a generic text length (characters, bytes, etc.) for compact display.
+---Delegates to format_tokens — same thresholds and suffixes apply.
+---@param count number
+---@return string
+function M.format_text_length(count)
+  return M.format_tokens(count)
+end
+
 ---Format a cost in USD with smart precision.
 ---Sub-cent values (> 0 and < 0.01) use 4 decimal places; otherwise 2.
 ---@param cost number

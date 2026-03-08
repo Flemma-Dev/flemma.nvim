@@ -24,6 +24,7 @@ local parser = require("flemma.parser")
 local pipeline = require("flemma.pipeline")
 local processor = require("flemma.processor")
 local session_module = require("flemma.session")
+local str = require("flemma.utilities.string")
 local tool_approval = require("flemma.tools.approval")
 local tool_context = require("flemma.tools.context")
 local tools_module = require("flemma.tools")
@@ -892,14 +893,8 @@ function M.send_to_provider(opts)
       vim.schedule(function()
         thinking_char_count = thinking_char_count + #delta
 
-        local display
-        if thinking_char_count >= 1000 then
-          display = string.format("%.1fk characters", thinking_char_count / 1000)
-        elseif thinking_char_count == 1 then
-          display = "1 character"
-        else
-          display = thinking_char_count .. " characters"
-        end
+        local suffix = thinking_char_count == 1 and " character" or " characters"
+        local display = str.format_text_length(thinking_char_count) .. suffix
 
         ui.update_thinking_preview(bufnr, display)
       end)
