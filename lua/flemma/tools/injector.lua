@@ -3,6 +3,10 @@
 ---@class flemma.tools.Injector
 local M = {}
 
+local buffer = require("flemma.utilities.buffer")
+local codeblock = require("flemma.codeblock")
+local json = require("flemma.utilities.json")
+local parser = require("flemma.parser")
 local roles = require("flemma.utilities.roles")
 
 --- Error messages for tool status resolution
@@ -21,10 +25,6 @@ function M.resolve_error_message(status, content)
   end
   return M.DENIED_MESSAGE
 end
-
-local buffer = require("flemma.utilities.buffer")
-local codeblock = require("flemma.codeblock")
-local json = require("flemma.utilities.json")
 
 --- Find the assistant message containing a tool_use with the given ID
 --- @param doc table Parsed document AST
@@ -151,7 +151,6 @@ function M.inject_placeholder(bufnr, tool_id, inject_opts)
     return nil, "Buffer is no longer valid", { modified = false }
   end
 
-  local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
 
   -- Check if tool_result already exists for this tool_id
@@ -285,7 +284,6 @@ function M.inject_result(bufnr, tool_id, result)
     return false, "Buffer is no longer valid"
   end
 
-  local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
 
   -- Find existing tool_result placeholder
@@ -349,7 +347,6 @@ function M.strip_fence_info_string(bufnr, tool_id)
     return false, "Buffer is no longer valid"
   end
 
-  local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
 
   local seg = find_existing_tool_result(doc, tool_id)

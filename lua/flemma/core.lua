@@ -12,6 +12,7 @@ local writequeue = require("flemma.buffer.writequeue")
 local ui = require("flemma.ui")
 local registry = require("flemma.provider.registry")
 local autopilot = require("flemma.autopilot")
+local callbacks_registry = require("flemma.core.callbacks")
 local client = require("flemma.client")
 local context_module = require("flemma.context")
 local diagnostics_module = require("flemma.diagnostics")
@@ -1178,9 +1179,8 @@ end
 
 -- Register core functions with the callback registry so modules that cannot
 -- require core directly (due to circular dependencies) can dispatch to them.
-local callbacks = require("flemma.core.callbacks")
-callbacks.register("send_or_execute", M.send_or_execute)
-callbacks.register("cancel_request", M.cancel_request)
-callbacks.register("update_ui", M.update_ui)
+callbacks_registry.register("send_or_execute", M.send_or_execute)
+callbacks_registry.register("cancel_request", M.cancel_request)
+callbacks_registry.register("update_ui", M.update_ui)
 
 return M

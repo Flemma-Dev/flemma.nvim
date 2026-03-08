@@ -1,4 +1,4 @@
-.PHONY: default changeset test lint check
+.PHONY: default changeset test lint check lint-inline-requires
 
 default:
 	@echo "Usage: make [$(shell cat ${MAKEFILE_LIST} | grep -E '^[a-zA-Z_-]+:' | sed 's/:.*//g' | grep -v '^default' | tr '\n' '|' | sed 's/|$$//')]"
@@ -22,6 +22,10 @@ check:
 	@# On NixOS, `nvim` might be symlinked to a store path, so we resolve it with `readlink -f`.
 	VIMRUNTIME=$(shell dirname $(shell dirname $(shell readlink -f $(shell which nvim))))/share/nvim/runtime \
 		lua-language-server --check lua/ --configpath ../.luarc-check.lua
+
+# Check that all require("flemma.*") calls are at the top of each file
+lint-inline-requires:
+	@bash scripts/lint-inline-requires.sh
 
 .PHONY: develop
 # Launch Flemma.nvim from local directory
