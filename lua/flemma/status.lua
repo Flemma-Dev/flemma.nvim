@@ -7,6 +7,7 @@ local state = require("flemma.state")
 local config_manager = require("flemma.core.config.manager")
 local autopilot = require("flemma.autopilot")
 local sandbox = require("flemma.sandbox")
+local str = require("flemma.utilities.string")
 local tools_registry = require("flemma.tools.registry")
 local tool_presets = require("flemma.tools.presets")
 local registry = require("flemma.provider.registry")
@@ -359,18 +360,6 @@ local function format_name_list(names, frontmatter_items)
   return table.concat(parts, ", ")
 end
 
----Format a token count as a compact string (e.g. 200000 → "200K", 1000000 → "1M")
----@param tokens integer
----@return string
-local function format_tokens(tokens)
-  if tokens >= 1000000 and tokens % 1000000 == 0 then
-    return tostring(tokens / 1000000) .. "M"
-  elseif tokens >= 1000 and tokens % 1000 == 0 then
-    return tostring(tokens / 1000) .. "K"
-  end
-  return tostring(tokens)
-end
-
 ---Format a scalar or table value as a display string
 ---@param value any
 ---@return string
@@ -409,10 +398,10 @@ function M.format(data, verbose)
     if model_info.max_input_tokens or model_info.max_output_tokens then
       local parts = {}
       if model_info.max_input_tokens then
-        table.insert(parts, format_tokens(model_info.max_input_tokens) .. " input")
+        table.insert(parts, str.format_tokens(model_info.max_input_tokens) .. " input")
       end
       if model_info.max_output_tokens then
-        table.insert(parts, format_tokens(model_info.max_output_tokens) .. " output")
+        table.insert(parts, str.format_tokens(model_info.max_output_tokens) .. " output")
       end
       add("  context: " .. table.concat(parts, ", "))
     end

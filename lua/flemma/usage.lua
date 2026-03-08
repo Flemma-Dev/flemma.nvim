@@ -7,6 +7,7 @@ local M = {}
 local bar = require("flemma.bar")
 local provider_registry = require("flemma.provider.registry")
 local state = require("flemma.state")
+local str = require("flemma.utilities.string")
 
 --- Item priorities (higher = more important, shown first when space is scarce)
 local PRIORITY = {
@@ -27,13 +28,7 @@ local PRIORITY = {
 ---@param number number The number to format
 ---@return string formatted The comma-separated string (e.g. 20449 -> "20,449")
 function M.format_number(number)
-  local integer_part = tostring(math.floor(number))
-  -- Reverse, insert commas every 3 digits, reverse back
-  local reversed = integer_part:reverse()
-  local with_commas = reversed:gsub("(%d%d%d)", "%1,")
-  -- Remove trailing comma if present (when digit count is a multiple of 3)
-  with_commas = with_commas:gsub(",$", "")
-  return with_commas:reverse()
+  return str.format_number(number)
 end
 
 --- Calculate cache hit percentage for a request
@@ -91,7 +86,7 @@ function M.build_segments(request, session)
     if pricing_enabled then
       table.insert(request_items, {
         key = "request_cost",
-        text = string.format("$%.2f", request:get_total_cost()),
+        text = str.format_cost(request:get_total_cost()),
         priority = PRIORITY.REQUEST_COST,
         highlight = { group = "FlemmaNotificationsBar" },
       })
@@ -113,7 +108,7 @@ function M.build_segments(request, session)
       end
 
       if not below_threshold then
-        local cache_text = tostring(cache_percent) .. "%"
+        local cache_text = str.format_percent(cache_percent)
         local group = cache_percent > 50 and "FlemmaNotificationsCacheGood" or "FlemmaNotificationsCacheBad"
         table.insert(request_items, {
           key = "cache_percent",
@@ -170,7 +165,7 @@ function M.build_segments(request, session)
     if pricing_enabled then
       table.insert(session_items, {
         key = "session_cost",
-        text = string.format("$%.2f", session:get_total_cost()),
+        text = str.format_cost(session:get_total_cost()),
         priority = PRIORITY.SESSION_COST,
         highlight = { group = "FlemmaNotificationsBar" },
       })

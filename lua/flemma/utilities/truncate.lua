@@ -10,6 +10,8 @@
 ---@class flemma.utilities.Truncate
 local M = {}
 
+local str = require("flemma.utilities.string")
+
 M.MAX_LINES = 2000
 M.MAX_BYTES = 50 * 1024 -- 50KB
 
@@ -32,13 +34,7 @@ M.MAX_BYTES = 50 * 1024 -- 50KB
 ---@param bytes integer
 ---@return string
 function M.format_size(bytes)
-  if bytes < 1024 then
-    return string.format("%dB", bytes)
-  elseif bytes < 1024 * 1024 then
-    return string.format("%.1fKB", bytes / 1024)
-  else
-    return string.format("%.1fMB", bytes / (1024 * 1024))
-  end
+  return str.format_size(bytes)
 end
 
 ---Truncate content from the head (keep first N lines/bytes).
