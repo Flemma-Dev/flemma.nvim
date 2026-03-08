@@ -10,6 +10,10 @@ local buffer_utils = require("flemma.utilities.buffer")
 local preview = require("flemma.ui.preview")
 local folding = require("flemma.ui.folding")
 local roles = require("flemma.utilities.roles")
+local callbacks = require("flemma.core.callbacks")
+local migration = require("flemma.migration")
+local parser = require("flemma.parser")
+local writequeue = require("flemma.buffer.writequeue")
 
 -- Extmark priority constants
 -- Higher values take precedence when multiple extmarks overlap on the same line.
@@ -220,7 +224,6 @@ function M.start_loading_spinner(bufnr)
   local spinner_line_idx0 = nil
   local spinner_extmark_id = nil
 
-  local writequeue = require("flemma.buffer.writequeue")
   writequeue.schedule(bufnr, function()
     buffer_utils.with_modifiable(bufnr, function()
       -- Clear any existing virtual text
@@ -596,7 +599,7 @@ function M.setup_chat_filetype_autocmds()
     group = augroup,
     pattern = "*.chat",
     callback = function(ev)
-      require("flemma.migration").migrate_buffer(ev.buf)
+      migration.migrate_buffer(ev.buf)
       vim.bo[ev.buf].filetype = "chat"
       apply_chat_buffer_settings(ev.buf)
     end,
@@ -803,7 +806,6 @@ function M.update_ui(bufnr)
   end
 
   -- Parse messages using AST
-  local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
 
   M.add_rulers(bufnr, doc)
@@ -1059,7 +1061,6 @@ function M.reposition_tool_indicators(bufnr)
   end
 
   -- Build tool_use_id → start_line map from AST
-  local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
   local result_positions = {}
   for _, msg in ipairs(doc.messages) do
@@ -1183,7 +1184,7 @@ function M.setup()
       if (ev.event == "CursorHold" or ev.event == "CursorHoldI") and buffer_state.ui_update_tick == tick then
         return
       end
-      require("flemma.core").update_ui(ev.buf)
+      callbacks.update_ui(ev.buf)
       buffer_state.ui_update_tick = tick
     end,
   })
