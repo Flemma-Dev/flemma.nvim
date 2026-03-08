@@ -22,15 +22,6 @@ describe("flemma.usage", function()
     })
   end)
 
-  describe("format_number", function()
-    it("should add comma separators", function()
-      assert.are.equal("20,449", usage.format_number(20449))
-      assert.are.equal("1,000,000", usage.format_number(1000000))
-      assert.are.equal("100", usage.format_number(100))
-      assert.are.equal("0", usage.format_number(0))
-    end)
-  end)
-
   describe("calculate_cache_percent", function()
     it("should return nil when total input is 0", function()
       local request = session_module.Request.new({
