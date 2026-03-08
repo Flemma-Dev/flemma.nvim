@@ -42,7 +42,11 @@ describe("flemma.provider.base", function()
     it("formats tool use block with dynamic fence sizing", function()
       local provider = make_provider()
       local emitted = nil
-      local callbacks = { on_content = function(text) emitted = text end }
+      local callbacks = {
+        on_content = function(text)
+          emitted = text
+        end,
+      }
 
       base._emit_tool_use_block(provider, "my_tool", "tool_123", '{"key": "value"}', callbacks)
 
@@ -55,7 +59,11 @@ describe("flemma.provider.base", function()
     it("uses longer fence when JSON contains backticks", function()
       local provider = make_provider()
       local emitted = nil
-      local callbacks = { on_content = function(text) emitted = text end }
+      local callbacks = {
+        on_content = function(text)
+          emitted = text
+        end,
+      }
 
       base._emit_tool_use_block(provider, "tool", "id", '{"code": "```lua\\nprint()\\n```"}', callbacks)
 
@@ -67,7 +75,11 @@ describe("flemma.provider.base", function()
       local provider = make_provider()
       provider._response_buffer.content = "prior text"
       local emitted = nil
-      local callbacks = { on_content = function(text) emitted = text end }
+      local callbacks = {
+        on_content = function(text)
+          emitted = text
+        end,
+      }
 
       base._emit_tool_use_block(provider, "tool", "id", "{}", callbacks)
 
@@ -80,7 +92,11 @@ describe("flemma.provider.base", function()
       local provider = make_provider()
       provider._response_buffer.content = "text\n"
       local emitted = nil
-      local callbacks = { on_content = function(text) emitted = text end }
+      local callbacks = {
+        on_content = function(text)
+          emitted = text
+        end,
+      }
 
       base._emit_thinking_block(provider, "deep thoughts", "sig123", "anthropic", callbacks)
 
@@ -93,7 +109,11 @@ describe("flemma.provider.base", function()
       local provider = make_provider()
       provider._response_buffer.content = "text\n"
       local emitted = nil
-      local callbacks = { on_content = function(text) emitted = text end }
+      local callbacks = {
+        on_content = function(text)
+          emitted = text
+        end,
+      }
 
       base._emit_thinking_block(provider, "deep thoughts", nil, "vertex", callbacks)
 
@@ -105,7 +125,11 @@ describe("flemma.provider.base", function()
       local provider = make_provider()
       provider._response_buffer.content = "text\n"
       local emitted = nil
-      local callbacks = { on_content = function(text) emitted = text end }
+      local callbacks = {
+        on_content = function(text)
+          emitted = text
+        end,
+      }
 
       base._emit_thinking_block(provider, "", "sig123", "openai", callbacks)
 
@@ -115,7 +139,11 @@ describe("flemma.provider.base", function()
     it("does nothing when no content and no signature", function()
       local provider = make_provider()
       local emitted = nil
-      local callbacks = { on_content = function(text) emitted = text end }
+      local callbacks = {
+        on_content = function(text)
+          emitted = text
+        end,
+      }
 
       base._emit_thinking_block(provider, "", nil, "anthropic", callbacks)
 
@@ -126,7 +154,11 @@ describe("flemma.provider.base", function()
       local provider = make_provider()
       -- No content set — _get_content_prefix returns ""
       local emitted = nil
-      local callbacks = { on_content = function(text) emitted = text end }
+      local callbacks = {
+        on_content = function(text)
+          emitted = text
+        end,
+      }
 
       base._emit_thinking_block(provider, "thoughts", "sig", "anthropic", callbacks)
 
@@ -140,7 +172,11 @@ describe("flemma.provider.base", function()
       local provider = make_provider()
       provider._response_buffer.content = "text\n"
       local emitted = nil
-      local callbacks = { on_content = function(text) emitted = text end }
+      local callbacks = {
+        on_content = function(text)
+          emitted = text
+        end,
+      }
 
       base._emit_redacted_thinking(provider, "opaque_data", callbacks)
 
@@ -154,7 +190,11 @@ describe("flemma.provider.base", function()
     it("calls on_response_complete", function()
       local provider = make_provider()
       local completed = false
-      local callbacks = { on_response_complete = function() completed = true end }
+      local callbacks = {
+        on_response_complete = function()
+          completed = true
+        end,
+      }
 
       base._warn_truncated(provider, callbacks)
 
@@ -166,7 +206,11 @@ describe("flemma.provider.base", function()
     it("calls on_error with provider name and reason", function()
       local provider = make_provider()
       local error_msg = nil
-      local callbacks = { on_error = function(msg) error_msg = msg end }
+      local callbacks = {
+        on_error = function(msg)
+          error_msg = msg
+        end,
+      }
 
       base._signal_blocked(provider, "refusal", callbacks)
 
@@ -241,10 +285,11 @@ describe("flemma.provider.base", function()
       function provider:_process_data() end
       local error_msg = nil
 
-      provider:process_response_line(
-        'data: {"error":{"message":"bad request"}}',
-        { on_error = function(msg) error_msg = msg end }
-      )
+      provider:process_response_line('data: {"error":{"message":"bad request"}}', {
+        on_error = function(msg)
+          error_msg = msg
+        end,
+      })
 
       assert.is_not_nil(error_msg)
     end)
@@ -290,8 +335,7 @@ describe("flemma.tools.get_sorted_for_prompt", function()
     local sorted = tools.get_sorted_for_prompt()
     assert.is_true(#sorted > 1)
     for i = 2, #sorted do
-      assert.is_true(sorted[i - 1].name < sorted[i].name,
-        "Expected " .. sorted[i - 1].name .. " < " .. sorted[i].name)
+      assert.is_true(sorted[i - 1].name < sorted[i].name, "Expected " .. sorted[i - 1].name .. " < " .. sorted[i].name)
     end
   end)
 

@@ -122,6 +122,7 @@ secret-tool store --label="Vertex AI Service Account" service vertex key api pro
    ```markdown
    @You:
    Turn the notes below into a short project update.
+
    - Added Vertex thinking budget support.
    - Refactored :Flemma command routing.
    - Documented presets in the README.
@@ -165,6 +166,7 @@ Summarise {{release.version}} with emphasis on {{release.focus}} using the point
 {{notes}}
 
 @Assistant:
+
 - Changelog bullets...
 - Follow-up actions...
 

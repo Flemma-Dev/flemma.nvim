@@ -397,9 +397,7 @@ function M._process_data(self, data, _parsed, callbacks)
   if data.type == "message_start" then
     log.debug("anthropic._process_data(): Received message_start event")
     if data.message and data.message.usage and data.message.usage.input_tokens then
-      log.debug(
-        "anthropic._process_data(): ... Input tokens from message_start: " .. data.message.usage.input_tokens
-      )
+      log.debug("anthropic._process_data(): ... Input tokens from message_start: " .. data.message.usage.input_tokens)
       if callbacks.on_usage then
         callbacks.on_usage({
           type = "input",
@@ -446,13 +444,7 @@ function M._process_data(self, data, _parsed, callbacks)
     -- Append accumulated thinking at the end (after text content)
     local accumulated = self._response_buffer.extra.thinking_sink:read()
     local signature = self._response_buffer.extra.accumulated_signature or ""
-    base._emit_thinking_block(
-      self,
-      accumulated,
-      (#signature > 0) and signature or nil,
-      "anthropic",
-      callbacks
-    )
+    base._emit_thinking_block(self, accumulated, (#signature > 0) and signature or nil, "anthropic", callbacks)
 
     -- Append redacted thinking blocks
     for _, redacted_data in ipairs(self._response_buffer.extra.redacted_thinking_blocks or {}) do
@@ -484,9 +476,7 @@ function M._process_data(self, data, _parsed, callbacks)
 
   -- Handle content_block_start event
   if data.type == "content_block_start" then
-    log.debug(
-      "anthropic._process_data(): Received content_block_start event for index " .. tostring(data.index)
-    )
+    log.debug("anthropic._process_data(): Received content_block_start event for index " .. tostring(data.index))
     if data.content_block and data.content_block.type then
       self._response_buffer.extra.current_block_type = data.content_block.type
       log.debug("anthropic._process_data(): Started block type: " .. data.content_block.type)

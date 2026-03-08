@@ -856,15 +856,8 @@ function M._emit_tool_use_block(self, name, id, arguments_json, callbacks)
   local fence = string.rep("`", math.max(3, max_ticks + 1))
 
   local prefix = self:_get_content_prefix()
-  local formatted = string.format(
-    "%s**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n",
-    prefix,
-    name,
-    id,
-    fence,
-    arguments_json,
-    fence
-  )
+  local formatted =
+    string.format("%s**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n", prefix, name, id, fence, arguments_json, fence)
 
   M._signal_content(self, formatted, callbacks)
   log.debug(self.metadata.name .. ".process_response_line(): Emitted tool_use block for " .. name)
@@ -889,7 +882,7 @@ function M._emit_thinking_block(self, content, signature, provider_prefix, callb
   local prefix = self:_get_content_prefix()
   local open_tag
   if has_signature then
-    open_tag = '<thinking ' .. provider_prefix .. ':signature="' .. signature .. '">'
+    open_tag = "<thinking " .. provider_prefix .. ':signature="' .. signature .. '">'
   else
     open_tag = "<thinking>"
   end

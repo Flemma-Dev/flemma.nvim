@@ -647,9 +647,7 @@ function M._process_data(self, data, _parsed, callbacks)
 
   -- Check for finish reason (this indicates the end of the stream for this candidate)
   if data.candidates and data.candidates[1] and data.candidates[1].finishReason then
-    log.debug(
-      "vertex._process_data(): Received finish reason: " .. log.inspect(data.candidates[1].finishReason)
-    )
+    log.debug("vertex._process_data(): Received finish reason: " .. log.inspect(data.candidates[1].finishReason))
 
     -- Emit aggregated thinking block (handles content, signature, empty-tag, and prefix)
     local accumulated_thoughts = self._response_buffer.extra.thinking_sink:read()
