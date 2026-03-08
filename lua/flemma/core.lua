@@ -11,6 +11,22 @@ local editing = require("flemma.buffer.editing")
 local writequeue = require("flemma.buffer.writequeue")
 local ui = require("flemma.ui")
 local registry = require("flemma.provider.registry")
+local autopilot = require("flemma.autopilot")
+local client = require("flemma.client")
+local context_module = require("flemma.context")
+local diagnostics_module = require("flemma.diagnostics")
+local executor = require("flemma.tools.executor")
+local injector = require("flemma.tools.injector")
+local models_data = require("flemma.models")
+local notifications = require("flemma.notifications")
+local parser = require("flemma.parser")
+local pipeline = require("flemma.pipeline")
+local processor = require("flemma.processor")
+local session_module = require("flemma.session")
+local tool_approval = require("flemma.tools.approval")
+local tool_context = require("flemma.tools.context")
+local tools_module = require("flemma.tools")
+local usage = require("flemma.usage")
 
 local ABORT_MESSAGE = "Response interrupted by the user."
 
@@ -143,7 +159,6 @@ function M.cancel_request()
     writequeue.clear(bufnr)
 
     -- Use client to cancel the request
-    local client = require("flemma.client")
     if client.cancel_request(buffer_state.current_request) then
       buffer_state.current_request = nil
 
@@ -175,7 +190,7 @@ function M.cancel_request()
       state.unlock_buffer(bufnr)
 
       -- Disarm autopilot on cancellation
-      require("flemma.autopilot").disarm(bufnr)
+      autopilot.disarm(bufnr)
 
       local msg = "Flemma: Request cancelled"
       if log.is_enabled() then
@@ -212,11 +227,7 @@ local function advance_phase2(opts)
     return
   end
 
-  local tool_context = require("flemma.tools.context")
-  local autopilot = require("flemma.autopilot")
   local autopilot_active = autopilot.is_enabled(bufnr)
-  local executor = require("flemma.tools.executor")
-  local injector = require("flemma.tools.injector")
 
   local tool_blocks = tool_context.resolve_all_tool_blocks(bufnr)
 
@@ -366,14 +377,10 @@ function M.send_or_execute(opts)
     return
   end
 
-  local tool_context = require("flemma.tools.context")
-
   -- Evaluate frontmatter once per dispatch cycle. The result is threaded through
   -- approval, executor, and pipeline so no caller needs to re-evaluate.
-  local processor = require("flemma.processor")
-  local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
-  local context = require("flemma.context").from_buffer(bufnr)
+  local context = context_module.from_buffer(bufnr)
   local evaluated_frontmatter = processor.evaluate_frontmatter(doc, context)
   local frontmatter_opts = evaluated_frontmatter.context:get_opts()
 
@@ -384,8 +391,6 @@ function M.send_or_execute(opts)
   local pending = tool_context.resolve_all_pending(bufnr)
 
   if #pending > 0 then
-    local approval = require("flemma.tools.approval")
-    local injector = require("flemma.tools.injector")
     local first_placeholder_line = nil
 
     -- Partition into aborted (skip approval) and normal (run approval)
@@ -407,7 +412,7 @@ function M.send_or_execute(opts)
     -- Normal tools: run through approval flow
     for _, ctx in ipairs(normal_pending) do
       local decision =
-        approval.resolve(ctx.tool_name, ctx.input, { bufnr = bufnr, tool_id = ctx.tool_id, opts = frontmatter_opts })
+        tool_approval.resolve(ctx.tool_name, ctx.input, { bufnr = bufnr, tool_id = ctx.tool_id, opts = frontmatter_opts })
 
       ---@type flemma.ast.ToolStatus
       local status
@@ -474,17 +479,13 @@ function M.send_to_provider(opts)
   end
 
   -- Check if tool executions are in progress (mutually exclusive with API requests)
-  local ok_executor, executor = pcall(require, "flemma.tools.executor")
-  if ok_executor then
-    local pending = executor.get_pending(bufnr)
-    if #pending > 0 then
-      vim.notify("Flemma: Cannot send while tool execution is in progress.", vim.log.levels.WARN)
-      return
-    end
+  local pending_tools = executor.get_pending(bufnr)
+  if #pending_tools > 0 then
+    vim.notify("Flemma: Cannot send while tool execution is in progress.", vim.log.levels.WARN)
+    return
   end
 
   -- Gate on async tool sources being ready
-  local tools_module = require("flemma.tools")
   if not tools_module.is_ready() then
     vim.notify("Flemma: Waiting for tool definitions to load…", vim.log.levels.WARN)
     if buffer_state.waiting_for_tools then
@@ -509,7 +510,6 @@ function M.send_to_provider(opts)
   state.lock_buffer(bufnr)
 
   -- Parse buffer via cached AST (single buffer read + parse, reused below)
-  local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
 
   -- Check if buffer has content
@@ -529,11 +529,10 @@ function M.send_to_provider(opts)
   end
 
   -- Create context ONCE for the entire pipeline (used by frontmatter, @./file refs, etc.)
-  local context = require("flemma.context").from_buffer(bufnr)
+  local context = context_module.from_buffer(bufnr)
 
   -- Run the pipeline with the pre-parsed document. If frontmatter was already
   -- evaluated by send_or_execute, reuse it to avoid re-executing frontmatter code.
-  local pipeline = require("flemma.pipeline")
   local prompt, evaluated = pipeline.run(doc, context, opts.evaluated_frontmatter)
 
   if #prompt.history == 0 then
@@ -685,7 +684,6 @@ function M.send_to_provider(opts)
 
   -- Validate provider (endpoint, API key, headers) and build request body.
   -- Wrapped in pcall so any provider error unlocks the buffer cleanly.
-  local client = require("flemma.client")
   local prep_ok, prep_result = pcall(function()
     local endpoint = current_provider:get_endpoint()
     if not endpoint then
@@ -754,7 +752,7 @@ function M.send_to_provider(opts)
   }
 
   -- Capture request start time for duration tracking (before callbacks so closures can see it)
-  local request_started_at = require("flemma.session").now()
+  local request_started_at = session_module.now()
 
   -- Set up callbacks for the provider
   local callbacks = {
@@ -810,7 +808,6 @@ function M.send_to_provider(opts)
 
     on_response_complete = function()
       vim.schedule(function()
-        local usage = require("flemma.usage")
         local config = state.get_config()
 
         -- Get tokens from in-flight usage
@@ -827,7 +824,6 @@ function M.send_to_provider(opts)
         end
 
         -- Add request to session with pricing snapshot
-        local models_data = require("flemma.models")
         local provider_data = models_data.providers[config.provider]
         local model_info = provider_data and provider_data.models[config.model]
         local pricing_info = model_info and model_info.pricing
@@ -845,7 +841,7 @@ function M.send_to_provider(opts)
             filepath = filepath,
             bufnr = bufnr,
             started_at = request_started_at,
-            completed_at = require("flemma.session").now(),
+            completed_at = session_module.now(),
             output_has_thoughts = provider_capabilities and provider_capabilities.output_has_thoughts or false,
             cache_read_input_tokens = buffer_state.inflight_usage.cache_read_input_tokens,
             cache_creation_input_tokens = buffer_state.inflight_usage.cache_creation_input_tokens,
@@ -857,13 +853,12 @@ function M.send_to_provider(opts)
           local latest_request = session:get_latest_request()
           local segments = usage.build_segments(latest_request, session)
           if #segments > 0 then
-            require("flemma.notifications").show(segments, bufnr)
+            notifications.show(segments, bufnr)
           end
         end
 
         -- Diagnostics: compare request with previous
         if config.diagnostics and config.diagnostics.enabled then
-          local diagnostics_module = require("flemma.diagnostics")
           local raw_json_str = buffer_state._diagnostics_raw_json
           if raw_json_str then
             diagnostics_module.record_and_compare(bufnr, raw_json_str)
@@ -1082,7 +1077,6 @@ function M.send_to_provider(opts)
           end
 
           -- Hook autopilot: check if assistant response contains tool_use
-          local autopilot = require("flemma.autopilot")
           autopilot.on_response_complete(bufnr)
         else
           -- cURL request failed (exit code ~= 0)
