@@ -1179,4 +1179,11 @@ function M.update_ui(bufnr)
   return ui.update_ui(bufnr)
 end
 
+-- Register core functions with the callback registry so modules that cannot
+-- require core directly (due to circular dependencies) can dispatch to them.
+local callbacks = require("flemma.core.callbacks")
+callbacks.register("send_or_execute", M.send_or_execute)
+callbacks.register("cancel_request", M.cancel_request)
+callbacks.register("update_ui", M.update_ui)
+
 return M
