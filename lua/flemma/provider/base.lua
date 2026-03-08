@@ -674,11 +674,8 @@ end
 
 --- Parse a single SSE (Server-Sent Events) line
 ---@param line string The raw line from the stream
----@param opts? { allow_done?: boolean }
 ---@return flemma.provider.SSELine|nil
-function M._parse_sse_line(line, opts)
-  opts = opts or {}
-
+function M._parse_sse_line(line)
   -- Skip empty lines
   if not line or line == "" or line == "\r" then
     return nil
@@ -695,7 +692,7 @@ function M._parse_sse_line(line, opts)
     local content = line:gsub("^data: ", "")
 
     -- Handle [DONE] message
-    if content == "[DONE]" and opts.allow_done ~= false then
+    if content == "[DONE]" then
       return { type = "done" }
     end
 
