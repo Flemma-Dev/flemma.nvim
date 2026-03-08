@@ -6,6 +6,7 @@ local M = {}
 local color = require("flemma.utilities.color")
 local log = require("flemma.logging")
 local state = require("flemma.state")
+local str = require("flemma.utilities.string")
 local roles = require("flemma.utilities.roles")
 
 ---Get color from a highlight group attribute
@@ -325,34 +326,10 @@ local function validate_role_style(role_style)
       if VALID_STYLE_ATTRIBUTES[style] then
         attrs[style] = true
       else
-        local best, best_dist = nil, math.huge
-        for candidate in pairs(VALID_STYLE_ATTRIBUTES) do
-          local la, lb = #style, #candidate
-          local dist
-          if math.abs(la - lb) <= 3 then
-            local prev = {}
-            for j = 0, lb do
-              prev[j] = j
-            end
-            for i = 1, la do
-              local curr = { [0] = i }
-              for j = 1, lb do
-                local cost = style:byte(i) == candidate:byte(j) and 0 or 1
-                curr[j] = math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
-              end
-              prev = curr
-            end
-            dist = prev[lb]
-          else
-            dist = math.max(la, lb)
-          end
-          if dist < best_dist then
-            best, best_dist = candidate, dist
-          end
-        end
         local msg = string.format("flemma: invalid role_style '%s'", style)
-        if best and best_dist <= 3 then
-          msg = msg .. string.format(". Did you mean '%s'?", best)
+        local suggestion = str.closest_match(style, VALID_STYLE_ATTRIBUTES)
+        if suggestion then
+          msg = msg .. string.format(". Did you mean '%s'?", suggestion)
         end
         vim.notify_once(msg, vim.log.levels.WARN)
       end

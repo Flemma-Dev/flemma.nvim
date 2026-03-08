@@ -129,4 +129,64 @@ function M.format_percent(n)
   return tostring(n) .. "%"
 end
 
+---Compute Levenshtein edit distance between two strings.
+---@param a string
+---@param b string
+---@return integer
+function M.levenshtein(a, b)
+  local la, lb = #a, #b
+  if la == 0 then
+    return lb
+  end
+  if lb == 0 then
+    return la
+  end
+  local prev, curr = {}, {}
+  for j = 0, lb do
+    prev[j] = j
+  end
+  for i = 1, la do
+    curr[0] = i
+    for j = 1, lb do
+      local cost = a:byte(i) == b:byte(j) and 0 or 1
+      curr[j] = math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
+    end
+    prev, curr = curr, prev
+  end
+  return prev[lb]
+end
+
+---Find the closest match for a name among candidates.
+---Returns nil if no candidate is within max_distance.
+---@param name string
+---@param candidates string[]|table<string, any> Array of strings or table whose keys are candidates
+---@param max_distance? integer Maximum edit distance to consider (default: 3)
+---@return string|nil closest The closest candidate, or nil if none is close enough
+function M.closest_match(name, candidates, max_distance)
+  max_distance = max_distance or 3
+  local best, best_dist = nil, math.huge
+  local iter = type(candidates) == "table" and candidates or {}
+  -- Support both arrays and key-value tables
+  if #iter > 0 then
+    for _, candidate in ipairs(iter) do
+      local dist = M.levenshtein(name, candidate)
+      if dist < best_dist then
+        best, best_dist = candidate, dist
+      end
+    end
+  else
+    for key in pairs(iter) do
+      local candidate = key --[[@as string]]
+      local dist = M.levenshtein(name, candidate)
+      if dist < best_dist then
+        best, best_dist = candidate, dist
+      end
+    end
+  end
+  if best and best_dist <= max_distance then
+    return best
+  end
+  return nil
+end
+
 return M

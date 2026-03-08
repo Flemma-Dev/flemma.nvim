@@ -7,6 +7,7 @@ local config_manager = require("flemma.core.config.manager")
 local loader = require("flemma.loader")
 local provider_registry = require("flemma.provider.registry")
 local state = require("flemma.state")
+local str = require("flemma.utilities.string")
 local tools = require("flemma.tools")
 local tool_presets = require("flemma.tools.presets")
 
@@ -34,33 +35,6 @@ local tool_presets = require("flemma.tools.presets")
 local ListOption = {}
 ListOption.__index = ListOption
 
---- Levenshtein distance between two strings
----@param a string
----@param b string
----@return integer
-local function levenshtein(a, b)
-  local la, lb = #a, #b
-  if la == 0 then
-    return lb
-  end
-  if lb == 0 then
-    return la
-  end
-  local prev, curr = {}, {}
-  for j = 0, lb do
-    prev[j] = j
-  end
-  for i = 1, la do
-    curr[0] = i
-    for j = 1, lb do
-      local cost = a:byte(i) == b:byte(j) and 0 or 1
-      curr[j] = math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
-    end
-    prev, curr = curr, prev
-  end
-  return prev[lb]
-end
-
 --- Validate that a name exists in the universe; errors with suggestion if not.
 --- Module paths (containing dots) bypass the universe check and are validated via loader instead.
 ---@param self flemma.opt.ListOption
@@ -74,16 +48,10 @@ local function validate_name(self, name)
     return
   end
   if not self._universe[name] then
-    local best, best_dist = nil, math.huge
-    for candidate in pairs(self._universe) do
-      local dist = levenshtein(name, candidate)
-      if dist < best_dist then
-        best, best_dist = candidate, dist
-      end
-    end
     local msg = string.format("flemma.opt: unknown value '%s'", name)
-    if best and best_dist <= 3 then
-      msg = msg .. string.format(". Did you mean '%s'?", best)
+    local suggestion = str.closest_match(name, self._universe)
+    if suggestion then
+      msg = msg .. string.format(". Did you mean '%s'?", suggestion)
     end
     error(msg)
   end
@@ -325,16 +293,10 @@ function M.create()
           loader.assert_exists(name)
           auto_approve_universe[name] = true
         else
-          local best, best_dist = nil, math.huge
-          for candidate in pairs(auto_approve_universe) do
-            local dist = levenshtein(name, candidate)
-            if dist < best_dist then
-              best, best_dist = candidate, dist
-            end
-          end
           local msg = string.format("flemma.opt: unknown value '%s'", name)
-          if best and best_dist <= 3 then
-            msg = msg .. string.format(". Did you mean '%s'?", best)
+          local suggestion = str.closest_match(name, auto_approve_universe)
+          if suggestion then
+            msg = msg .. string.format(". Did you mean '%s'?", suggestion)
           end
           error(msg)
         end

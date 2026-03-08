@@ -3,6 +3,8 @@
 --- Reserved environment fields:
 ---   __filename  - Current file path for error reporting and path resolution
 ---   __dirname   - Directory containing the current file
+---   __opts      - Per-buffer frontmatter options (for tool filtering in personality system)
+---   __bufnr     - Buffer number for context-aware operations
 ---
 --- User-defined variables from frontmatter are stored as top-level keys in the environment.
 
@@ -14,6 +16,9 @@ local mime_util = require("flemma.mime")
 local parser = require("flemma.parser")
 local personality_builder = require("flemma.personalities.builder")
 local personality_registry = require("flemma.personalities")
+local str = require("flemma.utilities.string")
+
+local PERSONALITY_URN_PREFIX = "urn:flemma:personality:"
 
 ---@alias flemma.eval.Environment table<string, any>
 
@@ -66,15 +71,17 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
     opts = opts or {}
 
     -- URN dispatch: personality system
-    local PERSONALITY_URN_PREFIX = "urn:flemma:personality:"
     if relative_path:sub(1, #PERSONALITY_URN_PREFIX) == PERSONALITY_URN_PREFIX then
       local personality_name = relative_path:sub(#PERSONALITY_URN_PREFIX + 1)
       local personality = personality_registry.get(personality_name)
       if not personality then
-        error({
-          type = "expression",
-          error = string.format("Unknown personality: '%s'", personality_name),
-        })
+        local msg = string.format("Unknown personality: '%s'", personality_name)
+        local all_personalities = personality_registry.get_all()
+        local suggestion = str.closest_match(personality_name, all_personalities)
+        if suggestion then
+          msg = msg .. string.format(". Did you mean '%s'?", suggestion)
+        end
+        error({ type = "expression", error = msg })
       end
       local render_opts =
         personality_builder.build(personality_name, env.__opts, env.__dirname or vim.fn.getcwd(), env.__bufnr)

@@ -16,6 +16,7 @@ local provider_registry = require("flemma.provider.registry")
 local loader = require("flemma.loader")
 local config_manager = require("flemma.core.config.manager")
 local notifications = require("flemma.notifications")
+local personalities = require("flemma.personalities")
 local tools = require("flemma.tools")
 local tools_presets = require("flemma.tools.presets")
 local tools_approval = require("flemma.tools.approval")
@@ -127,6 +128,9 @@ M.setup = function(user_opts)
 
   -- Initialize tool registry with built-in tools
   tools.setup()
+
+  -- Initialize personality registry with built-in personalities
+  personalities.setup()
 
   -- Initialize tool approval presets (built-ins + user-defined)
   tools_presets.setup(config.tools and config.tools.presets)
