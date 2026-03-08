@@ -168,7 +168,7 @@ When you `:remove()` a tool that lives inside a preset (e.g., removing `"write"`
 
 - **Async tools** (like `bash`) show an animated spinner while running and can be cancelled.
 - **Buffer locking** – the buffer is made non-modifiable during tool execution to prevent race conditions.
-- **Output truncation** – large outputs (> 2000 lines or 50 KB) are automatically truncated. The full output is saved to a temporary file.
+- **Output truncation** – large outputs (> 2000 lines or 50KB) are automatically truncated. The full output is saved to a temporary file.
 - **Cursor positioning** – after injection, the cursor can move to the result (`"result"`), stay put (`"stay"`), or jump to the next `@You:` prompt (`"next"`). Controlled by `tools.cursor_after_result`.
 
 ### Parallel tool use
@@ -206,7 +206,7 @@ Every built-in tool ships with a tailored `format_preview` function:
 | `bash`             | `$ command` with optional label                    | `bash: $ git status  # checking repo`       |
 | `read`             | Path with optional `+offset,limit` range and label | `read: config.lua  +100,50  # reading tail` |
 | `edit`             | Path with optional label                           | `edit: config.lua  # fixing typo`           |
-| `write`            | Path with content size and optional label          | `write: output.txt  (2.3 KB)  # saving log` |
+| `write`            | Path with content size and optional label          | `write: output.txt  (2.3KB)  # saving log`  |
 
 ### Generic fallback
 
@@ -397,7 +397,7 @@ local size_str = ctx.truncate.format_size(12345)  -- "12.1KB"
 
 -- Constants
 ctx.truncate.MAX_LINES  -- 2000
-ctx.truncate.MAX_BYTES  -- 51200 (50 KB)
+ctx.truncate.MAX_BYTES  -- 51200 (50KB)
 ```
 
 ### `ctx:get_config()` – Tool-specific config
