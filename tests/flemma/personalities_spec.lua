@@ -328,10 +328,7 @@ describe("URN dispatch in include()", function()
     local env = eval.create_safe_env()
     env.__dirname = vim.fn.getcwd()
 
-    local result = eval.eval_expression(
-      "include('urn:flemma:personality:coding-assistant')",
-      env
-    )
+    local result = eval.eval_expression("include('urn:flemma:personality:coding-assistant')", env)
     assert.is_table(result)
     assert.is_function(result.emit)
   end)
@@ -341,10 +338,7 @@ describe("URN dispatch in include()", function()
     env.__dirname = vim.fn.getcwd()
 
     assert.has_error(function()
-      eval.eval_expression(
-        "include('urn:flemma:personality:nonexistent')",
-        env
-      )
+      eval.eval_expression("include('urn:flemma:personality:nonexistent')", env)
     end)
   end)
 
@@ -396,10 +390,7 @@ describe("personality system integration", function()
     local env = eval.create_safe_env()
     env.__dirname = vim.fn.getcwd()
 
-    local result = eval.eval_expression(
-      "include('urn:flemma:personality:coding-assistant')",
-      env
-    )
+    local result = eval.eval_expression("include('urn:flemma:personality:coding-assistant')", env)
 
     -- Emit the result to get the final text
     local emittable_mod = require("flemma.emittable")

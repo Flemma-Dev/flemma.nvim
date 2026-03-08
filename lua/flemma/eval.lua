@@ -76,12 +76,8 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
           error = string.format("Unknown personality: '%s'", personality_name),
         })
       end
-      local render_opts = personality_builder.build(
-        personality_name,
-        env.__opts,
-        env.__dirname or vim.fn.getcwd(),
-        env.__bufnr
-      )
+      local render_opts =
+        personality_builder.build(personality_name, env.__opts, env.__dirname or vim.fn.getcwd(), env.__bufnr)
       local rendered = personality.render(render_opts)
       return emittable.composite_include_part({ rendered })
     end
