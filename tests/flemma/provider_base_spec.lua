@@ -208,4 +208,65 @@ describe("flemma.provider.base", function()
       assert.equals("id2", results[2].id)
     end)
   end)
+
+  describe("auto-sink-destroy in reset", function()
+    it("destroys sinks in _response_buffer.extra on reset", function()
+      local provider = make_provider()
+      local sink = require("flemma.sink")
+      local test_sink = sink.create({ name = "test/sink" })
+      provider._response_buffer.extra.test_sink = test_sink
+      -- Should not error — auto-destroys the sink
+      provider:reset()
+      -- After reset, extra should be empty (fresh buffer)
+      assert.is_nil(provider._response_buffer.extra.test_sink)
+    end)
+  end)
+
+  describe("process_response_line (base SSE preamble)", function()
+    it("delegates to _process_data for valid SSE data", function()
+      local provider = make_provider()
+      local received_data = nil
+      function provider:_process_data(data, _parsed, _callbacks)
+        received_data = data
+      end
+
+      provider:process_response_line('data: {"type":"ping"}', {})
+
+      assert.is_not_nil(received_data)
+      assert.equals("ping", received_data.type)
+    end)
+
+    it("calls on_error for error responses via _is_error_response", function()
+      local provider = make_provider()
+      function provider:_process_data() end
+      local error_msg = nil
+
+      provider:process_response_line(
+        'data: {"error":{"message":"bad request"}}',
+        { on_error = function(msg) error_msg = msg end }
+      )
+
+      assert.is_not_nil(error_msg)
+    end)
+
+    it("handles non-SSE lines via _handle_non_sse_line", function()
+      local provider = make_provider()
+      function provider:_process_data() end
+
+      -- Non-SSE line should not error
+      provider:process_response_line("not an sse line", {})
+    end)
+
+    it("handles [DONE] gracefully", function()
+      local provider = make_provider()
+      local process_called = false
+      function provider:_process_data()
+        process_called = true
+      end
+
+      provider:process_response_line("data: [DONE]", {})
+
+      assert.is_false(process_called)
+    end)
+  end)
 end)

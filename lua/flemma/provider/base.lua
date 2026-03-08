@@ -15,17 +15,25 @@ Methods are grouped into three categories:
   - `build_request(self, prompt, context)` — convert a canonical `Prompt`
     into the provider's API request format.
   - `get_request_headers(self)` — return a string array of HTTP headers.
-  - `process_response_line(self, line, callbacks)` — parse one SSE line
-    and call the appropriate callbacks.
+  - `_process_data(self, data, parsed, callbacks)` — handle a single parsed
+    SSE data event (JSON already decoded, errors already checked).
+
+  Template method — base drives, provider hooks
+  ----------------------------------------------
+  - `process_response_line(self, line, callbacks)` — SSE parsing, JSON
+    decoding, error detection; delegates to `_process_data`.
+  - `_is_error_response(self, data)` — detect provider-specific error shapes
+    (default: `data.error ~= nil`).
 
   Required, call super — provider MUST override and invoke the base
   ------------------------------------------------------------------
-  - `new(opts)` — constructor; must call `base.new(opts)` and set
-    provider-specific fields.
+  - `new(opts)` — constructor; must call `base.new(opts)` and
+    `base._init_provider(M, provider)`, then call `provider:reset()`.
   - `get_api_key(self, opts)` — authentication; call `base.get_api_key()`
     with the appropriate env/keyring opts table.
   - `reset(self)` — call `base.reset(self)` plus any provider-specific
-    state initialization.
+    state initialization. Sinks in `_response_buffer.extra` are
+    auto-destroyed by base.
 
   Virtual — sensible default provided, override only if needed
   -------------------------------------------------------------
@@ -34,6 +42,7 @@ Methods are grouped into three categories:
   - `validate_parameters(model_name, parameters)` — parameter validation
     (warnings, not failures).
   - `finalize_response(self, exit_code, callbacks)` — post-request cleanup.
+    Auto-destroys sinks in `_response_buffer.extra`.
   - `extract_json_response_error(self, data)` — custom error extraction
     from JSON responses.
   - `try_import_from_buffer(self, lines)` — import conversations from
@@ -166,16 +175,56 @@ function M.get_request_headers(self)
   error("get_request_headers() must be implemented by provider")
 end
 
---- @abstract
---- Process a single line of streaming API response data
----
---- Called for each line of data received from the streaming API response.
---- Parse the line, extract content/usage information, and call appropriate callbacks.
----@param self flemma.provider.Base The provider instance
+--- Process a single line of streaming API response data.
+--- Handles SSE parsing, JSON decoding, and error detection.
+--- Delegates to _process_data() for provider-specific event dispatch.
+---@param self flemma.provider.Base
 ---@param line string A single line from the API response stream
----@param callbacks flemma.provider.Callbacks Table of callback functions to handle parsed data
+---@param callbacks flemma.provider.Callbacks
 function M.process_response_line(self, line, callbacks)
-  error("process_response_line() must be implemented by provider")
+  local parsed = M._parse_sse_line(line)
+  if not parsed then
+    M._handle_non_sse_line(self, line, callbacks)
+    return
+  end
+
+  -- Handle [DONE] and event: lines
+  if parsed.type == "done" or parsed.type ~= "data" then
+    return
+  end
+
+  local ok, data = pcall(json.decode, parsed.content)
+  if not ok then
+    log.error(self.metadata.name .. ".process_response_line(): Failed to parse JSON: " .. parsed.content)
+    return
+  end
+  if type(data) ~= "table" then
+    log.error(self.metadata.name .. ".process_response_line(): Expected table, got: " .. type(data))
+    return
+  end
+
+  -- Provider-specific error detection
+  if self:_is_error_response(data) then
+    local message = self:extract_json_response_error(data) or "Unknown API error"
+    log.error(self.metadata.name .. ".process_response_line(): API error: " .. log.inspect(message))
+    if callbacks.on_error then
+      callbacks.on_error(message)
+    end
+    return
+  end
+
+  self:_process_data(data, parsed, callbacks)
+end
+
+--- @abstract
+--- Process parsed SSE data after base preamble (error checking, JSON decoding).
+--- Providers MUST override this to dispatch provider-specific events.
+---@param self flemma.provider.Base
+---@param data table Parsed JSON data from the SSE line
+---@param parsed flemma.provider.SSELine The parsed SSE line metadata
+---@param callbacks flemma.provider.Callbacks
+function M._process_data(self, data, parsed, callbacks)
+  error("_process_data() must be implemented by provider")
 end
 
 -- ============================================================================
@@ -217,6 +266,14 @@ function M.new(opts)
   end
 
   return provider
+end
+
+--- Set up the standard metatable chain for a provider instance.
+--- Call this in provider constructors after base.new() and before reset().
+---@param provider_module table The provider module table (M)
+---@param provider flemma.provider.Base The provider instance from base.new()
+function M._init_provider(provider_module, provider)
+  setmetatable(provider, { __index = setmetatable(provider_module, { __index = M }) })
 end
 
 ---@param service_name string
@@ -299,10 +356,25 @@ function M.get_api_key(self, opts)
   return self.state.api_key
 end
 
+--- Destroy all sink objects in a response buffer's extra table.
+--- Finds values with a :destroy() method via duck typing.
+---@param response_buffer flemma.provider.ResponseBuffer|nil
+local function destroy_sinks(response_buffer)
+  if not response_buffer or not response_buffer.extra then
+    return
+  end
+  for _, value in pairs(response_buffer.extra) do
+    if type(value) == "table" and type(value.destroy) == "function" then
+      value:destroy()
+    end
+  end
+end
+
 --- Reset provider state before a new request.
 --- When called without opts, performs a full reset (response buffer, etc.).
 --- When called with opts, performs a selective reset (only the specified fields).
 --- Providers must call `base.reset(self)` plus any provider-specific state initialization.
+--- Sinks in `_response_buffer.extra` are auto-destroyed on full reset.
 ---@param self flemma.provider.Base
 ---@param opts? flemma.provider.ResetOpts
 function M.reset(self, opts)
@@ -312,6 +384,8 @@ function M.reset(self, opts)
     end
     return
   end
+  -- Destroy provider-specific sinks in extra
+  destroy_sinks(self._response_buffer)
   -- Destroy previous response buffer sink if it exists
   if self._response_buffer and self._response_buffer.lines_sink then
     self._response_buffer.lines_sink:destroy()
@@ -397,6 +471,8 @@ end
 ---@param exit_code number The HTTP request exit code (0 for success, non-zero for failure)
 ---@param callbacks flemma.provider.Callbacks Table of callback functions for any remaining data processing
 function M.finalize_response(self, exit_code, callbacks)
+  -- Destroy provider-specific sinks in extra
+  destroy_sinks(self._response_buffer)
   -- Check buffered response if we haven't processed content successfully
   if self._response_buffer and not self._response_buffer.successful then
     self:_check_buffered_response(callbacks)
