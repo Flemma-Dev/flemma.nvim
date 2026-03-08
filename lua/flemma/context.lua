@@ -107,18 +107,23 @@ end
 
 ---Prepare a safe eval environment from a Context
 ---@param ctx flemma.Context|table
+---@param bufnr? integer Optional buffer number for context-aware includes
 ---@return flemma.eval.Environment env
-function M.to_eval_env(ctx)
+function M.to_eval_env(ctx, bufnr)
   local env = eval.create_safe_env()
 
   -- Handle both Context objects and plain tables
   if ctx and type(ctx.get_filename) == "function" then
     env.__filename = ctx:get_filename()
     env.__dirname = ctx:get_dirname()
+    env.__opts = ctx:get_opts()
   else
     env.__filename = nil
     env.__dirname = nil
+    env.__opts = nil
   end
+
+  env.__bufnr = bufnr
 
   -- Merge user vars
   for k, v in pairs((ctx and ctx.__variables) or {}) do
