@@ -4,6 +4,9 @@
 ---@class flemma.Sandbox
 local M = {}
 
+local bwrap = require("flemma.sandbox.backends.bwrap")
+local loader = require("flemma.loader")
+local registry_utils = require("flemma.registry")
 local state = require("flemma.state")
 
 -- ---------------------------------------------------------------------------
@@ -55,7 +58,6 @@ end
 ---@param name string Unique backend name
 ---@param definition flemma.sandbox.BackendDefinition
 function M.register(name, definition)
-  local registry_utils = require("flemma.registry")
   registry_utils.validate_name(name, "sandbox backend")
   for i, entry in ipairs(backends) do
     if entry.name == name then
@@ -137,7 +139,6 @@ end
 ---Validates existence immediately, loads and registers immediately.
 ---@param module_path string Lua module path (must contain a dot)
 function M.register_module(module_path)
-  local loader = require("flemma.loader")
   loader.assert_exists(module_path)
   local mod = loader.load(module_path)
   if type(mod.available) ~= "function" or type(mod.wrap) ~= "function" then
@@ -213,7 +214,6 @@ local function resolve_backend(cfg)
       return nil, "No sandbox backend configured"
     end
     -- If it's a module path, load and register it first
-    local loader = require("flemma.loader")
     if loader.is_module_path(backend_name) then
       local load_ok, load_err = pcall(M.register_module, backend_name)
       if not load_ok then
@@ -271,7 +271,6 @@ end
 ---Register built-in sandbox backends.
 ---Called during plugin setup in init.lua.
 function M.setup()
-  local bwrap = require("flemma.sandbox.backends.bwrap")
   if not M.get("bwrap") then
     M.register("bwrap", {
       available = bwrap.available,
@@ -282,7 +281,6 @@ function M.setup()
   end
 
   -- Validate module-path backend early (fail fast at startup)
-  local loader = require("flemma.loader")
   local config = state.get_config()
   if config.sandbox and config.sandbox.backend and loader.is_module_path(config.sandbox.backend) then
     loader.assert_exists(config.sandbox.backend)

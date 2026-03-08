@@ -3,6 +3,13 @@
 ---@class flemma.buffer.Opt
 local M = {}
 
+local config_manager = require("flemma.core.config.manager")
+local loader = require("flemma.loader")
+local provider_registry = require("flemma.provider.registry")
+local state = require("flemma.state")
+local tools = require("flemma.tools")
+local tool_presets = require("flemma.tools.presets")
+
 ---@class flemma.opt.FrontmatterOpts
 ---@field tools string[]|nil List of allowed tool names
 ---@field auto_approve flemma.config.AutoApprove|nil Per-buffer auto-approve policy
@@ -59,7 +66,6 @@ end
 ---@param self flemma.opt.ListOption
 ---@param name string
 local function validate_name(self, name)
-  local loader = require("flemma.loader")
   -- Module paths bypass the universe check — validated via loader instead
   if loader.is_module_path(name) then
     loader.assert_exists(name)
@@ -257,8 +263,7 @@ end
 ---@type table<string, flemma.opt.DefaultFn>
 local option_defs = {
   tools = function()
-    local tools_module = require("flemma.tools")
-    local all_tools = tools_module.get_all({ include_disabled = true })
+    local all_tools = tools.get_all({ include_disabled = true })
     local entries = {}
     for name, def in pairs(all_tools) do
       table.insert(entries, { name = name, enabled = def.enabled ~= false })
@@ -298,10 +303,9 @@ function M.create()
   local raw_options = {}
 
   -- Build auto_approve universe: all tool names + all preset names
-  local tool_presets = require("flemma.tools.presets")
   ---@type table<string, boolean>
   local auto_approve_universe = {}
-  local all_tools_for_universe = require("flemma.tools").get_all({ include_disabled = true })
+  local all_tools_for_universe = tools.get_all({ include_disabled = true })
   for name in pairs(all_tools_for_universe) do
     auto_approve_universe[name] = true
   end
@@ -316,7 +320,6 @@ function M.create()
     local entries = {}
     for _, name in ipairs(names) do
       -- Validate against auto_approve_universe (module paths bypass via validate_name logic)
-      local loader = require("flemma.loader")
       if not auto_approve_universe[name] then
         if loader.is_module_path(name) then
           loader.assert_exists(name)
@@ -356,7 +359,7 @@ function M.create()
     if auto_approve_option or auto_approve_fn then
       return
     end
-    local config = require("flemma.state").get_config()
+    local config = state.get_config()
     local default_policy = config.tools and config.tools.auto_approve
     if type(default_policy) == "table" then
       auto_approve_option = create_auto_approve_option(default_policy --[[@as string[] ]])
@@ -427,8 +430,6 @@ function M.create()
   ---@type table<string, any>
   local general_params = {}
 
-  local config_manager = require("flemma.core.config.manager")
-
   local opt_proxy = setmetatable({}, {
     ---@param _ table
     ---@param key string
@@ -440,7 +441,7 @@ function M.create()
       if key == "sandbox" then
         return raw_options.sandbox
       end
-      local provider_reg = require("flemma.provider.registry")
+      local provider_reg = provider_registry
       if provider_reg.has(key) then
         if not provider_proxies[key] then
           provider_params[key] = provider_params[key] or {}
@@ -485,7 +486,7 @@ function M.create()
         raw_options.sandbox = vim.tbl_deep_extend("force", raw_options.sandbox or {}, value)
         return
       end
-      local provider_reg = require("flemma.provider.registry")
+      local provider_reg = provider_registry
       if provider_reg.has(key) then
         if type(value) ~= "table" then
           error(string.format("flemma.opt.%s: expected table, got %s", key, type(value)))

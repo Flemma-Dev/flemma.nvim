@@ -4,6 +4,10 @@
 ---@class flemma.Usage
 local M = {}
 
+local bar = require("flemma.bar")
+local provider_registry = require("flemma.provider.registry")
+local state = require("flemma.state")
+
 --- Item priorities (higher = more important, shown first when space is scarce)
 local PRIORITY = {
   MODEL_NAME = 110,
@@ -50,7 +54,6 @@ end
 ---@param session? flemma.session.Session Session instance
 ---@return flemma.bar.Segment[]
 function M.build_segments(request, session)
-  local state = require("flemma.state")
   local config = state.get_config()
   local pricing_enabled = config.pricing.enabled
 
@@ -100,8 +103,7 @@ function M.build_segments(request, session)
       -- Suppress cache indicator when 0% is expected (below minimum cacheable tokens)
       local below_threshold = false
       if cache_percent == 0 then
-        local registry = require("flemma.provider.registry")
-        local model_info = registry.get_model_info(request.provider, request.model)
+        local model_info = provider_registry.get_model_info(request.provider, request.model)
         if model_info and model_info.min_cache_tokens then
           local total_input = request.input_tokens
             + request.cache_read_input_tokens
@@ -209,7 +211,6 @@ end
 ---@param available_width integer Window width in display characters
 ---@return flemma.bar.RenderResult
 function M.format_notification(request, session, available_width)
-  local bar = require("flemma.bar")
   local segments = M.build_segments(request, session)
   if #segments == 0 then
     return { text = "", highlights = {} }

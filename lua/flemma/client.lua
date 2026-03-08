@@ -2,6 +2,7 @@
 --- Handles all HTTP requests and transport mechanisms
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local sink = require("flemma.sink")
 
 ---@class flemma.Client
 local M = {}
@@ -265,8 +266,7 @@ function M.send_request(opts)
   -- Sink for stdout line framing and real-time SSE dispatch.
   -- Neovim's jobstart splits stdout on newlines; table.concat(data, "\n")
   -- reconstructs the original bytes which the sink re-frames into lines.
-  local sink_module = require("flemma.sink")
-  local stdout_sink = sink_module.create({
+  local stdout_sink = sink.create({
     name = "http/" .. (opts.endpoint or "request"):gsub("[^%w/%-]", "-"),
     on_line = function(line)
       process_stdout_line(line)

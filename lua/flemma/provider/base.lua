@@ -80,6 +80,7 @@ Missing boolean capabilities default to `false` at registration time.
 
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local sink = require("flemma.sink")
 
 -- ============================================================================
 -- Type definitions
@@ -706,7 +707,6 @@ end
 --- Create a new response buffer for accumulating non-processable lines
 ---@param self flemma.provider.Base
 function M._new_response_buffer(self)
-  local sink = require("flemma.sink")
   self._response_buffer = {
     lines_sink = sink.create({ name = "provider/response-lines" }),
     successful = false,

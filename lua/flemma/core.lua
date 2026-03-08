@@ -411,8 +411,11 @@ function M.send_or_execute(opts)
 
     -- Normal tools: run through approval flow
     for _, ctx in ipairs(normal_pending) do
-      local decision =
-        tool_approval.resolve(ctx.tool_name, ctx.input, { bufnr = bufnr, tool_id = ctx.tool_id, opts = frontmatter_opts })
+      local decision = tool_approval.resolve(
+        ctx.tool_name,
+        ctx.input,
+        { bufnr = bufnr, tool_id = ctx.tool_id, opts = frontmatter_opts }
+      )
 
       ---@type flemma.ast.ToolStatus
       local status

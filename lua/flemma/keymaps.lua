@@ -3,6 +3,13 @@
 ---@class flemma.Keymaps
 local M = {}
 
+local core = require("flemma.core")
+local executor = require("flemma.tools.executor")
+local navigation = require("flemma.navigation")
+local state = require("flemma.state")
+local textobject = require("flemma.textobject")
+local ui = require("flemma.ui")
+
 local ROLE_NAMES = { ["@System"] = true, ["@You"] = true, ["@Assistant"] = true }
 local CANCEL_WINDOW_MS = 800
 
@@ -30,12 +37,6 @@ end
 
 ---Setup function to initialize all keymaps
 M.setup = function()
-  local core = require("flemma.core")
-  local navigation = require("flemma.navigation")
-  local ui = require("flemma.ui")
-  local textobject = require("flemma.textobject")
-  local state = require("flemma.state")
-
   -- Create or clear the augroup for keymap-related autocmds
   local augroup = vim.api.nvim_create_augroup("FlemmaKeymaps", { clear = true })
 
@@ -56,7 +57,7 @@ M.setup = function()
         if config.keymaps.normal.tool_execute then
           vim.keymap.set("n", config.keymaps.normal.tool_execute, function()
             local bufnr = vim.api.nvim_get_current_buf()
-            local executor = require("flemma.tools.executor")
+
             local ok, err = executor.execute_at_cursor(bufnr)
             if not ok then
               vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
@@ -67,7 +68,7 @@ M.setup = function()
         if config.keymaps.normal.cancel then
           vim.keymap.set("n", config.keymaps.normal.cancel, function()
             local bufnr = vim.api.nvim_get_current_buf()
-            local executor = require("flemma.tools.executor")
+
             if not executor.cancel_for_buffer(bufnr) then
               vim.notify("Flemma: Nothing to cancel", vim.log.levels.INFO)
             end

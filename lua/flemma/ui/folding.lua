@@ -7,6 +7,8 @@ local M = {}
 local state = require("flemma.state")
 local log = require("flemma.logging")
 local loader = require("flemma.loader")
+local parser = require("flemma.parser")
+local roles = require("flemma.utilities.roles")
 local str = require("flemma.utilities.string")
 local preview = require("flemma.ui.preview")
 local query = require("flemma.ast.query")
@@ -162,7 +164,6 @@ function M.get_fold_level(lnum)
   local bufnr = vim.api.nvim_get_current_buf()
   local tick = vim.api.nvim_buf_get_changedtick(bufnr)
   if fold_map_cache.changedtick ~= tick or fold_map_cache.bufnr ~= bufnr then
-    local parser = require("flemma.parser")
     local doc = parser.get_parsed_document(bufnr)
     fold_map_cache = { changedtick = tick, bufnr = bufnr, map = build_fold_map(doc) }
   end
@@ -177,7 +178,6 @@ end
 ---@return flemma.ast.DocumentNode
 local function get_document()
   local bufnr = vim.api.nvim_get_current_buf()
-  local parser = require("flemma.parser")
   return parser.get_parsed_document(bufnr)
 end
 
@@ -194,7 +194,6 @@ end
 ---Returns a list of {text, highlight_group} tuples for per-segment highlighting.
 ---@return {[1]:string, [2]:string}[]
 function M.get_fold_text()
-  local roles = require("flemma.utilities.roles")
   local foldstart_lnum = vim.v.foldstart
   local foldend_lnum = vim.v.foldend
   local total_fold_lines = foldend_lnum - foldstart_lnum + 1
@@ -475,7 +474,6 @@ function M.fold_completed_blocks(bufnr)
   end
   buffer_state.fold_completed_tick = tick
 
-  local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
 
   if #doc.messages == 0 then

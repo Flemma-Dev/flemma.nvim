@@ -3,6 +3,7 @@ local eval = require("flemma.eval")
 local emittable = require("flemma.emittable")
 local json = require("flemma.utilities.json")
 local codeblock_parsers = require("flemma.codeblock.parsers")
+local parser = require("flemma.parser")
 
 ---@class flemma.Processor
 local M = {}
@@ -124,7 +125,6 @@ end
 ---@param bufnr integer
 ---@return flemma.processor.EvaluatedFrontmatter
 function M.evaluate_buffer_frontmatter(bufnr)
-  local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
   return M.evaluate_frontmatter(doc, ctxutil.from_buffer(bufnr))
 end

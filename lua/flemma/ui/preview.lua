@@ -6,6 +6,7 @@ local M = {}
 local query = require("flemma.ast.query")
 local str = require("flemma.utilities.string")
 local display = require("flemma.utilities.display")
+local tools = require("flemma.tools")
 
 -- Constants for preview text
 local MAX_CONTENT_PREVIEW_LINES = 10
@@ -151,7 +152,6 @@ function M.format_tool_preview(tool_name, input, max_length)
   local name_prefix = tool_name .. ": "
   local available = max_length - str.strwidth(name_prefix)
 
-  local tools = require("flemma.tools")
   local tool_def = tools.get(tool_name)
 
   local body
@@ -260,7 +260,6 @@ end
 ---@param available integer Available width for the body
 ---@return string
 function M.get_tool_use_body(tool_name, input, available)
-  local tools = require("flemma.tools")
   local tool_def = tools.get(tool_name)
 
   local body

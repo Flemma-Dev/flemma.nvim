@@ -1,7 +1,9 @@
 local ast = require("flemma.ast")
 local codeblock = require("flemma.codeblock")
 local json = require("flemma.utilities.json")
+local modeline = require("flemma.utilities.modeline")
 local roles = require("flemma.utilities.roles")
+local state = require("flemma.state")
 
 ---@class flemma.Parser
 local M = {}
@@ -201,7 +203,6 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
       if block then
         if block.language == "flemma:tool" then
           -- Tool status placeholder — parse info string for status
-          local modeline = require("flemma.utilities.modeline")
           local parsed = modeline.parse(block.info or "")
           local tool_status = TOOL_STATUS_MAP[parsed.status] or "pending"
 
@@ -592,7 +593,6 @@ end
 ---@param bufnr integer
 ---@return flemma.ast.DocumentNode
 function M.get_parsed_document(bufnr)
-  local state = require("flemma.state")
   local buffer_state = state.get_buffer_state(bufnr)
   local current_tick = vim.api.nvim_buf_get_changedtick(bufnr)
 

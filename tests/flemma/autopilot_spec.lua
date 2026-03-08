@@ -818,6 +818,7 @@ describe("Autopilot integration", function()
 
   before_each(function()
     package.loaded["flemma"] = nil
+    package.loaded["flemma.commands"] = nil
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.core.config.manager"] = nil

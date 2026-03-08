@@ -9,6 +9,10 @@
 ---@class flemma.Eval
 local M = {}
 
+local emittable = require("flemma.emittable")
+local mime_util = require("flemma.mime")
+local parser = require("flemma.parser")
+
 ---@alias flemma.eval.Environment table<string, any>
 
 --- MIME detection: override or auto-detect via `file` command + extension fallback.
@@ -19,7 +23,6 @@ local function detect_mime(path, override)
   if override and #override > 0 then
     return override
   end
-  local mime_util = require("flemma.mime")
   local ok, mt, _ = pcall(mime_util.get_mime_type, path)
   if ok and mt then
     return mt
@@ -54,8 +57,6 @@ end
 ---@param eval_expr_fn fun(expr: string, env: flemma.eval.Environment): any
 ---@param create_env_fn fun(): flemma.eval.Environment
 local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
-  local emittable = require("flemma.emittable")
-
   ---@param relative_path string
   ---@param opts? { binary?: boolean, mime?: string }
   ---@return table emittable An IncludePart with an emit() method
@@ -133,7 +134,6 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
     end
 
     -- Parse content for {{ }} expressions and @./ file references
-    local parser = require("flemma.parser")
     local segments = parser.parse_inline_content(content)
 
     -- Create isolated child environment (does NOT inherit user variables)

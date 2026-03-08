@@ -671,6 +671,7 @@ describe("Anthropic Streaming Tool Use Response (integration)", function()
 
   before_each(function()
     package.loaded["flemma"] = nil
+    package.loaded["flemma.commands"] = nil
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.core.config.manager"] = nil
@@ -1027,6 +1028,7 @@ describe("OpenAI Streaming Tool Use Response (integration)", function()
 
   before_each(function()
     package.loaded["flemma"] = nil
+    package.loaded["flemma.commands"] = nil
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.core.config.manager"] = nil
@@ -1392,6 +1394,7 @@ describe("Vertex AI Streaming Function Call Response (integration)", function()
 
   before_each(function()
     package.loaded["flemma"] = nil
+    package.loaded["flemma.commands"] = nil
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.core.config.manager"] = nil

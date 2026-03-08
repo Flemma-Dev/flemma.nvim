@@ -4,6 +4,8 @@
 ---@class flemma.ContextUtil
 local M = {}
 
+local eval = require("flemma.eval")
+
 ---@class flemma.Context
 ---@field __filename string|nil The current file path (private)
 ---@field __variables table<string, any>|nil User-defined variables for execution contexts (private)
@@ -107,7 +109,6 @@ end
 ---@param ctx flemma.Context|table
 ---@return flemma.eval.Environment env
 function M.to_eval_env(ctx)
-  local eval = require("flemma.eval")
   local env = eval.create_safe_env()
 
   -- Handle both Context objects and plain tables

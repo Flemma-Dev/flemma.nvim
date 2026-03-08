@@ -7,6 +7,7 @@ describe(":Flemma send command", function()
   before_each(function()
     -- Invalidate the main flemma module cache to ensure a clean setup for each test
     package.loaded["flemma"] = nil
+    package.loaded["flemma.commands"] = nil
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.core.config.manager"] = nil
