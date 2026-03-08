@@ -5,7 +5,7 @@ if empty(s:project_root)
   echom "Please run this from within the 'nix develop' shell."
   cquit
 endif
-execute 'set rtp+=' . s:project_root
+execute 'set rtp^=' . s:project_root
 
 " Add plenary to the runtime path
 let s:plenary_path = $PLENARY_PATH

@@ -65,12 +65,16 @@ develop:
 	@nvim --cmd "lua																	\
 			local cwd = vim.uv.cwd();													\
 			vim.opt.rtp:prepend(cwd);													\
-			vim.opt.rtp = vim.tbl_filter(function(p)									\
-				return not (p:find('flemma') and p ~= cwd)								\
-			end, vim.opt.rtp:get())														\
+			package.loaded['lualine.components.flemma'] = setmetatable({}, {			\
+				__call = function(_, ...)												\
+					local m = dofile(cwd .. '/lua/lualine/components/flemma.lua');		\
+					package.loaded['lualine.components.flemma'] = m;					\
+					return m(...)														\
+				end,																	\
+			})																			\
 		"																				\
-		-c "																			\
-		lua require(\"flemma\").setup({													\
+		-c "lua																			\
+		require(\"flemma\").setup({														\
 			model = \"\$$haiku\",														\
 			parameters = { thinking = \"minimal\" },									\
 			presets = {																	\
