@@ -36,7 +36,7 @@ function M.new(merged_config)
   provider.api_version = "2023-06-01"
 
   -- Set metatable BEFORE reset so M.reset (not base.reset) initializes provider-specific state
-  setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
+  base._init_provider(M, provider)
   provider:reset()
 
   return provider --[[@as flemma.provider.Anthropic]]
@@ -44,16 +44,7 @@ end
 
 ---@param self flemma.provider.Anthropic
 function M.reset(self)
-  -- Destroy previous sinks if they exist
-  if self._response_buffer and self._response_buffer.extra then
-    if self._response_buffer.extra.thinking_sink then
-      self._response_buffer.extra.thinking_sink:destroy()
-    end
-    if self._response_buffer.extra.tool_input_sink then
-      self._response_buffer.extra.tool_input_sink:destroy()
-    end
-  end
-
+  -- base.reset auto-destroys sinks in extra via duck typing
   base.reset(self)
 
   local sink = require("flemma.sink")
@@ -71,21 +62,6 @@ function M.reset(self)
 end
 
 ---@param self flemma.provider.Anthropic
----@param exit_code number
----@param callbacks flemma.provider.Callbacks
-function M.finalize_response(self, exit_code, callbacks)
-  if self._response_buffer and self._response_buffer.extra then
-    if self._response_buffer.extra.thinking_sink then
-      self._response_buffer.extra.thinking_sink:destroy()
-    end
-    if self._response_buffer.extra.tool_input_sink then
-      self._response_buffer.extra.tool_input_sink:destroy()
-    end
-  end
-  base.finalize_response(self, exit_code, callbacks)
-end
-
----@param self flemma.provider.Anthropic
 ---@return string|nil
 function M.get_api_key(self)
   -- Call the base implementation with Anthropic-specific parameters
@@ -94,6 +70,14 @@ function M.get_api_key(self)
     keyring_service_name = "anthropic",
     keyring_key_name = "api",
   })
+end
+
+--- Anthropic uses `data.type == "error"` for errors (not `data.error`).
+---@param self flemma.provider.Anthropic
+---@param data table
+---@return boolean
+function M._is_error_response(self, data)
+  return data.type == "error"
 end
 
 ---Build request body for Anthropic API
@@ -240,28 +224,16 @@ function M.build_request(self, prompt, _context)
   end
 
   -- Inject synthetic error results for orphaned tool calls
-  local pending = prompt.pending_tool_calls
-  if pending and #pending > 0 then
-    local synthetic_blocks = {}
-    for _, orphan in ipairs(pending) do
-      table.insert(synthetic_blocks, {
-        type = "tool_result",
-        tool_use_id = base.normalize_tool_id(orphan.id),
-        content = "No result provided",
-        is_error = true,
-      })
-      log.debug(
-        "anthropic.build_request: Injected synthetic tool_result for orphaned "
-          .. orphan.name
-          .. " ("
-          .. orphan.id
-          .. ")"
-      )
-    end
-    table.insert(api_messages, {
-      role = "user",
-      content = synthetic_blocks,
-    })
+  local orphan_results = base._inject_orphan_results(self, prompt.pending_tool_calls, function(orphan)
+    return {
+      type = "tool_result",
+      tool_use_id = base.normalize_tool_id(orphan.id),
+      content = "No result provided",
+      is_error = true,
+    }
+  end)
+  if orphan_results then
+    table.insert(api_messages, { role = "user", content = orphan_results })
   end
 
   local cache_retention = self.parameters.cache_retention or "short"
@@ -275,21 +247,15 @@ function M.build_request(self, prompt, _context)
 
   -- Build tools array from registry (filtered by per-buffer opts if present)
   local tools_module = require("flemma.tools")
-  local all_tools = tools_module.get_for_prompt(prompt.opts)
+  local sorted_tools = tools_module.get_sorted_for_prompt(prompt.opts)
   local tools_array = {}
-
-  for _, def in pairs(all_tools) do
+  for _, def in ipairs(sorted_tools) do
     table.insert(tools_array, {
       name = def.name,
       description = tools_module.build_description(def),
       input_schema = def.input_schema,
     })
   end
-
-  -- Stable alphabetical ordering for cache efficiency
-  table.sort(tools_array, function(a, b)
-    return a.name < b.name
-  end)
 
   -- Breakpoint 1: last tool definition
   if cache_control and #tools_array > 0 then
@@ -414,67 +380,25 @@ function M.get_request_headers(self)
   }
 end
 
--- Get API endpoint
---- Process a single line of Anthropic API streaming response
---- Parses Anthropic's server-sent events format and extracts content, usage, and error information
+--- Process parsed SSE data for Anthropic API streaming responses.
+--- Called by base.process_response_line() after SSE parsing, JSON decode, and error checks.
 ---@param self flemma.provider.Anthropic
----@param line string A single line from the Anthropic API response stream
+---@param data table The parsed JSON data from the SSE line
+---@param _parsed flemma.provider.SSELine The original parsed SSE line (unused by Anthropic)
 ---@param callbacks flemma.provider.Callbacks Table of callback functions to handle parsed data
-function M.process_response_line(self, line, callbacks)
-  -- Use base SSE parser
-  local parsed = base._parse_sse_line(line)
-  if not parsed then
-    -- Handle non-SSE lines
-    base._handle_non_sse_line(self, line, callbacks)
-    return
-  end
-
-  -- Handle event lines
-  if parsed.type == "event" then
-    log.trace("anthropic.process_response_line(): Received event type: " .. parsed.event_type)
-    return
-  end
-
-  -- Handle [DONE] message (Anthropic doesn't typically send this)
-  if parsed.type == "done" then
-    log.debug("anthropic.process_response_line(): Received [DONE] message (unexpected)")
-    return
-  end
-
-  -- Parse JSON data
-  local ok, data = pcall(json.decode, parsed.content)
-  if not ok then
-    log.error("anthropic.process_response_line(): Failed to parse JSON: " .. parsed.content)
-    return
-  end
-
-  if type(data) ~= "table" then
-    log.error("anthropic.process_response_line(): Expected table in response, got type: " .. type(data))
-    return
-  end
-
-  -- Handle error responses
-  if data.type == "error" then
-    local msg = self:extract_json_response_error(data) or "Unknown API error"
-    log.error("anthropic.process_response_line(): Anthropic API error: " .. log.inspect(msg))
-    if callbacks.on_error then
-      callbacks.on_error(msg)
-    end
-    return
-  end
-
+function M._process_data(self, data, _parsed, callbacks)
   -- Handle ping events
   if data.type == "ping" then
-    log.trace("anthropic.process_response_line(): Received ping event")
+    log.trace("anthropic._process_data(): Received ping event")
     return
   end
 
   -- Track usage information from message_start event
   if data.type == "message_start" then
-    log.debug("anthropic.process_response_line(): Received message_start event")
+    log.debug("anthropic._process_data(): Received message_start event")
     if data.message and data.message.usage and data.message.usage.input_tokens then
       log.debug(
-        "anthropic.process_response_line(): ... Input tokens from message_start: " .. data.message.usage.input_tokens
+        "anthropic._process_data(): ... Input tokens from message_start: " .. data.message.usage.input_tokens
       )
       if callbacks.on_usage then
         callbacks.on_usage({
@@ -491,13 +415,13 @@ function M.process_response_line(self, line, callbacks)
         callbacks.on_usage({ type = "cache_creation", tokens = usage.cache_creation_input_tokens })
       end
     else
-      log.debug("anthropic.process_response_line(): ... No usage information in message_start event")
+      log.debug("anthropic._process_data(): ... No usage information in message_start event")
     end
   end
 
   -- Track output tokens from usage field in any event (including message_delta)
   if type(data.usage) == "table" and data.usage.output_tokens then
-    log.debug("anthropic.process_response_line(): ... Output tokens update: " .. data.usage.output_tokens)
+    log.debug("anthropic._process_data(): ... Output tokens update: " .. data.usage.output_tokens)
     if callbacks.on_usage then
       callbacks.on_usage({
         type = "output",
@@ -508,48 +432,31 @@ function M.process_response_line(self, line, callbacks)
 
   -- Handle message_delta event — capture stop_reason for completion branching
   if data.type == "message_delta" then
-    log.debug("anthropic.process_response_line(): Received message_delta event")
+    log.debug("anthropic._process_data(): Received message_delta event")
     if data.delta and data.delta.stop_reason then
       self._response_buffer.extra.stop_reason = data.delta.stop_reason
-      log.debug("anthropic.process_response_line(): Captured stop_reason: " .. data.delta.stop_reason)
+      log.debug("anthropic._process_data(): Captured stop_reason: " .. data.delta.stop_reason)
     end
   end
 
   -- Handle message_stop event
   if data.type == "message_stop" then
-    log.debug("anthropic.process_response_line(): Received message_stop event")
+    log.debug("anthropic._process_data(): Received message_stop event")
 
     -- Append accumulated thinking at the end (after text content)
     local accumulated = self._response_buffer.extra.thinking_sink:read()
     local signature = self._response_buffer.extra.accumulated_signature or ""
-
-    if accumulated and #accumulated > 0 then
-      local stripped = vim.trim(accumulated)
-      -- Use single newline prefix if content already ends with newline, else double
-      local prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
-      local open_tag
-      if #signature > 0 then
-        open_tag = '<thinking anthropic:signature="' .. signature .. '">'
-      else
-        open_tag = "<thinking>"
-      end
-      local thinking_block = prefix .. open_tag .. "\n" .. stripped .. "\n</thinking>\n"
-      base._signal_content(self, thinking_block, callbacks)
-      log.debug("anthropic.process_response_line(): Appended thinking block at end of response")
-    elseif #signature > 0 then
-      -- Signature but no thinking content — emit open/close tag (enables folding)
-      local prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
-      local tag = prefix .. '<thinking anthropic:signature="' .. signature .. '">\n</thinking>\n'
-      base._signal_content(self, tag, callbacks)
-      log.debug("anthropic.process_response_line(): Appended empty thinking tag with signature")
-    end
+    base._emit_thinking_block(
+      self,
+      accumulated,
+      (#signature > 0) and signature or nil,
+      "anthropic",
+      callbacks
+    )
 
     -- Append redacted thinking blocks
     for _, redacted_data in ipairs(self._response_buffer.extra.redacted_thinking_blocks or {}) do
-      local prefix = self:_content_ends_with_newline() and "" or "\n"
-      local block = prefix .. "<thinking redacted>\n" .. redacted_data .. "\n</thinking>\n"
-      base._signal_content(self, block, callbacks)
-      log.debug("anthropic.process_response_line(): Appended redacted thinking block")
+      base._emit_redacted_thinking(self, redacted_data, callbacks)
     end
 
     -- Reset accumulated state
@@ -564,21 +471,9 @@ function M.process_response_line(self, line, callbacks)
     local stop_reason = self._response_buffer.extra.stop_reason
 
     if stop_reason == "max_tokens" then
-      -- Truncated: complete normally but warn user
-      log.warn("anthropic.process_response_line(): Response truncated (max_tokens)")
-      vim.schedule(function()
-        vim.notify("Flemma: Response truncated – model reached max output tokens", vim.log.levels.WARN)
-      end)
-      if callbacks.on_response_complete then
-        callbacks.on_response_complete()
-      end
+      base._warn_truncated(self, callbacks)
     elseif stop_reason == "refusal" or stop_reason == "sensitive" then
-      -- Content policy: surface as error
-      local error_message = "Response blocked by Anthropic (" .. stop_reason .. ")"
-      log.error("anthropic.process_response_line(): " .. error_message)
-      if callbacks.on_error then
-        callbacks.on_error(error_message)
-      end
+      base._signal_blocked(self, stop_reason, callbacks)
     else
       -- end_turn, tool_use, stop_sequence, pause_turn, nil — normal completion
       if callbacks.on_response_complete then
@@ -590,11 +485,11 @@ function M.process_response_line(self, line, callbacks)
   -- Handle content_block_start event
   if data.type == "content_block_start" then
     log.debug(
-      "anthropic.process_response_line(): Received content_block_start event for index " .. tostring(data.index)
+      "anthropic._process_data(): Received content_block_start event for index " .. tostring(data.index)
     )
     if data.content_block and data.content_block.type then
       self._response_buffer.extra.current_block_type = data.content_block.type
-      log.debug("anthropic.process_response_line(): Started block type: " .. data.content_block.type)
+      log.debug("anthropic._process_data(): Started block type: " .. data.content_block.type)
 
       -- Track redacted_thinking block
       if data.content_block.type == "redacted_thinking" then
@@ -602,7 +497,7 @@ function M.process_response_line(self, line, callbacks)
           self._response_buffer.extra.redacted_thinking_blocks = {}
         end
         table.insert(self._response_buffer.extra.redacted_thinking_blocks, data.content_block.data or "")
-        log.debug("anthropic.process_response_line(): Captured redacted_thinking block")
+        log.debug("anthropic._process_data(): Captured redacted_thinking block")
       end
 
       -- Track tool_use block
@@ -616,7 +511,7 @@ function M.process_response_line(self, line, callbacks)
           name = "anthropic/tool-input",
         })
         log.debug(
-          "anthropic.process_response_line(): Started tool_use block: "
+          "anthropic._process_data(): Started tool_use block: "
             .. data.content_block.name
             .. " ("
             .. data.content_block.id
@@ -628,7 +523,7 @@ function M.process_response_line(self, line, callbacks)
 
   -- Handle content_block_stop event
   if data.type == "content_block_stop" then
-    log.debug("anthropic.process_response_line(): Received content_block_stop event for index " .. tostring(data.index))
+    log.debug("anthropic._process_data(): Received content_block_stop event for index " .. tostring(data.index))
 
     -- Emit formatted tool_use block
     local current_tool = self._response_buffer.extra.current_tool_use
@@ -637,37 +532,13 @@ function M.process_response_line(self, line, callbacks)
       local parse_ok, input = pcall(json.decode, input_json)
       if not parse_ok then
         input = {}
-        log.warn("anthropic.process_response_line(): Failed to parse tool input JSON: " .. input_json)
+        log.warn("anthropic._process_data(): Failed to parse tool input JSON: " .. input_json)
       end
 
-      -- Pretty-print JSON for display
+      -- Re-encode for normalized display
       local json_str = json.encode(input)
-
-      -- Determine fence length based on content (dynamic fence sizing)
-      local max_ticks = 0
-      for ticks in json_str:gmatch("`+") do
-        max_ticks = math.max(max_ticks, #ticks)
-      end
-      local fence = string.rep("`", math.max(3, max_ticks + 1))
-
-      -- Format for buffer display
-      -- Use appropriate prefix based on what's already accumulated
-      local prefix = ""
-      if self:_has_content() then
-        prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
-      end
-      local formatted = string.format(
-        "%s**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n",
-        prefix,
-        current_tool.name,
-        current_tool.id,
-        fence,
-        json_str,
-        fence
-      )
-
-      base._signal_content(self, formatted, callbacks)
-      log.debug("anthropic.process_response_line(): Emitted tool_use block for " .. current_tool.name)
+      base._emit_tool_use_block(self, current_tool.name, current_tool.id, json_str, callbacks)
+      log.debug("anthropic._process_data(): Emitted tool_use block for " .. current_tool.name)
 
       -- Reset tool state
       self._response_buffer.extra.current_tool_use = nil
@@ -684,19 +555,19 @@ function M.process_response_line(self, line, callbacks)
   -- Handle content_block_delta event
   if data.type == "content_block_delta" then
     if not data.delta then
-      log.error("anthropic.process_response_line(): Received content_block_delta without delta: " .. log.inspect(data))
+      log.error("anthropic._process_data(): Received content_block_delta without delta: " .. log.inspect(data))
       return
     end
 
     if data.delta.type == "text_delta" and data.delta.text then
-      log.trace("anthropic.process_response_line(): Content text delta: " .. log.inspect(data.delta.text))
+      log.trace("anthropic._process_data(): Content text delta: " .. log.inspect(data.delta.text))
       base._signal_content(self, data.delta.text, callbacks)
     elseif data.delta.type == "input_json_delta" and data.delta.partial_json ~= nil then
-      log.trace("anthropic.process_response_line(): Content input_json_delta: " .. log.inspect(data.delta.partial_json))
+      log.trace("anthropic._process_data(): Content input_json_delta: " .. log.inspect(data.delta.partial_json))
       -- Accumulate tool input JSON
       self._response_buffer.extra.tool_input_sink:write(data.delta.partial_json)
     elseif data.delta.type == "thinking_delta" and data.delta.thinking then
-      log.trace("anthropic.process_response_line(): Content thinking delta: " .. log.inspect(data.delta.thinking))
+      log.trace("anthropic._process_data(): Content thinking delta: " .. log.inspect(data.delta.thinking))
       self._response_buffer.extra.thinking_sink:write(data.delta.thinking)
       if callbacks.on_thinking then
         callbacks.on_thinking(data.delta.thinking)
@@ -704,9 +575,9 @@ function M.process_response_line(self, line, callbacks)
     elseif data.delta.type == "signature_delta" and data.delta.signature then
       self._response_buffer.extra.accumulated_signature = (self._response_buffer.extra.accumulated_signature or "")
         .. data.delta.signature
-      log.trace("anthropic.process_response_line(): Content signature delta received")
+      log.trace("anthropic._process_data(): Content signature delta received")
     else
-      log.warn("anthropic.process_response_line(): Unknown delta type: " .. log.inspect(data.delta.type))
+      log.warn("anthropic._process_data(): Unknown delta type: " .. log.inspect(data.delta.type))
     end
   elseif
     data.type
@@ -719,7 +590,7 @@ function M.process_response_line(self, line, callbacks)
       or data.type == "ping"
     )
   then
-    log.warn("anthropic.process_response_line(): Unknown event type: " .. log.inspect(data.type))
+    log.warn("anthropic._process_data(): Unknown event type: " .. log.inspect(data.type))
   end
 end
 
