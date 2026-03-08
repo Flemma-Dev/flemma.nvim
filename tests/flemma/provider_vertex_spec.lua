@@ -412,7 +412,7 @@ describe("Vertex AI Provider", function()
 
     it("should use thinkingLevel LOW for Gemini 3 Flash with thinking=low", function()
       local provider = vertex.new({
-        model = "gemini-3-flash",
+        model = "gemini-3-flash-preview",
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
@@ -428,7 +428,7 @@ describe("Vertex AI Provider", function()
 
     it("should use thinkingLevel MEDIUM for Gemini 3 Flash with thinking=medium", function()
       local provider = vertex.new({
-        model = "gemini-3-flash",
+        model = "gemini-3-flash-preview",
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
@@ -460,7 +460,7 @@ describe("Vertex AI Provider", function()
 
     it("should use thinkingLevel LOW for Gemini 3 Pro with thinking=low", function()
       local provider = vertex.new({
-        model = "gemini-3-pro",
+        model = "gemini-3-pro-preview",
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
@@ -476,7 +476,7 @@ describe("Vertex AI Provider", function()
 
     it("should use thinkingLevel MINIMAL for Gemini 3 Flash with thinking=minimal", function()
       local provider = vertex.new({
-        model = "gemini-3-flash",
+        model = "gemini-3-flash-preview",
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
@@ -492,7 +492,7 @@ describe("Vertex AI Provider", function()
 
     it("should clamp thinking='max' to HIGH for Gemini 3 Flash", function()
       local provider = vertex.new({
-        model = "gemini-3-flash",
+        model = "gemini-3-flash-preview",
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
@@ -508,7 +508,7 @@ describe("Vertex AI Provider", function()
 
     it("should map thinking='minimal' to LOW for Gemini 3 Pro", function()
       local provider = vertex.new({
-        model = "gemini-3-pro",
+        model = "gemini-3-pro-preview",
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
@@ -542,7 +542,7 @@ describe("Vertex AI Provider", function()
     it("should still resolve numeric thinking to thinkingLevel for Gemini 3", function()
       -- A numeric budget like 4096 resolves to level="medium" via budget_to_effort()
       local provider = vertex.new({
-        model = "gemini-3-flash",
+        model = "gemini-3-flash-preview",
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",

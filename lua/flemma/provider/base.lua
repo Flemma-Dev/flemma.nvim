@@ -812,6 +812,17 @@ local function effort_to_budget(level, model_info)
   end
 end
 
+--- Map an effort level through model_info.thinking_effort_map if available
+---@param effort string The canonical Flemma effort level
+---@param model_info? flemma.models.ModelInfo
+---@return string mapped_effort The provider-specific API value
+local function map_effort(effort, model_info)
+  if model_info and model_info.thinking_effort_map then
+    return model_info.thinking_effort_map[effort] or effort
+  end
+  return effort
+end
+
 --- Resolve the unified `thinking` parameter into provider-appropriate values.
 ---
 --- Priority: provider-specific param > thinking > provider defaults.
@@ -869,7 +880,8 @@ function M.resolve_thinking(params, caps, model_info)
     -- Priority: provider-specific reasoning > unified thinking
     local raw_reasoning = params.reasoning
     if raw_reasoning ~= nil and raw_reasoning ~= "" then
-      return { enabled = true, effort = raw_reasoning, level = raw_reasoning }
+      local mapped = map_effort(raw_reasoning, model_info)
+      return { enabled = true, effort = mapped, level = raw_reasoning }
     end
 
     -- Fall back to unified `thinking` parameter
@@ -878,11 +890,13 @@ function M.resolve_thinking(params, caps, model_info)
       return { enabled = false }
     end
     if type(thinking) == "string" then
-      return { enabled = true, effort = thinking, level = thinking }
+      local mapped = map_effort(thinking, model_info)
+      return { enabled = true, effort = mapped, level = thinking }
     end
     if type(thinking) == "number" and thinking > 0 then
-      local effort = budget_to_effort(thinking)
-      return { enabled = true, effort = effort, level = effort }
+      local canonical = budget_to_effort(thinking)
+      local mapped = map_effort(canonical, model_info)
+      return { enabled = true, effort = mapped, level = canonical }
     end
     return { enabled = false }
   end

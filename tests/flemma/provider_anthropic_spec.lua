@@ -422,7 +422,7 @@ describe("Anthropic Provider", function()
 
   describe("adaptive thinking", function()
     it("should use adaptive thinking for opus-4-6 models", function()
-      local p = anthropic.new({ model = "claude-opus-4-6-20260101", max_tokens = 4000, thinking = "high" })
+      local p = anthropic.new({ model = "claude-opus-4-6", max_tokens = 4000, thinking = "high" })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
@@ -446,7 +446,7 @@ describe("Anthropic Provider", function()
     end)
 
     it("should map effort level from thinking parameter", function()
-      local p = anthropic.new({ model = "claude-opus-4-6-20260101", max_tokens = 4000, thinking = "low" })
+      local p = anthropic.new({ model = "claude-opus-4-6", max_tokens = 4000, thinking = "low" })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
@@ -457,7 +457,7 @@ describe("Anthropic Provider", function()
     end)
 
     it("should map thinking='max' to effort='max' on opus-4-6", function()
-      local p = anthropic.new({ model = "claude-opus-4-6-20260101", max_tokens = 4000, thinking = "max" })
+      local p = anthropic.new({ model = "claude-opus-4-6", max_tokens = 4000, thinking = "max" })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
@@ -468,7 +468,7 @@ describe("Anthropic Provider", function()
     end)
 
     it("should map thinking='minimal' to effort='low' on opus-4-6", function()
-      local p = anthropic.new({ model = "claude-opus-4-6-20260101", max_tokens = 4000, thinking = "minimal" })
+      local p = anthropic.new({ model = "claude-opus-4-6", max_tokens = 4000, thinking = "minimal" })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
@@ -479,7 +479,7 @@ describe("Anthropic Provider", function()
     end)
 
     it("should use adaptive thinking for sonnet-4-6 models", function()
-      local p = anthropic.new({ model = "claude-sonnet-4-6-20260201", max_tokens = 4000, thinking = "high" })
+      local p = anthropic.new({ model = "claude-sonnet-4-6", max_tokens = 4000, thinking = "high" })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
@@ -491,7 +491,7 @@ describe("Anthropic Provider", function()
     end)
 
     it("should clamp 'max' effort to 'high' on sonnet-4-6", function()
-      local p = anthropic.new({ model = "claude-sonnet-4-6-20260201", max_tokens = 4000, thinking = "max" })
+      local p = anthropic.new({ model = "claude-sonnet-4-6", max_tokens = 4000, thinking = "max" })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }

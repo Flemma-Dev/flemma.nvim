@@ -335,22 +335,31 @@ function M.build_request(self, prompt, _context)
   local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
 
   if thinking.enabled then
-    -- 4.6 models use adaptive thinking (effort level) instead of budget_tokens
-    local model = self.parameters.model or ""
-    local use_adaptive = model:match("%-4%-6") ~= nil or model:match("%-4%.6") ~= nil
+    local is_adaptive = model_info and model_info.supports_adaptive_thinking
 
-    if use_adaptive then
-      -- Anthropic effort values: low, medium, high, max (max is Opus-only)
-      -- Flemma's "minimal" has no Anthropic equivalent, map to "low"
-      local effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" }
-      local effort = effort_map[thinking.level] or "high"
-      if effort == "max" and not model:match("opus") then
-        effort = "high"
-        log.debug("anthropic.build_request: Clamped 'max' effort to 'high' (max is Opus-only)")
+    if is_adaptive and model_info and model_info.thinking_effort_map then
+      ---@cast model_info -nil
+      -- 4.6 adaptive thinking: resolve canonical level directly from params
+      -- (the budget path's level loses "max" → "high" via budget_to_effort roundtrip)
+      local canonical_level = thinking.level
+      if type(self.parameters.thinking) == "string" then
+        canonical_level = self.parameters.thinking
       end
+      local effort = model_info.thinking_effort_map[canonical_level] or "high"
       request_body.thinking = { type = "adaptive" }
       request_body.output_config = { effort = effort }
       log.debug("anthropic.build_request: Adaptive thinking enabled with effort: " .. effort)
+    elseif model_info and model_info.thinking_effort_map and thinking.budget then
+      ---@cast model_info -nil
+      -- Opus 4.5: budget-based thinking with effort parameter alongside
+      local canonical_level = thinking.level
+      if type(self.parameters.thinking) == "string" then
+        canonical_level = self.parameters.thinking
+      end
+      local effort = model_info.thinking_effort_map[canonical_level] or "high"
+      request_body.thinking = { type = "enabled", budget_tokens = thinking.budget }
+      request_body.output_config = { effort = effort }
+      log.debug("anthropic.build_request: Budget thinking with effort: " .. effort .. ", budget: " .. thinking.budget)
     elseif thinking.budget then
       local budget = thinking.budget
       local max_tokens = self.parameters.max_tokens

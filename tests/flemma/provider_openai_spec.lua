@@ -149,7 +149,7 @@ describe("OpenAI Provider", function()
       assert.equals("xhigh", request_body.reasoning.effort)
     end)
 
-    it("should pass through thinking='minimal' as reasoning.effort='minimal'", function()
+    it("should map thinking='minimal' to reasoning.effort='low' for o3", function()
       local provider = openai.new({
         model = "o3",
         max_tokens = 4000,
@@ -164,7 +164,7 @@ describe("OpenAI Provider", function()
       local request_body = provider:build_request(prompt)
 
       assert.is_not_nil(request_body.reasoning)
-      assert.equals("minimal", request_body.reasoning.effort)
+      assert.equals("low", request_body.reasoning.effort)
     end)
 
     it("should use custom reasoning_summary when configured", function()

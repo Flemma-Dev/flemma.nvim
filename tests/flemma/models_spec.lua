@@ -56,4 +56,87 @@ describe("flemma.models", function()
       assert.are.equal(4096, info.min_cache_tokens)
     end)
   end)
+
+  describe("thinking_effort_map", function()
+    it("openai gpt-5.2 maps minimal to low", function()
+      local info = models_data.providers.openai.models["gpt-5.2"]
+      assert.is_not_nil(info.thinking_effort_map)
+      assert.are.equal("low", info.thinking_effort_map.minimal)
+    end)
+
+    it("openai gpt-5.2 maps max to xhigh", function()
+      local info = models_data.providers.openai.models["gpt-5.2"]
+      assert.are.equal("xhigh", info.thinking_effort_map.max)
+    end)
+
+    it("openai gpt-5 maps minimal to minimal (native support)", function()
+      local info = models_data.providers.openai.models["gpt-5"]
+      assert.are.equal("minimal", info.thinking_effort_map.minimal)
+    end)
+
+    it("openai gpt-5 maps max to high (no xhigh support)", function()
+      local info = models_data.providers.openai.models["gpt-5"]
+      assert.are.equal("high", info.thinking_effort_map.max)
+    end)
+
+    it("anthropic opus-4-6 maps max to max", function()
+      local info = models_data.providers.anthropic.models["claude-opus-4-6"]
+      assert.is_not_nil(info.thinking_effort_map)
+      assert.are.equal("max", info.thinking_effort_map.max)
+    end)
+
+    it("anthropic sonnet-4-6 maps max to high (max is Opus-only)", function()
+      local info = models_data.providers.anthropic.models["claude-sonnet-4-6"]
+      assert.are.equal("high", info.thinking_effort_map.max)
+    end)
+
+    it("anthropic sonnet-4-6 maps minimal to low", function()
+      local info = models_data.providers.anthropic.models["claude-sonnet-4-6"]
+      assert.are.equal("low", info.thinking_effort_map.minimal)
+    end)
+
+    it("vertex gemini-3-pro-preview maps minimal to LOW", function()
+      local info = models_data.providers.vertex.models["gemini-3-pro-preview"]
+      assert.is_not_nil(info.thinking_effort_map)
+      assert.are.equal("LOW", info.thinking_effort_map.minimal)
+    end)
+
+    it("vertex gemini-3-flash-preview maps minimal to MINIMAL", function()
+      local info = models_data.providers.vertex.models["gemini-3-flash-preview"]
+      assert.are.equal("MINIMAL", info.thinking_effort_map.minimal)
+    end)
+
+    it("vertex gemini-3-pro-preview maps medium to HIGH (3 Pro has no MEDIUM)", function()
+      local info = models_data.providers.vertex.models["gemini-3-pro-preview"]
+      assert.are.equal("HIGH", info.thinking_effort_map.medium)
+    end)
+
+    it("vertex gemini-3.1-pro-preview maps medium to MEDIUM (3.1 Pro added MEDIUM)", function()
+      local info = models_data.providers.vertex.models["gemini-3.1-pro-preview"]
+      assert.is_not_nil(info.thinking_effort_map)
+      assert.are.equal("MEDIUM", info.thinking_effort_map.medium)
+    end)
+
+    it("non-thinking models have no effort map", function()
+      local info = models_data.providers.openai.models["gpt-4o"]
+      assert.is_nil(info.thinking_effort_map)
+    end)
+
+    it("anthropic opus-4-5 maps max to high (no max support)", function()
+      local info = models_data.providers.anthropic.models["claude-opus-4-5"]
+      assert.is_not_nil(info.thinking_effort_map)
+      assert.are.equal("high", info.thinking_effort_map.max)
+      assert.are.equal("low", info.thinking_effort_map.minimal)
+    end)
+
+    it("budget-only anthropic models (sonnet-4-5, haiku-4-5) have no effort map", function()
+      local info = models_data.providers.anthropic.models["claude-sonnet-4-5"]
+      assert.is_nil(info.thinking_effort_map)
+    end)
+
+    it("budget-only vertex models (gemini-2.5) have no effort map", function()
+      local info = models_data.providers.vertex.models["gemini-2.5-pro"]
+      assert.is_nil(info.thinking_effort_map)
+    end)
+  end)
 end)

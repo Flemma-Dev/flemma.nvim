@@ -15,27 +15,6 @@ local FINISH_REASON_MAP = {
   MAX_TOKENS = "length",
 }
 
---- Maps Flemma effort levels to Vertex AI ThinkingLevel enum values for Gemini 3 Flash.
---- Gemini 3 Pro only supports LOW and HIGH, so gets a separate mapping below.
----@type table<string, string>
-local THINKING_LEVEL_MAP = {
-  minimal = "MINIMAL",
-  low = "LOW",
-  medium = "MEDIUM",
-  high = "HIGH",
-  max = "HIGH", -- no max equivalent in Google API, clamp to HIGH
-}
-
---- Maps Flemma effort levels to Vertex AI ThinkingLevel for Gemini 3 Pro (only LOW/HIGH).
----@type table<string, string>
-local THINKING_LEVEL_MAP_PRO = {
-  minimal = "LOW", -- Pro has no MINIMAL
-  low = "LOW",
-  medium = "HIGH", -- Pro has no MEDIUM
-  high = "HIGH",
-  max = "HIGH", -- no max equivalent
-}
-
 ---@class flemma.provider.Vertex : flemma.provider.Base
 ---@field _token_generated_at integer|nil os.time() when the gcloud token was generated
 ---@field _token_from "gcloud"|"env"|"direct"|nil Source of the cached token
@@ -501,15 +480,13 @@ function M.build_request(self, prompt, _context)
 
   if thinking.enabled then
     local thinking_config = { includeThoughts = true }
-    local model = self.parameters.model or ""
 
-    if model:match("gemini%-3") then
-      -- Gemini 3 models use thinkingLevel (discrete enum) instead of thinkingBudget
-      local level_map = model:match("3%-pro") and THINKING_LEVEL_MAP_PRO or THINKING_LEVEL_MAP
-      local level = thinking.level and level_map[thinking.level]
-      if level then
-        thinking_config.thinkingLevel = level
-        log.debug("build_request: Vertex AI thinkingConfig included with thinkingLevel: " .. level)
+    if model_info and model_info.thinking_effort_map then
+      -- Gemini 3+ models: map canonical level to provider API value via model metadata
+      local mapped = model_info.thinking_effort_map[thinking.level]
+      if mapped then
+        thinking_config.thinkingLevel = mapped
+        log.debug("build_request: Vertex AI thinkingConfig included with thinkingLevel: " .. mapped)
       end
     elseif thinking.budget then
       -- Gemini 2.5 and earlier: use thinkingBudget (numeric token count)

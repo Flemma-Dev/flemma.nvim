@@ -333,19 +333,14 @@ function M.build_request(self, prompt, context)
   end
 
   -- Add reasoning configuration using unified resolution
-  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities)
+  local model_info = require("flemma.provider.registry").get_model_info("openai", self.parameters.model)
+  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
 
   if thinking.enabled and thinking.effort then
-    -- Map Flemma's canonical "max" to OpenAI's "xhigh" for models that support it
-    local effort = thinking.effort
-    if effort == "max" then
-      local model = self.parameters.model or ""
-      local supports_xhigh = model:match("gpt%-5%.2") ~= nil or model:match("gpt%-5%.3") ~= nil
-      effort = supports_xhigh and "xhigh" or "high"
-    end
+    -- effort is already mapped to provider API value by resolve_thinking via thinking_effort_map
     local reasoning_summary = self.parameters.reasoning_summary or "auto"
     request_body.reasoning = {
-      effort = effort,
+      effort = thinking.effort,
       summary = reasoning_summary,
     }
     request_body.include = { "reasoning.encrypted_content" }
