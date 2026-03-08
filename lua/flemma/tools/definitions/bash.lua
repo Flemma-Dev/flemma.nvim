@@ -9,6 +9,7 @@ local M = {}
 -- Module-level require for description constants only (evaluated at load time).
 -- Runtime code inside execute() must use ctx.truncate instead.
 local truncate = require("flemma.utilities.truncate")
+local sink_module = require("flemma.sink")
 
 M.definitions = {
   {
@@ -60,7 +61,6 @@ M.definitions = {
 
       local timeout = input.timeout or ctx.timeout
 
-      local sink_module = require("flemma.sink")
       local output_sink = sink_module.create({
         name = "bash/" .. (input.label or "cmd"):gsub("[^%w/%-]", "-"),
       })

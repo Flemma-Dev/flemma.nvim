@@ -3,6 +3,9 @@
 local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local sink = require("flemma.sink")
+local tools_module = require("flemma.tools")
+local provider_registry = require("flemma.provider.registry")
 
 local TOKEN_TTL_SECONDS = 3600
 local TOKEN_REFRESH_BUFFER_SECONDS = 300
@@ -170,7 +173,6 @@ function M.reset(self, opts)
   -- Full reset (base auto-destroys sinks in extra)
   base.reset(self)
   -- Add Vertex-specific extension
-  local sink = require("flemma.sink")
   self._response_buffer.extra.thinking_sink = sink.create({
     name = "vertex/thinking",
   })
@@ -449,7 +451,7 @@ function M.build_request(self, prompt, _context)
   }
 
   -- Add thinking configuration using unified resolution
-  local model_info = require("flemma.provider.registry").get_model_info("vertex", self.parameters.model)
+  local model_info = provider_registry.get_model_info("vertex", self.parameters.model)
   local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
 
   if thinking.enabled then
@@ -484,7 +486,6 @@ function M.build_request(self, prompt, _context)
   end
 
   -- Build tools array from registry (Vertex AI format, filtered by per-buffer opts if present)
-  local tools_module = require("flemma.tools")
   local sorted_tools = tools_module.get_sorted_for_prompt(prompt.opts)
   local function_declarations = {}
 
@@ -661,7 +662,6 @@ function M._process_data(self, data, _parsed, callbacks)
 
     -- Reset thinking state for next potential full message
     self._response_buffer.extra.thinking_sink:destroy()
-    local sink = require("flemma.sink")
     self._response_buffer.extra.thinking_sink = sink.create({
       name = "vertex/thinking",
     })

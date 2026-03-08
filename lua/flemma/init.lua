@@ -12,6 +12,14 @@ local ui = require("flemma.ui")
 local commands = require("flemma.commands")
 local keymaps = require("flemma.keymaps")
 local highlight = require("flemma.highlight")
+local provider_registry = require("flemma.provider.registry")
+local loader = require("flemma.loader")
+local config_manager = require("flemma.core.config.manager")
+local notifications = require("flemma.notifications")
+local tools = require("flemma.tools")
+local tools_presets = require("flemma.tools.presets")
+local tools_approval = require("flemma.tools.approval")
+local sandbox = require("flemma.sandbox")
 
 -- Module configuration (will hold merged user opts and defaults)
 local config = {}
@@ -55,11 +63,9 @@ M.setup = function(user_opts)
   log.info("setup(): Flemma starting...")
 
   -- Initialize provider registry with built-in providers
-  local provider_registry = require("flemma.provider.registry")
   provider_registry.setup()
 
   -- If provider is a module path, validate and register it
-  local loader = require("flemma.loader")
   if loader.is_module_path(config.provider) then
     loader.assert_exists(config.provider)
     provider_registry.register(config.provider)
@@ -84,7 +90,6 @@ M.setup = function(user_opts)
   local current_config = state.get_config()
   if resolved_preset then
     -- Merge preset parameters on top of config parameters (same pattern as switch_provider)
-    local config_manager = require("flemma.core.config.manager")
     local merged_params =
       config_manager.merge_parameters(current_config.parameters, resolved_preset.provider, resolved_preset.parameters)
     core.initialize_provider(current_config.provider, current_config.model, merged_params)
@@ -115,22 +120,21 @@ M.setup = function(user_opts)
   highlight.setup()
 
   -- Set up notifications
-  require("flemma.notifications").setup()
+  notifications.setup()
 
   -- Set up chat filetype handling
   ui.setup_chat_filetype_autocmds()
 
   -- Initialize tool registry with built-in tools
-  require("flemma.tools").setup()
+  tools.setup()
 
   -- Initialize tool approval presets (built-ins + user-defined)
-  require("flemma.tools.presets").setup(config.tools and config.tools.presets)
+  tools_presets.setup(config.tools and config.tools.presets)
 
   -- Initialize approval resolver chain from config
-  require("flemma.tools.approval").setup()
+  tools_approval.setup()
 
   -- Register built-in sandbox backends and validate availability
-  local sandbox = require("flemma.sandbox")
   sandbox.setup()
 
   -- Defer sandbox backend check until the user enters a .chat buffer.

@@ -3,6 +3,9 @@
 local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local sink = require("flemma.sink")
+local tools_module = require("flemma.tools")
+local provider_registry = require("flemma.provider.registry")
 
 ---@class flemma.provider.Anthropic : flemma.provider.Base
 local M = {}
@@ -47,7 +50,6 @@ function M.reset(self)
   -- base.reset auto-destroys sinks in extra via duck typing
   base.reset(self)
 
-  local sink = require("flemma.sink")
   self._response_buffer.extra.thinking_sink = sink.create({
     name = "anthropic/thinking",
   })
@@ -246,7 +248,6 @@ function M.build_request(self, prompt, _context)
   -- nil when "none"
 
   -- Build tools array from registry (filtered by per-buffer opts if present)
-  local tools_module = require("flemma.tools")
   local sorted_tools = tools_module.get_sorted_for_prompt(prompt.opts)
   local tools_array = {}
   for _, def in ipairs(sorted_tools) do
@@ -297,7 +298,7 @@ function M.build_request(self, prompt, _context)
   end
 
   -- Add thinking configuration using unified resolution
-  local model_info = require("flemma.provider.registry").get_model_info("anthropic", self.parameters.model)
+  local model_info = provider_registry.get_model_info("anthropic", self.parameters.model)
   local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
 
   if thinking.enabled then
@@ -453,7 +454,7 @@ function M._process_data(self, data, _parsed, callbacks)
 
     -- Reset accumulated state
     self._response_buffer.extra.thinking_sink:destroy()
-    self._response_buffer.extra.thinking_sink = require("flemma.sink").create({
+    self._response_buffer.extra.thinking_sink = sink.create({
       name = "anthropic/thinking",
     })
     self._response_buffer.extra.accumulated_signature = ""
@@ -497,7 +498,7 @@ function M._process_data(self, data, _parsed, callbacks)
           name = data.content_block.name,
         }
         self._response_buffer.extra.tool_input_sink:destroy()
-        self._response_buffer.extra.tool_input_sink = require("flemma.sink").create({
+        self._response_buffer.extra.tool_input_sink = sink.create({
           name = "anthropic/tool-input",
         })
         log.debug(
@@ -533,7 +534,7 @@ function M._process_data(self, data, _parsed, callbacks)
       -- Reset tool state
       self._response_buffer.extra.current_tool_use = nil
       self._response_buffer.extra.tool_input_sink:destroy()
-      self._response_buffer.extra.tool_input_sink = require("flemma.sink").create({
+      self._response_buffer.extra.tool_input_sink = sink.create({
         name = "anthropic/tool-input",
       })
     end

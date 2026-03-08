@@ -4,6 +4,9 @@ local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local models = require("flemma.models")
+local sink = require("flemma.sink")
+local tools_module = require("flemma.tools")
+local provider_registry = require("flemma.provider.registry")
 
 ---@class flemma.provider.OpenAI : flemma.provider.Base
 local M = {}
@@ -61,7 +64,6 @@ end
 function M.reset(self)
   base.reset(self)
 
-  local sink = require("flemma.sink")
   self._response_buffer.extra.tool_calls = {}
   self._response_buffer.extra.reasoning_sink = sink.create({
     name = "openai/reasoning",
@@ -271,7 +273,6 @@ function M.build_request(self, prompt, context)
   end
 
   -- Build tools array from registry (OpenAI format, filtered by per-buffer opts if present)
-  local tools_module = require("flemma.tools")
   local sorted_tools = tools_module.get_sorted_for_prompt(prompt.opts)
   local tools_array = {}
 
@@ -304,7 +305,7 @@ function M.build_request(self, prompt, context)
   end
 
   -- Add reasoning configuration using unified resolution
-  local model_info = require("flemma.provider.registry").get_model_info("openai", self.parameters.model)
+  local model_info = provider_registry.get_model_info("openai", self.parameters.model)
   local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
 
   if thinking.enabled and thinking.effort then
@@ -453,7 +454,7 @@ function M._process_data(self, data, _parsed, callbacks)
       )
     elseif data.item and data.item.type == "reasoning" then
       self._response_buffer.extra.reasoning_sink:destroy()
-      self._response_buffer.extra.reasoning_sink = require("flemma.sink").create({
+      self._response_buffer.extra.reasoning_sink = sink.create({
         name = "openai/reasoning",
       })
       log.debug("openai._process_data(): Reasoning item started")
