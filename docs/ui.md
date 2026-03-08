@@ -256,11 +256,32 @@ Which produces `claude-sonnet-4-5 (high)` when thinking is active, or just `clau
 
 Variables are lazy-evaluated — only variables referenced by the format string trigger data lookups.
 
+**Config state:**
+
 | Variable      | Example                 | Description                                    |
 | ------------- | ----------------------- | ---------------------------------------------- |
 | `#{model}`    | `claude-sonnet-4-6`     | Current model name                             |
 | `#{provider}` | `anthropic`             | Current provider name                          |
 | `#{thinking}` | `high`, `medium`, `low` | Thinking/reasoning level (empty when inactive) |
+
+**Session totals** (cumulative across all requests in this Neovim session):
+
+| Variable                   | Example | Description                   |
+| -------------------------- | ------- | ----------------------------- |
+| `#{session.cost}`          | `$1.23` | Total session cost            |
+| `#{session.requests}`      | `5`     | Number of completed requests  |
+| `#{session.tokens.input}`  | `15K`   | Total input tokens (compact)  |
+| `#{session.tokens.output}` | `2.5M`  | Total output tokens (compact) |
+
+**Last request:**
+
+| Variable                | Example | Description                              |
+| ----------------------- | ------- | ---------------------------------------- |
+| `#{last.cost}`          | `$0.38` | Cost of the most recent request          |
+| `#{last.tokens.input}`  | `100K`  | Input tokens of the most recent request  |
+| `#{last.tokens.output}` | `5K`    | Output tokens of the most recent request |
+
+All session/request variables return empty when no requests have been made, so they work naturally with conditionals.
 
 #### Syntax
 
@@ -290,6 +311,12 @@ format = '#{model}#{?#{thinking}, [#{thinking}],}'
 
 -- Provider-conditional label: "A: claude-sonnet-4-5" or "O: o3"
 format = '#{?#{==:#{provider},anthropic},A,O}: #{model}'
+
+-- Running session cost: "claude-sonnet-4-5 $1.23" or "claude-sonnet-4-5"
+format = '#{model}#{?#{session.cost}, #{session.cost},}'
+
+-- Full dashboard: "claude-sonnet-4-5 (high) $1.23 [5]"
+format = '#{model}#{?#{thinking}, (#{thinking}),}#{?#{session.cost}, #{session.cost},}#{?#{session.requests}, [#{session.requests}],}'
 ```
 
 The component only shows data in `chat` buffers and respects per-buffer overrides from `flemma.opt` – if frontmatter changes the thinking level, the statusline reflects it.

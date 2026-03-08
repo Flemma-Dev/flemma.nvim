@@ -30,6 +30,9 @@ describe("Lualine component", function()
     core = require("flemma.core")
     flemma.setup({})
 
+    -- Reset session to prevent leakage between tests
+    require("flemma.session").get():reset()
+
     -- Set up a chat buffer
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
@@ -222,6 +225,134 @@ describe("Lualine component", function()
 
       -- Assert
       assert.are.equal("A: claude-sonnet-4-5", status)
+    end)
+  end)
+
+  describe("session variables", function()
+    it("should display session cost when format includes #{session.cost}", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{model} #{?#{session.cost},#{session.cost},}"
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+
+      -- Add a request to the session
+      local s = require("flemma.session").get()
+      s:reset()
+      s:add_request({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 1000,
+        output_tokens = 500,
+        input_price = 3.0,
+        output_price = 15.0,
+      })
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert: cost = (1000/1M)*3 + (500/1M)*15 = 0.003 + 0.0075 = 0.0105 → $0.01
+      assert.are.equal("claude-sonnet-4-5 $0.01", status)
+    end)
+
+    it("should display request count", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{model} (#{session.requests})"
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+
+      local s = require("flemma.session").get()
+      s:reset()
+      s:add_request({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 3.0,
+        output_price = 15.0,
+      })
+      s:add_request({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 200,
+        output_tokens = 100,
+        input_price = 3.0,
+        output_price = 15.0,
+      })
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("claude-sonnet-4-5 (2)", status)
+    end)
+
+    it("should hide session variables when no requests exist", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{model}#{?#{session.cost}, #{session.cost},}"
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+
+      local s = require("flemma.session").get()
+      s:reset()
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert: cost is empty, conditional collapses
+      assert.are.equal("claude-sonnet-4-5", status)
+    end)
+
+    it("should format tokens compactly", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "↑#{session.tokens.input} ↓#{session.tokens.output}"
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+
+      local s = require("flemma.session").get()
+      s:reset()
+      s:add_request({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 15000,
+        output_tokens = 2000000,
+        input_price = 3.0,
+        output_price = 15.0,
+      })
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("↑15K ↓2M", status)
+    end)
+
+    it("should display last request cost", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{model} last:#{last.cost}"
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+
+      local s = require("flemma.session").get()
+      s:reset()
+      s:add_request({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 100000,
+        output_tokens = 5000,
+        input_price = 3.0,
+        output_price = 15.0,
+      })
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert: cost = (100000/1M)*3 + (5000/1M)*15 = 0.30 + 0.075 = 0.375
+      assert.are.equal("claude-sonnet-4-5 last:$0.38", status)
     end)
   end)
 
