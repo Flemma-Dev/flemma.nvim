@@ -1,4 +1,6 @@
-.PHONY: default changeset test lint check lint-inline-requires
+.PHONY: default changeset qa develop screencast
+
+VIMRUNTIME_PATH = $(shell dirname $(shell dirname $(shell readlink -f $(shell which nvim))))/share/nvim/runtime
 
 default:
 	@echo "Usage: make [$(shell cat ${MAKEFILE_LIST} | grep -E '^[a-zA-Z_-]+:' | sed 's/:.*//g' | grep -v '^default' | tr '\n' '|' | sed 's/|$$//')]"
@@ -8,26 +10,55 @@ default:
 changeset:
 	pnpm changeset
 
-# Run the test suite
-test:
-	nvim --headless --noplugin -u tests/minimal.vim -c "PlenaryBustedDirectory tests/flemma/ {minimal_init = 'tests/minimal_init.lua'}"
+# Run all quality gates — silent on success, shows only failures
+qa:
+	@failed=""; \
+	luacheck lua/ tests/ >/dev/null 2>&1 \
+		|| failed="$$failed luacheck"; \
+	VIMRUNTIME=$(VIMRUNTIME_PATH) \
+		lua-language-server --check lua/ --configpath ../.luarc-check.lua >/dev/null 2>&1 \
+		|| failed="$$failed types"; \
+	bash scripts/lint-inline-requires.sh >/dev/null 2>&1 \
+		|| failed="$$failed imports"; \
+	nvim --headless --noplugin -u tests/minimal.vim \
+		-c "PlenaryBustedDirectory tests/flemma/ {minimal_init = 'tests/minimal_init.lua'}" \
+		>/dev/null 2>&1 \
+		|| failed="$$failed test"; \
+	if [ -z "$$failed" ]; then \
+		echo "qa: OK"; \
+	else \
+		echo "qa: FAILED —$$failed"; \
+		echo ""; \
+		for gate in $$failed; do \
+			case $$gate in \
+				luacheck) \
+					echo "--- luacheck ---"; \
+					luacheck lua/ tests/; \
+					echo "" ;; \
+				types) \
+					echo "--- types ---"; \
+					VIMRUNTIME=$(VIMRUNTIME_PATH) \
+						lua-language-server --check lua/ --configpath ../.luarc-check.lua; \
+					echo "" ;; \
+				imports) \
+					echo "--- imports ---"; \
+					bash scripts/lint-inline-requires.sh; \
+					echo "" ;; \
+				test) \
+					echo "--- test ---"; \
+					nvim --headless --noplugin -u tests/minimal.vim \
+						-c "PlenaryBustedDirectory tests/flemma/ {minimal_init = 'tests/minimal_init.lua'}" \
+						2>&1 \
+						| grep -vE '^.....(Success|Failed|Errors)' \
+						| grep -v '^Scheduling' \
+						| grep -v '^Flemma: Switched to' \
+						| grep -v '^===='; \
+					echo "" ;; \
+			esac; \
+		done; \
+		exit 1; \
+	fi
 
-# Run luacheck on the Lua files
-lint:
-	luacheck lua/ tests/
-
-# Run lua-language-server type checker on production code
-check:
-	@# VIMRUNTIME must be set so .luarc-check.lua can locate the Neovim runtime Lua stubs.
-	@# On NixOS, `nvim` might be symlinked to a store path, so we resolve it with `readlink -f`.
-	VIMRUNTIME=$(shell dirname $(shell dirname $(shell readlink -f $(shell which nvim))))/share/nvim/runtime \
-		lua-language-server --check lua/ --configpath ../.luarc-check.lua
-
-# Check that all require("flemma.*") calls are at the top of each file
-lint-inline-requires:
-	@bash scripts/lint-inline-requires.sh
-
-.PHONY: develop
 # Launch Flemma.nvim from local directory
 develop:
 	@-rm ~/.cache/nvim/flemma.log

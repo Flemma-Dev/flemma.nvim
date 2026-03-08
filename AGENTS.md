@@ -94,12 +94,9 @@ All tool IDs and metadata are embedded in buffer text so `.chat` files are porta
 
 ## Build, Test, and Development Commands
 
-- **`make test`** — run the full Plenary+Busted test suite. Use `make test >/dev/null 2>&1` mid-session to check exit codes without flooding the transcript. To see just the failure details, use: `make test 2>&1 | grep -vE '^.....(Success|Failed|Errors)' | grep -v '^Scheduling' | grep -v '^Flemma: Switched to' | grep -v '^===='`
-- **`make lint`** — run `luacheck` on `lua/` and `tests/`.
-- **`make check`** — run `lua-language-server --check` on production code.
+- **`make qa`** — run all quality gates (luacheck, types, imports, test). Silent on success; on failure, re-runs only the failed gate(s) with visible output. This is the single command to run before committing.
 - **`make changeset`** — interactive changeset creation (for human use; agents write changeset files directly).
 - **`make develop`** — launch Flemma from the working directory for manual testing.
-- All three quality gates (`test`, `lint`, `check`) must pass before committing.
 - `flemma-fmt` reformats the entire codebase.
 
 ## Testing Guidelines
@@ -199,5 +196,5 @@ When you resolve a non-obvious issue — something that required real investigat
 ## Session Closure Checklist
 
 - Run `flemma-fmt` to reformat the entire codebase.
-- Run all three quality gates and confirm they pass: `make test` (no redirection — verify exit code 0), `make lint`, `make check`.
+- Run `make qa` and confirm it passes.
 - Note outstanding follow-ups, failing tests, or context the next agent will need to resume work.
