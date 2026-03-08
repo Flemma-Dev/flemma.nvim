@@ -10,6 +10,16 @@ local state = require("flemma.state")
 local log = require("flemma.logging")
 local roles = require("flemma.utilities.roles")
 
+local autopilot = require("flemma.autopilot")
+local callbacks = require("flemma.core.callbacks")
+local context_module = require("flemma.context")
+local parser = require("flemma.parser")
+local sandbox_module = require("flemma.sandbox")
+local tool_context = require("flemma.tools.context")
+local truncate_module = require("flemma.utilities.truncate")
+local ui = require("flemma.ui")
+local writequeue = require("flemma.buffer.writequeue")
+
 ---@class flemma.tools.PendingExecution
 ---@field tool_id string
 ---@field tool_name string
@@ -56,7 +66,7 @@ local function maybe_unlock_buffer(bufnr)
   if count_pending(bufnr) == 0 then
     state.unlock_buffer(bufnr)
     -- Notify autopilot that all tool executions have completed
-    require("flemma.autopilot").on_tools_complete(bufnr)
+    autopilot.on_tools_complete(bufnr)
   end
 end
 
@@ -82,7 +92,6 @@ end
 ---@param tool_id string
 ---@param mode string "result" or "next"
 local function move_cursor_after_result(bufnr, tool_id, mode)
-  local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
 
   local target_line = nil
@@ -137,14 +146,13 @@ local function do_completion(bufnr, tool_id, result, opts)
   end
 
   -- Inject result into buffer
-  local ui = require("flemma.ui")
   local ok, err = injector.inject_result(bufnr, tool_id, result)
   if not ok then
     log.error("executor: Failed to inject result for " .. tool_id .. ": " .. (err or "unknown"))
   end
 
   -- Move cursor based on config (skip when autopilot is armed — it owns cursor positioning)
-  if ok and require("flemma.autopilot").get_state(bufnr) ~= "armed" then
+  if ok and autopilot.get_state(bufnr) ~= "armed" then
     local config = state.get_config()
     local cursor_mode = config.tools and config.tools.cursor_after_result or "result"
     if cursor_mode ~= "stay" then
@@ -193,7 +201,6 @@ local function handle_completion(bufnr, tool_id, result, opts)
   entry.completed = true
 
   if opts.async then
-    local writequeue = require("flemma.buffer.writequeue")
     writequeue.schedule(bufnr, function()
       do_completion(bufnr, tool_id, result, { async = true })
     end)
@@ -252,7 +259,6 @@ function M.build_execution_context(params)
   return setmetatable(context, {
     __index = function(self, key)
       if key == "sandbox" then
-        local sandbox_module = require("flemma.sandbox")
         ---@type flemma.tools.SandboxContext
         local sandbox_namespace = {
           is_path_writable = function(path)
@@ -265,7 +271,6 @@ function M.build_execution_context(params)
         rawset(self, "sandbox", sandbox_namespace)
         return sandbox_namespace
       elseif key == "truncate" then
-        local truncate_module = require("flemma.utilities.truncate")
         rawset(self, "truncate", truncate_module)
         return truncate_module
       elseif key == "path" then
@@ -354,7 +359,6 @@ function M.execute(bufnr, context, frontmatter_opts)
   pending[tool_id].placeholder_modified = (placeholder_opts and placeholder_opts.modified) or false
 
   -- Show execution indicator
-  local ui = require("flemma.ui")
   local config = state.get_config()
   if not config.tools or config.tools.show_spinner ~= false then
     ui.show_tool_indicator(bufnr, tool_id, header_line)
@@ -368,7 +372,7 @@ function M.execute(bufnr, context, frontmatter_opts)
   ui.update_ui(bufnr)
 
   -- Build execution context for tools that need buffer/sandbox info
-  local buffer_context = require("flemma.context").from_buffer(bufnr)
+  local buffer_context = context_module.from_buffer(bufnr)
   local dirname = buffer_context:get_dirname()
 
   -- Resolve cwd: config value may contain $FLEMMA_BUFFER_PATH pseudo-variable
@@ -490,7 +494,7 @@ function M.cancel_all(bufnr)
   end
 
   -- Disarm autopilot after cancelling all tools
-  require("flemma.autopilot").disarm(bufnr)
+  autopilot.disarm(bufnr)
 end
 
 ---Get pending executions for a buffer
@@ -518,7 +522,7 @@ end
 function M.cancel_for_buffer(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
   if buffer_state.current_request then
-    require("flemma.core").cancel_request()
+    callbacks.cancel_request()
     return true
   end
   local pending = M.get_pending(bufnr)
@@ -526,7 +530,7 @@ function M.cancel_for_buffer(bufnr)
     table.sort(pending, function(a, b)
       return a.started_at < b.started_at
     end)
-    require("flemma.autopilot").disarm(bufnr)
+    autopilot.disarm(bufnr)
     M.cancel(pending[1].tool_id)
     return true
   end
@@ -537,9 +541,7 @@ end
 ---@param bufnr integer
 ---@return boolean cancelled
 function M.cancel_at_cursor(bufnr)
-  local autopilot = require("flemma.autopilot")
   local cursor = vim.api.nvim_win_get_cursor(0)
-  local tool_context = require("flemma.tools.context")
   local ctx, _ = tool_context.resolve(bufnr, { row = cursor[1], col = cursor[2] })
   if ctx then
     autopilot.disarm(bufnr)
@@ -563,14 +565,12 @@ end
 ---@return string|nil error
 function M.execute_at_cursor(bufnr)
   local cursor = vim.api.nvim_win_get_cursor(0)
-  local tool_context = require("flemma.tools.context")
   local ctx, err = tool_context.resolve(bufnr, { row = cursor[1], col = cursor[2] })
   if not ctx then
     return false, err or "No tool call found"
   end
 
   -- Check if matching tool_result has a status that prevents execution
-  local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
   for _, msg in ipairs(doc.messages) do
     if roles.is_user(msg.role) then
@@ -584,7 +584,6 @@ function M.execute_at_cursor(bufnr)
             })
             -- Re-arm autopilot if it was paused (same logic as the pending/approved
             -- path below) so that on_tools_complete can resume the loop.
-            local autopilot = require("flemma.autopilot")
             if autopilot.get_state(bufnr) == "paused" then
               autopilot.arm(bufnr)
             end
@@ -592,7 +591,7 @@ function M.execute_at_cursor(bufnr)
             -- Notify autopilot so it can resume the loop
             vim.schedule(function()
               if vim.api.nvim_buf_is_valid(bufnr) then
-                require("flemma.autopilot").on_tools_complete(bufnr)
+                autopilot.on_tools_complete(bufnr)
               end
             end)
             return true, nil
@@ -605,7 +604,6 @@ function M.execute_at_cursor(bufnr)
   -- Re-arm autopilot only if it was paused (i.e., actively in a loop that
   -- stopped on this pending tool). Don't arm from idle — the user may be
   -- manually executing tools without an autopilot loop running.
-  local autopilot = require("flemma.autopilot")
   if autopilot.get_state(bufnr) == "paused" then
     autopilot.arm(bufnr)
   end
@@ -627,5 +625,10 @@ function M.cleanup_buffer(bufnr)
   end
   buffer_state.pending_executions = nil
 end
+
+-- Register cleanup hook with state (breaks circular dependency: state cannot require executor)
+state.register_cleanup("executor", function(bufnr)
+  M.cleanup_buffer(bufnr)
+end)
 
 return M
