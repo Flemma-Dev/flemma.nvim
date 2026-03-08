@@ -45,6 +45,7 @@ local M = {}
 ---@field execute? fun(input: table<string, any>, context: flemma.tools.ExecutionContext, callback?: fun(result: flemma.tools.ExecutionResult)): any Executor function (sync returns ExecutionResult, async returns cancel fn or nil)
 ---@field capabilities? string[] Declarative capability tags (e.g., "can_auto_approve_if_sandboxed") queried by resolvers and policies
 ---@field format_preview? fun(input: table<string, any>, max_length: integer): string Custom preview body generator (receives input and available width after "name: " prefix)
+---@field personalities? table<string, table<string, string|string[]>> Personality-scoped parts keyed by personality name, then by part name
 
 ---@class flemma.tools.ExecutionResult
 ---@field success boolean Whether execution succeeded
