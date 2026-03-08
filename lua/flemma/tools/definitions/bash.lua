@@ -43,6 +43,15 @@ M.definitions = {
       required = { "label", "command", "timeout" },
       additionalProperties = false,
     },
+    personalities = {
+      ["coding-assistant"] = {
+        snippet = "Execute shell commands in the user's project directory",
+        guidelines = {
+          "Prefer dedicated tools (read, edit, write) over bash for file operations",
+          "Never run destructive commands (rm -rf, git reset --hard) without user confirmation",
+        },
+      },
+    },
     async = true,
     format_preview = function(input)
       local parts = { "$ " .. input.command }

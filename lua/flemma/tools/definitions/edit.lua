@@ -36,6 +36,15 @@ M.definitions = {
       required = { "label", "path", "oldText", "newText" },
       additionalProperties = false,
     },
+    personalities = {
+      ["coding-assistant"] = {
+        snippet = "Make surgical edits to files (find exact text and replace)",
+        guidelines = {
+          "Use edit for precise, targeted changes — old text must match exactly",
+          "Use write only for new files or complete rewrites, not for modifications",
+        },
+      },
+    },
     async = false,
     format_preview = function(input)
       local parts = { input.path }

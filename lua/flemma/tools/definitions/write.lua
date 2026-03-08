@@ -34,6 +34,14 @@ M.definitions = {
       required = { "label", "path", "content" },
       additionalProperties = false,
     },
+    personalities = {
+      ["coding-assistant"] = {
+        snippet = "Create new files or completely overwrite existing ones",
+        guidelines = {
+          "Prefer edit over write for modifying existing files",
+        },
+      },
+    },
     async = false,
     format_preview = function(input)
       local parts = { input.path, "(" .. str.format_size(#input.content) .. ")" }

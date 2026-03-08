@@ -43,6 +43,14 @@ M.definitions = {
       required = { "label", "path", "offset", "limit" },
       additionalProperties = false,
     },
+    personalities = {
+      ["coding-assistant"] = {
+        snippet = "Read file contents with optional offset and line limit",
+        guidelines = {
+          "Use read to examine files before editing",
+        },
+      },
+    },
     async = false,
     format_preview = function(input)
       local parts = { input.path }
