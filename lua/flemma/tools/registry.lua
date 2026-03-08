@@ -51,6 +51,8 @@ local M = {}
 ---@field output? string|table Result output (string or JSON-encodable table)
 ---@field error? string Error message (when success=false)
 
+local registry_utils = require("flemma.registry")
+
 ---@type table<string, flemma.tools.ToolDefinition>
 local tools = {}
 
@@ -58,7 +60,6 @@ local tools = {}
 ---@param name string The tool name
 ---@param definition flemma.tools.ToolDefinition The tool definition
 function M.register(name, definition)
-  local registry_utils = require("flemma.registry")
   registry_utils.validate_name(name, "tool")
   if tools[name] and tools[name] ~= definition then
     vim.notify(

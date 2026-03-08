@@ -6,8 +6,10 @@
 ---@class flemma.tools.Approval
 local M = {}
 
-local state = require("flemma.state")
+local loader = require("flemma.loader")
 local log = require("flemma.logging")
+local registry_utils = require("flemma.registry")
+local state = require("flemma.state")
 
 ---@alias flemma.tools.ApprovalResult "approve"|"require_approval"|"deny"
 
@@ -76,7 +78,6 @@ end
 ---@param name string Unique resolver name
 ---@param definition flemma.tools.ApprovalResolverDefinition
 function M.register(name, definition)
-  local registry_utils = require("flemma.registry")
   registry_utils.validate_name(name, "approval resolver")
   register_entry(name, definition)
 end
@@ -242,7 +243,6 @@ end
 ---@param module_path string Dot-notation Lua module path
 ---@return fun(tool_name: string, input: table, context: flemma.config.AutoApproveContext): flemma.tools.ApprovalResult|nil
 local function build_module_resolver(module_path)
-  local loader = require("flemma.loader")
   loader.assert_exists(module_path)
   ---@type { resolve: fun(tool_name: string, input: table, context: flemma.config.AutoApproveContext): flemma.tools.ApprovalResult|nil }|nil
   local loaded_resolver = nil
@@ -275,7 +275,6 @@ function M.setup()
 
   local auto_approve = tools_config and tools_config.auto_approve
   if auto_approve ~= nil then
-    local loader = require("flemma.loader")
     if type(auto_approve) == "string" and loader.is_module_path(auto_approve) then
       -- Single module path: validate now, load lazily on first resolve
       -- Registered under the module path so users can get()/unregister() by path
