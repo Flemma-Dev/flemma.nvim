@@ -47,7 +47,11 @@ end
 ---@param opts flemma.opt.FrontmatterOpts|nil
 ---@return { merged: table<string, any>, frontmatter_overrides: table<string, any>|nil, resolved_max_tokens: integer|nil }
 local function collect_parameters(config, opts)
-  local base_merged = config_manager.merge_parameters(config.parameters or {}, config.provider)
+  -- Use the provider instance's actual parameters when available (includes switch overrides).
+  -- Fall back to re-deriving from global config when no provider is initialized.
+  local provider_instance = state.get_provider()
+  local base_merged = provider_instance and provider_instance._base_parameters
+    or config_manager.merge_parameters(config.parameters or {}, config.provider)
 
   -- Resolve max_tokens on a copy to show the resolved integer alongside the original
   local resolved_max_tokens = nil
@@ -58,19 +62,29 @@ local function collect_parameters(config, opts)
   end
 
   -- If we have frontmatter opts with parameter overrides, compute the diff
+  -- by overlaying frontmatter values on top of base_merged (not the global config)
+  -- so switch overrides don't produce spurious diffs.
   local frontmatter_overrides = nil
   if opts then
-    -- Build provider overrides from opts (same logic the pipeline uses)
-    local provider_overrides = opts[config.provider]
-    local effective_params = config.parameters or {}
-
-    -- If frontmatter has general parameters, merge them into the base
-    if opts.parameters then
-      effective_params = vim.tbl_deep_extend("force", effective_params, opts.parameters)
+    local merged_with_frontmatter = {}
+    for k, v in pairs(base_merged) do
+      merged_with_frontmatter[k] = v
     end
 
-    local merged_with_frontmatter =
-      config_manager.merge_parameters(effective_params, config.provider, provider_overrides)
+    -- Apply general frontmatter parameter overrides
+    if opts.parameters then
+      for k, v in pairs(opts.parameters) do
+        merged_with_frontmatter[k] = v
+      end
+    end
+
+    -- Apply provider-specific frontmatter overrides
+    local provider_overrides = opts[config.provider]
+    if type(provider_overrides) == "table" then
+      for k, v in pairs(provider_overrides) do
+        merged_with_frontmatter[k] = v
+      end
+    end
 
     -- Diff the two to find overridden keys
     local overrides = {}

@@ -124,6 +124,7 @@ local sink = require("flemma.sink")
 ---@field metadata? flemma.provider.Metadata
 ---@field _response_buffer? flemma.provider.ResponseBuffer
 ---@field _response_headers? table<string, string[]>
+---@field _base_parameters table<string, any> Underlying parameter table (without per-request overrides), for iteration
 ---@field set_parameter_overrides fun(self, overrides: table<string, any>|nil)
 local M = {}
 
@@ -254,6 +255,7 @@ function M.new(opts)
 
   local provider = setmetatable({
     parameters = params_proxy,
+    _base_parameters = base_params,
     state = {
       api_key = nil,
     },
