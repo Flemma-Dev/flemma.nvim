@@ -8,6 +8,7 @@ local registry = require("flemma.provider.registry")
 local format = require("flemma.utilities.format")
 local session = require("flemma.session")
 local str = require("flemma.utilities.string")
+local tools = require("flemma.tools")
 
 --- Default format: model name, with thinking level in parens when active.
 local DEFAULT_FORMAT = "#{model}#{?#{thinking}, (#{thinking}),}"
@@ -57,6 +58,11 @@ end
 ---@return table<string, fun(): string>
 local function make_resolvers(config)
   return {
+    -- Boot state
+    booting = function()
+      return tools.is_ready() and "" or "1"
+    end,
+
     -- Identity
     model = function()
       return config.model or ""

@@ -356,6 +356,47 @@ describe("Lualine component", function()
     end)
   end)
 
+  describe("booting variable", function()
+    it("should be truthy while async tool sources are pending", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{?#{booting},booting,ready}"
+
+      local tools = require("flemma.tools")
+      tools.clear()
+      local captured_done
+      tools.register_async(function(_register, done)
+        captured_done = done
+      end)
+
+      -- Act
+      local status_text = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("booting", status_text)
+
+      -- Cleanup: resolve the async source
+      captured_done()
+    end)
+
+    it("should be falsy once all async tool sources resolve", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{?#{booting},booting,ready}"
+
+      local tools = require("flemma.tools")
+      tools.clear()
+
+      -- Act (no pending async sources)
+      local status_text = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("ready", status_text)
+    end)
+  end)
+
   describe("frontmatter overrides", function()
     local state = require("flemma.state")
 
