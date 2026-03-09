@@ -85,52 +85,53 @@ function M.find_segment_at_position(doc, lnum, col)
   for _, msg in ipairs(doc.messages) do
     local msg_start = msg.position.start_line
     local msg_end = msg.position.end_line or msg_start
-    if lnum < msg_start or lnum > msg_end then
-      goto continue_msg
-    end
 
-    ---@type flemma.ast.Segment|nil
-    local fallback_seg = nil
+    if lnum >= msg_start and lnum <= msg_end then
+      ---@type flemma.ast.Segment|nil
+      local fallback_seg = nil
+      for _, seg in ipairs(msg.segments) do
+        if not seg.position then
+          goto continue_seg
+        end
 
-    for _, seg in ipairs(msg.segments) do
-      if not seg.position then
-        goto continue_seg
-      end
+        local seg_start = seg.position.start_line
+        local seg_end = seg.position.end_line or seg_start
 
-      local seg_start = seg.position.start_line
-      local seg_end = seg.position.end_line or seg_start
+        if lnum < seg_start or lnum > seg_end then
+          goto continue_seg
+        end
 
-      if lnum < seg_start or lnum > seg_end then
-        goto continue_seg
-      end
+        -- Line matches. Refine with column if available.
+        if lnum == seg_start and seg.position.start_col and seg.position.end_col then
+          if col >= seg.position.start_col and col <= seg.position.end_col then
+            return seg, msg
+          end
+          goto continue_seg
+        end
 
-      -- Line matches. Refine with column if available.
-      if lnum == seg_start and seg.position.start_col and seg.position.end_col then
-        if col >= seg.position.start_col and col <= seg.position.end_col then
+        -- Multi-line hit beyond first line — definite match
+        if lnum > seg_start then
           return seg, msg
         end
-        goto continue_seg
+
+        -- Single-line segment without column info — save as fallback
+        -- so column-aware segments on the same line get a chance to match first
+        if not seg.position.start_col then
+          fallback_seg = seg
+        end
+
+        ::continue_seg::
       end
 
-      -- Multi-line hit beyond first line — definite match
-      if lnum > seg_start then
-        return seg, msg
+      -- Return fallback if no column-specific match found
+      if fallback_seg then
+        return fallback_seg, msg
       end
 
-      -- Single-line segment without column info — save as fallback
-      if not fallback_seg then
-        fallback_seg = seg
-      end
-
-      ::continue_seg::
+      -- Cursor is within the message range but no segment matched
+      -- (e.g., on the @Role: marker line). Return the message itself.
+      return nil, msg
     end
-
-    -- Return fallback if no column-specific match found
-    if fallback_seg then
-      return fallback_seg, msg
-    end
-
-    ::continue_msg::
   end
   return nil, nil
 end

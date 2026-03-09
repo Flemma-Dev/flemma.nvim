@@ -88,6 +88,74 @@ local function segment_to_markdown(seg, msg)
   return table.concat(lines, "\n")
 end
 
+---Serialize a message node (role marker) to a markdown hover string.
+---@param msg flemma.ast.MessageNode
+---@return string markdown
+local function message_to_markdown(msg)
+  local lines = {}
+  table.insert(lines, "### MessageNode")
+  table.insert(lines, "")
+  table.insert(lines, "**Role:** " .. msg.role)
+  table.insert(lines, "**Segments:** " .. #msg.segments)
+
+  -- Summarize segment kinds
+  local kind_counts = {} ---@type table<string, integer>
+  for _, seg in ipairs(msg.segments) do
+    kind_counts[seg.kind] = (kind_counts[seg.kind] or 0) + 1
+  end
+  local summary_parts = {}
+  for kind, count in pairs(kind_counts) do
+    table.insert(summary_parts, kind .. "=" .. count)
+  end
+  table.sort(summary_parts)
+  if #summary_parts > 0 then
+    table.insert(lines, "**Breakdown:** " .. table.concat(summary_parts, ", "))
+  end
+
+  if msg.position then
+    table.insert(lines, "")
+    table.insert(lines, "**Position:** L" .. msg.position.start_line .. " \u{2192} L" .. (msg.position.end_line or msg.position.start_line))
+  end
+
+  return table.concat(lines, "\n")
+end
+
+---Serialize a frontmatter node to a markdown hover string.
+---@param fm flemma.ast.FrontmatterNode
+---@return string markdown
+local function frontmatter_to_markdown(fm)
+  local lines = {}
+  table.insert(lines, "### FrontmatterNode")
+  table.insert(lines, "")
+  table.insert(lines, "**Language:** " .. fm.language)
+  table.insert(lines, "**Length:** " .. #fm.code .. " bytes")
+
+  if fm.position then
+    table.insert(lines, "")
+    table.insert(lines, "**Position:** L" .. fm.position.start_line .. " \u{2192} L" .. (fm.position.end_line or fm.position.start_line))
+  end
+
+  table.insert(lines, "")
+  table.insert(lines, "**Code:**")
+  table.insert(lines, "```" .. fm.language)
+  table.insert(lines, fm.code)
+  table.insert(lines, "```")
+
+  return table.concat(lines, "\n")
+end
+
+---Build an LSP Hover response from a markdown string.
+---@param markdown string
+---@return table result LSP Hover response
+local function hover_response(markdown)
+  return {
+    contents = {
+      kind = "markdown",
+      value = markdown,
+    },
+  }
+end
+
 ---Handle a textDocument/hover request.
 ---@param params table LSP HoverParams
 ---@return table|nil result LSP Hover response or nil
@@ -121,42 +189,53 @@ local function handle_hover(params)
 
   local seg, msg = ast.find_segment_at_position(doc, lnum, col)
 
-  if not seg or not msg then
-    log.debug("lsp hover: no segment found at L" .. lnum .. ":C" .. col .. " in buffer " .. bufnr)
-    return nil
+  if seg and msg then
+    -- Build a concise segment identity for the log
+    local seg_detail = seg.kind
+    if seg.kind == "expression" then
+      ---@cast seg flemma.ast.ExpressionSegment
+      seg_detail = seg_detail .. " code=" .. seg.code:sub(1, 40)
+    elseif seg.kind == "tool_use" then
+      ---@cast seg flemma.ast.ToolUseSegment
+      seg_detail = seg_detail .. " name=" .. seg.name .. " id=" .. seg.id
+    elseif seg.kind == "tool_result" then
+      ---@cast seg flemma.ast.ToolResultSegment
+      seg_detail = seg_detail .. " tool_use_id=" .. seg.tool_use_id .. " error=" .. tostring(seg.is_error)
+    elseif seg.kind == "thinking" then
+      ---@cast seg flemma.ast.ThinkingSegment
+      seg_detail = seg_detail .. " len=" .. #seg.content .. " redacted=" .. tostring(seg.redacted or false)
+    elseif seg.kind == "text" then
+      ---@cast seg flemma.ast.TextSegment
+      seg_detail = seg_detail .. " len=" .. #seg.value
+    end
+
+    log.debug("lsp hover: matched " .. seg_detail .. " in @" .. msg.role .. " message")
+
+    local markdown = segment_to_markdown(seg, msg)
+    log.trace("lsp hover: response markdown (" .. #markdown .. " bytes):\n" .. markdown)
+    return hover_response(markdown)
   end
 
-  -- Build a concise segment identity for the log
-  local seg_detail = seg.kind
-  if seg.kind == "expression" then
-    ---@cast seg flemma.ast.ExpressionSegment
-    seg_detail = seg_detail .. " code=" .. seg.code:sub(1, 40)
-  elseif seg.kind == "tool_use" then
-    ---@cast seg flemma.ast.ToolUseSegment
-    seg_detail = seg_detail .. " name=" .. seg.name .. " id=" .. seg.id
-  elseif seg.kind == "tool_result" then
-    ---@cast seg flemma.ast.ToolResultSegment
-    seg_detail = seg_detail .. " tool_use_id=" .. seg.tool_use_id .. " error=" .. tostring(seg.is_error)
-  elseif seg.kind == "thinking" then
-    ---@cast seg flemma.ast.ThinkingSegment
-    seg_detail = seg_detail .. " len=" .. #seg.content .. " redacted=" .. tostring(seg.redacted or false)
-  elseif seg.kind == "text" then
-    ---@cast seg flemma.ast.TextSegment
-    seg_detail = seg_detail .. " len=" .. #seg.value
+  -- No segment but within a message (e.g., role marker line)
+  if msg then
+    log.debug("lsp hover: role marker for @" .. msg.role .. " at L" .. lnum)
+    return hover_response(message_to_markdown(msg))
   end
 
-  log.debug("lsp hover: matched " .. seg_detail .. " in @" .. msg.role .. " message")
+  -- Check frontmatter
+  local fm = doc.frontmatter
+  if fm and fm.position then
+    ---@cast fm flemma.ast.FrontmatterNode
+    local pos = fm.position --[[@as flemma.ast.Position]]
+    local fm_end = pos.end_line or pos.start_line
+    if lnum >= pos.start_line and lnum <= fm_end then
+      log.debug("lsp hover: frontmatter (" .. fm.language .. ") at L" .. lnum)
+      return hover_response(frontmatter_to_markdown(fm))
+    end
+  end
 
-  local markdown = segment_to_markdown(seg, msg)
-
-  log.trace("lsp hover: response markdown (" .. #markdown .. " bytes):\n" .. markdown)
-
-  return {
-    contents = {
-      kind = "markdown",
-      value = markdown,
-    },
-  }
+  log.debug("lsp hover: no node at L" .. lnum .. ":C" .. col .. " in buffer " .. bufnr)
+  return nil
 end
 
 ---Create the in-process LSP server dispatch table.

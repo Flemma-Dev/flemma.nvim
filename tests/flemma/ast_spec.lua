@@ -376,6 +376,17 @@ describe("find_segment_at_position", function()
     assert.equals("Assistant", msg.role)
   end)
 
+  it("returns message without segment on role marker line", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Hello world",
+    })
+    local seg, msg = ast.find_segment_at_position(doc, 1, 1)
+    assert.is_nil(seg)
+    assert.is_not_nil(msg)
+    assert.equals("You", msg.role)
+  end)
+
   it("distinguishes adjacent expressions on same line", function()
     local doc = parser.parse_lines({
       "@You:",

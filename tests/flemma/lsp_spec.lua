@@ -151,4 +151,34 @@ describe("Flemma LSP", function()
     assert.is_truthy(result.contents.value:find("bash"))
     assert.is_truthy(result.contents.value:find("call_abc123"))
   end)
+
+  it("returns hover for role marker line", function()
+    local bufnr, client = setup_chat_buffer({
+      "@You:",
+      "Hello world",
+    })
+
+    local result = hover_sync(client, bufnr, 0, 0) -- 0-indexed, on "@You:" line
+    assert.is_not_nil(result, "Expected hover result on role marker")
+    assert.equals("markdown", result.contents.kind)
+    assert.is_truthy(result.contents.value:find("MessageNode"))
+    assert.is_truthy(result.contents.value:find("You"))
+    assert.is_truthy(result.contents.value:find("Segments"))
+  end)
+
+  it("returns hover for frontmatter", function()
+    local bufnr, client = setup_chat_buffer({
+      "```yaml",
+      "model: claude-3",
+      "```",
+      "@You:",
+      "Hello",
+    })
+
+    local result = hover_sync(client, bufnr, 1, 0) -- 0-indexed, inside frontmatter
+    assert.is_not_nil(result, "Expected hover result on frontmatter")
+    assert.equals("markdown", result.contents.kind)
+    assert.is_truthy(result.contents.value:find("FrontmatterNode"))
+    assert.is_truthy(result.contents.value:find("yaml"))
+  end)
 end)
