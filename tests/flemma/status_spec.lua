@@ -105,6 +105,44 @@ describe("flemma.status", function()
       assert.is_false(data.buffer.is_chat)
     end)
 
+    it("includes booting state when async tool sources are pending", function()
+      local state = require("flemma.state")
+      ---@diagnostic disable-next-line: missing-fields
+      state.set_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local tools = require("flemma.tools")
+      tools.clear()
+      local captured_done
+      tools.register_async(function(_register, done)
+        captured_done = done
+      end)
+
+      local data = status.collect(0)
+      assert.is_true(data.tools.booting)
+
+      -- Cleanup
+      captured_done()
+    end)
+
+    it("reports booting as false when all tool sources are ready", function()
+      local state = require("flemma.state")
+      ---@diagnostic disable-next-line: missing-fields
+      state.set_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect(0)
+      assert.is_false(data.tools.booting)
+    end)
+
     it("reports autopilot state", function()
       local state = require("flemma.state")
       ---@diagnostic disable-next-line: missing-fields
