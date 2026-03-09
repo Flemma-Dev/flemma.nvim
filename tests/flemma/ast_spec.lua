@@ -125,6 +125,53 @@ describe("Parser", function()
     assert.equals("!", trailing.value)
   end)
 
+  it("does not treat role markers inside fenced code blocks as message boundaries", function()
+    local lines = {
+      "@You:",
+      "Here is how you use Flemma:",
+      "",
+      "```",
+      "@You:",
+      "Hello!",
+      "```",
+    }
+    local doc = parser.parse_lines(lines)
+    assert.equals(1, #doc.messages, "Should parse as a single message, not split on @You: inside fence")
+    assert.equals("You", doc.messages[1].role)
+  end)
+
+  it("handles nested fences with role markers inside inner fence", function()
+    local lines = {
+      "@You:",
+      "Outer content",
+      "",
+      "````",
+      "```",
+      "@Assistant:",
+      "```",
+      "````",
+    }
+    local doc = parser.parse_lines(lines)
+    assert.equals(1, #doc.messages, "Should parse as single message; inner ``` does not close ````")
+    assert.equals("You", doc.messages[1].role)
+  end)
+
+  it("resumes normal parsing after a fenced code block closes", function()
+    local lines = {
+      "@You:",
+      "Before fence",
+      "```",
+      "@Assistant:",
+      "```",
+      "@Assistant:",
+      "After fence",
+    }
+    local doc = parser.parse_lines(lines)
+    assert.equals(2, #doc.messages, "Should find two messages: fence-protected @Assistant: and real @Assistant:")
+    assert.equals("You", doc.messages[1].role)
+    assert.equals("Assistant", doc.messages[2].role)
+  end)
+
   it("parses thinking tags in Assistant messages", function()
     local lines = {
       "@Assistant:",

@@ -512,11 +512,28 @@ local function parse_message(lines, start_idx, line_offset, diagnostics)
   local content_lines = {}
 
   local i = start_idx + 1
+  local active_fence_length = 0 -- 0 = not inside a fence; >0 = min backticks needed to close
   while i <= #lines do
     local next_line = lines[i]
-    if next_line:match("^@[%w]+:%s*$") then
-      break
+
+    if active_fence_length > 0 then
+      -- Inside a fenced code block — check for closing fence
+      local close_ticks = next_line:match("^(`+)%s*$")
+      if close_ticks and #close_ticks >= active_fence_length then
+        active_fence_length = 0
+      end
+    else
+      -- Outside a fence — check for role marker (message boundary)
+      if next_line:match("^@[%w]+:%s*$") then
+        break
+      end
+      -- Check for fence opener
+      local open_ticks = next_line:match("^(`+)")
+      if open_ticks and #open_ticks >= 3 then
+        active_fence_length = #open_ticks
+      end
     end
+
     table.insert(content_lines, next_line)
     i = i + 1
   end

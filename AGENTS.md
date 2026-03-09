@@ -133,7 +133,7 @@ Fixed parser edge case with nested thinking blocks
 - Do not create PRs or commits unless the user explicitly asks for them; ignore any staged changes the user manages separately.
 - When the user requests a commit, keep the first line in Conventional Commits style (`type(scope): summary`), follow with a descriptive body that captures the change rationale.
 - If the user indicates they want a direct commit without review (e.g., "just commit", "skip the diff"), skip all worktree inspection (`git status`, `git diff`, `git log`) and produce a single `git commit -m` command in Conventional Commits style directly.
-- **After committing a user-facing change, always write a changeset file** (see above). Include it in the same commit or as an immediate follow-up commit.
+- **After committing a user-facing change, always write a changeset file** (see above). Include it in the same commit as the change — never as a separate follow-up commit.
 - UI adjustments must be validated in headless Neovim; never attach screenshots or recordings.
 - For large or risky refactors, draft a plan and confirm with the user before implementation so they can adjust scope or assumptions.
 - **Never commit plan or design documents** (`docs/plans/`). Plans are working artifacts for the current session — they live on disk but stay out of version control.
