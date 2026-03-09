@@ -54,7 +54,7 @@ describe("Lualine component", function()
     -- Act
     local status = flemma_component:update_status()
 
-    -- Assert (uses default format "#{model}#{?#{thinking}, (#{thinking}),}")
+    -- Assert (default format from config.lua)
     assert.are.equal("o3 (high)", status)
   end)
 

@@ -10,9 +10,6 @@ local session = require("flemma.session")
 local str = require("flemma.utilities.string")
 local tools = require("flemma.tools")
 
---- Default format: model name, with thinking level in parens when active.
-local DEFAULT_FORMAT = "#{model}#{?#{thinking}, (#{thinking}),}"
-
 -- Create a new component for displaying Flemma status
 local flemma_component = lualine_component:extend()
 
@@ -173,8 +170,7 @@ function flemma_component:update_status()
     return ""
   end
 
-  local statusline_config = config.statusline or {}
-  local fmt = statusline_config.format or DEFAULT_FORMAT
+  local fmt = config.statusline.format
 
   return format.expand(fmt, build_vars(config))
 end
