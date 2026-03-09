@@ -262,11 +262,13 @@ function M.start_loading_spinner(bufnr, spinner_opts)
       -- Immediately update UI after adding the thinking message
       M.update_ui(bufnr)
       -- Move to bottom and center so user sees the spinner
+      local is_user_send = spinner_opts and spinner_opts.force or false
       cursor.request_move(bufnr, {
         line = vim.api.nvim_buf_line_count(bufnr),
         bottom = true,
         center = true,
-        force = spinner_opts and spinner_opts.force or false,
+        force = is_user_send,
+        reason = is_user_send and "spinner/user-send" or "spinner/autopilot",
       })
     end)
   end)

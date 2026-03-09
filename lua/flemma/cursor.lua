@@ -11,6 +11,7 @@ local state = require("flemma.state")
 ---@field extmark_id integer Extmark tracking the target position (moves with text)
 ---@field bottom boolean If true, target is end-of-buffer (resolved at move time)
 ---@field center boolean Center viewport after moving
+---@field reason string Logging label from the original request
 
 ---@class flemma.cursor.MoveOpts
 ---@field line integer Target line (1-based)
@@ -18,24 +19,55 @@ local state = require("flemma.state")
 ---@field bottom? boolean Target end-of-buffer (resolved at move time, overrides line)
 ---@field center? boolean Center the cursor line in the viewport after moving
 ---@field force? boolean Bypass idle timer and heuristics, execute immediately
+---@field reason? string Short label for logging (e.g. "response-complete", "spinner/user-send")
 
 local NAMESPACE = vim.api.nvim_create_namespace("flemma_cursor_target")
 local EXTMARK_ID = 1
+
+---Format a target description for log messages.
+---@param line integer
+---@param bottom boolean
+---@param center boolean
+---@return string
+local function describe_target(line, bottom, center)
+  local parts = "line " .. line
+  if bottom then
+    parts = parts .. " (bottom)"
+  end
+  if center then
+    parts = parts .. " +center"
+  end
+  return parts
+end
 
 ---Execute a cursor move immediately (internal — no heuristics).
 ---@param bufnr integer
 ---@param line integer 1-based target line
 ---@param col integer 0-based target column
 ---@param center boolean Center the viewport after moving
-local function execute_move(bufnr, line, col, center)
+---@param reason string Logging label
+local function execute_move(bufnr, line, col, center, reason)
   local winid = vim.fn.bufwinid(bufnr)
   if winid == -1 then
+    log.debug("cursor: skipped (" .. reason .. ") — buf " .. bufnr .. " not visible in any window")
     return
   end
   local line_count = vim.api.nvim_buf_line_count(bufnr)
-  line = math.min(line, line_count)
-  line = math.max(line, 1)
-  vim.api.nvim_win_set_cursor(winid, { line, col })
+  local clamped_line = math.max(1, math.min(line, line_count))
+  if clamped_line ~= line then
+    log.trace(
+      "cursor: clamped line "
+        .. line
+        .. " → "
+        .. clamped_line
+        .. " (buf "
+        .. bufnr
+        .. " has "
+        .. line_count
+        .. " lines)"
+    )
+  end
+  vim.api.nvim_win_set_cursor(winid, { clamped_line, col })
   if center then
     vim.fn.win_execute(winid, "normal! zz")
   end
@@ -58,6 +90,7 @@ end
 ---@param bufnr integer
 local function evaluate_pending(bufnr)
   if not vim.api.nvim_buf_is_valid(bufnr) then
+    log.trace("cursor: idle timer fired but buf " .. bufnr .. " is invalid, skipping")
     return
   end
 
@@ -76,15 +109,22 @@ local function evaluate_pending(bufnr)
     -- Read extmark's current position (may have shifted due to buffer mutations)
     local ok, pos = pcall(vim.api.nvim_buf_get_extmark_by_id, bufnr, NAMESPACE, pending.extmark_id, {})
     if not ok or not pos or #pos < 1 then
-      log.debug("cursor: extmark lost for buffer " .. bufnr .. ", discarding pending move")
+      log.debug("cursor: extmark lost (" .. pending.reason .. "), buf " .. bufnr .. " — discarding pending move")
       clear_pending(bufnr)
       return
     end
     target_line = pos[1] + 1 -- 0-indexed → 1-indexed
   end
 
-  execute_move(bufnr, target_line, col, pending.center)
-  log.trace("cursor: deferred move to line " .. target_line .. " in buffer " .. bufnr)
+  log.debug(
+    "cursor: executing deferred move ("
+      .. pending.reason
+      .. ") → "
+      .. describe_target(target_line, pending.bottom, pending.center)
+      .. ", buf "
+      .. bufnr
+  )
+  execute_move(bufnr, target_line, col, pending.center, pending.reason)
   clear_pending(bufnr)
 end
 
@@ -125,11 +165,22 @@ function M.request_move(bufnr, opts)
   local col = opts.col or 0
   local center = opts.center or false
   local bottom = opts.bottom or false
+  local reason = opts.reason or "unknown"
 
   if opts.force then
     -- Force path: execute immediately, clear any pending deferred move
-    clear_pending(bufnr)
     local buffer_state = state.get_buffer_state(bufnr)
+    if buffer_state.cursor_pending then
+      log.trace(
+        "cursor: force move ("
+          .. reason
+          .. ") clearing pending deferred move ("
+          .. buffer_state.cursor_pending.reason
+          .. "), buf "
+          .. bufnr
+      )
+    end
+    clear_pending(bufnr)
     local timer = buffer_state.cursor_idle_timer
     if timer then
       ---@cast timer uv.uv_timer_t
@@ -139,13 +190,26 @@ function M.request_move(bufnr, opts)
     if bottom then
       line = vim.api.nvim_buf_line_count(bufnr)
     end
-    execute_move(bufnr, line, col, center)
-    log.trace("cursor: force move to line " .. line .. " in buffer " .. bufnr)
+    log.debug(
+      "cursor: force move (" .. reason .. ") → " .. describe_target(line, bottom, center) .. ", buf " .. bufnr
+    )
+    execute_move(bufnr, line, col, center, reason)
     return
   end
 
   -- Deferred path: place extmark, start/reset idle timer
   local buffer_state = state.get_buffer_state(bufnr)
+
+  if buffer_state.cursor_pending then
+    log.trace(
+      "cursor: deferred move ("
+        .. reason
+        .. ") supersedes pending ("
+        .. buffer_state.cursor_pending.reason
+        .. "), buf "
+        .. bufnr
+    )
+  end
 
   -- Place or update the tracking extmark
   local target_line_0 = bottom and (vim.api.nvim_buf_line_count(bufnr) - 1) or (line - 1)
@@ -160,16 +224,22 @@ function M.request_move(bufnr, opts)
     extmark_id = EXTMARK_ID,
     bottom = bottom,
     center = center,
+    reason = reason,
   }
 
   reset_idle_timer(buffer_state, bufnr)
-  log.trace("cursor: deferred move requested to line " .. line .. " in buffer " .. bufnr)
+  log.trace(
+    "cursor: deferred move queued (" .. reason .. ") → " .. describe_target(line, bottom, center) .. ", buf " .. bufnr
+  )
 end
 
 ---Cancel any pending deferred move for a buffer.
 ---@param bufnr integer
 function M.cancel_pending(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
+  if buffer_state.cursor_pending then
+    log.debug("cursor: cancel_pending (" .. buffer_state.cursor_pending.reason .. "), buf " .. bufnr)
+  end
   local timer = buffer_state.cursor_idle_timer
   if timer then
     ---@cast timer uv.uv_timer_t
@@ -190,6 +260,12 @@ function M.setup()
       local bufnr = ev.buf
       local buffer_state = state.get_buffer_state(bufnr)
       if buffer_state.cursor_pending and buffer_state.cursor_idle_timer then
+        log.trace(
+          "cursor: idle timer reset (CursorMoved), pending ("
+            .. buffer_state.cursor_pending.reason
+            .. "), buf "
+            .. bufnr
+        )
         reset_idle_timer(buffer_state, bufnr)
       end
     end,
@@ -206,6 +282,7 @@ function M.setup()
         timer:close()
       end
       buffer_state.cursor_idle_timer = nil
+      log.trace("cursor: cleanup timer for buf " .. bufnr)
     end
   end)
 end

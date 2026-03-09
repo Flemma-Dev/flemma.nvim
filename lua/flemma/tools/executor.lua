@@ -116,7 +116,7 @@ local function move_cursor_after_result(bufnr, tool_id, mode)
   end
 
   if target_line then
-    cursor.request_move(bufnr, { line = target_line })
+    cursor.request_move(bufnr, { line = target_line, reason = "tool-result/" .. mode })
   end
 end
 

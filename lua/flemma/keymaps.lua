@@ -29,7 +29,10 @@ function M.handle_colon_insert()
     -- Complete the role marker and add a blank line below
     local row = vim.api.nvim_win_get_cursor(0)[1]
     vim.api.nvim_buf_set_lines(0, row - 1, row, false, { line .. ":", "" })
-    cursor.request_move(vim.api.nvim_get_current_buf(), { line = row + 1, force = true })
+    cursor.request_move(
+      vim.api.nvim_get_current_buf(),
+      { line = row + 1, force = true, reason = "role-marker-completion" }
+    )
     return true
   end
 

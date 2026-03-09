@@ -15,7 +15,7 @@ function M.find_next_message()
 
   for _, msg in ipairs(doc.messages) do
     if msg.position.start_line > cur_line then
-      cursor.request_move(bufnr, { line = msg.position.start_line + 1, force = true })
+      cursor.request_move(bufnr, { line = msg.position.start_line + 1, force = true, reason = "nav/next-message" })
       return true
     end
   end
@@ -34,7 +34,7 @@ function M.find_prev_message()
     local msg = doc.messages[i]
     local content_line = msg.position.start_line + 1
     if content_line < cur_line then
-      cursor.request_move(bufnr, { line = content_line, force = true })
+      cursor.request_move(bufnr, { line = content_line, force = true, reason = "nav/prev-message" })
       return true
     end
   end

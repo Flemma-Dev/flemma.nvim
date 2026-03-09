@@ -327,7 +327,7 @@ local function advance_phase2(opts)
   if #pending_blocks > 0 then
     -- Pending blocks remain — move cursor to the first one so the user can act
     local first = pending_blocks[1]
-    cursor.request_move(bufnr, { line = first.tool_result.start_line })
+    cursor.request_move(bufnr, { line = first.tool_result.start_line, reason = "phase2/pending-block" })
     if opts.on_request_complete then
       opts.on_request_complete()
     end
@@ -438,7 +438,7 @@ function M.send_or_execute(opts)
 
     -- Move cursor to first pending placeholder so the user can review
     if first_placeholder_line then
-      cursor.request_move(bufnr, { line = first_placeholder_line })
+      cursor.request_move(bufnr, { line = first_placeholder_line, reason = "phase1/pending-placeholder" })
     end
 
     -- Schedule Phase 2 via vim.schedule for undo boundary separation.
@@ -1068,7 +1068,7 @@ function M.send_to_provider(opts)
 
           -- Position cursor on the blank content line after @You:
           local new_prompt_line = last_line_idx + cursor_line_offset
-          cursor.request_move(bufnr, { line = new_prompt_line, bottom = true })
+          cursor.request_move(bufnr, { line = new_prompt_line, bottom = true, reason = "response-complete" })
 
           editing.auto_write(bufnr)
           ui.update_ui(bufnr)

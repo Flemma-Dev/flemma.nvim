@@ -200,7 +200,7 @@ function M.on_tools_complete(bufnr)
   if first_empty_pending then
     bs.state = "paused"
     log.debug("autopilot: flemma:tool status=pending blocks remain, pausing")
-    cursor.request_move(bufnr, { line = first_empty_pending.tool_result.start_line })
+    cursor.request_move(bufnr, { line = first_empty_pending.tool_result.start_line, reason = "autopilot/pending-tool" })
     return
   end
 
