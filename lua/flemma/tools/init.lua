@@ -26,13 +26,14 @@ local ready_callbacks = {}
 local active_timers = {}
 local generation = 0
 
----Fire all ready callbacks and clear the list
+---Fire all ready callbacks, clear the list, and emit the boot-complete autocmd
 local function fire_ready_callbacks()
   local callbacks = ready_callbacks
   ready_callbacks = {}
   for _, cb in ipairs(callbacks) do
     cb()
   end
+  vim.api.nvim_exec_autocmds("User", { pattern = "FlemmaBootComplete" })
 end
 
 ---Register an async tool source that resolves definitions asynchronously
