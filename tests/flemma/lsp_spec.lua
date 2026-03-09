@@ -139,7 +139,7 @@ describe("Flemma LSP", function()
   it("returns hover for tool_use segment", function()
     local bufnr, client = setup_chat_buffer({
       "@Assistant:",
-      '**Tool Use:** `bash` (`call_abc123`)',
+      "**Tool Use:** `bash` (`call_abc123`)",
       "```json",
       '{"command": "ls -la"}',
       "```",

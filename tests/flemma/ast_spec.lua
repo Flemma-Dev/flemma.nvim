@@ -365,7 +365,7 @@ describe("find_segment_at_position", function()
   it("finds tool_use segment by line", function()
     local doc = parser.parse_lines({
       "@Assistant:",
-      '**Tool Use:** `bash` (`call_123`)',
+      "**Tool Use:** `bash` (`call_123`)",
       "```json",
       '{"command": "ls"}',
       "```",
