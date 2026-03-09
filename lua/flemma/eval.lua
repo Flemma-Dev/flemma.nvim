@@ -57,6 +57,21 @@ local function read_file(path, opts)
   return data, nil
 end
 
+--- Propagate an error from pcall: re-throw structured error tables as-is, wrap others with context.
+---
+--- Structured errors (tables with a `type` field) come from include() and other subsystems
+--- that produce typed diagnostics. Re-throwing preserves the diagnostic type so the
+--- processor can format them properly (e.g., "file" errors vs "expression" errors).
+---@param err any Error value from pcall
+---@param format string Format string for wrapping non-structured errors
+---@param ... any Additional format arguments
+local function propagate_error(err, format, ...)
+  if type(err) == "table" and err.type then
+    error(err)
+  end
+  error(string.format(format, ...))
+end
+
 --- Build the include() closure for a given environment.
 --- The include_stack is threaded through closures — not stored on the env.
 ---@param env flemma.eval.Environment The environment where include() will be installed
@@ -91,9 +106,11 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
 
     local dirname = env.__dirname
 
-    -- Resolve path: use __dirname if set, otherwise use relative path as-is
+    -- Resolve path: absolute paths used as-is, relative paths joined with __dirname
     local target_path
-    if dirname then
+    if relative_path:sub(1, 1) == "/" then
+      target_path = vim.fs.normalize(relative_path)
+    elseif dirname then
       target_path = vim.fs.normalize(dirname .. "/" .. relative_path)
     else
       target_path = relative_path
@@ -106,6 +123,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
         filename = target_path,
         raw = relative_path,
         error = "File not found: " .. target_path,
+        include_stack = { unpack(include_stack) },
       })
     end
 
@@ -119,6 +137,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
           filename = target_path,
           raw = relative_path,
           error = "Could not determine MIME type for: " .. target_path,
+          include_stack = { unpack(include_stack) },
         })
       end
 
@@ -129,6 +148,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
           filename = target_path,
           raw = relative_path,
           error = read_err or "read error",
+          include_stack = { unpack(include_stack) },
         })
       end
 
@@ -157,6 +177,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
         filename = target_path,
         raw = relative_path,
         error = read_err or "Failed to read file",
+        include_stack = { unpack(include_stack) },
       })
     end
 
@@ -186,6 +207,10 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
       elseif seg.kind == "expression" then
         local ok, result = pcall(eval_expr_fn, seg.code, child_env)
         if not ok then
+          -- Enrich structured errors from deeper includes with this level's stack
+          if type(result) == "table" and result.type and not result.include_stack then
+            result.include_stack = { unpack(child_stack) }
+          end
           error(result)
         end
         -- If result is emittable, keep it as a child; otherwise stringify
@@ -319,11 +344,7 @@ function M.execute_safe(code, env_param)
 
   local ok, exec_err = pcall(chunk)
   if not ok then
-    error(string.format(
-      "Execution error in frontmatter of '%s': %s",
-      (env.__filename or "N/A"),
-      exec_err -- This could be an error from include, already contextualized
-    ))
+    propagate_error(exec_err, "Execution error in frontmatter of '%s': %s", (env.__filename or "N/A"), exec_err)
   end
 
   -- Collect only new keys that weren't in initial environment
@@ -362,18 +383,12 @@ function M.eval_expression(expr, env)
 
   local ok, eval_result = pcall(chunk)
   if not ok then
-    -- Preserve structured error tables (e.g. from include()) so the processor
-    -- can produce properly typed diagnostics (type="file" vs type="expression").
-    if type(eval_result) == "table" and eval_result.type then
-      error(eval_result)
-    end
-    error(
-      string.format(
-        "Evaluation error in '%s' for expression '{{%s}}': %s",
-        (env.__filename or "N/A"),
-        expr,
-        eval_result
-      )
+    propagate_error(
+      eval_result,
+      "Evaluation error in '%s' for expression '{{%s}}': %s",
+      (env.__filename or "N/A"),
+      expr,
+      eval_result
     )
   end
 

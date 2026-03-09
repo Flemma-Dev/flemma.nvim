@@ -8,6 +8,30 @@ local parser = require("flemma.parser")
 ---@class flemma.Processor
 local M = {}
 
+--- Convert a pcall error into a diagnostic table.
+---
+--- Structured error tables (e.g. from include()) are used as-is with defaults
+--- filled in. Plain errors are wrapped in a new diagnostic with the given fallback fields.
+---@param err any Error value from pcall
+---@param defaults table<string, any> Default fields (position, source_file, severity, etc.)
+---@param fallback table<string, any> Extra fields for non-structured errors (type, expression, language, etc.)
+---@return flemma.ast.Diagnostic
+local function error_to_diagnostic(err, defaults, fallback)
+  if type(err) == "table" and err.type then
+    for k, v in pairs(defaults) do
+      if err[k] == nil then
+        err[k] = v
+      end
+    end
+    return err
+  end
+  fallback.error = tostring(err)
+  for k, v in pairs(defaults) do
+    fallback[k] = v
+  end
+  return fallback
+end
+
 ---@param v any
 ---@return string
 local function to_text(v)
@@ -86,14 +110,17 @@ local function evaluate_frontmatter_internal(doc, base_context)
           })
         end
       else
-        table.insert(diagnostics, {
-          type = "frontmatter",
-          severity = "error",
-          language = fm.language,
-          error = tostring(result),
-          position = fm.position,
-          source_file = context:get_filename() or "N/A",
-        })
+        table.insert(
+          diagnostics,
+          error_to_diagnostic(result, {
+            position = fm.position,
+            source_file = context:get_filename() or "N/A",
+            severity = "error",
+          }, {
+            type = "frontmatter",
+            language = fm.language,
+          })
+        )
       end
     else
       table.insert(diagnostics, {
@@ -177,29 +204,18 @@ function M.evaluate(doc, base_context, evaluated_frontmatter)
       elseif seg.kind == "expression" then
         local ok, result = pcall(eval.eval_expression, seg.code, env)
         if not ok then
-          -- Check if the error is a structured table (e.g. from include())
-          if type(result) == "table" and result.type then
-            table.insert(diagnostics, {
-              type = result.type,
-              severity = "warning",
-              filename = result.filename,
-              raw = result.raw,
-              error = result.error or tostring(result),
+          table.insert(
+            diagnostics,
+            error_to_diagnostic(result, {
               position = seg.position,
               message_role = msg.role,
               source_file = context:get_filename() or "N/A",
-            })
-          else
-            table.insert(diagnostics, {
+              severity = "warning",
+            }, {
               type = "expression",
-              severity = "warning",
               expression = seg.code,
-              error = tostring(result),
-              position = seg.position,
-              message_role = msg.role,
-              source_file = context:get_filename() or "N/A",
             })
-          end
+          )
           -- Keep original expression text in output
           table.insert(parts, { kind = "text", text = "{{" .. (seg.code or "") .. "}}" })
         elseif emittable.is_emittable(result) then

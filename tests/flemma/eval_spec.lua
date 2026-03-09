@@ -179,5 +179,97 @@ describe("flemma.eval", function()
 
       vim.fn.delete(temp_dir, "rf")
     end)
+
+    it("should propagate structured errors through execute_safe (frontmatter)", function()
+      local temp_dir = vim.fn.tempname() .. "_include_frontmatter_error_test"
+      vim.fn.mkdir(temp_dir, "p")
+
+      local parent_file = temp_dir .. "/parent.chat"
+      local env = eval.create_safe_env()
+      env.__filename = parent_file
+      env.__dirname = temp_dir
+
+      local ok, err = pcall(eval.execute_safe, "include('nonexistent.txt')", env)
+      assert.is_false(ok)
+      -- Structured error table must survive execute_safe, not become "table: 0x..."
+      assert.equals("table", type(err))
+      assert.equals("file", err.type)
+      assert.is_true(err.error:match("File not found") ~= nil)
+      -- Include stack should contain the parent file
+      assert.is_table(err.include_stack)
+      assert.equals(1, #err.include_stack)
+      assert.equals(parent_file, err.include_stack[1])
+
+      vim.fn.delete(temp_dir, "rf")
+    end)
+
+    it("should carry include stack through nested includes", function()
+      local temp_dir = vim.fn.tempname() .. "_include_nested_error_test"
+      vim.fn.mkdir(temp_dir, "p")
+
+      -- middle.txt includes a nonexistent file via @./ reference
+      local middle_file = temp_dir .. "/middle.txt"
+      local f = io.open(middle_file, "w")
+      f:write("some text @./nonexistent.png and more")
+      f:close()
+
+      local parent_file = temp_dir .. "/parent.chat"
+      local env = eval.create_safe_env()
+      env.__filename = parent_file
+      env.__dirname = temp_dir
+
+      local ok, err = pcall(eval.eval_expression, "include('middle.txt')", env)
+      assert.is_false(ok)
+      assert.equals("table", type(err))
+      assert.equals("file", err.type)
+      assert.is_true(err.error:match("File not found") ~= nil)
+      -- Stack should show: parent.chat → middle.txt
+      assert.is_table(err.include_stack)
+      assert.equals(2, #err.include_stack)
+      assert.equals(parent_file, err.include_stack[1])
+      assert.equals(vim.fs.normalize(temp_dir .. "/middle.txt"), err.include_stack[2])
+
+      vim.fn.delete(temp_dir, "rf")
+    end)
+  end)
+
+  describe("include() absolute paths", function()
+    it("should resolve absolute paths without prepending dirname", function()
+      local emittable = require("flemma.emittable")
+
+      local temp_dir = vim.fn.tempname() .. "_include_abspath_test"
+      vim.fn.mkdir(temp_dir, "p")
+
+      -- Create target file
+      local target_file = temp_dir .. "/target.txt"
+      local f = io.open(target_file, "w")
+      f:write("absolute content")
+      f:close()
+
+      -- Set dirname to a DIFFERENT directory to prove absolute path ignores it
+      local other_dir = vim.fn.tempname() .. "_include_abspath_other"
+      vim.fn.mkdir(other_dir, "p")
+
+      local env = eval.create_safe_env()
+      env.__filename = other_dir .. "/parent.chat"
+      env.__dirname = other_dir
+
+      local result = eval.eval_expression("include('" .. target_file .. "')", env)
+      assert.is_true(emittable.is_emittable(result))
+
+      local ctx = emittable.EmitContext.new()
+      result:emit(ctx)
+
+      local texts = {}
+      for _, part in ipairs(ctx.parts) do
+        if part.kind == "text" then
+          table.insert(texts, part.text)
+        end
+      end
+      assert.are.equal("absolute content", table.concat(texts, ""))
+
+      vim.fn.delete(temp_dir, "rf")
+      vim.fn.delete(other_dir, "rf")
+    end)
   end)
 end)

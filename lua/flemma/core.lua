@@ -618,6 +618,13 @@ function M.send_to_provider(opts)
           local loc = (d.source_file or "N/A") .. format_position(d.position)
           local ref = d.filename or d.raw or "unknown"
           table.insert(diagnostic_lines, string.format("  [%s] %s: %s", loc, ref, d.error))
+          if d.include_stack and #d.include_stack > 0 then
+            table.insert(diagnostic_lines, "  Caused by:")
+            for _, path in ipairs(d.include_stack) do
+              table.insert(diagnostic_lines, "  ↓ " .. path)
+            end
+            table.insert(diagnostic_lines, "  → " .. (d.raw or d.filename))
+          end
         elseif i == max_per_type + 1 then
           table.insert(diagnostic_lines, string.format("  …and %d more", #by_type.file - max_per_type))
           break
