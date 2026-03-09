@@ -7,7 +7,7 @@ local ast = require("flemma.ast")
 local ctxutil = require("flemma.context")
 local cursor = require("flemma.cursor")
 local eval = require("flemma.eval")
-
+local log = require("flemma.logging")
 local parser = require("flemma.parser")
 local processor = require("flemma.processor")
 
@@ -55,17 +55,29 @@ function M.resolve_include_path(bufnr)
   local cursor = vim.api.nvim_win_get_cursor(0)
   local lnum = cursor[1] -- 1-indexed
   local col = cursor[2] + 1 -- 0-indexed -> 1-indexed
+  log.trace("navigation: resolve_include_path at line=" .. lnum .. " col=" .. col .. " buf=" .. bufnr)
 
   local doc = parser.get_parsed_document(bufnr)
   local seg = ast.find_segment_at_position(doc, lnum, col)
 
-  if not seg or seg.kind ~= "expression" then
+  if not seg then
+    log.trace("navigation: no segment at cursor position")
     return nil
   end
+
+  if seg.kind ~= "expression" then
+    log.trace("navigation: segment is " .. seg.kind .. ", not expression — skipping")
+    return nil
+  end
+
+  log.debug("navigation: found expression segment, code=" .. seg.code)
 
   -- Build eval environment with frontmatter variables
   local context = ctxutil.from_buffer(bufnr)
   local fm = processor.evaluate_frontmatter(doc, context)
+  if #fm.diagnostics > 0 then
+    log.debug("navigation: frontmatter had " .. #fm.diagnostics .. " diagnostic(s), variables may be incomplete")
+  end
   local env = ctxutil.to_eval_env(fm.context, bufnr)
 
   -- Install a capturing include() stub
@@ -78,6 +90,7 @@ function M.resolve_include_path(bufnr)
     end
 
     local dirname = env.__dirname
+    log.trace("navigation: include() called with path=" .. relative_path .. " dirname=" .. (dirname or "nil"))
 
     local target_path
     if dirname then
@@ -91,7 +104,16 @@ function M.resolve_include_path(bufnr)
   end
 
   -- Evaluate the expression — pcall to handle errors gracefully
-  pcall(eval.eval_expression, seg.code, env)
+  local ok, err = pcall(eval.eval_expression, seg.code, env)
+  if not ok then
+    log.debug("navigation: expression eval failed: " .. tostring(err))
+  end
+
+  if captured_path then
+    log.debug("navigation: resolved include path=" .. captured_path)
+  else
+    log.trace("navigation: expression did not call include()")
+  end
 
   return captured_path
 end
@@ -102,6 +124,9 @@ end
 function M.resolve_include_path_expr()
   local bufnr = vim.api.nvim_get_current_buf()
   local resolved = M.resolve_include_path(bufnr)
+  if not resolved then
+    log.trace("navigation: includeexpr falling back to v:fname=" .. vim.v.fname)
+  end
   return resolved or vim.v.fname
 end
 
