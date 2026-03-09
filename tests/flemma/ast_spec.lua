@@ -254,6 +254,147 @@ describe("Parser", function()
   end)
 end)
 
+describe("Expression segment positions", function()
+  it("sets end_col on {{ }} expressions", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Hello {{ name }} world",
+    })
+    local segs = doc.messages[1].segments
+    -- Find the expression segment
+    local expr_seg
+    for _, seg in ipairs(segs) do
+      if seg.kind == "expression" then
+        expr_seg = seg
+        break
+      end
+    end
+    assert.is_not_nil(expr_seg)
+    assert.is_not_nil(expr_seg.position.start_col)
+    assert.is_not_nil(expr_seg.position.end_col)
+    assert.is_true(expr_seg.position.end_col > expr_seg.position.start_col)
+  end)
+
+  it("sets end_col on @./ file references", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "See @./readme.md for details",
+    })
+    local segs = doc.messages[1].segments
+    local expr_seg
+    for _, seg in ipairs(segs) do
+      if seg.kind == "expression" then
+        expr_seg = seg
+        break
+      end
+    end
+    assert.is_not_nil(expr_seg)
+    assert.is_not_nil(expr_seg.position.start_col)
+    assert.is_not_nil(expr_seg.position.end_col)
+  end)
+
+  it("excludes trailing punctuation from @./ end_col", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Check @./file.txt, then continue",
+    })
+    local segs = doc.messages[1].segments
+    local expr_seg
+    for _, seg in ipairs(segs) do
+      if seg.kind == "expression" then
+        expr_seg = seg
+        break
+      end
+    end
+    assert.is_not_nil(expr_seg)
+    -- The comma should NOT be included in the expression range
+    -- Extract the path from the include() call and verify it excludes trailing comma
+    local path_in_code = expr_seg.code:match("include%('([^']+)'")
+    assert.is_not_nil(path_in_code)
+    assert.is_nil(path_in_code:find(","), "Trailing comma should not be in file path")
+  end)
+end)
+
+describe("find_segment_at_position", function()
+  it("finds expression segment by line and column", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Hello {{ name }} world",
+    })
+    local seg, msg = ast.find_segment_at_position(doc, 2, 8)
+    assert.is_not_nil(seg)
+    assert.equals("expression", seg.kind)
+    assert.equals("You", msg.role)
+  end)
+
+  it("returns text segment when not on expression", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Hello {{ name }} world",
+    })
+    local seg, msg = ast.find_segment_at_position(doc, 2, 1)
+    assert.is_not_nil(seg)
+    assert.equals("text", seg.kind)
+    assert.equals("You", msg.role)
+  end)
+
+  it("returns nil for line outside any message", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Hello",
+    })
+    local seg, msg = ast.find_segment_at_position(doc, 99, 1)
+    assert.is_nil(seg)
+    assert.is_nil(msg)
+  end)
+
+  it("finds thinking segment by line", function()
+    local doc = parser.parse_lines({
+      "@Assistant:",
+      "<thinking>",
+      "I need to think about this",
+      "</thinking>",
+      "Here is my answer",
+    })
+    local seg, msg = ast.find_segment_at_position(doc, 3, 1)
+    assert.is_not_nil(seg)
+    assert.equals("thinking", seg.kind)
+    assert.equals("Assistant", msg.role)
+  end)
+
+  it("finds tool_use segment by line", function()
+    local doc = parser.parse_lines({
+      "@Assistant:",
+      '**Tool Use:** `bash` (`call_123`)',
+      "```json",
+      '{"command": "ls"}',
+      "```",
+    })
+    local seg, msg = ast.find_segment_at_position(doc, 2, 1)
+    assert.is_not_nil(seg)
+    assert.equals("tool_use", seg.kind)
+    assert.equals("Assistant", msg.role)
+  end)
+
+  it("distinguishes adjacent expressions on same line", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "{{ a }} and {{ b }}",
+    })
+    -- First expression
+    local seg1 = ast.find_segment_at_position(doc, 2, 1)
+    assert.is_not_nil(seg1)
+    assert.equals("expression", seg1.kind)
+    assert.equals(" a ", seg1.code)
+
+    -- Second expression
+    local seg2 = ast.find_segment_at_position(doc, 2, 14)
+    assert.is_not_nil(seg2)
+    assert.equals("expression", seg2.kind)
+    assert.equals(" b ", seg2.code)
+  end)
+end)
+
 describe("Processor", function()
   local function setup_fixtures()
     os.execute("mkdir -p tests/fixtures")
