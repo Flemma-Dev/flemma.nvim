@@ -535,6 +535,9 @@ function M.format(data, verbose)
   local enabled_count = #data.tools.enabled
   local disabled_count = #data.tools.disabled
   add("Tools (" .. enabled_count .. " enabled, " .. disabled_count .. " disabled)")
+  if data.tools.booting then
+    add("  ⏳ loading async tool sources…")
+  end
   if enabled_count > 0 then
     add("  ✓ " .. format_name_list(data.tools.enabled, data.tools.frontmatter_items))
   end
