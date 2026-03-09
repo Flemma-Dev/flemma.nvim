@@ -59,6 +59,7 @@ develop:
 		"																				\
 		-c "lua																			\
 		require(\"flemma\").setup({														\
+			experimental = { lsp = true },												\
 			model = \"\$$haiku\",														\
 			parameters = { thinking = \"minimal\" },									\
 			presets = {																	\
@@ -66,7 +67,7 @@ develop:
 				[\"\$$gpt\"] = \"openai gpt-5.2\",										\
 			},																			\
 			diagnostics = { enabled = true },											\
-			logging = { enabled = true },												\
+			logging = { enabled = true, level = "TRACE" },								\
 			editing = { auto_write = true },											\
 			tools = { modules = { \"extras.flemma.tools.calculator\" } },				\
 		})																				\
