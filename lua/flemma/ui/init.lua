@@ -589,6 +589,8 @@ local function apply_chat_buffer_settings(bufnr)
   if config.editing.disable_textwidth then
     vim.bo[bufnr].textwidth = 0
   end
+
+  vim.bo[bufnr].includeexpr = 'v:lua.require("flemma.navigation").resolve_include_path_expr()'
 end
 
 ---Set up chat filetype autocmds

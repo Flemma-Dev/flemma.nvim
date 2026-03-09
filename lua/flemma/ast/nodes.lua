@@ -6,6 +6,7 @@ local M = {}
 ---@field start_line integer
 ---@field end_line? integer
 ---@field start_col? integer
+---@field end_col? integer
 
 ---@class flemma.ast.DocumentNode
 ---@field kind "document"
