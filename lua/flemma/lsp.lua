@@ -178,7 +178,7 @@ local function create_server(dispatchers)
         })
         return true, 1
       elseif method == "shutdown" then
-        log.info("lsp server: shutdown requested")
+        log.debug("lsp server: shutdown requested")
         closing = true
         callback(nil, nil)
         return true, 2
@@ -208,7 +208,7 @@ local function create_server(dispatchers)
     end,
 
     terminate = function()
-      log.info("lsp server: terminate called")
+      log.debug("lsp server: terminate called")
       closing = true
     end,
   }
