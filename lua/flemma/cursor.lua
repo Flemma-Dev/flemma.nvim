@@ -101,9 +101,13 @@ local function reset_idle_timer(buffer_state, bufnr)
   local timer = buffer_state.cursor_idle_timer
   ---@cast timer uv.uv_timer_t
   timer:stop()
-  timer:start(vim.o.updatetime, 0, vim.schedule_wrap(function()
-    evaluate_pending(bufnr)
-  end))
+  timer:start(
+    vim.o.updatetime,
+    0,
+    vim.schedule_wrap(function()
+      evaluate_pending(bufnr)
+    end)
+  )
 end
 
 ---Request a cursor move for a .chat buffer.
