@@ -1,5 +1,6 @@
 .PHONY: default changeset qa develop screencast
 
+SHELL := $(shell which bash)
 VIMRUNTIME_PATH = $(shell dirname $(shell dirname $(shell readlink -f $(shell which nvim))))/share/nvim/runtime
 
 default:
@@ -10,54 +11,37 @@ default:
 changeset:
 	pnpm changeset
 
-# Run all quality gates — silent on success, shows only failures
+# Run all quality gates — parallel, bail on first failure
 qa:
-	@failed=""; \
-	luacheck lua/ tests/ >/dev/null 2>&1 \
-		|| failed="$$failed luacheck"; \
+	@d=$$(mktemp -d); trap 'rm -rf "$$d"' EXIT; \
+	declare -A gate; \
+	luacheck lua/ tests/ \
+		>"$$d/luacheck" 2>&1 & gate[$$!]=luacheck; \
 	VIMRUNTIME=$(VIMRUNTIME_PATH) \
-		lua-language-server --check lua/ --configpath ../.luarc-check.lua >/dev/null 2>&1 \
-		|| failed="$$failed types"; \
-	bash scripts/lint-inline-requires.sh >/dev/null 2>&1 \
-		|| failed="$$failed imports"; \
+		lua-language-server --check lua/ --configpath ../.luarc-check.lua \
+		>"$$d/types" 2>&1 & gate[$$!]=types; \
+	bash scripts/lint-inline-requires.sh \
+		>"$$d/imports" 2>&1 & gate[$$!]=imports; \
 	nvim --headless --noplugin -u tests/minimal.vim \
 		-c "PlenaryBustedDirectory tests/flemma/ {minimal_init = 'tests/minimal_init.lua'}" \
-		>/dev/null 2>&1 \
-		|| failed="$$failed test"; \
-	if [ -z "$$failed" ]; then \
-		echo "qa: OK"; \
-	else \
-		echo "qa: FAILED —$$failed"; \
-		echo ""; \
-		for gate in $$failed; do \
-			case $$gate in \
-				luacheck) \
-					echo "--- luacheck ---"; \
-					luacheck lua/ tests/; \
-					echo "" ;; \
-				types) \
-					echo "--- types ---"; \
-					VIMRUNTIME=$(VIMRUNTIME_PATH) \
-						lua-language-server --check lua/ --configpath ../.luarc-check.lua; \
-					echo "" ;; \
-				imports) \
-					echo "--- imports ---"; \
-					bash scripts/lint-inline-requires.sh; \
-					echo "" ;; \
-				test) \
-					echo "--- test ---"; \
-					nvim --headless --noplugin -u tests/minimal.vim \
-						-c "PlenaryBustedDirectory tests/flemma/ {minimal_init = 'tests/minimal_init.lua'}" \
-						2>&1 \
-						| grep -vE '^.....(Success|Failed|Errors)' \
-						| grep -v '^Scheduling' \
-						| grep -v '^Flemma: Switched to' \
-						| grep -v '^===='; \
-					echo "" ;; \
-			esac; \
-		done; \
-		exit 1; \
-	fi
+		>"$$d/test" 2>&1 & gate[$$!]=test; \
+	while (( $${#gate[@]} )); do \
+		pid=0; wait -n -p pid $${!gate[@]}; rc=$$?; \
+		name=$${gate[$$pid]}; unset "gate[$$pid]"; \
+		if (( rc )); then \
+			kill $${!gate[@]} 2>/dev/null; wait 2>/dev/null; \
+			echo "qa: FAILED — $$name"; echo ""; \
+			echo "--- $$name ---"; \
+			if [ "$$name" = test ]; then \
+				grep -vE '^.....(Success|Failed|Errors)' "$$d/$$name" \
+					| grep -v '^Scheduling' \
+					| grep -v '^Flemma: Switched to' \
+					| grep -v '^===='; \
+			else cat "$$d/$$name"; fi; \
+			echo ""; exit 1; \
+		fi; \
+	done; \
+	echo "qa: OK"
 
 # Launch Flemma.nvim from local directory
 develop:
