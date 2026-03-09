@@ -836,6 +836,7 @@ function M.update_ui(bufnr)
   end
 end
 
+---@deprecated Use cursor.request_move() instead
 ---Move cursor to end of buffer
 ---@param bufnr? integer If provided, moves cursor in the window displaying that buffer
 function M.move_to_bottom(bufnr)
@@ -849,6 +850,7 @@ function M.move_to_bottom(bufnr)
   vim.cmd("normal! G")
 end
 
+---@deprecated Use cursor.request_move() instead
 ---Center cursor line in window
 ---@param bufnr? integer If provided, centers cursor in the window displaying that buffer
 function M.center_cursor(bufnr)
@@ -862,6 +864,7 @@ function M.center_cursor(bufnr)
   vim.cmd("normal! zz")
 end
 
+---@deprecated Use cursor.request_move() instead
 ---Move cursor to specific position
 ---@param line integer
 ---@param col integer
