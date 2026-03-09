@@ -16,6 +16,21 @@ local DEFAULT_FORMAT = "#{model}#{?#{thinking}, (#{thinking}),}"
 -- Create a new component for displaying Flemma status
 local flemma_component = lualine_component:extend()
 
+---@param options table Lualine component options
+function flemma_component:init(options)
+  lualine_component.init(self, options)
+
+  vim.api.nvim_create_autocmd("User", {
+    pattern = "FlemmaBootComplete",
+    callback = function()
+      local ok, lualine = pcall(require, "lualine")
+      if ok then
+        lualine.refresh()
+      end
+    end,
+  })
+end
+
 ---Resolve the current thinking/reasoning level (unified across providers).
 ---Reads from the provider's parameter proxy which includes frontmatter overrides.
 ---@param config flemma.Config

@@ -7,11 +7,12 @@ describe("Lualine component", function()
 
     -- Mock lualine.component before requiring the flemma component
     package.preload["lualine.component"] = function()
-      return {
-        extend = function()
-          return {}
-        end,
-      }
+      local component = {}
+      component.init = function() end
+      component.extend = function()
+        return setmetatable({}, { __index = component })
+      end
+      return component
     end
 
     -- Invalidate caches to ensure we get fresh modules
@@ -378,6 +379,30 @@ describe("Lualine component", function()
 
       -- Cleanup: resolve the async source
       captured_done()
+    end)
+
+    it("should refresh lualine on FlemmaBootComplete", function()
+      -- Arrange: track lualine.refresh() calls
+      local refresh_called = false
+      package.loaded["lualine"] = { refresh = function() refresh_called = true end }
+
+      -- Re-require component so init() picks up the mock
+      package.loaded["lualine.components.flemma"] = nil
+      flemma_component = require("lualine.components.flemma")
+
+      -- Simulate init() being called (lualine calls this on component creation)
+      if flemma_component.init then
+        flemma_component:init({})
+      end
+
+      -- Act: emit the autocmd
+      vim.api.nvim_exec_autocmds("User", { pattern = "FlemmaBootComplete" })
+
+      -- Assert
+      assert.is_true(refresh_called)
+
+      -- Cleanup
+      package.loaded["lualine"] = nil
     end)
 
     it("should be falsy once all async tool sources resolve", function()
