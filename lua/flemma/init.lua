@@ -20,6 +20,7 @@ local personalities = require("flemma.personalities")
 local tools = require("flemma.tools")
 local tools_presets = require("flemma.tools.presets")
 local tools_approval = require("flemma.tools.approval")
+local cursor = require("flemma.cursor")
 local sandbox = require("flemma.sandbox")
 
 -- Module configuration (will hold merged user opts and defaults)
@@ -110,6 +111,9 @@ M.setup = function(user_opts)
 
   -- Set up UI module
   ui.setup()
+
+  -- Set up cursor engine
+  cursor.setup()
 
   -- Set up user commands
   commands.setup()

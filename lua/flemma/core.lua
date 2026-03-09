@@ -28,6 +28,7 @@ local str = require("flemma.utilities.string")
 local tool_approval = require("flemma.tools.approval")
 local tool_context = require("flemma.tools.context")
 local tools_module = require("flemma.tools")
+local cursor = require("flemma.cursor")
 local usage = require("flemma.usage")
 
 local ABORT_MESSAGE = "Response interrupted by the user."
@@ -214,7 +215,7 @@ end
 
 ---Phase 2 (Execute): Process flemma:tool blocks by status.
 ---Called from Phase 1 via vim.schedule (undo boundary) or directly when Phase 1 has nothing.
----@param opts { on_request_complete?: fun(), bufnr: integer, evaluated_frontmatter?: flemma.processor.EvaluatedFrontmatter, frontmatter_opts?: flemma.opt.FrontmatterOpts }
+---@param opts { on_request_complete?: fun(), bufnr: integer, evaluated_frontmatter?: flemma.processor.EvaluatedFrontmatter, frontmatter_opts?: flemma.opt.FrontmatterOpts, user_initiated?: boolean }
 local function advance_phase2(opts)
   local bufnr = opts.bufnr
   if not vim.api.nvim_buf_is_valid(bufnr) then
@@ -326,10 +327,7 @@ local function advance_phase2(opts)
   if #pending_blocks > 0 then
     -- Pending blocks remain — move cursor to the first one so the user can act
     local first = pending_blocks[1]
-    local winid = vim.fn.bufwinid(bufnr)
-    if winid ~= -1 then
-      vim.api.nvim_win_set_cursor(winid, { first.tool_result.start_line, 0 })
-    end
+    cursor.request_move(bufnr, { line = first.tool_result.start_line })
     if opts.on_request_complete then
       opts.on_request_complete()
     end
@@ -359,6 +357,7 @@ local function advance_phase2(opts)
     on_request_complete = opts.on_request_complete,
     bufnr = opts.bufnr,
     evaluated_frontmatter = opts.evaluated_frontmatter,
+    user_initiated = opts.user_initiated,
   })
 end
 
@@ -367,7 +366,7 @@ end
 ---Phase 2 (Execute): Process flemma:tool blocks by status (approved/denied/rejected/pending).
 ---Phase 3 (Continue): No tool blocks remain → send to provider.
 ---Both <C-]> and autopilot call this same function.
----@param opts? { on_request_complete?: fun(), bufnr?: integer }
+---@param opts? { on_request_complete?: fun(), bufnr?: integer, user_initiated?: boolean }
 function M.send_or_execute(opts)
   opts = opts or {}
   local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
@@ -439,10 +438,7 @@ function M.send_or_execute(opts)
 
     -- Move cursor to first pending placeholder so the user can review
     if first_placeholder_line then
-      local winid = vim.fn.bufwinid(bufnr)
-      if winid ~= -1 then
-        vim.api.nvim_win_set_cursor(winid, { first_placeholder_line, 0 })
-      end
+      cursor.request_move(bufnr, { line = first_placeholder_line })
     end
 
     -- Schedule Phase 2 via vim.schedule for undo boundary separation.
@@ -453,6 +449,7 @@ function M.send_or_execute(opts)
       bufnr = bufnr,
       evaluated_frontmatter = evaluated_frontmatter,
       frontmatter_opts = frontmatter_opts,
+      user_initiated = opts.user_initiated,
     }
     writequeue.schedule(bufnr, function()
       advance_phase2(phase2_opts)
@@ -467,11 +464,12 @@ function M.send_or_execute(opts)
     bufnr = bufnr,
     evaluated_frontmatter = evaluated_frontmatter,
     frontmatter_opts = frontmatter_opts,
+    user_initiated = opts.user_initiated,
   })
 end
 
 ---Handle the AI provider interaction
----@param opts? { on_request_complete?: fun(), bufnr?: integer, evaluated_frontmatter?: flemma.processor.EvaluatedFrontmatter }
+---@param opts? { on_request_complete?: fun(), bufnr?: integer, evaluated_frontmatter?: flemma.processor.EvaluatedFrontmatter, user_initiated?: boolean }
 function M.send_to_provider(opts)
   opts = opts or {}
   local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
@@ -747,7 +745,7 @@ function M.send_to_provider(opts)
   )
 
   ---@type integer|nil
-  local spinner_timer = ui.start_loading_spinner(bufnr) -- Handles its own modifiable toggles for writes
+  local spinner_timer = ui.start_loading_spinner(bufnr, { force = opts.user_initiated }) -- Handles its own modifiable toggles for writes
   local response_started = false
   local thinking_char_count = 0
 
@@ -1070,10 +1068,7 @@ function M.send_to_provider(opts)
 
           -- Position cursor on the blank content line after @You:
           local new_prompt_line = last_line_idx + cursor_line_offset
-          if vim.api.nvim_get_current_buf() == bufnr then
-            ui.set_cursor(new_prompt_line, 0, bufnr)
-          end
-          ui.move_to_bottom(bufnr)
+          cursor.request_move(bufnr, { line = new_prompt_line, bottom = true })
 
           editing.auto_write(bufnr)
           ui.update_ui(bufnr)

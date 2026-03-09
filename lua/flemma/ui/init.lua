@@ -13,6 +13,7 @@ local roles = require("flemma.utilities.roles")
 local bridge = require("flemma.core.bridge")
 local migration = require("flemma.migration")
 local parser = require("flemma.parser")
+local cursor = require("flemma.cursor")
 local writequeue = require("flemma.buffer.writequeue")
 
 -- Extmark priority constants
@@ -216,8 +217,9 @@ end
 
 ---Show loading spinner
 ---@param bufnr integer
+---@param spinner_opts? { force?: boolean }
 ---@return integer timer_id
-function M.start_loading_spinner(bufnr)
+function M.start_loading_spinner(bufnr, spinner_opts)
   local buffer_state = state.get_buffer_state(bufnr)
   local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
   local frame = 1
@@ -259,9 +261,13 @@ function M.start_loading_spinner(bufnr)
 
       -- Immediately update UI after adding the thinking message
       M.update_ui(bufnr)
-      -- Move to bottom and center the line so user sees the message
-      M.move_to_bottom(bufnr)
-      M.center_cursor(bufnr)
+      -- Move to bottom and center so user sees the spinner
+      cursor.request_move(bufnr, {
+        line = vim.api.nvim_buf_line_count(bufnr),
+        bottom = true,
+        center = true,
+        force = spinner_opts and spinner_opts.force or false,
+      })
     end)
   end)
 

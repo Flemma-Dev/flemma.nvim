@@ -50,7 +50,7 @@ M.setup = function()
         -- Normal mode mappings
         if config.keymaps.normal.send then
           vim.keymap.set("n", config.keymaps.normal.send, function()
-            core.send_or_execute()
+            core.send_or_execute({ user_initiated = true })
           end, { buffer = true, desc = "Send to Flemma" })
         end
 
@@ -151,6 +151,7 @@ M.setup = function()
             -- and we exit any textlock context (e.g., Copilot's keymap wrapper)
             vim.schedule(function()
               core.send_or_execute({
+                user_initiated = true,
                 on_request_complete = function()
                   ui.buffer_cmd(bufnr, "startinsert!")
                 end,
