@@ -384,7 +384,11 @@ describe("Lualine component", function()
     it("should refresh lualine on FlemmaBootComplete", function()
       -- Arrange: track lualine.refresh() calls
       local refresh_called = false
-      package.loaded["lualine"] = { refresh = function() refresh_called = true end }
+      package.loaded["lualine"] = {
+        refresh = function()
+          refresh_called = true
+        end,
+      }
 
       -- Re-require component so init() picks up the mock
       package.loaded["lualine.components.flemma"] = nil
