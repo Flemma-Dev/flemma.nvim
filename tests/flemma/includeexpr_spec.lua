@@ -94,6 +94,27 @@ describe("Include expression navigation", function()
     assert.is_truthy(result:find("include_target.txt"))
   end)
 
+  it("resolves indirect include via frontmatter variable", function()
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
+    vim.api.nvim_buf_set_name(bufnr, fixture_dir .. "test.chat")
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "```lua",
+      "file = './include_target.txt'",
+      "mod = include(file)",
+      "```",
+      "@You:",
+      "See {{ mod }}",
+    })
+    -- Place cursor on the {{ mod }} expression
+    vim.api.nvim_win_set_cursor(0, { 6, 5 })
+
+    local result = navigation.resolve_include_path(bufnr)
+    assert.is_not_nil(result)
+    assert.is_truthy(result:find("include_target.txt"))
+  end)
+
   it("resolve_include_path_expr returns a string when cursor is on plain text", function()
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)

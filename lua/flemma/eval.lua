@@ -222,7 +222,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
       end
     end
 
-    return emittable.composite_include_part(children)
+    return emittable.composite_include_part(children, { source_path = target_path })
   end
 end
 

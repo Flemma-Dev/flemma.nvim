@@ -10,6 +10,7 @@ local eval = require("flemma.eval")
 local log = require("flemma.logging")
 local parser = require("flemma.parser")
 local processor = require("flemma.processor")
+local symbols = require("flemma.symbols")
 
 ---Find the next message marker in the buffer and move cursor there
 ---@return boolean found True if a next message was found and cursor moved
@@ -104,15 +105,21 @@ function M.resolve_include_path(bufnr)
   end
 
   -- Evaluate the expression — pcall to handle errors gracefully
-  local ok, err = pcall(eval.eval_expression, seg.code, env)
+  local ok, result = pcall(eval.eval_expression, seg.code, env)
   if not ok then
-    log.debug("navigation: expression eval failed: " .. tostring(err))
+    log.debug("navigation: expression eval failed: " .. tostring(result))
+  end
+
+  -- Check if the eval result carries a source path (e.g., a variable assigned from include())
+  if not captured_path and ok and type(result) == "table" and result[symbols.SOURCE_PATH] then
+    captured_path = result[symbols.SOURCE_PATH]
+    log.debug("navigation: resolved via symbols.SOURCE_PATH=" .. captured_path)
   end
 
   if captured_path then
     log.debug("navigation: resolved include path=" .. captured_path)
   else
-    log.trace("navigation: expression did not call include()")
+    log.trace("navigation: expression did not resolve to an include path")
   end
 
   return captured_path
