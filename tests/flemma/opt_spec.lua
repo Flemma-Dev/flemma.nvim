@@ -823,7 +823,7 @@ describe("flemma.opt", function()
     it("table flows through frontmatter pipeline", function()
       local lines = {
         "```lua",
-        'flemma.opt.sandbox = { enabled = true, policy = { rw_paths = { "$CWD" } } }',
+        'flemma.opt.sandbox = { enabled = true, policy = { rw_paths = { "urn:flemma:cwd" } } }',
         "```",
         "@You:",
         "test",
@@ -834,7 +834,7 @@ describe("flemma.opt", function()
       assert.is_not_nil(prompt.opts)
       assert.is_not_nil(prompt.opts.sandbox)
       assert.is_true(prompt.opts.sandbox.enabled)
-      assert.are.same({ "$CWD" }, prompt.opts.sandbox.policy.rw_paths)
+      assert.are.same({ "urn:flemma:cwd" }, prompt.opts.sandbox.policy.rw_paths)
     end)
   end)
 
