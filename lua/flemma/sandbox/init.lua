@@ -8,6 +8,7 @@ local bwrap = require("flemma.sandbox.backends.bwrap")
 local loader = require("flemma.loader")
 local registry_utils = require("flemma.registry")
 local state = require("flemma.state")
+local variables = require("flemma.utilities.variables")
 
 -- ---------------------------------------------------------------------------
 -- Backend registry (mirrors tools/approval.lua pattern)
@@ -295,21 +296,22 @@ end
 ---@type boolean|nil nil = no override, defer to config
 local runtime_override = nil
 
---- Known path variables and their resolvers.
---- Each resolver receives (bufnr) and returns an absolute path or nil.
----@type table<string, fun(bufnr: integer): string|nil>
-local path_variables = {
-  ["$CWD"] = function(_bufnr)
-    return vim.fn.getcwd()
-  end,
-  ["$FLEMMA_BUFFER_PATH"] = function(bufnr)
-    local bufname = vim.api.nvim_buf_get_name(bufnr)
-    if bufname == "" then
-      return nil
-    end
-    return vim.fn.fnamemodify(bufname, ":p:h")
-  end,
-}
+-- Register Flemma-specific URN resolvers (once at module load)
+variables.register("urn:flemma:cwd", function(_context)
+  return vim.fn.getcwd()
+end)
+
+variables.register("urn:flemma:buffer:path", function(context)
+  local bufnr = context and context.bufnr
+  if not bufnr then
+    return nil
+  end
+  local bufname = vim.api.nvim_buf_get_name(bufnr)
+  if bufname == "" then
+    return nil
+  end
+  return vim.fn.fnamemodify(bufname, ":p:h")
+end)
 
 --- Normalize a path to absolute, resolving symlinks
 ---@param path string
@@ -325,38 +327,19 @@ end
 ---@return flemma.config.SandboxPolicy resolved
 local function resolve_policy(policy, bufnr)
   local resolved = vim.deepcopy(policy)
-  local seen = {}
-  local expanded = {}
+  local context = { bufnr = bufnr }
 
-  for _, path in ipairs(resolved.rw_paths or {}) do
-    local abs
-    local resolver = path_variables[path]
-    if resolver then
-      abs = resolver(bufnr)
-      if not abs then
-        -- Variable resolved to nil (e.g., unnamed buffer for $FLEMMA_BUFFER_PATH)
-        goto continue
-      end
-      abs = normalize(abs)
-    elseif path:match("^%$") then
-      -- Unknown variable
-      vim.schedule(function()
-        vim.notify("Flemma sandbox: unknown path variable '" .. path .. "', skipping", vim.log.levels.WARN)
-      end)
-      goto continue
-    else
-      abs = normalize(path)
-    end
+  -- Expand variables, dropping nils
+  local expanded = variables.expand_list(resolved.rw_paths or {}, context)
 
-    if not seen[abs] then
-      seen[abs] = true
-      table.insert(expanded, abs)
-    end
-
-    ::continue::
+  -- Normalize to absolute paths
+  local normalized = {}
+  for _, path in ipairs(expanded) do
+    table.insert(normalized, normalize(path))
   end
 
-  resolved.rw_paths = expanded
+  -- Deduplicate: exact matches and prefix subsumption
+  resolved.rw_paths = variables.deduplicate_by_prefix(normalized)
   return resolved
 end
 
