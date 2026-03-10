@@ -64,10 +64,13 @@ require("flemma").setup({
     enabled = true,               -- Master switch (default: true)
     backend = "auto",             -- "auto" | "required" | explicit name (default: "auto")
     policy = {
-      rw_paths = {                -- Read-write paths (all others are read-only)
-        "$CWD",                   --   Vim global working directory (from :cd)
-        "$FLEMMA_BUFFER_PATH",    --   Directory of the current .chat file
-        "/tmp",                   --   System temp directory
+      rw_paths = {                          -- Read-write paths (all others are read-only)
+        "urn:flemma:cwd",                   --   Vim global working directory (from :cd)
+        "urn:flemma:buffer:path",           --   Directory of the current .chat file
+        "/tmp",                             --   System temp directory
+        "${TMPDIR:-/tmp}",                  --   TMPDIR (deduped with /tmp if same)
+        "${XDG_CACHE_HOME:-~/.cache}",      --   Package manager caches
+        "${XDG_DATA_HOME:-~/.local/share}", --   Package manager stores
       },
       network = true,             -- Allow network access (default: true)
       allow_privileged = false,   -- Allow sudo/capabilities (default: false)
@@ -106,20 +109,28 @@ sandbox = {
 
 | Key                | Default                                     | Effect                                                                        |
 | ------------------ | ------------------------------------------- | ----------------------------------------------------------------------------- |
-| `rw_paths`         | `{ "$CWD", "$FLEMMA_BUFFER_PATH", "/tmp" }` | Paths with read-write access. Everything else is read-only.                   |
+| `rw_paths`         | `{ "urn:flemma:cwd", "urn:flemma:buffer:path", "/tmp", ... }` | Paths with read-write access. Everything else is read-only. |
 | `network`          | `true`                                      | Allow network access inside the sandbox.                                      |
 | `allow_privileged` | `false`                                     | Allow `sudo` and capabilities. When `false`, user namespaces drop privileges. |
 
 ### Path variables
 
-Paths in `rw_paths` support two variables that are expanded at execution time:
+Paths in `rw_paths` support three expansion forms:
 
-| Variable              | Expansion                                    | Source                                |
-| --------------------- | -------------------------------------------- | ------------------------------------- |
-| `$CWD`                | Vim's global working directory               | `vim.fn.getcwd()` (set by `:cd`)      |
-| `$FLEMMA_BUFFER_PATH` | Directory containing the current buffer file | `vim.fn.fnamemodify(bufname, ":p:h")` |
+| Form | Example | Expansion |
+|------|---------|-----------|
+| `urn:flemma:*` | `urn:flemma:cwd` | Flemma-specific resolver (see below) |
+| `$VAR` | `$HOME` | Environment variable (nil if unset) |
+| `${VAR:-default}` | `${XDG_CACHE_HOME:-~/.cache}` | Env var with fallback; `~` expanded in default |
 
-After expansion, all paths are normalized to absolute paths with symlinks resolved. Duplicate paths are deduplicated. Unknown `$VARIABLES` produce a warning and are skipped.
+#### Flemma URN variables
+
+| URN | Expansion | Source |
+|-----|-----------|--------|
+| `urn:flemma:cwd` | Vim's global working directory | `vim.fn.getcwd()` (set by `:cd`) |
+| `urn:flemma:buffer:path` | Directory containing the current .chat file | `vim.fn.fnamemodify(bufname, ":p:h")` |
+
+After expansion, all paths are normalized to absolute paths with symlinks resolved. Paths subsumed by a parent path are deduplicated (e.g., `/tmp` and `/tmp/foo` collapses to just `/tmp`).
 
 ---
 
@@ -139,7 +150,7 @@ flemma.opt.sandbox = false
 flemma.opt.sandbox = {
   enabled = true,
   policy = {
-    rw_paths = { "$CWD", "/data/experiments" },
+    rw_paths = { "urn:flemma:cwd", "/data/experiments" },
     network = false,
   },
 }
@@ -226,7 +237,7 @@ No `/tmp`, no network, only the project directory is writable:
 require("flemma").setup({
   sandbox = {
     policy = {
-      rw_paths = { "$CWD" },
+      rw_paths = { "urn:flemma:cwd" },
       network = false,
     },
   },
@@ -241,7 +252,7 @@ Instead of sharing the host's `/tmp`, mount a private tmpfs that is discarded wh
 require("flemma").setup({
   sandbox = {
     policy = {
-      rw_paths = { "$CWD", "$FLEMMA_BUFFER_PATH" },  -- remove /tmp from rw_paths
+      rw_paths = { "urn:flemma:cwd", "urn:flemma:buffer:path" },  -- remove /tmp from rw_paths
     },
     backends = {
       bwrap = {
@@ -342,7 +353,7 @@ The built-in [Bubblewrap](https://github.com/containers/bubblewrap) backend is r
 | `--bind path path`  | Mount each `rw_paths` entry read-write                                 |
 | `--dev /dev`        | Provide `/dev` (needed by most tools)                                  |
 | `--proc /proc`      | Provide `/proc` (needed by Python, Node, etc.)                         |
-| `--tmpfs /run`      | Writable `/run` for runtime files (see [NixOS note](#nixos--gnu-guix)) |
+| (no `--tmpfs /run`) | `/run` stays read-only — host runtime sockets (nscd, D-Bus) are preserved |
 | `--unshare-user`    | Drop privileges (when `allow_privileged = false`)                      |
 | `--unshare-pid`     | Isolate PID namespace                                                  |
 | `--unshare-uts`     | Isolate hostname                                                       |
@@ -386,21 +397,7 @@ The sandbox limits the blast radius of tool execution. It is effective against t
 
 ### NixOS / GNU Guix
 
-On NixOS and GNU Guix, system packages are exposed via symlinks under `/run/current-system/sw/bin/`. The bwrap backend automatically detects `/run/current-system` and re-binds it read-only after the `/run` tmpfs mount, so system commands like `free`, `which`, and `ls` remain available inside the sandbox.
-
-If your distribution places essential paths under `/run` that Flemma doesn't know about, use `extra_args` to bind them manually:
-
-```lua
-require("flemma").setup({
-  sandbox = {
-    backends = {
-      bwrap = {
-        extra_args = { "--ro-bind", "/run/my-distro-path", "/run/my-distro-path" },
-      },
-    },
-  },
-})
-```
+On NixOS and GNU Guix, system packages are exposed via symlinks under `/run/current-system/sw/bin/`. Since `/run` is mounted read-only (via `--ro-bind / /`), these symlinks are automatically available inside the sandbox without any special handling.
 
 **Signal propagation is best-effort.** When a sandboxed command times out, Flemma kills the `bwrap` parent. Child processes are terminated via `--die-with-parent` and PID namespace teardown. In practice this is reliable, but a process that has deliberately escaped its session may survive briefly before kernel cleanup catches it.
 

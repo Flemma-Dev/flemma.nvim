@@ -39,7 +39,7 @@ require("flemma").setup({
     },
     bash = {
       shell = nil,                           -- Shell binary (default: bash)
-      cwd = "$FLEMMA_BUFFER_PATH",           -- Working directory; resolves to .chat file's directory (set nil for Neovim cwd)
+      cwd = "urn:flemma:buffer:path",         -- Working directory; resolves to .chat file's directory (set nil for Neovim cwd)
       env = nil,                             -- Extra environment variables
     },
     modules = {},                            -- Lua module paths for third-party tool sources (e.g., "3rd.tools.todos")
@@ -115,10 +115,13 @@ require("flemma").setup({
     enabled = true,                          -- Enable filesystem sandboxing
     backend = "auto",                        -- "auto" | "required" | explicit name
     policy = {
-      rw_paths = {                           -- Read-write paths (all others read-only)
-        "$CWD",                              --   Vim working directory
-        "$FLEMMA_BUFFER_PATH",               --   Directory of the .chat file
-        "/tmp",                              --   System temp directory
+      rw_paths = {                              -- Read-write paths (all others read-only)
+        "urn:flemma:cwd",                       --   Vim working directory
+        "urn:flemma:buffer:path",               --   Directory of the .chat file
+        "/tmp",                                 --   System temp directory
+        "${TMPDIR:-/tmp}",                      --   TMPDIR (deduped with /tmp if same)
+        "${XDG_CACHE_HOME:-~/.cache}",          --   Package manager caches
+        "${XDG_DATA_HOME:-~/.local/share}",     --   Package manager stores
       },
       network = true,                        -- Allow network access
       allow_privileged = false,              -- Allow sudo/capabilities
@@ -273,7 +276,7 @@ Sandboxing constrains tool execution so that shell commands run inside a read-on
 | --------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `sandbox.enabled`                 | `true`                                      | Master switch for sandboxing.                                                         |
 | `sandbox.backend`                 | `"auto"`                                    | `"auto"` = detect silently, `"required"` = detect and warn, or explicit backend name. |
-| `sandbox.policy.rw_paths`         | `{ "$CWD", "$FLEMMA_BUFFER_PATH", "/tmp" }` | Paths with read-write access. Supports path variables.                                |
+| `sandbox.policy.rw_paths`         | `{ "urn:flemma:cwd", "urn:flemma:buffer:path", "/tmp", ... }` | Paths with read-write access. Supports URNs, `$ENV`, `${ENV:-default}`. |
 | `sandbox.policy.network`          | `true`                                      | Allow network access inside the sandbox.                                              |
 | `sandbox.policy.allow_privileged` | `false`                                     | Allow `sudo` and capabilities inside the sandbox.                                     |
 

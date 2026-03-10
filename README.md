@@ -390,7 +390,7 @@ Flemma auto-detects the best available backend. The built-in [Bubblewrap](https:
 require("flemma").setup({
   sandbox = {
     policy = {
-      rw_paths = { "$CWD" },    -- only the project directory is writable
+      rw_paths = { "urn:flemma:cwd" },    -- only the project directory is writable
       network = false,          -- no network access
     },
   },

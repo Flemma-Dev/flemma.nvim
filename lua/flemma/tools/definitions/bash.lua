@@ -168,7 +168,7 @@ M.definitions = {
       }
 
       -- Apply bash-specific config
-      -- cwd is already resolved by executor (config > $FLEMMA_BUFFER_PATH > Neovim cwd)
+      -- cwd is already resolved by executor (config > urn:flemma:buffer:path > Neovim cwd)
       job_opts.cwd = ctx.cwd
       local tool_config = ctx:get_config()
       if tool_config and tool_config.env then
