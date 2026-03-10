@@ -223,6 +223,7 @@ describe("flemma.status", function()
           backend = "bwrap",
           backend_mode = "auto",
           backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
         },
         tools = { enabled = { "bash", "read_file" }, disabled = {} },
         approval = {
@@ -268,6 +269,7 @@ describe("flemma.status", function()
           backend = "bwrap",
           backend_mode = "auto",
           backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
         },
         tools = { enabled = { "bash" }, disabled = {} },
         approval = {
@@ -309,6 +311,7 @@ describe("flemma.status", function()
           backend = "bwrap",
           backend_mode = "auto",
           backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
         },
         tools = { enabled = {}, disabled = {} },
         approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
@@ -339,6 +342,7 @@ describe("flemma.status", function()
           backend = "bwrap",
           backend_mode = "auto",
           backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
         },
         tools = { enabled = {}, disabled = {} },
         approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
@@ -387,6 +391,7 @@ describe("flemma.status", function()
           backend = "bwrap",
           backend_mode = "auto",
           backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
         },
         tools = { enabled = {}, disabled = {} },
         approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
@@ -420,6 +425,7 @@ describe("flemma.status", function()
           backend = "bwrap",
           backend_mode = "auto",
           backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
         },
         tools = { enabled = {}, disabled = {} },
         approval = {
@@ -448,6 +454,7 @@ describe("flemma.status", function()
           backend = "bwrap",
           backend_mode = "auto",
           backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
         },
         tools = { enabled = { "bash", "read_file" }, disabled = { "execute_command" } },
         approval = {
@@ -480,6 +487,7 @@ describe("flemma.status", function()
           backend = "bwrap",
           backend_mode = "auto",
           backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
         },
         tools = { enabled = { "bash", "edit", "read", "write" }, disabled = {} },
         approval = {
@@ -511,6 +519,7 @@ describe("flemma.status", function()
           backend = "bwrap",
           backend_mode = "auto",
           backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
         },
         tools = { enabled = { "bash", "read" }, disabled = {} },
         approval = {
@@ -539,6 +548,7 @@ describe("flemma.status", function()
           backend = "bwrap",
           backend_mode = "auto",
           backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
         },
         tools = { enabled = { "bash", "read" }, disabled = {} },
         approval = {

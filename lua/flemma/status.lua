@@ -23,7 +23,7 @@ local MARKER_FRONTMATTER = "✲"
 ---@field provider { name: string, model: string|nil, initialized: boolean, model_info: flemma.models.ModelInfo|nil }
 ---@field parameters { merged: table<string, any>, frontmatter_overrides: table<string, any>|nil, resolved_max_tokens: integer|nil }
 ---@field autopilot { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, frontmatter_override: boolean|nil }
----@field sandbox { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil }
+---@field sandbox { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil, policy: flemma.config.SandboxPolicy }
 ---@field tools { enabled: string[], disabled: string[], frontmatter_items: table<string, true>|nil }
 ---@field approval { source: string|nil, approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil }
 ---@field buffer { is_chat: boolean, bufnr: integer }
@@ -133,14 +133,17 @@ local function collect_autopilot(bufnr, config, opts)
 end
 
 ---Collect sandbox section data
+---@param bufnr integer
 ---@param opts flemma.opt.FrontmatterOpts|nil
----@return { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil }
-local function collect_sandbox(opts)
+---@return { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil, policy: flemma.config.SandboxPolicy }
+local function collect_sandbox(bufnr, opts)
   local sandbox_config = sandbox.resolve_config(opts)
   local runtime_override = sandbox.get_override()
 
   local backend_name, backend_error = sandbox.detect_available_backend(opts)
   local backend_available, validate_error = sandbox.validate_backend(opts)
+
+  local policy = sandbox.get_policy(bufnr, opts)
 
   return {
     enabled = sandbox.is_enabled(opts),
@@ -150,6 +153,7 @@ local function collect_sandbox(opts)
     backend_mode = sandbox_config.backend,
     backend_available = backend_available,
     backend_error = backend_error or validate_error,
+    policy = policy,
   }
 end
 
@@ -512,6 +516,17 @@ function M.format(data, verbose)
   if data.sandbox.backend_error then
     add("  backend error: " .. data.sandbox.backend_error)
   end
+  add("  network: " .. (data.sandbox.policy.network == false and "blocked" or "allowed"))
+  add("  privileged: " .. (data.sandbox.policy.allow_privileged == true and "allowed" or "dropped"))
+  local rw_paths = data.sandbox.policy.rw_paths or {}
+  if #rw_paths > 0 then
+    add("  rw_paths (" .. #rw_paths .. "):")
+    for _, path in ipairs(rw_paths) do
+      add("    " .. path)
+    end
+  else
+    add("  rw_paths: (none)")
+  end
   add("")
 
   -- Tools section
@@ -605,7 +620,7 @@ function M.collect(bufnr)
     provider = collect_provider(config),
     parameters = collect_parameters(config, opts),
     autopilot = collect_autopilot(bufnr, config, opts),
-    sandbox = collect_sandbox(opts),
+    sandbox = collect_sandbox(bufnr, opts),
     tools = tools_data,
     approval = collect_approval(config, opts, tools_data.enabled),
     buffer = {
