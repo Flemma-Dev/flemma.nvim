@@ -512,9 +512,9 @@ function M.format(data, verbose)
       .. (data.sandbox.backend or "(none)")
       .. (data.sandbox.backend_mode and (" (" .. data.sandbox.backend_mode .. ")") or "")
   )
-  add("  backend available: " .. tostring(data.sandbox.backend_available))
+  add("    available: " .. tostring(data.sandbox.backend_available))
   if data.sandbox.backend_error then
-    add("  backend error: " .. data.sandbox.backend_error)
+    add("    error: " .. data.sandbox.backend_error)
   end
   add("  network: " .. (data.sandbox.policy.network == false and "blocked" or "allowed"))
   add("  privileged: " .. (data.sandbox.policy.allow_privileged == true and "allowed" or "dropped"))
