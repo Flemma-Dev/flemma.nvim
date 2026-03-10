@@ -45,23 +45,14 @@ function M.wrap(policy, backend_config, inner_cmd)
     vim.list_extend(args, { "--bind", path, path })
   end
 
-  -- Essentials for tools (Python, Node, etc.)
+  -- Essentials
   vim.list_extend(args, { "--dev", "/dev" })
   vim.list_extend(args, { "--proc", "/proc" })
-  vim.list_extend(args, { "--tmpfs", "/run" })
-
-  -- NixOS: /run/current-system and /run/booted-system are symlinks into
-  -- /nix/store that tools like `nix path-info` rely on. The tmpfs above
-  -- hides them. Use --symlink (not --ro-bind) so the link target is
-  -- preserved — --ro-bind follows the symlink and mounts the store path
-  -- as a plain directory, which breaks nix store-path detection.
-  for _, name in ipairs({ "current-system", "booted-system" }) do
-    local run_path = "/run/" .. name
-    local target = vim.uv.fs_readlink(run_path)
-    if target then
-      vim.list_extend(args, { "--symlink", target, run_path })
-    end
-  end
+  -- /run is intentionally left as read-only (from --ro-bind / /) rather than
+  -- replaced with a tmpfs. A tmpfs hides host runtime sockets (nscd, systemd-
+  -- resolved, D-Bus) that sandboxed tools depend on for DNS and IPC. The
+  -- read-only mount still prevents sandboxed processes from creating PID files
+  -- or mutating host runtime state.
 
   -- Capabilities / privilege isolation
   if policy.allow_privileged ~= true then

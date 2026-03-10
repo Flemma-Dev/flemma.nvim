@@ -195,7 +195,7 @@ describe("sandbox bwrap backend", function()
       assert.is_truthy(vim.tbl_contains(args, "--unshare-ipc"))
     end)
 
-    it("uses --symlink for NixOS /run symlinks to preserve store-path detection", function()
+    it("does not mount tmpfs on /run (host /run stays read-only)", function()
       local policy = {
         rw_paths = {},
         network = true,
@@ -203,35 +203,16 @@ describe("sandbox bwrap backend", function()
       }
       local args = bwrap.wrap(policy, {}, { "echo" })
 
-      for _, name in ipairs({ "current-system", "booted-system" }) do
-        local run_path = "/run/" .. name
-        local target = vim.uv.fs_readlink(run_path)
-        if target then
-          -- Should use --symlink <target> <run_path>, NOT --ro-bind
-          local found_symlink = false
-          local found_ro_bind = false
-          for i, arg in ipairs(args) do
-            if arg == "--symlink" and args[i + 1] == target and args[i + 2] == run_path then
-              found_symlink = true
-            end
-            if arg == "--ro-bind" and args[i + 1] == run_path then
-              found_ro_bind = true
-            end
-          end
-          assert.is_true(found_symlink, "expected --symlink for " .. run_path .. " on NixOS")
-          assert.is_false(found_ro_bind, "--ro-bind would break nix store-path detection for " .. run_path)
-        else
-          -- On non-NixOS, neither symlink nor bind should be present
-          local found = false
-          for _, arg in ipairs(args) do
-            if arg == run_path then
-              found = true
-              break
-            end
-          end
-          assert.is_false(found, "should not reference " .. run_path .. " on non-NixOS")
+      -- Should NOT contain --tmpfs /run
+      for i, arg in ipairs(args) do
+        if arg == "--tmpfs" and args[i + 1] == "/run" then
+          assert.fail("--tmpfs /run should not be present (host /run stays read-only via --ro-bind)")
         end
       end
+
+      -- Should still have --dev and --proc
+      assert.is_truthy(vim.tbl_contains(args, "--dev"))
+      assert.is_truthy(vim.tbl_contains(args, "--proc"))
     end)
 
     it("includes dev and proc mounts", function()
