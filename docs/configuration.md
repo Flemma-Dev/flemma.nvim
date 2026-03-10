@@ -39,7 +39,7 @@ require("flemma").setup({
     },
     bash = {
       shell = nil,                           -- Shell binary (default: bash)
-      cwd = "urn:flemma:buffer:path",         -- Working directory; resolves to .chat file's directory (set nil for Neovim cwd)
+      cwd = "urn:flemma:buffer:path",        -- Working directory; resolves to .chat file's directory (set nil for Neovim cwd)
       env = nil,                             -- Extra environment variables
     },
     modules = {},                            -- Lua module paths for third-party tool sources (e.g., "3rd.tools.todos")
@@ -272,13 +272,13 @@ Preset names must begin with `$`. Switch using `:Flemma switch $fast` and overri
 
 Sandboxing constrains tool execution so that shell commands run inside a read-only filesystem with write access limited to an explicit allowlist. It is enabled by default and auto-detects a compatible backend (currently Bubblewrap on Linux). On platforms without a backend, Flemma silently degrades to unsandboxed execution.
 
-| Key                               | Default                                     | Effect                                                                                |
-| --------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `sandbox.enabled`                 | `true`                                      | Master switch for sandboxing.                                                         |
-| `sandbox.backend`                 | `"auto"`                                    | `"auto"` = detect silently, `"required"` = detect and warn, or explicit backend name. |
-| `sandbox.policy.rw_paths`         | `{ "urn:flemma:cwd", "urn:flemma:buffer:path", "/tmp", ... }` | Paths with read-write access. Supports URNs, `$ENV`, `${ENV:-default}`. |
-| `sandbox.policy.network`          | `true`                                      | Allow network access inside the sandbox.                                              |
-| `sandbox.policy.allow_privileged` | `false`                                     | Allow `sudo` and capabilities inside the sandbox.                                     |
+| Key                               | Default                                                       | Effect                                                                                |
+| --------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `sandbox.enabled`                 | `true`                                                        | Master switch for sandboxing.                                                         |
+| `sandbox.backend`                 | `"auto"`                                                      | `"auto"` = detect silently, `"required"` = detect and warn, or explicit backend name. |
+| `sandbox.policy.rw_paths`         | `{ "urn:flemma:cwd", "urn:flemma:buffer:path", "/tmp", ... }` | Paths with read-write access. Supports URNs, `$ENV`, `${ENV:-default}`.               |
+| `sandbox.policy.network`          | `true`                                                        | Allow network access inside the sandbox.                                              |
+| `sandbox.policy.allow_privileged` | `false`                                                       | Allow `sudo` and capabilities inside the sandbox.                                     |
 
 Override per-buffer via `flemma.opt.sandbox` in frontmatter (boolean shorthand `true`/`false` supported). Toggle at runtime with `:Flemma sandbox:enable/disable/status`.
 

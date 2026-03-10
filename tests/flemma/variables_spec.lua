@@ -41,18 +41,12 @@ describe("utilities.variables", function()
     end)
 
     it("expands ${VAR:-default} using default when unset", function()
-      assert.are.equal(
-        "/fallback/path",
-        variables.expand("${FLEMMA_TEST_NONEXISTENT_VAR_12345:-/fallback/path}")
-      )
+      assert.are.equal("/fallback/path", variables.expand("${FLEMMA_TEST_NONEXISTENT_VAR_12345:-/fallback/path}"))
     end)
 
     it("expands ~ in default values", function()
       local home = os.getenv("HOME")
-      assert.are.equal(
-        home .. "/.cache",
-        variables.expand("${FLEMMA_TEST_NONEXISTENT_VAR_12345:-~/.cache}")
-      )
+      assert.are.equal(home .. "/.cache", variables.expand("${FLEMMA_TEST_NONEXISTENT_VAR_12345:-~/.cache}"))
     end)
 
     it("expands ~ at start of literal paths", function()

@@ -107,27 +107,27 @@ sandbox = {
 
 ### Policy options
 
-| Key                | Default                                     | Effect                                                                        |
-| ------------------ | ------------------------------------------- | ----------------------------------------------------------------------------- |
-| `rw_paths`         | `{ "urn:flemma:cwd", "urn:flemma:buffer:path", "/tmp", ... }` | Paths with read-write access. Everything else is read-only. |
-| `network`          | `true`                                      | Allow network access inside the sandbox.                                      |
-| `allow_privileged` | `false`                                     | Allow `sudo` and capabilities. When `false`, user namespaces drop privileges. |
+| Key                | Default                                                       | Effect                                                                        |
+| ------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `rw_paths`         | `{ "urn:flemma:cwd", "urn:flemma:buffer:path", "/tmp", ... }` | Paths with read-write access. Everything else is read-only.                   |
+| `network`          | `true`                                                        | Allow network access inside the sandbox.                                      |
+| `allow_privileged` | `false`                                                       | Allow `sudo` and capabilities. When `false`, user namespaces drop privileges. |
 
 ### Path variables
 
 Paths in `rw_paths` support three expansion forms:
 
-| Form | Example | Expansion |
-|------|---------|-----------|
-| `urn:flemma:*` | `urn:flemma:cwd` | Flemma-specific resolver (see below) |
-| `$VAR` | `$HOME` | Environment variable (nil if unset) |
+| Form              | Example                       | Expansion                                      |
+| ----------------- | ----------------------------- | ---------------------------------------------- |
+| `urn:flemma:*`    | `urn:flemma:cwd`              | Flemma-specific resolver (see below)           |
+| `$VAR`            | `$HOME`                       | Environment variable (nil if unset)            |
 | `${VAR:-default}` | `${XDG_CACHE_HOME:-~/.cache}` | Env var with fallback; `~` expanded in default |
 
 #### Flemma URN variables
 
-| URN | Expansion | Source |
-|-----|-----------|--------|
-| `urn:flemma:cwd` | Vim's global working directory | `vim.fn.getcwd()` (set by `:cd`) |
+| URN                      | Expansion                                   | Source                                |
+| ------------------------ | ------------------------------------------- | ------------------------------------- |
+| `urn:flemma:cwd`         | Vim's global working directory              | `vim.fn.getcwd()` (set by `:cd`)      |
 | `urn:flemma:buffer:path` | Directory containing the current .chat file | `vim.fn.fnamemodify(bufname, ":p:h")` |
 
 After expansion, all paths are normalized to absolute paths with symlinks resolved. Paths subsumed by a parent path are deduplicated (e.g., `/tmp` and `/tmp/foo` collapses to just `/tmp`).
@@ -347,20 +347,20 @@ The built-in [Bubblewrap](https://github.com/containers/bubblewrap) backend is r
 
 ### What bwrap does
 
-| Flag                | Effect                                                                 |
-| ------------------- | ---------------------------------------------------------------------- |
-| `--ro-bind / /`     | Mount the entire rootfs read-only                                      |
-| `--bind path path`  | Mount each `rw_paths` entry read-write                                 |
-| `--dev /dev`        | Provide `/dev` (needed by most tools)                                  |
-| `--proc /proc`      | Provide `/proc` (needed by Python, Node, etc.)                         |
+| Flag                | Effect                                                                    |
+| ------------------- | ------------------------------------------------------------------------- |
+| `--ro-bind / /`     | Mount the entire rootfs read-only                                         |
+| `--bind path path`  | Mount each `rw_paths` entry read-write                                    |
+| `--dev /dev`        | Provide `/dev` (needed by most tools)                                     |
+| `--proc /proc`      | Provide `/proc` (needed by Python, Node, etc.)                            |
 | (no `--tmpfs /run`) | `/run` stays read-only — host runtime sockets (nscd, D-Bus) are preserved |
-| `--unshare-user`    | Drop privileges (when `allow_privileged = false`)                      |
-| `--unshare-pid`     | Isolate PID namespace                                                  |
-| `--unshare-uts`     | Isolate hostname                                                       |
-| `--unshare-ipc`     | Isolate IPC namespace                                                  |
-| `--share-net`       | Allow network (or `--unshare-net` when `network = false`)              |
-| `--die-with-parent` | Kill child when parent dies                                            |
-| `--new-session`     | Prevent keystroke injection                                            |
+| `--unshare-user`    | Drop privileges (when `allow_privileged = false`)                         |
+| `--unshare-pid`     | Isolate PID namespace                                                     |
+| `--unshare-uts`     | Isolate hostname                                                          |
+| `--unshare-ipc`     | Isolate IPC namespace                                                     |
+| `--share-net`       | Allow network (or `--unshare-net` when `network = false`)                 |
+| `--die-with-parent` | Kill child when parent dies                                               |
+| `--new-session`     | Prevent keystroke injection                                               |
 
 ### Process lifecycle
 

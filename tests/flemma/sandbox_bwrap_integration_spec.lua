@@ -178,7 +178,8 @@ describe("bash tool sandbox integration", function()
     -- making the working directory writable inside the sandbox.
     local cwd = vim.fn.getcwd()
     local target = cwd .. "/sandbox_cwd_test_" .. tostring(os.time())
-    local result = execute_bash_tool("echo cwd_write > " .. target .. " && cat " .. target, sandbox_config({ "urn:flemma:cwd" }))
+    local result =
+      execute_bash_tool("echo cwd_write > " .. target .. " && cat " .. target, sandbox_config({ "urn:flemma:cwd" }))
 
     assert.is_true(result.success, "urn:flemma:cwd expansion should make CWD writable: " .. tostring(result.error))
     assert.is_truthy(result.output:match("cwd_write"))
