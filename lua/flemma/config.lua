@@ -73,11 +73,11 @@
 
 ---@class flemma.config.BashToolConfig
 ---@field shell? string
----@field cwd? string Working directory; supports "$FLEMMA_BUFFER_PATH" pseudo-variable (default: "$FLEMMA_BUFFER_PATH")
+---@field cwd? string Working directory; supports "urn:flemma:buffer:path" (default: "urn:flemma:buffer:path")
 ---@field env? table<string, string>
 
 ---@class flemma.config.SandboxPolicy
----@field rw_paths? string[] Read-write paths; supports $CWD and $FLEMMA_BUFFER_PATH (default: {"$CWD", "$FLEMMA_BUFFER_PATH", "/tmp"})
+---@field rw_paths? string[] Read-write paths; supports urn:flemma:* URNs, $ENV, ${ENV:-default} (default: see config defaults)
 ---@field network? boolean Allow network access (default: true)
 ---@field allow_privileged? boolean Allow sudo/capabilities (default: false, enables --unshare-user)
 
@@ -285,7 +285,7 @@ return {
     cursor_after_result = "result", -- Cursor behavior after result injection: "result", "stay", or "next"
     bash = {
       shell = nil, -- Shell to use (default: bash)
-      cwd = "$FLEMMA_BUFFER_PATH", -- Working directory; resolves to .chat file's directory (set nil for Neovim cwd)
+      cwd = "urn:flemma:buffer:path", -- Working directory; resolves to .chat file's directory (set nil for Neovim cwd)
       env = nil, -- Environment variables to add
     },
     modules = {}, -- Lua module paths for third-party tool sources (e.g., "3rd.tools.todos")
@@ -329,7 +329,14 @@ return {
     enabled = true, -- Enable filesystem sandboxing
     backend = "auto", -- "auto" detects the best available backend; set explicitly to force one
     policy = {
-      rw_paths = { "$CWD", "$FLEMMA_BUFFER_PATH", "/tmp" }, -- Read-write paths (all others are read-only)
+      rw_paths = { -- Read-write paths (all others are read-only)
+        "urn:flemma:cwd",
+        "urn:flemma:buffer:path",
+        "/tmp",
+        "${TMPDIR:-/tmp}",
+        "${XDG_CACHE_HOME:-~/.cache}",
+        "${XDG_DATA_HOME:-~/.local/share}",
+      },
       network = true, -- Allow network access inside the sandbox
       allow_privileged = false, -- Allow sudo/capabilities (false = safer, drops privileges)
     },
