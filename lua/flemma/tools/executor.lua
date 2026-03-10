@@ -18,6 +18,7 @@ local sandbox_module = require("flemma.sandbox")
 local tool_context = require("flemma.tools.context")
 local truncate_module = require("flemma.utilities.truncate")
 local ui = require("flemma.ui")
+local variables = require("flemma.utilities.variables")
 local writequeue = require("flemma.buffer.writequeue")
 
 ---@class flemma.tools.PendingExecution
@@ -375,13 +376,11 @@ function M.execute(bufnr, context, frontmatter_opts)
   local buffer_context = context_module.from_buffer(bufnr)
   local dirname = buffer_context:get_dirname()
 
-  -- Resolve cwd: config value may contain $FLEMMA_BUFFER_PATH pseudo-variable
+  -- Resolve cwd: config value may be a URN or variable
   local raw_cwd = config.tools and config.tools.bash and config.tools.bash.cwd
   local resolved_cwd
-  if raw_cwd == "$FLEMMA_BUFFER_PATH" then
-    resolved_cwd = dirname or vim.fn.getcwd()
-  elseif raw_cwd then
-    resolved_cwd = raw_cwd
+  if raw_cwd then
+    resolved_cwd = variables.expand(raw_cwd, { bufnr = bufnr }) or vim.fn.getcwd()
   else
     resolved_cwd = vim.fn.getcwd()
   end
