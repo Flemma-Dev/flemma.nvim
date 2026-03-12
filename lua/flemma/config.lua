@@ -353,6 +353,6 @@ return {
     },
   },
   experimental = {
-    lsp = false,
+    lsp = vim.lsp ~= nil,
   },
 }

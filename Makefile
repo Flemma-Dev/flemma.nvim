@@ -59,7 +59,6 @@ develop:
 		"																				\
 		-c "lua																			\
 		require(\"flemma\").setup({														\
-			experimental = { lsp = true },												\
 			model = \"\$$haiku\",														\
 			parameters = { thinking = \"minimal\" },									\
 			presets = {																	\
