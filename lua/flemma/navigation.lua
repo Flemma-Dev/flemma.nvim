@@ -47,15 +47,20 @@ function M.find_prev_message()
   return false
 end
 
----Resolve the file path for an include expression under the cursor.
+---Resolve the file path for an include expression at a given position.
 ---Evaluates the expression using the real include() and checks the result
 ---for a symbols.SOURCE_PATH tag to determine the originating file.
+---When lnum/col are omitted, reads the current cursor position.
 ---@param bufnr integer Buffer number
----@return string|nil resolved_path Absolute file path, or nil if cursor is not on an include expression
-function M.resolve_include_path(bufnr)
-  local cursor_pos = vim.api.nvim_win_get_cursor(0)
-  local lnum = cursor_pos[1] -- 1-indexed
-  local col = cursor_pos[2] + 1 -- 0-indexed -> 1-indexed
+---@param lnum? integer 1-indexed line number (defaults to cursor line)
+---@param col? integer 1-indexed column number (defaults to cursor column)
+---@return string|nil resolved_path Absolute file path, or nil if position is not on an include expression
+function M.resolve_include_path(bufnr, lnum, col)
+  if not lnum or not col then
+    local cursor_pos = vim.api.nvim_win_get_cursor(0)
+    lnum = lnum or cursor_pos[1] -- 1-indexed
+    col = col or (cursor_pos[2] + 1) -- 0-indexed -> 1-indexed
+  end
   log.trace("navigation: resolve_include_path at line=" .. lnum .. " col=" .. col .. " buf=" .. bufnr)
 
   local doc = parser.get_parsed_document(bufnr)

@@ -152,6 +152,75 @@ describe("Flemma LSP", function()
     assert.is_truthy(result.contents.value:find("call_abc123"))
   end)
 
+  --- Helper: make a synchronous definition request
+  ---@param client vim.lsp.Client
+  ---@param bufnr integer
+  ---@param line integer 0-indexed line
+  ---@param character integer 0-indexed column
+  ---@return table|nil result
+  local function definition_sync(client, bufnr, line, character)
+    local response = client:request_sync("textDocument/definition", {
+      textDocument = { uri = vim.uri_from_bufnr(bufnr) },
+      position = { line = line, character = character },
+    }, 2000, bufnr)
+    if response and response.result then
+      return response.result
+    end
+    return nil
+  end
+
+  it("returns definition for @./file reference", function()
+    -- Name the buffer inside fixtures/ so @./include_target.txt resolves
+    local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
+    local target_path = fixture_dir .. "include_target.txt"
+
+    flemma.setup({ experimental = { lsp = true } })
+
+    test_counter = test_counter + 1
+    local bufnr = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_name(bufnr, fixture_dir .. "lsp_def_test_" .. test_counter .. ".chat")
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@You:",
+      "See @./include_target.txt for details",
+    })
+    vim.bo[bufnr].filetype = "chat"
+    vim.cmd("doautocmd FileType")
+
+    vim.wait(1000, function()
+      return #vim.lsp.get_clients({ name = "flemma", bufnr = bufnr }) > 0
+    end)
+
+    local clients = vim.lsp.get_clients({ name = "flemma", bufnr = bufnr })
+    assert.is_true(#clients > 0, "Client should be attached")
+    local client = clients[1]
+
+    -- Position on the file reference (0-indexed: line 1, on the @./ path)
+    local result = definition_sync(client, bufnr, 1, 6)
+    assert.is_not_nil(result, "Expected definition result for file reference")
+    assert.equals(vim.uri_from_fname(target_path), result.uri)
+  end)
+
+  it("returns nil for definition on non-include expression", function()
+    local bufnr, client = setup_chat_buffer({
+      "@You:",
+      "Hello {{ 1 + 1 }} world",
+    })
+
+    local result = definition_sync(client, bufnr, 1, 10) -- on the expression
+    assert.is_nil(result, "Non-include expression should not have a definition")
+  end)
+
+  it("returns nil for definition on plain text", function()
+    local bufnr, client = setup_chat_buffer({
+      "@You:",
+      "Just some plain text",
+    })
+
+    local result = definition_sync(client, bufnr, 1, 5)
+    assert.is_nil(result, "Plain text should not have a definition")
+  end)
+
   it("returns hover for role marker line", function()
     local bufnr, client = setup_chat_buffer({
       "@You:",

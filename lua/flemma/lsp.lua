@@ -5,6 +5,7 @@ local M = {}
 
 local ast = require("flemma.ast")
 local log = require("flemma.logging")
+local navigation = require("flemma.navigation")
 local parser = require("flemma.parser")
 local json = require("flemma.utilities.json")
 
@@ -257,6 +258,48 @@ local function handle_hover(params)
   return nil
 end
 
+---Handle a textDocument/definition request.
+---Resolves include expressions (@./file, {{ include() }}) to file locations.
+---@param params table LSP DefinitionParams
+---@return table|nil result LSP Location or nil
+local function handle_definition(params)
+  local uri = params.textDocument.uri
+  local bufnr = vim.uri_to_bufnr(uri)
+
+  log.debug("lsp definition: uri=" .. uri .. " -> bufnr=" .. bufnr)
+
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    log.warn("lsp definition: buffer " .. bufnr .. " is invalid (uri=" .. uri .. ")")
+    return nil
+  end
+
+  -- LSP positions are 0-indexed; navigation expects 1-indexed
+  local lnum = params.position.line + 1
+  local col = params.position.character + 1
+
+  log.debug("lsp definition: resolving include at L" .. lnum .. ":C" .. col)
+
+  local resolved_path = navigation.resolve_include_path(bufnr, lnum, col)
+  if not resolved_path then
+    log.debug("lsp definition: no include path resolved")
+    return nil
+  end
+
+  if vim.fn.filereadable(resolved_path) ~= 1 then
+    log.debug("lsp definition: resolved path not readable: " .. resolved_path)
+    return nil
+  end
+
+  log.debug("lsp definition: jumping to " .. resolved_path)
+  return {
+    uri = vim.uri_from_fname(resolved_path),
+    range = {
+      start = { line = 0, character = 0 },
+      ["end"] = { line = 0, character = 0 },
+    },
+  }
+end
+
 ---Create the in-process LSP server dispatch table.
 ---@param dispatchers vim.lsp.rpc.Dispatchers
 ---@return vim.lsp.rpc.PublicClient
@@ -268,10 +311,11 @@ local function create_server(dispatchers)
     request = function(method, params, callback)
       log.trace("lsp server: request " .. method)
       if method == "initialize" then
-        log.debug("lsp server: initialize — advertising hoverProvider")
+        log.debug("lsp server: initialize — advertising hoverProvider, definitionProvider")
         callback(nil, {
           capabilities = {
             hoverProvider = true,
+            definitionProvider = true,
           },
         })
         return true, 1
@@ -285,10 +329,15 @@ local function create_server(dispatchers)
         log.debug("lsp server: hover response " .. (result and "returned" or "nil (no match)"))
         callback(nil, result)
         return true, 3
+      elseif method == "textDocument/definition" then
+        local result = handle_definition(params)
+        log.debug("lsp server: definition response " .. (result and "returned" or "nil (no match)"))
+        callback(nil, result)
+        return true, 4
       else
         log.debug("lsp server: unhandled method " .. method)
         callback(nil, nil)
-        return true, 4
+        return true, 5
       end
     end,
 
