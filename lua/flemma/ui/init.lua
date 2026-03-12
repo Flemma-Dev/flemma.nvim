@@ -228,16 +228,25 @@ local function build_progress_virt_text(progress_text, bufnr, highlight)
   return chunks
 end
 
----Show loading spinner
+---Start the progress line for a new request.
+---Creates the waiting-phase extmark on the @Assistant: line and starts the
+---100ms animation timer. The timer reads all progress state from buffer_state
+---exclusively — no closure-local copies of extmark IDs or line positions.
 ---@param bufnr integer
----@param spinner_opts? { force?: boolean }
+---@param progress_opts { force?: boolean, timeout: integer }
 ---@return integer timer_id
-function M.start_loading_spinner(bufnr, spinner_opts)
+function M.start_progress(bufnr, progress_opts)
   local buffer_state = state.get_buffer_state(bufnr)
-  local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
-  local frame = 1
-  local spinner_line_idx0 = nil
-  local spinner_extmark_id = nil
+  local tick = 0
+
+  -- Initialize progress state
+  buffer_state.progress_phase = "waiting"
+  buffer_state.progress_char_count = 0
+  buffer_state.progress_started_at = vim.uv.now()
+  buffer_state.progress_timeout = progress_opts.timeout
+  buffer_state.progress_extmark_id = nil
+  buffer_state.progress_last_line = nil
+  buffer_state.progress_last_rendered_line = nil
 
   writequeue.schedule(bufnr, function()
     buffer_utils.with_modifiable(bufnr, function()
@@ -253,64 +262,138 @@ function M.start_loading_spinner(bufnr, spinner_opts)
         vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "@Assistant:" })
       end
 
-      -- Track the spinner line position and create the animated extmark.
-      -- "Thinking…" is virtual text so the buffer line stays as just "@Assistant:"
-      -- which the parser can recognise as a role marker.
-      -- hl_mode="combine" lets the spinner inherit line highlights (from apply_line_highlights, cursorline, etc.)
-      spinner_line_idx0 = vim.api.nvim_buf_line_count(bufnr) - 1
-      local spinner_text = spinner_frames[frame] .. " " .. SPINNER_LABEL
-      spinner_extmark_id = vim.api.nvim_buf_set_extmark(bufnr, spinner_ns, spinner_line_idx0, 0, {
-        virt_text = build_spinner_virt_text(spinner_text, bufnr),
+      -- Create the waiting-phase extmark (virt_text at EOL on @Assistant: line)
+      local progress_line_idx0 = vim.api.nvim_buf_line_count(bufnr) - 1
+      local frames = SPINNER_FRAMES.waiting
+      local spinner_char = frames[(tick % #frames) + 1]
+      local progress_text = spinner_char .. " " .. WAITING_LABEL .. MIDDLE_DOT .. "0s"
+      local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, spinner_ns, progress_line_idx0, 0, {
+        virt_text = build_progress_virt_text(progress_text, bufnr),
         virt_text_pos = "eol",
         hl_mode = "combine",
         priority = PRIORITY.SPINNER,
         spell = false,
       })
 
-      -- Expose extmark info so the timer and update_thinking_preview can coordinate
-      buffer_state.spinner_extmark_id = spinner_extmark_id
-      buffer_state.spinner_line_idx0 = spinner_line_idx0
-      buffer_state.spinner_preview_text = nil
+      buffer_state.progress_extmark_id = extmark_id
+      buffer_state.progress_last_line = progress_line_idx0
 
-      -- Immediately update UI after adding the thinking message
+      -- Immediately update UI and position cursor
       M.update_ui(bufnr)
-      -- Move to bottom and center so user sees the spinner
-      local is_user_send = spinner_opts and spinner_opts.force or false
+      local is_user_send = progress_opts and progress_opts.force or false
       cursor.request_move(bufnr, {
         line = vim.api.nvim_buf_line_count(bufnr),
         bottom = true,
         center = true,
         force = is_user_send,
-        reason = is_user_send and "spinner/user-send" or "spinner/autopilot",
+        reason = is_user_send and "progress/user-send" or "progress/autopilot",
       })
     end)
   end)
 
   local timer = vim.fn.timer_start(100, function()
+    if not vim.api.nvim_buf_is_valid(bufnr) then
+      return
+    end
     if not buffer_state.current_request then
       return
     end
 
-    -- Only update the extmark — no buffer modification needed.
-    -- The timer owns all extmark updates; update_thinking_preview just sets
-    -- buffer_state.spinner_preview_text for the timer to pick up.
-    if spinner_line_idx0 ~= nil and spinner_extmark_id ~= nil then
-      frame = (frame % #spinner_frames) + 1
-      local preview_text = buffer_state.spinner_preview_text
-      local label = preview_text and SPINNER_LABEL .. "  (" .. preview_text .. ")" or SPINNER_LABEL
-      local spinner_text = spinner_frames[frame] .. " " .. label
-      pcall(vim.api.nvim_buf_set_extmark, bufnr, spinner_ns, spinner_line_idx0, 0, {
-        id = spinner_extmark_id,
-        virt_text = build_spinner_virt_text(spinner_text, bufnr),
-        virt_text_pos = "eol",
-        hl_mode = "combine",
-        priority = PRIORITY.SPINNER,
-        spell = false,
-      })
+    tick = tick + 1
+
+    local phase = buffer_state.progress_phase or "waiting"
+    local frames = SPINNER_FRAMES[phase]
+    local spinner_char = frames[(tick % #frames) + 1]
+
+    -- Compute elapsed time
+    local elapsed_seconds = 0
+    if buffer_state.progress_started_at then
+      elapsed_seconds = (vim.uv.now() - buffer_state.progress_started_at) / 1000
+    end
+    local elapsed_str = str.format_elapsed(elapsed_seconds)
+
+    -- Build the progress text
+    local progress_text
+    if phase == "waiting" then
+      progress_text = spinner_char .. " " .. WAITING_LABEL .. MIDDLE_DOT .. elapsed_str
+    else
+      local count = buffer_state.progress_char_count or 0
+      local suffix = count == 1 and " character" or " characters"
+      local count_str = str.format_text_length(count) .. suffix
+      progress_text = spinner_char .. " " .. count_str .. MIDDLE_DOT .. elapsed_str
+    end
+
+    -- Timeout warning
+    local highlight = nil
+    local timeout = buffer_state.progress_timeout
+    if timeout and timeout > 0 then
+      local pct = elapsed_seconds / timeout
+      if pct >= 0.9 then
+        highlight = "DiagnosticError"
+        local remaining = math.max(0, math.floor(timeout - elapsed_seconds))
+        progress_text = progress_text .. MIDDLE_DOT .. "timeout in " .. str.format_elapsed(remaining)
+      elseif pct >= 0.8 then
+        highlight = "DiagnosticWarn"
+        local remaining = math.max(0, math.floor(timeout - elapsed_seconds))
+        progress_text = progress_text .. MIDDLE_DOT .. "timeout in " .. str.format_elapsed(remaining)
+      end
+    end
+
+    local virt_text_chunks = build_progress_virt_text(progress_text, bufnr, highlight)
+
+    -- Render based on phase: waiting/thinking use virt_text at EOL, streaming/buffering use virt_lines
+    if phase == "waiting" or phase == "thinking" then
+      local target_line = buffer_state.progress_last_line
+      local ext_id = buffer_state.progress_extmark_id
+      if target_line ~= nil and ext_id ~= nil then
+        pcall(vim.api.nvim_buf_set_extmark, bufnr, spinner_ns, target_line, 0, {
+          id = ext_id,
+          virt_text = virt_text_chunks,
+          virt_text_pos = "eol",
+          hl_mode = "combine",
+          priority = PRIORITY.SPINNER,
+          spell = false,
+        })
+      end
+    else
+      -- virt_lines below the last content line
+      local target_line = buffer_state.progress_last_line
+      if target_line == nil then
+        return
+      end
+
+      local ext_id = buffer_state.progress_extmark_id
+      local last_rendered = buffer_state.progress_last_rendered_line
+
+      if ext_id ~= nil and last_rendered == target_line then
+        -- Same line — update in-place
+        pcall(vim.api.nvim_buf_set_extmark, bufnr, spinner_ns, target_line, 0, {
+          id = ext_id,
+          virt_lines = { virt_text_chunks },
+          virt_lines_above = false,
+          hl_mode = "combine",
+          priority = PRIORITY.SPINNER,
+        })
+      else
+        -- Line changed or first active render — recreate extmark
+        if ext_id ~= nil then
+          pcall(vim.api.nvim_buf_del_extmark, bufnr, spinner_ns, ext_id)
+        end
+        local ok, new_id = pcall(vim.api.nvim_buf_set_extmark, bufnr, spinner_ns, target_line, 0, {
+          virt_lines = { virt_text_chunks },
+          virt_lines_above = false,
+          hl_mode = "combine",
+          priority = PRIORITY.SPINNER,
+        })
+        if ok then
+          buffer_state.progress_extmark_id = new_id
+        end
+      end
+      buffer_state.progress_last_rendered_line = target_line
     end
   end, { ["repeat"] = -1 })
 
-  buffer_state.spinner_timer = timer
+  buffer_state.progress_timer = timer
   return timer
 end
 
