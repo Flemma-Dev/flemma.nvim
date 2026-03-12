@@ -83,6 +83,13 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
   ---@param opts? { binary?: boolean, mime?: string }
   ---@return table emittable An IncludePart with an emit() method
   env.include = function(relative_path, opts)
+    if type(relative_path) ~= "string" then
+      error({
+        type = "expression",
+        error = string.format("include() expects a string path, got %s", type(relative_path)),
+      })
+    end
+
     opts = opts or {}
 
     -- URN dispatch: personality system
@@ -222,7 +229,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
       end
     end
 
-    return emittable.composite_include_part(children)
+    return emittable.composite_include_part(children, { source_path = target_path })
   end
 end
 

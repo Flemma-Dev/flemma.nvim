@@ -589,6 +589,14 @@ local function apply_chat_buffer_settings(bufnr)
   if config.editing.disable_textwidth then
     vim.bo[bufnr].textwidth = 0
   end
+
+  -- Enable gf / <C-w>f navigation for @./file references and {{ include() }} expressions.
+  -- Extend isfname so Neovim's gf extracts a candidate that covers the full {{ ... }}
+  -- expression — without these, cursor on ), }, or { wouldn't trigger includeexpr.
+  for character in ("{()}"):gmatch(".") do
+    vim.opt_local.isfname:append(character)
+  end
+  vim.bo[bufnr].includeexpr = 'v:lua.require("flemma.navigation").resolve_include_path_expr()'
 end
 
 ---Set up chat filetype autocmds
