@@ -44,12 +44,14 @@ local function get_buffer_pending(bufnr)
   return buffer_state.pending_executions
 end
 
----Count executions that have not been cleaned up yet for a buffer.
----Uses table presence (removed by cleanup_pending) rather than the completed
----flag, so that simultaneous async completions don't cause premature unlock.
+---Count tools currently occupying execution slots for a buffer.
+---Includes entries whose completed flag is true but haven't been cleaned up yet
+---(async completion still processing via writequeue). This inclusive counting is
+---correct for concurrency gating: an occupied slot is occupied regardless of
+---whether the tool's result is still being injected.
 ---@param bufnr integer
 ---@return integer
-local function count_pending(bufnr)
+function M.count_running(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
   local pending = buffer_state.pending_executions
   if not pending then
@@ -65,7 +67,7 @@ end
 ---Unlock the buffer if no more tools are actively executing
 ---@param bufnr integer
 local function maybe_unlock_buffer(bufnr)
-  if count_pending(bufnr) == 0 then
+  if M.count_running(bufnr) == 0 then
     state.unlock_buffer(bufnr)
     -- Notify autopilot that all tool executions have completed
     autopilot.on_tools_complete(bufnr)
@@ -76,7 +78,7 @@ end
 ---@param bufnr integer
 ---@return boolean
 function M.has_pending(bufnr)
-  return count_pending(bufnr) > 0
+  return M.count_running(bufnr) > 0
 end
 
 ---Clean up a pending execution entry

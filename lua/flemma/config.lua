@@ -117,6 +117,7 @@
 ---@field cursor_after_result "result"|"stay"|"next"
 ---@field bash flemma.config.BashToolConfig
 ---@field modules? string[] Lua module paths for third-party tool sources
+---@field max_concurrent integer
 
 ---@class flemma.config.AutoClose
 ---@field thinking boolean
@@ -285,6 +286,7 @@ return {
       enabled = true, -- Auto-execute approved tools and re-send when resolved
       max_turns = 100, -- Safety limit on consecutive autonomous LLM turns
     },
+    max_concurrent = 2, -- Max tools executing simultaneously per buffer (0 = unlimited)
     default_timeout = 30, -- Default timeout for async tools (seconds)
     show_spinner = true, -- Show spinner animation during execution
     cursor_after_result = "result", -- Cursor behavior after result injection: "result", "stay", or "next"

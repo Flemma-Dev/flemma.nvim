@@ -26,7 +26,7 @@ local MARKER_SANDBOX = "⊡"
 ---@field parameters { merged: table<string, any>, frontmatter_overrides: table<string, any>|nil, resolved_max_tokens: integer|nil }
 ---@field autopilot { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, frontmatter_override: boolean|nil }
 ---@field sandbox { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil, policy: flemma.config.SandboxPolicy }
----@field tools { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil }
+---@field tools { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer, max_concurrent_frontmatter: integer|nil }
 ---@field approval { source: string|nil, approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil }
 ---@field buffer { is_chat: boolean, bufnr: integer }
 
@@ -162,9 +162,10 @@ end
 ---Collect tools section data, respecting per-buffer frontmatter overrides.
 ---When frontmatter changes the tool list, items that differ from config are tracked
 ---in frontmatter_items so the formatter can annotate them.
+---@param config flemma.Config
 ---@param opts flemma.opt.FrontmatterOpts|nil
----@return { enabled: string[], disabled: string[], frontmatter_items: table<string, true>|nil }
-local function collect_tools(opts)
+---@return { enabled: string[], disabled: string[], frontmatter_items: table<string, true>|nil, max_concurrent: integer, max_concurrent_frontmatter: integer|nil }
+local function collect_tools(config, opts)
   local all_tools = tools_registry.get_all({ include_disabled = true })
 
   -- Config-only baseline: which tools are enabled by default?
@@ -210,11 +211,20 @@ local function collect_tools(opts)
   table.sort(enabled)
   table.sort(disabled)
 
+  -- max_concurrent: check frontmatter override, fall back to config
+  local config_max_concurrent = (config.tools and config.tools.max_concurrent) or 2
+  local max_concurrent_frontmatter = nil
+  if opts and opts.max_concurrent ~= nil then
+    max_concurrent_frontmatter = opts.max_concurrent
+  end
+
   return {
     enabled = enabled,
     disabled = disabled,
     booting = not tools_module.is_ready(),
     frontmatter_items = next(frontmatter_items) and frontmatter_items or nil,
+    max_concurrent = config_max_concurrent,
+    max_concurrent_frontmatter = max_concurrent_frontmatter,
   }
 end
 
@@ -488,6 +498,19 @@ function M.format(data, verbose)
   if data.tools.booting then
     add("  ⏳ loading async tool sources…")
   end
+  if data.tools.max_concurrent_frontmatter ~= nil then
+    add(
+      "  max_concurrent: ~~"
+        .. tostring(data.tools.max_concurrent)
+        .. "~~ "
+        .. tostring(data.tools.max_concurrent_frontmatter)
+        .. " "
+        .. MARKER_FRONTMATTER
+    )
+  else
+    local mc_label = data.tools.max_concurrent == 0 and "unlimited" or tostring(data.tools.max_concurrent)
+    add("  max_concurrent: " .. mc_label)
+  end
   if enabled_count > 0 then
     add("  ✓ " .. format_name_list(data.tools.enabled, data.tools.frontmatter_items))
   end
@@ -527,6 +550,7 @@ function M.format(data, verbose)
   local has_frontmatter_marker = data.parameters.frontmatter_overrides
     or data.autopilot.frontmatter_override ~= nil
     or data.tools.frontmatter_items
+    or data.tools.max_concurrent_frontmatter ~= nil
     or data.approval.frontmatter_items
   local has_sandbox_marker = data.approval.sandbox_items ~= nil
   if has_frontmatter_marker or has_sandbox_marker then
@@ -582,7 +606,7 @@ function M.collect(bufnr)
     end
   end
 
-  local tools_data = collect_tools(opts)
+  local tools_data = collect_tools(config, opts)
 
   return {
     provider = collect_provider(config),
