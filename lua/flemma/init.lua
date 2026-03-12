@@ -22,6 +22,7 @@ local tools_presets = require("flemma.tools.presets")
 local tools_approval = require("flemma.tools.approval")
 local cursor = require("flemma.cursor")
 local sandbox = require("flemma.sandbox")
+local lsp = require("flemma.lsp")
 
 -- Module configuration (will hold merged user opts and defaults)
 local config = {}
@@ -144,6 +145,11 @@ M.setup = function(user_opts)
 
   -- Register built-in sandbox backends and validate availability
   sandbox.setup()
+
+  -- Set up experimental LSP if enabled
+  if config.experimental and config.experimental.lsp then
+    lsp.setup()
+  end
 
   -- Defer sandbox backend check until the user enters a .chat buffer.
   -- By that time, other plugins may have registered additional backends.

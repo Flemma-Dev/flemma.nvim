@@ -146,6 +146,9 @@
 ---@field insert flemma.config.InsertKeymaps
 ---@field enabled boolean
 
+---@class flemma.config.Experimental
+---@field lsp boolean Enable in-process LSP for .chat buffers
+
 ---User-facing setup options — every field is optional (merged with defaults).
 ---@class flemma.Config.Opts
 ---@field defaults? { dark: { bg: string, fg: string }, light: { bg: string, fg: string } }
@@ -168,6 +171,7 @@
 ---@field keymaps? flemma.config.Keymaps
 ---@field sandbox? flemma.config.SandboxConfig
 ---@field diagnostics? flemma.config.Diagnostics
+---@field experimental? flemma.config.Experimental
 
 ---Full resolved config (all fields present after merging with defaults).
 ---@class flemma.Config : flemma.Config.Opts
@@ -190,6 +194,7 @@
 ---@field keymaps flemma.config.Keymaps
 ---@field sandbox flemma.config.SandboxConfig
 ---@field diagnostics flemma.config.Diagnostics
+---@field experimental flemma.config.Experimental
 
 ---@type flemma.Config
 return {
@@ -346,5 +351,8 @@ return {
         extra_args = {}, -- Additional bwrap arguments for advanced use
       },
     },
+  },
+  experimental = {
+    lsp = vim.lsp ~= nil,
   },
 }

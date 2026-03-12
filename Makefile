@@ -66,7 +66,7 @@ develop:
 				[\"\$$gpt\"] = \"openai gpt-5.2\",										\
 			},																			\
 			diagnostics = { enabled = true },											\
-			logging = { enabled = true },												\
+			logging = { enabled = true, level = "TRACE" },								\
 			editing = { auto_write = true },											\
 			tools = { modules = { \"extras.flemma.tools.calculator\" } },				\
 		})																				\
