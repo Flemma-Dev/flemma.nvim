@@ -16,8 +16,8 @@ local function segment_to_markdown(seg, msg)
   local lines = {}
 
   -- Header: segment kind
-  local kind_label = seg.kind:sub(1, 1):upper() .. seg.kind:sub(2) .. "Segment"
-  table.insert(lines, "### " .. kind_label)
+  local kind_label = seg.kind:gsub("_?(%a)([%w]*)", function(first, rest) return first:upper() .. rest end) .. "Segment"
+  table.insert(lines, "_" .. kind_label .. "_")
   table.insert(lines, "")
   table.insert(lines, "**Role:** " .. msg.role)
 
@@ -93,7 +93,7 @@ end
 ---@return string markdown
 local function message_to_markdown(msg)
   local lines = {}
-  table.insert(lines, "### MessageNode")
+  table.insert(lines, "_MessageNode_")
   table.insert(lines, "")
   table.insert(lines, "**Role:** " .. msg.role)
   table.insert(lines, "**Segments:** " .. #msg.segments)
@@ -114,7 +114,13 @@ local function message_to_markdown(msg)
 
   if msg.position then
     table.insert(lines, "")
-    table.insert(lines, "**Position:** L" .. msg.position.start_line .. " \u{2192} L" .. (msg.position.end_line or msg.position.start_line))
+    table.insert(
+      lines,
+      "**Position:** L"
+        .. msg.position.start_line
+        .. " \u{2192} L"
+        .. (msg.position.end_line or msg.position.start_line)
+    )
   end
 
   return table.concat(lines, "\n")
@@ -125,14 +131,17 @@ end
 ---@return string markdown
 local function frontmatter_to_markdown(fm)
   local lines = {}
-  table.insert(lines, "### FrontmatterNode")
+  table.insert(lines, "_FrontmatterNode_")
   table.insert(lines, "")
   table.insert(lines, "**Language:** " .. fm.language)
   table.insert(lines, "**Length:** " .. #fm.code .. " bytes")
 
   if fm.position then
     table.insert(lines, "")
-    table.insert(lines, "**Position:** L" .. fm.position.start_line .. " \u{2192} L" .. (fm.position.end_line or fm.position.start_line))
+    table.insert(
+      lines,
+      "**Position:** L" .. fm.position.start_line .. " \u{2192} L" .. (fm.position.end_line or fm.position.start_line)
+    )
   end
 
   table.insert(lines, "")
@@ -174,7 +183,17 @@ local function handle_hover(params)
   local lnum = params.position.line + 1
   local col = params.position.character + 1
 
-  log.debug("lsp hover: position LSP(L" .. params.position.line .. ":C" .. params.position.character .. ") -> AST(L" .. lnum .. ":C" .. col .. ")")
+  log.debug(
+    "lsp hover: position LSP(L"
+      .. params.position.line
+      .. ":C"
+      .. params.position.character
+      .. ") -> AST(L"
+      .. lnum
+      .. ":C"
+      .. col
+      .. ")"
+  )
 
   local doc = parser.get_parsed_document(bufnr)
 

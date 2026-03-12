@@ -147,7 +147,7 @@ describe("Flemma LSP", function()
 
     local result = hover_sync(client, bufnr, 1, 5) -- on tool use header
     assert.is_not_nil(result)
-    assert.is_truthy(result.contents.value:find("Tool_useSegment"))
+    assert.is_truthy(result.contents.value:find("ToolUseSegment"))
     assert.is_truthy(result.contents.value:find("bash"))
     assert.is_truthy(result.contents.value:find("call_abc123"))
   end)
