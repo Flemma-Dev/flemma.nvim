@@ -275,13 +275,13 @@ local function show_progress_float(bufnr, parent_winid, progress_text, highlight
   -- Pad text to align with the editor text area (after gutter)
   local float_bufnr = buffer_state.progress_float_bufnr --[[@as integer]]
   local padding = string.rep(" ", gutter_width)
-  vim.api.nvim_buf_set_lines(float_bufnr, 0, -1, false, { padding .. " " .. progress_text })
+  vim.api.nvim_buf_set_lines(float_bufnr, 0, -1, false, { padding .. progress_text })
 
   -- Apply highlight to the text (timeout warnings override StatusLine text color)
   vim.api.nvim_buf_clear_namespace(float_bufnr, spinner_ns, 0, -1)
   if highlight then
     vim.api.nvim_buf_set_extmark(float_bufnr, spinner_ns, 0, 0, {
-      end_col = #(padding .. " " .. progress_text),
+      end_col = #(padding .. progress_text),
       hl_group = highlight,
     })
   end
