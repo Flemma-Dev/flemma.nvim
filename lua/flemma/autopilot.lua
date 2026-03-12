@@ -5,6 +5,7 @@ local M = {}
 
 local log = require("flemma.logging")
 local bridge = require("flemma.core.bridge")
+local cursor = require("flemma.cursor")
 local parser = require("flemma.parser")
 local state = require("flemma.state")
 local tool_context = require("flemma.tools.context")
@@ -199,10 +200,7 @@ function M.on_tools_complete(bufnr)
   if first_empty_pending then
     bs.state = "paused"
     log.debug("autopilot: flemma:tool status=pending blocks remain, pausing")
-    local winid = vim.fn.bufwinid(bufnr)
-    if winid ~= -1 then
-      vim.api.nvim_win_set_cursor(winid, { first_empty_pending.tool_result.start_line, 0 })
-    end
+    cursor.request_move(bufnr, { line = first_empty_pending.tool_result.start_line, reason = "autopilot/pending-tool" })
     return
   end
 

@@ -4,6 +4,7 @@
 local M = {}
 
 local core = require("flemma.core")
+local cursor = require("flemma.cursor")
 local executor = require("flemma.tools.executor")
 local navigation = require("flemma.navigation")
 local state = require("flemma.state")
@@ -28,7 +29,10 @@ function M.handle_colon_insert()
     -- Complete the role marker and add a blank line below
     local row = vim.api.nvim_win_get_cursor(0)[1]
     vim.api.nvim_buf_set_lines(0, row - 1, row, false, { line .. ":", "" })
-    vim.api.nvim_win_set_cursor(0, { row + 1, 0 })
+    cursor.request_move(
+      vim.api.nvim_get_current_buf(),
+      { line = row + 1, force = true, reason = "role-marker-completion" }
+    )
     return true
   end
 
@@ -50,7 +54,7 @@ M.setup = function()
         -- Normal mode mappings
         if config.keymaps.normal.send then
           vim.keymap.set("n", config.keymaps.normal.send, function()
-            core.send_or_execute()
+            core.send_or_execute({ user_initiated = true })
           end, { buffer = true, desc = "Send to Flemma" })
         end
 
@@ -151,6 +155,7 @@ M.setup = function()
             -- and we exit any textlock context (e.g., Copilot's keymap wrapper)
             vim.schedule(function()
               core.send_or_execute({
+                user_initiated = true,
                 on_request_complete = function()
                   ui.buffer_cmd(bufnr, "startinsert!")
                 end,

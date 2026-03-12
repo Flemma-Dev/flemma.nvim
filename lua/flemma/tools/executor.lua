@@ -11,6 +11,7 @@ local log = require("flemma.logging")
 local roles = require("flemma.utilities.roles")
 
 local autopilot = require("flemma.autopilot")
+local cursor = require("flemma.cursor")
 local bridge = require("flemma.core.bridge")
 local context_module = require("flemma.context")
 local parser = require("flemma.parser")
@@ -115,11 +116,7 @@ local function move_cursor_after_result(bufnr, tool_id, mode)
   end
 
   if target_line then
-    target_line = math.min(target_line, vim.api.nvim_buf_line_count(bufnr))
-    local winid = vim.fn.bufwinid(bufnr)
-    if winid ~= -1 then
-      vim.api.nvim_win_set_cursor(winid, { target_line, 0 })
-    end
+    cursor.request_move(bufnr, { line = target_line, reason = "tool-result/" .. mode })
   end
 end
 
@@ -540,8 +537,8 @@ end
 ---@param bufnr integer
 ---@return boolean cancelled
 function M.cancel_at_cursor(bufnr)
-  local cursor = vim.api.nvim_win_get_cursor(0)
-  local ctx, _ = tool_context.resolve(bufnr, { row = cursor[1], col = cursor[2] })
+  local cursor_pos = vim.api.nvim_win_get_cursor(0)
+  local ctx, _ = tool_context.resolve(bufnr, { row = cursor_pos[1], col = cursor_pos[2] })
   if ctx then
     autopilot.disarm(bufnr)
     return M.cancel(ctx.tool_id)
@@ -563,8 +560,8 @@ end
 ---@return boolean success
 ---@return string|nil error
 function M.execute_at_cursor(bufnr)
-  local cursor = vim.api.nvim_win_get_cursor(0)
-  local ctx, err = tool_context.resolve(bufnr, { row = cursor[1], col = cursor[2] })
+  local cursor_pos = vim.api.nvim_win_get_cursor(0)
+  local ctx, err = tool_context.resolve(bufnr, { row = cursor_pos[1], col = cursor_pos[2] })
   if not ctx then
     return false, err or "No tool call found"
   end

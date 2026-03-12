@@ -3,6 +3,7 @@
 ---@class flemma.Navigation
 local M = {}
 
+local cursor = require("flemma.cursor")
 local parser = require("flemma.parser")
 
 ---Find the next message marker in the buffer and move cursor there
@@ -14,7 +15,7 @@ function M.find_next_message()
 
   for _, msg in ipairs(doc.messages) do
     if msg.position.start_line > cur_line then
-      vim.api.nvim_win_set_cursor(0, { msg.position.start_line + 1, 0 })
+      cursor.request_move(bufnr, { line = msg.position.start_line + 1, force = true, reason = "nav/next-message" })
       return true
     end
   end
@@ -33,7 +34,7 @@ function M.find_prev_message()
     local msg = doc.messages[i]
     local content_line = msg.position.start_line + 1
     if content_line < cur_line then
-      vim.api.nvim_win_set_cursor(0, { content_line, 0 })
+      cursor.request_move(bufnr, { line = content_line, force = true, reason = "nav/prev-message" })
       return true
     end
   end

@@ -41,6 +41,8 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field diagnostics_previous_request? string Raw JSON of the previous request sent from this buffer
 ---@field diagnostics_current_request? string Raw JSON of the most recent request sent from this buffer
 ---@field _diagnostics_raw_json? string Temporary storage for raw JSON during request lifecycle
+---@field cursor_pending? flemma.cursor.PendingTarget Deferred cursor move waiting for user idle
+---@field cursor_idle_timer? uv.uv_timer_t Per-buffer idle timer for cursor deferral
 
 ---@diagnostic disable-next-line: missing-fields
 local config = {} ---@type flemma.Config
