@@ -24,7 +24,6 @@ local parser = require("flemma.parser")
 local pipeline = require("flemma.pipeline")
 local processor = require("flemma.processor")
 local session_module = require("flemma.session")
-local str = require("flemma.utilities.string")
 local tool_approval = require("flemma.tools.approval")
 local tool_context = require("flemma.tools.context")
 local tools_module = require("flemma.tools")
@@ -169,12 +168,12 @@ function M.cancel_request()
       local last_line_content = buffer_utils.get_last_line(bufnr)
 
       if last_line_content == "@Assistant:" then
-        -- No content received — clean up spinner placeholder (empty @Assistant: block)
-        log.debug("cancel_request(): ... Cleaning up empty @Assistant: spinner placeholder")
-        ui.cleanup_spinner(bufnr)
+        -- No content received — clean up progress placeholder (empty @Assistant: block)
+        log.debug("cancel_request(): ... Cleaning up empty @Assistant: progress placeholder")
+        ui.cleanup_progress(bufnr)
       else
         -- Content was received — mark the response as aborted
-        ui.cleanup_spinner(bufnr)
+        ui.cleanup_progress(bufnr)
         buffer_utils.with_modifiable(bufnr, function()
           local last_content, line_count = buffer_utils.get_last_line(bufnr)
           local separator = (last_content == "") and {} or { "" }
@@ -745,9 +744,8 @@ function M.send_to_provider(opts)
   )
 
   ---@type integer|nil
-  local spinner_timer = ui.start_loading_spinner(bufnr, { force = opts.user_initiated }) -- Handles its own modifiable toggles for writes
+  local progress_timer = ui.start_progress(bufnr, { force = opts.user_initiated, timeout = effective_timeout or 600 })
   local response_started = false
-  local thinking_char_count = 0
 
   -- Reset in-flight usage tracking for this buffer
   -- Include the provider's output_has_thoughts flag so usage.lua can display correctly
@@ -768,10 +766,10 @@ function M.send_to_provider(opts)
   local callbacks = {
     on_error = function(msg)
       writequeue.schedule(bufnr, function()
-        if spinner_timer then
-          vim.fn.timer_stop(spinner_timer)
+        if progress_timer then
+          vim.fn.timer_stop(progress_timer)
         end
-        ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
+        ui.cleanup_progress(bufnr)
         buffer_state.current_request = nil
         buffer_state.api_error_occurred = true -- Set flag indicating API error
 
@@ -896,12 +894,11 @@ function M.send_to_provider(opts)
 
     on_thinking = function(delta)
       vim.schedule(function()
-        thinking_char_count = thinking_char_count + #delta
-
-        local suffix = thinking_char_count == 1 and " character" or " characters"
-        local display = str.format_text_length(thinking_char_count) .. suffix
-
-        ui.update_thinking_preview(bufnr, display)
+        buffer_state.progress_char_count = buffer_state.progress_char_count + #delta
+        -- Stay in virt_text mode (no buffer content yet), but show counter instead of "Waiting..."
+        if buffer_state.progress_phase == "waiting" or buffer_state.progress_phase == "thinking" then
+          buffer_state.progress_phase = "thinking"
+        end
       end)
     end,
 
@@ -916,10 +913,23 @@ function M.send_to_provider(opts)
         end
 
         buffer_utils.with_modifiable(bufnr, function()
-          -- Stop spinner on first content
           if not response_started then
-            if spinner_timer then
-              vim.fn.timer_stop(spinner_timer)
+            -- Transition progress from waiting/thinking (virt_text) to active (virt_lines).
+            -- Don't stop the timer — it keeps running throughout the request.
+            ui.transition_progress_to_active(bufnr)
+
+            -- Remove the @Assistant: placeholder line that start_progress created.
+            -- The code below re-writes @Assistant: with actual content.
+            local placeholder = buffer_utils.get_last_line(bufnr)
+            if placeholder == "@Assistant:" then
+              local lc = vim.api.nvim_buf_line_count(bufnr)
+              local prev_content = lc > 1 and buffer_utils.get_line(bufnr, lc - 1) or nil
+              ui.buffer_cmd(bufnr, "undojoin")
+              if prev_content and prev_content:match("%S") then
+                vim.api.nvim_buf_set_lines(bufnr, lc - 1, lc, false, { "" })
+              else
+                vim.api.nvim_buf_set_lines(bufnr, lc - 1, lc, false, {})
+              end
             end
           end
 
@@ -930,10 +940,6 @@ function M.send_to_provider(opts)
             local last_line = vim.api.nvim_buf_line_count(bufnr)
 
             if not response_started then
-              -- Clean up spinner and ensure blank line
-              ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
-              last_line = vim.api.nvim_buf_line_count(bufnr)
-
               local header_lines
 
               if content_lines[1]:match("^%*%*Tool Use:%*%*") then
@@ -995,10 +1001,23 @@ function M.send_to_provider(opts)
             end
 
             response_started = true
+
+            -- Update progress tracking
+            buffer_state.progress_phase = "streaming"
+            buffer_state.progress_char_count = buffer_state.progress_char_count + #text
+            buffer_state.progress_last_line = vim.api.nvim_buf_line_count(bufnr) - 1
+
             -- Force UI update after appending content
             ui.update_ui(bufnr)
           end
         end)
+      end)
+    end,
+
+    on_tool_input = function(delta)
+      vim.schedule(function()
+        buffer_state.progress_phase = "buffering"
+        buffer_state.progress_char_count = buffer_state.progress_char_count + #delta
       end)
     end,
 
@@ -1007,20 +1026,19 @@ function M.send_to_provider(opts)
         -- If the request was cancelled, M.cancel_request() handles cleanup including modifiable.
         if buffer_state.request_cancelled then
           -- M.cancel_request should have already set modifiable = true
-          -- and stopped the spinner.
-          if spinner_timer then
-            vim.fn.timer_stop(spinner_timer)
-            spinner_timer = nil
+          -- and stopped the progress timer.
+          if progress_timer then
+            vim.fn.timer_stop(progress_timer)
+            progress_timer = nil
           end
           return
         end
 
-        -- Stop the spinner timer if it's still active.
-        -- on_content might have already stopped it if response_started.
-        -- ui.cleanup_spinner will also try to stop state.spinner_timer.
-        if spinner_timer then
-          vim.fn.timer_stop(spinner_timer)
-          spinner_timer = nil
+        -- Stop the progress timer if it's still active.
+        -- cleanup_progress will also try to stop state.progress_timer.
+        if progress_timer then
+          vim.fn.timer_stop(progress_timer)
+          progress_timer = nil
         end
         buffer_state.current_request = nil -- Mark request as no longer current
 
@@ -1035,7 +1053,7 @@ function M.send_to_provider(opts)
             )
             buffer_state.api_error_occurred = false -- Reset flag for next request
             if not response_started then
-              ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
+              ui.cleanup_progress(bufnr)
             end
             editing.auto_write(bufnr) -- Still auto-write if configured
             ui.update_ui(bufnr) -- Update UI
@@ -1046,7 +1064,7 @@ function M.send_to_provider(opts)
             log.warn(
               "send_to_provider(): on_request_complete: cURL success (code 0), no API error, but no response content was processed."
             )
-            ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
+            ui.cleanup_progress(bufnr)
             vim.notify("Flemma: Request completed but no response was received.", vim.log.levels.WARN)
           end
 
@@ -1082,7 +1100,7 @@ function M.send_to_provider(opts)
         else
           -- cURL request failed (exit code ~= 0)
           -- Buffer is already set to modifiable = true
-          ui.cleanup_spinner(bufnr) -- Handles its own modifiable toggles
+          ui.cleanup_progress(bufnr)
 
           local error_msg
           if code == 6 then -- CURLE_COULDNT_RESOLVE_HOST
@@ -1149,13 +1167,12 @@ function M.send_to_provider(opts)
 
   if not buffer_state.current_request or buffer_state.current_request == 0 or buffer_state.current_request == -1 then
     log.error("send_to_provider(): Failed to start provider job.")
-    -- Stop the spinner timer if it was started
-    -- Note: spinner_timer is the local variable, buffer_state.spinner_timer is where it's stored
-    if spinner_timer then
-      vim.fn.timer_stop(spinner_timer)
-      buffer_state.spinner_timer = nil
+    -- Stop the progress timer if it was started
+    if progress_timer then
+      vim.fn.timer_stop(progress_timer)
+      buffer_state.progress_timer = nil
     end
-    ui.cleanup_spinner(bufnr) -- Clean up any "Thinking…" message, handles its own modifiable toggles
+    ui.cleanup_progress(bufnr)
     state.unlock_buffer(bufnr)
     return
   end
