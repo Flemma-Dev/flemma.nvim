@@ -189,4 +189,17 @@ function M.closest_match(name, candidates, max_distance)
   return nil
 end
 
+---Format an elapsed duration in seconds for compact display.
+---@param seconds number Elapsed time in seconds (fractional allowed, floored to integer)
+---@return string formatted e.g. "3s", "1m 3s", "12m 45s"
+function M.format_elapsed(seconds)
+  local total = math.floor(seconds)
+  if total < 60 then
+    return total .. "s"
+  end
+  local minutes = math.floor(total / 60)
+  local remaining_seconds = total % 60
+  return minutes .. "m " .. remaining_seconds .. "s"
+end
+
 return M
