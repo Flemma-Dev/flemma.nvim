@@ -15,6 +15,8 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field cache_read_input_tokens number
 ---@field cache_creation_input_tokens number
 
+---@alias flemma.state.ProgressPhase "waiting"|"thinking"|"streaming"|"buffering"
+
 ---@class flemma.state.BufferState
 ---@field current_request integer|nil Job ID of the active cURL request
 ---@field request_cancelled boolean Whether the current request has been cancelled
@@ -27,6 +29,14 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field spinner_extmark_id integer|nil Extmark ID for the spinner/thinking preview
 ---@field spinner_line_idx0 integer|nil 0-indexed line of the spinner extmark
 ---@field spinner_preview_text string|nil Thinking preview text for the spinner timer to render
+---@field progress_timer integer|nil Timer ID for the progress line animation
+---@field progress_phase flemma.state.ProgressPhase|nil Current progress line phase
+---@field progress_char_count integer Unified character counter across all delta types
+---@field progress_started_at integer|nil Monotonic timestamp (ms) from vim.uv.now() at curl spawn
+---@field progress_timeout integer|nil Effective timeout (seconds) for the current request
+---@field progress_extmark_id integer|nil Stable extmark ID for timer updates
+---@field progress_last_line integer|nil 0-indexed last content line (set by writequeue callbacks)
+---@field progress_last_rendered_line integer|nil 0-indexed last line where virt_lines extmark was placed
 ---@field autopilot_override? boolean Per-buffer autopilot override (set from frontmatter, nil = use global config)
 ---@field auto_closed_folds? table<string, boolean>
 ---@field pending_folds? table<string, boolean> Fold IDs that were attempted but failed to close (eligible for retry)
@@ -105,6 +115,14 @@ local function init_buffer(bufnr)
     api_error_occurred = false,
     locked = false,
     waiting_for_tools = false,
+    progress_timer = nil,
+    progress_phase = nil,
+    progress_char_count = 0,
+    progress_started_at = nil,
+    progress_timeout = nil,
+    progress_extmark_id = nil,
+    progress_last_line = nil,
+    progress_last_rendered_line = nil,
     inflight_usage = {
       input_tokens = 0,
       output_tokens = 0,
@@ -157,6 +175,9 @@ function M.cleanup_buffer_state(bufnr)
     end
     if st.spinner_timer then
       vim.fn.timer_stop(st.spinner_timer)
+    end
+    if st.progress_timer then
+      vim.fn.timer_stop(st.progress_timer)
     end
   end
   -- Run registered cleanup hooks (executor, notifications) before clearing state.
