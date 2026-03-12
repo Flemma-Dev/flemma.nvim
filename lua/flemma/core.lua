@@ -914,10 +914,6 @@ function M.send_to_provider(opts)
 
         buffer_utils.with_modifiable(bufnr, function()
           if not response_started then
-            -- Transition progress from waiting/thinking (virt_text) to active (virt_lines).
-            -- Don't stop the timer — it keeps running throughout the request.
-            ui.transition_progress_to_active(bufnr)
-
             -- Remove the @Assistant: placeholder line that start_progress created.
             -- The code below re-writes @Assistant: with actual content.
             local placeholder = buffer_utils.get_last_line(bufnr)

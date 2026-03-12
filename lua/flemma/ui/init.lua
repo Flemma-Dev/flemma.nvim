@@ -345,7 +345,6 @@ function M.start_progress(bufnr, progress_opts)
   buffer_state.progress_timeout = progress_opts.timeout
   buffer_state.progress_extmark_id = nil
   buffer_state.progress_last_line = nil
-  buffer_state.progress_last_rendered_line = nil
 
   writequeue.schedule(bufnr, function()
     buffer_utils.with_modifiable(bufnr, function()
@@ -512,7 +511,6 @@ function M.cleanup_progress(bufnr)
     buffer_state.progress_timeout = nil
     buffer_state.progress_extmark_id = nil
     buffer_state.progress_last_line = nil
-    buffer_state.progress_last_rendered_line = nil
     buffer_state.progress_float_bufnr = nil
 
     vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
@@ -544,22 +542,6 @@ function M.cleanup_progress(bufnr)
 
     M.update_ui(bufnr)
   end)
-end
-
----Transition the progress line from waiting/thinking (virt_text at EOL) to
----active (virt_lines below last content line). Called once on first content delta.
----Clears the waiting-phase extmark; the timer recreates as virt_lines on next tick
----using buffer_state.progress_last_line.
----@param bufnr integer
-function M.transition_progress_to_active(bufnr)
-  local buffer_state = state.get_buffer_state(bufnr)
-
-  -- Clear the waiting-phase virt_text extmark
-  vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)
-
-  -- Nil out the extmark ID so the timer knows to create a fresh virt_lines extmark
-  buffer_state.progress_extmark_id = nil
-  buffer_state.progress_last_rendered_line = nil
 end
 
 ---Place signs for a message

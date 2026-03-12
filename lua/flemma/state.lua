@@ -32,7 +32,6 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field progress_timeout integer|nil Effective timeout (seconds) for the current request
 ---@field progress_extmark_id integer|nil Stable extmark ID for timer updates
 ---@field progress_last_line integer|nil 0-indexed last content line (set by writequeue callbacks)
----@field progress_last_rendered_line integer|nil 0-indexed last line where virt_lines extmark was placed
 ---@field progress_float_winid integer|nil Window ID for the off-screen progress float
 ---@field progress_float_bufnr integer|nil Buffer ID for the off-screen progress float
 ---@field autopilot_override? boolean Per-buffer autopilot override (set from frontmatter, nil = use global config)
@@ -119,7 +118,6 @@ local function init_buffer(bufnr)
     progress_timeout = nil,
     progress_extmark_id = nil,
     progress_last_line = nil,
-    progress_last_rendered_line = nil,
     progress_float_winid = nil,
     progress_float_bufnr = nil,
     inflight_usage = {

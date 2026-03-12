@@ -71,22 +71,6 @@ describe("progress line", function()
     end)
   end)
 
-  describe("transition_progress_to_active", function()
-    it("clears extmark ID so timer recreates as virt_lines", function()
-      local bufnr = vim.api.nvim_create_buf(false, true)
-      local buffer_state = state.get_buffer_state(bufnr)
-      buffer_state.progress_extmark_id = 42
-      buffer_state.progress_last_rendered_line = 5
-
-      ui.transition_progress_to_active(bufnr)
-
-      assert.is_nil(buffer_state.progress_extmark_id)
-      assert.is_nil(buffer_state.progress_last_rendered_line)
-
-      vim.api.nvim_buf_delete(bufnr, { force = true })
-    end)
-  end)
-
   describe("cleanup_progress on empty spinner placeholder", function()
     it("removes the @Assistant: line when it is the last line", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
@@ -131,7 +115,6 @@ describe("progress line", function()
       assert.is_nil(buffer_state.progress_timeout)
       assert.is_nil(buffer_state.progress_extmark_id)
       assert.is_nil(buffer_state.progress_last_line)
-      assert.is_nil(buffer_state.progress_last_rendered_line)
       assert.is_nil(buffer_state.progress_float_winid)
       assert.is_nil(buffer_state.progress_float_bufnr)
 
