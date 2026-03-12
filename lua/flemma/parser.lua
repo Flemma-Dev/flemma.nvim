@@ -113,10 +113,10 @@ local function parse_segments(text, base_line)
 
     if next_kind == "expr" then
       local line, col = char_to_line_col(next_start)
-      local _, end_col = char_to_line_col(next_end)
+      local end_line, end_col = char_to_line_col(next_end)
       table.insert(
         segments,
-        ast.expression(payload --[[@as string]], { start_line = line, start_col = col, end_col = end_col })
+        ast.expression(payload --[[@as string]], { start_line = line, start_col = col, end_line = end_line, end_col = end_col })
       )
     elseif next_kind == "file" then
       ---@cast payload string
@@ -140,8 +140,8 @@ local function parse_segments(text, base_line)
       ---@cast cleaned_path string
       local escaped_path = lua_string_escape(cleaned_path)
       local line, col = char_to_line_col(next_start)
-      -- end_col is the end of the @./file reference, excluding trailing punctuation
-      local _, end_col = char_to_line_col(next_end - #trailing_punct)
+      -- end position is the end of the @./file reference, excluding trailing punctuation
+      local end_line, end_col = char_to_line_col(next_end - #trailing_punct)
 
       -- Build the include() expression code
       local opts_parts = { "binary = true" }
@@ -150,7 +150,7 @@ local function parse_segments(text, base_line)
       end
       local code = "include('" .. escaped_path .. "', { " .. table.concat(opts_parts, ", ") .. " })"
 
-      table.insert(segments, ast.expression(code, { start_line = line, start_col = col, end_col = end_col }))
+      table.insert(segments, ast.expression(code, { start_line = line, start_col = col, end_line = end_line, end_col = end_col }))
 
       -- Emit trailing punctuation as a separate text segment
       if #trailing_punct > 0 then
