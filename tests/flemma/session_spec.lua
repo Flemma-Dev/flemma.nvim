@@ -670,7 +670,8 @@ describe("flemma.session", function()
       })
 
       assert.are.equal(2, session:get_request_count())
-      assert.are.equal(300, session:get_total_input_tokens())
+      -- Total = (100 + 500 + 200) + (200 + 0 + 0) = 1000
+      assert.are.equal(1000, session:get_total_input_tokens())
 
       -- Verify first request preserved all raw fields
       local first = session.requests[1]

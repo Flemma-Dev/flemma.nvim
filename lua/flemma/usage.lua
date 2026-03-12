@@ -37,7 +37,7 @@ end
 ---@param request flemma.session.Request The request to calculate cache percentage for
 ---@return integer|nil percent Cache hit percentage (0-100), or nil when total input is 0
 function M.calculate_cache_percent(request)
-  local total_input = request.input_tokens + request.cache_read_input_tokens + request.cache_creation_input_tokens
+  local total_input = request:get_total_input_tokens()
   if total_input == 0 then
     return nil
   end
@@ -100,10 +100,7 @@ function M.build_segments(request, session)
       if cache_percent == 0 then
         local model_info = provider_registry.get_model_info(request.provider, request.model)
         if model_info and model_info.min_cache_tokens then
-          local total_input = request.input_tokens
-            + request.cache_read_input_tokens
-            + request.cache_creation_input_tokens
-          below_threshold = total_input < model_info.min_cache_tokens
+          below_threshold = request:get_total_input_tokens() < model_info.min_cache_tokens
         end
       end
 
@@ -121,10 +118,10 @@ function M.build_segments(request, session)
       end
     end
 
-    -- Input tokens
+    -- Input tokens (total including cached)
     table.insert(request_items, {
       key = "request_input_tokens",
-      text = M.format_number(request.input_tokens) .. "\xE2\x86\x91", -- ↑
+      text = M.format_number(request:get_total_input_tokens()) .. "\xE2\x86\x91", -- ↑
       priority = PRIORITY.REQUEST_INPUT_TOKENS,
       highlight = { group = "FlemmaNotificationsSecondary" },
     })

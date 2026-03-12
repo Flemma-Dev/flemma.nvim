@@ -408,9 +408,11 @@ function M._process_data(self, data, _parsed, callbacks)
       -- Parse cache usage tokens from message_start
       local usage = data.message.usage
       if usage.cache_read_input_tokens and callbacks.on_usage then
+        log.debug("anthropic._process_data(): ... Cache read input tokens: " .. usage.cache_read_input_tokens)
         callbacks.on_usage({ type = "cache_read", tokens = usage.cache_read_input_tokens })
       end
       if usage.cache_creation_input_tokens and callbacks.on_usage then
+        log.debug("anthropic._process_data(): ... Cache creation input tokens: " .. usage.cache_creation_input_tokens)
         callbacks.on_usage({ type = "cache_creation", tokens = usage.cache_creation_input_tokens })
       end
     else
