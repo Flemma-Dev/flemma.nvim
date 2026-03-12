@@ -2057,3 +2057,21 @@ describe("Tool Executor", function()
     end)
   end)
 end)
+
+describe("Executor count_running", function()
+  local executor_module
+
+  before_each(function()
+    package.loaded["flemma.tools.executor"] = nil
+    executor_module = require("flemma.tools.executor")
+  end)
+
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("returns 0 when no tools are executing", function()
+    local bufnr = create_buffer({ "@You:", "test" })
+    assert.equals(0, executor_module.count_running(bufnr))
+  end)
+end)
