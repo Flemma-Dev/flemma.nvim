@@ -275,7 +275,7 @@ describe("flemma.usage", function()
 
       local result = usage.format_notification(request, nil, 120)
 
-      assert.has_match("\xE2\x97\x8B 25", result.text)
+      assert.has_match("25\xE2\x81\x82", result.text)
     end)
 
     it("should format large numbers with commas", function()

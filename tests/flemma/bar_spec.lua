@@ -393,7 +393,7 @@ describe("flemma.bar", function()
           key = "request",
           items = {
             { key = "request_cost", text = "$0.01", priority = 80 },
-            { key = "thinking_tokens", text = "\xE2\x97\x8B 25 thinking", priority = 35 },
+            { key = "thinking_tokens", text = "25\xE2\x81\x82 thinking", priority = 35 },
           },
         },
         {

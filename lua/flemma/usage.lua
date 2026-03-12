@@ -139,7 +139,7 @@ function M.build_segments(request, session)
     if request.thoughts_tokens > 0 then
       table.insert(request_items, {
         key = "thinking_tokens",
-        text = "\xE2\x97\x8B " .. M.format_number(request.thoughts_tokens), -- ○
+        text = M.format_number(request.thoughts_tokens) .. "\xE2\x81\x82", -- ⁂
         priority = PRIORITY.THINKING_TOKENS,
         highlight = { group = "FlemmaNotificationsSecondary" },
       })
