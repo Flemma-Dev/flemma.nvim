@@ -438,10 +438,16 @@ function M.start_progress(bufnr, progress_opts)
       end
     end
 
-    local virt_text_chunks = build_progress_virt_text(progress_text, bufnr, highlight)
+    -- Rendering strategy:
+    -- - Waiting/thinking: inline virt_text at EOL on @Assistant: line,
+    --   plus float if the line is scrolled out of view
+    -- - Streaming/buffering: float only (virt_lines below the last buffer
+    --   line are unreliable — Neovim doesn't include them in scroll calcs)
+    local winid = vim.fn.bufwinid(bufnr)
 
-    -- Render based on phase: waiting/thinking use virt_text at EOL, streaming/buffering use virt_lines
     if phase == "waiting" or phase == "thinking" then
+      -- Inline virt_text at EOL
+      local virt_text_chunks = build_progress_virt_text(progress_text, bufnr, highlight)
       local target_line = buffer_state.progress_last_line
       local ext_id = buffer_state.progress_extmark_id
       if target_line ~= nil and ext_id ~= nil then
@@ -454,69 +460,25 @@ function M.start_progress(bufnr, progress_opts)
           spell = false,
         })
       end
-    else
-      -- virt_lines below the last content line
-      local target_line = buffer_state.progress_last_line
-      if target_line == nil then
-        return
-      end
 
-      local ext_id = buffer_state.progress_extmark_id
-      local last_rendered = buffer_state.progress_last_rendered_line
-
-      if ext_id ~= nil and last_rendered == target_line then
-        -- Same line — update in-place
-        pcall(vim.api.nvim_buf_set_extmark, bufnr, spinner_ns, target_line, 0, {
-          id = ext_id,
-          virt_lines = { virt_text_chunks },
-          virt_lines_above = false,
-          hl_mode = "combine",
-          priority = PRIORITY.SPINNER,
-        })
-      else
-        -- Line changed or first active render — recreate extmark
-        if ext_id ~= nil then
-          pcall(vim.api.nvim_buf_del_extmark, bufnr, spinner_ns, ext_id)
-        end
-        local ok, new_id = pcall(vim.api.nvim_buf_set_extmark, bufnr, spinner_ns, target_line, 0, {
-          virt_lines = { virt_text_chunks },
-          virt_lines_above = false,
-          hl_mode = "combine",
-          priority = PRIORITY.SPINNER,
-        })
-        if ok then
-          buffer_state.progress_extmark_id = new_id
-        end
-      end
-      buffer_state.progress_last_rendered_line = target_line
-    end
-
-    -- Show a floating window when the progress extmark would not be visible.
-    -- virt_lines below the last buffer line are invisible at the bottom of the
-    -- viewport (Neovim doesn't account for them in scroll calculations), so the
-    -- float is the only reliable way to show progress during active streaming.
-    local winid = vim.fn.bufwinid(bufnr)
-    if winid ~= -1 then
-      local target_line = buffer_state.progress_last_line
-      if target_line ~= nil then
+      -- Also show float if the inline extmark is off-screen
+      if winid ~= -1 and target_line ~= nil then
         local last_visible = vim.fn.line("w$", winid)
-        local target_1indexed = target_line + 1
-        -- For virt_lines phases (streaming/buffering), the content renders
-        -- below the target line and needs room — show float when target is
-        -- at or beyond the last visible line. For virt_text phases
-        -- (waiting/thinking), the text is on the line itself.
-        local needs_float
-        if phase == "streaming" or phase == "buffering" then
-          needs_float = target_1indexed >= last_visible
-        else
-          needs_float = target_1indexed > last_visible
-        end
-
-        if needs_float then
+        if target_line + 1 > last_visible then
           show_progress_float(bufnr, winid, progress_text, highlight)
         else
           hide_progress_float(bufnr)
         end
+      end
+    else
+      -- Streaming/buffering: float only — clear any leftover inline extmark
+      if buffer_state.progress_extmark_id ~= nil then
+        vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)
+        buffer_state.progress_extmark_id = nil
+      end
+
+      if winid ~= -1 then
+        show_progress_float(bufnr, winid, progress_text, highlight)
       end
     end
   end, { ["repeat"] = -1 })
