@@ -7,11 +7,12 @@ describe("Lualine component", function()
 
     -- Mock lualine.component before requiring the flemma component
     package.preload["lualine.component"] = function()
-      return {
-        extend = function()
-          return {}
-        end,
-      }
+      local component = {}
+      component.init = function() end
+      component.extend = function()
+        return setmetatable({}, { __index = component })
+      end
+      return component
     end
 
     -- Invalidate caches to ensure we get fresh modules
@@ -53,7 +54,7 @@ describe("Lualine component", function()
     -- Act
     local status = flemma_component:update_status()
 
-    -- Assert (uses default format "#{model}#{?#{thinking}, (#{thinking}),}")
+    -- Assert (default format from config.lua)
     assert.are.equal("o3 (high)", status)
   end)
 
@@ -353,6 +354,75 @@ describe("Lualine component", function()
 
       -- Assert: cost = (100000/1M)*3 + (5000/1M)*15 = 0.30 + 0.075 = 0.375
       assert.are.equal("claude-sonnet-4-5 last:$0.38", status)
+    end)
+  end)
+
+  describe("booting variable", function()
+    it("should be truthy while async tool sources are pending", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{?#{booting},booting,ready}"
+
+      local tools = require("flemma.tools")
+      tools.clear()
+      local captured_done
+      tools.register_async(function(_register, done)
+        captured_done = done
+      end)
+
+      -- Act
+      local status_text = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("booting", status_text)
+
+      -- Cleanup: resolve the async source
+      captured_done()
+    end)
+
+    it("should refresh lualine on FlemmaBootComplete", function()
+      -- Arrange: track lualine.refresh() calls
+      local refresh_called = false
+      package.loaded["lualine"] = {
+        refresh = function()
+          refresh_called = true
+        end,
+      }
+
+      -- Re-require component so init() picks up the mock
+      package.loaded["lualine.components.flemma"] = nil
+      flemma_component = require("lualine.components.flemma")
+
+      -- Simulate init() being called (lualine calls this on component creation)
+      if flemma_component.init then
+        flemma_component:init({})
+      end
+
+      -- Act: emit the autocmd
+      vim.api.nvim_exec_autocmds("User", { pattern = "FlemmaBootComplete" })
+
+      -- Assert
+      assert.is_true(refresh_called)
+
+      -- Cleanup
+      package.loaded["lualine"] = nil
+    end)
+
+    it("should be falsy once all async tool sources resolve", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{?#{booting},booting,ready}"
+
+      local tools = require("flemma.tools")
+      tools.clear()
+
+      -- Act (no pending async sources)
+      local status_text = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("ready", status_text)
     end)
   end)
 

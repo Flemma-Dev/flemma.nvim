@@ -105,6 +105,44 @@ describe("flemma.status", function()
       assert.is_false(data.buffer.is_chat)
     end)
 
+    it("includes booting state when async tool sources are pending", function()
+      local state = require("flemma.state")
+      ---@diagnostic disable-next-line: missing-fields
+      state.set_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local tools = require("flemma.tools")
+      tools.clear()
+      local captured_done
+      tools.register_async(function(_register, done)
+        captured_done = done
+      end)
+
+      local data = status.collect(0)
+      assert.is_true(data.tools.booting)
+
+      -- Cleanup
+      captured_done()
+    end)
+
+    it("reports booting as false when all tool sources are ready", function()
+      local state = require("flemma.state")
+      ---@diagnostic disable-next-line: missing-fields
+      state.set_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect(0)
+      assert.is_false(data.tools.booting)
+    end)
+
     it("reports autopilot state", function()
       local state = require("flemma.state")
       ---@diagnostic disable-next-line: missing-fields
@@ -534,6 +572,65 @@ describe("flemma.status", function()
       local lines = status.format(data, false)
       local text = table.concat(lines, "\n")
       assert.truthy(text:find("all tools auto%-approved"), "expected catch-all message")
+    end)
+
+    it("shows booting indicator when tools are still loading", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
+        parameters = { merged = {} },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
+        },
+        tools = { enabled = { "bash", "read" }, disabled = {}, booting = true },
+        approval = {
+          approved = { "read" },
+          denied = {},
+          pending = { "bash" },
+          require_approval_disabled = false,
+        },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local lines = status.format(data, false)
+      local text = table.concat(lines, "\n")
+      assert.truthy(text:find("⏳"), "expected booting indicator")
+      assert.truthy(text:find("loading async tool sources"), "expected booting message")
+    end)
+
+    it("omits booting indicator when tools are ready", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
+        parameters = { merged = {} },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
+        },
+        tools = { enabled = { "bash", "read" }, disabled = {}, booting = false },
+        approval = {
+          approved = { "read" },
+          denied = {},
+          pending = { "bash" },
+          require_approval_disabled = false,
+        },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local lines = status.format(data, false)
+      local text = table.concat(lines, "\n")
+      assert.falsy(text:find("⏳"), "expected no booting indicator")
     end)
 
     it("shows denied tools in approval digest", function()

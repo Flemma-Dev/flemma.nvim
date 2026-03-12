@@ -8,12 +8,25 @@ local registry = require("flemma.provider.registry")
 local format = require("flemma.utilities.format")
 local session = require("flemma.session")
 local str = require("flemma.utilities.string")
-
---- Default format: model name, with thinking level in parens when active.
-local DEFAULT_FORMAT = "#{model}#{?#{thinking}, (#{thinking}),}"
+local tools = require("flemma.tools")
 
 -- Create a new component for displaying Flemma status
 local flemma_component = lualine_component:extend()
+
+---@param options table Lualine component options
+function flemma_component:init(options)
+  lualine_component.init(self, options)
+
+  vim.api.nvim_create_autocmd("User", {
+    pattern = "FlemmaBootComplete",
+    callback = function()
+      local ok, lualine = pcall(require, "lualine")
+      if ok then
+        lualine.refresh()
+      end
+    end,
+  })
+end
 
 ---Resolve the current thinking/reasoning level (unified across providers).
 ---Reads from the provider's parameter proxy which includes frontmatter overrides.
@@ -57,6 +70,11 @@ end
 ---@return table<string, fun(): string>
 local function make_resolvers(config)
   return {
+    -- Boot state
+    booting = function()
+      return tools.is_ready() and "" or "1"
+    end,
+
     -- Identity
     model = function()
       return config.model or ""
@@ -152,8 +170,7 @@ function flemma_component:update_status()
     return ""
   end
 
-  local statusline_config = config.statusline or {}
-  local fmt = statusline_config.format or DEFAULT_FORMAT
+  local fmt = config.statusline.format
 
   return format.expand(fmt, build_vars(config))
 end

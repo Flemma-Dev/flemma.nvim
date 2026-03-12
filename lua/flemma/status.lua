@@ -8,6 +8,7 @@ local config_manager = require("flemma.core.config.manager")
 local autopilot = require("flemma.autopilot")
 local sandbox = require("flemma.sandbox")
 local str = require("flemma.utilities.string")
+local tools_module = require("flemma.tools")
 local tools_registry = require("flemma.tools.registry")
 local tool_presets = require("flemma.tools.presets")
 local registry = require("flemma.provider.registry")
@@ -24,7 +25,7 @@ local MARKER_FRONTMATTER = "✲"
 ---@field parameters { merged: table<string, any>, frontmatter_overrides: table<string, any>|nil, resolved_max_tokens: integer|nil }
 ---@field autopilot { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, frontmatter_override: boolean|nil }
 ---@field sandbox { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil, policy: flemma.config.SandboxPolicy }
----@field tools { enabled: string[], disabled: string[], frontmatter_items: table<string, true>|nil }
+---@field tools { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil }
 ---@field approval { source: string|nil, approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil }
 ---@field buffer { is_chat: boolean, bufnr: integer }
 
@@ -211,6 +212,7 @@ local function collect_tools(opts)
   return {
     enabled = enabled,
     disabled = disabled,
+    booting = not tools_module.is_ready(),
     frontmatter_items = next(frontmatter_items) and frontmatter_items or nil,
   }
 end
@@ -533,6 +535,9 @@ function M.format(data, verbose)
   local enabled_count = #data.tools.enabled
   local disabled_count = #data.tools.disabled
   add("Tools (" .. enabled_count .. " enabled, " .. disabled_count .. " disabled)")
+  if data.tools.booting then
+    add("  ⏳ loading async tool sources…")
+  end
   if enabled_count > 0 then
     add("  ✓ " .. format_name_list(data.tools.enabled, data.tools.frontmatter_items))
   end
