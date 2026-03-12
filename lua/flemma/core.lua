@@ -32,6 +32,7 @@ local cursor = require("flemma.cursor")
 local usage = require("flemma.usage")
 
 local ABORT_MESSAGE = "Response interrupted by the user."
+local DEFAULT_MAX_CONCURRENT = 2
 
 -- For testing purposes
 local last_request_body_for_testing = nil
@@ -276,11 +277,29 @@ local function advance_phase2(opts)
 
   -- Process approved → execute tool (pass pre-evaluated opts to avoid re-evaluating frontmatter)
   local approved = tool_blocks["approved"] or {}
+  local config = state.get_config()
+  local max_concurrent = (config.tools and config.tools.max_concurrent) or DEFAULT_MAX_CONCURRENT
+  local executed_count = 0
+  local throttled = false
+
   for _, ctx in ipairs(approved) do
+    if max_concurrent > 0 and executor.count_running(bufnr) >= max_concurrent then
+      throttled = true
+      break
+    end
     local ok, err = executor.execute(bufnr, ctx, opts.frontmatter_opts)
     if not ok then
       vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+    else
+      executed_count = executed_count + 1
     end
+  end
+
+  if throttled and opts.user_initiated then
+    vim.notify(
+      "Flemma: Executing " .. executed_count .. "/" .. #approved .. " tools (max_concurrent=" .. max_concurrent .. ")",
+      vim.log.levels.INFO
+    )
   end
 
   -- Collect truly-pending blocks (empty content — user-filled ones were already resolved).
