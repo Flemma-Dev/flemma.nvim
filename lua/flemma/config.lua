@@ -271,7 +271,7 @@ return {
   parameters = {
     max_tokens = "50%", -- Default max tokens: percentage of model's max_output_tokens, or integer
     temperature = 0.7, -- Default temperature for all providers
-    timeout = 120, -- Default response timeout for cURL requests
+    timeout = 600, -- Default response timeout for cURL requests (previously 120)
     connect_timeout = 10, -- Default connection timeout for cURL requests
     cache_retention = "short", -- Default prompt caching: "short", "long", or "none"
     thinking = "high", -- Default thinking level: "low", "medium", "high", numeric budget, or false to disable
