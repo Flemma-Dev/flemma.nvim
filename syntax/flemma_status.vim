@@ -51,6 +51,7 @@ syntax region FlemmaStatusStrikethrough matchgroup=Conceal start=/\~\~/ end=/\~\
 
 " Legend
 syntax match FlemmaStatusLegend "^✲.*$"
+syntax match FlemmaStatusLegend "^⊡.*$"
 
 " Config dump region with embedded Lua highlighting
 syntax region FlemmaStatusConfigBlock start="^\(Model Info\|Config (full)\)$" end="\%$" keepend contains=FlemmaStatusConfigTitle,FlemmaStatusConfigSeparator,@FlemmaStatusLua

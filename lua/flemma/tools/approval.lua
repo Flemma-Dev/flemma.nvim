@@ -149,6 +149,18 @@ end
 ---@param context flemma.config.AutoApproveContext
 ---@return flemma.tools.ApprovalResult
 function M.resolve(tool_name, input, context)
+  local result = M.resolve_with_source(tool_name, input, context)
+  return result
+end
+
+---Like resolve(), but also returns the name of the resolver that made the decision.
+---Used by status display to annotate why a tool was approved/denied.
+---@param tool_name string
+---@param input table<string, any>
+---@param context flemma.config.AutoApproveContext
+---@return flemma.tools.ApprovalResult result
+---@return string source Resolver name, or "default" if no resolver matched
+function M.resolve_with_source(tool_name, input, context)
   ensure_sorted()
 
   for _, entry in ipairs(resolvers) do
@@ -157,13 +169,13 @@ function M.resolve(tool_name, input, context)
       log.warn("approval: resolver '" .. entry.name .. "' error: " .. tostring(result))
     elseif result ~= nil then
       if VALID_RESULTS[result] then
-        return result
+        return result, entry.name
       end
       log.warn("approval: resolver '" .. entry.name .. "' returned invalid result: " .. tostring(result))
     end
   end
 
-  return "require_approval"
+  return "require_approval", "default"
 end
 
 ---Resolve an auto_approve policy (string[] or function) against a tool call.

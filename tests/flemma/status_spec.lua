@@ -545,6 +545,38 @@ describe("flemma.status", function()
       assert.truthy(text:find("require approval: bash"), "expected pending tools")
     end)
 
+    it("shows sandbox marker on sandbox-promoted tools", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
+        parameters = { merged = {} },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        sandbox = {
+          enabled = true,
+          config_enabled = true,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
+        },
+        tools = { enabled = { "bash", "edit", "read", "write" }, disabled = {} },
+        approval = {
+          source = "$default",
+          approved = { "bash", "edit", "read", "write" },
+          denied = {},
+          pending = {},
+          require_approval_disabled = false,
+          sandbox_items = { bash = true },
+        },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local lines = status.format(data, false)
+      local text = table.concat(lines, "\n")
+      assert.truthy(text:find("bash ⊡"), "expected sandbox marker on bash")
+      assert.truthy(text:find("⊡ auto%-approved via sandbox"), "expected sandbox legend")
+    end)
+
     it("shows require_approval = false override", function()
       ---@type flemma.status.Data
       local data = {
@@ -670,10 +702,18 @@ describe("flemma.status", function()
       require("flemma.tools.presets").setup()
     end)
 
-    it("expands $default preset and classifies tools", function()
-      local state = require("flemma.state")
+    ---Set config and initialize the approval resolver chain.
+    ---Must be called before status.collect() in every approval test.
+    ---@param config table
+    local function setup_config(config)
+      local st = require("flemma.state")
       ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      st.set_config(config)
+      require("flemma.tools.approval").setup()
+    end
+
+    it("expands $default preset and classifies tools", function()
+      setup_config({
         provider = "anthropic",
         parameters = {},
         tools = {
@@ -709,9 +749,7 @@ describe("flemma.status", function()
     end)
 
     it("returns nil source when no auto_approve is configured", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      setup_config({
         provider = "anthropic",
         parameters = {},
         tools = { autopilot = { enabled = false, max_turns = 100 } },
@@ -733,9 +771,7 @@ describe("flemma.status", function()
     end)
 
     it("builds source from multiple policy entries", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      setup_config({
         provider = "anthropic",
         parameters = {},
         tools = {
@@ -764,9 +800,7 @@ describe("flemma.status", function()
     end)
 
     it("returns all tools as pending for function policy", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      setup_config({
         provider = "anthropic",
         parameters = {},
         tools = {
@@ -788,14 +822,14 @@ describe("flemma.status", function()
 
       local data = status.collect(0)
       assert.equals("(function)", data.approval.source)
-      assert.are.same({}, data.approval.approved)
-      assert.are.same({ "read" }, data.approval.pending)
+      -- Function policies resolve at runtime — tools show as approved when the
+      -- resolver chain evaluates them (the function returns true for all tools)
+      assert.are.same({ "read" }, data.approval.approved)
+      assert.are.same({}, data.approval.pending)
     end)
 
     it("detects require_approval = false", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      setup_config({
         provider = "anthropic",
         parameters = {},
         tools = {
@@ -810,9 +844,7 @@ describe("flemma.status", function()
     end)
 
     it("reports no frontmatter_items when opts is nil", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      setup_config({
         provider = "anthropic",
         parameters = {},
         tools = {
@@ -833,6 +865,107 @@ describe("flemma.status", function()
       local data = status.collect(0)
       assert.is_nil(data.approval.frontmatter_items)
       assert.is_nil(data.tools.frontmatter_items)
+    end)
+
+    it("promotes sandbox-capable tools to approved when sandbox is active", function()
+      setup_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = {
+          auto_approve = { "$default" },
+          autopilot = { enabled = false, max_turns = 100 },
+        },
+        sandbox = { enabled = true, backend = "auto" },
+      })
+
+      -- Stub sandbox backend availability
+      local sandbox_mod = require("flemma.sandbox")
+      local original_validate = sandbox_mod.validate_backend
+      sandbox_mod.validate_backend = function()
+        return true, nil
+      end
+
+      local registry = require("flemma.tools.registry")
+      registry.clear()
+      registry.register("read", {
+        name = "read",
+        description = "Read tool",
+        input_schema = { type = "object" },
+      })
+      registry.register("bash", {
+        name = "bash",
+        description = "Bash tool",
+        capabilities = { "can_auto_approve_if_sandboxed" },
+        input_schema = { type = "object" },
+      })
+
+      local data = status.collect(0)
+      assert.are.same({ "bash", "read" }, data.approval.approved)
+      assert.are.same({}, data.approval.pending)
+      assert.is_not_nil(data.approval.sandbox_items)
+      assert.is_true(data.approval.sandbox_items.bash)
+
+      sandbox_mod.validate_backend = original_validate
+    end)
+
+    it("does not promote sandbox-capable tools when sandbox is disabled", function()
+      setup_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = {
+          auto_approve = { "$default" },
+          autopilot = { enabled = false, max_turns = 100 },
+        },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local registry = require("flemma.tools.registry")
+      registry.clear()
+      registry.register("bash", {
+        name = "bash",
+        description = "Bash tool",
+        capabilities = { "can_auto_approve_if_sandboxed" },
+        input_schema = { type = "object" },
+      })
+
+      local data = status.collect(0)
+      assert.are.same({}, data.approval.approved)
+      assert.are.same({ "bash" }, data.approval.pending)
+      assert.is_nil(data.approval.sandbox_items)
+    end)
+
+    it("does not promote sandbox-capable tools when no auto_approve is configured", function()
+      setup_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = {
+          autopilot = { enabled = false, max_turns = 100 },
+        },
+        sandbox = { enabled = true, backend = "auto" },
+      })
+
+      -- Stub sandbox backend availability
+      local sandbox_mod = require("flemma.sandbox")
+      local original_validate = sandbox_mod.validate_backend
+      sandbox_mod.validate_backend = function()
+        return true, nil
+      end
+
+      local registry = require("flemma.tools.registry")
+      registry.clear()
+      registry.register("bash", {
+        name = "bash",
+        description = "Bash tool",
+        capabilities = { "can_auto_approve_if_sandboxed" },
+        input_schema = { type = "object" },
+      })
+
+      local data = status.collect(0)
+      assert.are.same({}, data.approval.approved)
+      assert.are.same({ "bash" }, data.approval.pending)
+      assert.is_nil(data.approval.sandbox_items)
+
+      sandbox_mod.validate_backend = original_validate
     end)
   end)
 

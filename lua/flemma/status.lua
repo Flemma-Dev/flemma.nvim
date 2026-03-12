@@ -9,11 +9,12 @@ local autopilot = require("flemma.autopilot")
 local sandbox = require("flemma.sandbox")
 local str = require("flemma.utilities.string")
 local tools_module = require("flemma.tools")
+local tools_approval = require("flemma.tools.approval")
 local tools_registry = require("flemma.tools.registry")
-local tool_presets = require("flemma.tools.presets")
 local registry = require("flemma.provider.registry")
 
 local MARKER_FRONTMATTER = "✲"
+local MARKER_SANDBOX = "⊡"
 
 ---@class flemma.status.ShowOptions
 ---@field verbose? boolean Include full config dump
@@ -26,7 +27,7 @@ local MARKER_FRONTMATTER = "✲"
 ---@field autopilot { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, frontmatter_override: boolean|nil }
 ---@field sandbox { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil, policy: flemma.config.SandboxPolicy }
 ---@field tools { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil }
----@field approval { source: string|nil, approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil }
+---@field approval { source: string|nil, approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil }
 ---@field buffer { is_chat: boolean, bufnr: integer }
 
 ---Collect provider section data
@@ -217,86 +218,41 @@ local function collect_tools(opts)
   }
 end
 
----Expand an auto_approve policy (table form) into approve/deny sets.
----@param policy string[]|nil The auto_approve value
----@param exclusions table<string, true>|nil Exclusion set from ListOption :remove()
----@return table<string, true> approved_set
----@return table<string, true> denied_set
-local function expand_approval_policy(policy, exclusions)
-  local approved_set = {}
-  local denied_set = {}
+---Map an ApprovalResult to the bucket key used by collect_approval.
+local RESULT_TO_BUCKET = {
+  approve = "approved",
+  deny = "denied",
+  require_approval = "pending",
+}
 
-  if type(policy) ~= "table" then
-    return approved_set, denied_set
-  end
-
-  for _, entry in
-    ipairs(policy --[[@as string[] ]])
-  do
-    if vim.startswith(entry, "$") then
-      local preset = tool_presets.get(entry)
-      if preset then
-        if preset.approve then
-          for _, name in ipairs(preset.approve) do
-            approved_set[name] = true
-          end
-        end
-        if preset.deny then
-          for _, name in ipairs(preset.deny) do
-            denied_set[name] = true
-          end
-        end
-      end
-    else
-      approved_set[entry] = true
-    end
-  end
-
-  if exclusions then
-    for name in pairs(exclusions) do
-      approved_set[name] = nil
-    end
-  end
-
-  for name in pairs(denied_set) do
-    approved_set[name] = nil
-  end
-
-  return approved_set, denied_set
+---Resolve approval for a tool via the resolver chain, returning the bucket and source.
+---@param tool_name string
+---@param opts flemma.opt.FrontmatterOpts|nil
+---@param bufnr integer
+---@return "approved"|"denied"|"pending" bucket
+---@return string source Resolver name that made the decision
+local function resolve_tool_approval(tool_name, opts, bufnr)
+  local result, source = tools_approval.resolve_with_source(tool_name, {}, { bufnr = bufnr, tool_id = "", opts = opts })
+  return RESULT_TO_BUCKET[result] or "pending", source
 end
 
----Classify a tool name against approve/deny sets.
----@param name string
----@param approved_set table<string, true>
----@param denied_set table<string, true>
----@return "approved"|"denied"|"pending"
-local function classify_tool(name, approved_set, denied_set)
-  if denied_set[name] then
-    return "denied"
-  elseif approved_set[name] then
-    return "approved"
-  end
-  return "pending"
-end
-
----Collect tool approval section data by expanding presets and classifying each enabled tool.
+---Collect tool approval section data by running each tool through the approval
+---resolver chain — the same code path used at tool-execution time.
 ---When frontmatter changes a tool's approval status, it is tracked in frontmatter_items.
 ---@param config flemma.Config
 ---@param opts flemma.opt.FrontmatterOpts|nil
 ---@param enabled_tools string[] Sorted list of enabled tool names
----@return { source: string|nil, approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil }
-local function collect_approval(config, opts, enabled_tools)
+---@param bufnr integer Buffer number for resolver context
+---@return { source: string|nil, approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil }
+local function collect_approval(config, opts, enabled_tools, bufnr)
   local tools_config = config.tools
   local require_approval_disabled = tools_config and tools_config.require_approval == false or false
 
-  -- Determine effective policy (frontmatter overrides config)
+  -- Build source string from the effective auto_approve policy
   local effective_policy = tools_config and tools_config.auto_approve
-  local has_frontmatter = opts and opts.auto_approve ~= nil
-  if has_frontmatter then
-    effective_policy = opts --[[@as flemma.opt.FrontmatterOpts]].auto_approve
+  if opts and opts.auto_approve ~= nil then
+    effective_policy = opts.auto_approve
   end
-
-  -- Build source string from the raw policy entries (before expansion)
   ---@type string|nil
   local source = nil
   if type(effective_policy) == "table" then
@@ -308,44 +264,33 @@ local function collect_approval(config, opts, enabled_tools)
     source = "(function)"
   end
 
-  -- Function policies can't be statically expanded
-  if type(effective_policy) == "function" or type(tools_config and tools_config.auto_approve) == "function" then
-    return {
-      source = source,
-      approved = {},
-      denied = {},
-      pending = enabled_tools,
-      require_approval_disabled = require_approval_disabled,
-    }
-  end
-
-  -- Expand effective policy (with frontmatter exclusions)
-  local exclusions = opts and opts.auto_approve_exclusions
-  local approved_set, denied_set = expand_approval_policy(effective_policy --[[@as string[]|nil]], exclusions)
-
-  -- Expand config-only baseline for diffing (no exclusions — those come from frontmatter)
-  local config_policy = tools_config and tools_config.auto_approve
-  local config_approved_set, config_denied_set = expand_approval_policy(config_policy --[[@as string[]|nil]], nil)
-
-  -- Classify each enabled tool and track frontmatter diffs
+  -- Classify each tool through the resolver chain
   local approved = {}
   local denied = {}
   local pending = {}
   local frontmatter_items = {}
+  local sandbox_items = {}
+  local has_frontmatter = opts and opts.auto_approve ~= nil
 
   for _, name in ipairs(enabled_tools) do
-    local effective_class = classify_tool(name, approved_set, denied_set)
-    if effective_class == "denied" then
+    local bucket, resolver_source = resolve_tool_approval(name, opts, bufnr)
+    if bucket == "denied" then
       table.insert(denied, name)
-    elseif effective_class == "approved" then
+    elseif bucket == "approved" then
       table.insert(approved, name)
     else
       table.insert(pending, name)
     end
 
+    -- Track sandbox-sourced approvals
+    if resolver_source == "urn:flemma:approval:sandbox" then
+      sandbox_items[name] = true
+    end
+
+    -- Track frontmatter diffs by re-resolving without opts
     if has_frontmatter then
-      local config_class = classify_tool(name, config_approved_set, config_denied_set)
-      if effective_class ~= config_class then
+      local config_bucket = resolve_tool_approval(name, nil, bufnr)
+      if bucket ~= config_bucket then
         frontmatter_items[name] = true
       end
     end
@@ -358,24 +303,29 @@ local function collect_approval(config, opts, enabled_tools)
     pending = pending,
     require_approval_disabled = require_approval_disabled,
     frontmatter_items = next(frontmatter_items) and frontmatter_items or nil,
+    sandbox_items = next(sandbox_items) and sandbox_items or nil,
   }
 end
 
----Format a list of names, appending the frontmatter emoji to items in the given set.
+---Format a list of names, appending markers for frontmatter/sandbox items.
 ---@param names string[]
 ---@param frontmatter_items table<string, true>|nil
+---@param sandbox_items table<string, true>|nil
 ---@return string
-local function format_name_list(names, frontmatter_items)
-  if not frontmatter_items then
+local function format_name_list(names, frontmatter_items, sandbox_items)
+  if not frontmatter_items and not sandbox_items then
     return table.concat(names, ", ")
   end
   local parts = {}
   for _, name in ipairs(names) do
-    if frontmatter_items[name] then
-      table.insert(parts, name .. " " .. MARKER_FRONTMATTER)
-    else
-      table.insert(parts, name)
+    local suffix = ""
+    if frontmatter_items and frontmatter_items[name] then
+      suffix = suffix .. " " .. MARKER_FRONTMATTER
     end
+    if sandbox_items and sandbox_items[name] then
+      suffix = suffix .. " " .. MARKER_SANDBOX
+    end
+    table.insert(parts, name .. suffix)
   end
   return table.concat(parts, ", ")
 end
@@ -555,25 +505,38 @@ function M.format(data, verbose)
   if data.approval.require_approval_disabled then
     add("  ✓ all tools auto-approved (require_approval = false)")
   else
+    local sandbox_items = data.approval.sandbox_items
     if #data.approval.approved > 0 then
-      add("  ✓ auto-approve: " .. format_name_list(data.approval.approved, data.approval.frontmatter_items))
+      add(
+        "  ✓ auto-approve: "
+          .. format_name_list(data.approval.approved, data.approval.frontmatter_items, sandbox_items)
+      )
     end
     if #data.approval.denied > 0 then
-      add("  ✗ deny: " .. format_name_list(data.approval.denied, data.approval.frontmatter_items))
+      add("  ✗ deny: " .. format_name_list(data.approval.denied, data.approval.frontmatter_items, sandbox_items))
     end
     if #data.approval.pending > 0 then
-      add("  ⋯ require approval: " .. format_name_list(data.approval.pending, data.approval.frontmatter_items))
+      add(
+        "  ⋯ require approval: "
+          .. format_name_list(data.approval.pending, data.approval.frontmatter_items, sandbox_items)
+      )
     end
   end
 
-  -- Legend (only if frontmatter marker was used)
+  -- Legend (only if annotation markers were used)
   local has_frontmatter_marker = data.parameters.frontmatter_overrides
     or data.autopilot.frontmatter_override ~= nil
     or data.tools.frontmatter_items
     or data.approval.frontmatter_items
-  if has_frontmatter_marker then
+  local has_sandbox_marker = data.approval.sandbox_items ~= nil
+  if has_frontmatter_marker or has_sandbox_marker then
     add("")
-    add(MARKER_FRONTMATTER .. " set by buffer frontmatter")
+    if has_frontmatter_marker then
+      add(MARKER_FRONTMATTER .. " set by buffer frontmatter")
+    end
+    if has_sandbox_marker then
+      add(MARKER_SANDBOX .. " auto-approved via sandbox")
+    end
   end
 
   -- Verbose: model info dump and full config dump
@@ -627,7 +590,7 @@ function M.collect(bufnr)
     autopilot = collect_autopilot(bufnr, config, opts),
     sandbox = collect_sandbox(bufnr, opts),
     tools = tools_data,
-    approval = collect_approval(config, opts, tools_data.enabled),
+    approval = collect_approval(config, opts, tools_data.enabled, bufnr),
     buffer = {
       is_chat = is_chat,
       bufnr = bufnr,
