@@ -115,6 +115,28 @@ describe("Include expression navigation", function()
     assert.is_truthy(result:find("include_target.txt"))
   end)
 
+  it("returns nil gracefully when frontmatter include references missing file", function()
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
+    vim.api.nvim_buf_set_name(bufnr, fixture_dir .. "test.chat")
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "```lua",
+      "file = './nonexistent.txt'",
+      "mod = include(file)",
+      "```",
+      "@You:",
+      "See {{ mod }}",
+    })
+    -- Place cursor on the {{ mod }} expression
+    vim.api.nvim_win_set_cursor(0, { 6, 5 })
+
+    -- Should not crash — frontmatter error means variables are lost,
+    -- so expression returns nil and falls back gracefully
+    local result = navigation.resolve_include_path(bufnr)
+    assert.is_nil(result)
+  end)
+
   it("resolve_include_path_expr returns a string when cursor is on plain text", function()
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)

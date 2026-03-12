@@ -48,14 +48,14 @@ function M.find_prev_message()
 end
 
 ---Resolve the file path for an include expression under the cursor.
----Evaluates the expression with a capturing include() stub that records
----the resolved path without performing I/O.
+---Evaluates the expression using the real include() and checks the result
+---for a symbols.SOURCE_PATH tag to determine the originating file.
 ---@param bufnr integer Buffer number
 ---@return string|nil resolved_path Absolute file path, or nil if cursor is not on an include expression
 function M.resolve_include_path(bufnr)
-  local cursor = vim.api.nvim_win_get_cursor(0)
-  local lnum = cursor[1] -- 1-indexed
-  local col = cursor[2] + 1 -- 0-indexed -> 1-indexed
+  local cursor_pos = vim.api.nvim_win_get_cursor(0)
+  local lnum = cursor_pos[1] -- 1-indexed
+  local col = cursor_pos[2] + 1 -- 0-indexed -> 1-indexed
   log.trace("navigation: resolve_include_path at line=" .. lnum .. " col=" .. col .. " buf=" .. bufnr)
 
   local doc = parser.get_parsed_document(bufnr)
@@ -76,53 +76,32 @@ function M.resolve_include_path(bufnr)
   -- Build eval environment with frontmatter variables
   local context = ctxutil.from_buffer(bufnr)
   local fm = processor.evaluate_frontmatter(doc, context)
-  if #fm.diagnostics > 0 then
-    log.debug("navigation: frontmatter had " .. #fm.diagnostics .. " diagnostic(s), variables may be incomplete")
+
+  for _, diag in ipairs(fm.diagnostics) do
+    if diag.severity == "error" then
+      log.debug("navigation: frontmatter error: " .. (diag.error or "unknown"))
+      vim.notify("Flemma: frontmatter has errors — gf navigation may not work.", vim.log.levels.WARN)
+      break
+    end
   end
+
   local env = ctxutil.to_eval_env(fm.context, bufnr)
 
-  -- Install a capturing include() stub
-  local captured_path = nil
-
-  env.include = function(relative_path, _opts)
-    if captured_path then
-      -- Already captured — ignore subsequent calls
-      return { emit = function() end }
-    end
-
-    local dirname = env.__dirname
-    log.trace("navigation: include() called with path=" .. relative_path .. " dirname=" .. (dirname or "nil"))
-
-    local target_path
-    if dirname then
-      target_path = vim.fs.normalize(dirname .. "/" .. relative_path)
-    else
-      target_path = relative_path
-    end
-
-    captured_path = target_path
-    return { emit = function() end }
-  end
-
-  -- Evaluate the expression — pcall to handle errors gracefully
+  -- Evaluate the expression using the real include() — the result is an
+  -- emittable tagged with symbols.SOURCE_PATH when it originates from a file
   local ok, result = pcall(eval.eval_expression, seg.code, env)
   if not ok then
     log.debug("navigation: expression eval failed: " .. tostring(result))
+    return nil
   end
 
-  -- Check if the eval result carries a source path (e.g., a variable assigned from include())
-  if not captured_path and ok and type(result) == "table" and result[symbols.SOURCE_PATH] then
-    captured_path = result[symbols.SOURCE_PATH]
-    log.debug("navigation: resolved via symbols.SOURCE_PATH=" .. captured_path)
+  if type(result) == "table" and result[symbols.SOURCE_PATH] then
+    log.debug("navigation: resolved include path=" .. result[symbols.SOURCE_PATH])
+    return result[symbols.SOURCE_PATH]
   end
 
-  if captured_path then
-    log.debug("navigation: resolved include path=" .. captured_path)
-  else
-    log.trace("navigation: expression did not resolve to an include path")
-  end
-
-  return captured_path
+  log.trace("navigation: expression did not resolve to an include path")
+  return nil
 end
 
 ---includeexpr wrapper: returns resolved path or falls back to v:fname.
