@@ -104,7 +104,7 @@ function M.add_rulers(bufnr, doc)
 
   local win_width = vim.api.nvim_win_get_width(winid)
 
-  local spinner_line = state.get_buffer_state(bufnr).spinner_line_idx0
+  local spinner_line = state.get_buffer_state(bufnr).progress_last_line
 
   for _, msg in ipairs(doc.messages) do
     local line_idx = msg.position.start_line - 1
@@ -397,68 +397,75 @@ function M.start_progress(bufnr, progress_opts)
   return timer
 end
 
----Clean up spinner and prepare for response
+---Clean up progress line and prepare for response completion.
+---Handles both waiting phase (virt_text) and active phase (virt_lines).
 ---@param bufnr integer
-function M.cleanup_spinner(bufnr)
+function M.cleanup_progress(bufnr)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return
   end
 
   buffer_utils.with_modifiable(bufnr, function()
     local buffer_state = state.get_buffer_state(bufnr)
-    if buffer_state.spinner_timer then
-      vim.fn.timer_stop(buffer_state.spinner_timer)
-      buffer_state.spinner_timer = nil
+    if buffer_state.progress_timer then
+      vim.fn.timer_stop(buffer_state.progress_timer)
+      buffer_state.progress_timer = nil
     end
 
-    -- Clear spinner/thinking preview state
-    buffer_state.spinner_extmark_id = nil
-    buffer_state.spinner_line_idx0 = nil
-    buffer_state.spinner_preview_text = nil
+    -- Clear progress state
+    buffer_state.progress_phase = nil
+    buffer_state.progress_char_count = 0
+    buffer_state.progress_started_at = nil
+    buffer_state.progress_timeout = nil
+    buffer_state.progress_extmark_id = nil
+    buffer_state.progress_last_line = nil
+    buffer_state.progress_last_rendered_line = nil
 
-    vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1) -- Clear rulers/virtual text
-    vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1) -- Remove spinner suppression
+    vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
+    vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)
 
     local last_line_content, line_count = buffer_utils.get_last_line(bufnr)
     if line_count == 0 then
-      M.update_ui(bufnr) -- Ensure UI is clean even if buffer is empty
+      M.update_ui(bufnr)
       return
     end
 
     -- Only modify lines if the last line is the empty @Assistant: spinner placeholder.
-    -- "Thinking…" is now virtual text, so the buffer line is just "@Assistant:".
     if last_line_content and last_line_content == "@Assistant:" then
-      M.buffer_cmd(bufnr, "undojoin") -- Group changes for undo
+      M.buffer_cmd(bufnr, "undojoin")
 
-      -- Get the line before the "@Assistant:" marker (if it exists)
       local prev_line_actual_content = nil
       if line_count > 1 then
         prev_line_actual_content = buffer_utils.get_line(bufnr, line_count - 1)
       end
 
-      -- Ensure we maintain a blank line if needed, or remove the spinner line
       if prev_line_actual_content and prev_line_actual_content:match("%S") then
-        -- Previous line has content, replace spinner line with a blank line
         vim.api.nvim_buf_set_lines(bufnr, line_count - 1, line_count, false, { "" })
       else
-        -- Previous line is blank or doesn't exist, remove the spinner line entirely
         vim.api.nvim_buf_set_lines(bufnr, line_count - 1, line_count, false, {})
       end
     else
-      log.debug("cleanup_spinner(): Last line is not the spinner placeholder, not modifying lines.")
+      log.debug("cleanup_progress(): Last line is not the spinner placeholder, not modifying lines.")
     end
 
-    M.update_ui(bufnr) -- Force UI update after cleaning up spinner
+    M.update_ui(bufnr)
   end)
 end
 
----Store thinking preview text for the spinner timer to render.
----The timer owns all extmark updates so the animation stays smooth.
+---Transition the progress line from waiting/thinking (virt_text at EOL) to
+---active (virt_lines below last content line). Called once on first content delta.
+---Clears the waiting-phase extmark; the timer recreates as virt_lines on next tick
+---using buffer_state.progress_last_line.
 ---@param bufnr integer
----@param preview_text string Truncated preview to display (e.g. "329 characters")
-function M.update_thinking_preview(bufnr, preview_text)
+function M.transition_progress_to_active(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
-  buffer_state.spinner_preview_text = preview_text
+
+  -- Clear the waiting-phase virt_text extmark
+  vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)
+
+  -- Nil out the extmark ID so the timer knows to create a fresh virt_lines extmark
+  buffer_state.progress_extmark_id = nil
+  buffer_state.progress_last_rendered_line = nil
 end
 
 ---Place signs for a message
@@ -924,7 +931,7 @@ function M.update_ui(bufnr)
   M.highlight_thinking_tags(bufnr, doc)
   M.apply_line_highlights(bufnr, doc)
   M.add_tool_previews(bufnr, doc)
-  -- Note: spinner extmark (with suppression) is managed by start_loading_spinner and its timer
+  -- Note: spinner extmark (with suppression) is managed by start_progress and its timer
 
   -- Re-apply CursorLine overlay now that line highlights are refreshed,
   -- so the blend reflects the current AST state instead of the pre-edit state.
@@ -1267,7 +1274,7 @@ function M.setup()
     pattern = "*",
     callback = function(ev)
       if vim.bo[ev.buf].filetype == "chat" or string.match(vim.api.nvim_buf_get_name(ev.buf), "%.chat$") then
-        M.cleanup_spinner(ev.buf)
+        M.cleanup_progress(ev.buf)
         M.clear_all_tool_indicators(ev.buf)
         -- state.cleanup_buffer_state handles executor.cleanup_buffer internally
         state.cleanup_buffer_state(ev.buf)
