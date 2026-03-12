@@ -244,6 +244,75 @@ local function build_progress_virt_text(progress_text, bufnr, highlight)
   return chunks
 end
 
+---Show or update the progress float at the bottom of the window.
+---Called when the progress extmark target line is not visible in the viewport.
+---@param bufnr integer
+---@param parent_winid integer Window displaying the chat buffer
+---@param progress_text string Formatted progress text to display
+---@param highlight? string Override highlight group (for timeout warnings)
+local function show_progress_float(bufnr, parent_winid, progress_text, highlight)
+  local buffer_state = state.get_buffer_state(bufnr)
+  local win_width = vim.api.nvim_win_get_width(parent_winid)
+  local win_height = vim.api.nvim_win_get_height(parent_winid)
+
+  -- Create or reuse the scratch buffer
+  if not buffer_state.progress_float_bufnr or not vim.api.nvim_buf_is_valid(buffer_state.progress_float_bufnr) then
+    buffer_state.progress_float_bufnr = vim.api.nvim_create_buf(false, true)
+  end
+
+  local float_bufnr = buffer_state.progress_float_bufnr --[[@as integer]]
+  vim.api.nvim_buf_set_lines(float_bufnr, 0, -1, false, { " " .. progress_text })
+
+  -- Apply highlight to the text (timeout warnings override StatusLine text color)
+  vim.api.nvim_buf_clear_namespace(float_bufnr, spinner_ns, 0, -1)
+  if highlight then
+    vim.api.nvim_buf_set_extmark(float_bufnr, spinner_ns, 0, 0, {
+      end_col = #(" " .. progress_text),
+      hl_group = highlight,
+    })
+  end
+
+  if buffer_state.progress_float_winid and vim.api.nvim_win_is_valid(buffer_state.progress_float_winid) then
+    -- Update position and size
+    pcall(vim.api.nvim_win_set_config, buffer_state.progress_float_winid, {
+      relative = "win",
+      win = parent_winid,
+      row = win_height - 1,
+      col = 0,
+      width = win_width,
+      height = 1,
+    })
+  else
+    -- Create new float
+    local ok, float_winid = pcall(vim.api.nvim_open_win, float_bufnr, false, {
+      relative = "win",
+      win = parent_winid,
+      row = win_height - 1,
+      col = 0,
+      width = win_width,
+      height = 1,
+      style = "minimal",
+      focusable = false,
+      noautocmd = true,
+      zindex = 50,
+    })
+    if ok then
+      buffer_state.progress_float_winid = float_winid
+      vim.api.nvim_set_option_value("winhighlight", "Normal:StatusLine,NormalFloat:StatusLine", { win = float_winid })
+    end
+  end
+end
+
+---Hide the progress float if it exists.
+---@param bufnr integer
+local function hide_progress_float(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  if buffer_state.progress_float_winid and vim.api.nvim_win_is_valid(buffer_state.progress_float_winid) then
+    vim.api.nvim_win_close(buffer_state.progress_float_winid, true)
+    buffer_state.progress_float_winid = nil
+  end
+end
+
 ---Start the progress line for a new request.
 ---Creates the waiting-phase extmark on the @Assistant: line and starts the
 ---100ms animation timer. The timer reads all progress state from buffer_state
@@ -407,6 +476,31 @@ function M.start_progress(bufnr, progress_opts)
       end
       buffer_state.progress_last_rendered_line = target_line
     end
+
+    -- Float visibility: show a floating window at the bottom of the window
+    -- when the progress extmark target line is not visible in the viewport.
+    local winid = vim.fn.bufwinid(bufnr)
+    if winid ~= -1 then
+      local target_line = buffer_state.progress_last_line
+      if target_line ~= nil then
+        local last_visible = vim.fn.line("w$", winid)
+        local target_1indexed = target_line + 1
+        -- For virt_lines (streaming/buffering), content is below the target line,
+        -- so the target must be strictly before the last visible line to have room.
+        local needs_float
+        if phase == "streaming" or phase == "buffering" then
+          needs_float = target_1indexed >= last_visible
+        else
+          needs_float = target_1indexed > last_visible
+        end
+
+        if needs_float then
+          show_progress_float(bufnr, winid, progress_text, highlight)
+        else
+          hide_progress_float(bufnr)
+        end
+      end
+    end
   end, { ["repeat"] = -1 })
 
   buffer_state.progress_timer = timer
@@ -428,6 +522,9 @@ function M.cleanup_progress(bufnr)
       buffer_state.progress_timer = nil
     end
 
+    -- Close the progress float if open
+    hide_progress_float(bufnr)
+
     -- Clear progress state
     buffer_state.progress_phase = nil
     buffer_state.progress_char_count = 0
@@ -436,6 +533,7 @@ function M.cleanup_progress(bufnr)
     buffer_state.progress_extmark_id = nil
     buffer_state.progress_last_line = nil
     buffer_state.progress_last_rendered_line = nil
+    buffer_state.progress_float_bufnr = nil
 
     vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
     vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)

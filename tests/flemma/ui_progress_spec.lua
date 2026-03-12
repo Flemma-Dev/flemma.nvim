@@ -132,6 +132,41 @@ describe("progress line", function()
       assert.is_nil(buffer_state.progress_extmark_id)
       assert.is_nil(buffer_state.progress_last_line)
       assert.is_nil(buffer_state.progress_last_rendered_line)
+      assert.is_nil(buffer_state.progress_float_winid)
+      assert.is_nil(buffer_state.progress_float_bufnr)
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
+  describe("cleanup_progress closes progress float", function()
+    it("closes the float window and clears state", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Hello", "", "@Assistant:" })
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.current_request = 1
+
+      -- Simulate an open float
+      local float_bufnr = vim.api.nvim_create_buf(false, true)
+      local float_winid = vim.api.nvim_open_win(float_bufnr, false, {
+        relative = "editor",
+        row = 0,
+        col = 0,
+        width = 20,
+        height = 1,
+        style = "minimal",
+        focusable = false,
+      })
+      buffer_state.progress_float_winid = float_winid
+      buffer_state.progress_float_bufnr = float_bufnr
+
+      assert.is_true(vim.api.nvim_win_is_valid(float_winid))
+
+      ui.cleanup_progress(bufnr)
+
+      assert.is_false(vim.api.nvim_win_is_valid(float_winid))
+      assert.is_nil(buffer_state.progress_float_winid)
+      assert.is_nil(buffer_state.progress_float_bufnr)
 
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)

@@ -33,6 +33,8 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field progress_extmark_id integer|nil Stable extmark ID for timer updates
 ---@field progress_last_line integer|nil 0-indexed last content line (set by writequeue callbacks)
 ---@field progress_last_rendered_line integer|nil 0-indexed last line where virt_lines extmark was placed
+---@field progress_float_winid integer|nil Window ID for the off-screen progress float
+---@field progress_float_bufnr integer|nil Buffer ID for the off-screen progress float
 ---@field autopilot_override? boolean Per-buffer autopilot override (set from frontmatter, nil = use global config)
 ---@field auto_closed_folds? table<string, boolean>
 ---@field pending_folds? table<string, boolean> Fold IDs that were attempted but failed to close (eligible for retry)
@@ -118,6 +120,8 @@ local function init_buffer(bufnr)
     progress_extmark_id = nil,
     progress_last_line = nil,
     progress_last_rendered_line = nil,
+    progress_float_winid = nil,
+    progress_float_bufnr = nil,
     inflight_usage = {
       input_tokens = 0,
       output_tokens = 0,
@@ -170,6 +174,9 @@ function M.cleanup_buffer_state(bufnr)
     end
     if st.progress_timer then
       vim.fn.timer_stop(st.progress_timer)
+    end
+    if st.progress_float_winid and vim.api.nvim_win_is_valid(st.progress_float_winid) then
+      vim.api.nvim_win_close(st.progress_float_winid, true)
     end
   end
   -- Run registered cleanup hooks (executor, notifications) before clearing state.
