@@ -491,26 +491,33 @@ function M.start_progress(bufnr, progress_opts)
       buffer_state.progress_last_rendered_line = target_line
     end
 
-    -- Float visibility: show a floating window at the bottom of the window
-    -- when the progress extmark target line is not visible in the viewport.
+    -- Ensure the progress line is always visible. Three cases:
+    -- 1. Target line is comfortably visible → inline extmark is fine, hide float
+    -- 2. Target line is at the bottom edge → scroll viewport +1 to reveal virt_lines
+    -- 3. Target line is off-screen → show floating window overlay
     local winid = vim.fn.bufwinid(bufnr)
     if winid ~= -1 then
       local target_line = buffer_state.progress_last_line
       if target_line ~= nil then
         local last_visible = vim.fn.line("w$", winid)
         local target_1indexed = target_line + 1
-        -- For virt_lines (streaming/buffering), content is below the target line,
-        -- so the target must be strictly before the last visible line to have room.
-        local needs_float
-        if phase == "streaming" or phase == "buffering" then
-          needs_float = target_1indexed >= last_visible
-        else
-          needs_float = target_1indexed > last_visible
-        end
+        local is_virt_lines_phase = phase == "streaming" or phase == "buffering"
 
-        if needs_float then
+        if target_1indexed > last_visible then
+          -- Case 3: completely off-screen — show float
           show_progress_float(bufnr, winid, progress_text, highlight)
+        elseif is_virt_lines_phase and target_1indexed == last_visible then
+          -- Case 2: target is the last visible line, virt_lines below it
+          -- are clipped. Scroll viewport down by 1 to reveal them.
+          hide_progress_float(bufnr)
+          pcall(vim.api.nvim_win_call, winid, function()
+            local view = vim.fn.winsaveview()
+            if view then
+              vim.fn.winrestview({ topline = view.topline + 1 })
+            end
+          end)
         else
+          -- Case 1: comfortably visible — inline extmark is fine
           hide_progress_float(bufnr)
         end
       end
