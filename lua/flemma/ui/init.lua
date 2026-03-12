@@ -15,6 +15,7 @@ local migration = require("flemma.migration")
 local parser = require("flemma.parser")
 local cursor = require("flemma.cursor")
 local writequeue = require("flemma.buffer.writequeue")
+local str = require("flemma.utilities.string")
 
 -- Extmark priority constants
 -- Higher values take precedence when multiple extmarks overlap on the same line.
@@ -33,7 +34,19 @@ local PRIORITY = {
   SPINNER = 300,
 }
 
-local SPINNER_LABEL = "Thinking…"
+---@type string
+local WAITING_LABEL = "Waiting…"
+
+---@type table<flemma.state.ProgressPhase, string[]>
+local SPINNER_FRAMES = {
+  waiting = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" },
+  thinking = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" },
+  streaming = { "⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷" },
+  buffering = { "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█", "▉", "▊", "▋", "▌", "▍", "▎", "▏" },
+}
+
+---@type string
+local MIDDLE_DOT = " · "
 
 -- Define namespace for our extmarks
 local ns_id = vim.api.nvim_create_namespace("flemma")
@@ -189,24 +202,24 @@ function M.highlight_thinking_tags(bufnr, doc)
   end
 end
 
----Build spinner virt_text chunks, appending ruler chars when rulers are enabled.
----@param spinner_text string The spinner frame + label text
+---Build virtual text chunks for the progress line.
+---@param progress_text string The formatted progress text (e.g., "⠋ Waiting… · 3s")
 ---@param bufnr integer
+---@param highlight? string Override highlight group (for timeout warnings)
 ---@return {[1]:string, [2]:string}[]
-local function build_spinner_virt_text(spinner_text, bufnr)
+local function build_progress_virt_text(progress_text, bufnr, highlight)
   local current_config = state.get_config()
   local ruler_config = current_config.ruler
   local rulers_enabled = ruler_config and ruler_config.enabled ~= false
 
-  -- When rulers are off, the colon overlay isn't present, so add a leading space
   local prefix = rulers_enabled and "" or " "
+  local hl = highlight or "FlemmaAssistantSpinner"
   ---@type {[1]:string, [2]:string}[]
-  local chunks = { { prefix .. spinner_text, "FlemmaAssistantSpinner" } }
+  local chunks = { { prefix .. progress_text, hl } }
 
   if rulers_enabled then
     local winid = vim.fn.bufwinid(bufnr)
     if winid ~= -1 then
-      -- Use win_width chars — the window clips excess, so overshoot is fine
       local win_width = vim.api.nvim_win_get_width(winid)
       table.insert(chunks, { " " .. string.rep(ruler_config.char, win_width), "FlemmaRuler" })
     end
