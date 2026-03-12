@@ -97,10 +97,23 @@ describe("progress line", function()
       ui.cleanup_progress(bufnr)
 
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-      -- The @Assistant: placeholder line should be removed
-      for _, line in ipairs(lines) do
-        assert.is_not.equals("@Assistant:", line)
-      end
+      assert.same({ "@You:", "Hello", "" }, lines)
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
+  describe("cleanup_progress with existing content", function()
+    it("does not modify buffer when last line is not the placeholder", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Hello", "", "@Assistant:", "Some response" })
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.current_request = 1
+
+      ui.cleanup_progress(bufnr)
+
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      assert.same({ "@You:", "Hello", "", "@Assistant:", "Some response" }, lines)
 
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
