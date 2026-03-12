@@ -26,9 +26,18 @@ function M.handle_colon_insert()
   -- in normal mode it clamps to col == #line - 1 (on last char).
   -- Accept both: the line itself must be a valid role name.
   if ROLE_NAMES[line] and col >= #line - 1 then
-    -- Complete the role marker and add a blank line below
     local row = vim.api.nvim_win_get_cursor(0)[1]
-    vim.api.nvim_buf_set_lines(0, row - 1, row, false, { line .. ":", "" })
+    local line_count = vim.api.nvim_buf_line_count(0)
+    local next_line_blank = row < line_count
+      and vim.api.nvim_buf_get_lines(0, row, row + 1, false)[1]:match("^%s*$") ~= nil
+
+    if next_line_blank then
+      -- Blank line already present — just complete the marker, don't insert another
+      vim.api.nvim_buf_set_lines(0, row - 1, row, false, { line .. ":" })
+    else
+      -- Complete the role marker and add a blank line below
+      vim.api.nvim_buf_set_lines(0, row - 1, row, false, { line .. ":", "" })
+    end
     cursor.request_move(
       vim.api.nvim_get_current_buf(),
       { line = row + 1, force = true, reason = "role-marker-completion" }
