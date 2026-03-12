@@ -586,6 +586,7 @@ describe("flemma.status", function()
           backend = "bwrap",
           backend_mode = "auto",
           backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
         },
         tools = { enabled = { "bash", "read" }, disabled = {}, booting = true },
         approval = {
@@ -615,6 +616,7 @@ describe("flemma.status", function()
           backend = "bwrap",
           backend_mode = "auto",
           backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
         },
         tools = { enabled = { "bash", "read" }, disabled = {}, booting = false },
         approval = {
