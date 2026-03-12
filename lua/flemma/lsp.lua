@@ -154,6 +154,28 @@ local function frontmatter_to_markdown(fm)
   return table.concat(lines, "\n")
 end
 
+---Extract and validate buffer + position from LSP textDocument params.
+---Converts LSP 0-indexed positions to 1-indexed AST coordinates.
+---@param params table LSP TextDocumentPositionParams
+---@param label string Log label for this request type (e.g. "hover", "definition")
+---@return integer|nil bufnr Valid buffer number, or nil on failure
+---@return integer lnum 1-indexed line number
+---@return integer col 1-indexed column number
+local function resolve_params(params, label)
+  local uri = params.textDocument.uri
+  local bufnr = vim.uri_to_bufnr(uri)
+
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    log.warn("lsp " .. label .. ": buffer " .. bufnr .. " is invalid (uri=" .. uri .. ")")
+    return nil, 0, 0
+  end
+
+  local lnum = params.position.line + 1
+  local col = params.position.character + 1
+  log.debug("lsp " .. label .. ": " .. uri .. "#L" .. lnum .. "C" .. col .. " \u{2192} bufnr=" .. bufnr)
+  return bufnr, lnum, col
+end
+
 ---Build an LSP Hover response from a markdown string.
 ---@param markdown string
 ---@return table result LSP Hover response
@@ -170,31 +192,10 @@ end
 ---@param params table LSP HoverParams
 ---@return table|nil result LSP Hover response or nil
 local function handle_hover(params)
-  local uri = params.textDocument.uri
-  local bufnr = vim.uri_to_bufnr(uri)
-
-  log.debug("lsp hover: uri=" .. uri .. " -> bufnr=" .. bufnr)
-
-  if not vim.api.nvim_buf_is_valid(bufnr) then
-    log.warn("lsp hover: buffer " .. bufnr .. " is invalid (uri=" .. uri .. ")")
+  local bufnr, lnum, col = resolve_params(params, "hover")
+  if not bufnr then
     return nil
   end
-
-  -- LSP positions are 0-indexed; AST positions are 1-indexed
-  local lnum = params.position.line + 1
-  local col = params.position.character + 1
-
-  log.debug(
-    "lsp hover: position LSP(L"
-      .. params.position.line
-      .. ":C"
-      .. params.position.character
-      .. ") -> AST(L"
-      .. lnum
-      .. ":C"
-      .. col
-      .. ")"
-  )
 
   local doc = parser.get_parsed_document(bufnr)
 
@@ -263,21 +264,10 @@ end
 ---@param params table LSP DefinitionParams
 ---@return table|nil result LSP Location or nil
 local function handle_definition(params)
-  local uri = params.textDocument.uri
-  local bufnr = vim.uri_to_bufnr(uri)
-
-  log.debug("lsp definition: uri=" .. uri .. " -> bufnr=" .. bufnr)
-
-  if not vim.api.nvim_buf_is_valid(bufnr) then
-    log.warn("lsp definition: buffer " .. bufnr .. " is invalid (uri=" .. uri .. ")")
+  local bufnr, lnum, col = resolve_params(params, "definition")
+  if not bufnr then
     return nil
   end
-
-  -- LSP positions are 0-indexed; navigation expects 1-indexed
-  local lnum = params.position.line + 1
-  local col = params.position.character + 1
-
-  log.debug("lsp definition: resolving include at L" .. lnum .. ":C" .. col)
 
   local resolved_path = navigation.resolve_include_path(bufnr, lnum, col)
   if not resolved_path then
