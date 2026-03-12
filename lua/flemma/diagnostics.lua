@@ -505,7 +505,7 @@ function M.record_and_compare(bufnr, raw_json)
         .. ")"
         .. "\nChanges:\n  • "
         .. table.concat(change_descriptions, "\n  • ")
-        .. "\n\nRun :Flemma diagnostics:open for full diff",
+        .. "\n\nRun :Flemma diagnostics:diff for full diff",
       vim.log.levels.WARN
     )
   else
@@ -518,7 +518,7 @@ function M.record_and_compare(bufnr, raw_json)
         .. path
         .. ")"
         .. "\nLikely cause: JSON serialization non-determinism (key ordering)"
-        .. "\n\nRun :Flemma diagnostics:open for full diff",
+        .. "\n\nRun :Flemma diagnostics:diff for full diff",
       vim.log.levels.WARN
     )
   end

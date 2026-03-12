@@ -389,7 +389,7 @@ local function setup_commands()
 
   command_tree.children.diagnostics = {
     children = {
-      open = {
+      diff = {
         action = function(context)
           local bufnr = vim.api.nvim_get_current_buf()
           local normalized = context.extra_args[1] == "normalized"
