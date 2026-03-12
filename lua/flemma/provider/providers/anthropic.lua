@@ -559,6 +559,10 @@ function M._process_data(self, data, _parsed, callbacks)
       log.trace("anthropic._process_data(): Content input_json_delta: " .. log.inspect(data.delta.partial_json))
       -- Accumulate tool input JSON
       self._response_buffer.extra.tool_input_sink:write(data.delta.partial_json)
+      -- Notify progress tracking (optional callback, may not be provided)
+      if callbacks.on_tool_input then
+        callbacks.on_tool_input(data.delta.partial_json)
+      end
     elseif data.delta.type == "thinking_delta" and data.delta.thinking then
       log.trace("anthropic._process_data(): Content thinking delta: " .. log.inspect(data.delta.thinking))
       self._response_buffer.extra.thinking_sink:write(data.delta.thinking)

@@ -15,18 +15,27 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field cache_read_input_tokens number
 ---@field cache_creation_input_tokens number
 
+---@alias flemma.state.ProgressPhase "waiting"|"thinking"|"streaming"|"buffering"
+
 ---@class flemma.state.BufferState
 ---@field current_request integer|nil Job ID of the active cURL request
 ---@field request_cancelled boolean Whether the current request has been cancelled
----@field spinner_timer integer|nil Timer ID for the spinner animation
 ---@field api_error_occurred boolean Whether an API error occurred during the last request
 ---@field inflight_usage flemma.state.InflightUsage Token counters accumulated during streaming
 ---@field locked boolean Whether the buffer is locked (non-modifiable) for request/tool execution
 ---@field waiting_for_tools? boolean Whether a send is queued waiting for async tool resolution
 ---@field ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached parsed AST
----@field spinner_extmark_id integer|nil Extmark ID for the spinner/thinking preview
----@field spinner_line_idx0 integer|nil 0-indexed line of the spinner extmark
----@field spinner_preview_text string|nil Thinking preview text for the spinner timer to render
+---@field progress_timer integer|nil Timer ID for the progress line animation
+---@field progress_phase flemma.state.ProgressPhase|nil Current progress line phase
+---@field progress_char_count integer Unified character counter across all delta types
+---@field progress_started_at integer|nil Monotonic timestamp (ms) from vim.uv.now() at curl spawn
+---@field progress_timeout integer|nil Effective timeout (seconds) for the current request
+---@field progress_extmark_id integer|nil Stable extmark ID for timer updates
+---@field progress_last_line integer|nil 0-indexed last content line (set by writequeue callbacks)
+---@field progress_float_winid integer|nil Window ID for the off-screen progress float
+---@field progress_float_bufnr integer|nil Buffer ID for the off-screen progress float
+---@field progress_gutter_icon_winid integer|nil Window ID for the progress gutter icon float
+---@field progress_gutter_icon_bufnr integer|nil Buffer ID for the progress gutter icon float
 ---@field autopilot_override? boolean Per-buffer autopilot override (set from frontmatter, nil = use global config)
 ---@field auto_closed_folds? table<string, boolean>
 ---@field pending_folds? table<string, boolean> Fold IDs that were attempted but failed to close (eligible for retry)
@@ -101,10 +110,20 @@ local function init_buffer(bufnr)
   buffer_states[bufnr] = {
     current_request = nil,
     request_cancelled = false,
-    spinner_timer = nil,
     api_error_occurred = false,
     locked = false,
     waiting_for_tools = false,
+    progress_timer = nil,
+    progress_phase = nil,
+    progress_char_count = 0,
+    progress_started_at = nil,
+    progress_timeout = nil,
+    progress_extmark_id = nil,
+    progress_last_line = nil,
+    progress_float_winid = nil,
+    progress_float_bufnr = nil,
+    progress_gutter_icon_winid = nil,
+    progress_gutter_icon_bufnr = nil,
     inflight_usage = {
       input_tokens = 0,
       output_tokens = 0,
@@ -155,8 +174,14 @@ function M.cleanup_buffer_state(bufnr)
       st.request_cancelled = true
       client.cancel_request(st.current_request)
     end
-    if st.spinner_timer then
-      vim.fn.timer_stop(st.spinner_timer)
+    if st.progress_timer then
+      vim.fn.timer_stop(st.progress_timer)
+    end
+    if st.progress_float_winid and vim.api.nvim_win_is_valid(st.progress_float_winid) then
+      vim.api.nvim_win_close(st.progress_float_winid, true)
+    end
+    if st.progress_gutter_icon_winid and vim.api.nvim_win_is_valid(st.progress_gutter_icon_winid) then
+      vim.api.nvim_win_close(st.progress_gutter_icon_winid, true)
     end
   end
   -- Run registered cleanup hooks (executor, notifications) before clearing state.

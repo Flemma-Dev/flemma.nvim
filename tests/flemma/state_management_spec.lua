@@ -349,8 +349,8 @@ describe("State Management", function()
     end)
   end)
 
-  describe("spinner timer isolation", function()
-    it("should track spinner timer per buffer", function()
+  describe("progress timer isolation", function()
+    it("should track progress timer per buffer", function()
       local buf1 = vim.api.nvim_create_buf(false, false)
       local buf2 = vim.api.nvim_create_buf(false, false)
 
@@ -358,13 +358,13 @@ describe("State Management", function()
       local state2 = state.get_buffer_state(buf2)
 
       -- Set timer for buf1
-      state1.spinner_timer = 123
+      state1.progress_timer = 123
 
       -- buf2 should not have a timer
-      assert.is_nil(state2.spinner_timer)
+      assert.is_nil(state2.progress_timer)
 
       -- buf1 should have its timer
-      assert.equals(123, state1.spinner_timer)
+      assert.equals(123, state1.progress_timer)
     end)
   end)
 

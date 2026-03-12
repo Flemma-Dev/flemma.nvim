@@ -54,6 +54,10 @@
 ---@class flemma.config.Pricing
 ---@field enabled boolean
 
+---@class flemma.Config.Progress
+---@field highlight string Comma-separated highlight groups to derive progress bar colors from (first with both fg+bg wins)
+---@field zindex integer Floating window stacking priority
+
 ---@class flemma.config.Diagnostics
 ---@field enabled boolean
 
@@ -159,6 +163,7 @@
 ---@field signs? flemma.config.Signs
 ---@field line_highlights? flemma.config.LineHighlights
 ---@field notifications? flemma.Config.Notifications
+---@field progress? flemma.Config.Progress
 ---@field pricing? flemma.config.Pricing
 ---@field statusline? flemma.config.Statusline
 ---@field provider? string
@@ -183,6 +188,7 @@
 ---@field signs flemma.config.Signs
 ---@field line_highlights flemma.config.LineHighlights
 ---@field notifications flemma.Config.Notifications
+---@field progress flemma.Config.Progress
 ---@field pricing flemma.config.Pricing
 ---@field statusline flemma.config.Statusline
 ---@field provider string
@@ -261,6 +267,10 @@ return {
     highlight = "@text.note,PmenuSel", -- Highlight group(s) for the notification bar; first with both fg+bg is used
     border = false, -- Bottom border: "underline", "underdouble", "undercurl", "underdotted", "underdashed", or false
   },
+  progress = {
+    highlight = "StatusLine", -- Highlight group(s) for the progress bar; first with both fg+bg is used
+    zindex = 50, -- Progress bar sits above notifications (zindex 30)
+  },
   pricing = {
     enabled = true, -- Whether to show pricing information in notifications
   },
@@ -272,7 +282,7 @@ return {
   parameters = {
     max_tokens = "50%", -- Default max tokens: percentage of model's max_output_tokens, or integer
     temperature = 0.7, -- Default temperature for all providers
-    timeout = 120, -- Default response timeout for cURL requests
+    timeout = 600, -- Default response timeout for cURL requests (previously 120)
     connect_timeout = 10, -- Default connection timeout for cURL requests
     cache_retention = "short", -- Default prompt caching: "short", "long", or "none"
     thinking = "high", -- Default thinking level: "low", "medium", "high", numeric budget, or false to disable

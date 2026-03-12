@@ -602,6 +602,11 @@ function M._process_data(self, data, _parsed, callbacks)
           local generated_id = string.format("urn:flemma:tool:%s:%s", fc.name, unique_suffix)
 
           local json_str = json.encode(fc.args or {})
+          -- Notify progress tracking with the complete tool input (Vertex delivers
+          -- args in one shot, not streamed incrementally like Anthropic)
+          if callbacks.on_tool_input then
+            callbacks.on_tool_input(json_str)
+          end
           base._emit_tool_use_block(self, fc.name, generated_id, json_str, callbacks)
         else
           log.warn("vertex._process_data(): Received functionCall without name")
