@@ -156,8 +156,26 @@ describe("Tool concurrency gating in Phase 2", function()
     -- Simulate 2 tools already running (fills max_concurrent=2)
     local buffer_state = state.get_buffer_state(bufnr)
     buffer_state.pending_executions = {
-      ["toolu_01"] = { tool_id = "toolu_01", tool_name = "bash", bufnr = bufnr, completed = false, started_at = os.time(), placeholder_modified = false, start_line = 0, end_line = 0 },
-      ["toolu_02"] = { tool_id = "toolu_02", tool_name = "bash", bufnr = bufnr, completed = false, started_at = os.time(), placeholder_modified = false, start_line = 0, end_line = 0 },
+      ["toolu_01"] = {
+        tool_id = "toolu_01",
+        tool_name = "bash",
+        bufnr = bufnr,
+        completed = false,
+        started_at = os.time(),
+        placeholder_modified = false,
+        start_line = 0,
+        end_line = 0,
+      },
+      ["toolu_02"] = {
+        tool_id = "toolu_02",
+        tool_name = "bash",
+        bufnr = bufnr,
+        completed = false,
+        started_at = os.time(),
+        placeholder_modified = false,
+        start_line = 0,
+        end_line = 0,
+      },
     }
 
     -- Phase 2 should skip toolu_03 because slots are full
@@ -215,11 +233,56 @@ describe("Tool concurrency gating in Phase 2", function()
 
     local buffer_state = state.get_buffer_state(bufnr)
     buffer_state.pending_executions = {
-      ["toolu_01"] = { tool_id = "toolu_01", tool_name = "bash", bufnr = bufnr, completed = false, started_at = os.time(), placeholder_modified = false, start_line = 0, end_line = 0 },
-      ["toolu_02"] = { tool_id = "toolu_02", tool_name = "bash", bufnr = bufnr, completed = false, started_at = os.time(), placeholder_modified = false, start_line = 0, end_line = 0 },
-      ["toolu_03"] = { tool_id = "toolu_03", tool_name = "bash", bufnr = bufnr, completed = false, started_at = os.time(), placeholder_modified = false, start_line = 0, end_line = 0 },
-      ["toolu_04"] = { tool_id = "toolu_04", tool_name = "bash", bufnr = bufnr, completed = false, started_at = os.time(), placeholder_modified = false, start_line = 0, end_line = 0 },
-      ["toolu_05"] = { tool_id = "toolu_05", tool_name = "bash", bufnr = bufnr, completed = false, started_at = os.time(), placeholder_modified = false, start_line = 0, end_line = 0 },
+      ["toolu_01"] = {
+        tool_id = "toolu_01",
+        tool_name = "bash",
+        bufnr = bufnr,
+        completed = false,
+        started_at = os.time(),
+        placeholder_modified = false,
+        start_line = 0,
+        end_line = 0,
+      },
+      ["toolu_02"] = {
+        tool_id = "toolu_02",
+        tool_name = "bash",
+        bufnr = bufnr,
+        completed = false,
+        started_at = os.time(),
+        placeholder_modified = false,
+        start_line = 0,
+        end_line = 0,
+      },
+      ["toolu_03"] = {
+        tool_id = "toolu_03",
+        tool_name = "bash",
+        bufnr = bufnr,
+        completed = false,
+        started_at = os.time(),
+        placeholder_modified = false,
+        start_line = 0,
+        end_line = 0,
+      },
+      ["toolu_04"] = {
+        tool_id = "toolu_04",
+        tool_name = "bash",
+        bufnr = bufnr,
+        completed = false,
+        started_at = os.time(),
+        placeholder_modified = false,
+        start_line = 0,
+        end_line = 0,
+      },
+      ["toolu_05"] = {
+        tool_id = "toolu_05",
+        tool_name = "bash",
+        bufnr = bufnr,
+        completed = false,
+        started_at = os.time(),
+        placeholder_modified = false,
+        start_line = 0,
+        end_line = 0,
+      },
     }
 
     core.send_or_execute({ bufnr = bufnr })
@@ -328,8 +391,26 @@ describe("Tool concurrency gating in Phase 2", function()
       -- Fill both concurrency slots so the gate fires on the very first approved block
       local buffer_state = state.get_buffer_state(bufnr)
       buffer_state.pending_executions = {
-        ["toolu_31"] = { tool_id = "toolu_31", tool_name = "bash", bufnr = bufnr, completed = false, started_at = os.time(), placeholder_modified = false, start_line = 0, end_line = 0 },
-        ["toolu_32"] = { tool_id = "toolu_32", tool_name = "bash", bufnr = bufnr, completed = false, started_at = os.time(), placeholder_modified = false, start_line = 0, end_line = 0 },
+        ["toolu_31"] = {
+          tool_id = "toolu_31",
+          tool_name = "bash",
+          bufnr = bufnr,
+          completed = false,
+          started_at = os.time(),
+          placeholder_modified = false,
+          start_line = 0,
+          end_line = 0,
+        },
+        ["toolu_32"] = {
+          tool_id = "toolu_32",
+          tool_name = "bash",
+          bufnr = bufnr,
+          completed = false,
+          started_at = os.time(),
+          placeholder_modified = false,
+          start_line = 0,
+          end_line = 0,
+        },
       }
       return bufnr
     end
