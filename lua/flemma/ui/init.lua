@@ -1,5 +1,5 @@
 --- UI module for Flemma plugin
---- Handles visual presentation: rulers, spinners, folding, and signs
+--- Handles visual presentation: rulers, progress indicators, folding, and signs
 ---@class flemma.UI
 local M = {}
 
@@ -24,7 +24,7 @@ local str = require("flemma.utilities.string")
 --   2. THINKING_BLOCK (100)     - Thinking block backgrounds, overrides message line highlights
 --   3. CURSORLINE (125)         - CursorLine overlay, blends with underlying line highlights
 --   4. THINKING_TAG (200)       - Text styling for <thinking> and </thinking> tags
---   5. SPINNER (300)            - Spinner line, highest priority to suppress spell checking
+--   5. SPINNER (300)            - Progress line, highest priority to suppress spell checking
 local PRIORITY = {
   LINE_HIGHLIGHT = 50,
   THINKING_BLOCK = 100,
@@ -123,7 +123,7 @@ function M.add_rulers(bufnr, doc)
 
   local win_width = vim.api.nvim_win_get_width(winid)
 
-  local spinner_line = state.get_buffer_state(bufnr).progress_last_line
+  local progress_line = state.get_buffer_state(bufnr).progress_last_line
 
   for _, msg in ipairs(doc.messages) do
     local line_idx = msg.position.start_line - 1
@@ -153,10 +153,10 @@ function M.add_rulers(bufnr, doc)
         hl_mode = "combine",
       })
 
-      -- On the spinner line, only replace : with a space (no ruler extension)
-      -- so the EOL spinner text isn't covered by overlay chars.
+      -- On the progress line, only replace : with a space (no ruler extension)
+      -- so the EOL progress text isn't covered by overlay chars.
       -- On all other lines, extend ruler chars to the window edge.
-      if line_idx == spinner_line then
+      if line_idx == progress_line then
         vim.api.nvim_buf_set_extmark(bufnr, ns_id, line_idx, colon_col, {
           virt_text = { { " ", "FlemmaRuler" } },
           virt_text_pos = "overlay",
@@ -600,7 +600,7 @@ function M.start_progress(bufnr, progress_opts)
 end
 
 ---Clean up progress line and prepare for response completion.
----Handles both waiting phase (virt_text) and active phase (virt_lines).
+---Handles both waiting phase (inline virt_text) and streaming/buffering phase (float).
 ---@param bufnr integer
 function M.cleanup_progress(bufnr)
   if not vim.api.nvim_buf_is_valid(bufnr) then
@@ -637,7 +637,7 @@ function M.cleanup_progress(bufnr)
       return
     end
 
-    -- Only modify lines if the last line is the empty @Assistant: spinner placeholder.
+    -- Only modify lines if the last line is the empty @Assistant: progress placeholder.
     if last_line_content and last_line_content == "@Assistant:" then
       M.buffer_cmd(bufnr, "undojoin")
 
@@ -652,7 +652,7 @@ function M.cleanup_progress(bufnr)
         vim.api.nvim_buf_set_lines(bufnr, line_count - 1, line_count, false, {})
       end
     else
-      log.debug("cleanup_progress(): Last line is not the spinner placeholder, not modifying lines.")
+      log.debug("cleanup_progress(): Last line is not the progress placeholder, not modifying lines.")
     end
 
     M.update_ui(bufnr)
@@ -1122,7 +1122,7 @@ function M.update_ui(bufnr)
   M.highlight_thinking_tags(bufnr, doc)
   M.apply_line_highlights(bufnr, doc)
   M.add_tool_previews(bufnr, doc)
-  -- Note: spinner extmark (with suppression) is managed by start_progress and its timer
+  -- Note: progress extmark (with spell suppression) is managed by start_progress and its timer
 
   -- Re-apply CursorLine overlay now that line highlights are refreshed,
   -- so the blend reflects the current AST state instead of the pre-edit state.
@@ -1459,7 +1459,7 @@ function M.setup()
   })
 
   -- Ensure buffer-local state gets cleaned up when chat buffers are removed.
-  -- This prevents leaking timers or jobs if a buffer is deleted while a request/spinner is active.
+  -- This prevents leaking timers or jobs if a buffer is deleted while a request/progress indicator is active.
   vim.api.nvim_create_autocmd({ "BufWipeout", "BufUnload", "BufDelete" }, {
     group = augroup,
     pattern = "*",
