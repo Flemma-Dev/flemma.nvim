@@ -16,6 +16,7 @@ local tool_presets = require("flemma.tools.presets")
 ---@field auto_approve flemma.config.AutoApprove|nil Per-buffer auto-approve policy
 ---@field auto_approve_exclusions table<string, boolean>|nil Tools to exclude from preset expansion
 ---@field autopilot boolean|nil Per-buffer autopilot override (true/false)
+---@field max_concurrent integer|nil Per-buffer max concurrent tools override
 ---@field parameters table<string, any>|nil General parameter overrides (provider-agnostic)
 ---@field anthropic table<string, any>|nil Per-buffer Anthropic parameter overrides
 ---@field openai table<string, any>|nil Per-buffer OpenAI parameter overrides
@@ -346,6 +347,9 @@ function M.create()
       if key == "autopilot" then
         return raw_options.autopilot
       end
+      if key == "max_concurrent" then
+        return raw_options.max_concurrent
+      end
       return ListOption[key]
     end,
     __newindex = function(_, key, value)
@@ -372,6 +376,15 @@ function M.create()
           error(string.format("flemma.opt.tools.autopilot: expected boolean, got %s", type(value)))
         end
         raw_options.autopilot = value
+        return
+      end
+      if key == "max_concurrent" then
+        if type(value) ~= "number" or value ~= math.floor(value) or value < 0 then
+          error(
+            string.format("flemma.opt.tools.max_concurrent: expected non-negative integer, got %s", tostring(value))
+          )
+        end
+        raw_options.max_concurrent = value
         return
       end
       rawset(tools_option, key, value)
@@ -482,6 +495,9 @@ function M.create()
     end
     if raw_options.autopilot ~= nil then
       result.autopilot = raw_options.autopilot
+    end
+    if raw_options.max_concurrent ~= nil then
+      result.max_concurrent = raw_options.max_concurrent
     end
     if raw_options.sandbox ~= nil then
       result.sandbox = vim.deepcopy(raw_options.sandbox)

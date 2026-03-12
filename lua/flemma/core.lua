@@ -278,7 +278,12 @@ local function advance_phase2(opts)
   -- Process approved → execute tool (pass pre-evaluated opts to avoid re-evaluating frontmatter)
   local approved = tool_blocks["approved"] or {}
   local config = state.get_config()
-  local max_concurrent = (config.tools and config.tools.max_concurrent) or DEFAULT_MAX_CONCURRENT
+  local max_concurrent
+  if opts.frontmatter_opts and opts.frontmatter_opts.max_concurrent ~= nil then
+    max_concurrent = opts.frontmatter_opts.max_concurrent
+  else
+    max_concurrent = (config.tools and config.tools.max_concurrent) or DEFAULT_MAX_CONCURRENT
+  end
   local executed_count = 0
   local throttled = false
 
