@@ -54,6 +54,10 @@
 ---@class flemma.config.Pricing
 ---@field enabled boolean
 
+---@class flemma.Config.Progress
+---@field highlight string Comma-separated highlight groups to derive progress bar colors from (first with both fg+bg wins)
+---@field zindex integer Floating window stacking priority
+
 ---@class flemma.config.Diagnostics
 ---@field enabled boolean
 
@@ -158,6 +162,7 @@
 ---@field signs? flemma.config.Signs
 ---@field line_highlights? flemma.config.LineHighlights
 ---@field notifications? flemma.Config.Notifications
+---@field progress? flemma.Config.Progress
 ---@field pricing? flemma.config.Pricing
 ---@field statusline? flemma.config.Statusline
 ---@field provider? string
@@ -182,6 +187,7 @@
 ---@field signs flemma.config.Signs
 ---@field line_highlights flemma.config.LineHighlights
 ---@field notifications flemma.Config.Notifications
+---@field progress flemma.Config.Progress
 ---@field pricing flemma.config.Pricing
 ---@field statusline flemma.config.Statusline
 ---@field provider string
@@ -259,6 +265,10 @@ return {
     zindex = 30,
     highlight = "@text.note,PmenuSel", -- Highlight group(s) for the notification bar; first with both fg+bg is used
     border = false, -- Bottom border: "underline", "underdouble", "undercurl", "underdotted", "underdashed", or false
+  },
+  progress = {
+    highlight = "StatusLine", -- Highlight group(s) for the progress bar; first with both fg+bg is used
+    zindex = 50, -- Progress bar sits above notifications (zindex 30)
   },
   pricing = {
     enabled = true, -- Whether to show pricing information in notifications

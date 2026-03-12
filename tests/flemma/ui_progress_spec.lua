@@ -117,6 +117,8 @@ describe("progress line", function()
       assert.is_nil(buffer_state.progress_last_line)
       assert.is_nil(buffer_state.progress_float_winid)
       assert.is_nil(buffer_state.progress_float_bufnr)
+      assert.is_nil(buffer_state.progress_gutter_icon_winid)
+      assert.is_nil(buffer_state.progress_gutter_icon_bufnr)
 
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
@@ -129,7 +131,7 @@ describe("progress line", function()
       local buffer_state = state.get_buffer_state(bufnr)
       buffer_state.current_request = 1
 
-      -- Simulate an open float
+      -- Simulate an open float + gutter icon
       local float_bufnr = vim.api.nvim_create_buf(false, true)
       local float_winid = vim.api.nvim_open_win(float_bufnr, false, {
         relative = "editor",
@@ -143,13 +145,30 @@ describe("progress line", function()
       buffer_state.progress_float_winid = float_winid
       buffer_state.progress_float_bufnr = float_bufnr
 
+      local gutter_icon_bufnr = vim.api.nvim_create_buf(false, true)
+      local gutter_icon_winid = vim.api.nvim_open_win(gutter_icon_bufnr, false, {
+        relative = "editor",
+        row = 0,
+        col = 0,
+        width = 4,
+        height = 1,
+        style = "minimal",
+        focusable = false,
+      })
+      buffer_state.progress_gutter_icon_winid = gutter_icon_winid
+      buffer_state.progress_gutter_icon_bufnr = gutter_icon_bufnr
+
       assert.is_true(vim.api.nvim_win_is_valid(float_winid))
+      assert.is_true(vim.api.nvim_win_is_valid(gutter_icon_winid))
 
       ui.cleanup_progress(bufnr)
 
       assert.is_false(vim.api.nvim_win_is_valid(float_winid))
+      assert.is_false(vim.api.nvim_win_is_valid(gutter_icon_winid))
       assert.is_nil(buffer_state.progress_float_winid)
       assert.is_nil(buffer_state.progress_float_bufnr)
+      assert.is_nil(buffer_state.progress_gutter_icon_winid)
+      assert.is_nil(buffer_state.progress_gutter_icon_bufnr)
 
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)

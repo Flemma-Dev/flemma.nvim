@@ -492,6 +492,28 @@ M.apply_syntax = function()
     end
   end
 
+  -- Progress bar highlight groups
+  -- Derived from the first group in progress.highlight that provides both fg and bg
+  local progress_config = syntax_config.progress or { highlight = "@text.note,PmenuSel" }
+  local progress_bg_hex, progress_fg_hex
+  for candidate in (progress_config.highlight or ""):gmatch("[^,]+") do
+    candidate = vim.trim(candidate)
+    local bg = get_hl_color(candidate, "bg")
+    local fg = get_hl_color(candidate, "fg")
+    if bg and fg then
+      progress_bg_hex = bg
+      progress_fg_hex = fg
+      break
+    end
+  end
+
+  if progress_bg_hex and progress_fg_hex then
+    vim.api.nvim_set_hl(0, "FlemmaProgressBar", { bg = progress_bg_hex, fg = progress_fg_hex, default = true })
+  else
+    -- Fallback: link to StatusLine
+    vim.api.nvim_set_hl(0, "FlemmaProgressBar", { link = "StatusLine", default = true })
+  end
+
   -- Create CursorLine blend variants after all base groups are defined
   setup_cursorline_highlights()
 end

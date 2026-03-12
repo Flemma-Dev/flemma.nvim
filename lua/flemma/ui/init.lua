@@ -64,6 +64,9 @@ local SPINNER_FRAMES = {
 ---@type string
 local MIDDLE_DOT = " · "
 
+--- Display width of the spinner prefix (spinner char + space), matching bar.PREFIX_DISPLAY_WIDTH
+local SPINNER_PREFIX_DISPLAY_WIDTH = 2
+
 -- Define namespace for our extmarks
 local ns_id = vim.api.nvim_create_namespace("flemma")
 local spinner_ns = vim.api.nvim_create_namespace("flemma_spinner")
@@ -255,69 +258,173 @@ local function get_gutter_width(winid)
   return 0
 end
 
+---Check whether the gutter is wide enough to hold the spinner prefix icon.
+---@param gutter_width integer
+---@return boolean
+local function gutter_fits_spinner(gutter_width)
+  return gutter_width >= SPINNER_PREFIX_DISPLAY_WIDTH
+end
+
+---Close the progress gutter icon window.
+---@param buffer_state flemma.state.BufferState
+local function close_progress_gutter_icon(buffer_state)
+  if buffer_state.progress_gutter_icon_winid and vim.api.nvim_win_is_valid(buffer_state.progress_gutter_icon_winid) then
+    vim.api.nvim_win_close(buffer_state.progress_gutter_icon_winid, true)
+  end
+  buffer_state.progress_gutter_icon_winid = nil
+  buffer_state.progress_gutter_icon_bufnr = nil
+end
+
+---Create or update the progress gutter icon floating window.
+---@param buffer_state flemma.state.BufferState
+---@param parent_winid integer Parent window ID
+---@param gutter_width integer Gutter width in columns
+---@param row integer Row offset from window top
+---@param spinner_char string Current spinner character
+local function update_progress_gutter_icon(buffer_state, parent_winid, gutter_width, row, spinner_char)
+  local progress_config = state.get_config().progress
+
+  -- Build icon text: spinner right-aligned in the gutter with a trailing space
+  local icon_text = string.rep(" ", math.max(0, gutter_width - SPINNER_PREFIX_DISPLAY_WIDTH)) .. spinner_char .. " "
+
+  if
+    not buffer_state.progress_gutter_icon_bufnr
+    or not vim.api.nvim_buf_is_valid(buffer_state.progress_gutter_icon_bufnr)
+  then
+    buffer_state.progress_gutter_icon_bufnr = vim.api.nvim_create_buf(false, true)
+    vim.bo[buffer_state.progress_gutter_icon_bufnr].buftype = "nofile"
+    vim.bo[buffer_state.progress_gutter_icon_bufnr].bufhidden = "wipe"
+    vim.bo[buffer_state.progress_gutter_icon_bufnr].undolevels = -1
+  end
+
+  local icon_bufnr = buffer_state.progress_gutter_icon_bufnr --[[@as integer]]
+  vim.bo[icon_bufnr].modifiable = true
+  vim.api.nvim_buf_set_lines(icon_bufnr, 0, -1, false, { icon_text })
+  vim.bo[icon_bufnr].modifiable = false
+
+  if buffer_state.progress_gutter_icon_winid and vim.api.nvim_win_is_valid(buffer_state.progress_gutter_icon_winid) then
+    pcall(vim.api.nvim_win_set_config, buffer_state.progress_gutter_icon_winid, {
+      relative = "win",
+      win = parent_winid,
+      row = row,
+      col = 0,
+      width = gutter_width,
+      height = 1,
+    })
+  else
+    local ok, icon_winid = pcall(vim.api.nvim_open_win, icon_bufnr, false, {
+      relative = "win",
+      win = parent_winid,
+      row = row,
+      col = 0,
+      width = gutter_width,
+      height = 1,
+      focusable = false,
+      style = "minimal",
+      noautocmd = true,
+      zindex = progress_config.zindex,
+    })
+    if ok then
+      buffer_state.progress_gutter_icon_winid = icon_winid
+      vim.api.nvim_set_option_value("winhighlight", "NormalFloat:FlemmaProgressBar", { win = icon_winid })
+    end
+  end
+end
+
 ---Show or update the progress float at the bottom of the window.
----Called when the progress extmark target line is not visible in the viewport.
----The float is offset by the gutter width so content aligns with the editor text area.
+---When the gutter is wide enough, the spinner character is placed in a separate
+---gutter icon window (matching the notification bar layout) and the main float
+---contains only the text portion (character count, elapsed time, etc.).
 ---@param bufnr integer
 ---@param parent_winid integer Window displaying the chat buffer
----@param progress_text string Formatted progress text to display
+---@param progress_text string Formatted progress text (spinner_char .. " " .. rest)
+---@param spinner_char string Current spinner character (for gutter icon)
 ---@param highlight? string Override highlight group (for timeout warnings)
-local function show_progress_float(bufnr, parent_winid, progress_text, highlight)
+local function show_progress_float(bufnr, parent_winid, progress_text, spinner_char, highlight)
   local buffer_state = state.get_buffer_state(bufnr)
+  local progress_config = state.get_config().progress
   local win_width = vim.api.nvim_win_get_width(parent_winid)
   local win_height = vim.api.nvim_win_get_height(parent_winid)
   local gutter_width = get_gutter_width(parent_winid)
+  local use_gutter_icon = gutter_fits_spinner(gutter_width)
+
   -- Create or reuse the scratch buffer
   if not buffer_state.progress_float_bufnr or not vim.api.nvim_buf_is_valid(buffer_state.progress_float_bufnr) then
     buffer_state.progress_float_bufnr = vim.api.nvim_create_buf(false, true)
   end
 
-  -- Pad text to align with the editor text area (after gutter)
-  local float_bufnr = buffer_state.progress_float_bufnr --[[@as integer]]
-  local padding = string.rep(" ", gutter_width)
-  vim.api.nvim_buf_set_lines(float_bufnr, 0, -1, false, { padding .. progress_text })
+  -- When spinner is in gutter, strip the "spinner_char " prefix from the text
+  local display_text
+  if use_gutter_icon then
+    -- Remove leading "X " (spinner + space) — show just the content portion
+    display_text = progress_text:sub(#spinner_char + 2) -- +2 for the space after spinner
+  else
+    display_text = string.rep(" ", gutter_width) .. progress_text
+  end
 
-  -- Apply highlight to the text (timeout warnings override StatusLine text color)
+  -- Add one trailing space for breathing room
+  display_text = display_text .. " "
+
+  local float_bufnr = buffer_state.progress_float_bufnr --[[@as integer]]
+  vim.api.nvim_buf_set_lines(float_bufnr, 0, -1, false, { display_text })
+
+  -- Apply highlight to the text (timeout warnings override bar text color)
   vim.api.nvim_buf_clear_namespace(float_bufnr, spinner_ns, 0, -1)
   if highlight then
     vim.api.nvim_buf_set_extmark(float_bufnr, spinner_ns, 0, 0, {
-      end_col = #(padding .. progress_text),
+      end_col = #display_text,
       hl_group = highlight,
     })
   end
 
+  -- Size float to fit text only — uncovered area to the right reveals buffer content
+  local float_col = use_gutter_icon and gutter_width or 0
+  local text_display_width = vim.api.nvim_strwidth(display_text)
+  local max_width = use_gutter_icon and (win_width - gutter_width) or win_width
+  local float_width = math.max(1, math.min(text_display_width, max_width))
+  local float_row = win_height - 1
+
   if buffer_state.progress_float_winid and vim.api.nvim_win_is_valid(buffer_state.progress_float_winid) then
-    -- Update position and size (gutter width may change)
     pcall(vim.api.nvim_win_set_config, buffer_state.progress_float_winid, {
       relative = "win",
       win = parent_winid,
-      row = win_height - 1,
-      col = 0,
-      width = win_width,
+      row = float_row,
+      col = float_col,
+      width = float_width,
       height = 1,
     })
   else
-    -- Create new float, positioned after the gutter
     local ok, float_winid = pcall(vim.api.nvim_open_win, float_bufnr, false, {
       relative = "win",
       win = parent_winid,
-      row = win_height - 1,
-      col = 0,
-      width = win_width,
+      row = float_row,
+      col = float_col,
+      width = float_width,
       height = 1,
       style = "minimal",
       focusable = false,
       noautocmd = true,
-      zindex = 50,
+      zindex = progress_config.zindex,
     })
     if ok then
       buffer_state.progress_float_winid = float_winid
-      vim.api.nvim_set_option_value("winhighlight", "Normal:StatusLine,NormalFloat:StatusLine", { win = float_winid })
+      vim.api.nvim_set_option_value(
+        "winhighlight",
+        "Normal:FlemmaProgressBar,NormalFloat:FlemmaProgressBar",
+        { win = float_winid }
+      )
     end
+  end
+
+  -- Manage gutter icon: create/reposition when gutter fits, close when it doesn't
+  if use_gutter_icon then
+    update_progress_gutter_icon(buffer_state, parent_winid, gutter_width, float_row, spinner_char)
+  else
+    close_progress_gutter_icon(buffer_state)
   end
 end
 
----Hide the progress float if it exists.
+---Hide the progress float and gutter icon if they exist.
 ---@param bufnr integer
 local function hide_progress_float(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
@@ -325,6 +432,7 @@ local function hide_progress_float(bufnr)
     vim.api.nvim_win_close(buffer_state.progress_float_winid, true)
     buffer_state.progress_float_winid = nil
   end
+  close_progress_gutter_icon(buffer_state)
 end
 
 ---Start the progress line for a new request.
@@ -464,7 +572,7 @@ function M.start_progress(bufnr, progress_opts)
       if winid ~= -1 and target_line ~= nil then
         local last_visible = vim.fn.line("w$", winid)
         if target_line + 1 > last_visible then
-          show_progress_float(bufnr, winid, progress_text, highlight)
+          show_progress_float(bufnr, winid, progress_text, spinner_char, highlight)
         else
           hide_progress_float(bufnr)
         end
@@ -477,7 +585,7 @@ function M.start_progress(bufnr, progress_opts)
       end
 
       if winid ~= -1 then
-        show_progress_float(bufnr, winid, progress_text, highlight)
+        show_progress_float(bufnr, winid, progress_text, spinner_char, highlight)
       end
     end
   end, { ["repeat"] = -1 })
@@ -512,6 +620,8 @@ function M.cleanup_progress(bufnr)
     buffer_state.progress_extmark_id = nil
     buffer_state.progress_last_line = nil
     buffer_state.progress_float_bufnr = nil
+    buffer_state.progress_gutter_icon_winid = nil
+    buffer_state.progress_gutter_icon_bufnr = nil
 
     vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
     vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)

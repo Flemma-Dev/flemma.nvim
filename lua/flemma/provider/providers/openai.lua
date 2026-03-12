@@ -23,7 +23,6 @@ local NOOP_EVENTS = {
   ["response.content_part.added"]           = true, -- content part started; we accumulate via text.delta
   ["response.content_part.done"]            = true, -- content part finished; final text in response.completed
   ["response.output_text.done"]             = true, -- final text for output; redundant with accumulated deltas
-  ["response.function_call_arguments.delta"] = true, -- incremental args; final args come via output_item.done
   ["response.function_call_arguments.done"] = true, -- final args; redundant with output_item.done
   ["response.reasoning_summary_part.added"] = true, -- reasoning summary part started
   ["response.reasoning_summary_part.done"]  = true, -- reasoning summary part finished
@@ -434,6 +433,15 @@ function M._process_data(self, data, _parsed, callbacks)
     if data.delta then
       log.trace("openai._process_data(): Text delta: " .. log.inspect(data.delta))
       base._signal_content(self, data.delta, callbacks)
+    end
+    return
+  end
+
+  -- Handle incremental function call argument deltas (progress tracking only;
+  -- the final args arrive via output_item.done which is the source of truth)
+  if event_type == "response.function_call_arguments.delta" then
+    if data.delta and callbacks.on_tool_input then
+      callbacks.on_tool_input(data.delta)
     end
     return
   end
