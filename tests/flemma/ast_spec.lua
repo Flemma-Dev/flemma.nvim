@@ -156,6 +156,31 @@ describe("Parser", function()
     assert.equals("You", doc.messages[1].role)
   end)
 
+  it("does not treat inline fenced code as a fence opener", function()
+    -- Per CommonMark: backtick fence info string cannot contain backtick characters.
+    -- Lines where backticks open and close on the same line are not valid fences.
+    local cases = {
+      "```How are you?```",
+      "```markdown Hello!```",
+      "```    ...giving up```",
+      "```Hello `World?",
+    }
+    for _, inline_code in ipairs(cases) do
+      local lines = {
+        "@Assistant:",
+        "Hi!",
+        inline_code,
+        "",
+        "@You:",
+        "Goodbye!",
+      }
+      local doc = parser.parse_lines(lines)
+      assert.equals(2, #doc.messages, "Line '" .. inline_code .. "' should not be treated as a fence opener")
+      assert.equals("Assistant", doc.messages[1].role)
+      assert.equals("You", doc.messages[2].role)
+    end
+  end)
+
   it("resumes normal parsing after a fenced code block closes", function()
     local lines = {
       "@You:",

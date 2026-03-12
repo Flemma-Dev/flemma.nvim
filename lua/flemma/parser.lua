@@ -539,9 +539,9 @@ local function parse_message(lines, start_idx, line_offset, diagnostics)
       if next_line:match("^@[%w]+:%s*$") then
         break
       end
-      -- Check for fence opener
+      -- Check for fence opener (CommonMark: backtick fence info string cannot contain backticks)
       local open_ticks = next_line:match("^(`+)")
-      if open_ticks and #open_ticks >= 3 then
+      if open_ticks and #open_ticks >= 3 and not next_line:sub(#open_ticks + 1):find("`") then
         active_fence_length = #open_ticks
       end
     end
