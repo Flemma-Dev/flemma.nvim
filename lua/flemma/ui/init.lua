@@ -351,6 +351,9 @@ local function show_progress_float(bufnr, parent_winid, progress_text, spinner_c
   -- Create or reuse the scratch buffer
   if not buffer_state.progress_float_bufnr or not vim.api.nvim_buf_is_valid(buffer_state.progress_float_bufnr) then
     buffer_state.progress_float_bufnr = vim.api.nvim_create_buf(false, true)
+    vim.bo[buffer_state.progress_float_bufnr].buftype = "nofile"
+    vim.bo[buffer_state.progress_float_bufnr].bufhidden = "wipe"
+    vim.bo[buffer_state.progress_float_bufnr].undolevels = -1
   end
 
   -- When spinner is in gutter, strip the "spinner_char " prefix from the text
@@ -428,8 +431,10 @@ end
 ---@param bufnr integer
 local function hide_progress_float(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
-  if buffer_state.progress_float_winid and vim.api.nvim_win_is_valid(buffer_state.progress_float_winid) then
-    vim.api.nvim_win_close(buffer_state.progress_float_winid, true)
+  if buffer_state.progress_float_winid then
+    if vim.api.nvim_win_is_valid(buffer_state.progress_float_winid) then
+      vim.api.nvim_win_close(buffer_state.progress_float_winid, true)
+    end
     buffer_state.progress_float_winid = nil
   end
   close_progress_gutter_icon(buffer_state)

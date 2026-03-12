@@ -914,6 +914,11 @@ function M.send_to_provider(opts)
 
         buffer_utils.with_modifiable(bufnr, function()
           if not response_started then
+            -- Transition progress to streaming BEFORE modifying the buffer so the
+            -- timer never attempts to update the inline extmark on a line that is
+            -- about to be deleted.
+            buffer_state.progress_phase = "streaming"
+
             -- Remove the @Assistant: placeholder line that start_progress created.
             -- The code below re-writes @Assistant: with actual content.
             local placeholder = buffer_utils.get_last_line(bufnr)
@@ -1056,19 +1061,18 @@ function M.send_to_provider(opts)
             return -- Do not proceed to add new prompt or call opts.on_request_complete
           end
 
-          if not response_started then
-            log.warn(
-              "send_to_provider(): on_request_complete: cURL success (code 0), no API error, but no response content was processed."
-            )
-            ui.cleanup_progress(bufnr)
-            vim.notify("Flemma: Request completed but no response was received.", vim.log.levels.WARN)
-          end
-
           -- Clean up progress line extmarks and float (timer already stopped above).
           -- On the happy path the @Assistant: placeholder has real content, so
           -- cleanup_progress won't remove any buffer lines — it only removes a
           -- bare "@Assistant:" placeholder.
           ui.cleanup_progress(bufnr)
+
+          if not response_started then
+            log.warn(
+              "send_to_provider(): on_request_complete: cURL success (code 0), no API error, but no response content was processed."
+            )
+            vim.notify("Flemma: Request completed but no response was received.", vim.log.levels.WARN)
+          end
 
           -- Add new "@You:" prompt for the next message (buffer is already modifiable)
           local last_line_content, last_line_idx = buffer_utils.get_last_line(bufnr)
