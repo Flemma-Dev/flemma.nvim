@@ -17,7 +17,9 @@ local function segment_to_markdown(seg, msg)
   local lines = {}
 
   -- Header: segment kind
-  local kind_label = seg.kind:gsub("_?(%a)([%w]*)", function(first, rest) return first:upper() .. rest end) .. "Segment"
+  local kind_label = seg.kind:gsub("_?(%a)([%w]*)", function(first, rest)
+    return first:upper() .. rest
+  end) .. "Segment"
   table.insert(lines, "_" .. kind_label .. "_")
   table.insert(lines, "")
   table.insert(lines, "**Role:** " .. msg.role)
