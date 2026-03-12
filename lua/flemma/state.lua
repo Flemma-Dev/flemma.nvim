@@ -20,15 +20,11 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@class flemma.state.BufferState
 ---@field current_request integer|nil Job ID of the active cURL request
 ---@field request_cancelled boolean Whether the current request has been cancelled
----@field spinner_timer integer|nil Timer ID for the spinner animation
 ---@field api_error_occurred boolean Whether an API error occurred during the last request
 ---@field inflight_usage flemma.state.InflightUsage Token counters accumulated during streaming
 ---@field locked boolean Whether the buffer is locked (non-modifiable) for request/tool execution
 ---@field waiting_for_tools? boolean Whether a send is queued waiting for async tool resolution
 ---@field ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached parsed AST
----@field spinner_extmark_id integer|nil Extmark ID for the spinner/thinking preview
----@field spinner_line_idx0 integer|nil 0-indexed line of the spinner extmark
----@field spinner_preview_text string|nil Thinking preview text for the spinner timer to render
 ---@field progress_timer integer|nil Timer ID for the progress line animation
 ---@field progress_phase flemma.state.ProgressPhase|nil Current progress line phase
 ---@field progress_char_count integer Unified character counter across all delta types
@@ -111,7 +107,6 @@ local function init_buffer(bufnr)
   buffer_states[bufnr] = {
     current_request = nil,
     request_cancelled = false,
-    spinner_timer = nil,
     api_error_occurred = false,
     locked = false,
     waiting_for_tools = false,
@@ -172,9 +167,6 @@ function M.cleanup_buffer_state(bufnr)
     if st.current_request then
       st.request_cancelled = true
       client.cancel_request(st.current_request)
-    end
-    if st.spinner_timer then
-      vim.fn.timer_stop(st.spinner_timer)
     end
     if st.progress_timer then
       vim.fn.timer_stop(st.progress_timer)
