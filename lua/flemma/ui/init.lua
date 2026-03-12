@@ -244,8 +244,20 @@ local function build_progress_virt_text(progress_text, bufnr, highlight)
   return chunks
 end
 
+---Get the gutter width (line number, sign, fold columns) for a window.
+---@param winid integer
+---@return integer
+local function get_gutter_width(winid)
+  local info = vim.fn.getwininfo(winid)
+  if info and info[1] then
+    return info[1].textoff
+  end
+  return 0
+end
+
 ---Show or update the progress float at the bottom of the window.
 ---Called when the progress extmark target line is not visible in the viewport.
+---The float is offset by the gutter width so content aligns with the editor text area.
 ---@param bufnr integer
 ---@param parent_winid integer Window displaying the chat buffer
 ---@param progress_text string Formatted progress text to display
@@ -254,26 +266,28 @@ local function show_progress_float(bufnr, parent_winid, progress_text, highlight
   local buffer_state = state.get_buffer_state(bufnr)
   local win_width = vim.api.nvim_win_get_width(parent_winid)
   local win_height = vim.api.nvim_win_get_height(parent_winid)
-
+  local gutter_width = get_gutter_width(parent_winid)
   -- Create or reuse the scratch buffer
   if not buffer_state.progress_float_bufnr or not vim.api.nvim_buf_is_valid(buffer_state.progress_float_bufnr) then
     buffer_state.progress_float_bufnr = vim.api.nvim_create_buf(false, true)
   end
 
+  -- Pad text to align with the editor text area (after gutter)
   local float_bufnr = buffer_state.progress_float_bufnr --[[@as integer]]
-  vim.api.nvim_buf_set_lines(float_bufnr, 0, -1, false, { " " .. progress_text })
+  local padding = string.rep(" ", gutter_width)
+  vim.api.nvim_buf_set_lines(float_bufnr, 0, -1, false, { padding .. " " .. progress_text })
 
   -- Apply highlight to the text (timeout warnings override StatusLine text color)
   vim.api.nvim_buf_clear_namespace(float_bufnr, spinner_ns, 0, -1)
   if highlight then
     vim.api.nvim_buf_set_extmark(float_bufnr, spinner_ns, 0, 0, {
-      end_col = #(" " .. progress_text),
+      end_col = #(padding .. " " .. progress_text),
       hl_group = highlight,
     })
   end
 
   if buffer_state.progress_float_winid and vim.api.nvim_win_is_valid(buffer_state.progress_float_winid) then
-    -- Update position and size
+    -- Update position and size (gutter width may change)
     pcall(vim.api.nvim_win_set_config, buffer_state.progress_float_winid, {
       relative = "win",
       win = parent_winid,
@@ -283,7 +297,7 @@ local function show_progress_float(bufnr, parent_winid, progress_text, highlight
       height = 1,
     })
   else
-    -- Create new float
+    -- Create new float, positioned after the gutter
     local ok, float_winid = pcall(vim.api.nvim_open_win, float_bufnr, false, {
       relative = "win",
       win = parent_winid,

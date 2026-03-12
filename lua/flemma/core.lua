@@ -1068,6 +1068,12 @@ function M.send_to_provider(opts)
             vim.notify("Flemma: Request completed but no response was received.", vim.log.levels.WARN)
           end
 
+          -- Clean up progress line extmarks and float (timer already stopped above).
+          -- On the happy path the @Assistant: placeholder has real content, so
+          -- cleanup_progress won't remove any buffer lines — it only removes a
+          -- bare "@Assistant:" placeholder.
+          ui.cleanup_progress(bufnr)
+
           -- Add new "@You:" prompt for the next message (buffer is already modifiable)
           local last_line_content, last_line_idx = buffer_utils.get_last_line(bufnr)
 
