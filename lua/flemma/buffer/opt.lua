@@ -15,6 +15,7 @@ local tool_presets = require("flemma.tools.presets")
 ---@field tools string[]|nil List of allowed tool names
 ---@field auto_approve flemma.config.AutoApprove|nil Per-buffer auto-approve policy
 ---@field auto_approve_exclusions table<string, boolean>|nil Tools to exclude from preset expansion
+---@field auto_approve_explicit boolean|nil True when auto_approve was set via assignment (explicit policy)
 ---@field autopilot boolean|nil Per-buffer autopilot override (true/false)
 ---@field max_concurrent integer|nil Per-buffer max concurrent tools override
 ---@field parameters table<string, any>|nil General parameter overrides (provider-agnostic)
@@ -33,6 +34,7 @@ local tool_presets = require("flemma.tools.presets")
 ---@field _universe table<string, boolean> Set of all valid names (private)
 ---@field _exclusions table<string, true> Names excluded via :remove() when not in _entries (private)
 ---@field _dirty boolean True when any mutation method has been called (private)
+---@field _explicit boolean True when created via assignment (explicit policy) (private)
 local ListOption = {}
 ListOption.__index = ListOption
 
@@ -282,10 +284,14 @@ function M.create()
     auto_approve_universe[preset_name] = true
   end
 
+  ---@class flemma.opt.CreateAutoApproveOpts
+  ---@field explicit? boolean Mark as an explicit (assigned) policy — prevents lower-priority resolvers from adding extras
+
   --- Create a ListOption for auto_approve from a string[] of names
   ---@param names string[]
+  ---@param opts? flemma.opt.CreateAutoApproveOpts
   ---@return flemma.opt.ListOption
-  local function create_auto_approve_option(names)
+  local function create_auto_approve_option(names, opts)
     local entries = {}
     for _, name in ipairs(names) do
       -- Validate against auto_approve_universe (module paths bypass via validate_name logic)
@@ -304,8 +310,9 @@ function M.create()
       end
       table.insert(entries, { name = name, enabled = true })
     end
+    local explicit = opts and opts.explicit or false
     return setmetatable(
-      { _entries = entries, _universe = auto_approve_universe, _exclusions = {}, _dirty = false },
+      { _entries = entries, _universe = auto_approve_universe, _exclusions = {}, _dirty = false, _explicit = explicit },
       ListOption
     )
   end
@@ -364,7 +371,7 @@ function M.create()
           return
         end
         if type(value) == "table" then
-          auto_approve_option = create_auto_approve_option(value)
+          auto_approve_option = create_auto_approve_option(value, { explicit = true })
           auto_approve_option._dirty = true
           auto_approve_fn = nil
           return
@@ -490,6 +497,9 @@ function M.create()
     if auto_approve_option and auto_approve_option._dirty then
       result.auto_approve = auto_approve_option:get()
       result.auto_approve_exclusions = auto_approve_option:get_exclusions()
+      if auto_approve_option._explicit then
+        result.auto_approve_explicit = true
+      end
     elseif auto_approve_fn then
       result.auto_approve = auto_approve_fn
     end

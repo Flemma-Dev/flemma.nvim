@@ -372,16 +372,7 @@ function M.setup()
       if not opts or not opts.auto_approve then
         return nil
       end
-      local result = resolve_auto_approve_policy(opts.auto_approve, tool_name, input, context)
-      -- A table policy is a complete specification: anything not explicitly listed
-      -- (or approved via preset expansion) requires approval. This prevents
-      -- lower-priority resolvers (e.g. sandbox) from granting additional approvals
-      -- beyond what the frontmatter policy specifies.
-      -- Function policies returning nil mean "no opinion" — pass through as before.
-      if result == nil and type(opts.auto_approve) == "table" then
-        return "require_approval"
-      end
-      return result
+      return resolve_auto_approve_policy(opts.auto_approve, tool_name, input, context)
     end,
   })
 
@@ -418,6 +409,12 @@ function M.setup()
       -- Respect frontmatter exclusions (e.g. auto_approve:remove("bash"))
       local exclusions = context.opts and context.opts.auto_approve_exclusions
       if exclusions and exclusions[tool_name] then
+        return nil
+      end
+
+      -- An explicit (assigned) policy is a complete specification — don't grant
+      -- additional approvals beyond what the assignment lists.
+      if context.opts and context.opts.auto_approve_explicit then
         return nil
       end
 
