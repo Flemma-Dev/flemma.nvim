@@ -13,12 +13,6 @@ local M = {}
 ---@field resolved_at integer
 ---@field effective_ttl? number
 
---- Partial definition; authoritative definition is in flemma.secrets (init.lua).
----@class flemma.secrets.Credential
----@field kind string
----@field service string
----@field ttl? integer
----@field ttl_scale? number
 
 ---@type table<string, flemma.secrets.CachedResult>
 local entries = {}
