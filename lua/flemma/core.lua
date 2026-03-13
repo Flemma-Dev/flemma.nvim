@@ -164,6 +164,7 @@ function M.cancel_request()
     -- Use client to cancel the request
     if client.cancel_request(buffer_state.current_request) then
       buffer_state.current_request = nil
+      parser.clear_snapshot(bufnr)
 
       -- Clean up the buffer
       local last_line_content = buffer_utils.get_last_line(bufnr)
@@ -788,6 +789,10 @@ function M.send_to_provider(opts)
       .. log.inspect(current_provider.parameters.model)
   )
 
+  -- Snapshot the AST before the @Assistant: placeholder is written.
+  -- During streaming, get_parsed_document will parse only the suffix.
+  parser.create_snapshot(bufnr)
+
   ---@type integer|nil
   local progress_timer = ui.start_progress(bufnr, { force = opts.user_initiated, timeout = effective_timeout or 600 })
   local response_started = false
@@ -816,6 +821,7 @@ function M.send_to_provider(opts)
         end
         ui.cleanup_progress(bufnr)
         buffer_state.current_request = nil
+        parser.clear_snapshot(bufnr)
         buffer_state.api_error_occurred = true -- Set flag indicating API error
 
         state.unlock_buffer(bufnr)
@@ -1087,6 +1093,7 @@ function M.send_to_provider(opts)
           progress_timer = nil
         end
         buffer_state.current_request = nil -- Mark request as no longer current
+        parser.clear_snapshot(bufnr)
 
         -- Ensure buffer is modifiable for final operations and user interaction
         state.unlock_buffer(bufnr)
@@ -1224,6 +1231,7 @@ function M.send_to_provider(opts)
       buffer_state.progress_timer = nil
     end
     ui.cleanup_progress(bufnr)
+    parser.clear_snapshot(bufnr)
     state.unlock_buffer(bufnr)
     return
   end
