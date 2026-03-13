@@ -175,6 +175,25 @@ describe("flemma.secrets.resolvers.secrettool", function()
       assert.equals(2, #calls)
     end)
 
+    it("skips legacy fallback for access_token kind", function()
+      local calls = {}
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(cmd, _)
+        table.insert(calls, vim.deepcopy(cmd))
+        return {
+          wait = function()
+            return { code = 1, stdout = "" }
+          end,
+        }
+      end
+
+      local result = secrettool:resolve({ kind = "access_token", service = "vertex" })
+
+      assert.is_nil(result)
+      -- Should only try convention (key=access_token), not legacy (key=api)
+      assert.equals(1, #calls)
+    end)
+
     it("prefers convention over legacy", function()
       ---@diagnostic disable-next-line: duplicate-set-field
       vim.system = function(_, _)
@@ -421,6 +440,25 @@ describe("flemma.secrets.resolvers.keychain", function()
       assert.is_not_nil(result)
       assert.equals("sk-legacy", result.value)
       assert.equals(2, #calls)
+    end)
+
+    it("skips legacy fallback for access_token kind", function()
+      local calls = {}
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(cmd, _)
+        table.insert(calls, vim.deepcopy(cmd))
+        return {
+          wait = function()
+            return { code = 44, stdout = "" }
+          end,
+        }
+      end
+
+      local result = keychain:resolve({ kind = "access_token", service = "vertex" })
+
+      assert.is_nil(result)
+      -- Should only try convention (-a access_token), not legacy (-a api)
+      assert.equals(1, #calls)
     end)
 
     it("trims trailing whitespace", function()

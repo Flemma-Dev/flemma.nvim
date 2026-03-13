@@ -167,6 +167,14 @@ function M.build_request(self, prompt, context)
 end
 
 --- @abstract
+--- Resolve credentials via the secrets module.
+---@param self flemma.provider.Base
+---@return string|nil
+function M.get_api_key(self)
+  error("get_api_key() must be implemented by provider")
+end
+
+--- @abstract
 --- Return HTTP headers for the provider's API
 ---@param self flemma.provider.Base
 ---@return string[]|nil

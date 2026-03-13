@@ -55,7 +55,10 @@ function M.resolve(_self, credential)
   end
 
   -- Legacy fallback: service=<service> key=api
-  if credential.kind ~= LEGACY_KEY then
+  -- Skip for access_token kind: tokens are ephemeral and were never stored in
+  -- keyrings — the legacy key=api entry holds static credentials (API keys or
+  -- service account JSON), not access tokens. Letting gcloud resolve instead.
+  if credential.kind ~= LEGACY_KEY and credential.kind ~= "access_token" then
     value = try_lookup(credential.service, LEGACY_KEY)
     if value then
       return { value = value }

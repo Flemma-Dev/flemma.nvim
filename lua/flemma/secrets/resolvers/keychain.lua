@@ -37,17 +37,17 @@ local function try_lookup(service, account)
   return value
 end
 
----@param self flemma.secrets.resolvers.Keychain
+---@param _self flemma.secrets.resolvers.Keychain
 ---@param _credential flemma.secrets.Credential
 ---@return boolean
-function M.supports(self, _credential)
+function M.supports(_self, _credential)
   return vim.fn.has("mac") == 1
 end
 
----@param self flemma.secrets.resolvers.Keychain
+---@param _self flemma.secrets.resolvers.Keychain
 ---@param credential flemma.secrets.Credential
 ---@return flemma.secrets.Result|nil
-function M.resolve(self, credential)
+function M.resolve(_self, credential)
   -- Try new convention first: -s <service> -a <kind>
   local value = try_lookup(credential.service, credential.kind)
   if value then
@@ -55,7 +55,10 @@ function M.resolve(self, credential)
   end
 
   -- Legacy fallback: -s <service> -a api
-  if credential.kind ~= LEGACY_ACCOUNT then
+  -- Skip for access_token kind: tokens are ephemeral and were never stored in
+  -- keychains — the legacy account=api holds static credentials (API keys or
+  -- service account JSON), not access tokens. Letting gcloud resolve instead.
+  if credential.kind ~= LEGACY_ACCOUNT and credential.kind ~= "access_token" then
     value = try_lookup(credential.service, LEGACY_ACCOUNT)
     if value then
       return { value = value }
