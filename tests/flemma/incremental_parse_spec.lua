@@ -49,7 +49,7 @@ describe("parse_messages extraction", function()
   end)
 end)
 
-describe("create_snapshot", function()
+describe("create_ast_snapshot_before_send", function()
   local bufnr
 
   before_each(function()
@@ -78,7 +78,7 @@ describe("create_snapshot", function()
       "Hello",
     })
 
-    parser.create_snapshot(bufnr)
+    parser.create_ast_snapshot_before_send(bufnr)
 
     local bs = state.get_buffer_state(bufnr)
     local snapshot = bs.ast_snapshot_before_send
@@ -88,25 +88,25 @@ describe("create_snapshot", function()
     assert.equals(2, #snapshot.messages)
     assert.equals("System", snapshot.messages[1].role)
     assert.equals("You", snapshot.messages[2].role)
-    assert.equals(8, snapshot.freeze_line)
+    assert.equals(8, snapshot.resume_line)
   end)
 
-  it("sets freeze_line to line after last content", function()
+  it("sets resume_line to line after last content", function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
       "@You:",
       "Hello",
     })
 
-    parser.create_snapshot(bufnr)
+    parser.create_ast_snapshot_before_send(bufnr)
 
     local snapshot = state.get_buffer_state(bufnr).ast_snapshot_before_send
-    assert.equals(3, snapshot.freeze_line)
+    assert.equals(3, snapshot.resume_line)
   end)
 
   it("handles empty buffer", function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {})
 
-    parser.create_snapshot(bufnr)
+    parser.create_ast_snapshot_before_send(bufnr)
 
     local snapshot = state.get_buffer_state(bufnr).ast_snapshot_before_send
     assert.is_not_nil(snapshot)
@@ -115,7 +115,7 @@ describe("create_snapshot", function()
   end)
 end)
 
-describe("clear_snapshot", function()
+describe("clear_ast_snapshot_before_send", function()
   local bufnr
 
   before_each(function()
@@ -139,10 +139,10 @@ describe("clear_snapshot", function()
       "Hello",
     })
 
-    parser.create_snapshot(bufnr)
+    parser.create_ast_snapshot_before_send(bufnr)
     assert.is_not_nil(state.get_buffer_state(bufnr).ast_snapshot_before_send)
 
-    parser.clear_snapshot(bufnr)
+    parser.clear_ast_snapshot_before_send(bufnr)
     assert.is_nil(state.get_buffer_state(bufnr).ast_snapshot_before_send)
   end)
 end)
@@ -227,7 +227,7 @@ describe("incremental get_parsed_document", function()
     })
 
     -- Phase 2: Create snapshot (simulates pre-send)
-    parser.create_snapshot(bufnr)
+    parser.create_ast_snapshot_before_send(bufnr)
 
     -- Phase 3: Append new content (simulates streaming)
     local line_count = vim.api.nvim_buf_line_count(bufnr)
@@ -242,7 +242,7 @@ describe("incremental get_parsed_document", function()
     local incremental_doc = parser.get_parsed_document(bufnr)
 
     -- Phase 5: Clear snapshot and invalidate cache to force full parse
-    parser.clear_snapshot(bufnr)
+    parser.clear_ast_snapshot_before_send(bufnr)
     state.get_buffer_state(bufnr).ast_cache = nil
     local full_doc = parser.get_parsed_document(bufnr)
 
@@ -256,7 +256,7 @@ describe("incremental get_parsed_document", function()
       "List files",
     })
 
-    parser.create_snapshot(bufnr)
+    parser.create_ast_snapshot_before_send(bufnr)
 
     local line_count = vim.api.nvim_buf_line_count(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, line_count, line_count, false, {
@@ -270,7 +270,7 @@ describe("incremental get_parsed_document", function()
 
     local incremental_doc = parser.get_parsed_document(bufnr)
 
-    parser.clear_snapshot(bufnr)
+    parser.clear_ast_snapshot_before_send(bufnr)
     state.get_buffer_state(bufnr).ast_cache = nil
     local full_doc = parser.get_parsed_document(bufnr)
 
@@ -285,7 +285,7 @@ describe("incremental get_parsed_document", function()
       "What is 2+2?",
     })
 
-    parser.create_snapshot(bufnr)
+    parser.create_ast_snapshot_before_send(bufnr)
 
     local line_count = vim.api.nvim_buf_line_count(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, line_count, line_count, false, {
@@ -298,7 +298,7 @@ describe("incremental get_parsed_document", function()
 
     local incremental_doc = parser.get_parsed_document(bufnr)
 
-    parser.clear_snapshot(bufnr)
+    parser.clear_ast_snapshot_before_send(bufnr)
     state.get_buffer_state(bufnr).ast_cache = nil
     local full_doc = parser.get_parsed_document(bufnr)
 
@@ -311,13 +311,13 @@ describe("incremental get_parsed_document", function()
     -- full parse (extending its end_line) but NOT by the incremental parse
     -- (the snapshot captured @You: before the blank existed). This is
     -- documented in the Design Decisions section of the plan — the divergence
-    -- is visually invisible and corrected on clear_snapshot.
+    -- is visually invisible and corrected on clear_ast_snapshot_before_send.
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
       "@You:",
       "Hello",
     })
 
-    parser.create_snapshot(bufnr)
+    parser.create_ast_snapshot_before_send(bufnr)
 
     -- start_progress / on_content typically adds a blank line before @Assistant:
     local line_count = vim.api.nvim_buf_line_count(bufnr)
@@ -329,7 +329,7 @@ describe("incremental get_parsed_document", function()
 
     local incremental_doc = parser.get_parsed_document(bufnr)
 
-    parser.clear_snapshot(bufnr)
+    parser.clear_ast_snapshot_before_send(bufnr)
     state.get_buffer_state(bufnr).ast_cache = nil
     local full_doc = parser.get_parsed_document(bufnr)
 
@@ -355,7 +355,7 @@ describe("incremental get_parsed_document", function()
       "Hello",
     })
 
-    parser.create_snapshot(bufnr)
+    parser.create_ast_snapshot_before_send(bufnr)
 
     local line_count = vim.api.nvim_buf_line_count(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, line_count, line_count, false, {
@@ -370,13 +370,13 @@ describe("incremental get_parsed_document", function()
     assert.equals(doc1, doc2, "Should return same table reference from cache")
   end)
 
-  it("full parse resumes after clear_snapshot", function()
+  it("full parse resumes after clear_ast_snapshot_before_send", function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
       "@You:",
       "Hello",
     })
 
-    parser.create_snapshot(bufnr)
+    parser.create_ast_snapshot_before_send(bufnr)
 
     local line_count = vim.api.nvim_buf_line_count(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, line_count, line_count, false, {
@@ -388,7 +388,7 @@ describe("incremental get_parsed_document", function()
     parser.get_parsed_document(bufnr)
 
     -- Clear snapshot
-    parser.clear_snapshot(bufnr)
+    parser.clear_ast_snapshot_before_send(bufnr)
 
     -- Append more content
     line_count = vim.api.nvim_buf_line_count(bufnr)

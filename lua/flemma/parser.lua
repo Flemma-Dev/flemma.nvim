@@ -8,11 +8,11 @@ local state = require("flemma.state")
 ---@class flemma.Parser
 local M = {}
 
----@class flemma.parser.SnapshotBeforeSend
+---@class flemma.parser.Snapshot
 ---@field frontmatter flemma.ast.FrontmatterNode|nil Frozen frontmatter node
----@field messages flemma.ast.MessageNode[] Frozen message nodes (all messages before freeze point)
+---@field messages flemma.ast.MessageNode[] Frozen message nodes (all messages before resume point)
 ---@field errors flemma.ast.Diagnostic[] Diagnostics from frozen portion
----@field freeze_line integer 1-indexed buffer line where frozen content ends (first line NOT in snapshot)
+---@field resume_line integer 1-indexed buffer line where incremental parsing resumes (first line NOT in snapshot)
 
 local TOOL_USE_PATTERN = "^%*%*Tool Use:%*%*%s*`([^`]+)`%s*%(`([^)]+)`%)"
 local TOOL_RESULT_PATTERN = "^%*%*Tool Result:%*%*%s*`([^`]+)`"
@@ -650,14 +650,14 @@ function M.get_parsed_document(bufnr)
   local snapshot = buffer_state.ast_snapshot_before_send
 
   if snapshot then
-    -- Incremental parse: read only lines from freeze point onwards.
-    -- freeze_line is 1-indexed; nvim_buf_get_lines is 0-indexed, hence - 1.
-    -- The same offset (freeze_line - 1) is passed to parse_messages so that
-    -- local index 1 in suffix_lines maps to absolute line freeze_line:
-    --   parse_message computes start_line = start_idx + line_offset = 1 + (freeze_line - 1) = freeze_line
+    -- Incremental parse: read only lines from resume point onwards.
+    -- resume_line is 1-indexed; nvim_buf_get_lines is 0-indexed, hence - 1.
+    -- The same offset (resume_line - 1) is passed to parse_messages so that
+    -- local index 1 in suffix_lines maps to absolute line resume_line:
+    --   parse_message computes start_line = start_idx + line_offset = 1 + (resume_line - 1) = resume_line
     local total_lines = vim.api.nvim_buf_line_count(bufnr)
-    local suffix_lines = vim.api.nvim_buf_get_lines(bufnr, snapshot.freeze_line - 1, -1, false)
-    local new_messages, new_errors = parse_messages(suffix_lines, snapshot.freeze_line - 1)
+    local suffix_lines = vim.api.nvim_buf_get_lines(bufnr, snapshot.resume_line - 1, -1, false)
+    local new_messages, new_errors = parse_messages(suffix_lines, snapshot.resume_line - 1)
 
     -- Merge frozen + new
     local all_messages = {}
@@ -699,7 +699,7 @@ end
 --- captures all messages up to the current buffer end, so only content
 --- appended after this point needs re-parsing.
 ---@param bufnr integer
-function M.create_snapshot(bufnr)
+function M.create_ast_snapshot_before_send(bufnr)
   local doc = M.get_parsed_document(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
 
@@ -717,14 +717,14 @@ function M.create_snapshot(bufnr)
     frontmatter = doc.frontmatter,
     messages = messages,
     errors = errors,
-    freeze_line = doc.position.end_line + 1,
+    resume_line = doc.position.end_line + 1,
   }
 end
 
---- Clear the snapshot, restoring full-parse behavior.
+--- Clear the AST snapshot, restoring full-parse behavior.
 --- Must be called on every request exit path (success, error, cancel, job failure).
 ---@param bufnr integer
-function M.clear_snapshot(bufnr)
+function M.clear_ast_snapshot_before_send(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
   buffer_state.ast_snapshot_before_send = nil
 end
