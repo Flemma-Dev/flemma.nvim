@@ -339,14 +339,8 @@ describe("incremental get_parsed_document", function()
     assert.equals("Assistant", incremental_doc.messages[2].role)
 
     -- @Assistant: message positions and content match exactly
-    assert.equals(
-      full_doc.messages[2].position.start_line,
-      incremental_doc.messages[2].position.start_line
-    )
-    assert.equals(
-      full_doc.messages[2].position.end_line,
-      incremental_doc.messages[2].position.end_line
-    )
+    assert.equals(full_doc.messages[2].position.start_line, incremental_doc.messages[2].position.start_line)
+    assert.equals(full_doc.messages[2].position.end_line, incremental_doc.messages[2].position.end_line)
 
     -- @You: end_line diverges by 1 (accepted — see Design Decisions)
     -- Full parse: @You: absorbs the blank line (end_line = 3)
