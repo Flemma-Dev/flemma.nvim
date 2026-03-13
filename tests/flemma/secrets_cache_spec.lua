@@ -1,12 +1,11 @@
 --- Tests for secrets cache module
 
-package.loaded["flemma.secrets.cache"] = nil
-
-local cache = require("flemma.secrets.cache")
+local cache
 
 describe("flemma.secrets.cache", function()
   before_each(function()
-    cache.invalidate_all()
+    package.loaded["flemma.secrets.cache"] = nil
+    cache = require("flemma.secrets.cache")
   end)
 
   describe("get/set", function()
