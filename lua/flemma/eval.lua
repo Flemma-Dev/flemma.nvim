@@ -18,10 +18,42 @@ local mime_util = require("flemma.mime")
 local parser = require("flemma.parser")
 local personality_builder = require("flemma.personalities.builder")
 local personality_registry = require("flemma.personalities")
+local state = require("flemma.state")
 local str = require("flemma.utilities.string")
 local symbols = require("flemma.symbols")
 
 local PERSONALITY_URN_PREFIX = "urn:flemma:personality:"
+
+--- Check for file content drift and push a diagnostic if the file changed since
+--- the last evaluation. Stores the current hash for future comparisons.
+---@param env flemma.eval.Environment Eval environment with symbol-keyed fields
+---@param target_path string Resolved absolute file path
+---@param content string Current file content (text or binary)
+local function check_file_drift(env, target_path, content)
+  local bufnr = env[symbols.BUFFER_NUMBER]
+  local collector = env[symbols.DIAGNOSTICS]
+  if not bufnr or not collector then
+    return
+  end
+
+  local hash = vim.fn.sha256(content)
+  local buffer_state = state.get_buffer_state(bufnr)
+  if not buffer_state.file_reference_hashes then
+    buffer_state.file_reference_hashes = {}
+  end
+
+  local previous_hash = buffer_state.file_reference_hashes[target_path]
+  if previous_hash and previous_hash ~= hash then
+    table.insert(collector, {
+      type = "custom:file_drift",
+      severity = "warning",
+      label = "File drift detected (content changed since last request)",
+      error = string.format("File changed since last request: %s", target_path),
+      filename = target_path,
+    })
+  end
+  buffer_state.file_reference_hashes[target_path] = hash
+end
 
 ---@alias flemma.eval.Environment table<string, any>
 
@@ -166,6 +198,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
         })
       end
 
+      check_file_drift(env, target_path, data)
       return emittable.binary_include_part(target_path, mime, data)
     end
 
@@ -194,6 +227,8 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
         include_stack = { unpack(include_stack) },
       })
     end
+
+    check_file_drift(env, target_path, content)
 
     -- Parse content for {{ }} expressions and @./ file references
     local segments = parser.parse_inline_content(content)

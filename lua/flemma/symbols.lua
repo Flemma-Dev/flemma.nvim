@@ -38,6 +38,14 @@ M.FRONTMATTER_OPTS = {}
 ---@type table
 M.VARIABLES = {}
 
+--- Generic diagnostics collector for eval-phase producers.
+--- Initialized as an empty array on eval environments by the processor before
+--- evaluation. Any code running in the eval environment (include(), expressions)
+--- can push diagnostic tables into it. The processor drains the array after
+--- evaluation and merges entries into the result diagnostics.
+---@type table
+M.DIAGNOSTICS = {}
+
 --- Deep-copy a table while preserving symbol key identity.
 ---
 --- vim.deepcopy copies table *keys* by value, creating new table references

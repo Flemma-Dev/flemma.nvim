@@ -55,9 +55,10 @@ local M = {}
 ---@alias flemma.ast.Segment flemma.ast.TextSegment|flemma.ast.ExpressionSegment|flemma.ast.ThinkingSegment|flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|flemma.ast.AbortedSegment
 
 ---@class flemma.ast.Diagnostic
----@field type "frontmatter"|"expression"|"file"|"tool_use"|"parse"
+---@field type string Diagnostic category. Internal types are unprefixed (e.g., "frontmatter", "expression", "file"). Custom types from symbols.DIAGNOSTICS must use the "custom:" prefix (e.g., "custom:file_drift").
 ---@field severity "error"|"warning"
----@field error? string
+---@field error? string Human-readable error message
+---@field label? string Section heading for display (required for types rendered by the generic fallback)
 ---@field position? flemma.ast.Position
 ---@field language? string
 ---@field expression? string

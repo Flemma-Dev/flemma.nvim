@@ -4,6 +4,7 @@ local emittable = require("flemma.emittable")
 local json = require("flemma.utilities.json")
 local codeblock_parsers = require("flemma.codeblock.parsers")
 local parser = require("flemma.parser")
+local symbols = require("flemma.symbols")
 
 ---@class flemma.Processor
 local M = {}
@@ -280,6 +281,11 @@ function M.evaluate(doc, base_context, opts)
       parts = parts,
       position = msg.position,
     })
+  end
+
+  -- Drain generic eval-phase diagnostics (file drift, future producers)
+  for _, d in ipairs(env[symbols.DIAGNOSTICS] or {}) do
+    table.insert(diagnostics, d)
   end
 
   return {

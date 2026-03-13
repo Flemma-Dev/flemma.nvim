@@ -140,6 +140,7 @@ function M.to_eval_env(ctx, bufnr)
   -- Internal symbol keys (invisible to sandbox code)
   env[symbols.FRONTMATTER_OPTS] = ctx and type(ctx.get_opts) == "function" and ctx:get_opts() or nil
   env[symbols.BUFFER_NUMBER] = bufnr
+  env[symbols.DIAGNOSTICS] = {}
 
   -- Merge user vars as top-level string keys
   local variables = ctx and ctx[symbols.VARIABLES]

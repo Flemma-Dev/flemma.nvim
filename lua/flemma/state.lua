@@ -52,6 +52,7 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field _diagnostics_raw_json? string Temporary storage for raw JSON during request lifecycle
 ---@field cursor_pending? flemma.cursor.PendingTarget Deferred cursor move waiting for user idle
 ---@field cursor_idle_timer? uv.uv_timer_t Per-buffer idle timer for cursor deferral
+---@field file_reference_hashes? table<string, string> SHA256 hashes of included files from the last evaluation (keyed by absolute path)
 
 ---@diagnostic disable-next-line: missing-fields
 local config = {} ---@type flemma.Config

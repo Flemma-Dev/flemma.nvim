@@ -677,6 +677,24 @@ function M.send_to_provider(opts)
       end
     end
 
+    -- Generic fallback: render any custom: diagnostic type.
+    -- Diagnostics must carry a `label` field for the section heading.
+    for dtype, bucket in pairs(by_type) do
+      if dtype:sub(1, 7) == "custom:" and #bucket > 0 then
+        local short_type = dtype:sub(8) -- strip "custom:" prefix
+        local heading = string.format("[%s] %s", short_type, bucket[1].label or short_type)
+        table.insert(diagnostic_lines, heading)
+        for i, d in ipairs(bucket) do
+          if i <= max_per_type then
+            table.insert(diagnostic_lines, string.format("  %s", d.error or "unknown"))
+          elseif i == max_per_type + 1 then
+            table.insert(diagnostic_lines, string.format("  …and %d more", #bucket - max_per_type))
+            break
+          end
+        end
+      end
+    end
+
     local level = has_errors and vim.log.levels.ERROR or vim.log.levels.WARN
     vim.notify("Flemma diagnostics:\n" .. table.concat(diagnostic_lines, "\n"), level)
     log.warn("send_to_provider(): Diagnostics occurred: " .. #diagnostics .. " total")
