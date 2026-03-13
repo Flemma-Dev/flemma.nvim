@@ -495,7 +495,6 @@ function M.start_progress(bufnr, progress_opts)
       cursor.request_move(bufnr, {
         line = vim.api.nvim_buf_line_count(bufnr),
         bottom = true,
-        center = true,
         force = is_user_send,
         reason = is_user_send and "progress/user-send" or "progress/autopilot",
       })
