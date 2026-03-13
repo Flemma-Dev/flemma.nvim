@@ -158,6 +158,33 @@ describe("flemma.personalities.builder", function()
       assert.is_string(env.date)
       assert.is_string(env.time)
     end)
+
+    it("uses the passed bufnr's cache, not the focused buffer's cache", function()
+      local buf1 = vim.api.nvim_create_buf(false, true)
+      local buf2 = vim.api.nvim_create_buf(false, true)
+
+      -- Seed distinct cached environments for each buffer
+      local state_mod = require("flemma.state")
+      state_mod.get_buffer_state(buf1).personality_environment = {
+        date = "Monday, January 01, 2024",
+        time = "09:00 AM",
+      }
+      state_mod.get_buffer_state(buf2).personality_environment = {
+        date = "Friday, December 31, 2027",
+        time = "11:59 PM",
+      }
+
+      -- Focus buffer 2 (simulates user switching away from buffer 1)
+      vim.api.nvim_set_current_buf(buf2)
+
+      -- Build environment for buffer 1 while buffer 2 has focus
+      local env = builder.build_environment(buf1)
+      assert.equals("Monday, January 01, 2024", env.date)
+      assert.equals("09:00 AM", env.time)
+
+      vim.api.nvim_buf_delete(buf1, { force = true })
+      vim.api.nvim_buf_delete(buf2, { force = true })
+    end)
   end)
 
   describe("build_project_context()", function()
@@ -326,6 +353,136 @@ describe("flemma.personalities.coding-assistant", function()
       project_context = {},
     })
     assert.falsy(result:find("Project Context"))
+  end)
+end)
+
+describe("context.to_eval_env bufnr threading", function()
+  local ctxutil, sym
+
+  before_each(function()
+    package.loaded["flemma.context"] = nil
+    package.loaded["flemma.symbols"] = nil
+    ctxutil = require("flemma.context")
+    sym = require("flemma.symbols")
+  end)
+
+  it("sets buffer number from explicit parameter", function()
+    local buf1 = vim.api.nvim_create_buf(false, true)
+    local buf2 = vim.api.nvim_create_buf(false, true)
+
+    -- Focus buffer 2
+    vim.api.nvim_set_current_buf(buf2)
+
+    -- Pass buf1 explicitly — should not fall back to focused buffer
+    local context = ctxutil.from_buffer(buf1)
+    local env = ctxutil.to_eval_env(context, buf1)
+
+    assert.equals(buf1, env[sym.BUFFER_NUMBER])
+
+    vim.api.nvim_buf_delete(buf1, { force = true })
+    vim.api.nvim_buf_delete(buf2, { force = true })
+  end)
+
+  it("buffer number is nil when not provided", function()
+    local context = ctxutil.from_file("/tmp/test.chat")
+    local env = ctxutil.to_eval_env(context)
+
+    -- No bufnr passed, no fallback — should be nil
+    assert.is_nil(env[sym.BUFFER_NUMBER])
+  end)
+
+  it("symbol-keyed fields are invisible to sandbox iteration", function()
+    local buf1 = vim.api.nvim_create_buf(false, true)
+    local context = ctxutil.from_buffer(buf1)
+    local env = ctxutil.to_eval_env(context, buf1)
+
+    -- Iterate env as sandbox code would — symbol keys should not appear
+    local string_keys = {}
+    for k, _ in pairs(env) do
+      if type(k) == "string" then
+        string_keys[k] = true
+      end
+    end
+
+    -- Internal fields should not be visible as string keys
+    assert.is_nil(string_keys["__opts"])
+    assert.is_nil(string_keys["__bufnr"])
+
+    -- User-visible fields should still be present as string keys
+    assert.is_true(string_keys["__filename"] ~= nil or env.__filename == nil)
+
+    vim.api.nvim_buf_delete(buf1, { force = true })
+  end)
+end)
+
+describe("cross-buffer personality environment isolation", function()
+  local state_mod, ctxutil
+
+  before_each(function()
+    package.loaded["flemma.personalities.builder"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.context"] = nil
+    package.loaded["flemma.eval"] = nil
+    package.loaded["flemma.personalities"] = nil
+    package.loaded["flemma.personalities.coding-assistant"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.registry"] = nil
+
+    state_mod = require("flemma.state")
+    ctxutil = require("flemma.context")
+
+    local tool_registry = require("flemma.tools.registry")
+    tool_registry.clear()
+
+    local pers = require("flemma.personalities")
+    pers.setup()
+  end)
+
+  it("personality include uses correct buffer when another buffer has focus", function()
+    local eval_mod = require("flemma.eval")
+    local emittable_mod = require("flemma.emittable")
+
+    local buf1 = vim.api.nvim_create_buf(false, true)
+    local buf2 = vim.api.nvim_create_buf(false, true)
+
+    -- Seed distinct cached environments
+    state_mod.get_buffer_state(buf1).personality_environment = {
+      date = "Monday, January 01, 2024",
+      time = "09:00 AM",
+    }
+    state_mod.get_buffer_state(buf2).personality_environment = {
+      date = "Friday, December 31, 2027",
+      time = "11:59 PM",
+    }
+
+    -- Focus buffer 2 (user switched away from buffer 1)
+    vim.api.nvim_set_current_buf(buf2)
+
+    -- Build eval env with explicit buf1 — the way processor.evaluate() now does it
+    local context = ctxutil.from_buffer(buf1)
+    local env = ctxutil.to_eval_env(context, buf1)
+
+    -- Evaluate a personality include expression (the real code path)
+    local result = eval_mod.eval_expression("include('urn:flemma:personality:coding-assistant')", env)
+
+    -- Emit the result and check the rendered date
+    local emit_ctx = emittable_mod.EmitContext.new()
+    result:emit(emit_ctx)
+
+    local text = emit_ctx.parts[1].text
+
+    -- The rendered system prompt should contain buffer 1's date, not buffer 2's
+    assert.truthy(
+      text:find("Monday, January 01, 2024"),
+      "Expected buffer 1's date in system prompt, but got buffer 2's date instead"
+    )
+    assert.falsy(
+      text:find("Friday, December 31, 2027"),
+      "Buffer 2's date leaked into buffer 1's system prompt"
+    )
+
+    vim.api.nvim_buf_delete(buf1, { force = true })
+    vim.api.nvim_buf_delete(buf2, { force = true })
   end)
 end)
 

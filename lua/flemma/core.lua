@@ -559,7 +559,10 @@ function M.send_to_provider(opts)
 
   -- Run the pipeline with the pre-parsed document. If frontmatter was already
   -- evaluated by send_or_execute, reuse it to avoid re-executing frontmatter code.
-  local prompt, evaluated = pipeline.run(doc, context, opts.evaluated_frontmatter)
+  local prompt, evaluated = pipeline.run(doc, context, {
+    evaluated_frontmatter = opts.evaluated_frontmatter,
+    bufnr = bufnr,
+  })
 
   if #prompt.history == 0 then
     log.warn("send_to_provider(): No messages found in buffer")

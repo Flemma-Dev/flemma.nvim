@@ -78,10 +78,10 @@ end
 ---@field opts flemma.opt.FrontmatterOpts|nil
 
 ---@class flemma.processor.EvaluatedFrontmatter
----@field context flemma.Context Evaluated context with __opts and user variables set
+---@field context flemma.Context Evaluated context with frontmatter opts and user variables set
 ---@field diagnostics flemma.ast.Diagnostic[] Frontmatter-specific diagnostics
 
----Evaluate frontmatter and return the resulting context (with __opts and user variables set).
+---Evaluate frontmatter and return the resulting context (with frontmatter opts and user variables set).
 ---@param doc flemma.ast.DocumentNode
 ---@param base_context flemma.Context|nil
 ---@return flemma.Context context
@@ -138,7 +138,7 @@ local function evaluate_frontmatter_internal(doc, base_context)
 end
 
 ---Evaluate frontmatter from a parsed document.
----Returns the evaluated context (with __opts and user variables) and any diagnostics.
+---Returns the evaluated context (with frontmatter opts and user variables) and any diagnostics.
 ---@param doc flemma.ast.DocumentNode
 ---@param base_context flemma.Context|nil
 ---@return flemma.processor.EvaluatedFrontmatter
@@ -160,15 +160,20 @@ end
 --- If a pre-evaluated frontmatter result is provided, it is reused instead of
 --- re-evaluating frontmatter code. This allows callers to evaluate frontmatter
 --- once and thread the result through multiple consumers.
+---@class flemma.processor.EvaluateOpts
+---@field evaluated_frontmatter? flemma.processor.EvaluatedFrontmatter Pre-evaluated frontmatter (skips re-evaluation)
+---@field bufnr? integer Buffer number for context-aware expression evaluation
+
 ---@param doc flemma.ast.DocumentNode
 ---@param base_context flemma.Context|nil
----@param evaluated_frontmatter flemma.processor.EvaluatedFrontmatter|nil
+---@param opts? flemma.processor.EvaluateOpts
 ---@return flemma.processor.EvaluatedResult
-function M.evaluate(doc, base_context, evaluated_frontmatter)
+function M.evaluate(doc, base_context, opts)
+  opts = opts or {}
   local context, fm_diagnostics
-  if evaluated_frontmatter then
-    context = evaluated_frontmatter.context
-    fm_diagnostics = evaluated_frontmatter.diagnostics
+  if opts.evaluated_frontmatter then
+    context = opts.evaluated_frontmatter.context
+    fm_diagnostics = opts.evaluated_frontmatter.diagnostics
   else
     context, fm_diagnostics = evaluate_frontmatter_internal(doc, base_context)
   end
@@ -181,7 +186,7 @@ function M.evaluate(doc, base_context, evaluated_frontmatter)
 
   -- 2) Evaluate messages
   local evaluated_messages = {}
-  local env = ctxutil.to_eval_env(context)
+  local env = ctxutil.to_eval_env(context, opts.bufnr)
 
   for _, msg in ipairs(doc.messages or {}) do
     local parts = {}

@@ -1,10 +1,12 @@
 --- Safe environment and execution for Lua code in Flemma, where safe is a loose term.
 ---
---- Reserved environment fields:
+--- User-visible environment fields (string keys, accessible to sandbox code):
 ---   __filename  - Current file path for error reporting and path resolution
 ---   __dirname   - Directory containing the current file
----   __opts      - Per-buffer frontmatter options (for tool filtering in personality system)
----   __bufnr     - Buffer number for context-aware operations
+---
+--- Internal environment fields (symbol keys, invisible to sandbox code):
+---   symbols.FRONTMATTER_OPTS  - Per-buffer frontmatter options
+---   symbols.BUFFER_NUMBER     - Buffer number for context-aware operations
 ---
 --- User-defined variables from frontmatter are stored as top-level keys in the environment.
 
@@ -17,6 +19,7 @@ local parser = require("flemma.parser")
 local personality_builder = require("flemma.personalities.builder")
 local personality_registry = require("flemma.personalities")
 local str = require("flemma.utilities.string")
+local symbols = require("flemma.symbols")
 
 local PERSONALITY_URN_PREFIX = "urn:flemma:personality:"
 
@@ -106,7 +109,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
         error({ type = "expression", error = msg })
       end
       local render_opts =
-        personality_builder.build(personality_name, env.__opts, env.__dirname or vim.fn.getcwd(), env.__bufnr)
+        personality_builder.build(personality_name, env[symbols.FRONTMATTER_OPTS], env.__dirname or vim.fn.getcwd(), env[symbols.BUFFER_NUMBER])
       local rendered = personality.render(render_opts)
       return emittable.composite_include_part({ rendered })
     end
@@ -251,7 +254,7 @@ end
 ---
 --- User-defined variables from frontmatter are merged as top-level keys by context.to_eval_env().
 --- The 'include' function is added by ensure_env_capabilities to capture the correct environment.
---- Reserved internal fields (__filename, __dirname) are set by context.to_eval_env().
+--- User-visible fields (__filename, __dirname) and internal symbol-keyed fields are set by context.to_eval_env().
 ---@return flemma.eval.Environment
 function M.create_safe_env()
   return {

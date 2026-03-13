@@ -81,11 +81,11 @@ end
 --- re-evaluating frontmatter code.
 ---@param doc flemma.ast.DocumentNode
 ---@param context flemma.Context|nil
----@param evaluated_frontmatter flemma.processor.EvaluatedFrontmatter|nil
+---@param opts? flemma.processor.EvaluateOpts
 ---@return flemma.pipeline.Prompt prompt
 ---@return flemma.processor.EvaluatedResult evaluated
-function M.run(doc, context, evaluated_frontmatter)
-  local evaluated = processor.evaluate(doc, context, evaluated_frontmatter)
+function M.run(doc, context, opts)
+  local evaluated = processor.evaluate(doc, context, opts)
 
   local history = {}
   local system = nil

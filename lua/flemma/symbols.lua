@@ -17,4 +17,49 @@ local M = {}
 ---@type table
 M.SOURCE_PATH = {}
 
+--- The originating buffer number.
+--- Set on eval environments so that buffer-specific operations (e.g.,
+--- personality environment caching) resolve against the correct buffer
+--- rather than falling back to nvim_get_current_buf(). Threaded as an
+--- explicit parameter through pipeline → processor → eval, not stored
+--- on Context (which is a portable document identity, not a runtime handle).
+---@type table
+M.BUFFER_NUMBER = {}
+
+--- Evaluated frontmatter options (flemma.opt proxy result).
+--- Carried on Context objects and eval environments so the personality system
+--- and tool filtering can access per-buffer frontmatter configuration.
+---@type table
+M.FRONTMATTER_OPTS = {}
+
+--- User-defined variables from frontmatter execution.
+--- Carried on Context objects; merged into the eval environment as top-level
+--- keys so expressions can reference them directly.
+---@type table
+M.VARIABLES = {}
+
+--- Deep-copy a table while preserving symbol key identity.
+---
+--- vim.deepcopy copies table *keys* by value, creating new table references
+--- for keys that are tables. Since symbols ARE table references used as keys,
+--- vim.deepcopy would produce a copy where symbol lookups silently fail —
+--- the data is there under a different (cloned) key, but symbols.X won't find it.
+---
+--- This function iterates the source and copies each entry using the original
+--- key reference. Table values are deep-copied via vim.deepcopy to prevent
+--- aliasing; primitive values are copied directly.
+---@param source table The table to clone
+---@return table clone A deep copy with symbol key identity preserved
+function M.deepcopy(source)
+  local clone = {}
+  for k, v in pairs(source) do
+    if type(v) == "table" then
+      clone[k] = vim.deepcopy(v)
+    else
+      clone[k] = v
+    end
+  end
+  return clone
+end
+
 return M

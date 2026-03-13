@@ -24,9 +24,9 @@ function M.parse(code, context)
   -- Safety net: ensure flemma doesn't leak to returned globals
   user_globals.flemma = nil
 
-  -- Store frontmatter opts on context
-  if context and type(context) == "table" then
-    context.__opts = resolve()
+  -- Store frontmatter opts on context via accessor
+  if context and type(context.set_opts) == "function" then
+    context:set_opts(resolve())
   end
 
   return user_globals
