@@ -580,20 +580,19 @@ local function parse_message(lines, start_idx, line_offset, diagnostics)
   return msg, (i - 1), diagnostics
 end
 
----@param lines string[]|nil
----@return flemma.ast.DocumentNode
-function M.parse_lines(lines)
-  lines = lines or {}
-  local errors = {}
-  local fm, _, body, body_start = parse_frontmatter(lines)
+--- Parse message blocks from content lines with a line offset.
+--- Shared by full parse and incremental (snapshot) parse paths.
+---@param lines string[]
+---@param line_offset integer Offset added to line indices for absolute positions
+---@return flemma.ast.MessageNode[] messages
+---@return flemma.ast.Diagnostic[] errors
+local function parse_messages(lines, line_offset)
   local messages = {}
+  local errors = {}
   local i = 1
-  local content_lines = body or lines
-  -- Calculate line offset: if frontmatter exists, messages start after it
-  local line_offset = body and (body_start - 1) or 0
 
-  while i <= #content_lines do
-    local msg, last, diagnostics = parse_message(content_lines, i, line_offset, {})
+  while i <= #lines do
+    local msg, last, diagnostics = parse_message(lines, i, line_offset, {})
     if msg then
       table.insert(messages, msg)
       for _, diag in ipairs(diagnostics) do
@@ -605,6 +604,17 @@ function M.parse_lines(lines)
     end
   end
 
+  return messages, errors
+end
+
+---@param lines string[]|nil
+---@return flemma.ast.DocumentNode
+function M.parse_lines(lines)
+  lines = lines or {}
+  local fm, _, body, body_start = parse_frontmatter(lines)
+  local content_lines = body or lines
+  local line_offset = body and (body_start - 1) or 0
+  local messages, errors = parse_messages(content_lines, line_offset)
   local doc = ast.document(fm, messages, errors, { start_line = 1, end_line = #lines })
   return doc
 end
