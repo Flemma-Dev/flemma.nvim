@@ -13,7 +13,6 @@ local M = {}
 ---@field resolved_at integer
 ---@field effective_ttl? number
 
-
 ---@type table<string, flemma.secrets.CachedResult>
 local entries = {}
 

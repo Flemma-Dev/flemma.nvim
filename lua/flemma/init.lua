@@ -17,6 +17,7 @@ local loader = require("flemma.loader")
 local config_manager = require("flemma.core.config.manager")
 local notifications = require("flemma.notifications")
 local personalities = require("flemma.personalities")
+local secrets = require("flemma.secrets")
 local tools = require("flemma.tools")
 local tools_presets = require("flemma.tools.presets")
 local tools_approval = require("flemma.tools.approval")
@@ -64,6 +65,9 @@ M.setup = function(user_opts)
   vim.treesitter.language.register("markdown", { "chat" })
 
   log.info("setup(): Flemma starting...")
+
+  -- Initialize secrets module with built-in resolvers
+  secrets.setup()
 
   -- Initialize provider registry with built-in providers
   provider_registry.setup()

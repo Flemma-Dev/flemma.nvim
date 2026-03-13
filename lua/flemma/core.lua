@@ -121,7 +121,7 @@ function M.switch_provider(provider_name, model_name, parameters)
   local updated_config = state.get_config()
 
   -- Force the new provider to clear its API key cache
-  new_provider:reset({ auth = true })
+  new_provider:reset({ invalidate_all_secrets = true })
 
   -- Clear diagnostics request history — cache state doesn't carry across providers,
   -- so comparing requests from different providers would produce spurious warnings.
@@ -835,7 +835,7 @@ function M.send_to_provider(opts)
             .. "\n\nYour conversation is too long for this model."
             .. " Remove earlier messages or start a new conversation."
         elseif current_provider:is_auth_error(msg) then
-          current_provider:reset({ auth = true })
+          current_provider:reset({ invalidate_all_secrets = true })
           notify_msg = notify_msg .. "\n\nAuthentication expired. Send again to generate a fresh token."
         elseif current_provider:is_rate_limit_error(msg) then
           local details = current_provider:format_rate_limit_details()

@@ -29,8 +29,9 @@ Methods are grouped into three categories:
   ------------------------------------------------------------------
   - `new(opts)` — constructor; must call `base.new(opts)` and
     `base._init_provider(M, provider)`, then call `provider:reset()`.
-  - `get_api_key(self, opts)` — authentication; call `base.get_api_key()`
-    with the appropriate env/keyring opts table.
+  - `get_api_key(self)` — authentication; resolve credentials via
+    `require("flemma.secrets").resolve()` with the appropriate credential
+    descriptor (kind + service).
   - `reset(self)` — call `base.reset(self)` plus any provider-specific
     state initialization. Sinks in `_response_buffer.extra` are
     auto-destroyed by base.
@@ -80,6 +81,7 @@ Missing boolean capabilities default to `false` at registration time.
 
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local secrets = require("flemma.secrets")
 local sink = require("flemma.sink")
 
 -- ============================================================================
@@ -99,7 +101,6 @@ local sink = require("flemma.sink")
 ---@field on_tool_input? fun(delta: string) Called when tool input JSON delta is received (optional, for progress tracking)
 
 ---@class flemma.provider.ProviderState
----@field api_key string|nil Cached API key
 
 --- Flattened per-provider parameters (result of config_manager.merge_parameters on flemma.config.Parameters).
 --- Provider-specific sub-tables (e.g. `vertex`, `openai`) are merged to top level.
@@ -123,6 +124,7 @@ local sink = require("flemma.sink")
 ---@field endpoint? string
 ---@field api_version? string
 ---@field metadata? flemma.provider.Metadata
+---@field get_api_key fun(self): string|nil Resolve credentials via secrets module (providers must override)
 ---@field _response_buffer? flemma.provider.ResponseBuffer
 ---@field _response_headers? table<string, string[]>
 ---@field _base_parameters table<string, any> Underlying parameter table (without per-request overrides), for iteration
@@ -139,14 +141,8 @@ local M = {}
 ---@field opts flemma.opt.FrontmatterOpts|nil Per-buffer options from frontmatter
 ---@field pending_tool_calls flemma.pipeline.UnresolvedTool[]|nil Tool calls without matching results
 
----@class flemma.provider.ApiKeyOpts
----@field env_var_name? string
----@field keyring_service_name? string
----@field keyring_key_name? string
----@field keyring_project_id? string
-
 ---@class flemma.provider.ResetOpts
----@field auth? boolean If true, reset authentication state only
+---@field invalidate_all_secrets? boolean If true, invalidate all cached credentials only
 
 ---@class flemma.provider.SSELine
 ---@field type "data"|"event"|"done"
@@ -257,9 +253,7 @@ function M.new(opts)
   local provider = setmetatable({
     parameters = params_proxy,
     _base_parameters = base_params,
-    state = {
-      api_key = nil,
-    },
+    state = {},
   }, { __index = M })
 
   --- Set per-request parameter overrides (from frontmatter).
@@ -278,86 +272,6 @@ end
 ---@param provider flemma.provider.Base The provider instance from base.new()
 function M._init_provider(provider_module, provider)
   setmetatable(provider, { __index = setmetatable(provider_module, { __index = M }) })
-end
-
----@param service_name string
----@param key_name string
----@param project_id string|nil
----@return string|nil
-local function try_keyring(service_name, key_name, project_id)
-  if vim.fn.has("linux") == 1 then
-    local cmd
-    if project_id then
-      -- Include project_id in the lookup if provided
-      cmd = string.format(
-        "secret-tool lookup service %s key %s project_id %s 2>/dev/null",
-        service_name,
-        key_name,
-        project_id
-      )
-    else
-      cmd = string.format("secret-tool lookup service %s key %s 2>/dev/null", service_name, key_name)
-    end
-
-    local handle = io.popen(cmd)
-    if handle then
-      local result = handle:read("*a")
-      handle:close()
-      if result and #result > 0 then
-        return result:gsub("%s+$", "") -- Trim whitespace
-      end
-    end
-  end
-  return nil
-end
-
---- Get API key from environment, keyring, or prompt.
---- Providers must call this with their specific opts table.
----@param self flemma.provider.Base
----@param opts flemma.provider.ApiKeyOpts|nil
----@return string|nil
-function M.get_api_key(self, opts)
-  -- Return cached key if we have it and it's not empty
-  if self.state.api_key and self.state.api_key ~= "" then
-    log.debug("get_api_key(): Using cached API key")
-    return self.state.api_key
-  end
-
-  -- Reset the API key to nil to ensure we don't use an empty string
-  self.state.api_key = nil
-
-  -- Try environment variable if provided
-  if opts and opts.env_var_name then
-    local env_key = os.getenv(opts.env_var_name)
-    -- Only set if not empty
-    if env_key and env_key ~= "" then
-      self.state.api_key = env_key
-    end
-  end
-
-  -- Try system keyring if no env var and service/key names are provided
-  if not self.state.api_key and opts and opts.keyring_service_name and opts.keyring_key_name then
-    -- First try with project_id if provided
-    if opts.keyring_project_id then
-      local key = try_keyring(opts.keyring_service_name, opts.keyring_key_name, opts.keyring_project_id)
-      if key and key ~= "" then
-        self.state.api_key = key
-        log.debug(
-          "get_api_key(): Retrieved API key from keyring with project ID: " .. log.inspect(opts.keyring_project_id)
-        )
-      end
-    end
-
-    -- Fall back to generic lookup if project-specific key wasn't found
-    if not self.state.api_key then
-      local key = try_keyring(opts.keyring_service_name, opts.keyring_key_name)
-      if key and key ~= "" then
-        self.state.api_key = key
-      end
-    end
-  end
-
-  return self.state.api_key
 end
 
 --- Destroy all sink objects in a response buffer's extra table.
@@ -383,8 +297,8 @@ end
 ---@param opts? flemma.provider.ResetOpts
 function M.reset(self, opts)
   if opts then
-    if opts.auth then
-      self.state.api_key = nil
+    if opts.invalidate_all_secrets then
+      secrets.invalidate_all()
     end
     return
   end

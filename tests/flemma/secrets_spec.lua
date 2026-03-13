@@ -52,8 +52,12 @@ describe("flemma.secrets", function()
       local failing_resolver = {
         name = "failing",
         priority = 100,
-        supports = function(_, _) return true end,
-        resolve = function(_, _) return nil end,
+        supports = function(_, _)
+          return true
+        end,
+        resolve = function(_, _)
+          return nil
+        end,
       }
       registry.register("failing", failing_resolver)
       registry.register("keyring", make_resolver("keyring", 50, { "api_key" }, "sk-from-keyring"))
@@ -83,7 +87,9 @@ describe("flemma.secrets", function()
       local counting_resolver = {
         name = "counting",
         priority = 100,
-        supports = function(_, _) return true end,
+        supports = function(_, _)
+          return true
+        end,
         resolve = function(_, _)
           call_count = call_count + 1
           return { value = "sk-test" }
@@ -102,7 +108,9 @@ describe("flemma.secrets", function()
       local counting_resolver = {
         name = "counting",
         priority = 100,
-        supports = function(_, _) return true end,
+        supports = function(_, _)
+          return true
+        end,
         resolve = function(_, credential)
           call_count = call_count + 1
           return { value = credential.service .. "-key" }
@@ -125,7 +133,9 @@ describe("flemma.secrets", function()
       local resolver = {
         name = "env",
         priority = 100,
-        supports = function(_, _) return true end,
+        supports = function(_, _)
+          return true
+        end,
         resolve = function(_, _)
           call_count = call_count + 1
           return { value = "sk-test" }
@@ -148,7 +158,9 @@ describe("flemma.secrets", function()
       local resolver = {
         name = "env",
         priority = 100,
-        supports = function(_, _) return true end,
+        supports = function(_, _)
+          return true
+        end,
         resolve = function(_, _)
           call_count = call_count + 1
           return { value = "sk-test" }

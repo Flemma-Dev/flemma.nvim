@@ -4,6 +4,7 @@ local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local models = require("flemma.models")
+local secrets = require("flemma.secrets")
 local sink = require("flemma.sink")
 local tools_module = require("flemma.tools")
 local provider_registry = require("flemma.provider.registry")
@@ -74,12 +75,12 @@ end
 ---@param self flemma.provider.OpenAI
 ---@return string|nil
 function M.get_api_key(self)
-  -- Call the base implementation with OpenAI-specific parameters
-  return base.get_api_key(self, {
-    env_var_name = "OPENAI_API_KEY",
-    keyring_service_name = "openai",
-    keyring_key_name = "api",
+  local result = secrets.resolve({
+    kind = "api_key",
+    service = "openai",
+    description = "OpenAI API key",
   })
+  return result and result.value or nil
 end
 
 ---Build request body for OpenAI Responses API

@@ -3,12 +3,10 @@
 local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local secrets = require("flemma.secrets")
 local sink = require("flemma.sink")
 local tools_module = require("flemma.tools")
 local provider_registry = require("flemma.provider.registry")
-
-local TOKEN_TTL_SECONDS = 3600
-local TOKEN_REFRESH_BUFFER_SECONDS = 300
 
 --- Maps Vertex AI finish reasons to normalized stop outcomes.
 --- Only STOP and MAX_TOKENS are non-error; everything else (SAFETY, RECITATION, etc.) is an error.
@@ -19,8 +17,6 @@ local FINISH_REASON_MAP = {
 }
 
 ---@class flemma.provider.Vertex : flemma.provider.Base
----@field _token_generated_at integer|nil os.time() when the gcloud token was generated
----@field _token_from "gcloud"|"env"|"direct"|nil Source of the cached token
 local M = {}
 
 -- Inherit from base provider
@@ -56,89 +52,6 @@ local function _validate_config(self)
   -- NOTE: Location has a default, and model is handled by provider_config, so only project_id is strictly required here.
 end
 
----@param service_account_json string
----@return string|nil token
----@return string|nil error
-local function generate_access_token(service_account_json)
-  -- Create a temporary file with the service account JSON
-  local tmp_file = os.tmpname()
-  local f = io.open(tmp_file, "w")
-  if not f then
-    return nil, "Failed to create temporary file for service account"
-  end
-  f:write(service_account_json)
-  f:close()
-
-  -- Schedule deletion of the temporary file after 60 seconds as a safety measure
-  -- This ensures the file is deleted even if there's an unhandled error
-  vim.defer_fn(function()
-    if vim.fn.filereadable(tmp_file) == 1 then
-      log.debug("vertex.generate_access_token(): Safety timer: removing temporary service account file: " .. tmp_file)
-      os.remove(tmp_file)
-    end
-  end, 60 * 1000) -- 60 seconds in milliseconds
-
-  -- First check if gcloud is installed
-  local check_cmd = "command -v gcloud >/dev/null 2>&1"
-  local check_result = os.execute(check_cmd)
-
-  if check_result ~= 0 then
-    -- Clean up the temporary file
-    os.remove(tmp_file)
-    return nil,
-      "gcloud command not found. Please install the Google Cloud CLI or set VERTEX_AI_ACCESS_TOKEN environment variable."
-  end
-
-  -- Use gcloud to generate an access token
-  -- Capture both stdout and stderr for better error reporting
-  local cmd = string.format("GOOGLE_APPLICATION_CREDENTIALS=%s gcloud auth print-access-token 2>&1", tmp_file)
-  local handle = io.popen(cmd)
-  local output, token, err
-
-  if handle then
-    output = handle:read("*a")
-    local success, _, code = handle:close()
-
-    -- Clean up the temporary file immediately after use
-    os.remove(tmp_file)
-
-    if success and output and #output > 0 then
-      -- Check if the output looks like a token (no error messages)
-      if
-        not output:match("ERROR:")
-        and not output:match("command not found")
-        and not output:match("not recognized")
-      then
-        -- Trim whitespace
-        token = output:gsub("%s+$", "")
-        -- Basic validation: tokens are usually long strings without spaces
-        if #token > 20 and not token:match("%s") then
-          return token
-        else
-          err = "Invalid token format received from gcloud"
-          log.warn("vertex.generate_access_token(): Invalid token format received from gcloud: " .. output)
-        end
-      else
-        -- This is an error message from gcloud
-        err = "gcloud error: " .. output
-        log.warn("vertex.generate_access_token(): gcloud command output: " .. output)
-      end
-    else
-      err = "Failed to generate access token (exit code: " .. tostring(code) .. ")"
-      if output and #output > 0 then
-        err = err .. "\nOutput: " .. output
-        log.warn("vertex.generate_access_token(): gcloud command output: " .. output)
-      end
-    end
-  else
-    -- Clean up the temporary file
-    os.remove(tmp_file)
-    err = "Failed to execute gcloud command"
-  end
-
-  return nil, err
-end
-
 ---@param provider_config flemma.provider.Parameters
 ---@return flemma.provider.Vertex
 function M.new(provider_config)
@@ -163,11 +76,7 @@ end
 ---@param opts? flemma.provider.ResetOpts
 function M.reset(self, opts)
   if opts then
-    if opts.auth then
-      base.reset(self, opts)
-      self._token_generated_at = nil
-      self._token_from = nil
-    end
+    base.reset(self, opts)
     return
   end
   -- Full reset (base auto-destroys sinks in extra)
@@ -184,80 +93,16 @@ end
 ---@param self flemma.provider.Vertex
 ---@return string|nil
 function M.get_api_key(self)
-  -- Validate required configuration first
   _validate_config(self)
-
-  -- 1. Check environment variable on every call (allows external rotation)
-  local env_token = os.getenv("VERTEX_AI_ACCESS_TOKEN")
-  if env_token and #env_token > 0 then
-    self.state.api_key = env_token
-    self._token_from = "env"
-    return env_token
-  end
-
-  -- 2. Proactive staleness check for gcloud-generated tokens
-  if self._token_from == "gcloud" and self._token_generated_at then
-    local age = os.time() - self._token_generated_at
-    if age >= (TOKEN_TTL_SECONDS - TOKEN_REFRESH_BUFFER_SECONDS) then
-      log.debug(
-        "vertex.get_api_key(): gcloud token is "
-          .. tostring(age)
-          .. "s old (threshold "
-          .. tostring(TOKEN_TTL_SECONDS - TOKEN_REFRESH_BUFFER_SECONDS)
-          .. "s), clearing for refresh"
-      )
-      self.state.api_key = nil
-      self._token_generated_at = nil
-    end
-  end
-
-  -- 3. Return cached token if still valid
-  if self.state.api_key and self.state.api_key ~= "" then
-    return self.state.api_key
-  end
-
-  -- 4. Fetch service account JSON from env/keyring (re-fetched on each refresh)
-  local project_id = self.parameters.project_id
-
-  -- Clear cached api_key in base before calling get_api_key to force re-read
-  self.state.api_key = nil
-  local service_account_json = base.get_api_key(self, {
-    env_var_name = "VERTEX_SERVICE_ACCOUNT",
-    keyring_service_name = "vertex",
-    keyring_key_name = "api",
-    keyring_project_id = project_id,
+  local result = secrets.resolve({
+    kind = "access_token",
+    service = "vertex",
+    description = "Vertex AI access token",
+    ttl = 3600,
+    ttl_scale = 0.925,
+    aliases = { "VERTEX_AI_ACCESS_TOKEN" },
   })
-
-  -- 5. If we have service account JSON, generate a gcloud token
-  if service_account_json and service_account_json:match("service_account") then
-    log.debug("vertex.get_api_key(): Found service account JSON, attempting to generate access token")
-
-    local generated_token, err = generate_access_token(service_account_json)
-    if generated_token then
-      log.debug("vertex.get_api_key(): Successfully generated access token from service account")
-      self.state.api_key = generated_token
-      self._token_generated_at = os.time()
-      self._token_from = "gcloud"
-      return generated_token
-    else
-      log.error("vertex.get_api_key(): Failed to generate access token: " .. (err or "unknown error"))
-      error(
-        (err or "Unknown error generating access token")
-          .. "\n\n---\n\nVertex AI requires the Google Cloud CLI (gcloud) to generate access tokens from service accounts.\n"
-          .. "Please install gcloud or set VERTEX_AI_ACCESS_TOKEN environment variable.",
-        0
-      )
-    end
-  end
-
-  -- 6. Fallback: treat as direct token
-  if service_account_json and #service_account_json > 0 then
-    self.state.api_key = service_account_json
-    self._token_from = "direct"
-    return service_account_json
-  end
-
-  return nil
+  return result and result.value or nil
 end
 
 --- Extract function name from Flemma synthetic ID

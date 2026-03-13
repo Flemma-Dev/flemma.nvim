@@ -3,6 +3,7 @@
 local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local secrets = require("flemma.secrets")
 local sink = require("flemma.sink")
 local tools_module = require("flemma.tools")
 local provider_registry = require("flemma.provider.registry")
@@ -66,12 +67,12 @@ end
 ---@param self flemma.provider.Anthropic
 ---@return string|nil
 function M.get_api_key(self)
-  -- Call the base implementation with Anthropic-specific parameters
-  return base.get_api_key(self, {
-    env_var_name = "ANTHROPIC_API_KEY",
-    keyring_service_name = "anthropic",
-    keyring_key_name = "api",
+  local result = secrets.resolve({
+    kind = "api_key",
+    service = "anthropic",
+    description = "Anthropic API key",
   })
+  return result and result.value or nil
 end
 
 --- Anthropic uses `data.type == "error"` for errors (not `data.error`).
