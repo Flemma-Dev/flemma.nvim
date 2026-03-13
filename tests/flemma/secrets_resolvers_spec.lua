@@ -96,3 +96,127 @@ describe("flemma.secrets.resolvers.environment", function()
     end)
   end)
 end)
+
+local secrettool
+
+describe("flemma.secrets.resolvers.secrettool", function()
+  before_each(function()
+    package.loaded["flemma.secrets.resolvers.secrettool"] = nil
+    secrettool = require("flemma.secrets.resolvers.secrettool")
+  end)
+
+  describe("supports", function()
+    it("returns based on platform availability", function()
+      local expected = vim.fn.has("linux") == 1 and vim.fn.executable("secret-tool") == 1
+      assert.equals(expected, secrettool:supports({ kind = "api_key", service = "test" }))
+    end)
+  end)
+
+  describe("resolve", function()
+    local original_system
+
+    before_each(function()
+      original_system = vim.system
+    end)
+
+    after_each(function()
+      vim.system = original_system
+    end)
+
+    it("calls secret-tool with service and kind", function()
+      local captured_cmd
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(cmd, _)
+        captured_cmd = cmd
+        return {
+          wait = function()
+            return { code = 0, stdout = "sk-from-keyring\n" }
+          end,
+        }
+      end
+
+      local result = secrettool:resolve({ kind = "api_key", service = "anthropic" })
+
+      assert.is_not_nil(result)
+      assert.equals("sk-from-keyring", result.value)
+      assert.is_not_nil(captured_cmd)
+      assert.equals("secret-tool", captured_cmd[1])
+      assert.equals("lookup", captured_cmd[2])
+      local cmd_str = table.concat(captured_cmd, " ")
+      assert.truthy(cmd_str:match("service"))
+      assert.truthy(cmd_str:match("anthropic"))
+      assert.truthy(cmd_str:match("api_key"))
+    end)
+
+    it("falls back to legacy key=api when convention fails", function()
+      local calls = {}
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(cmd, _)
+        table.insert(calls, vim.deepcopy(cmd))
+        local key_value = cmd[6]
+        if key_value == "api" then
+          return {
+            wait = function()
+              return { code = 0, stdout = "sk-legacy\n" }
+            end,
+          }
+        end
+        return {
+          wait = function()
+            return { code = 1, stdout = "" }
+          end,
+        }
+      end
+
+      local result = secrettool:resolve({ kind = "api_key", service = "anthropic" })
+
+      assert.is_not_nil(result)
+      assert.equals("sk-legacy", result.value)
+      assert.equals(2, #calls)
+    end)
+
+    it("prefers convention over legacy", function()
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _)
+        return {
+          wait = function()
+            return { code = 0, stdout = "sk-from-convention\n" }
+          end,
+        }
+      end
+
+      local result = secrettool:resolve({ kind = "api_key", service = "anthropic" })
+      assert.is_not_nil(result)
+      assert.equals("sk-from-convention", result.value)
+    end)
+
+    it("trims trailing whitespace from result", function()
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _)
+        return {
+          wait = function()
+            return { code = 0, stdout = "sk-test-key  \n\n" }
+          end,
+        }
+      end
+
+      local result = secrettool:resolve({ kind = "api_key", service = "test" })
+      assert.is_not_nil(result)
+      assert.equals("sk-test-key", result.value)
+    end)
+
+    it("returns nil when both convention and legacy fail", function()
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _)
+        return {
+          wait = function()
+            return { code = 1, stdout = "" }
+          end,
+        }
+      end
+
+      local result = secrettool:resolve({ kind = "api_key", service = "test" })
+      assert.is_nil(result)
+    end)
+  end)
+end)
