@@ -646,9 +646,45 @@ function M.get_parsed_document(bufnr)
     return buffer_state.ast_cache.document
   end
 
-  -- Parse and cache
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local doc = M.parse_lines(lines)
+  local doc
+  local snapshot = buffer_state.ast_snapshot_before_send
+
+  if snapshot then
+    -- Incremental parse: read only lines from freeze point onwards.
+    -- freeze_line is 1-indexed; nvim_buf_get_lines is 0-indexed, hence - 1.
+    -- The same offset (freeze_line - 1) is passed to parse_messages so that
+    -- local index 1 in suffix_lines maps to absolute line freeze_line:
+    --   parse_message computes start_line = start_idx + line_offset = 1 + (freeze_line - 1) = freeze_line
+    local total_lines = vim.api.nvim_buf_line_count(bufnr)
+    local suffix_lines = vim.api.nvim_buf_get_lines(bufnr, snapshot.freeze_line - 1, -1, false)
+    local new_messages, new_errors = parse_messages(suffix_lines, snapshot.freeze_line - 1)
+
+    -- Merge frozen + new
+    local all_messages = {}
+    for i, msg in ipairs(snapshot.messages) do
+      all_messages[i] = msg
+    end
+    for _, msg in ipairs(new_messages) do
+      all_messages[#all_messages + 1] = msg
+    end
+
+    local all_errors = {}
+    for i, err in ipairs(snapshot.errors) do
+      all_errors[i] = err
+    end
+    for _, err in ipairs(new_errors) do
+      all_errors[#all_errors + 1] = err
+    end
+
+    doc = ast.document(snapshot.frontmatter, all_messages, all_errors, {
+      start_line = 1,
+      end_line = total_lines,
+    })
+  else
+    -- Full parse
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    doc = M.parse_lines(lines)
+  end
 
   buffer_state.ast_cache = {
     changedtick = current_tick,
@@ -656,6 +692,41 @@ function M.get_parsed_document(bufnr)
   }
 
   return doc
+end
+
+--- Snapshot the current AST for incremental parsing during streaming.
+--- Call this before writing the @Assistant: placeholder. The snapshot
+--- captures all messages up to the current buffer end, so only content
+--- appended after this point needs re-parsing.
+---@param bufnr integer
+function M.create_snapshot(bufnr)
+  local doc = M.get_parsed_document(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+
+  -- Shallow-copy arrays so the snapshot is independent of the cached doc
+  local messages = {}
+  for i, msg in ipairs(doc.messages) do
+    messages[i] = msg
+  end
+  local errors = {}
+  for i, err in ipairs(doc.errors) do
+    errors[i] = err
+  end
+
+  buffer_state.ast_snapshot_before_send = {
+    frontmatter = doc.frontmatter,
+    messages = messages,
+    errors = errors,
+    freeze_line = doc.position.end_line + 1,
+  }
+end
+
+--- Clear the snapshot, restoring full-parse behavior.
+--- Must be called on every request exit path (success, error, cancel, job failure).
+---@param bufnr integer
+function M.clear_snapshot(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  buffer_state.ast_snapshot_before_send = nil
 end
 
 return M
