@@ -108,8 +108,12 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
         end
         error({ type = "expression", error = msg })
       end
-      local render_opts =
-        personality_builder.build(personality_name, env[symbols.FRONTMATTER_OPTS], env.__dirname or vim.fn.getcwd(), env[symbols.BUFFER_NUMBER])
+      local render_opts = personality_builder.build(
+        personality_name,
+        env[symbols.FRONTMATTER_OPTS],
+        env.__dirname or vim.fn.getcwd(),
+        env[symbols.BUFFER_NUMBER]
+      )
       local rendered = personality.render(render_opts)
       return emittable.composite_include_part({ rendered })
     end

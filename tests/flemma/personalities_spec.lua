@@ -476,10 +476,7 @@ describe("cross-buffer personality environment isolation", function()
       text:find("Monday, January 01, 2024"),
       "Expected buffer 1's date in system prompt, but got buffer 2's date instead"
     )
-    assert.falsy(
-      text:find("Friday, December 31, 2027"),
-      "Buffer 2's date leaked into buffer 1's system prompt"
-    )
+    assert.falsy(text:find("Friday, December 31, 2027"), "Buffer 2's date leaked into buffer 1's system prompt")
 
     vim.api.nvim_buf_delete(buf1, { force = true })
     vim.api.nvim_buf_delete(buf2, { force = true })
