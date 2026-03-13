@@ -372,7 +372,16 @@ function M.setup()
       if not opts or not opts.auto_approve then
         return nil
       end
-      return resolve_auto_approve_policy(opts.auto_approve, tool_name, input, context)
+      local result = resolve_auto_approve_policy(opts.auto_approve, tool_name, input, context)
+      -- A table policy is a complete specification: anything not explicitly listed
+      -- (or approved via preset expansion) requires approval. This prevents
+      -- lower-priority resolvers (e.g. sandbox) from granting additional approvals
+      -- beyond what the frontmatter policy specifies.
+      -- Function policies returning nil mean "no opinion" — pass through as before.
+      if result == nil and type(opts.auto_approve) == "table" then
+        return "require_approval"
+      end
+      return result
     end,
   })
 

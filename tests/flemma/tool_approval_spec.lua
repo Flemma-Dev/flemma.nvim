@@ -2895,4 +2895,44 @@ describe("Sandbox auto-approval resolver", function()
     local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
     assert.equals("require_approval", result)
   end)
+
+  it("frontmatter table policy is authoritative — blocks sandbox for unlisted tools", function()
+    setup_with_sandbox()
+    -- Frontmatter sets auto_approve = {} — explicit "approve nothing"
+    -- Sandbox resolver should NOT override this with bash auto-approval
+    local ctx = { bufnr = 1, tool_id = "t1", opts = { auto_approve = {} } }
+    assert.equals("require_approval", approval.resolve("bash", {}, ctx))
+  end)
+
+  it("frontmatter table policy with preset blocks sandbox for tools outside preset", function()
+    setup_with_sandbox()
+    -- Frontmatter sets auto_approve = { "$default" } — approve read/write/edit only
+    -- bash is not in $default, so sandbox should not add it
+    local ctx = { bufnr = 1, tool_id = "t1", opts = { auto_approve = { "$default" } } }
+    assert.equals("require_approval", approval.resolve("bash", {}, ctx))
+    -- $default tools are still approved by the frontmatter resolver
+    assert.equals("approve", approval.resolve("read", {}, ctx))
+  end)
+
+  it("frontmatter table policy that explicitly includes bash still approves it", function()
+    setup_with_sandbox()
+    -- Frontmatter explicitly lists bash — approved by frontmatter resolver, not sandbox
+    local ctx = { bufnr = 1, tool_id = "t1", opts = { auto_approve = { "$default", "bash" } } }
+    assert.equals("approve", approval.resolve("bash", {}, ctx))
+  end)
+
+  it("frontmatter function policy returning nil still allows sandbox fallthrough", function()
+    setup_with_sandbox()
+    -- Function returning nil means "no opinion" — sandbox should still work
+    local ctx = {
+      bufnr = 1,
+      tool_id = "t1",
+      opts = {
+        auto_approve = function()
+          return nil
+        end,
+      },
+    }
+    assert.equals("approve", approval.resolve("bash", {}, ctx))
+  end)
 end)
