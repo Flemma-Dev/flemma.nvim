@@ -221,6 +221,135 @@ describe("flemma.secrets.resolvers.secrettool", function()
   end)
 end)
 
+local gcloud
+
+describe("flemma.secrets.resolvers.gcloud", function()
+  before_each(function()
+    package.loaded["flemma.secrets.resolvers.gcloud"] = nil
+    package.loaded["flemma.secrets"] = nil
+    package.loaded["flemma.secrets.cache"] = nil
+    package.loaded["flemma.secrets.registry"] = nil
+    gcloud = require("flemma.secrets.resolvers.gcloud")
+  end)
+
+  describe("supports", function()
+    it("only supports access_token kind", function()
+      local has_gcloud = vim.fn.executable("gcloud") == 1
+      assert.equals(has_gcloud, gcloud:supports({ kind = "access_token", service = "vertex" }))
+      assert.is_false(gcloud:supports({ kind = "api_key", service = "vertex" }))
+      assert.is_false(gcloud:supports({ kind = "service_account", service = "vertex" }))
+    end)
+  end)
+
+  describe("resolve", function()
+    local original_system
+    local original_resolve
+
+    before_each(function()
+      original_system = vim.system
+      local secrets_mod = require("flemma.secrets")
+      original_resolve = secrets_mod.resolve
+    end)
+
+    after_each(function()
+      vim.system = original_system
+      local secrets_mod = require("flemma.secrets")
+      secrets_mod.resolve = original_resolve
+    end)
+
+    it("derives access token from service account via gcloud", function()
+      local secrets_mod = require("flemma.secrets")
+      ---@diagnostic disable-next-line: duplicate-set-field
+      secrets_mod.resolve = function(credential)
+        if credential.kind == "service_account" then
+          return { value = '{"type":"service_account","project_id":"test"}' }
+        end
+        return nil
+      end
+
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _)
+        return {
+          wait = function()
+            return { code = 0, stdout = "ya29.generated-token\n" }
+          end,
+        }
+      end
+
+      local result = gcloud:resolve({ kind = "access_token", service = "vertex" })
+
+      assert.is_not_nil(result)
+      assert.equals("ya29.generated-token", result.value)
+      assert.equals(3600, result.ttl)
+    end)
+
+    it("falls back to default credentials when no service account", function()
+      local secrets_mod = require("flemma.secrets")
+      ---@diagnostic disable-next-line: duplicate-set-field
+      secrets_mod.resolve = function(_)
+        return nil
+      end
+
+      local captured_cmd
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(cmd, _)
+        captured_cmd = cmd
+        return {
+          wait = function()
+            return { code = 0, stdout = "ya29.default-token\n" }
+          end,
+        }
+      end
+
+      local result = gcloud:resolve({ kind = "access_token", service = "vertex" })
+
+      assert.is_not_nil(result)
+      assert.equals("ya29.default-token", result.value)
+      assert.is_not_nil(captured_cmd)
+    end)
+
+    it("returns nil when gcloud fails", function()
+      local secrets_mod = require("flemma.secrets")
+      ---@diagnostic disable-next-line: duplicate-set-field
+      secrets_mod.resolve = function(_)
+        return nil
+      end
+
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _)
+        return {
+          wait = function()
+            return { code = 1, stdout = "", stderr = "ERROR: not authenticated" }
+          end,
+        }
+      end
+
+      local result = gcloud:resolve({ kind = "access_token", service = "vertex" })
+      assert.is_nil(result)
+    end)
+
+    it("validates token is non-empty", function()
+      local secrets_mod = require("flemma.secrets")
+      ---@diagnostic disable-next-line: duplicate-set-field
+      secrets_mod.resolve = function(_)
+        return nil
+      end
+
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _)
+        return {
+          wait = function()
+            return { code = 0, stdout = "\n" }
+          end,
+        }
+      end
+
+      local result = gcloud:resolve({ kind = "access_token", service = "vertex" })
+      assert.is_nil(result)
+    end)
+  end)
+end)
+
 local keychain
 
 describe("flemma.secrets.resolvers.keychain", function()
