@@ -220,3 +220,107 @@ describe("flemma.secrets.resolvers.secrettool", function()
     end)
   end)
 end)
+
+local keychain
+
+describe("flemma.secrets.resolvers.keychain", function()
+  before_each(function()
+    package.loaded["flemma.secrets.resolvers.keychain"] = nil
+    keychain = require("flemma.secrets.resolvers.keychain")
+  end)
+
+  describe("supports", function()
+    it("returns true only on macOS", function()
+      local expected = vim.fn.has("mac") == 1
+      assert.equals(expected, keychain:supports({ kind = "api_key", service = "test" }))
+    end)
+  end)
+
+  describe("resolve", function()
+    local original_system
+
+    before_each(function()
+      original_system = vim.system
+    end)
+
+    after_each(function()
+      vim.system = original_system
+    end)
+
+    it("calls security find-generic-password with service and kind", function()
+      local captured_cmd
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(cmd, _)
+        captured_cmd = cmd
+        return {
+          wait = function()
+            return { code = 0, stdout = "sk-from-keychain\n" }
+          end,
+        }
+      end
+
+      local result = keychain:resolve({ kind = "api_key", service = "anthropic" })
+
+      assert.is_not_nil(result)
+      assert.equals("sk-from-keychain", result.value)
+      assert.equals("security", captured_cmd[1])
+      assert.equals("find-generic-password", captured_cmd[2])
+    end)
+
+    it("falls back to legacy account=api when convention fails", function()
+      local calls = {}
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(cmd, _)
+        table.insert(calls, vim.deepcopy(cmd))
+        local account = cmd[6]
+        if account == "api" then
+          return {
+            wait = function()
+              return { code = 0, stdout = "sk-legacy\n" }
+            end,
+          }
+        end
+        return {
+          wait = function()
+            return { code = 44, stdout = "" }
+          end,
+        }
+      end
+
+      local result = keychain:resolve({ kind = "api_key", service = "anthropic" })
+
+      assert.is_not_nil(result)
+      assert.equals("sk-legacy", result.value)
+      assert.equals(2, #calls)
+    end)
+
+    it("trims trailing whitespace", function()
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _)
+        return {
+          wait = function()
+            return { code = 0, stdout = "sk-key  \n" }
+          end,
+        }
+      end
+
+      local result = keychain:resolve({ kind = "api_key", service = "test" })
+      assert.is_not_nil(result)
+      assert.equals("sk-key", result.value)
+    end)
+
+    it("returns nil when both convention and legacy fail", function()
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _)
+        return {
+          wait = function()
+            return { code = 44, stdout = "" }
+          end,
+        }
+      end
+
+      local result = keychain:resolve({ kind = "api_key", service = "test" })
+      assert.is_nil(result)
+    end)
+  end)
+end)
