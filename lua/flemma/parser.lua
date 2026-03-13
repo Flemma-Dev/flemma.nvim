@@ -8,6 +8,12 @@ local state = require("flemma.state")
 ---@class flemma.Parser
 local M = {}
 
+---@class flemma.parser.SnapshotBeforeSend
+---@field frontmatter flemma.ast.FrontmatterNode|nil Frozen frontmatter node
+---@field messages flemma.ast.MessageNode[] Frozen message nodes (all messages before freeze point)
+---@field errors flemma.ast.Diagnostic[] Diagnostics from frozen portion
+---@field freeze_line integer 1-indexed buffer line where frozen content ends (first line NOT in snapshot)
+
 local TOOL_USE_PATTERN = "^%*%*Tool Use:%*%*%s*`([^`]+)`%s*%(`([^)]+)`%)"
 local TOOL_RESULT_PATTERN = "^%*%*Tool Result:%*%*%s*`([^`]+)`"
 local TOOL_RESULT_ERROR_PATTERN = "%s*%(error%)%s*$"
