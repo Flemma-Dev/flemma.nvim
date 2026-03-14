@@ -205,14 +205,12 @@ Previews are non-editable virtual text (extmarks) that disappear once the tool e
 
 Every built-in tool ships with a tailored `format_preview` function:
 
-| Tool               | Preview format                                     | Example                                     |
-| ------------------ | -------------------------------------------------- | ------------------------------------------- |
-| `calculator`       | The expression directly                            | `calculator: 2 + 2`                         |
-| `calculator_async` | Expression with optional delay                     | `calculator_async: sqrt(16)  # 500ms`       |
-| `bash`             | `$ command` with optional label                    | `bash: $ git status  # checking repo`       |
-| `read`             | Path with optional `+offset,limit` range and label | `read: config.lua  +100,50  # reading tail` |
-| `edit`             | Path with optional label                           | `edit: config.lua  # fixing typo`           |
-| `write`            | Path with content size and optional label          | `write: output.txt  (2.3KB)  # saving log`  |
+| Tool    | Preview format                                     | Example                                     |
+| ------- | -------------------------------------------------- | ------------------------------------------- |
+| `bash`  | `$ command` with optional label                    | `bash: $ git status  # checking repo`       |
+| `read`  | Path with optional `+offset,limit` range and label | `read: config.lua  +100,50  # reading tail` |
+| `edit`  | Path with optional label                           | `edit: config.lua  # fixing typo`           |
+| `write` | Path with content size and optional label          | `write: output.txt  (2.3KB)  # saving log`  |
 
 ### Generic fallback
 

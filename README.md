@@ -224,7 +224,7 @@ Use the single entry point `:Flemma {command}`. Autocompletion lists every avail
 | `:Flemma switch ...`                                            | Choose or override provider/model parameters.                                                                                                            | See below.                                                                  |
 | `:Flemma format`                                                | Migrate old inline-format `.chat` buffers to the current own-line role marker format.                                                                    |
 | `:Flemma import`                                                | Convert Claude Workbench code snippets into `.chat` format ([guide](docs/importing.md)).                                                                 |                                                                             |
-| `:Flemma message:next` / `:Flemma message:previous`             | Jump through message headers.                                                                                                                            |                                                                             |
+| `:Flemma message:next` / `:Flemma message:previous` (or `:...:prev`) | Jump through message headers.                                                                                                                            |                                                                             |
 | `:Flemma tool:execute`                                          | Execute the tool at the cursor position.                                                                                                                 |                                                                             |
 | `:Flemma tool:cancel`                                           | Cancel the tool execution at the cursor.                                                                                                                 |                                                                             |
 | `:Flemma tool:cancel-all`                                       | Cancel all pending tool executions in the buffer.                                                                                                        |                                                                             |
@@ -270,13 +270,15 @@ All three providers support extended thinking/reasoning. Flemma provides a singl
 
 | `thinking` value       | Anthropic (budget) | OpenAI (effort)      | Vertex AI (budget) |
 | ---------------------- | ------------------ | -------------------- | ------------------ |
-| `"max"`                | 32,768 tokens      | `"max"` effort       | 32,768 tokens      |
-| `"high"` **(default)** | 16,384 tokens      | `"high"` effort      | 16,384 tokens      |
+| `"max"`                | model-dependent\*  | `"max"` effort       | 32,768 tokens      |
+| `"high"` **(default)** | 16,384 tokens      | `"high"` effort      | 32,768 tokens      |
 | `"medium"`             | 8,192 tokens       | `"medium"` effort    | 8,192 tokens       |
 | `"low"`                | 2,048 tokens       | `"low"` effort       | 2,048 tokens       |
-| `"minimal"`            | 128 tokens         | `"minimal"` effort   | 128 tokens         |
+| `"minimal"`            | 1,024 tokens       | `"minimal"` effort   | 128 tokens         |
 | number (e.g. `4096`)   | 4,096 tokens       | closest effort level | 4,096 tokens       |
 | `false` or `0`         | disabled           | disabled             | disabled           |
+
+\*Anthropic models with adaptive thinking (Opus 4.6) use the provider's native `"max"` effort level. Other Anthropic models map `"max"` to the highest available budget. Exact values are model-dependent – see `lua/flemma/models.lua` for the full per-model catalogue.
 
 Set it once in your config and it works everywhere:
 
@@ -558,7 +560,7 @@ On a personal level, I've used Flemma to generate bedtime stories with recurring
 - **Nothing happens when I send:** confirm the buffer name ends with `.chat` and the first message uses a role marker (`@You:` or `@System:`) on its own line with content below it.
 - **Frontmatter errors:** notifications list the exact line and file. Fix the error and resend; Flemma will not contact the provider until the frontmatter parses cleanly.
 - **Attachments ignored:** ensure the file exists relative to the `.chat` file and that the provider supports its MIME type. Use `;type=` to override when necessary.
-- **Temperature ignored:** when thinking is enabled (default `"high"`), Anthropic and OpenAI disable temperature. Set `thinking = false` if you need temperature control.
+- **Temperature ignored:** when thinking is enabled (default `"high"`), Anthropic and OpenAI disable temperature (this is an API requirement, not a Flemma choice). Vertex AI passes temperature regardless. Set `thinking = false` if you need temperature control on Anthropic/OpenAI.
 - **Vertex refuses requests:** double-check `parameters.vertex.project_id` and authentication. Run `gcloud auth print-access-token` manually to ensure credentials are valid.
 - **Tool execution doesn't respond:** make sure the cursor is on or near the `**Tool Use:**` block. Only tools with registered executors can be run – check `:lua print(vim.inspect(require("flemma.tools").get_all()))`.
 - **Keymaps clash:** disable built-in mappings via `keymaps.enabled = false` and register your own `:Flemma` commands.
