@@ -29,7 +29,7 @@ syntax match FlemmaToolResultError "(error)" contained
 " Note: Tool names and IDs in backticks are handled by treesitter markdown_inline as inline code
 syntax region FlemmaToolUse start="\*\*Tool Use:\*\*" end="$" oneline contained contains=FlemmaToolUseTitle
 " Tool Result region (in user messages): **Tool Result:** `id` (optional: (error))
-syntax region FlemmaToolResult start="\*\*Tool Result:\*\*" end="$" oneline contained contains=FlemmaToolResultTitle,FlemmaToolResultError
+syntax region FlemmaToolResult start="\*\*Tool Result:\*\*" end="$" oneline contained containedin=FlemmaUser contains=FlemmaToolResultTitle,FlemmaToolResultError
 
 " Note: Signature concealment is now handled via extmarks in ui.lua highlight_thinking_tags()
 " This avoids needing conceallevel which affects the whole buffer (including frontmatter)
@@ -49,7 +49,7 @@ syntax region FlemmaFrontmatterBlockJson start="\%1l^```json$" end="^```$" keepe
 " System region
 syntax region FlemmaSystem start='^@System:\s*$' end='\(^@\(You\|Assistant\):\s*$\)\@=\|\%$' contains=FlemmaRoleSystem,@Markdown
 " User region (contains tool results)
-syntax region FlemmaUser start='^@You:\s*$' end='\(^@\(System\|Assistant\):\s*$\)\@=\|\%$' contains=FlemmaRoleUser,FlemmaToolResult,@Markdown
+syntax region FlemmaUser start='^@You:\s*$' end='\(^@\(System\|Assistant\):\s*$\)\@=\|\%$' contains=FlemmaRoleUser,@Markdown
 
 " Thinking Block Region (nested inside Assistant)
 " This region starts with <thinking> or <thinking provider:signature="..."> and ends with </thinking>.
