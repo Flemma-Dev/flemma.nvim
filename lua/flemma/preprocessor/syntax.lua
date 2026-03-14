@@ -19,6 +19,7 @@ local REGION_MAP = {
 }
 
 --- All content region group names, comma-joined (used for "*" expansion).
+---@type string
 local ALL_CONTENT_REGIONS = "FlemmaUser,FlemmaSystem,FlemmaAssistant"
 
 --------------------------------------------------------------------------------
