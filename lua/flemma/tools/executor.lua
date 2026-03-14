@@ -13,6 +13,7 @@ local roles = require("flemma.utilities.roles")
 local autopilot = require("flemma.autopilot")
 local cursor = require("flemma.cursor")
 local bridge = require("flemma.core.bridge")
+local hooks = require("flemma.hooks")
 local context_module = require("flemma.context")
 local parser = require("flemma.parser")
 local sandbox_module = require("flemma.sandbox")
@@ -150,6 +151,13 @@ local function do_completion(bufnr, tool_id, result, opts)
   if not ok then
     log.error("executor: Failed to inject result for " .. tool_id .. ": " .. (err or "unknown"))
   end
+
+  hooks.dispatch("tool:finished", {
+    bufnr = bufnr,
+    tool_name = entry and entry.tool_name or "unknown",
+    tool_id = tool_id,
+    status = result.success and "success" or "error",
+  })
 
   -- Move cursor based on config (skip when autopilot is armed — it owns cursor positioning)
   if ok and autopilot.get_state(bufnr) ~= "armed" then
@@ -393,6 +401,8 @@ function M.execute(bufnr, context, frontmatter_opts)
     __filename = buffer_context:get_filename(),
     opts = frontmatter_opts,
   })
+
+  hooks.dispatch("tool:executing", { bufnr = bufnr, tool_name = tool_name, tool_id = tool_id })
 
   -- Execute the tool
   if is_async then
