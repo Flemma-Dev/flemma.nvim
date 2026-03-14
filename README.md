@@ -421,7 +421,7 @@ For programmatic access to token usage and cost data, see [docs/session-api.md](
 
 Flemma adapts to your colour scheme with theme-aware highlights, line backgrounds, rulers, sign column indicators, and folding. Every visual element is configurable – see [docs/ui.md](docs/ui.md) for the full reference.
 
-The bundled [Lualine component](docs/ui.md#lualine-integration) shows the active model and thinking level in your statusline.
+Flemma ships optional [plugin integrations](docs/integrations.md) for lualine (statusline component) and bufferline (busy tab indicator).
 
 ---
 
