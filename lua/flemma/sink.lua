@@ -7,6 +7,7 @@
 ---@class flemma.SinkModule
 local M = {}
 
+local hooks = require("flemma.hooks")
 local log = require("flemma.logging")
 local writequeue = require("flemma.buffer.writequeue")
 
@@ -88,10 +89,7 @@ function Sink:_materialize()
     end)
   end
 
-  vim.api.nvim_exec_autocmds("User", {
-    pattern = "FlemmaSinkCreated",
-    data = { name = self._name, bufnr = bufnr },
-  })
+  hooks.dispatch("sink:created", { bufnr = bufnr, name = self._name })
 end
 
 ---Create a new sink.
@@ -390,10 +388,7 @@ function Sink:destroy()
     return
   end
 
-  vim.api.nvim_exec_autocmds("User", {
-    pattern = "FlemmaSinkDestroyed",
-    data = { name = self._name, bufnr = self._bufnr },
-  })
+  hooks.dispatch("sink:destroyed", { bufnr = self._bufnr, name = self._name })
 
   -- Check if the buffer is still valid before operating on it
   if not vim.api.nvim_buf_is_valid(self._bufnr) then

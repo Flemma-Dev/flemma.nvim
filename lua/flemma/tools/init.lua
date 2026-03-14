@@ -4,6 +4,7 @@
 local M = {}
 
 local config = require("flemma.config")
+local hooks = require("flemma.hooks")
 local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
 local registry = require("flemma.tools.registry")
@@ -33,7 +34,7 @@ local function fire_ready_callbacks()
   for _, cb in ipairs(callbacks) do
     cb()
   end
-  vim.api.nvim_exec_autocmds("User", { pattern = "FlemmaBootComplete" })
+  hooks.dispatch("boot:complete")
 end
 
 ---Register an async tool source that resolves definitions asynchronously

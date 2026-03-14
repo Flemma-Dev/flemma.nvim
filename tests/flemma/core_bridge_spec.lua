@@ -23,13 +23,13 @@ describe("flemma.core.bridge", function()
     assert.are.same({ bufnr = 42 }, called_with)
   end)
 
-  it("dispatches cancel_request after registration", function()
-    local called = false
-    bridge.register("cancel_request", function()
-      called = true
+  it("dispatches cancel_request with opts after registration", function()
+    local called_opts = nil
+    bridge.register("cancel_request", function(opts)
+      called_opts = opts
     end)
-    bridge.cancel_request()
-    assert.is_true(called)
+    bridge.cancel_request({ bufnr = 99 })
+    assert.are.same({ bufnr = 99 }, called_opts)
   end)
 
   it("dispatches update_ui after registration", function()
