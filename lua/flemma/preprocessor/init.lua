@@ -6,7 +6,10 @@
 ---@class flemma.Preprocessor
 local M = {}
 
+local context_module = require("flemma.preprocessor.context")
 local registry = require("flemma.preprocessor.registry")
+local runner = require("flemma.preprocessor.runner")
+local state = require("flemma.state")
 
 --------------------------------------------------------------------------------
 -- Constants
@@ -184,6 +187,96 @@ end
 ---@return boolean removed
 function M.unregister(name)
   return registry.unregister(name)
+end
+
+--------------------------------------------------------------------------------
+-- Pipeline execution
+--------------------------------------------------------------------------------
+
+---@class flemma.preprocessor.RunUserOpts
+---@field interactive? boolean Whether this is an interactive (live) run (default false)
+
+--- Run the preprocessor pipeline on a parsed document.
+--- Returns the transformed document and diagnostics. If a Confirmation is thrown
+--- during an interactive run, returns nil, nil so the caller can present the
+--- confirmation UI and re-run.
+---@param doc flemma.ast.DocumentNode Parsed document to transform
+---@param bufnr integer|nil Buffer number (required for interactive mode)
+---@param opts? flemma.preprocessor.RunUserOpts
+---@return flemma.ast.DocumentNode|nil result_doc Nil when suspended for confirmation
+---@return flemma.preprocessor.RewriterDiagnostic[]|nil diagnostics Nil when suspended
+function M.run(doc, bufnr, opts)
+  opts = opts or {}
+  local rewriters = registry.get_all()
+  if #rewriters == 0 then
+    return doc, {}
+  end
+
+  ---@type flemma.preprocessor.RunOpts
+  local run_opts = {
+    interactive = opts.interactive or false,
+    rewriters = rewriters,
+    bufnr = bufnr,
+  }
+
+  local ok, result_or_err, result_diagnostics = pcall(runner.run_pipeline, doc, bufnr, run_opts)
+
+  if not ok then
+    -- Check if this is a Confirmation suspension
+    if context_module.is_confirmation(result_or_err) then
+      -- Store the pending confirmation in buffer state for the UI to present
+      if bufnr then
+        local buffer_state = state.get_buffer_state(bufnr)
+        local confirmation = result_or_err --[[@as flemma.preprocessor.Confirmation]]
+        buffer_state._pending_confirmation = confirmation
+      end
+      return nil, nil
+    end
+    -- Non-confirmation error — re-throw
+    error(result_or_err)
+  end
+
+  ---@cast result_or_err flemma.ast.DocumentNode
+  ---@cast result_diagnostics flemma.preprocessor.RewriterDiagnostic[]
+  return result_or_err, result_diagnostics
+end
+
+--------------------------------------------------------------------------------
+-- Setup
+--------------------------------------------------------------------------------
+
+--- Initialize the preprocessor subsystem.
+--- Loads built-in rewriters and registers the post-parse hook.
+function M.setup()
+  -- Load built-in rewriters
+  for _, module_path in ipairs(BUILTIN_REWRITERS) do
+    local load_ok, load_err = pcall(M.register, module_path)
+    if not load_ok then
+      vim.notify(
+        "flemma: failed to load built-in rewriter " .. module_path .. ": " .. tostring(load_err),
+        vim.log.levels.WARN
+      )
+    end
+  end
+
+  -- Register post-parse hook (parser.set_post_parse_hook is added in Task 8)
+  -- The hook runs the preprocessor in non-interactive mode after each parse,
+  -- storing diagnostics in buffer state and returning the rewritten document.
+  local parser_ok, parser_module = pcall(require, "flemma.parser")
+  if parser_ok then
+    local parser_table = parser_module --[[@as table]]
+    local hook_setter = parser_table.set_post_parse_hook
+    if hook_setter then
+      hook_setter(function(doc, bufnr)
+        local result_doc, diagnostics = M.run(doc, bufnr, { interactive = false })
+        if result_doc and bufnr then
+          local buffer_state = state.get_buffer_state(bufnr)
+          buffer_state.rewriter_diagnostics = diagnostics
+        end
+        return result_doc or doc
+      end)
+    end
+  end
 end
 
 return M

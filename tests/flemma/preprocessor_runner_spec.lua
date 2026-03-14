@@ -761,4 +761,153 @@ describe("flemma.preprocessor.runner", function()
       assert.truthy(result_doc.frontmatter.code:match("model: claude"))
     end)
   end)
+
+  describe("preprocessor.run() suspension handling", function()
+    it("catches Confirmation and returns nil in interactive mode", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local rewriter = preprocessor.create_rewriter("confirmer")
+      rewriter:on_text("ASK", function(_, ctx)
+        ctx:confirm("ask_id", "Proceed?")
+        return ctx:remove()
+      end)
+      preprocessor.register(rewriter)
+
+      local doc = make_doc({
+        ast.text("do ASK now", { start_line = 1 }),
+      })
+
+      local result_doc, diagnostics = preprocessor.run(doc, bufnr, { interactive = true })
+      assert.is_nil(result_doc)
+      assert.is_nil(diagnostics)
+
+      -- Verify that the pending confirmation was stored in buffer state
+      local flemma_state = require("flemma.state")
+      local buffer_state = flemma_state.get_buffer_state(bufnr)
+      assert.is_not_nil(buffer_state._pending_confirmation)
+      assert.equals("ask_id", buffer_state._pending_confirmation.id)
+    end)
+
+    it("returns stored answer on re-run after confirmation", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local flemma_state = require("flemma.state")
+
+      local rewriter = preprocessor.create_rewriter("confirmer_rerun")
+      rewriter:on_text("ASK", function(_, ctx)
+        local answer = ctx:confirm("rerun_id", "Proceed?")
+        if answer then
+          return ctx:text("YES")
+        end
+        return ctx:remove()
+      end)
+      preprocessor.register(rewriter)
+
+      -- Simulate stored answer from UI
+      local buffer_state = flemma_state.get_buffer_state(bufnr)
+      buffer_state.confirmation_answers = { rerun_id = true }
+
+      local doc = make_doc({
+        ast.text("do ASK now", { start_line = 1 }),
+      })
+
+      local result_doc, diagnostics = preprocessor.run(doc, bufnr, { interactive = true })
+      assert.is_not_nil(result_doc)
+      assert.equals(0, #diagnostics)
+
+      -- The "ASK" match should be replaced with "YES"
+      local segments = result_doc.messages[1].segments
+      local found_yes = false
+      for _, seg in ipairs(segments) do
+        if seg.kind == "text" and seg.value == "YES" then
+          found_yes = true
+        end
+      end
+      assert.is_true(found_yes)
+    end)
+
+    it("returns doc unchanged when no rewriters are registered", function()
+      -- registry is already cleared in before_each
+      local doc = make_doc({
+        ast.text("hello world", { start_line = 1 }),
+      })
+
+      local result_doc, diagnostics = preprocessor.run(doc, nil)
+      assert.equals(doc, result_doc)
+      assert.equals(0, #diagnostics)
+    end)
+  end)
+
+  describe("ctx:rewrite() buffer edits", function()
+    it("queues and applies buffer edits in interactive mode", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      -- Set up buffer content matching the AST
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "before OLD after" })
+
+      local rewriter = preprocessor.create_rewriter("rewrite_test")
+      rewriter:on_text("OLD", function(_, ctx)
+        return ctx:rewrite("NEW")
+      end)
+
+      local doc = ast.document(nil, {
+        ast.message("You", {
+          ast.text("before OLD after", { start_line = 1 }),
+        }, { start_line = 1, end_line = 1 }),
+      }, {}, { start_line = 1, end_line = 1 })
+
+      local result_doc = runner.run_pipeline(doc, bufnr, {
+        interactive = true,
+        rewriters = { rewriter },
+        bufnr = bufnr,
+      })
+
+      -- AST should have the rewritten text
+      local segments = result_doc.messages[1].segments
+      local found_new = false
+      for _, seg in ipairs(segments) do
+        if seg.kind == "text" and seg.value == "NEW" then
+          found_new = true
+        end
+      end
+      assert.is_true(found_new)
+
+      -- Buffer should have the rewritten text
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      assert.truthy(lines[1]:find("NEW"), "expected buffer to contain NEW: " .. lines[1])
+    end)
+
+    it("does NOT apply buffer edits in non-interactive mode", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "before OLD after" })
+
+      local rewriter = preprocessor.create_rewriter("no_edit")
+      rewriter:on_text("OLD", function(_, ctx)
+        return ctx:rewrite("NEW")
+      end)
+
+      local doc = ast.document(nil, {
+        ast.message("You", {
+          ast.text("before OLD after", { start_line = 1 }),
+        }, { start_line = 1, end_line = 1 }),
+      }, {}, { start_line = 1, end_line = 1 })
+
+      local result_doc = runner.run_pipeline(doc, bufnr, {
+        interactive = false,
+        rewriters = { rewriter },
+        bufnr = bufnr,
+      })
+
+      -- AST should still have the rewritten text
+      local segments = result_doc.messages[1].segments
+      local found_new = false
+      for _, seg in ipairs(segments) do
+        if seg.kind == "text" and seg.value == "NEW" then
+          found_new = true
+        end
+      end
+      assert.is_true(found_new)
+
+      -- Buffer should NOT have been modified
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      assert.equals("before OLD after", lines[1])
+    end)
+  end)
 end)
