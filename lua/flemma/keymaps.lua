@@ -89,19 +89,19 @@ M.setup = function()
         end
 
         -- Message navigation keymaps
-        if config.keymaps.normal.next_message then
+        if config.keymaps.normal.message_next then
           vim.keymap.set(
             "n",
-            config.keymaps.normal.next_message,
+            config.keymaps.normal.message_next,
             navigation.find_next_message,
             { buffer = true, desc = "Jump to next message" }
           )
         end
 
-        if config.keymaps.normal.prev_message then
+        if config.keymaps.normal.message_prev then
           vim.keymap.set(
             "n",
-            config.keymaps.normal.prev_message,
+            config.keymaps.normal.message_prev,
             navigation.find_prev_message,
             { buffer = true, desc = "Jump to previous message" }
           )

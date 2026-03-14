@@ -139,8 +139,8 @@ require("flemma").setup({
       send = "<C-]>",                        -- Hybrid: execute pending tools or send
       cancel = "<C-c>",
       tool_execute = "<M-CR>",               -- Execute tool at cursor
-      next_message = "]m",
-      prev_message = "[m",
+      message_next = "]m",
+      message_prev = "[m",
     },
     insert = {
       send = "<C-]>",                        -- Same hybrid behaviour, re-enters insert after

@@ -141,8 +141,8 @@
 ---@field send string
 ---@field cancel string
 ---@field tool_execute string
----@field next_message string
----@field prev_message string
+---@field message_next string
+---@field message_prev string
 
 ---@class flemma.config.InsertKeymaps
 ---@field send string
@@ -333,8 +333,8 @@ return {
       send = "<C-]>",
       cancel = "<C-c>",
       tool_execute = "<M-CR>", -- Execute tool at cursor
-      next_message = "]m", -- Jump to next message
-      prev_message = "[m", -- Jump to previous message
+      message_next = "]m", -- Jump to next message
+      message_prev = "[m", -- Jump to previous message
     },
     insert = {
       send = "<C-]>",
