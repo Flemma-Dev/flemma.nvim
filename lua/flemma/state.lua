@@ -25,6 +25,7 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field locked boolean Whether the buffer is locked (non-modifiable) for request/tool execution
 ---@field waiting_for_tools? boolean Whether a send is queued waiting for async tool resolution
 ---@field ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached parsed AST
+---@field raw_ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached raw (pre-rewriter) AST
 ---@field ast_snapshot_before_send? flemma.parser.Snapshot Frozen AST for incremental parsing during streaming
 ---@field progress_timer integer|nil Timer ID for the progress line animation
 ---@field progress_phase flemma.state.ProgressPhase|nil Current progress line phase

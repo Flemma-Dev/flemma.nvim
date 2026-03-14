@@ -910,4 +910,52 @@ describe("flemma.preprocessor.runner", function()
       assert.equals("before OLD after", lines[1])
     end)
   end)
+
+  describe("parser post-parse hook and raw_ast_cache", function()
+    local parser_mod
+
+    before_each(function()
+      package.loaded["flemma.parser"] = nil
+      parser_mod = require("flemma.parser")
+    end)
+
+    after_each(function()
+      parser_mod.set_post_parse_hook(nil)
+    end)
+
+    it("set_post_parse_hook is called during get_parsed_document", function()
+      local hook_called = false
+      parser_mod.set_post_parse_hook(function(doc, _bufnr)
+        hook_called = true
+        return doc
+      end)
+
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Hello world" })
+
+      parser_mod.get_parsed_document(bufnr)
+      assert.is_true(hook_called)
+    end)
+
+    it("get_raw_document returns the pre-hook document", function()
+      -- Hook that empties all segments
+      parser_mod.set_post_parse_hook(function(doc, _bufnr)
+        for _, msg in ipairs(doc.messages) do
+          msg.segments = {}
+        end
+        return doc
+      end)
+
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Hello world" })
+
+      -- get_parsed_document returns the post-hook (empty segments) version
+      local parsed_doc = parser_mod.get_parsed_document(bufnr)
+      assert.equals(0, #parsed_doc.messages[1].segments)
+
+      -- get_raw_document returns the pre-hook version with original segments
+      local raw_doc = parser_mod.get_raw_document(bufnr)
+      assert.is_true(#raw_doc.messages[1].segments > 0)
+    end)
+  end)
 end)

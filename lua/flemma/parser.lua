@@ -8,6 +8,9 @@ local state = require("flemma.state")
 ---@class flemma.Parser
 local M = {}
 
+---@type (fun(doc: flemma.ast.DocumentNode, bufnr: integer): flemma.ast.DocumentNode)|nil
+local post_parse_hook = nil
+
 ---@class flemma.parser.Snapshot
 ---@field frontmatter flemma.ast.FrontmatterNode|nil Frozen frontmatter node
 ---@field messages flemma.ast.MessageNode[] Frozen message nodes (all messages before resume point)
@@ -633,6 +636,13 @@ function M.parse_inline_content(text)
   return parse_segments(text or "")
 end
 
+---Register a post-parse hook that transforms the AST after parsing.
+---Used by the preprocessor to run rewriters on the parsed document.
+---@param hook (fun(doc: flemma.ast.DocumentNode, bufnr: integer): flemma.ast.DocumentNode)|nil
+function M.set_post_parse_hook(hook)
+  post_parse_hook = hook
+end
+
 --- Get parsed document with automatic caching based on buffer changedtick
 --- Returns cached AST if buffer unchanged, otherwise parses and caches
 ---@param bufnr integer
@@ -686,12 +696,42 @@ function M.get_parsed_document(bufnr)
     doc = M.parse_lines(lines)
   end
 
+  -- Store raw (pre-rewriter) AST
+  buffer_state.raw_ast_cache = {
+    changedtick = current_tick,
+    document = doc,
+  }
+
+  -- Run post-parse hook (preprocessor rewriters in non-interactive mode)
+  if post_parse_hook then
+    local rewritten_doc = vim.deepcopy(doc)
+    rewritten_doc = post_parse_hook(rewritten_doc, bufnr)
+    doc = rewritten_doc
+  end
+
   buffer_state.ast_cache = {
     changedtick = current_tick,
     document = doc,
   }
 
   return doc
+end
+
+---Get the raw (pre-rewriter) parsed document.
+---Used by the send flow to start a fresh interactive rewriter pass.
+---@param bufnr integer
+---@return flemma.ast.DocumentNode
+function M.get_raw_document(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  local current_tick = vim.api.nvim_buf_get_changedtick(bufnr)
+
+  if buffer_state.raw_ast_cache and buffer_state.raw_ast_cache.changedtick == current_tick then
+    return buffer_state.raw_ast_cache.document
+  end
+
+  -- Calling get_parsed_document populates raw_ast_cache as a side effect
+  M.get_parsed_document(bufnr)
+  return buffer_state.raw_ast_cache.document
 end
 
 --- Snapshot the current AST for incremental parsing during streaming.
