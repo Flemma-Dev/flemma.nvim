@@ -58,7 +58,7 @@ describe("flemma.ast.dump", function()
         signature = { value = "base64data", provider = "anthropic" },
       })
       local lines = dump.tree(seg)
-      assert.is_truthy(lines[1]:find('redacted=false'))
+      assert.is_truthy(lines[1]:find("redacted=false"))
       assert.is_truthy(lines[1]:find('signature.provider="anthropic"'))
       assert.is_falsy(lines[1]:find("base64data"))
       assert.equals("  content:", lines[2])
@@ -122,15 +122,10 @@ describe("flemma.ast.dump", function()
     end)
 
     it("summarizes children at depth=1 for document", function()
-      local doc = nodes.document(
-        nodes.frontmatter("yaml", "model: claude", { start_line = 1, end_line = 3 }),
-        {
-          nodes.message("You", {}, { start_line = 4, end_line = 5 }),
-          nodes.message("Assistant", {}, { start_line = 6, end_line = 10 }),
-        },
-        {},
-        { start_line = 1, end_line = 10 }
-      )
+      local doc = nodes.document(nodes.frontmatter("yaml", "model: claude", { start_line = 1, end_line = 3 }), {
+        nodes.message("You", {}, { start_line = 4, end_line = 5 }),
+        nodes.message("Assistant", {}, { start_line = 6, end_line = 10 }),
+      }, {}, { start_line = 1, end_line = 10 })
       local lines = dump.tree(doc, { depth = 1 })
       assert.equals("document [1 - 10]", lines[1])
       assert.equals("  frontmatter: 1 child", lines[2])
@@ -141,19 +136,14 @@ describe("flemma.ast.dump", function()
 
   describe("full document dump", function()
     it("renders nested document with all levels", function()
-      local doc = nodes.document(
-        nodes.frontmatter("lua", "x = 1", { start_line = 1, end_line = 3 }),
-        {
-          nodes.message("You", {
-            nodes.text("Hello", { start_line = 5, end_line = 5 }),
-          }, { start_line = 4, end_line = 5 }),
-          nodes.message("Assistant", {
-            nodes.text("Hi there", { start_line = 7, end_line = 7 }),
-          }, { start_line = 6, end_line = 7 }),
-        },
-        {},
-        { start_line = 1, end_line = 7 }
-      )
+      local doc = nodes.document(nodes.frontmatter("lua", "x = 1", { start_line = 1, end_line = 3 }), {
+        nodes.message("You", {
+          nodes.text("Hello", { start_line = 5, end_line = 5 }),
+        }, { start_line = 4, end_line = 5 }),
+        nodes.message("Assistant", {
+          nodes.text("Hi there", { start_line = 7, end_line = 7 }),
+        }, { start_line = 6, end_line = 7 }),
+      }, {}, { start_line = 1, end_line = 7 })
       local lines = dump.tree(doc)
       assert.equals("document [1 - 7]", lines[1])
       assert.equals('  frontmatter [1 - 3] language="lua"', lines[2])

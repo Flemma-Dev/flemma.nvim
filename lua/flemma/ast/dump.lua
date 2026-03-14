@@ -33,6 +33,7 @@ local function format_position(pos)
 end
 
 ---Append indented multiline content under a key label.
+---Empty content lines are kept but stripped of trailing whitespace.
 ---@param output string[]
 ---@param level integer
 ---@param key string
@@ -42,7 +43,11 @@ local function append_multiline(output, level, key, value)
   table.insert(output, prefix .. key .. ":")
   local content_prefix = string.rep(INDENT, level + 1)
   for line in (value .. "\n"):gmatch("([^\n]*)\n") do
-    table.insert(output, content_prefix .. line)
+    if line == "" then
+      table.insert(output, "")
+    else
+      table.insert(output, content_prefix .. line)
+    end
   end
 end
 
@@ -115,12 +120,17 @@ end
 ---@param value table
 local function append_json(output, level, key, value)
   local encoded = json.encode_ordered(value)
-  local indent_str = string.rep(INDENT, level + 1)
-  local formatted = pretty_json(encoded, indent_str)
+  local content_indent = string.rep(INDENT, level + 1)
+  local formatted = pretty_json(encoded, content_indent)
   local prefix = string.rep(INDENT, level)
   table.insert(output, prefix .. key .. ":")
-  for line in (formatted .. "\n"):gmatch("([^\n]*)\n") do
-    table.insert(output, line)
+  -- First line of pretty_json output has no leading indent — prepend it
+  for line in (content_indent .. formatted .. "\n"):gmatch("([^\n]*)\n") do
+    if line:match("^%s+$") then
+      table.insert(output, "")
+    else
+      table.insert(output, line)
+    end
   end
 end
 
@@ -212,7 +222,10 @@ function M.tree(node, opts)
       for _, msg in ipairs(node.messages) do
         table.insert(kinds, msg.role)
       end
-      table.insert(output, prefix .. INDENT .. "messages: " .. #node.messages .. " children (" .. table.concat(kinds, ", ") .. ")")
+      table.insert(
+        output,
+        prefix .. INDENT .. "messages: " .. #node.messages .. " children (" .. table.concat(kinds, ", ") .. ")"
+      )
     else
       for _, msg in ipairs(node.messages) do
         local msg_lines = M.tree(msg, { depth = child_depth, indent = level + 1 })
@@ -226,7 +239,10 @@ function M.tree(node, opts)
       for _, seg in ipairs(node.segments) do
         table.insert(kinds, seg.kind)
       end
-      table.insert(output, prefix .. INDENT .. "segments: " .. #node.segments .. " children (" .. table.concat(kinds, ", ") .. ")")
+      table.insert(
+        output,
+        prefix .. INDENT .. "segments: " .. #node.segments .. " children (" .. table.concat(kinds, ", ") .. ")"
+      )
     else
       for _, seg in ipairs(node.segments) do
         local seg_lines = M.tree(seg, { depth = child_depth, indent = level + 1 })
@@ -304,6 +320,15 @@ function M.open_diff(bufnr)
   vim.api.nvim_set_current_buf(buf_rewritten)
   vim.cmd("diffthis")
 
+  -- diffthis overrides foldmethod to "diff" — restore our expr-based folding
+  -- while keeping diff highlighting and scrollbind active
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    vim.wo[win].foldmethod = "expr"
+    vim.wo[win].foldexpr = "v:lua.require('flemma.ast.dump').foldexpr(v:lnum)"
+    vim.wo[win].foldtext = "v:lua.require('flemma.ast.dump').foldtext()"
+    vim.wo[win].foldlevel = 99
+  end
+
   -- Find the node under the cursor and scroll to it
   local function find_target_line(doc, dump_lines)
     -- Try segment first
@@ -366,7 +391,27 @@ function M.foldexpr(lnum)
   local level = indent / #INDENT
 
   -- Node header lines start a fold at their indent level + 1
-  if line:match("^%s*%w+%s*%[") or line:match("^%s*%w+$") then
+  -- Match kind + position bracket, or a bare kind word (no position) followed by inline fields
+  if line:match("^%s*%w+%s*%[") or line:match("^%s*%w+%s+%w+") then
+    return ">" .. (level + 1)
+  end
+
+  -- Bare node headers without position or fields (e.g., "text" with no position)
+  local word = line:match("^%s*(%w+)$")
+  if
+    word
+    and (
+      word == "document"
+      or word == "message"
+      or word == "text"
+      or word == "expression"
+      or word == "thinking"
+      or word == "tool_use"
+      or word == "tool_result"
+      or word == "aborted"
+      or word == "frontmatter"
+    )
+  then
     return ">" .. (level + 1)
   end
 
