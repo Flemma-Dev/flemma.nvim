@@ -428,6 +428,17 @@ local function setup_commands()
     },
   }
 
+  command_tree.children.ast = {
+    children = {
+      diff = {
+        action = function()
+          local bufnr = vim.api.nvim_get_current_buf()
+          require("flemma.ast.dump").open_diff(bufnr)
+        end,
+      },
+    },
+  }
+
   command_tree.children.notification = {
     children = {
       recall = {

@@ -3,6 +3,11 @@
 local M = {}
 
 local json = require("flemma.utilities.json")
+-- NOTE: require("flemma.ast.query") directly instead of the barrel require("flemma.ast")
+-- because dump.lua is itself part of the ast/ package and imported by the barrel — using
+-- the barrel here would create a circular require.
+local ast_query = require("flemma.ast.query")
+local parser = require("flemma.parser")
 
 local INDENT = "  "
 
@@ -258,6 +263,97 @@ end
 ---@class flemma.ast.dump.Opts
 ---@field depth? integer nil = unlimited, 1 = this node + child summaries
 ---@field indent? integer starting indent level (default 0)
+
+---Open a side-by-side diff of the raw (pre-rewriter) and rewritten (post-rewriter) ASTs.
+---Both buffers scroll to the node under the cursor in the source .chat buffer.
+---@param bufnr integer Source .chat buffer number
+function M.open_diff(bufnr)
+  -- Record cursor position before switching buffers
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local lnum = cursor[1]
+  local col = cursor[2] + 1 -- convert 0-indexed col to 1-indexed
+
+  local raw_doc = parser.get_raw_document(bufnr)
+  local rewritten_doc = parser.get_parsed_document(bufnr)
+
+  local raw_lines = M.tree(raw_doc)
+  local rewritten_lines = M.tree(rewritten_doc)
+
+  -- Create scratch buffers
+  local buf_raw = vim.api.nvim_create_buf(false, true)
+  local buf_rewritten = vim.api.nvim_create_buf(false, true)
+
+  vim.api.nvim_buf_set_lines(buf_raw, 0, -1, false, raw_lines)
+  vim.api.nvim_buf_set_lines(buf_rewritten, 0, -1, false, rewritten_lines)
+
+  for _, buf in ipairs({ buf_raw, buf_rewritten }) do
+    vim.bo[buf].buftype = "nofile"
+    vim.bo[buf].bufhidden = "wipe"
+    vim.bo[buf].filetype = "flemma-ast"
+  end
+
+  local source_name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ":t")
+  vim.api.nvim_buf_set_name(buf_raw, "ast:raw (" .. source_name .. ")")
+  vim.api.nvim_buf_set_name(buf_rewritten, "ast:rewritten (" .. source_name .. ")")
+
+  -- Open in a new tab with diff mode
+  vim.cmd("tabnew")
+  vim.api.nvim_set_current_buf(buf_raw)
+  vim.cmd("diffthis")
+  vim.cmd("vsplit")
+  vim.api.nvim_set_current_buf(buf_rewritten)
+  vim.cmd("diffthis")
+
+  -- Find the node under the cursor and scroll to it
+  local function find_target_line(doc, dump_lines)
+    -- Try segment first
+    local seg, msg = ast_query.find_segment_at_position(doc, lnum, col)
+    local target_node = seg or msg
+
+    -- Check frontmatter
+    if not target_node and doc.frontmatter and doc.frontmatter.position then
+      local fm_pos = doc.frontmatter.position
+      local fm_end = fm_pos.end_line or fm_pos.start_line
+      if lnum >= fm_pos.start_line and lnum <= fm_end then
+        target_node = doc.frontmatter
+      end
+    end
+
+    if not target_node or not target_node.position then
+      return 1
+    end
+
+    -- Build the position string to search for
+    local pos_str = format_position(target_node.position)
+    local search_pattern = target_node.kind .. pos_str
+
+    for i, line in ipairs(dump_lines) do
+      if line:find(search_pattern, 1, true) then
+        return i
+      end
+    end
+
+    return 1
+  end
+
+  local target_raw = find_target_line(raw_doc, raw_lines)
+  local target_rewritten = find_target_line(rewritten_doc, rewritten_lines)
+
+  -- Scroll both windows to the target lines
+  local rewritten_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_cursor(rewritten_win, { target_rewritten, 0 })
+
+  vim.cmd("wincmd h")
+  local raw_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_cursor(raw_win, { target_raw, 0 })
+
+  -- Close all folds, then open the path to the cursor node
+  for _, win in ipairs({ raw_win, rewritten_win }) do
+    vim.api.nvim_set_current_win(win)
+    vim.cmd("normal! zM") -- close all folds
+    vim.cmd("normal! zv") -- open folds at cursor
+  end
+end
 
 ---Compute fold level for a line in a flemma-ast buffer.
 ---Node header lines (matching kind + position pattern) start folds.
