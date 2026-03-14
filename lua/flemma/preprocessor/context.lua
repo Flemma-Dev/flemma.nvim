@@ -6,14 +6,144 @@
 local M = {}
 
 --------------------------------------------------------------------------------
--- Forward declarations (fully defined later in this file)
+-- SystemAccessor
 --------------------------------------------------------------------------------
 
+---@class flemma.preprocessor.SystemAccessorEntry
+---@field emission flemma.preprocessor.Emission
+---@field position? { line?: integer, col?: integer }
+
 --- System message accessor — allows rewriters to prepend/append to system prompts.
+--- Emissions are collected during the rewriter run and applied afterward.
 ---@class flemma.preprocessor.SystemAccessor
+---@field _prepends flemma.preprocessor.SystemAccessorEntry[]
+---@field _appends flemma.preprocessor.SystemAccessorEntry[]
+---@field _ctx? flemma.preprocessor.Context
+local SystemAccessor = {}
+SystemAccessor.__index = SystemAccessor
+
+--- Create a new SystemAccessor instance.
+---@return flemma.preprocessor.SystemAccessor
+function SystemAccessor.new()
+  ---@diagnostic disable-next-line: return-type-mismatch
+  return setmetatable({
+    _prepends = {},
+    _appends = {},
+    _ctx = nil,
+  }, SystemAccessor)
+end
+
+--- Set the current context. Called by the runner before each handler.
+---@param ctx flemma.preprocessor.Context
+function SystemAccessor:set_context(ctx)
+  self._ctx = ctx
+end
+
+--- Record an emission to prepend to the system message.
+---@param emission flemma.preprocessor.Emission
+function SystemAccessor:prepend(emission)
+  local position = self._ctx and self._ctx.position or nil
+  table.insert(self._prepends, {
+    emission = emission,
+    position = position,
+  })
+end
+
+--- Record an emission to append to the system message.
+---@param emission flemma.preprocessor.Emission
+function SystemAccessor:append(emission)
+  local position = self._ctx and self._ctx.position or nil
+  table.insert(self._appends, {
+    emission = emission,
+    position = position,
+  })
+end
+
+--- Get all prepend entries.
+---@return flemma.preprocessor.SystemAccessorEntry[]
+function SystemAccessor:get_prepends()
+  return self._prepends
+end
+
+--- Get all append entries.
+---@return flemma.preprocessor.SystemAccessorEntry[]
+function SystemAccessor:get_appends()
+  return self._appends
+end
+
+M.SystemAccessor = SystemAccessor
+
+--------------------------------------------------------------------------------
+-- FrontmatterAccessor
+--------------------------------------------------------------------------------
+
+---@class flemma.preprocessor.FrontmatterSetMutation
+---@field action "set"
+---@field key string
+---@field value any
+
+---@class flemma.preprocessor.FrontmatterAppendMutation
+---@field action "append"
+---@field line string
+
+---@class flemma.preprocessor.FrontmatterRemoveMutation
+---@field action "remove"
+---@field key string
+
+---@alias flemma.preprocessor.FrontmatterMutation flemma.preprocessor.FrontmatterSetMutation|flemma.preprocessor.FrontmatterAppendMutation|flemma.preprocessor.FrontmatterRemoveMutation
 
 --- Frontmatter accessor — allows rewriters to mutate frontmatter fields.
+--- Mutations are collected during the rewriter run and applied afterward.
 ---@class flemma.preprocessor.FrontmatterAccessor
+---@field _mutations flemma.preprocessor.FrontmatterMutation[]
+local FrontmatterAccessor = {}
+FrontmatterAccessor.__index = FrontmatterAccessor
+
+--- Create a new FrontmatterAccessor instance.
+---@return flemma.preprocessor.FrontmatterAccessor
+function FrontmatterAccessor.new()
+  ---@diagnostic disable-next-line: return-type-mismatch
+  return setmetatable({
+    _mutations = {},
+  }, FrontmatterAccessor)
+end
+
+--- Record a set mutation (set key to value).
+---@param key string Frontmatter key
+---@param value any Value to set
+function FrontmatterAccessor:set(key, value)
+  table.insert(self._mutations, {
+    action = "set",
+    key = key,
+    value = value,
+  })
+end
+
+--- Record an append mutation (append a raw line).
+---@param line string Line to append
+function FrontmatterAccessor:append(line)
+  table.insert(self._mutations, {
+    action = "append",
+    line = line,
+  })
+end
+
+--- Record a remove mutation (remove a key).
+---@param key string Frontmatter key to remove
+function FrontmatterAccessor:remove(key)
+  table.insert(self._mutations, {
+    action = "remove",
+    key = key,
+  })
+end
+
+--- Get all recorded mutations.
+---@return flemma.preprocessor.FrontmatterMutation[]
+function FrontmatterAccessor:get_mutations()
+  return self._mutations
+end
+
+M.FrontmatterAccessor = FrontmatterAccessor
 
 --------------------------------------------------------------------------------
 -- Context options
@@ -69,8 +199,8 @@ Context.__index = Context
 ---@return flemma.preprocessor.Context
 function M.new(opts)
   local self = setmetatable({
-    system = opts.system,
-    frontmatter = opts.frontmatter,
+    system = opts.system or SystemAccessor.new(),
+    frontmatter = opts.frontmatter or FrontmatterAccessor.new(),
     message = opts.message,
     message_index = opts.message_index,
     position = opts.position,

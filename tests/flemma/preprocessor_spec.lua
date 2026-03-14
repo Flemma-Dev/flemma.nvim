@@ -272,6 +272,112 @@ describe("flemma.preprocessor", function()
         local ctx = context_module.new({})
         assert.is_false(ctx.interactive)
       end)
+
+      it("creates default SystemAccessor and FrontmatterAccessor when not provided", function()
+        local ctx = context_module.new({})
+        assert.is_not_nil(ctx.system)
+        assert.is_not_nil(ctx.frontmatter)
+      end)
+    end)
+
+    describe("SystemAccessor", function()
+      it("stores prepend emissions with position capture", function()
+        local accessor = context_module.SystemAccessor.new()
+        local ctx = context_module.new({
+          system = accessor,
+          position = { line = 10, col = 5 },
+        })
+        accessor:set_context(ctx)
+
+        local emission = ctx:text("prepended text")
+        accessor:prepend(emission)
+
+        local prepends = accessor:get_prepends()
+        assert.equals(1, #prepends)
+        assert.equals("text", prepends[1].emission.type)
+        assert.equals("prepended text", prepends[1].emission.text)
+        assert.same({ line = 10, col = 5 }, prepends[1].position)
+      end)
+
+      it("stores append emissions with position capture", function()
+        local accessor = context_module.SystemAccessor.new()
+        local ctx = context_module.new({
+          system = accessor,
+          position = { line = 20, col = 0 },
+        })
+        accessor:set_context(ctx)
+
+        local emission = ctx:rewrite("appended instruction")
+        accessor:append(emission)
+
+        local appends = accessor:get_appends()
+        assert.equals(1, #appends)
+        assert.equals("rewrite", appends[1].emission.type)
+        assert.equals("appended instruction", appends[1].emission.text)
+        assert.same({ line = 20, col = 0 }, appends[1].position)
+      end)
+
+      it("accumulates multiple prepends and appends", function()
+        local accessor = context_module.SystemAccessor.new()
+        local ctx = context_module.new({
+          system = accessor,
+          position = { line = 1, col = 0 },
+        })
+        accessor:set_context(ctx)
+
+        accessor:prepend(ctx:text("first"))
+        accessor:prepend(ctx:text("second"))
+        accessor:append(ctx:text("third"))
+
+        assert.equals(2, #accessor:get_prepends())
+        assert.equals(1, #accessor:get_appends())
+      end)
+    end)
+
+    describe("FrontmatterAccessor", function()
+      it("records set mutations", function()
+        local accessor = context_module.FrontmatterAccessor.new()
+        accessor:set("model", "claude-3-opus")
+
+        local mutations = accessor:get_mutations()
+        assert.equals(1, #mutations)
+        assert.equals("set", mutations[1].action)
+        assert.equals("model", mutations[1].key)
+        assert.equals("claude-3-opus", mutations[1].value)
+      end)
+
+      it("records append mutations", function()
+        local accessor = context_module.FrontmatterAccessor.new()
+        accessor:append("temperature: 0.5")
+
+        local mutations = accessor:get_mutations()
+        assert.equals(1, #mutations)
+        assert.equals("append", mutations[1].action)
+        assert.equals("temperature: 0.5", mutations[1].line)
+      end)
+
+      it("records remove mutations", function()
+        local accessor = context_module.FrontmatterAccessor.new()
+        accessor:remove("max_tokens")
+
+        local mutations = accessor:get_mutations()
+        assert.equals(1, #mutations)
+        assert.equals("remove", mutations[1].action)
+        assert.equals("max_tokens", mutations[1].key)
+      end)
+
+      it("accumulates multiple mutations in order", function()
+        local accessor = context_module.FrontmatterAccessor.new()
+        accessor:set("model", "gpt-4")
+        accessor:remove("temperature")
+        accessor:append("tools: [bash]")
+
+        local mutations = accessor:get_mutations()
+        assert.equals(3, #mutations)
+        assert.equals("set", mutations[1].action)
+        assert.equals("remove", mutations[2].action)
+        assert.equals("append", mutations[3].action)
+      end)
     end)
   end)
 end)
