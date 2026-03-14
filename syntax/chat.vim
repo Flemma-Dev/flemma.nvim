@@ -7,8 +7,8 @@ syntax match FlemmaRoleSystem '^@System:\s*$' contained
 syntax match FlemmaRoleUser '^@You:\s*$' contained
 syntax match FlemmaRoleAssistant '^@Assistant:\s*$' contained
 
-" Define the Lua expression match for User messages
-syntax match FlemmaUserLuaExpression "{{.\{-}}}" contained
+" Define the Lua expression match for User and System messages
+syntax match FlemmaLuaExpression "{{.\{-}}}" contained containedin=FlemmaUser,FlemmaSystem
 
 " Define Thinking Tags (for highlighting the tags themselves)
 " Matches: <thinking>, <thinking provider:signature="...">, <thinking provider:signature="..."/>
@@ -49,7 +49,7 @@ syntax region FlemmaFrontmatterBlockJson start="\%1l^```json$" end="^```$" keepe
 " System region
 syntax region FlemmaSystem start='^@System:\s*$' end='\(^@\(You\|Assistant\):\s*$\)\@=\|\%$' contains=FlemmaRoleSystem,@Markdown
 " User region (contains tool results)
-syntax region FlemmaUser start='^@You:\s*$' end='\(^@\(System\|Assistant\):\s*$\)\@=\|\%$' contains=FlemmaRoleUser,FlemmaUserLuaExpression,FlemmaToolResult,@Markdown
+syntax region FlemmaUser start='^@You:\s*$' end='\(^@\(System\|Assistant\):\s*$\)\@=\|\%$' contains=FlemmaRoleUser,FlemmaToolResult,@Markdown
 
 " Thinking Block Region (nested inside Assistant)
 " This region starts with <thinking> or <thinking provider:signature="..."> and ends with </thinking>.

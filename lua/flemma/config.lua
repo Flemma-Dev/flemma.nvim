@@ -6,7 +6,7 @@
 ---@field system flemma.config.HighlightValue
 ---@field user flemma.config.HighlightValue
 ---@field assistant flemma.config.HighlightValue
----@field user_lua_expression flemma.config.HighlightValue
+---@field lua_expression flemma.config.HighlightValue
 ---@field user_file_reference flemma.config.HighlightValue
 ---@field thinking_tag flemma.config.HighlightValue
 ---@field thinking_block flemma.config.HighlightValue
@@ -215,7 +215,7 @@ return {
     system = "Special", -- Highlight group or hex color (e.g., "#ffccaa") for system messages
     user = "Normal", -- Highlight group or hex color for user messages
     assistant = "Normal", -- Highlight group or hex color for assistant messages
-    user_lua_expression = "PreProc", -- Highlight group or hex color for {{expression}} in user messages
+    lua_expression = "PreProc", -- Highlight group or hex color for {{ expression }} syntax
     user_file_reference = "Include", -- Highlight group or hex color for @./file references in user messages
     thinking_tag = "Comment", -- Highlight group or hex color for <thinking> and </thinking> tags
     thinking_block = { dark = "Comment+bg:#102020-fg:#111111", light = "Comment-bg:#102020+fg:#111111" }, -- Highlight group or hex color for content inside <thinking> blocks

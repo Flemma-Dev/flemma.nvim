@@ -350,7 +350,7 @@ M.apply_syntax = function()
   set_highlight("FlemmaSystem", syntax_config.highlights.system)
   set_highlight("FlemmaUser", syntax_config.highlights.user)
   set_highlight("FlemmaAssistant", syntax_config.highlights.assistant)
-  set_highlight("FlemmaUserLuaExpression", syntax_config.highlights.user_lua_expression) -- Highlight for {{expression}} in user messages
+  set_highlight("FlemmaLuaExpression", syntax_config.highlights.lua_expression)
   -- Apply rewriter-owned syntax rules and highlights
   preprocessor_syntax.apply(syntax_config, set_highlight)
 

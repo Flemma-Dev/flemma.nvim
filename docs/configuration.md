@@ -52,7 +52,7 @@ require("flemma").setup({
     system = "Special",
     user = "Normal",
     assistant = "Normal",
-    user_lua_expression = "PreProc",
+    lua_expression = "PreProc",
     user_file_reference = "Include",
     thinking_tag = "Comment",
     thinking_block = { dark = "Comment+bg:#102020-fg:#111111",
