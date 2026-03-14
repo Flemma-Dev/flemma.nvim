@@ -233,6 +233,46 @@ describe("flemma.preprocessor.runner", function()
       assert.equals(" after", segments[5].value)
     end)
 
+    it("emission list positions are distributed across sub-emissions", function()
+      -- Simulates file reference rewriting: @./img.png. → expression + trailing dot
+      -- The expression should occupy the file reference span and the dot should
+      -- occupy the final column, not overlap the expression's range.
+      local rewriter = preprocessor.create_rewriter("position_split")
+      rewriter:on_text("@(%S+)(%p)$", function(match, ctx)
+        local code = "include('" .. match.captures[1] .. "')"
+        return { ctx:expression(code), ctx:text(match.captures[2]) }
+      end)
+
+      -- "text @./img.png." — match starts at col 6, ends at col 17 (12 chars)
+      local doc = make_doc({
+        ast.text("text @./img.png.", { start_line = 5, start_col = 1, end_line = 5, end_col = 16 }),
+      })
+
+      local result_doc, diagnostics = runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+      assert.equals(0, #diagnostics)
+
+      local segments = result_doc.messages[1].segments
+      assert.equals(3, #segments)
+
+      -- Preceding text "text "
+      assert.equals("text", segments[1].kind)
+      assert.equals("text ", segments[1].value)
+
+      -- Expression should span the file reference portion (cols 6-15)
+      assert.equals("expression", segments[2].kind)
+      assert.equals("include('./img.png')", segments[2].code)
+      assert.equals(5, segments[2].position.start_line)
+      assert.equals(6, segments[2].position.start_col)
+      assert.equals(15, segments[2].position.end_col)
+
+      -- Trailing "." should occupy only the final column (col 16)
+      assert.equals("text", segments[3].kind)
+      assert.equals(".", segments[3].value)
+      assert.equals(5, segments[3].position.start_line)
+      assert.equals(16, segments[3].position.start_col)
+      assert.equals(16, segments[3].position.end_col)
+    end)
+
     it("non-text segments pass through text handlers unchanged", function()
       local rewriter = preprocessor.create_rewriter("skip_non_text")
       rewriter:on_text("anything", function(_, ctx)

@@ -136,10 +136,52 @@ local function emission_to_segments(emission, position, original_text, buffer_ed
   local emission_table = emission --[[@as table]]
   if emission_table[1] ~= nil and emission_table.kind == nil then
     ---@cast emission flemma.preprocessor.EmissionList
+    -- Distribute position range across sub-emissions based on content lengths.
+    -- Text/rewrite emissions consume #value characters of the original span;
+    -- expression emissions share the remaining characters.
+    local match_end_col = position.end_col or position.col
+    local total_span = match_end_col - position.col + 1
+    local text_chars = 0
+    local expr_count = 0
+    for _, e in ipairs(emission) do
+      local et = e --[[@as table]]
+      if (et.kind == "text" or et.kind == "rewrite") and et.value then
+        text_chars = text_chars + #et.value
+      elseif et.kind == "expression" then
+        expr_count = expr_count + 1
+      end
+    end
+    local expr_chars_total = math.max(total_span - text_chars, 0)
+    local expr_chars_each = expr_count > 0 and math.floor(expr_chars_total / expr_count) or 0
+    local expr_remainder = expr_count > 0 and (expr_chars_total - expr_chars_each * expr_count) or 0
+    local expr_seen = 0
+
+    local cursor_col = position.col
     for _, single_emission in ipairs(emission) do
-      local sub_segments = emission_to_segments(single_emission, position, nil, buffer_edits, interactive)
+      local et = single_emission --[[@as table]]
+      local span
+      if (et.kind == "text" or et.kind == "rewrite") and et.value then
+        span = #et.value
+      elseif et.kind == "expression" then
+        expr_seen = expr_seen + 1
+        span = expr_chars_each + (expr_seen == expr_count and expr_remainder or 0)
+      else
+        -- remove or unknown: no span consumed
+        span = 0
+      end
+      local sub_end_col = cursor_col + math.max(span - 1, 0)
+      local sub_pos = {
+        line = position.line,
+        col = cursor_col,
+        end_line = position.end_line or position.line,
+        end_col = sub_end_col,
+      }
+      local sub_segments = emission_to_segments(single_emission, sub_pos, nil, buffer_edits, interactive)
       for _, seg in ipairs(sub_segments) do
         table.insert(segments, seg)
+      end
+      if span > 0 then
+        cursor_col = cursor_col + span
       end
     end
     return segments
