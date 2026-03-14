@@ -17,7 +17,7 @@ local log = require("flemma.logging")
 
 local BUILTIN_RESOLVERS = {
   "flemma.secrets.resolvers.environment",
-  "flemma.secrets.resolvers.secrettool",
+  "flemma.secrets.resolvers.secret_tool",
   "flemma.secrets.resolvers.keychain",
   "flemma.secrets.resolvers.gcloud",
 }

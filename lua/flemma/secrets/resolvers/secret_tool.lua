@@ -1,11 +1,11 @@
----@class flemma.secrets.resolvers.Secrettool : flemma.secrets.Resolver
+---@class flemma.secrets.resolvers.SecretTool : flemma.secrets.Resolver
 --- Resolves credentials from GNOME Keyring via secret-tool on Linux.
 --- Convention: secret-tool lookup service <service> key <kind>.
 --- Legacy fallback: tries key=api if the convention lookup fails, preserving
 --- existing keyring entries stored under the previous scheme.
 local M = {}
 
-M.name = "secrettool"
+M.name = "secret_tool"
 M.priority = 50
 
 --- Legacy key name used by the previous auth implementation.
@@ -37,14 +37,14 @@ local function try_lookup(service, key)
   return value
 end
 
----@param _self flemma.secrets.resolvers.Secrettool
+---@param _self flemma.secrets.resolvers.SecretTool
 ---@param _credential flemma.secrets.Credential
 ---@return boolean
 function M.supports(_self, _credential)
   return vim.fn.has("linux") == 1 and vim.fn.executable("secret-tool") == 1
 end
 
----@param _self flemma.secrets.resolvers.Secrettool
+---@param _self flemma.secrets.resolvers.SecretTool
 ---@param credential flemma.secrets.Credential
 ---@return flemma.secrets.Result|nil
 function M.resolve(_self, credential)

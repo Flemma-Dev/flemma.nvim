@@ -97,18 +97,18 @@ describe("flemma.secrets.resolvers.environment", function()
   end)
 end)
 
-local secrettool
+local secret_tool
 
-describe("flemma.secrets.resolvers.secrettool", function()
+describe("flemma.secrets.resolvers.secret_tool", function()
   before_each(function()
-    package.loaded["flemma.secrets.resolvers.secrettool"] = nil
-    secrettool = require("flemma.secrets.resolvers.secrettool")
+    package.loaded["flemma.secrets.resolvers.secret_tool"] = nil
+    secret_tool = require("flemma.secrets.resolvers.secret_tool")
   end)
 
   describe("supports", function()
     it("returns based on platform availability", function()
       local expected = vim.fn.has("linux") == 1 and vim.fn.executable("secret-tool") == 1
-      assert.equals(expected, secrettool:supports({ kind = "api_key", service = "test" }))
+      assert.equals(expected, secret_tool:supports({ kind = "api_key", service = "test" }))
     end)
   end)
 
@@ -135,7 +135,7 @@ describe("flemma.secrets.resolvers.secrettool", function()
         }
       end
 
-      local result = secrettool:resolve({ kind = "api_key", service = "anthropic" })
+      local result = secret_tool:resolve({ kind = "api_key", service = "anthropic" })
 
       assert.is_not_nil(result)
       assert.equals("sk-from-keyring", result.value)
@@ -168,7 +168,7 @@ describe("flemma.secrets.resolvers.secrettool", function()
         }
       end
 
-      local result = secrettool:resolve({ kind = "api_key", service = "anthropic" })
+      local result = secret_tool:resolve({ kind = "api_key", service = "anthropic" })
 
       assert.is_not_nil(result)
       assert.equals("sk-legacy", result.value)
@@ -187,7 +187,7 @@ describe("flemma.secrets.resolvers.secrettool", function()
         }
       end
 
-      local result = secrettool:resolve({ kind = "access_token", service = "vertex" })
+      local result = secret_tool:resolve({ kind = "access_token", service = "vertex" })
 
       assert.is_nil(result)
       -- Should only try convention (key=access_token), not legacy (key=api)
@@ -204,7 +204,7 @@ describe("flemma.secrets.resolvers.secrettool", function()
         }
       end
 
-      local result = secrettool:resolve({ kind = "api_key", service = "anthropic" })
+      local result = secret_tool:resolve({ kind = "api_key", service = "anthropic" })
       assert.is_not_nil(result)
       assert.equals("sk-from-convention", result.value)
     end)
@@ -219,7 +219,7 @@ describe("flemma.secrets.resolvers.secrettool", function()
         }
       end
 
-      local result = secrettool:resolve({ kind = "api_key", service = "test" })
+      local result = secret_tool:resolve({ kind = "api_key", service = "test" })
       assert.is_not_nil(result)
       assert.equals("sk-test-key", result.value)
     end)
@@ -234,7 +234,7 @@ describe("flemma.secrets.resolvers.secrettool", function()
         }
       end
 
-      local result = secrettool:resolve({ kind = "api_key", service = "test" })
+      local result = secret_tool:resolve({ kind = "api_key", service = "test" })
       assert.is_nil(result)
     end)
   end)
