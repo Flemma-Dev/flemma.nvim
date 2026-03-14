@@ -82,4 +82,4 @@ highlight default link FlemmaStatusToolDisabled DiagnosticWarn
 highlight default link FlemmaStatusToolPending DiagnosticInfo
 highlight default link FlemmaStatusBooting WarningMsg
 
-let b:current_syntax = "flemma_status"
+let b:current_syntax = "flemma-status"
