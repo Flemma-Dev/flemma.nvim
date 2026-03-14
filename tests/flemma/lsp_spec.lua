@@ -175,6 +175,39 @@ describe("Flemma LSP", function()
     return nil
   end
 
+  it("returns hover for @./file reference as expression segment", function()
+    -- Regression: preprocessor-generated expression segments must have
+    -- end_col so find_segment_at_position can match them by cursor column
+    local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
+
+    flemma.setup({ experimental = { lsp = true } })
+
+    test_counter = test_counter + 1
+    local bufnr = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_name(bufnr, fixture_dir .. "lsp_hover_fileref_" .. test_counter .. ".chat")
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@You:",
+      "See @./include_target.txt for details",
+    })
+    vim.bo[bufnr].filetype = "chat"
+    vim.cmd("doautocmd FileType")
+
+    vim.wait(1000, function()
+      return #vim.lsp.get_clients({ name = "flemma", bufnr = bufnr }) > 0
+    end)
+
+    local clients = vim.lsp.get_clients({ name = "flemma", bufnr = bufnr })
+    assert.is_true(#clients > 0, "Client should be attached")
+    local client = clients[1]
+
+    -- Hover on the file reference (0-indexed: line 1, col 6 = on the '/')
+    local result = hover_sync(client, bufnr, 1, 6)
+    assert.is_not_nil(result, "Expected hover result on file reference")
+    assert.is_truthy(result.contents.value:find("ExpressionSegment"), "Should show ExpressionSegment, not TextSegment")
+    assert.is_truthy(result.contents.value:find("include"))
+  end)
+
   it("returns definition for @./file reference", function()
     -- Name the buffer inside fixtures/ so @./include_target.txt resolves
     local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
@@ -205,6 +238,52 @@ describe("Flemma LSP", function()
     local result = definition_sync(client, bufnr, 1, 6)
     assert.is_not_nil(result, "Expected definition result for file reference")
     assert.equals(vim.uri_from_fname(target_path), result.uri)
+  end)
+
+  it("returns definition for @./file at start, middle, and end of reference", function()
+    -- Regression: expression segments from preprocessor must have end_col
+    -- so the cursor can match anywhere within the reference span
+    local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
+    local target_path = fixture_dir .. "include_target.txt"
+
+    flemma.setup({ experimental = { lsp = true } })
+
+    test_counter = test_counter + 1
+    local bufnr = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_name(bufnr, fixture_dir .. "lsp_def_pos_" .. test_counter .. ".chat")
+    vim.api.nvim_set_current_buf(bufnr)
+    -- "See @./include_target.txt ok"
+    --  0123456789...
+    --      ^                    ^ @=col4, t=col25 (0-indexed)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@You:",
+      "See @./include_target.txt ok",
+    })
+    vim.bo[bufnr].filetype = "chat"
+    vim.cmd("doautocmd FileType")
+
+    vim.wait(1000, function()
+      return #vim.lsp.get_clients({ name = "flemma", bufnr = bufnr }) > 0
+    end)
+
+    local clients = vim.lsp.get_clients({ name = "flemma", bufnr = bufnr })
+    assert.is_true(#clients > 0, "Client should be attached")
+    local client = clients[1]
+
+    -- At start of reference (0-indexed col 4 = '@')
+    local result_start = definition_sync(client, bufnr, 1, 4)
+    assert.is_not_nil(result_start, "Should resolve at start of @./file reference")
+    assert.equals(vim.uri_from_fname(target_path), result_start.uri)
+
+    -- In the middle (0-indexed col 12 = somewhere in 'include_target')
+    local result_mid = definition_sync(client, bufnr, 1, 12)
+    assert.is_not_nil(result_mid, "Should resolve in middle of @./file reference")
+    assert.equals(vim.uri_from_fname(target_path), result_mid.uri)
+
+    -- Near end (0-indexed col 24 = 'x' in '.txt')
+    local result_end = definition_sync(client, bufnr, 1, 24)
+    assert.is_not_nil(result_end, "Should resolve at end of @./file reference")
+    assert.equals(vim.uri_from_fname(target_path), result_end.uri)
   end)
 
   it("returns nil for definition on non-include expression", function()

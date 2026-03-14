@@ -84,7 +84,7 @@ end
 ---Convert a single emission to AST segments.
 ---Handles: nil (keep original), text, expression, remove, rewrite.
 ---@param emission flemma.preprocessor.Emission|flemma.preprocessor.EmissionList|nil
----@param position { line: integer, col: integer } Position for generated segments
+---@param position { line: integer, col: integer, end_line?: integer, end_col?: integer } Position for generated segments
 ---@param original_text string|nil Original matched text (for nil/keep-as-is case)
 ---@param buffer_edits flemma.preprocessor.BufferEdit[] Accumulator for buffer edits
 ---@param interactive boolean Whether in interactive mode
@@ -100,6 +100,8 @@ local function emission_to_segments(emission, position, original_text, buffer_ed
         ast.text(original_text, {
           start_line = position.line,
           start_col = position.col,
+          end_line = position.end_line,
+          end_col = position.end_col,
         })
       )
     end
@@ -120,7 +122,12 @@ local function emission_to_segments(emission, position, original_text, buffer_ed
   end
 
   ---@cast emission flemma.preprocessor.Emission
-  local pos = { start_line = position.line, start_col = position.col }
+  local pos = {
+    start_line = position.line,
+    start_col = position.col,
+    end_line = position.end_line,
+    end_col = position.end_col,
+  }
 
   if emission.kind == "remove" then
     -- Remove emission: produce no segments (delete matched text)
@@ -280,7 +287,7 @@ local function run_text_handlers(text_segment, handlers, rewriter_state, opts)
         -- Convert emission to segments
         local emission_segments = emission_to_segments(
           emission,
-          { line = current_line, col = accepted.start_pos },
+          { line = current_line, col = accepted.start_pos, end_line = current_line, end_col = accepted.end_pos },
           accepted.match.full,
           buffer_edits_accumulator,
           opts.interactive
@@ -380,13 +387,12 @@ local function run_segment_handlers(segment, handlers, rewriter_state, opts)
               original_text = "{{" .. seg.code .. "}}"
             end
 
-            local emission_segments = emission_to_segments(
-              emission,
-              { line = position.start_line or 1, col = position.start_col or 1 },
-              original_text,
-              buffer_edits_accumulator,
-              opts.interactive
-            )
+            local emission_segments = emission_to_segments(emission, {
+              line = position.start_line or 1,
+              col = position.start_col or 1,
+              end_line = position.end_line,
+              end_col = position.end_col,
+            }, original_text, buffer_edits_accumulator, opts.interactive)
 
             if rewriter_state._buffer_edits then
               for _, edit in ipairs(buffer_edits_accumulator) do

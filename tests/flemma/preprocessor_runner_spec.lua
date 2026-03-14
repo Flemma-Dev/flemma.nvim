@@ -640,6 +640,68 @@ describe("flemma.preprocessor.runner", function()
       -- "TARGET" starts at column 5 (1-indexed)
       assert.equals(5, expr_seg.position.start_col)
     end)
+
+    it("expression segments from text handlers include end_line and end_col", function()
+      local rewriter = preprocessor.create_rewriter("end_pos")
+      rewriter:on_text("MARKER", function(_, ctx)
+        return ctx:expression("replaced()")
+      end)
+
+      local doc = make_doc({
+        ast.text("abc MARKER xyz", { start_line = 3 }),
+      })
+
+      local result_doc = runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+
+      local segments = result_doc.messages[1].segments
+      local expr_seg = nil
+      for _, seg in ipairs(segments) do
+        if seg.kind == "expression" then
+          expr_seg = seg
+        end
+      end
+      assert.is_not_nil(expr_seg)
+      -- "MARKER" spans columns 5-10 on line 3
+      assert.equals(3, expr_seg.position.start_line)
+      assert.equals(5, expr_seg.position.start_col)
+      assert.equals(3, expr_seg.position.end_line)
+      assert.equals(10, expr_seg.position.end_col)
+    end)
+
+    it("find_segment_at_position matches expression segments from text handlers by column", function()
+      local query = require("flemma.ast.query")
+
+      local rewriter = preprocessor.create_rewriter("nav_pos")
+      rewriter:on_text("@(%.%.?%/[%.%/]*%S+)", function(match, ctx)
+        return ctx:expression("include('" .. match.captures[1] .. "')")
+      end)
+
+      local text_seg = ast.text("See @./file.txt for details", { start_line = 2 })
+      local doc = ast.document(nil, {
+        ast.message("You", { text_seg }, { start_line = 1, end_line = 2 }),
+      }, {}, { start_line = 1, end_line = 2 })
+
+      local result_doc = runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+
+      -- "See @./file.txt for details"
+      --  1234567890123456...
+      -- @./file.txt spans columns 5-15 (1-indexed)
+
+      -- Cursor on the "@" of @./file.txt (column 5)
+      local seg_at_start = query.find_segment_at_position(result_doc, 2, 5)
+      assert.is_not_nil(seg_at_start, "should find segment at start of file reference")
+      assert.equals("expression", seg_at_start.kind)
+
+      -- Cursor in the middle of @./file.txt (column 10)
+      local seg_at_mid = query.find_segment_at_position(result_doc, 2, 10)
+      assert.is_not_nil(seg_at_mid, "should find segment in middle of file reference")
+      assert.equals("expression", seg_at_mid.kind)
+
+      -- Cursor at end of @./file.txt (column 15, the last 't')
+      local seg_at_end = query.find_segment_at_position(result_doc, 2, 15)
+      assert.is_not_nil(seg_at_end, "should find segment at end of file reference")
+      assert.equals("expression", seg_at_end.kind)
+    end)
   end)
 
   describe("system accessor mutations", function()
