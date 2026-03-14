@@ -259,4 +259,60 @@ end
 ---@field depth? integer nil = unlimited, 1 = this node + child summaries
 ---@field indent? integer starting indent level (default 0)
 
+---Compute fold level for a line in a flemma-ast buffer.
+---Node header lines (matching kind + position pattern) start folds.
+---Multiline content key lines (value:, content:, code:, input:) start nested folds.
+---@param lnum integer 1-indexed line number
+---@return string
+function M.foldexpr(lnum)
+  local line = vim.fn.getline(lnum)
+  local indent = #(line:match("^(%s*)") or "")
+  local level = indent / #INDENT
+
+  -- Node header lines start a fold at their indent level + 1
+  if line:match("^%s*%w+%s*%[") or line:match("^%s*%w+$") then
+    return ">" .. (level + 1)
+  end
+
+  -- Multiline key lines (value:, content:, code:, input:) start a nested fold
+  if line:match("^%s+%w+:$") then
+    return ">" .. (level + 1)
+  end
+
+  return tostring(level + 1)
+end
+
+---Generate fold text for a collapsed fold in a flemma-ast buffer.
+---@return string
+function M.foldtext()
+  local foldstart = vim.v.foldstart
+  local foldend = vim.v.foldend
+  local line = vim.fn.getline(foldstart)
+  local line_count = foldend - foldstart + 1
+
+  -- For multiline content keys (value:, content:, code:, input:),
+  -- show a truncated preview of the content
+  if line:match("^%s+%w+:$") then
+    local key = vim.trim(line)
+    local next_line = vim.fn.getline(foldstart + 1)
+    local preview = vim.trim(next_line)
+
+    -- Calculate total content size
+    local total_bytes = 0
+    for i = foldstart + 1, foldend do
+      total_bytes = total_bytes + #vim.fn.getline(i)
+    end
+
+    if #preview > 40 then
+      preview = preview:sub(1, 40) .. "..."
+    end
+
+    local indent = line:match("^(%s*)")
+    return indent .. key:sub(1, -2) .. ': "' .. preview .. '" (' .. total_bytes .. " bytes)"
+  end
+
+  -- For node headers, show the header line with line count
+  return line .. " (" .. line_count .. " lines)"
+end
+
 return M
