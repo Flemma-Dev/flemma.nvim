@@ -5,6 +5,48 @@
 ---@class flemma.preprocessor.ContextModule
 local M = {}
 
+local state = require("flemma.state")
+
+--------------------------------------------------------------------------------
+-- Confirmation
+--------------------------------------------------------------------------------
+
+--- A confirmation request that suspends the preprocessor run.
+--- Thrown via error() when a rewriter needs user input during interactive mode.
+---@class flemma.preprocessor.Confirmation
+---@field id string Stable identifier for answer caching
+---@field prompt string Human-readable question
+---@field options? { yes_label?: string, no_label?: string }
+---@field _is_confirmation boolean Always true — sentinel for is_confirmation()
+local Confirmation = {}
+Confirmation.__index = Confirmation
+
+--- Create a new Confirmation instance.
+---@param id string Stable identifier for answer caching
+---@param prompt string Human-readable question
+---@param options? { yes_label?: string, no_label?: string }
+---@return flemma.preprocessor.Confirmation
+function Confirmation.new(id, prompt, options)
+  return setmetatable({
+    id = id,
+    prompt = prompt,
+    options = options,
+    _is_confirmation = true,
+  }, Confirmation)
+end
+
+M.Confirmation = Confirmation
+
+--- Check whether a value is a Confirmation object.
+---@param value any
+---@return boolean
+function M.is_confirmation(value)
+  if type(value) ~= "table" then
+    return false
+  end
+  return value._is_confirmation == true
+end
+
 --------------------------------------------------------------------------------
 -- SystemAccessor
 --------------------------------------------------------------------------------
@@ -292,6 +334,35 @@ end
 ---@return flemma.preprocessor.RewriterDiagnostic[]
 function Context:get_diagnostics()
   return self._diagnostics
+end
+
+--------------------------------------------------------------------------------
+-- Suspension API
+--------------------------------------------------------------------------------
+
+--- Request user confirmation. In non-interactive mode, returns nil immediately.
+--- In interactive mode, checks for a stored answer in buffer state; if found,
+--- returns the boolean. If no stored answer exists, throws a Confirmation object
+--- via error() to suspend the preprocessor run.
+---@param id string Stable identifier for answer caching across re-runs
+---@param prompt string Human-readable question to show the user
+---@param options? { yes_label?: string, no_label?: string } Custom button labels
+---@return boolean|nil result True/false if answered, nil if non-interactive
+function Context:confirm(id, prompt, options)
+  if not self.interactive then
+    return nil
+  end
+
+  -- Check for stored answer in buffer state
+  if self._bufnr then
+    local buffer_state = state.get_buffer_state(self._bufnr)
+    if buffer_state.confirmation_answers and buffer_state.confirmation_answers[id] ~= nil then
+      return buffer_state.confirmation_answers[id]
+    end
+  end
+
+  -- No stored answer — suspend by throwing a Confirmation
+  error(Confirmation.new(id, prompt, options))
 end
 
 M.Context = Context

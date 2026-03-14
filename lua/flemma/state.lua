@@ -54,6 +54,9 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field cursor_pending? flemma.cursor.PendingTarget Deferred cursor move waiting for user idle
 ---@field cursor_idle_timer? uv.uv_timer_t Per-buffer idle timer for cursor deferral
 ---@field file_reference_hashes? table<string, string> SHA256 hashes of included files from the last evaluation (keyed by absolute path)
+---@field confirmation_answers? table<string, boolean> Cached answers for preprocessor confirmation prompts
+---@field rewriter_diagnostics? flemma.preprocessor.RewriterDiagnostic[] Diagnostics from the last preprocessor run
+---@field _pending_confirmation? flemma.preprocessor.Confirmation In-flight confirmation awaiting user response
 
 ---@diagnostic disable-next-line: missing-fields
 local config = {} ---@type flemma.Config
@@ -134,6 +137,9 @@ local function init_buffer(bufnr)
       cache_read_input_tokens = 0,
       cache_creation_input_tokens = 0,
     },
+    confirmation_answers = nil,
+    rewriter_diagnostics = nil,
+    _pending_confirmation = nil,
   }
 end
 

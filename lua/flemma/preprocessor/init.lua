@@ -81,16 +81,6 @@ local DEFAULT_PRIORITY = 500
 ---@field end_col? integer 0-indexed end column
 
 --------------------------------------------------------------------------------
--- Confirmation type (used by ctx:confirm() suspension API)
---------------------------------------------------------------------------------
-
----@class flemma.preprocessor.Confirmation
----@field id string Stable identifier for answer caching
----@field prompt string Human-readable question
----@field options? { yes_label?: string, no_label?: string }
----@field _is_confirmation boolean Always true — sentinel for is_confirmation()
-
---------------------------------------------------------------------------------
 -- Rewriter class
 --------------------------------------------------------------------------------
 

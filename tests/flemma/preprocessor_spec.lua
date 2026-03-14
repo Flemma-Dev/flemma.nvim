@@ -379,5 +379,86 @@ describe("flemma.preprocessor", function()
         assert.equals("append", mutations[3].action)
       end)
     end)
+
+    describe("confirm()", function()
+      it("returns nil in non-interactive mode", function()
+        local ctx = context_module.new({
+          interactive = false,
+          _bufnr = vim.api.nvim_create_buf(false, true),
+        })
+        local result = ctx:confirm("test_id", "Allow this?")
+        assert.is_nil(result)
+      end)
+
+      it("throws a Confirmation when no stored answer in interactive mode", function()
+        local bufnr = vim.api.nvim_create_buf(false, true)
+        local ctx = context_module.new({
+          interactive = true,
+          _bufnr = bufnr,
+        })
+
+        local ok, err = pcall(function()
+          ctx:confirm("confirm_id", "Include file?")
+        end)
+        assert.is_false(ok)
+        assert.is_true(context_module.is_confirmation(err))
+        assert.equals("confirm_id", err.id)
+        assert.equals("Include file?", err.prompt)
+      end)
+
+      it("returns stored true answer on re-run", function()
+        local bufnr = vim.api.nvim_create_buf(false, true)
+        local state = require("flemma.state")
+        local buffer_state = state.get_buffer_state(bufnr)
+        buffer_state.confirmation_answers = { my_confirm = true }
+
+        local ctx = context_module.new({
+          interactive = true,
+          _bufnr = bufnr,
+        })
+
+        local result = ctx:confirm("my_confirm", "Proceed?")
+        assert.is_true(result)
+      end)
+
+      it("returns stored false answer on re-run", function()
+        local bufnr = vim.api.nvim_create_buf(false, true)
+        local state = require("flemma.state")
+        local buffer_state = state.get_buffer_state(bufnr)
+        buffer_state.confirmation_answers = { my_deny = false }
+
+        local ctx = context_module.new({
+          interactive = true,
+          _bufnr = bufnr,
+        })
+
+        local result = ctx:confirm("my_deny", "Proceed?")
+        assert.is_false(result)
+      end)
+
+      it("passes options through to the Confirmation object", function()
+        local bufnr = vim.api.nvim_create_buf(false, true)
+        local ctx = context_module.new({
+          interactive = true,
+          _bufnr = bufnr,
+        })
+
+        local ok, err = pcall(function()
+          ctx:confirm("opt_id", "Allow?", { yes_label = "Yes, include", no_label = "No, skip" })
+        end)
+        assert.is_false(ok)
+        assert.is_true(context_module.is_confirmation(err))
+        assert.equals("Yes, include", err.options.yes_label)
+        assert.equals("No, skip", err.options.no_label)
+      end)
+
+      it("is_confirmation returns false for non-confirmation values", function()
+        assert.is_false(context_module.is_confirmation(nil))
+        assert.is_false(context_module.is_confirmation("string"))
+        assert.is_false(context_module.is_confirmation(42))
+        assert.is_false(context_module.is_confirmation({}))
+        assert.is_false(context_module.is_confirmation({ _is_confirmation = false }))
+      end)
+    end)
   end)
 end)
