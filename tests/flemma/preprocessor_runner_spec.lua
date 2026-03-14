@@ -434,6 +434,222 @@ describe("flemma.preprocessor.runner", function()
     end)
   end)
 
+  describe("segment handlers — extended (Phase 2)", function()
+    it("on(text) handler processes text segments produced by on_text", function()
+      local rewriter = preprocessor.create_rewriter("text_phase2")
+      -- Phase 1: text handler produces a text emission with different content
+      rewriter:on_text("OLD", function(_, ctx)
+        return ctx:text("NEW")
+      end)
+      -- Phase 2: text segment handler wraps all text segments
+      rewriter:on("text", function(segment, ctx)
+        return ctx:text("[" .. segment.value .. "]")
+      end)
+
+      local doc = make_doc({
+        ast.text("x OLD y", { start_line = 1 }),
+      })
+
+      local result_doc, diagnostics = runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+      assert.equals(0, #diagnostics)
+
+      -- Phase 1 produces: text("x "), text("NEW"), text(" y")
+      -- Phase 2 wraps each text segment: text("[x ]"), text("[NEW]"), text("[  y]")
+      -- (note: actual text depends on Phase 1 output)
+      local segments = result_doc.messages[1].segments
+      for _, seg in ipairs(segments) do
+        if seg.kind == "text" then
+          assert.truthy(seg.value:match("^%[.+%]$"), "expected text wrapped in brackets: " .. seg.value)
+        end
+      end
+    end)
+
+    it("on(kind) handler does not match segments of other kinds", function()
+      local rewriter = preprocessor.create_rewriter("kind_filter")
+      local call_count = 0
+      rewriter:on("expression", function(_, ctx)
+        call_count = call_count + 1
+        return ctx:expression("handled")
+      end)
+
+      local doc = make_doc({
+        ast.text("just text", { start_line = 1 }),
+      })
+
+      runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+      assert.equals(0, call_count)
+    end)
+  end)
+
+  describe("multi-rewriter ordering — extended", function()
+    it("second rewriter's segment handler sees expressions from first rewriter", function()
+      local rewriter1 = preprocessor.create_rewriter("first_text", { priority = 100 })
+      rewriter1:on_text("EXPAND", function(_, ctx)
+        return ctx:expression("expanded()")
+      end)
+
+      local rewriter2 = preprocessor.create_rewriter("second_seg", { priority = 200 })
+      rewriter2:on("expression", function(segment, ctx)
+        return ctx:expression("wrapped(" .. segment.code .. ")")
+      end)
+
+      local doc = make_doc({
+        ast.text("do EXPAND now", { start_line = 1 }),
+      })
+
+      local result_doc, diagnostics = runner.run_pipeline(
+        doc,
+        nil,
+        make_opts({ rewriter1, rewriter2 })
+      )
+      assert.equals(0, #diagnostics)
+
+      local segments = result_doc.messages[1].segments
+      local found_wrapped = false
+      for _, seg in ipairs(segments) do
+        if seg.kind == "expression" and seg.code == "wrapped(expanded())" then
+          found_wrapped = true
+        end
+      end
+      assert.is_true(found_wrapped)
+    end)
+
+    it("processes all messages in a document", function()
+      local rewriter = preprocessor.create_rewriter("all_msgs")
+      rewriter:on_text("X", function(_, ctx)
+        return ctx:text("Y")
+      end)
+
+      local doc = ast.document(nil, {
+        ast.message("System", {
+          ast.text("sys X", { start_line = 1 }),
+        }, { start_line = 1, end_line = 2 }),
+        ast.message("You", {
+          ast.text("user X", { start_line = 3 }),
+        }, { start_line = 3, end_line = 4 }),
+        ast.message("Assistant", {
+          ast.text("asst X", { start_line = 5 }),
+        }, { start_line = 5, end_line = 6 }),
+      }, {}, { start_line = 1, end_line = 6 })
+
+      local result_doc = runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+
+      for _, msg in ipairs(result_doc.messages) do
+        local text_parts = {}
+        for _, seg in ipairs(msg.segments) do
+          if seg.kind == "text" then
+            table.insert(text_parts, seg.value)
+          end
+        end
+        local full = table.concat(text_parts)
+        assert.is_nil(full:find("X"), "expected X replaced in " .. msg.role .. " message: " .. full)
+        assert.truthy(full:find("Y"), "expected Y in " .. msg.role .. " message: " .. full)
+      end
+    end)
+  end)
+
+  describe("error handling — extended", function()
+    it("includes rewriter name in diagnostics", function()
+      local rewriter = preprocessor.create_rewriter("named_rewriter")
+      rewriter:on_text("FAIL", function()
+        error("intentional failure")
+      end)
+
+      local doc = make_doc({
+        ast.text("FAIL here", { start_line = 3 }),
+      })
+
+      local _, diagnostics = runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+      assert.equals(1, #diagnostics)
+      assert.equals("named_rewriter", diagnostics[1].rewriter_name)
+      assert.equals("rewriter", diagnostics[1].type)
+    end)
+
+    it("continues processing after a handler error", function()
+      local rewriter = preprocessor.create_rewriter("recover")
+      local call_count = 0
+      rewriter:on_text("(%u+)", function(match, ctx)
+        call_count = call_count + 1
+        if match.full == "BOOM" then
+          error("boom!")
+        end
+        return ctx:text(match.full:lower())
+      end)
+
+      local doc = make_doc({
+        ast.text("AAA BOOM ZZZ", { start_line = 1 }),
+      })
+
+      local result_doc, diagnostics = runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+      assert.equals(1, #diagnostics)
+      assert.equals(3, call_count)
+
+      -- AAA should be lowered, BOOM should be preserved, ZZZ should be lowered
+      local segments = result_doc.messages[1].segments
+      local full_text = ""
+      for _, seg in ipairs(segments) do
+        if seg.kind == "text" then
+          full_text = full_text .. seg.value
+        end
+      end
+      assert.truthy(full_text:find("aaa"))
+      assert.truthy(full_text:find("BOOM"))
+      assert.truthy(full_text:find("zzz"))
+    end)
+  end)
+
+  describe("position derivation — extended", function()
+    it("multi-line segment tracks line numbers for each line's matches", function()
+      local positions_seen = {}
+      local rewriter = preprocessor.create_rewriter("multiline_pos")
+      rewriter:on_text("MARK", function(match, _ctx)
+        table.insert(positions_seen, {
+          line = match._line,
+          col = match.start_col,
+        })
+        return nil -- keep original
+      end)
+
+      local doc = make_doc({
+        ast.text("no match\nMARK here\nmore\nMARK again", { start_line = 10 }),
+      })
+
+      runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+
+      -- MARK on line 2 of segment (base_line 10, so line 11) at col 1
+      -- MARK on line 4 of segment (base_line 10, so line 13) at col 1
+      assert.equals(2, #positions_seen)
+      assert.equals(11, positions_seen[1].line)
+      assert.equals(1, positions_seen[1].col)
+      assert.equals(13, positions_seen[2].line)
+      assert.equals(1, positions_seen[2].col)
+    end)
+
+    it("column position reflects match offset within the line", function()
+      local rewriter = preprocessor.create_rewriter("col_pos")
+      rewriter:on_text("TARGET", function(_, ctx)
+        return ctx:expression("found()")
+      end)
+
+      local doc = make_doc({
+        ast.text("abc TARGET xyz", { start_line = 1 }),
+      })
+
+      local result_doc = runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+
+      local segments = result_doc.messages[1].segments
+      local expr_seg = nil
+      for _, seg in ipairs(segments) do
+        if seg.kind == "expression" then
+          expr_seg = seg
+        end
+      end
+      assert.is_not_nil(expr_seg)
+      -- "TARGET" starts at column 5 (1-indexed)
+      assert.equals(5, expr_seg.position.start_col)
+    end)
+  end)
+
   describe("system accessor mutations", function()
     it("applies system prepends and appends to the document", function()
       local rewriter = preprocessor.create_rewriter("sys_mutator")
