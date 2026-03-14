@@ -10,6 +10,7 @@ local ast_query = require("flemma.ast.query")
 local parser = require("flemma.parser")
 
 local INDENT = "  "
+local NEWLINE_CHAR = "↵"
 
 ---Format a position as a bracket string.
 ---Collapses [N - N] to [N] when start and end are identical with no meaningful columns.
@@ -42,7 +43,8 @@ local function format_position(pos)
 end
 
 ---Append indented multiline content under a key label.
----Empty content lines are kept but stripped of trailing whitespace.
+---Each line ends with a visible newline marker (↵) so line boundaries
+---are unambiguous in the dump. Empty content lines show just the marker.
 ---@param output string[]
 ---@param level integer
 ---@param key string
@@ -51,11 +53,13 @@ local function append_multiline(output, level, key, value)
   local prefix = string.rep(INDENT, level)
   table.insert(output, prefix .. key .. ":")
   local content_prefix = string.rep(INDENT, level + 1)
-  for line in (value .. "\n"):gmatch("([^\n]*)\n") do
+  local lines = vim.split(value, "\n", { plain = true })
+  for i, line in ipairs(lines) do
+    local suffix = i < #lines and NEWLINE_CHAR or ""
     if line == "" then
-      table.insert(output, "")
+      table.insert(output, suffix == "" and "" or content_prefix .. suffix)
     else
-      table.insert(output, content_prefix .. line)
+      table.insert(output, content_prefix .. line .. suffix)
     end
   end
 end

@@ -74,6 +74,7 @@ local function build_match(line, m, current_line)
 end
 
 ---Emit a text AST segment from a string with position information.
+---Computes end_line and end_col from the string content.
 ---@param result flemma.ast.Segment[] Accumulator for segments
 ---@param str string Text to emit
 ---@param line integer 1-indexed line number
@@ -82,7 +83,23 @@ local function emit_text(result, str, line, col)
   if #str == 0 then
     return
   end
-  table.insert(result, ast.text(str, { start_line = line, start_col = col }))
+  local end_line = line
+  local end_col = col + #str - 1
+  -- Count newlines to compute end position
+  for _ in str:gmatch("\n") do
+    end_line = end_line + 1
+  end
+  if end_line > line then
+    -- After newlines, end_col is the length of the last line
+    local last_newline = str:find("\n[^\n]*$")
+    end_col = #str - last_newline
+  end
+  table.insert(result, ast.text(str, {
+    start_line = line,
+    start_col = col,
+    end_line = end_line,
+    end_col = end_col,
+  }))
 end
 
 ---Convert a single emission to AST segments.
@@ -314,7 +331,13 @@ local function run_text_handlers(text_segment, handlers, rewriter_state, opts, m
 
     -- Emit newline separator between lines (not after the last line)
     if line_index < #lines then
-      table.insert(result_segments, ast.text("\n", { start_line = current_line }))
+      local eol_col = #line + 1
+      table.insert(result_segments, ast.text("\n", {
+        start_line = current_line,
+        start_col = eol_col,
+        end_line = current_line + 1,
+        end_col = 0,
+      }))
       current_line = current_line + 1
     end
   end
