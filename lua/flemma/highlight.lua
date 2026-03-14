@@ -411,6 +411,9 @@ M.apply_syntax = function()
   set_highlight("FlemmaToolSuccess", { link = "DiagnosticOk", default = true })
   set_highlight("FlemmaToolError", { link = "DiagnosticError", default = true })
 
+  -- Integration busy indicator highlight
+  set_highlight("FlemmaBusy", syntax_config.highlights.busy)
+
   -- Notification bar highlight groups
   -- Derived from the first group in notifications.hl that provides both fg and bg
   local bar_bg_hex, bar_fg_hex, notification_base_group
