@@ -61,6 +61,20 @@ file_refs:on_text("@(%.%.?%/[%.%/]*%S+)", function(match, ctx)
   return ctx:expression(code)
 end)
 
+---@param config flemma.Config
+---@return flemma.preprocessor.SyntaxRule[]
+function file_refs:get_vim_syntax(config)
+  return {
+    {
+      kind = "match",
+      group = "FlemmaUserFileReference",
+      pattern = [=[@\v(\.\.?\/)\S*[^[:punct:]\s]]=],
+      containedin = { "user", "system" },
+      hl = config.highlights.user_file_reference,
+    },
+  }
+end
+
 M.rewriter = file_refs
 
 return M
