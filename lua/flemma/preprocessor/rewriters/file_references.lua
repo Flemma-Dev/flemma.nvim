@@ -23,6 +23,11 @@ end
 local file_refs = preprocessor.create_rewriter("file-references", { priority = 100 })
 
 file_refs:on_text("@(%.%.?%/[%.%/]*%S+)", function(match, ctx)
+  -- File references only apply to non-Assistant messages (parity with original parser)
+  if ctx.message and ctx.message.role == "Assistant" then
+    return nil
+  end
+
   local raw_path, options_str = match.captures[1]:match("^([^;]+)(;.+)$")
   local trailing
 

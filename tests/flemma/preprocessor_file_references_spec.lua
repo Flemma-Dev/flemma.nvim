@@ -156,6 +156,53 @@ describe("flemma.preprocessor.rewriters.file_references", function()
     assert.truthy(expr_seg.code:match("\\'"))
   end)
 
+  it("does not process @./file in Assistant messages", function()
+    local doc = ast.document(nil, {
+      ast.message("Assistant", {
+        ast.text("See @./readme.md for details", { start_line = 2, end_line = 2 }),
+      }, { start_line = 1, end_line = 2 }),
+    }, {}, { start_line = 1, end_line = 2 })
+
+    local result = runner.run_pipeline(doc, 0, {
+      interactive = false,
+      rewriters = { file_refs_module.rewriter },
+    })
+
+    local segs = result.messages[1].segments
+    -- All segments should be text — no expression from file reference
+    for _, seg in ipairs(segs) do
+      assert.equals("text", seg.kind, "expected no expression segments in Assistant message")
+    end
+    -- Original text should be preserved
+    local full_text = ""
+    for _, seg in ipairs(segs) do
+      full_text = full_text .. seg.value
+    end
+    assert.equals("See @./readme.md for details", full_text)
+  end)
+
+  it("still processes @./file in System messages", function()
+    local doc = ast.document(nil, {
+      ast.message("System", {
+        ast.text("@./readme.md", { start_line = 2, end_line = 2 }),
+      }, { start_line = 1, end_line = 2 }),
+    }, {}, { start_line = 1, end_line = 2 })
+
+    local result = runner.run_pipeline(doc, 0, {
+      interactive = false,
+      rewriters = { file_refs_module.rewriter },
+    })
+
+    local segs = result.messages[1].segments
+    local has_expression = false
+    for _, seg in ipairs(segs) do
+      if seg.kind == "expression" then
+        has_expression = true
+      end
+    end
+    assert.is_true(has_expression, "System messages should still have file references processed")
+  end)
+
   it("does not match email-like patterns", function()
     local doc = run_rewriter("email user@example.com here")
     local kinds = segment_kinds(doc)

@@ -25,6 +25,10 @@ local context_module = require("flemma.preprocessor.context")
 ---@field end_col integer 0-indexed end column
 ---@field replacement string[] Replacement lines
 
+---@class flemma.preprocessor.MessageContext
+---@field message flemma.ast.MessageNode The current message being processed
+---@field index integer 1-indexed position in the message array
+
 ---@class flemma.preprocessor.RewriterState
 ---@field system flemma.preprocessor.SystemAccessor
 ---@field frontmatter flemma.preprocessor.FrontmatterAccessor
@@ -173,8 +177,9 @@ end
 ---@param handlers flemma.preprocessor.TextHandlerEntry[] Text handlers from the rewriter
 ---@param rewriter_state flemma.preprocessor.RewriterState Shared state for this rewriter
 ---@param opts flemma.preprocessor.RunOpts Pipeline options
+---@param message_context flemma.preprocessor.MessageContext Current message iteration context
 ---@return flemma.ast.Segment[] result_segments
-local function run_text_handlers(text_segment, handlers, rewriter_state, opts)
+local function run_text_handlers(text_segment, handlers, rewriter_state, opts, message_context)
   if #handlers == 0 then
     return { text_segment }
   end
@@ -264,6 +269,8 @@ local function run_text_handlers(text_segment, handlers, rewriter_state, opts)
       local ctx = context_module.new({
         system = rewriter_state.system,
         frontmatter = rewriter_state.frontmatter,
+        message = message_context.message,
+        message_index = message_context.index,
         position = { line = current_line, col = accepted.start_pos },
         interactive = opts.interactive,
         _bufnr = opts.bufnr,
@@ -327,8 +334,9 @@ end
 ---@param handlers flemma.preprocessor.SegmentHandlerEntry[] Segment handlers from the rewriter
 ---@param rewriter_state flemma.preprocessor.RewriterState Shared state for this rewriter
 ---@param opts flemma.preprocessor.RunOpts Pipeline options
+---@param message_context flemma.preprocessor.MessageContext Current message iteration context
 ---@return flemma.ast.Segment[] result_segments
-local function run_segment_handlers(segment, handlers, rewriter_state, opts)
+local function run_segment_handlers(segment, handlers, rewriter_state, opts, message_context)
   local matching_handlers = {}
   for _, entry in ipairs(handlers) do
     if entry.kind == segment.kind then
@@ -354,6 +362,8 @@ local function run_segment_handlers(segment, handlers, rewriter_state, opts)
         local ctx = context_module.new({
           system = rewriter_state.system,
           frontmatter = rewriter_state.frontmatter,
+          message = message_context.message,
+          message_index = message_context.index,
           position = { line = position.start_line, col = position.start_col },
           interactive = opts.interactive,
           _bufnr = opts.bufnr,
@@ -421,13 +431,14 @@ end
 ---@param rewriter flemma.preprocessor.Rewriter The rewriter being executed
 ---@param rewriter_state flemma.preprocessor.RewriterState Shared state
 ---@param opts flemma.preprocessor.RunOpts Pipeline options
+---@param message_context flemma.preprocessor.MessageContext Current message iteration context
 ---@return flemma.ast.Segment[]
-local function process_segment(segment, rewriter, rewriter_state, opts)
+local function process_segment(segment, rewriter, rewriter_state, opts, message_context)
   -- Phase 1: on_text handlers (only for text segments)
   local phase1_segments ---@type flemma.ast.Segment[]
   if segment.kind == "text" then
     ---@cast segment flemma.ast.TextSegment
-    phase1_segments = run_text_handlers(segment, rewriter.text_handlers, rewriter_state, opts)
+    phase1_segments = run_text_handlers(segment, rewriter.text_handlers, rewriter_state, opts, message_context)
   else
     phase1_segments = { segment }
   end
@@ -439,7 +450,7 @@ local function process_segment(segment, rewriter, rewriter_state, opts)
 
   local phase2_segments = {} ---@type flemma.ast.Segment[]
   for _, seg in ipairs(phase1_segments) do
-    local handled = run_segment_handlers(seg, rewriter.segment_handlers, rewriter_state, opts)
+    local handled = run_segment_handlers(seg, rewriter.segment_handlers, rewriter_state, opts, message_context)
     for _, result_seg in ipairs(handled) do
       table.insert(phase2_segments, result_seg)
     end
@@ -610,11 +621,13 @@ function M.run_pipeline(doc, bufnr, opts)
     system_accessor:set_context(name_ctx)
 
     -- Process each message's segments
-    for _, message in ipairs(doc.messages) do
+    for message_index, message in ipairs(doc.messages) do
+      ---@type flemma.preprocessor.MessageContext
+      local message_context = { message = message, index = message_index }
       local new_segments = {} ---@type flemma.ast.Segment[]
 
       for _, segment in ipairs(message.segments) do
-        local result_segs = process_segment(segment, rewriter, rewriter_state, opts)
+        local result_segs = process_segment(segment, rewriter, rewriter_state, opts, message_context)
         for _, seg in ipairs(result_segs) do
           table.insert(new_segments, seg)
         end

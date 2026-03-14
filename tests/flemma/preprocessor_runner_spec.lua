@@ -321,6 +321,77 @@ describe("flemma.preprocessor.runner", function()
     end)
   end)
 
+  describe("context message population", function()
+    it("populates ctx.message with the current message node", function()
+      local captured_messages = {}
+      local rewriter = preprocessor.create_rewriter("msg_capture")
+      rewriter:on_text("X", function(_, ctx)
+        table.insert(captured_messages, ctx.message)
+        return nil
+      end)
+
+      local doc = ast.document(nil, {
+        ast.message("System", {
+          ast.text("X", { start_line = 1 }),
+        }, { start_line = 1, end_line = 2 }),
+        ast.message("You", {
+          ast.text("X", { start_line = 3 }),
+        }, { start_line = 3, end_line = 4 }),
+        ast.message("Assistant", {
+          ast.text("X", { start_line = 5 }),
+        }, { start_line = 5, end_line = 6 }),
+      }, {}, { start_line = 1, end_line = 6 })
+
+      runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+
+      assert.equals(3, #captured_messages)
+      assert.equals("System", captured_messages[1].role)
+      assert.equals("You", captured_messages[2].role)
+      assert.equals("Assistant", captured_messages[3].role)
+    end)
+
+    it("populates ctx.message_index with the 1-indexed position", function()
+      local captured_indices = {}
+      local rewriter = preprocessor.create_rewriter("idx_capture")
+      rewriter:on_text("X", function(_, ctx)
+        table.insert(captured_indices, ctx.message_index)
+        return nil
+      end)
+
+      local doc = ast.document(nil, {
+        ast.message("System", {
+          ast.text("X", { start_line = 1 }),
+        }, { start_line = 1, end_line = 2 }),
+        ast.message("You", {
+          ast.text("X", { start_line = 3 }),
+        }, { start_line = 3, end_line = 4 }),
+      }, {}, { start_line = 1, end_line = 4 })
+
+      runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+
+      assert.equals(2, #captured_indices)
+      assert.equals(1, captured_indices[1])
+      assert.equals(2, captured_indices[2])
+    end)
+
+    it("populates ctx.message in segment handlers (Phase 2)", function()
+      local captured_role = nil
+      local rewriter = preprocessor.create_rewriter("seg_msg_capture")
+      rewriter:on("expression", function(_, ctx)
+        captured_role = ctx.message and ctx.message.role
+        return nil
+      end)
+
+      local doc = make_doc({
+        ast.expression("1 + 1", { start_line = 1 }),
+      })
+
+      runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+
+      assert.equals("You", captured_role)
+    end)
+  end)
+
   describe("multi-rewriter ordering", function()
     it("runs rewriters in priority order, later sees output of earlier", function()
       local rewriter1 = preprocessor.create_rewriter("first", { priority = 100 })
