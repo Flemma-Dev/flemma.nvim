@@ -4,156 +4,17 @@
 local M = {}
 
 local ast = require("flemma.ast")
+local dump = require("flemma.ast.dump")
 local log = require("flemma.logging")
 local navigation = require("flemma.navigation")
 local parser = require("flemma.parser")
-local json = require("flemma.utilities.json")
 
----Serialize an AST segment to a markdown hover string.
----@param seg flemma.ast.Segment
----@param msg flemma.ast.MessageNode
+---Build a markdown hover string from an AST node using the dump module.
+---@param node flemma.ast.DocumentNode|flemma.ast.MessageNode|flemma.ast.Segment|flemma.ast.FrontmatterNode
 ---@return string markdown
-local function segment_to_markdown(seg, msg)
-  local lines = {}
-
-  -- Header: segment kind
-  local kind_label = seg.kind:gsub("_?(%a)([%w]*)", function(first, rest)
-    return first:upper() .. rest
-  end) .. "Segment"
-  table.insert(lines, "_" .. kind_label .. "_")
-  table.insert(lines, "")
-  table.insert(lines, "**Role:** " .. msg.role)
-
-  -- Kind-specific fields
-  if seg.kind == "expression" then
-    ---@cast seg flemma.ast.ExpressionSegment
-    table.insert(lines, "**Code:** `" .. seg.code .. "`")
-  elseif seg.kind == "thinking" then
-    ---@cast seg flemma.ast.ThinkingSegment
-    table.insert(lines, "**Redacted:** " .. tostring(seg.redacted or false))
-    if seg.signature then
-      table.insert(lines, "**Signature provider:** " .. seg.signature.provider)
-    end
-    table.insert(lines, "")
-    table.insert(lines, "**Content:**")
-    table.insert(lines, "")
-    table.insert(lines, seg.content)
-  elseif seg.kind == "tool_use" then
-    ---@cast seg flemma.ast.ToolUseSegment
-    table.insert(lines, "**Tool:** `" .. seg.name .. "`")
-    table.insert(lines, "**ID:** `" .. seg.id .. "`")
-    table.insert(lines, "")
-    table.insert(lines, "**Input:**")
-    table.insert(lines, "```json")
-    table.insert(lines, json.encode(seg.input))
-    table.insert(lines, "```")
-  elseif seg.kind == "tool_result" then
-    ---@cast seg flemma.ast.ToolResultSegment
-    table.insert(lines, "**Tool Use ID:** `" .. seg.tool_use_id .. "`")
-    table.insert(lines, "**Error:** " .. tostring(seg.is_error))
-    if seg.status then
-      table.insert(lines, "**Status:** " .. seg.status)
-    end
-    table.insert(lines, "")
-    table.insert(lines, "**Content:**")
-    table.insert(lines, "```")
-    table.insert(lines, seg.content)
-    table.insert(lines, "```")
-  elseif seg.kind == "text" then
-    ---@cast seg flemma.ast.TextSegment
-    local preview = seg.value
-    if #preview > 200 then
-      preview = preview:sub(1, 200) .. "..."
-    end
-    table.insert(lines, "**Content:** " .. vim.trim(preview))
-  elseif seg.kind == "aborted" then
-    ---@cast seg flemma.ast.AbortedSegment
-    table.insert(lines, "**Message:** " .. seg.message)
-  end
-
-  -- Position info
-  if seg.position then
-    table.insert(lines, "")
-    local pos_parts = { "L" .. seg.position.start_line }
-    if seg.position.start_col then
-      pos_parts[1] = pos_parts[1] .. ":C" .. seg.position.start_col
-    end
-    if seg.position.end_line then
-      local end_part = "L" .. seg.position.end_line
-      if seg.position.end_col then
-        end_part = end_part .. ":C" .. seg.position.end_col
-      end
-      table.insert(pos_parts, end_part)
-    end
-    table.insert(lines, "**Position:** " .. table.concat(pos_parts, " \u{2192} "))
-  end
-
-  return table.concat(lines, "\n")
-end
-
----Serialize a message node (role marker) to a markdown hover string.
----@param msg flemma.ast.MessageNode
----@return string markdown
-local function message_to_markdown(msg)
-  local lines = {}
-  table.insert(lines, "_MessageNode_")
-  table.insert(lines, "")
-  table.insert(lines, "**Role:** " .. msg.role)
-  table.insert(lines, "**Segments:** " .. #msg.segments)
-
-  -- Summarize segment kinds
-  local kind_counts = {} ---@type table<string, integer>
-  for _, seg in ipairs(msg.segments) do
-    kind_counts[seg.kind] = (kind_counts[seg.kind] or 0) + 1
-  end
-  local summary_parts = {}
-  for kind, count in pairs(kind_counts) do
-    table.insert(summary_parts, kind .. "=" .. count)
-  end
-  table.sort(summary_parts)
-  if #summary_parts > 0 then
-    table.insert(lines, "**Breakdown:** " .. table.concat(summary_parts, ", "))
-  end
-
-  if msg.position then
-    table.insert(lines, "")
-    table.insert(
-      lines,
-      "**Position:** L"
-        .. msg.position.start_line
-        .. " \u{2192} L"
-        .. (msg.position.end_line or msg.position.start_line)
-    )
-  end
-
-  return table.concat(lines, "\n")
-end
-
----Serialize a frontmatter node to a markdown hover string.
----@param fm flemma.ast.FrontmatterNode
----@return string markdown
-local function frontmatter_to_markdown(fm)
-  local lines = {}
-  table.insert(lines, "_FrontmatterNode_")
-  table.insert(lines, "")
-  table.insert(lines, "**Language:** " .. fm.language)
-  table.insert(lines, "**Length:** " .. #fm.code .. " bytes")
-
-  if fm.position then
-    table.insert(lines, "")
-    table.insert(
-      lines,
-      "**Position:** L" .. fm.position.start_line .. " \u{2192} L" .. (fm.position.end_line or fm.position.start_line)
-    )
-  end
-
-  table.insert(lines, "")
-  table.insert(lines, "**Code:**")
-  table.insert(lines, "```" .. fm.language)
-  table.insert(lines, fm.code)
-  table.insert(lines, "```")
-
-  return table.concat(lines, "\n")
+local function node_to_markdown(node)
+  local lines = dump.tree(node, { depth = 1 })
+  return "```flemma-ast\n" .. table.concat(lines, "\n") .. "\n```"
 end
 
 ---Extract and validate buffer + position from LSP textDocument params.
@@ -234,7 +95,7 @@ local function handle_hover(params)
 
     log.debug("lsp hover: matched " .. seg_detail .. " in @" .. msg.role .. " message")
 
-    local markdown = segment_to_markdown(seg, msg)
+    local markdown = node_to_markdown(seg)
     log.trace("lsp hover: response markdown (" .. #markdown .. " bytes):\n" .. markdown)
     return hover_response(markdown)
   end
@@ -242,7 +103,7 @@ local function handle_hover(params)
   -- No segment but within a message (e.g., role marker line)
   if msg then
     log.debug("lsp hover: role marker for @" .. msg.role .. " at L" .. lnum)
-    return hover_response(message_to_markdown(msg))
+    return hover_response(node_to_markdown(msg))
   end
 
   -- Check frontmatter
@@ -253,7 +114,7 @@ local function handle_hover(params)
     local fm_end = pos.end_line or pos.start_line
     if lnum >= pos.start_line and lnum <= fm_end then
       log.debug("lsp hover: frontmatter (" .. fm.language .. ") at L" .. lnum)
-      return hover_response(frontmatter_to_markdown(fm))
+      return hover_response(node_to_markdown(fm))
     end
   end
 
