@@ -1,12 +1,15 @@
 describe("flemma.ast.dump", function()
   local dump
   local nodes
+  local display
 
   before_each(function()
     package.loaded["flemma.ast.dump"] = nil
     package.loaded["flemma.ast.nodes"] = nil
+    package.loaded["flemma.utilities.display"] = nil
     dump = require("flemma.ast.dump")
     nodes = require("flemma.ast.nodes")
+    display = require("flemma.utilities.display")
   end)
 
   describe("position formatting", function()
@@ -45,11 +48,13 @@ describe("flemma.ast.dump", function()
       assert.equals("    World!", lines[4])
     end)
 
-    it("renders expression segment with inline code", function()
+    it("renders expression segment with multiline code", function()
       local seg = nodes.expression("os.date()", { start_line = 7, end_line = 7, start_col = 12, end_col = 28 })
       local lines = dump.tree(seg)
-      assert.equals('expression [7:12 - 7:28] code="os.date()"', lines[1])
-      assert.equals(1, #lines)
+      assert.equals("expression [7:12 - 7:28]", lines[1])
+      assert.equals("  code:", lines[2])
+      assert.equals("    os.date()", lines[3])
+      assert.equals(3, #lines)
     end)
 
     it("renders thinking segment with redacted and signature", function()
@@ -106,6 +111,24 @@ describe("flemma.ast.dump", function()
       assert.equals("    vim.g.x = true↵", lines[3])
       assert.equals("    vim.g.y = false", lines[4])
     end)
+
+    it("visualizes leading and trailing whitespace", function()
+      local lead = display.get_lead_char()
+      local trail = display.get_trail_char()
+      local seg = nodes.expression(" include('foo') ", { start_line = 5, end_line = 5, start_col = 1, end_col = 17 })
+      local lines = dump.tree(seg)
+      assert.equals("expression [5:1 - 5:17]", lines[1])
+      assert.equals("  code:", lines[2])
+      assert.equals("    " .. lead .. "include('foo')" .. trail, lines[3])
+    end)
+
+    it("visualizes whitespace-only content", function()
+      local trail = display.get_trail_char()
+      local seg = nodes.text("  ", { start_line = 5, end_line = 5 })
+      local lines = dump.tree(seg)
+      assert.equals("  value:", lines[2])
+      assert.equals("    " .. trail .. trail, lines[3])
+    end)
   end)
 
   describe("depth limiting", function()
@@ -150,11 +173,11 @@ describe("flemma.ast.dump", function()
       assert.equals("    code:", lines[3])
       assert.equals("      x = 1", lines[4])
       assert.equals('  message [4 - 5] role="You"', lines[5])
-      assert.equals("    text [5 - 5]", lines[6])
+      assert.equals("    text [5]", lines[6])
       assert.equals("      value:", lines[7])
       assert.equals("        Hello", lines[8])
       assert.equals('  message [6 - 7] role="Assistant"', lines[9])
-      assert.equals("    text [7 - 7]", lines[10])
+      assert.equals("    text [7]", lines[10])
       assert.equals("      value:", lines[11])
       assert.equals("        Hi there", lines[12])
     end)

@@ -3,6 +3,7 @@
 local M = {}
 
 local json = require("flemma.utilities.json")
+local display = require("flemma.utilities.display")
 -- NOTE: require("flemma.ast.query") directly instead of the barrel require("flemma.ast")
 -- because dump.lua is itself part of the ast/ package and imported by the barrel — using
 -- the barrel here would create a circular require.
@@ -10,7 +11,19 @@ local ast_query = require("flemma.ast.query")
 local parser = require("flemma.parser")
 
 local INDENT = "  "
-local NEWLINE_CHAR = "↵"
+
+---@type table<string, true>
+local NODE_KINDS = {
+  document = true,
+  message = true,
+  text = true,
+  expression = true,
+  thinking = true,
+  tool_use = true,
+  tool_result = true,
+  aborted = true,
+  frontmatter = true,
+}
 
 ---Format a position as a bracket string.
 ---Shows exactly what the AST has — no collapsing, no normalization.
@@ -29,14 +42,48 @@ local function format_position(pos)
     if pos.end_col then
       end_str = end_str .. ":" .. pos.end_col
     end
+    if start_str == end_str then
+      return " [" .. start_str .. "]"
+    end
     return " [" .. start_str .. " - " .. end_str .. "]"
   end
   return " [" .. start_str .. "]"
 end
 
+---Replace leading and trailing whitespace with visible marker characters.
+---@param str string
+---@return string
+local function visualize_whitespace(str)
+  if str == "" then
+    return str
+  end
+  local lead_char = display.get_lead_char()
+  local trail_char = display.get_trail_char()
+  local tab_char = display.get_tab_char()
+  -- Entirely whitespace — show as trailing
+  if str:match("^%s+$") then
+    return (str:gsub("\t", tab_char):gsub(" ", trail_char))
+  end
+  -- Leading whitespace
+  local leading = str:match("^(%s+)")
+  if leading then
+    local visible = leading:gsub("\t", tab_char):gsub(" ", lead_char)
+    str = visible .. str:sub(#leading + 1)
+  end
+  -- Trailing whitespace
+  local body, trailing = str:match("^(.-)(%s+)$")
+  if trailing then
+    local visible = trailing:gsub("\t", tab_char):gsub(" ", trail_char)
+    str = body .. visible
+  end
+  return str
+end
+
 ---Append indented multiline content under a key label.
----Each line ends with a visible newline marker (↵) so line boundaries
----are unambiguous in the dump. Empty content lines show just the marker.
+---Each line ends with a visible newline marker so line boundaries
+---are unambiguous in the dump. Leading and trailing whitespace is
+---replaced with visible marker characters. Empty content lines show
+---just the newline marker.
 ---@param output string[]
 ---@param level integer
 ---@param key string
@@ -47,11 +94,11 @@ local function append_multiline(output, level, key, value)
   local content_prefix = string.rep(INDENT, level + 1)
   local lines = vim.split(value, "\n", { plain = true })
   for i, line in ipairs(lines) do
-    local suffix = i < #lines and NEWLINE_CHAR or ""
+    local suffix = i < #lines and display.get_newline_char() or ""
     if line == "" then
       table.insert(output, suffix == "" and "" or content_prefix .. suffix)
     else
-      table.insert(output, content_prefix .. line .. suffix)
+      table.insert(output, content_prefix .. visualize_whitespace(line) .. suffix)
     end
   end
 end
@@ -152,12 +199,6 @@ local function inline_fields(seg)
   elseif kind == "frontmatter" then
     ---@cast seg flemma.ast.FrontmatterNode
     table.insert(parts, 'language="' .. seg.language .. '"')
-  elseif kind == "expression" then
-    ---@cast seg flemma.ast.ExpressionSegment
-    -- Adaptive: inline if single-line
-    if not seg.code:find("\n") then
-      table.insert(parts, 'code="' .. seg.code .. '"')
-    end
   elseif kind == "thinking" then
     ---@cast seg flemma.ast.ThinkingSegment
     table.insert(parts, "redacted=" .. tostring(seg.redacted or false))
@@ -262,10 +303,7 @@ function M.tree(node, opts)
     append_multiline(output, level + 1, "value", node.value)
   elseif kind == "expression" then
     ---@cast node flemma.ast.ExpressionSegment
-    -- Only render multiline if code contains newlines (otherwise it's inline)
-    if node.code:find("\n") then
-      append_multiline(output, level + 1, "code", node.code)
-    end
+    append_multiline(output, level + 1, "code", node.code)
   elseif kind == "thinking" then
     ---@cast node flemma.ast.ThinkingSegment
     append_multiline(output, level + 1, "content", node.content)
@@ -314,14 +352,25 @@ function M.open_diff(bufnr)
   end
 
   local source_name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ":t")
-  vim.api.nvim_buf_set_name(buf_raw, "ast:raw (" .. source_name .. ")")
-  vim.api.nvim_buf_set_name(buf_rewritten, "ast:rewritten (" .. source_name .. ")")
+  local raw_name = "ast:raw (" .. source_name .. ")"
+  local rewritten_name = "ast:rewritten (" .. source_name .. ")"
+  -- Wipe any existing ast:diff buffers for this file to avoid E95
+  -- Cannot use vim.fn.bufnr() here — it interprets the name as a pattern
+  -- and the parentheses break matching.
+  for _, b in ipairs(vim.api.nvim_list_bufs()) do
+    local bname = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(b), ":t")
+    if bname == raw_name or bname == rewritten_name then
+      vim.api.nvim_buf_delete(b, { force = true })
+    end
+  end
+  vim.api.nvim_buf_set_name(buf_raw, raw_name)
+  vim.api.nvim_buf_set_name(buf_rewritten, rewritten_name)
 
-  -- Open in a new tab with diff mode
+  -- Open in a new tab with diff mode: raw (old) on left, rewritten (new) on right
   vim.cmd("tabnew")
   vim.api.nvim_set_current_buf(buf_raw)
   vim.cmd("diffthis")
-  vim.cmd("vsplit")
+  vim.cmd("rightbelow vsplit")
   vim.api.nvim_set_current_buf(buf_rewritten)
   vim.cmd("diffthis")
 
@@ -377,12 +426,8 @@ function M.open_diff(bufnr)
   local raw_win = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_cursor(raw_win, { target_raw, 0 })
 
-  -- Close all folds, then open the path to the cursor node
-  for _, win in ipairs({ raw_win, rewritten_win }) do
-    vim.api.nvim_set_current_win(win)
-    vim.cmd("normal! zM") -- close all folds
-    vim.cmd("normal! zv") -- open folds at cursor
-  end
+  -- Leave cursor in the raw (left) window
+  vim.api.nvim_set_current_win(raw_win)
 end
 
 ---Compute fold level for a line in a flemma-ast buffer.
@@ -401,28 +446,9 @@ function M.foldexpr(lnum)
   local indent = #(line:match("^(%s*)") or "")
   local level = indent / #INDENT
 
-  -- Node header lines start a fold at their indent level + 1
-  -- Match kind + position bracket, or a bare kind word followed by inline fields
-  if line:match("^%s*%w+%s*%[") or line:match("^%s*%w+%s+%w+") then
-    return ">" .. (level + 1)
-  end
-
-  -- Bare node headers without position or fields (e.g., "text" with no position)
-  local word = line:match("^%s*(%w+)$")
-  if
-    word
-    and (
-      word == "document"
-      or word == "message"
-      or word == "text"
-      or word == "expression"
-      or word == "thinking"
-      or word == "tool_use"
-      or word == "tool_result"
-      or word == "aborted"
-      or word == "frontmatter"
-    )
-  then
+  -- Node header lines start a fold — use [%w_]+ to match kinds with underscores
+  local word = line:match("^%s*([%w_]+)")
+  if word and NODE_KINDS[word] then
     return ">" .. (level + 1)
   end
 

@@ -26,6 +26,12 @@ syntax match FlemmaAstMultilineKey "^\s\+\zs\(value\|content\|code\|input\)\ze:$
 " Child summary at depth=1
 syntax match FlemmaAstChildSummary "^\s\+\zs\(segments\|messages\|frontmatter\): \d\+ child\(ren\)\?"
 
+" Whitespace and newline markers — resolved at runtime from the user's listchars setting
+execute 'syntax match FlemmaAstNewline "' . luaeval("require('flemma.utilities.display').get_newline_char()") . '"'
+execute 'syntax match FlemmaAstWhitespace "' . luaeval("require('flemma.utilities.display').get_lead_char()") . '"'
+execute 'syntax match FlemmaAstWhitespace "' . luaeval("require('flemma.utilities.display').get_trail_char()") . '"'
+execute 'syntax match FlemmaAstWhitespace "' . luaeval("require('flemma.utilities.display').get_tab_char()") . '"'
+
 " Highlight links (FlemmaAstHeaderLine is transparent — it only contains)
 highlight default link FlemmaAstNodeKind Keyword
 highlight default link FlemmaAstPosition Comment
@@ -34,5 +40,7 @@ highlight default link FlemmaAstFieldValue String
 highlight default link FlemmaAstBoolean Boolean
 highlight default link FlemmaAstMultilineKey Label
 highlight default link FlemmaAstChildSummary Comment
+highlight default link FlemmaAstNewline NonText
+highlight default link FlemmaAstWhitespace Whitespace
 
 let b:current_syntax = "flemma-ast"
