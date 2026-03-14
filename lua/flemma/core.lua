@@ -81,15 +81,16 @@ end
 ---@param provider_name string
 ---@param model_name? string
 ---@param parameters? table<string, any>
+---@param opts? { bufnr: integer }
 ---@return flemma.provider.Base|nil
-function M.switch_provider(provider_name, model_name, parameters)
+function M.switch_provider(provider_name, model_name, parameters, opts)
   if not provider_name then
     vim.notify("Flemma: Provider name is required", vim.log.levels.ERROR)
     return
   end
 
   -- Check for ongoing requests
-  local bufnr = vim.api.nvim_get_current_buf()
+  local bufnr = (opts and opts.bufnr) or vim.api.nvim_get_current_buf()
   local buffer_state = state.get_buffer_state(bufnr)
   if buffer_state.current_request then
     vim.notify("Flemma: Cannot switch providers while a request is in progress.", vim.log.levels.WARN)
@@ -145,8 +146,9 @@ function M.switch_provider(provider_name, model_name, parameters)
 end
 
 ---Cancel ongoing request if any
-function M.cancel_request()
-  local bufnr = vim.api.nvim_get_current_buf()
+---@param opts? { bufnr: integer }
+function M.cancel_request(opts)
+  local bufnr = (opts and opts.bufnr) or vim.api.nvim_get_current_buf()
   local buffer_state = state.get_buffer_state(bufnr)
 
   if buffer_state.current_request then
@@ -522,7 +524,7 @@ function M.send_to_provider(opts)
     local target_bufnr = bufnr
     tools_module.on_ready(function()
       buffer_state.waiting_for_tools = false
-      if vim.api.nvim_buf_is_valid(target_bufnr) and vim.api.nvim_get_current_buf() == target_bufnr then
+      if vim.api.nvim_buf_is_valid(target_bufnr) then
         M.send_to_provider(opts)
       end
     end)

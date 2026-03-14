@@ -19,7 +19,7 @@ local MARKER_SANDBOX = "⊡"
 ---@class flemma.status.ShowOptions
 ---@field verbose? boolean Include full config dump
 ---@field jump_to? string Section header to jump cursor to
----@field source_bufnr? integer Buffer to collect status from (defaults to current)
+---@field bufnr? integer Buffer to collect status from (defaults to current)
 
 ---@class flemma.status.Data
 ---@field provider { name: string, model: string|nil, initialized: boolean, model_info: flemma.models.ModelInfo|nil }
@@ -625,9 +625,9 @@ end
 ---Open a vertical-split scratch buffer with formatted status output
 ---@param opts flemma.status.ShowOptions
 function M.show(opts)
-  local source_bufnr = opts.source_bufnr or vim.api.nvim_get_current_buf()
+  local target_bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
 
-  local data = M.collect(source_bufnr)
+  local data = M.collect(target_bufnr)
   local lines = M.format(data, opts.verbose or false)
 
   -- Check if a status buffer already exists in the current tabpage

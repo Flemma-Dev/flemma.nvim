@@ -873,10 +873,8 @@ local function count_active_chat_buffers()
 end
 
 ---Apply buffer-local settings for chat files
----@param bufnr? integer Buffer number, defaults to current buffer
+---@param bufnr integer Buffer number
 local function apply_chat_buffer_settings(bufnr)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
-
   folding.setup_folding(bufnr)
 
   if config.editing.disable_textwidth then

@@ -35,9 +35,10 @@ end
 
 ---Dispatch cancel_request. Prefer requiring flemma.core directly
 ---unless that would create a circular dependency.
-function M.cancel_request()
+---@param opts? { bufnr: integer }
+function M.cancel_request(opts)
   assert(handlers.cancel_request, "core.bridge: cancel_request not registered (core not loaded?)")
-  handlers.cancel_request()
+  handlers.cancel_request(opts)
 end
 
 ---Dispatch update_ui. Prefer requiring flemma.core directly

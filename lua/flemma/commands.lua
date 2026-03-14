@@ -223,6 +223,7 @@ local function setup_commands()
       local presets = require("flemma.presets")
       local provider_registry = require("flemma.provider.registry")
       local args = context.extra_args
+      local bufnr = vim.api.nvim_get_current_buf()
 
       if #args == 0 then
         local providers = {}
@@ -240,7 +241,7 @@ local function setup_commands()
           local models = provider_registry.models[selected_provider] or {}
           if type(models) ~= "table" or #models == 0 then
             vim.notify("Flemma: No models found for provider " .. selected_provider, vim.log.levels.WARN)
-            core.switch_provider(selected_provider, nil, {})
+            core.switch_provider(selected_provider, nil, {}, { bufnr = bufnr })
             return
           end
 
@@ -249,7 +250,7 @@ local function setup_commands()
               vim.notify("Flemma: Model selection cancelled", vim.log.levels.INFO)
               return
             end
-            core.switch_provider(selected_provider, selected_model, {})
+            core.switch_provider(selected_provider, selected_model, {}, { bufnr = bufnr })
           end)
         end)
         return
@@ -315,7 +316,7 @@ local function setup_commands()
           return
         end
 
-        core.switch_provider(provider, model, key_value_args)
+        core.switch_provider(provider, model, key_value_args, { bufnr = bufnr })
         return
       end
 
@@ -340,7 +341,7 @@ local function setup_commands()
         parameters[k] = v
       end
 
-      core.switch_provider(provider, extracted.model, parameters)
+      core.switch_provider(provider, extracted.model, parameters, { bufnr = bufnr })
     end,
     complete = switch_complete,
   }
@@ -453,7 +454,7 @@ local function setup_commands()
       },
       status = {
         action = function()
-          require("flemma.status").show({ jump_to = "Autopilot" })
+          require("flemma.status").show({ jump_to = "Autopilot", bufnr = vim.api.nvim_get_current_buf() })
         end,
       },
     },
@@ -481,7 +482,7 @@ local function setup_commands()
       },
       status = {
         action = function()
-          require("flemma.status").show({ jump_to = "Sandbox" })
+          require("flemma.status").show({ jump_to = "Sandbox", bufnr = vim.api.nvim_get_current_buf() })
         end,
       },
     },
@@ -495,7 +496,7 @@ local function setup_commands()
           verbose = true
         end
       end
-      require("flemma.status").show({ verbose = verbose })
+      require("flemma.status").show({ verbose = verbose, bufnr = vim.api.nvim_get_current_buf() })
     end,
     complete = function(arglead)
       local suggestions = { "verbose" }

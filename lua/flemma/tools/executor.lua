@@ -520,7 +520,7 @@ end
 function M.cancel_for_buffer(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
   if buffer_state.current_request then
-    bridge.cancel_request()
+    bridge.cancel_request({ bufnr = bufnr })
     return true
   end
   local pending = M.get_pending(bufnr)
