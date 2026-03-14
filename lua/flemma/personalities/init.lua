@@ -37,7 +37,7 @@ local registry_utils = require("flemma.registry")
 
 ---@type table<string, string>
 local BUILTIN_PERSONALITIES = {
-  ["coding-assistant"] = "flemma.personalities.coding-assistant",
+  ["coding-assistant"] = "flemma.personalities.coding_assistant",
 }
 
 ---@type table<string, flemma.personalities.Personality>

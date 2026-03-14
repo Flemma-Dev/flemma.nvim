@@ -239,10 +239,10 @@ end)
 
 local coding_assistant
 
-describe("flemma.personalities.coding-assistant", function()
+describe("flemma.personalities.coding_assistant", function()
   before_each(function()
-    package.loaded["flemma.personalities.coding-assistant"] = nil
-    coding_assistant = require("flemma.personalities.coding-assistant")
+    package.loaded["flemma.personalities.coding_assistant"] = nil
+    coding_assistant = require("flemma.personalities.coding_assistant")
   end)
 
   it("has a render function", function()
@@ -424,7 +424,7 @@ describe("cross-buffer personality environment isolation", function()
     package.loaded["flemma.context"] = nil
     package.loaded["flemma.eval"] = nil
     package.loaded["flemma.personalities"] = nil
-    package.loaded["flemma.personalities.coding-assistant"] = nil
+    package.loaded["flemma.personalities.coding_assistant"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.tools.registry"] = nil
 
@@ -489,7 +489,7 @@ describe("URN dispatch in include()", function()
   before_each(function()
     package.loaded["flemma.eval"] = nil
     package.loaded["flemma.personalities"] = nil
-    package.loaded["flemma.personalities.coding-assistant"] = nil
+    package.loaded["flemma.personalities.coding_assistant"] = nil
     eval = require("flemma.eval")
     local pers = require("flemma.personalities")
     pers.setup()
@@ -527,7 +527,7 @@ describe("personality system integration", function()
     package.loaded["flemma.eval"] = nil
     package.loaded["flemma.personalities"] = nil
     package.loaded["flemma.personalities.builder"] = nil
-    package.loaded["flemma.personalities.coding-assistant"] = nil
+    package.loaded["flemma.personalities.coding_assistant"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.tools.registry"] = nil
 
