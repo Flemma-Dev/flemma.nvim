@@ -94,12 +94,15 @@ local function emit_text(result, str, line, col)
     local last_newline = str:find("\n[^\n]*$")
     end_col = #str - last_newline
   end
-  table.insert(result, ast.text(str, {
-    start_line = line,
-    start_col = col,
-    end_line = end_line,
-    end_col = end_col,
-  }))
+  table.insert(
+    result,
+    ast.text(str, {
+      start_line = line,
+      start_col = col,
+      end_line = end_line,
+      end_col = end_col,
+    })
+  )
 end
 
 ---Convert a single emission to AST segments.

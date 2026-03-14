@@ -101,15 +101,33 @@ function M.find_segment_at_position(doc, lnum, col)
           goto continue_seg
         end
 
-        -- Line matches. Refine with column if available.
-        if lnum == seg_start and seg.position.start_col and seg.position.end_col then
-          if col >= seg.position.start_col and col <= seg.position.end_col then
+        -- Line matches. Refine with column info when available.
+        if seg.position.start_col then
+          if lnum == seg_start and lnum == seg_end and seg.position.end_col then
+            -- Single-line segment: check full column range
+            if col >= seg.position.start_col and col <= seg.position.end_col then
+              return seg, msg
+            end
+            goto continue_seg
+          elseif lnum == seg_start then
+            -- Start line of multi-line segment: only check start_col
+            if col >= seg.position.start_col then
+              return seg, msg
+            end
+            goto continue_seg
+          elseif lnum == seg_end and seg.position.end_col then
+            -- End line of multi-line segment: only check end_col
+            if col <= seg.position.end_col then
+              return seg, msg
+            end
+            goto continue_seg
+          else
+            -- Interior line of multi-line segment: always matches
             return seg, msg
           end
-          goto continue_seg
         end
 
-        -- Multi-line hit beyond first line — definite match
+        -- No column info — multi-line hit beyond first line is a definite match
         if lnum > seg_start then
           return seg, msg
         end

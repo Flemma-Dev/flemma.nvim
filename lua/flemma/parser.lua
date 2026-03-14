@@ -66,14 +66,29 @@ local function parse_segments(text, base_line)
 
   local function emit_text(str, char_start)
     if str and #str > 0 then
-      local start_line = char_to_line_col(char_start)
+      local start_line, start_col = char_to_line_col(char_start)
       local end_line = start_line
+      local end_col = start_col + #str - 1
+      -- Count newlines to compute end position (matches runner convention:
+      -- trailing \n means end_line is bumped, end_col is length after last \n)
       for i = 1, #str do
         if str:sub(i, i) == "\n" then
           end_line = end_line + 1
         end
       end
-      table.insert(segments, ast.text(str, { start_line = start_line, end_line = end_line }))
+      if end_line > start_line then
+        local last_newline = str:find("\n[^\n]*$")
+        end_col = #str - last_newline
+      end
+      table.insert(
+        segments,
+        ast.text(str, {
+          start_line = start_line,
+          start_col = start_col,
+          end_line = end_line,
+          end_col = end_col,
+        })
+      )
     end
   end
 
@@ -116,13 +131,22 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
     return { ast.text("") }, diagnostics
   end
 
-  local function emit_text_with_parsing(text, line_num)
-    if text and #text > 0 then
-      local parsed = parse_segments(text, line_num)
+  -- Accumulator for consecutive plain-text lines to avoid per-line segment splitting
+  local accum_lines = {} ---@type string[]
+  local accum_start_line = base_line_num
+
+  local function flush_accum()
+    if #accum_lines == 0 then
+      return
+    end
+    local text = table.concat(accum_lines, "\n")
+    if #text > 0 then
+      local parsed = parse_segments(text, accum_start_line)
       for _, seg in ipairs(parsed) do
         table.insert(segments, seg)
       end
     end
+    accum_lines = {}
   end
 
   local i = 1
@@ -133,6 +157,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
     -- Check for **Tool Result:** marker
     local tool_use_id = line:match(TOOL_RESULT_PATTERN)
     if tool_use_id then
+      flush_accum()
       local is_error = line:match(TOOL_RESULT_ERROR_PATTERN) ~= nil
       local result_start_line = current_line_num
 
@@ -228,14 +253,16 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
         i = content_start
       end
     else
-      -- Regular content line - parse for {{ }} expressions
-      emit_text_with_parsing(line, current_line_num)
-      if i < #lines then
-        table.insert(segments, ast.text("\n", { start_line = current_line_num, end_line = current_line_num }))
+      -- Regular content line — accumulate for batch parsing
+      if #accum_lines == 0 then
+        accum_start_line = current_line_num
       end
+      table.insert(accum_lines, line)
       i = i + 1
     end
   end
+
+  flush_accum()
 
   return segments, diagnostics
 end
@@ -253,10 +280,29 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
     return { ast.text("") }, diagnostics
   end
 
-  local function emit_text(str, line_num)
-    if str and #str > 0 then
-      table.insert(segments, ast.text(str, { start_line = line_num, end_line = line_num }))
+  -- Accumulator for consecutive plain-text lines to avoid per-line segment splitting
+  local accum_lines = {} ---@type string[]
+  local accum_start_line = base_line_num
+
+  local function flush_accum()
+    if #accum_lines == 0 then
+      return
     end
+    local text = table.concat(accum_lines, "\n")
+    if #text > 0 then
+      local end_line = accum_start_line + #accum_lines - 1
+      local end_col = #accum_lines[#accum_lines]
+      table.insert(
+        segments,
+        ast.text(text, {
+          start_line = accum_start_line,
+          start_col = 1,
+          end_line = end_line,
+          end_col = end_col,
+        })
+      )
+    end
+    accum_lines = {}
   end
 
   local i = 1
@@ -276,6 +322,7 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
     local redacted_open_tag = line:match("^<thinking%s+redacted>$")
 
     if self_closing_sig then
+      flush_accum()
       -- Self-closing tag with signature, no content
       local thinking_line = current_line_num
       table.insert(
@@ -287,6 +334,7 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
       )
       i = i + 1
     elseif open_tag_sig or simple_open_tag or redacted_open_tag then
+      flush_accum()
       local signature = open_tag_sig and { value = open_tag_sig, provider = open_tag_provider } or nil
       local redacted = redacted_open_tag ~= nil
       local thinking_start_line = current_line_num
@@ -313,6 +361,7 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
         end
       end
     elseif line:match(TOOL_USE_PATTERN) then
+      flush_accum()
       local tool_name, tool_id = line:match(TOOL_USE_PATTERN)
       local tool_start_line = current_line_num
 
@@ -379,21 +428,24 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
     else
       local aborted_message = line:match(ABORTED_PATTERN)
       if aborted_message then
+        flush_accum()
         table.insert(
           segments,
           ast.aborted(aborted_message, { start_line = current_line_num, end_line = current_line_num })
         )
         i = i + 1
       else
-        -- Regular text line
-        emit_text(line, current_line_num)
-        if i < #lines then
-          emit_text("\n", current_line_num)
+        -- Regular text line — accumulate for batch emission
+        if #accum_lines == 0 then
+          accum_start_line = current_line_num
         end
+        table.insert(accum_lines, line)
         i = i + 1
       end
     end
   end
+
+  flush_accum()
 
   return segments, diagnostics
 end

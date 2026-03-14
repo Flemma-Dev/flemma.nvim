@@ -24,8 +24,11 @@ local function build_line_content_map(msg)
         thinking_lines[line] = true
       end
     elseif seg.kind == "text" and seg.position then
-      if vim.trim(seg.value) ~= "" then
-        line_has_content[seg.position.start_line] = true
+      local text_lines = vim.split(seg.value, "\n", { plain = true })
+      for li, text_line in ipairs(text_lines) do
+        if vim.trim(text_line) ~= "" then
+          line_has_content[seg.position.start_line + li - 1] = true
+        end
       end
     elseif seg.position and seg.position.end_line then
       -- tool_use, tool_result, expression — mark all lines as having content

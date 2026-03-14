@@ -874,4 +874,105 @@ describe("find_segment_at_position", function()
     assert.equals("expression", seg2.kind)
     assert.equals(" b ", seg2.code)
   end)
+
+  it("distinguishes text segments around an expression on same line", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Hello {{ name }} world",
+    })
+    -- "Hello " text segment at col 1
+    local seg1 = ast.find_segment_at_position(doc, 2, 1)
+    assert.is_not_nil(seg1)
+    assert.equals("text", seg1.kind)
+    assert.equals("Hello ", seg1.value)
+
+    -- " world" text segment at col 17
+    local seg3 = ast.find_segment_at_position(doc, 2, 17)
+    assert.is_not_nil(seg3)
+    assert.equals("text", seg3.kind)
+    assert.equals(" world", seg3.value)
+  end)
+
+  it("finds segment on start line of multi-line text with end_col on different line", function()
+    -- Simulates a rewriter-produced segment like [102:34 - 103:0]
+    local doc = ast.document(nil, {
+      ast.message("You", {
+        ast.text("prefix ", { start_line = 1, start_col = 1, end_line = 1, end_col = 7 }),
+        ast.expression("expr", { start_line = 1, start_col = 8, end_line = 1, end_col = 15 }),
+        ast.text(" trailing\n", { start_line = 1, start_col = 16, end_line = 2, end_col = 0 }),
+      }, { start_line = 1, end_line = 2 }),
+    }, {}, { start_line = 1, end_line = 2 })
+
+    -- Col 20 is on the start line of the multi-line text segment
+    local seg = ast.find_segment_at_position(doc, 1, 20)
+    assert.is_not_nil(seg)
+    assert.equals("text", seg.kind)
+    assert.equals(" trailing\n", seg.value)
+  end)
+end)
+
+describe("parser text segment accumulation", function()
+  it("produces single text segment for multi-line assistant content", function()
+    local doc = parser.parse_lines({
+      "@Assistant:",
+      "Line one",
+      "Line two",
+      "Line three",
+    })
+    local msg = doc.messages[1]
+    -- Should be one accumulated text segment, not per-line segments
+    assert.equals(1, #msg.segments)
+    assert.equals("text", msg.segments[1].kind)
+    assert.equals("Line one\nLine two\nLine three", msg.segments[1].value)
+  end)
+
+  it("produces single text segment for multi-line user content without expressions", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Line one",
+      "Line two",
+      "Line three",
+    })
+    local msg = doc.messages[1]
+    assert.equals(1, #msg.segments)
+    assert.equals("text", msg.segments[1].kind)
+    assert.equals("Line one\nLine two\nLine three", msg.segments[1].value)
+  end)
+
+  it("flushes accumulated text before structural markers in assistant messages", function()
+    local doc = parser.parse_lines({
+      "@Assistant:",
+      "Text before",
+      "<thinking>",
+      "thought",
+      "</thinking>",
+      "Text after",
+    })
+    local msg = doc.messages[1]
+    -- text, thinking, text
+    assert.equals(3, #msg.segments)
+    assert.equals("text", msg.segments[1].kind)
+    assert.truthy(msg.segments[1].value:find("Text before"))
+    assert.equals("thinking", msg.segments[2].kind)
+    assert.equals("text", msg.segments[3].kind)
+    assert.truthy(msg.segments[3].value:find("Text after"))
+  end)
+
+  it("sets consistent end_line/end_col for trailing newlines", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "content",
+      "",
+      "@Assistant:",
+      "response",
+    })
+    -- The @You text segment includes trailing \n
+    local you_seg = doc.messages[1].segments[1]
+    assert.equals("text", you_seg.kind)
+    -- Trailing \n should bump end_line, end_col = 0
+    if you_seg.value:match("\n$") then
+      assert.equals(0, you_seg.position.end_col)
+      assert.is_true(you_seg.position.end_line > you_seg.position.start_line)
+    end
+  end)
 end)
