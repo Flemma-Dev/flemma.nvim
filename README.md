@@ -22,6 +22,7 @@ https://github.com/user-attachments/assets/586bdd15-8edb-41aa-be4d-64fed4290232
 - **Filesystem sandboxing** – shell commands run inside a read-only rootfs with write access limited to your project directory. Limits the blast radius of common accidents. Auto-detects the best available backend; silently degrades on platforms without one.
 - **Git-trackable conversations** – `.chat` files are plain text. Commit them, diff them, branch them, share them. No opaque database, no export step – your conversation history lives in version control the moment you save.
 - **Theme-aware UI** – line highlights, rulers, signs, tool previews, and folding that adapt to your colour scheme.
+- **In-editor LSP** – an experimental in-process LSP provides hover information on buffer elements (messages, segments, tool blocks) and go-to-definition for file references. Enabled by default when `vim.lsp` is available.
 
 ## Table of Contents
 
@@ -38,6 +39,7 @@ https://github.com/user-attachments/assets/586bdd15-8edb-41aa-be4d-64fed4290232
 - [Template System](#template-system)
 - [Usage, Pricing, and Notifications](#usage-pricing-and-notifications)
 - [UI Customisation](#ui-customisation)
+- [Extending Flemma](#extending-flemma)
 - [Configuration Reference](#configuration-reference)
 - [Developing and Testing](#developing-and-testing)
 - [FAQ](#faq)
@@ -79,6 +81,8 @@ For managers that do not wire `opts`, call `require("flemma").setup({})` yoursel
 | OpenAI           | `OPENAI_API_KEY`                                            | Supports GPT-5 family, including reasoning effort settings. |
 | Google Vertex AI | `VERTEX_AI_ACCESS_TOKEN` **or** service-account credentials | Requires additional configuration (see below).              |
 
+Flemma resolves credentials through a priority-based chain: environment variables are checked first, then platform keyring (Linux Secret Service or macOS Keychain), then `gcloud` CLI for Vertex AI access tokens. The first resolver that finds a credential wins. Credentials are cached with TTL awareness to avoid repeated lookups. See [docs/extending.md](docs/extending.md#credential-resolution) for details on the resolution chain and registering custom resolvers.
+
 <details>
 <summary><strong>Linux keyring setup (Secret Service)</strong></summary>
 
@@ -99,7 +103,7 @@ secret-tool store --label="Vertex AI Service Account" service vertex key api pro
 2. Download its JSON credentials and either:
    - export them via `VERTEX_SERVICE_ACCOUNT='{"type": "..."}'`, **or**
    - store them in the Secret Service entry above (the JSON is stored verbatim).
-3. Ensure the Google Cloud CLI is on your `$PATH`; Flemma shells out to `gcloud auth application-default print-access-token` whenever it needs to refresh the token.
+3. Ensure the Google Cloud CLI is on your `$PATH`; Flemma shells out to `gcloud auth print-access-token` whenever it needs to refresh the token.
 4. Set the project/location in configuration or via `:Flemma switch vertex gemini-2.5-pro project_id=my-project location=us-central1`.
 
 **Note:** If you only supply `VERTEX_AI_ACCESS_TOKEN`, Flemma uses that token until it expires and skips `gcloud`.
@@ -201,6 +205,7 @@ Inside `.chat` buffers Flemma defines:
 - `<Space>` – toggle the fold under the cursor (automatically skipped when `<Space>` is your `mapleader`).
 - `]m` / `[m` – jump to the next/previous message header.
 - `im` / `am` (configurable) – select the inside or entire message as a text object. `am` selects linewise and includes thinking blocks and trailing blank lines, making `dam` delete entire conversation turns. `im` skips `<thinking>` sections so yanking `im` never includes reasoning traces.
+- `gf` on `@./path` file references and `include()` expressions opens the referenced file. Flemma evaluates the expression to resolve the actual path, so `gf` works even on computed includes.
 - Buffer-local mappings for send/cancel default to `<C-]>` and `<C-c>` in normal mode. `<C-]>` is a hybrid key with three phases: inject approval placeholders, execute approved tools, send the conversation. `<M-CR>` (Alt-Enter) executes the single tool under the cursor – useful for stepping through pending tools one at a time. Insert-mode `<C-]>` behaves identically to normal mode but re-enters insert when the operation finishes.
 
 Disable or remap these through the `keymaps` section (see [Configuration Reference](#configuration-reference)).
@@ -227,6 +232,7 @@ Use the single entry point `:Flemma {command}`. Autocompletion lists every avail
 | `:Flemma autopilot:enable` / `:...:disable` / `:...:status`     | Toggle autopilot or view its state (status opens the full status buffer).                                                                                |                                                                             |
 | `:Flemma sandbox:enable` / `:...:disable` / `:...:status`       | Toggle sandboxing or view its state (status opens the full status buffer).                                                                               |                                                                             |
 | `:Flemma logging:enable [level]` / `:...:disable` / `:...:open` | Toggle structured logging and open the log file. Optional level: `TRACE`, `DEBUG` (default), `INFO`, `WARN`, `ERROR`.                                    |                                                                             |
+| `:Flemma diagnostics:enable` / `:...:disable` / `:...:diff`     | Toggle request diagnostics or view a diff of the last API request/response. Useful for debugging prompt caching.                                         |                                                                             |
 | `:Flemma notification:recall`                                   | Reopen the last usage/cost notification.                                                                                                                 |                                                                             |
 
 ### Switching providers and models
@@ -341,7 +347,9 @@ With autopilot disabled, the flow is manual: press <kbd>Ctrl-]</kbd> to inject r
 | `write` | sync  | Writes or creates files. Creates parent directories automatically.                                                  |
 | `edit`  | sync  | Find-and-replace with exact text matching. The old text must appear exactly once in the target file.                |
 
-By default, file operations (`read`, `write`, `edit`) are auto-approved via the `$default` preset, while `bash` requires manual approval. While a tool is pending, Flemma renders a virtual-line preview inside the placeholder showing the tool name and a formatted summary of its arguments – so you can see at a glance that `read` will open `config.lua +0,50` or that `bash` will run `$ make test`. Built-in tools ship with tailored preview formatters; custom tools can provide their own via `format_preview`.
+By default, file operations (`read`, `write`, `edit`) are auto-approved via the `$default` preset, while `bash` requires manual approval (unless sandboxed – see [Sandboxing](#sandboxing)). While a tool is pending, Flemma renders a virtual-line preview inside the placeholder showing the tool name and a formatted summary of its arguments – so you can see at a glance that `read` will open `config.lua +0,50` or that `bash` will run `$ make test`. Built-in tools ship with tailored preview formatters; custom tools can provide their own via `format_preview`.
+
+When the model returns multiple tool calls, Flemma executes up to `tools.max_concurrent` (default 2) simultaneously and queues the rest. Set to `0` for unlimited concurrency.
 
 The built-in presets (`$readonly`, `$default`) cover common policies; define your own in `tools.presets` and compose them freely in `auto_approve`. Override per-buffer via `flemma.opt.tools.auto_approve` in frontmatter, or set `tools.require_approval = false` to skip approval entirely. Register your own tools with `require("flemma.tools").register()` and extend the approval chain with custom resolvers for plugin-level security policies. See [docs/tools.md](docs/tools.md) for the full reference on approval presets, per-buffer configuration, custom tool registration, tool previews, and the resolver API.
 
@@ -404,7 +412,7 @@ Override per-buffer via `flemma.opt.sandbox` in frontmatter, or toggle at runtim
 
 ## Template System
 
-Flemma's prompt pipeline supports Lua/JSON frontmatter, inline `{{ expressions }}`, and an `include()` helper for composable prompts. Errors surface as diagnostics before the request leaves your editor. Embed local files with `@./path` syntax – Flemma detects MIME types and formats attachments per-provider. See [docs/templates.md](docs/templates.md) for the full reference.
+Flemma's prompt pipeline supports Lua/JSON frontmatter, inline `{{ expressions }}`, and an `include()` helper for composable prompts. Errors surface as diagnostics before the request leaves your editor. Embed local files with `@./path` syntax – Flemma detects MIME types and formats attachments per-provider. File references are tracked for content drift: if a referenced file changes between requests, Flemma warns you so the model works with up-to-date context. See [docs/templates.md](docs/templates.md) for the full reference.
 
 ---
 
@@ -422,7 +430,22 @@ For programmatic access to token usage and cost data, see [docs/session-api.md](
 
 Flemma adapts to your colour scheme with theme-aware highlights, line backgrounds, rulers, sign column indicators, and folding. Every visual element is configurable – see [docs/ui.md](docs/ui.md) for the full reference.
 
+A progress bar floats alongside the assistant's response while streaming, showing the current phase (thinking, text, tool input). Thinking blocks, tool use, and tool results auto-close (fold) when they finish, keeping the buffer tidy – configure per block type via `editing.auto_close`.
+
 Flemma ships optional [plugin integrations](docs/integrations.md) for lualine (statusline component) and bufferline (busy tab indicator).
+
+---
+
+## Extending Flemma
+
+Flemma is designed to be extended. Hooks, custom tools, approval resolvers, sandbox backends, credential resolvers, and personalities are all pluggable through registry patterns. See [docs/extending.md](docs/extending.md) for the full guide, including:
+
+- **Hooks** – lifecycle events (`FlemmaRequestSending`, `FlemmaToolExecuting`, etc.) emitted as User autocmds. Listen with standard `vim.api.nvim_create_autocmd` to build integrations.
+- **Credential resolution** – pluggable resolver chain for API keys and tokens (environment variables, Linux keyring, macOS Keychain, gcloud CLI). Register custom resolvers for vault integrations or team-specific credential stores.
+- **Custom tools** – register your own tool definitions with `require("flemma.tools").register()`. See [docs/tools.md](docs/tools.md#registering-custom-tools).
+- **Approval resolvers** – priority-based chain for tool approval policies. See [docs/tools.md](docs/tools.md#approval-resolvers).
+- **Sandbox backends** – add platform-specific sandboxing beyond Bubblewrap. See [docs/sandbox.md](docs/sandbox.md#custom-backends).
+- **Personalities** – dynamic system prompt generators. See [docs/personalities.md](docs/personalities.md).
 
 ---
 
@@ -536,7 +559,7 @@ On a personal level, I've used Flemma to generate bedtime stories with recurring
 - **Frontmatter errors:** notifications list the exact line and file. Fix the error and resend; Flemma will not contact the provider until the frontmatter parses cleanly.
 - **Attachments ignored:** ensure the file exists relative to the `.chat` file and that the provider supports its MIME type. Use `;type=` to override when necessary.
 - **Temperature ignored:** when thinking is enabled (default `"high"`), Anthropic and OpenAI disable temperature. Set `thinking = false` if you need temperature control.
-- **Vertex refuses requests:** double-check `parameters.vertex.project_id` and authentication. Run `gcloud auth application-default print-access-token` manually to ensure credentials are valid.
+- **Vertex refuses requests:** double-check `parameters.vertex.project_id` and authentication. Run `gcloud auth print-access-token` manually to ensure credentials are valid.
 - **Tool execution doesn't respond:** make sure the cursor is on or near the `**Tool Use:**` block. Only tools with registered executors can be run – check `:lua print(vim.inspect(require("flemma.tools").get_all()))`.
 - **Keymaps clash:** disable built-in mappings via `keymaps.enabled = false` and register your own `:Flemma` commands.
 - **Sandbox blocks writes:** If a tool reports "permission denied" on a path you expect to be writable, run `:Flemma status` (or `:Flemma sandbox:status`) and verify the path is inside `rw_paths`. Add it to `sandbox.policy.rw_paths` or disable sandboxing to troubleshoot.

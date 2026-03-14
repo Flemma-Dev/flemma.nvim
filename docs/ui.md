@@ -25,6 +25,7 @@ Configuration keys map to dedicated highlight groups:
 | `highlights.tool_preview`        | Tool preview virtual lines in pending placeholders (`FlemmaToolPreview`) |
 | `highlights.fold_preview`        | Content preview text in fold lines (`FlemmaFoldPreview`)                 |
 | `highlights.fold_meta`           | Line count and padding in fold lines (`FlemmaFoldMeta`)                  |
+| `highlights.busy`                | Busy indicator icon in integrations like bufferline (`FlemmaBusy`)       |
 
 Each value accepts a highlight name, a hex colour string, or a table of highlight attributes (`{ fg = "#ffcc00", bold = true }`).
 
@@ -223,6 +224,17 @@ Flemma uses a priority hierarchy to layer visual elements correctly when they ov
 | 300      | Spinner         | Highest priority; suppresses spell checking   |
 
 This hierarchy is defined in `lua/flemma/ui/init.lua` and is not user-configurable, but understanding it explains why certain elements visually override others. Tool preview virtual lines use `virt_lines` extmarks (not line-level highlights), so they don't participate in this priority hierarchy.
+
+## Progress bar
+
+While a request is streaming, Flemma shows a persistent progress indicator as a floating bar anchored to the assistant's response line. The bar displays the current phase (thinking, streaming text, receiving tool input) and repositions automatically if the target line scrolls off-screen. When the response line is visible in the window, the progress bar appears inline; when it scrolls out of view, a floating indicator appears so you always know what Flemma is doing.
+
+```lua
+progress = {
+  highlight = "StatusLine",  -- highlight group(s); first with both fg+bg is used
+  zindex = 50,               -- above notifications (zindex 30)
+}
+```
 
 ## Plugin integrations
 

@@ -25,10 +25,10 @@ The component only renders in `chat` buffers and returns an empty string otherwi
 The display format is configurable via `statusline.format` in the [configuration reference](configuration.md) using a tmux-style format syntax. The default is:
 
 ```
-#{model}#{?#{thinking}, (#{thinking}),}
+#{model}#{?#{thinking}, (#{thinking}),}#{?#{booting}, ⏳,}
 ```
 
-Which produces `claude-sonnet-4-5 (high)` when thinking is active, or just `claude-sonnet-4-5` when it's off.
+Which produces `claude-sonnet-4-6 (high)` when thinking is active, `claude-sonnet-4-6 ⏳` while async tool sources are loading, or just `claude-sonnet-4-6` when idle.
 
 #### Variables
 
@@ -36,11 +36,12 @@ Variables are lazy-evaluated — only variables referenced by the format string 
 
 **Config state:**
 
-| Variable      | Example                 | Description                                    |
-| ------------- | ----------------------- | ---------------------------------------------- |
-| `#{model}`    | `claude-sonnet-4-6`     | Current model name                             |
-| `#{provider}` | `anthropic`             | Current provider name                          |
-| `#{thinking}` | `high`, `medium`, `low` | Thinking/reasoning level (empty when inactive) |
+| Variable      | Example                 | Description                                          |
+| ------------- | ----------------------- | ---------------------------------------------------- |
+| `#{model}`    | `claude-sonnet-4-6`     | Current model name                                   |
+| `#{provider}` | `anthropic`             | Current provider name                                |
+| `#{thinking}` | `high`, `medium`, `low` | Thinking/reasoning level (empty when inactive)       |
+| `#{booting}`  | `⏳`                    | Non-empty while async tool sources are still loading |
 
 **Session totals** (cumulative across all requests in this Neovim session):
 

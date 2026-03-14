@@ -175,6 +175,12 @@ When you `:remove()` a tool that lives inside a preset (e.g., removing `"write"`
 
 All three providers support parallel tool calls. Press <kbd>Ctrl-]</kbd> to execute all pending calls at once, or use <kbd>Alt-Enter</kbd> on individual blocks. Flemma validates that every `**Tool Use:**` block has a matching `**Tool Result:**` before sending.
 
+### Concurrency limit
+
+`tools.max_concurrent` (default `2`) limits how many tools execute simultaneously per buffer. When the model returns more tool calls than the concurrency limit allows, Flemma queues the excess and starts them as earlier tools complete. This prevents resource exhaustion when the model emits many parallel calls.
+
+Set `tools.max_concurrent = 0` for unlimited concurrency. Override per-buffer via `flemma.opt.tools.max_concurrent` in frontmatter.
+
 ---
 
 ## Tool previews
