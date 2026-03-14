@@ -202,6 +202,19 @@ local function run_text_handlers(text_segment, handlers, rewriter_state, opts, m
   end
 
   local value = text_segment.value
+
+  -- Quick pre-scan: if no handler pattern matches anywhere in the text, return unchanged
+  local any_match = false
+  for _, entry in ipairs(handlers) do
+    if value:find(entry.pattern) then
+      any_match = true
+      break
+    end
+  end
+  if not any_match then
+    return { text_segment }
+  end
+
   local base_line = (text_segment.position and text_segment.position.start_line) or 1
   local buffer_edits_accumulator = {} ---@type flemma.preprocessor.BufferEdit[]
 
@@ -209,6 +222,19 @@ local function run_text_handlers(text_segment, handlers, rewriter_state, opts, m
   local lines = vim.split(value, "\n", { plain = true })
   local result_segments = {} ---@type flemma.ast.Segment[]
   local current_line = base_line
+
+  -- Accumulator for consecutive non-matching content to minimize segment splitting
+  local accum_text = ""
+  local accum_start_line = base_line
+  local accum_start_col = 1
+
+  ---Flush accumulated non-matching text as a single segment.
+  local function flush_accum()
+    if #accum_text > 0 then
+      emit_text(result_segments, accum_text, accum_start_line, accum_start_col)
+      accum_text = ""
+    end
+  end
 
   for line_index, line in ipairs(lines) do
     -- Collect all matches from all handlers for this line
@@ -272,75 +298,93 @@ local function run_text_handlers(text_segment, handlers, rewriter_state, opts, m
       return a.start_pos < b.start_pos
     end)
 
-    -- Build segments for this line: interleave unmatched text with handler emissions
-    local line_pos = 1
+    if #accepted_matches == 0 then
+      -- No matches on this line: accumulate text to minimize segment splitting
+      if #accum_text == 0 then
+        accum_start_line = current_line
+        accum_start_col = 1
+      end
+      accum_text = accum_text .. line
+      if line_index < #lines then
+        accum_text = accum_text .. "\n"
+      end
+    else
+      -- Has matches: flush accumulated text, then process matched line
+      flush_accum()
 
-    for _, accepted in ipairs(accepted_matches) do
-      -- Emit preceding unmatched text
-      if accepted.start_pos > line_pos then
-        local preceding = line:sub(line_pos, accepted.start_pos - 1)
-        emit_text(result_segments, preceding, current_line, line_pos)
+      local line_pos = 1
+
+      for _, accepted in ipairs(accepted_matches) do
+        -- Emit preceding unmatched text
+        if accepted.start_pos > line_pos then
+          local preceding = line:sub(line_pos, accepted.start_pos - 1)
+          emit_text(result_segments, preceding, current_line, line_pos)
+        end
+
+        -- Call handler with context
+        local ctx = context_module.new({
+          system = rewriter_state.system,
+          frontmatter = rewriter_state.frontmatter,
+          message = message_context.message,
+          message_index = message_context.index,
+          position = { line = current_line, col = accepted.start_pos },
+          interactive = opts.interactive,
+          _bufnr = opts.bufnr,
+          _metadata = rewriter_state.metadata,
+          _diagnostics = rewriter_state.diagnostics,
+          _rewriter_name = rewriter_state.system._ctx and rewriter_state.system._ctx._rewriter_name,
+        })
+        rewriter_state.system:set_context(ctx)
+
+        local handler_ok, emission = pcall(accepted.handler, accepted.match, ctx)
+
+        if not handler_ok then
+          -- Check if this is a Confirmation throw (re-throw it)
+          if context_module.is_confirmation(emission) then
+            error(emission)
+          end
+          -- Handler error — record diagnostic, leave text unchanged
+          ctx:diagnostic("error", "handler error: " .. tostring(emission))
+          emit_text(result_segments, accepted.match.full, current_line, accepted.start_pos)
+        else
+          -- Convert emission to segments
+          local emission_segments = emission_to_segments(
+            emission,
+            { line = current_line, col = accepted.start_pos, end_line = current_line, end_col = accepted.end_pos },
+            accepted.match.full,
+            buffer_edits_accumulator,
+            opts.interactive
+          )
+          for _, seg in ipairs(emission_segments) do
+            table.insert(result_segments, seg)
+          end
+        end
+
+        line_pos = accepted.end_pos + 1
       end
 
-      -- Call handler with context
-      local ctx = context_module.new({
-        system = rewriter_state.system,
-        frontmatter = rewriter_state.frontmatter,
-        message = message_context.message,
-        message_index = message_context.index,
-        position = { line = current_line, col = accepted.start_pos },
-        interactive = opts.interactive,
-        _bufnr = opts.bufnr,
-        _metadata = rewriter_state.metadata,
-        _diagnostics = rewriter_state.diagnostics,
-        _rewriter_name = rewriter_state.system._ctx and rewriter_state.system._ctx._rewriter_name,
-      })
-      rewriter_state.system:set_context(ctx)
-
-      local handler_ok, emission = pcall(accepted.handler, accepted.match, ctx)
-
-      if not handler_ok then
-        -- Check if this is a Confirmation throw (re-throw it)
-        if context_module.is_confirmation(emission) then
-          error(emission)
-        end
-        -- Handler error — record diagnostic, leave text unchanged
-        ctx:diagnostic("error", "handler error: " .. tostring(emission))
-        emit_text(result_segments, accepted.match.full, current_line, accepted.start_pos)
-      else
-        -- Convert emission to segments
-        local emission_segments = emission_to_segments(
-          emission,
-          { line = current_line, col = accepted.start_pos, end_line = current_line, end_col = accepted.end_pos },
-          accepted.match.full,
-          buffer_edits_accumulator,
-          opts.interactive
-        )
-        for _, seg in ipairs(emission_segments) do
-          table.insert(result_segments, seg)
-        end
+      -- Accumulate trailing text after the last match on this line
+      local trailing = ""
+      if line_pos <= #line then
+        trailing = line:sub(line_pos)
       end
-
-      line_pos = accepted.end_pos + 1
+      if line_index < #lines then
+        trailing = trailing .. "\n"
+      end
+      if #trailing > 0 then
+        accum_text = trailing
+        accum_start_line = current_line
+        accum_start_col = line_pos
+      end
     end
 
-    -- Emit trailing unmatched text on this line
-    if line_pos <= #line then
-      emit_text(result_segments, line:sub(line_pos), current_line, line_pos)
-    end
-
-    -- Emit newline separator between lines (not after the last line)
     if line_index < #lines then
-      local eol_col = #line + 1
-      table.insert(result_segments, ast.text("\n", {
-        start_line = current_line,
-        start_col = eol_col,
-        end_line = current_line + 1,
-        end_col = 0,
-      }))
       current_line = current_line + 1
     end
   end
+
+  -- Flush any remaining accumulated text
+  flush_accum()
 
   -- Attach buffer edits to the runner-level accumulator (stored in rewriter_state)
   if rewriter_state._buffer_edits then

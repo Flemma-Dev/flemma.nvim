@@ -151,33 +151,30 @@ describe("flemma.preprocessor.runner", function()
       assert.equals(0, #diagnostics)
 
       local segments = result_doc.messages[1].segments
-      -- line1: text("line1 "), expr("'DONE'"), newline
-      -- line2: text("line2"), newline
-      -- line3: text("line3 "), expr("'DONE'"), text(" end")
-      -- Count: 3 + 2 + 3 = 8
-      assert.equals(8, #segments)
+      -- Non-matching lines are accumulated into single segments:
+      -- line1 match: text("line1 "), expr("'DONE'")
+      -- line2 no match: accumulated with trailing newline from line1 → text("\nline2\n")
+      -- line3 match: text("line3 "), expr("'DONE'"), text(" end")
+      -- Count: 2 + 1 + 3 = 6
+      assert.equals(6, #segments)
 
-      -- Line 1
+      -- Line 1 (matched)
       assert.equals("text", segments[1].kind)
       assert.equals("line1 ", segments[1].value)
       assert.equals("expression", segments[2].kind)
       assert.equals("'DONE'", segments[2].code)
+
+      -- Line 2 (no match, accumulated with surrounding newlines)
       assert.equals("text", segments[3].kind)
-      assert.equals("\n", segments[3].value)
+      assert.equals("\nline2\n", segments[3].value)
 
-      -- Line 2
+      -- Line 3 (matched)
       assert.equals("text", segments[4].kind)
-      assert.equals("line2", segments[4].value)
-      assert.equals("text", segments[5].kind)
-      assert.equals("\n", segments[5].value)
-
-      -- Line 3
+      assert.equals("line3 ", segments[4].value)
+      assert.equals("expression", segments[5].kind)
+      assert.equals("'DONE'", segments[5].code)
       assert.equals("text", segments[6].kind)
-      assert.equals("line3 ", segments[6].value)
-      assert.equals("expression", segments[7].kind)
-      assert.equals("'DONE'", segments[7].code)
-      assert.equals("text", segments[8].kind)
-      assert.equals(" end", segments[8].value)
+      assert.equals(" end", segments[6].value)
     end)
 
     it("handler returning nil keeps original text", function()
@@ -252,6 +249,147 @@ describe("flemma.preprocessor.runner", function()
       assert.equals(1, #segments)
       assert.equals("expression", segments[1].kind)
       assert.equals("1 + 1", segments[1].code)
+    end)
+  end)
+
+  describe("segment accumulation stability", function()
+    it("returns original segment when handlers exist but no pattern matches", function()
+      local rewriter = preprocessor.create_rewriter("no_match_multi")
+      rewriter:on_text("WONTMATCH", function(_, ctx)
+        return ctx:expression("nope")
+      end)
+
+      local original = ast.text("line one\nline two\nline three", { start_line = 5, start_col = 1 })
+      local doc = make_doc({ original })
+
+      local result_doc = runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+      local segments = result_doc.messages[1].segments
+
+      -- Pre-scan finds no match: original segment returned unchanged
+      assert.equals(1, #segments)
+      assert.equals(original, segments[1])
+    end)
+
+    it("accumulates all non-matching lines before a match into one segment", function()
+      local rewriter = preprocessor.create_rewriter("late_match")
+      rewriter:on_text("MARK", function(_, ctx)
+        return ctx:expression("found()")
+      end)
+
+      local doc = make_doc({
+        ast.text("aaa\nbbb\nccc\nddd MARK end", { start_line = 1 }),
+      })
+
+      local result_doc = runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+      local segments = result_doc.messages[1].segments
+
+      -- Lines 1-3 have no match: accumulated into one segment
+      -- Line 4 has match: text("ddd "), expr("found()"), text(" end")
+      assert.equals(4, #segments)
+      assert.equals("text", segments[1].kind)
+      assert.equals("aaa\nbbb\nccc\n", segments[1].value)
+      assert.equals("text", segments[2].kind)
+      assert.equals("ddd ", segments[2].value)
+      assert.equals("expression", segments[3].kind)
+      assert.equals("found()", segments[3].code)
+      assert.equals("text", segments[4].kind)
+      assert.equals(" end", segments[4].value)
+    end)
+
+    it("accumulates all non-matching lines after a match into one segment", function()
+      local rewriter = preprocessor.create_rewriter("early_match")
+      rewriter:on_text("MARK", function(_, ctx)
+        return ctx:expression("found()")
+      end)
+
+      local doc = make_doc({
+        ast.text("MARK start\naaa\nbbb\nccc", { start_line = 1 }),
+      })
+
+      local result_doc = runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+      local segments = result_doc.messages[1].segments
+
+      -- Line 1 has match: expr("found()"), trailing " start\n" accumulated
+      -- Lines 2-4 have no match: accumulated with trailing → " start\naaa\nbbb\nccc"
+      assert.equals(2, #segments)
+      assert.equals("expression", segments[1].kind)
+      assert.equals("found()", segments[1].code)
+      assert.equals("text", segments[2].kind)
+      assert.equals(" start\naaa\nbbb\nccc", segments[2].value)
+    end)
+
+    it("accumulates non-matching lines between two matches", function()
+      local rewriter = preprocessor.create_rewriter("gap_match")
+      rewriter:on_text("MARK", function(_, ctx)
+        return ctx:expression("hit()")
+      end)
+
+      local doc = make_doc({
+        ast.text("MARK\naaa\nbbb\nccc\nMARK", { start_line = 10 }),
+      })
+
+      local result_doc = runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+      local segments = result_doc.messages[1].segments
+
+      -- Line 1 match: expr("hit()"), trailing "\n" starts accumulation
+      -- Lines 2-4 no match: accumulated → "\naaa\nbbb\nccc\n"
+      -- Line 5 match: flush, then expr("hit()")
+      assert.equals(3, #segments)
+      assert.equals("expression", segments[1].kind)
+      assert.equals("hit()", segments[1].code)
+      assert.equals("text", segments[2].kind)
+      assert.equals("\naaa\nbbb\nccc\n", segments[2].value)
+      assert.equals("expression", segments[3].kind)
+      assert.equals("hit()", segments[3].code)
+    end)
+
+    it("single-line segment with match still works correctly", function()
+      local rewriter = preprocessor.create_rewriter("single_line")
+      rewriter:on_text("X", function(_, ctx)
+        return ctx:expression("y")
+      end)
+
+      local doc = make_doc({
+        ast.text("a X b", { start_line = 1 }),
+      })
+
+      local result_doc = runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+      local segments = result_doc.messages[1].segments
+
+      assert.equals(3, #segments)
+      assert.equals("a ", segments[1].value)
+      assert.equals("expression", segments[2].kind)
+      assert.equals("y", segments[2].code)
+      assert.equals(" b", segments[3].value)
+    end)
+
+    it("preserves position info on accumulated segments", function()
+      local rewriter = preprocessor.create_rewriter("accum_pos")
+      rewriter:on_text("HIT", function(_, ctx)
+        return ctx:expression("x")
+      end)
+
+      local doc = make_doc({
+        ast.text("aaa\nbbb\nHIT\nccc\nddd", { start_line = 10 }),
+      })
+
+      local result_doc = runner.run_pipeline(doc, nil, make_opts({ rewriter }))
+      local segments = result_doc.messages[1].segments
+
+      -- Lines before match accumulated: "aaa\nbbb\n" starting at (10, 1)
+      assert.equals("text", segments[1].kind)
+      assert.equals("aaa\nbbb\n", segments[1].value)
+      assert.equals(10, segments[1].position.start_line)
+      assert.equals(1, segments[1].position.start_col)
+
+      -- Expression on line 12
+      assert.equals("expression", segments[2].kind)
+      assert.equals(12, segments[2].position.start_line)
+
+      -- Lines after match accumulated: "\nccc\nddd" starting at (12, 4)
+      assert.equals("text", segments[3].kind)
+      assert.equals("\nccc\nddd", segments[3].value)
+      assert.equals(12, segments[3].position.start_line)
     end)
   end)
 
