@@ -1,14 +1,17 @@
---- Tests for flemma.preprocessor — rewriter factory and registry
+--- Tests for flemma.preprocessor — rewriter factory, registry, and context
 
 local preprocessor
 local registry
+local context_module
 
 describe("flemma.preprocessor", function()
   before_each(function()
     package.loaded["flemma.preprocessor"] = nil
     package.loaded["flemma.preprocessor.registry"] = nil
+    package.loaded["flemma.preprocessor.context"] = nil
     preprocessor = require("flemma.preprocessor")
     registry = require("flemma.preprocessor.registry")
+    context_module = require("flemma.preprocessor.context")
   end)
 
   describe("create_rewriter()", function()
@@ -146,6 +149,129 @@ describe("flemma.preprocessor", function()
       preprocessor.register(rewriter)
 
       assert.is_true(registry.has("direct_reg"))
+    end)
+  end)
+
+  describe("Context", function()
+    describe("segment factories", function()
+      it("creates a text emission", function()
+        local ctx = context_module.new({})
+        local emission = ctx:text("hello world")
+        assert.equals("text", emission.type)
+        assert.equals("hello world", emission.text)
+      end)
+
+      it("creates an expression emission", function()
+        local ctx = context_module.new({})
+        local emission = ctx:expression("os.date()")
+        assert.equals("expression", emission.type)
+        assert.equals("os.date()", emission.code)
+      end)
+
+      it("creates a remove emission", function()
+        local ctx = context_module.new({})
+        local emission = ctx:remove()
+        assert.equals("remove", emission.type)
+      end)
+
+      it("creates a rewrite emission", function()
+        local ctx = context_module.new({})
+        local emission = ctx:rewrite("replacement text")
+        assert.equals("rewrite", emission.type)
+        assert.equals("replacement text", emission.text)
+      end)
+    end)
+
+    describe("metadata", function()
+      it("stores and retrieves metadata by key", function()
+        local ctx = context_module.new({})
+        ctx:set("my_key", "my_value")
+        assert.equals("my_value", ctx:get("my_key"))
+      end)
+
+      it("returns nil for unset keys", function()
+        local ctx = context_module.new({})
+        assert.is_nil(ctx:get("nonexistent"))
+      end)
+
+      it("overwrites existing keys", function()
+        local ctx = context_module.new({})
+        ctx:set("key", "first")
+        ctx:set("key", "second")
+        assert.equals("second", ctx:get("key"))
+      end)
+    end)
+
+    describe("diagnostics", function()
+      it("creates a diagnostic with auto-filled fields", function()
+        local ctx = context_module.new({
+          position = { line = 5, col = 10 },
+          _rewriter_name = "test_rewriter",
+        })
+        ctx:diagnostic(vim.diagnostic.severity.WARN, "something is wrong")
+
+        local diagnostics = ctx:get_diagnostics()
+        assert.equals(1, #diagnostics)
+        assert.equals("rewriter", diagnostics[1].type)
+        assert.equals("test_rewriter", diagnostics[1].rewriter_name)
+        assert.equals(vim.diagnostic.severity.WARN, diagnostics[1].severity)
+        assert.equals("something is wrong", diagnostics[1].message)
+      end)
+
+      it("includes optional position fields from opts", function()
+        local ctx = context_module.new({
+          position = { line = 5, col = 10 },
+          _rewriter_name = "pos_test",
+        })
+        ctx:diagnostic(vim.diagnostic.severity.ERROR, "bad thing", {
+          lnum = 3,
+          col = 7,
+          end_lnum = 3,
+          end_col = 15,
+        })
+
+        local diagnostics = ctx:get_diagnostics()
+        assert.equals(3, diagnostics[1].lnum)
+        assert.equals(7, diagnostics[1].col)
+        assert.equals(3, diagnostics[1].end_lnum)
+        assert.equals(15, diagnostics[1].end_col)
+      end)
+
+      it("accumulates multiple diagnostics", function()
+        local ctx = context_module.new({ _rewriter_name = "multi_diag" })
+        ctx:diagnostic(vim.diagnostic.severity.WARN, "first")
+        ctx:diagnostic(vim.diagnostic.severity.ERROR, "second")
+
+        local diagnostics = ctx:get_diagnostics()
+        assert.equals(2, #diagnostics)
+        assert.equals("first", diagnostics[1].message)
+        assert.equals("second", diagnostics[2].message)
+      end)
+    end)
+
+    describe("constructor options", function()
+      it("stores message, message_index, document fields", function()
+        local message = { role = "user", segments = {} }
+        local document = { frontmatter = nil, messages = {} }
+        local ctx = context_module.new({
+          message = message,
+          message_index = 3,
+          document = document,
+          interactive = true,
+          _bufnr = 42,
+        })
+
+        assert.equals(message, ctx.message)
+        assert.equals(3, ctx.message_index)
+        assert.equals(document, ctx.document)
+        assert.is_true(ctx.interactive)
+        assert.equals(42, ctx._bufnr)
+      end)
+
+      it("defaults interactive to false", function()
+        local ctx = context_module.new({})
+        assert.is_false(ctx.interactive)
+      end)
     end)
   end)
 end)
