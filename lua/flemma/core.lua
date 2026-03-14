@@ -28,6 +28,7 @@ local tool_approval = require("flemma.tools.approval")
 local tool_context = require("flemma.tools.context")
 local tools_module = require("flemma.tools")
 local cursor = require("flemma.cursor")
+local hooks = require("flemma.hooks")
 local usage = require("flemma.usage")
 
 local ABORT_MESSAGE = "Response interrupted by the user."
@@ -205,6 +206,7 @@ function M.cancel_request(opts)
       vim.notify(msg, vim.log.levels.INFO)
       -- Force UI update after cancellation
       ui.update_ui(bufnr)
+      hooks.dispatch("request:finished", { bufnr = bufnr, status = "cancelled" })
     end
   else
     log.debug("cancel_request(): No current request found")
@@ -1112,6 +1114,7 @@ function M.send_to_provider(opts)
             end
             editing.auto_write(bufnr) -- Still auto-write if configured
             ui.update_ui(bufnr) -- Update UI
+            hooks.dispatch("request:finished", { bufnr = bufnr, status = "errored" })
             return -- Do not proceed to add new prompt or call opts.on_request_complete
           end
 
@@ -1157,6 +1160,8 @@ function M.send_to_provider(opts)
 
           -- Hook autopilot: check if assistant response contains tool_use
           autopilot.on_response_complete(bufnr)
+
+          hooks.dispatch("request:finished", { bufnr = bufnr, status = "completed" })
         else
           -- cURL request failed (exit code ~= 0)
           -- Buffer is already set to modifiable = true
@@ -1189,12 +1194,15 @@ function M.send_to_provider(opts)
 
           editing.auto_write(bufnr) -- Auto-write if enabled, even on error
           ui.update_ui(bufnr) -- Update UI to remove any artifacts
+          hooks.dispatch("request:finished", { bufnr = bufnr, status = "errored" })
         end
       end)
     end,
   }
 
   -- Headers and endpoint are already obtained above with API key validation
+
+  hooks.dispatch("request:sending", { bufnr = bufnr })
 
   -- Send the request using the client
   buffer_state.current_request = client.send_request({
