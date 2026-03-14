@@ -70,6 +70,10 @@ develop:
 			editing = { auto_write = true },											\
 			tools = { modules = { \"extras.flemma.tools.calculator\" } },				\
 		})																				\
+		pcall(function()																\
+			require(\"bufferline.config\").options.get_element_icon =					\
+				require(\"flemma.integrations.bufferline\").get_element_icon			\
+		end)																			\
 		"																				\
 		-c ":edit $$HOME/.cache/nvim/flemma.log"										\
 		-c ":tabedit example.chat"
