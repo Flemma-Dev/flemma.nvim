@@ -12,26 +12,28 @@ local parser = require("flemma.parser")
 local INDENT = "  "
 
 ---Format a position as a bracket string.
----Collapses [N - N] to [N] when start and end are identical with no columns.
+---Collapses [N - N] to [N] when start and end are identical with no meaningful columns.
+---Omits start_col when it's 1 with no end_col (default "start of line" — not useful info).
 ---@param pos flemma.ast.Position|nil
 ---@return string
 local function format_position(pos)
   if not pos then
     return ""
   end
-  local has_start_col = pos.start_col ~= nil
-  local has_end_col = pos.end_col ~= nil
+  -- Only include start_col if end_col is also present (a meaningful column range)
+  -- or if start_col is not the default "start of line" value
+  local has_col_range = pos.start_col ~= nil and pos.end_col ~= nil
   local start_str = tostring(pos.start_line)
-  if has_start_col then
+  if has_col_range then
     start_str = start_str .. ":" .. pos.start_col
   end
   if pos.end_line then
-    -- Collapse [N - N] to [N] when no columns are involved
-    if pos.end_line == pos.start_line and not has_start_col and not has_end_col then
+    -- Collapse [N - N] to [N] when no meaningful column range exists
+    if pos.end_line == pos.start_line and not has_col_range then
       return " [" .. start_str .. "]"
     end
     local end_str = tostring(pos.end_line)
-    if has_end_col then
+    if has_col_range then
       end_str = end_str .. ":" .. pos.end_col
     end
     return " [" .. start_str .. " - " .. end_str .. "]"
