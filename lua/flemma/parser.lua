@@ -536,6 +536,11 @@ local function parse_message(lines, start_idx, line_offset, diagnostics)
     i = i + 1
   end
 
+  -- Strip trailing empty lines (inter-message whitespace before the next @Role: marker)
+  while #content_lines > 0 and content_lines[#content_lines] == "" do
+    table.remove(content_lines)
+  end
+
   local segments
   local content_start_line = start_idx + 1 + line_offset
 

@@ -976,3 +976,223 @@ describe("parser text segment accumulation", function()
     end
   end)
 end)
+
+describe("multi-turn API content stability", function()
+  local json = require("flemma.utilities.json")
+  local anthropic
+
+  before_each(function()
+    package.loaded["flemma.provider.providers.anthropic"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.registry"] = nil
+    package.loaded["flemma.tools.approval"] = nil
+    anthropic = require("flemma.provider.providers.anthropic")
+    local tools = require("flemma.tools")
+    tools.clear()
+  end)
+
+  ---Build an Anthropic API request body from raw buffer lines.
+  ---@param buffer_lines string[]
+  ---@return table request_body
+  local function build_request_from_lines(buffer_lines)
+    local doc = parser.parse_lines(buffer_lines)
+    local prompt = pipeline.run(doc)
+    local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 100 })
+    return provider:build_request(prompt)
+  end
+
+  ---Extract text values from a request message's content blocks.
+  ---@param msg table Anthropic message with content array
+  ---@return string[] texts
+  local function extract_texts(msg)
+    local texts = {}
+    for _, block in ipairs(msg.content or {}) do
+      if block.type == "text" then
+        table.insert(texts, block.text)
+      end
+    end
+    return texts
+  end
+
+  it("appending a new turn does not change earlier message content", function()
+    local req1 = build_request_from_lines({
+      "@You:",
+      "Hello world",
+      "",
+      "@Assistant:",
+      "Hi there!",
+    })
+
+    -- Append a second exchange
+    local req2 = build_request_from_lines({
+      "@You:",
+      "Hello world",
+      "",
+      "@Assistant:",
+      "Hi there!",
+      "",
+      "@You:",
+      "Follow-up question",
+    })
+
+    -- Append a third exchange
+    local req3 = build_request_from_lines({
+      "@You:",
+      "Hello world",
+      "",
+      "@Assistant:",
+      "Hi there!",
+      "",
+      "@You:",
+      "Follow-up question",
+      "",
+      "@Assistant:",
+      "Sure, here you go.",
+      "",
+      "@You:",
+      "Thanks!",
+    })
+
+    -- First user message must be byte-identical across all three
+    assert.same(extract_texts(req1.messages[1]), extract_texts(req2.messages[1]))
+    assert.same(extract_texts(req1.messages[1]), extract_texts(req3.messages[1]))
+
+    -- First assistant message must be byte-identical across req2 and req3
+    assert.same(extract_texts(req1.messages[2]), extract_texts(req2.messages[2]))
+    assert.same(extract_texts(req1.messages[2]), extract_texts(req3.messages[2]))
+
+    -- No trailing newlines on any message in any request
+    for _, req in ipairs({ req1, req2, req3 }) do
+      for mi, msg in ipairs(req.messages) do
+        for _, text in ipairs(extract_texts(msg)) do
+          assert.is_falsy(
+            text:match("\n$"),
+            string.format("message %d (%s) should not end with newline: %s", mi, msg.role, text)
+          )
+        end
+      end
+    end
+  end)
+
+  it("JSON prefix is stable across turns (simulates diagnostics cache check)", function()
+    local req1 = build_request_from_lines({
+      "@You:",
+      "What is 2+2?",
+      "",
+      "@Assistant:",
+      "The answer is 4.",
+    })
+
+    local req2 = build_request_from_lines({
+      "@You:",
+      "What is 2+2?",
+      "",
+      "@Assistant:",
+      "The answer is 4.",
+      "",
+      "@You:",
+      "And 3+3?",
+    })
+
+    -- req1 has 2 messages, req2 has 3; the first 2 must be byte-identical when serialized
+    local first_two_from_req1 = json.encode({ req1.messages[1], req1.messages[2] })
+    local first_two_from_req2 = json.encode({ req2.messages[1], req2.messages[2] })
+    assert.equals(first_two_from_req1, first_two_from_req2)
+  end)
+
+  it("multi-line user message with expressions has stable content across turns", function()
+    local req1 = build_request_from_lines({
+      "@You:",
+      "Hello {{ 'world' }}! How are you?",
+      "",
+      "@Assistant:",
+      "I am fine, thank you!",
+    })
+
+    local req2 = build_request_from_lines({
+      "@You:",
+      "Hello {{ 'world' }}! How are you?",
+      "",
+      "@Assistant:",
+      "I am fine, thank you!",
+      "",
+      "@You:",
+      "Great to hear!",
+    })
+
+    -- First user message content blocks must be identical
+    assert.same(extract_texts(req1.messages[1]), extract_texts(req2.messages[1]))
+
+    -- Verify the expression was evaluated and no trailing newlines
+    local full = table.concat(extract_texts(req1.messages[1]))
+    assert.truthy(full:find("world"), "expression should be evaluated")
+    assert.is_falsy(full:match("\n"), "evaluated content should not contain newlines")
+  end)
+
+  it("multiple blank separator lines between messages do not leak into content", function()
+    -- Some users leave extra blank lines between messages for readability
+    local req1 = build_request_from_lines({
+      "@You:",
+      "First question",
+      "",
+      "",
+      "",
+      "@Assistant:",
+      "First answer",
+      "",
+      "",
+      "@You:",
+      "Second question",
+    })
+
+    -- All messages should have clean content without trailing newlines
+    for mi, msg in ipairs(req1.messages) do
+      for _, text in ipairs(extract_texts(msg)) do
+        assert.is_falsy(
+          text:match("\n$"),
+          string.format("message %d (%s) should not end with newline: %s", mi, msg.role, text)
+        )
+      end
+    end
+
+    -- Verify content is exactly what was typed, nothing more
+    assert.equals("First question", extract_texts(req1.messages[1])[1])
+    assert.equals("First answer", extract_texts(req1.messages[2])[1])
+    assert.equals("Second question", extract_texts(req1.messages[3])[1])
+  end)
+
+  it("multi-line assistant content is stable across turns", function()
+    local req1 = build_request_from_lines({
+      "@You:",
+      "Tell me about Lua.",
+      "",
+      "@Assistant:",
+      "Lua is a lightweight scripting language.",
+      "It was created in Brazil.",
+      "It is used in game development.",
+    })
+
+    local req2 = build_request_from_lines({
+      "@You:",
+      "Tell me about Lua.",
+      "",
+      "@Assistant:",
+      "Lua is a lightweight scripting language.",
+      "It was created in Brazil.",
+      "It is used in game development.",
+      "",
+      "@You:",
+      "Tell me more.",
+    })
+
+    -- Assistant content must be identical
+    local asst1 = extract_texts(req1.messages[2])
+    local asst2 = extract_texts(req2.messages[2])
+    assert.same(asst1, asst2)
+
+    -- Should be one text block with internal newlines but no trailing newline
+    assert.equals(1, #asst1)
+    assert.is_falsy(asst1[1]:match("\n$"), "assistant text should not end with newline")
+    assert.truthy(asst1[1]:find("\n"), "multi-line content should have internal newlines")
+  end)
+end)
