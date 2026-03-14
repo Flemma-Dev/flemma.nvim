@@ -96,10 +96,13 @@ local function emission_to_segments(emission, position, original_text, buffer_ed
   if emission == nil then
     -- nil means keep original text
     if original_text and #original_text > 0 then
-      table.insert(segments, ast.text(original_text, {
-        start_line = position.line,
-        start_col = position.col,
-      }))
+      table.insert(
+        segments,
+        ast.text(original_text, {
+          start_line = position.line,
+          start_col = position.col,
+        })
+      )
     end
     return segments
   end
@@ -455,14 +458,7 @@ local function apply_buffer_edits(edits, bufnr)
 
   buffer_util.with_modifiable(bufnr, function()
     for _, edit in ipairs(edits) do
-      vim.api.nvim_buf_set_text(
-        bufnr,
-        edit.start_line,
-        edit.start_col,
-        edit.end_line,
-        edit.end_col,
-        edit.replacement
-      )
+      vim.api.nvim_buf_set_text(bufnr, edit.start_line, edit.start_col, edit.end_line, edit.end_col, edit.replacement)
     end
   end)
 end
@@ -512,7 +508,6 @@ local function apply_system_mutations(doc, system_accessor)
       table.insert(system_message.segments, seg)
     end
   end
-
 end
 
 ---Apply frontmatter accessor mutations to the document.

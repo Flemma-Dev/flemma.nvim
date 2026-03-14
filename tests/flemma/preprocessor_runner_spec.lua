@@ -337,11 +337,7 @@ describe("flemma.preprocessor.runner", function()
         ast.text("start AAA end", { start_line = 1 }),
       })
 
-      local result_doc, diagnostics = runner.run_pipeline(
-        doc,
-        nil,
-        make_opts({ rewriter1, rewriter2 })
-      )
+      local result_doc, diagnostics = runner.run_pipeline(doc, nil, make_opts({ rewriter1, rewriter2 }))
       assert.equals(0, #diagnostics)
 
       local segments = result_doc.messages[1].segments
@@ -497,11 +493,7 @@ describe("flemma.preprocessor.runner", function()
         ast.text("do EXPAND now", { start_line = 1 }),
       })
 
-      local result_doc, diagnostics = runner.run_pipeline(
-        doc,
-        nil,
-        make_opts({ rewriter1, rewriter2 })
-      )
+      local result_doc, diagnostics = runner.run_pipeline(doc, nil, make_opts({ rewriter1, rewriter2 }))
       assert.equals(0, #diagnostics)
 
       local segments = result_doc.messages[1].segments

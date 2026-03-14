@@ -7,10 +7,30 @@ describe("Include expression navigation", function()
     package.loaded["flemma.eval"] = nil
     package.loaded["flemma.context"] = nil
     package.loaded["flemma.processor"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.preprocessor"] = nil
+    package.loaded["flemma.preprocessor.registry"] = nil
+    package.loaded["flemma.preprocessor.runner"] = nil
+    package.loaded["flemma.preprocessor.context"] = nil
+    package.loaded["flemma.preprocessor.utilities"] = nil
+    package.loaded["flemma.preprocessor.rewriters.file_references"] = nil
     navigation = require("flemma.navigation")
+    -- Re-register the post-parse hook so @./file refs are converted to expressions
+    local parser_mod = require("flemma.parser")
+    local runner_mod = require("flemma.preprocessor.runner")
+    local file_refs_rewriter = require("flemma.preprocessor.rewriters.file_references")
+    parser_mod.set_post_parse_hook(function(doc, _bufnr)
+      local result_doc = runner_mod.run_pipeline(doc, 0, {
+        interactive = false,
+        rewriters = { file_refs_rewriter.rewriter },
+      })
+      return result_doc
+    end)
   end)
 
   after_each(function()
+    local parser_mod = require("flemma.parser")
+    parser_mod.set_post_parse_hook(nil)
     vim.cmd("silent! %bdelete!")
   end)
 

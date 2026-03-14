@@ -19,6 +19,7 @@ local notifications = require("flemma.notifications")
 local personalities = require("flemma.personalities")
 local secrets = require("flemma.secrets")
 local tools = require("flemma.tools")
+local preprocessor = require("flemma.preprocessor")
 local tools_presets = require("flemma.tools.presets")
 local tools_approval = require("flemma.tools.approval")
 local cursor = require("flemma.cursor")
@@ -137,6 +138,9 @@ M.setup = function(user_opts)
 
   -- Initialize tool registry with built-in tools
   tools.setup()
+
+  -- Initialize preprocessor with built-in rewriters and post-parse hook
+  preprocessor.setup()
 
   -- Initialize personality registry with built-in personalities
   personalities.setup()

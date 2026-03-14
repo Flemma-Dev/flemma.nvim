@@ -203,11 +203,11 @@ describe("flemma.eval", function()
       vim.fn.delete(temp_dir, "rf")
     end)
 
-    it("should carry include stack through nested includes", function()
-      local temp_dir = vim.fn.tempname() .. "_include_nested_error_test"
+    it("should treat @./ in included content as plain text (preprocessor handles document level)", function()
+      local temp_dir = vim.fn.tempname() .. "_include_nested_text_test"
       vim.fn.mkdir(temp_dir, "p")
 
-      -- middle.txt includes a nonexistent file via @./ reference
+      -- middle.txt contains @./ reference — now treated as plain text inside includes
       local middle_file = temp_dir .. "/middle.txt"
       local f = io.open(middle_file, "w")
       f:write("some text @./nonexistent.png and more")
@@ -218,16 +218,11 @@ describe("flemma.eval", function()
       env.__filename = parent_file
       env.__dirname = temp_dir
 
-      local ok, err = pcall(eval.eval_expression, "include('middle.txt')", env)
-      assert.is_false(ok)
-      assert.equals("table", type(err))
-      assert.equals("file", err.type)
-      assert.is_true(err.error:match("File not found") ~= nil)
-      -- Stack should show: parent.chat → middle.txt
-      assert.is_table(err.include_stack)
-      assert.equals(2, #err.include_stack)
-      assert.equals(parent_file, err.include_stack[1])
-      assert.equals(vim.fs.normalize(temp_dir .. "/middle.txt"), err.include_stack[2])
+      -- Should succeed: @./nonexistent.png is plain text, not an include() call
+      local ok, result = pcall(eval.eval_expression, "include('middle.txt')", env)
+      assert.is_true(ok)
+      -- Result should contain the raw @./ reference as text
+      assert.is_not_nil(result)
 
       vim.fn.delete(temp_dir, "rf")
     end)
