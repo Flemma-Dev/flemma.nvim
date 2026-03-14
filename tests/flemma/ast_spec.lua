@@ -3,6 +3,8 @@ local ctx = require("flemma.context")
 local parser = require("flemma.parser")
 local processor = require("flemma.processor")
 local pipeline = require("flemma.pipeline")
+local runner = require("flemma.preprocessor.runner")
+local file_refs = require("flemma.preprocessor.rewriters.file_references")
 
 describe("AST and Context", function()
   it("creates AST nodes with proper structure", function()
@@ -98,31 +100,25 @@ describe("Parser", function()
     for _, s in ipairs(m1.segments) do
       kinds[#kinds + 1] = s.kind
     end
-    -- Expected: text("Hello "), expression(1+1), text(" world "), expression(include), text(".")
+    -- Parser no longer converts @./file to expression; only {{ }} are expressions
+    -- Expected: text("Hello "), expression(1+1), text(" world @./a.txt.")
     assert.equals("text", kinds[1])
     assert.equals("expression", kinds[2])
     assert.equals("text", kinds[3])
-    assert.equals("expression", kinds[4])
-    assert.equals("text", kinds[5])
   end)
 
-  it("parses MIME override and URL-encoded filenames", function()
+  it("parses MIME override and URL-encoded filenames as raw text (handled by preprocessor)", function()
     local lines = {
       "@You:",
       "See @./my%20file.bin;type=image/png!",
     }
     local doc = parser.parse_lines(lines)
-    -- After desugaring, @./file becomes an ExpressionSegment with include() code
-    local seg = doc.messages[1].segments[2]
-    assert.equals("expression", seg.kind)
-    -- The include() call should contain the decoded path and MIME override
-    assert.is_true(seg.code:match("my file.bin") ~= nil)
-    assert.is_true(seg.code:match("image/png") ~= nil)
-    assert.is_true(seg.code:match("binary = true") ~= nil)
-    -- Trailing punctuation should be a separate text segment
-    local trailing = doc.messages[1].segments[3]
-    assert.equals("text", trailing.kind)
-    assert.equals("!", trailing.value)
+    -- Parser no longer converts @./file to expression; it stays as text
+    -- The preprocessor file-references rewriter handles the conversion
+    local segs = doc.messages[1].segments
+    assert.equals(1, #segs)
+    assert.equals("text", segs[1].kind)
+    assert.equals("See @./my%20file.bin;type=image/png!", segs[1].value)
   end)
 
   it("does not treat role markers inside fenced code blocks as message boundaries", function()
@@ -300,43 +296,16 @@ describe("Expression segment positions", function()
     assert.is_true(expr_seg.position.end_col > expr_seg.position.start_col)
   end)
 
-  it("sets end_col on @./ file references", function()
+  it("treats @./ file references as plain text (handled by preprocessor)", function()
     local doc = parser.parse_lines({
       "@You:",
       "See @./readme.md for details",
     })
     local segs = doc.messages[1].segments
-    local expr_seg
-    for _, seg in ipairs(segs) do
-      if seg.kind == "expression" then
-        expr_seg = seg
-        break
-      end
-    end
-    assert.is_not_nil(expr_seg)
-    assert.is_not_nil(expr_seg.position.start_col)
-    assert.is_not_nil(expr_seg.position.end_col)
-  end)
-
-  it("excludes trailing punctuation from @./ end_col", function()
-    local doc = parser.parse_lines({
-      "@You:",
-      "Check @./file.txt, then continue",
-    })
-    local segs = doc.messages[1].segments
-    local expr_seg
-    for _, seg in ipairs(segs) do
-      if seg.kind == "expression" then
-        expr_seg = seg
-        break
-      end
-    end
-    assert.is_not_nil(expr_seg)
-    -- The comma should NOT be included in the expression range
-    -- Extract the path from the include() call and verify it excludes trailing comma
-    local path_in_code = expr_seg.code:match("include%('([^']+)'")
-    assert.is_not_nil(path_in_code)
-    assert.is_nil(path_in_code:find(","), "Trailing comma should not be in file path")
+    -- Parser no longer converts @./file to expression segments
+    assert.equals(1, #segs)
+    assert.equals("text", segs[1].kind)
+    assert.equals("See @./readme.md for details", segs[1].value)
   end)
 end)
 
@@ -431,6 +400,17 @@ describe("find_segment_at_position", function()
   end)
 end)
 
+--- Run the file-references preprocessor rewriter on a parsed document.
+--- Converts @./file text into include() expression segments.
+---@param doc flemma.ast.DocumentNode
+---@return flemma.ast.DocumentNode
+local function run_file_refs_rewriter(doc)
+  return runner.run_pipeline(doc, 0, {
+    interactive = false,
+    rewriters = { file_refs.rewriter },
+  })
+end
+
 describe("Processor", function()
   local function setup_fixtures()
     os.execute("mkdir -p tests/fixtures")
@@ -459,6 +439,8 @@ describe("Processor", function()
       "File1: {{ 'hello' }} and File2: @./a.txt.",
     }
     local doc = parser.parse_lines(lines)
+    -- Run file-references rewriter to convert @./file -> include() expressions
+    doc = run_file_refs_rewriter(doc)
     local out = processor.evaluate(doc, base)
     assert.equals(1, #out.messages)
     local parts = out.messages[1].parts
@@ -483,6 +465,8 @@ describe("Processor", function()
       "See @./my%20file.txt!",
     }
     local doc = parser.parse_lines(lines)
+    -- Run file-references rewriter to convert @./file -> include() expressions
+    doc = run_file_refs_rewriter(doc)
     local out = processor.evaluate(doc, base)
     local parts = out.messages[1].parts
     assert.equals("file", parts[2].kind)
@@ -500,6 +484,8 @@ describe("Processor", function()
       "Img: @./sample.bin;type=image/png",
     }
     local doc = parser.parse_lines(lines)
+    -- Run file-references rewriter to convert @./file -> include() expressions
+    doc = run_file_refs_rewriter(doc)
     local out = processor.evaluate(doc, base2)
     local parts = out.messages[1].parts
     assert.equals("file", parts[2].kind)
@@ -517,7 +503,7 @@ describe("Processor", function()
     assert.is_true(ok, "Processor should not crash; include() error handled in expression eval as text")
   end)
 
-  it("resolves @./ file references inside included content as file parts", function()
+  it("treats @./ file references inside included content as plain text", function()
     local f = io.open("tests/fixtures/with_ref.txt", "w")
     f:write("Content: @./a.txt here")
     f:close()
@@ -530,20 +516,23 @@ describe("Processor", function()
     local doc = parser.parse_lines(lines)
     local out = processor.evaluate(doc, b)
 
-    -- After the emit protocol: @./a.txt inside included content produces a FilePart
+    -- @./file inside included content is now plain text (preprocessor runs at document level only)
     local parts = out.messages[1].parts
     local has_text_content = false
-    local has_file_part = false
     for _, p in ipairs(parts) do
       if p.kind == "text" and p.text:match("Content:") then
         has_text_content = true
       end
-      if p.kind == "file" and p.data:match("hello A") then
-        has_file_part = true
-      end
     end
     assert.is_true(has_text_content, "Should have text content from included file")
-    assert.is_true(has_file_part, "Should have file part for @./a.txt (the key improvement)")
+    -- The @./a.txt reference is now literal text, not a resolved file part
+    local full_text = ""
+    for _, p in ipairs(parts) do
+      if p.kind == "text" then
+        full_text = full_text .. p.text
+      end
+    end
+    assert.is_true(full_text:match("@%./a%.txt") ~= nil, "@./a.txt should remain as literal text in included content")
   end)
 
   it("does not process expressions or file refs in @Assistant messages", function()
@@ -699,7 +688,10 @@ describe("Pipeline Integration", function()
       "Got it",
     }
 
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+    local doc = parser.parse_lines(lines)
+    -- Run file-references rewriter to convert @./file -> include() expressions
+    doc = run_file_refs_rewriter(doc)
+    local prompt = pipeline.run(doc, ctx.from_file("tests/fixtures/doc.chat"))
 
     assert.is_nil(prompt.system)
     assert.equals(2, #prompt.history)
@@ -756,7 +748,10 @@ describe("Provider Integration", function()
     }
 
     local context = ctx.from_file("tests/fixtures/doc.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), context)
+    local doc = parser.parse_lines(lines)
+    -- Run file-references rewriter to convert @./file -> include() expressions
+    doc = run_file_refs_rewriter(doc)
+    local prompt = pipeline.run(doc, context)
     local req = provider:build_request(prompt, context)
     -- Responses API uses input[] instead of messages[]
     local user_items = vim.tbl_filter(function(item)
@@ -788,41 +783,16 @@ describe("Expression segment positions", function()
     assert.is_true(expr_seg.position.end_col > expr_seg.position.start_col)
   end)
 
-  it("sets end_col on @./ file references", function()
+  it("treats @./ file references as plain text (handled by preprocessor)", function()
     local doc = parser.parse_lines({
       "@You:",
       "See @./readme.md for details",
     })
     local segs = doc.messages[1].segments
-    local expr_seg
-    for _, seg in ipairs(segs) do
-      if seg.kind == "expression" then
-        expr_seg = seg
-        break
-      end
-    end
-    assert.is_not_nil(expr_seg)
-    assert.is_not_nil(expr_seg.position.start_col)
-    assert.is_not_nil(expr_seg.position.end_col)
-  end)
-
-  it("excludes trailing punctuation from @./ end_col", function()
-    local doc = parser.parse_lines({
-      "@You:",
-      "Check @./file.txt, then continue",
-    })
-    local segs = doc.messages[1].segments
-    local expr_seg
-    for _, seg in ipairs(segs) do
-      if seg.kind == "expression" then
-        expr_seg = seg
-        break
-      end
-    end
-    assert.is_not_nil(expr_seg)
-    -- @./file.txt spans columns 7-17; the comma at column 18 should be excluded
-    assert.equals(7, expr_seg.position.start_col)
-    assert.equals(17, expr_seg.position.end_col)
+    -- Parser no longer converts @./file to expression segments
+    assert.equals(1, #segs)
+    assert.equals("text", segs[1].kind)
+    assert.equals("See @./readme.md for details", segs[1].value)
   end)
 end)
 

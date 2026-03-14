@@ -29,6 +29,7 @@ local tool_context = require("flemma.tools.context")
 local tools_module = require("flemma.tools")
 local cursor = require("flemma.cursor")
 local hooks = require("flemma.hooks")
+local preprocessor = require("flemma.preprocessor")
 local usage = require("flemma.usage")
 
 local ABORT_MESSAGE = "Response interrupted by the user."
@@ -408,7 +409,19 @@ function M.send_or_execute(opts)
 
   -- Evaluate frontmatter once per dispatch cycle. The result is threaded through
   -- approval, executor, and pipeline so no caller needs to re-evaluate.
-  local doc = parser.get_parsed_document(bufnr)
+  -- Get raw (pre-rewriter) AST for a fresh interactive rewriter pass
+  local raw_doc = parser.get_raw_document(bufnr)
+  local interactive_doc = vim.deepcopy(raw_doc)
+
+  -- Run preprocessor in interactive mode (may suspend for confirmations)
+  local doc, rewriter_diagnostics = preprocessor.run(interactive_doc, bufnr, { interactive = true })
+  if not doc then
+    -- Confirmation pending — send aborted, UI prompt will be shown
+    return
+  end
+
+  -- Store rewriter diagnostics for diagnostic rendering in send_to_provider
+  buffer_state.rewriter_diagnostics = rewriter_diagnostics
   local context = context_module.from_buffer(bufnr)
   local evaluated_frontmatter = processor.evaluate_frontmatter(doc, context)
   local frontmatter_opts = evaluated_frontmatter.context:get_opts()
@@ -578,11 +591,17 @@ function M.send_to_provider(opts)
 
   log.debug("send_to_provider(): Processed messages count: " .. #prompt.history)
 
-  -- Display diagnostics to user if any
+  -- Merge rewriter diagnostics from interactive preprocessor pass
+  local rewriter_diags = buffer_state.rewriter_diagnostics or {}
   local diagnostics = evaluated.diagnostics or {}
+  for _, d in ipairs(rewriter_diags) do
+    table.insert(diagnostics, d)
+  end
+
+  -- Display diagnostics to user if any
   if #diagnostics > 0 then
     local has_errors = false
-    local by_type = { frontmatter = {}, expression = {}, file = {}, tool_result = {}, tool_use = {} }
+    local by_type = { frontmatter = {}, expression = {}, file = {}, tool_result = {}, tool_use = {}, rewriter = {} }
 
     for _, diag in ipairs(diagnostics) do
       if diag.severity == "error" then
@@ -677,6 +696,21 @@ function M.send_to_provider(opts)
           table.insert(diagnostic_lines, string.format("  [%s] %s", loc, d.error))
         elseif i == max_per_type + 1 then
           table.insert(diagnostic_lines, string.format("  …and %d more", #tool_diags - max_per_type))
+          break
+        end
+      end
+    end
+
+    -- Format rewriter errors/warnings
+    if #by_type.rewriter > 0 then
+      table.insert(diagnostic_lines, "Rewriter errors:")
+      for i, d in ipairs(by_type.rewriter) do
+        if i <= max_per_type then
+          local loc = format_position(d.position)
+          local rw_name = d.rewriter_name and (" [" .. d.rewriter_name .. "]") or ""
+          table.insert(diagnostic_lines, string.format("  %s%s %s", loc, rw_name, d.error or "unknown"))
+        elseif i == max_per_type + 1 then
+          table.insert(diagnostic_lines, string.format("  …and %d more", #by_type.rewriter - max_per_type))
           break
         end
       end

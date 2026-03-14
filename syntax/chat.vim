@@ -7,17 +7,8 @@ syntax match FlemmaRoleSystem '^@System:\s*$' contained
 syntax match FlemmaRoleUser '^@You:\s*$' contained
 syntax match FlemmaRoleAssistant '^@Assistant:\s*$' contained
 
-" Define the Lua expression match for User messages
-syntax match FlemmaUserLuaExpression "{{.\{-}}}" contained
-
-" Define the File Reference match for User messages: @./path or @../path, excluding trailing punctuation
-" @\v(\.\.?\/)\S*[^[:punct:]\s]
-" @                  - literal @
-" \v                 - very magic
-" (\.\.?\/)          - group: literal dot, optional literal dot, literal slash (./ or ../)
-" \S*                - zero or more non-whitespace characters
-" [^[:punct:]\s]     - a character that is NOT punctuation and NOT whitespace (ensures end is not punctuation)
-syntax match FlemmaUserFileReference "@\v(\.\.?\/)\S*[^[:punct:]\s]" contained
+" Define the Lua expression match for User and System messages
+syntax match FlemmaLuaExpression "{{.\{-}}}" contained containedin=FlemmaUser,FlemmaSystem
 
 " Define Thinking Tags (for highlighting the tags themselves)
 " Matches: <thinking>, <thinking provider:signature="...">, <thinking provider:signature="..."/>
@@ -36,9 +27,9 @@ syntax match FlemmaToolResultError "(error)" contained
 
 " Tool Use region (in assistant messages): **Tool Use:** `name` (`id`)
 " Note: Tool names and IDs in backticks are handled by treesitter markdown_inline as inline code
-syntax region FlemmaToolUse start="\*\*Tool Use:\*\*" end="$" oneline contained contains=FlemmaToolUseTitle
+syntax region FlemmaToolUse start="\*\*Tool Use:\*\*" end="$" oneline contained containedin=FlemmaAssistant contains=FlemmaToolUseTitle
 " Tool Result region (in user messages): **Tool Result:** `id` (optional: (error))
-syntax region FlemmaToolResult start="\*\*Tool Result:\*\*" end="$" oneline contained contains=FlemmaToolResultTitle,FlemmaToolResultError
+syntax region FlemmaToolResult start="\*\*Tool Result:\*\*" end="$" oneline contained containedin=FlemmaUser contains=FlemmaToolResultTitle,FlemmaToolResultError
 
 " Note: Signature concealment is now handled via extmarks in ui.lua highlight_thinking_tags()
 " This avoids needing conceallevel which affects the whole buffer (including frontmatter)
@@ -58,15 +49,15 @@ syntax region FlemmaFrontmatterBlockJson start="\%1l^```json$" end="^```$" keepe
 " System region
 syntax region FlemmaSystem start='^@System:\s*$' end='\(^@\(You\|Assistant\):\s*$\)\@=\|\%$' contains=FlemmaRoleSystem,@Markdown
 " User region (contains tool results)
-syntax region FlemmaUser start='^@You:\s*$' end='\(^@\(System\|Assistant\):\s*$\)\@=\|\%$' contains=FlemmaRoleUser,FlemmaUserLuaExpression,FlemmaUserFileReference,FlemmaToolResult,@Markdown
+syntax region FlemmaUser start='^@You:\s*$' end='\(^@\(System\|Assistant\):\s*$\)\@=\|\%$' contains=FlemmaRoleUser,@Markdown
 
 " Thinking Block Region (nested inside Assistant)
 " This region starts with <thinking> or <thinking provider:signature="..."> and ends with </thinking>.
 " Self-closing tags like <thinking provider:signature="..."/> are handled by match, not region.
 " It contains the tags themselves (FlemmaThinkingTag) and markdown for the content.
-syntax region FlemmaThinkingBlock start="^<thinking\(\s.*[^/>]\)\?>$" end="^</thinking>$" keepend contains=FlemmaThinkingTag,@Markdown
+syntax region FlemmaThinkingBlock start="^<thinking\(\s.*[^/>]\)\?>$" end="^</thinking>$" keepend contained containedin=FlemmaAssistant contains=FlemmaThinkingTag,@Markdown
 
 " Assistant region contains role markers, markdown, thinking blocks, and tool use
-syntax region FlemmaAssistant start='^@Assistant:\s*$' end='\(^@\(System\|You\):\s*$\)\@=\|\%$' contains=FlemmaRoleAssistant,FlemmaThinkingBlock,FlemmaToolUse,@Markdown
+syntax region FlemmaAssistant start='^@Assistant:\s*$' end='\(^@\(System\|You\):\s*$\)\@=\|\%$' contains=FlemmaRoleAssistant,@Markdown
 
 let b:current_syntax = "chat"

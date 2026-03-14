@@ -25,6 +25,7 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field locked boolean Whether the buffer is locked (non-modifiable) for request/tool execution
 ---@field waiting_for_tools? boolean Whether a send is queued waiting for async tool resolution
 ---@field ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached parsed AST
+---@field raw_ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached raw (pre-rewriter) AST
 ---@field ast_snapshot_before_send? flemma.parser.Snapshot Frozen AST for incremental parsing during streaming
 ---@field progress_timer integer|nil Timer ID for the progress line animation
 ---@field progress_phase flemma.state.ProgressPhase|nil Current progress line phase
@@ -54,6 +55,9 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field cursor_pending? flemma.cursor.PendingTarget Deferred cursor move waiting for user idle
 ---@field cursor_idle_timer? uv.uv_timer_t Per-buffer idle timer for cursor deferral
 ---@field file_reference_hashes? table<string, string> SHA256 hashes of included files from the last evaluation (keyed by absolute path)
+---@field confirmation_answers? table<string, boolean> Cached answers for preprocessor confirmation prompts
+---@field rewriter_diagnostics? flemma.preprocessor.RewriterDiagnostic[] Diagnostics from the last preprocessor run
+---@field _pending_confirmation? flemma.preprocessor.Confirmation In-flight confirmation awaiting user response
 
 ---@diagnostic disable-next-line: missing-fields
 local config = {} ---@type flemma.Config
@@ -134,6 +138,9 @@ local function init_buffer(bufnr)
       cache_read_input_tokens = 0,
       cache_creation_input_tokens = 0,
     },
+    confirmation_answers = nil,
+    rewriter_diagnostics = nil,
+    _pending_confirmation = nil,
   }
 end
 

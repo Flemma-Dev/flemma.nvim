@@ -114,9 +114,17 @@ function M.find_segment_at_position(doc, lnum, col)
           return seg, msg
         end
 
-        -- Single-line segment without column info — save as fallback
-        -- so column-aware segments on the same line get a chance to match first
-        if not seg.position.start_col then
+        -- Segment on correct line but missing full column range — save as fallback
+        -- so column-aware segments on the same line get a chance to match first.
+        -- For segments with start_col only (e.g., from preprocessor rewriters),
+        -- use the cursor position relative to start_col for a better guess.
+        if seg.position.start_col then
+          -- Has start_col but no end_col: use as fallback if cursor is at or after start
+          if col >= seg.position.start_col then
+            fallback_seg = seg
+          end
+        else
+          -- No column info at all: always use as fallback
           fallback_seg = seg
         end
 

@@ -8,6 +8,9 @@ local state = require("flemma.state")
 ---@class flemma.Parser
 local M = {}
 
+---@type (fun(doc: flemma.ast.DocumentNode, bufnr: integer): flemma.ast.DocumentNode)|nil
+local post_parse_hook = nil
+
 ---@class flemma.parser.Snapshot
 ---@field frontmatter flemma.ast.FrontmatterNode|nil Frozen frontmatter node
 ---@field messages flemma.ast.MessageNode[] Frozen message nodes (all messages before resume point)
@@ -30,32 +33,10 @@ local TOOL_STATUS_MAP = {
   deny = "denied",
 }
 
----@param str string|nil
----@return string|nil
-local function url_decode(str)
-  if not str then
-    return nil
-  end
-  str = string.gsub(str, "+", " ")
-  str = string.gsub(str, "%%(%x%x)", function(h)
-    return string.char(tonumber(h, 16))
-  end)
-  return str
-end
-
---- Escape a string for use inside a Lua single-quoted string literal.
----@param str string
----@return string
-local function lua_string_escape(str)
-  str = str:gsub("\\", "\\\\")
-  str = str:gsub("'", "\\'")
-  str = str:gsub("\n", "\\n")
-  return str
-end
-
---- Unified segment parser: parse text for {{ }} expressions and @./ file references
+--- Unified segment parser: parse text for {{ }} expressions
 --- Returns array of AST segments (text, expression)
 --- Note: <thinking> tags are NOT parsed here - only in @Assistant messages
+--- Note: @./ file references are handled by the preprocessor rewriter, not here
 ---@param text string|nil
 ---@param base_line integer|nil 1-indexed line number for accurate position tracking
 ---@return flemma.ast.Segment[]
@@ -98,78 +79,25 @@ local function parse_segments(text, base_line)
 
   while idx <= #s do
     local expr_start, expr_end, expr_code = s:find("{{(.-)}}", idx)
-    local file_start, file_end, file_full = s:find("@(%.%.?%/[%.%/]*%S+)", idx)
 
-    local next_kind, next_start, next_end, payload = nil, nil, nil, nil
-
-    -- Choose earliest match
-    if expr_start and (not file_start or expr_start < file_start) then
-      next_kind, next_start, next_end, payload = "expr", expr_start, expr_end, expr_code
-    elseif file_start then
-      next_kind, next_start, next_end, payload = "file", file_start, file_end, file_full
-    end
-
-    if not next_kind then
+    if not expr_start then
       emit_text(s:sub(idx), idx)
       break
     end
 
     -- Emit preceding text
-    emit_text(s:sub(idx, next_start - 1), idx)
+    emit_text(s:sub(idx, expr_start - 1), idx)
 
-    if next_kind == "expr" then
-      local line, col = char_to_line_col(next_start)
-      local end_line, end_col = char_to_line_col(next_end)
-      table.insert(
-        segments,
-        ast.expression(
-          payload --[[@as string]],
-          { start_line = line, start_col = col, end_line = end_line, end_col = end_col }
-        )
+    local line, col = char_to_line_col(expr_start)
+    local end_line, end_col = char_to_line_col(expr_end)
+    table.insert(
+      segments,
+      ast.expression(
+        expr_code --[[@as string]],
+        { start_line = line, start_col = col, end_line = end_line, end_col = end_col }
       )
-    elseif next_kind == "file" then
-      ---@cast payload string
-      local raw_file_match, mime_with_punct = payload:match("^([^;]+);type=(.+)$")
-      local mime_override = nil
-      local trailing_punct
-
-      if not raw_file_match then
-        raw_file_match = payload
-        local filename_no_punct = raw_file_match:gsub("[%p]+$", "")
-        trailing_punct = raw_file_match:sub(#filename_no_punct + 1)
-        raw_file_match = filename_no_punct
-      else
-        local mime_no_punct = mime_with_punct:gsub("[%p]+$", "")
-        trailing_punct = mime_with_punct:sub(#mime_no_punct + 1)
-        mime_override = mime_no_punct
-      end
-
-      -- URL-decode and escape the path for use in a Lua string literal
-      local cleaned_path = url_decode(raw_file_match)
-      ---@cast cleaned_path string
-      local escaped_path = lua_string_escape(cleaned_path)
-      local line, col = char_to_line_col(next_start)
-      -- end position is the end of the @./file reference, excluding trailing punctuation
-      local end_line, end_col = char_to_line_col(next_end - #trailing_punct)
-
-      -- Build the include() expression code
-      local opts_parts = { "binary = true" }
-      if mime_override then
-        opts_parts[#opts_parts + 1] = "mime = '" .. lua_string_escape(mime_override) .. "'"
-      end
-      local code = "include('" .. escaped_path .. "', { " .. table.concat(opts_parts, ", ") .. " })"
-
-      table.insert(
-        segments,
-        ast.expression(code, { start_line = line, start_col = col, end_line = end_line, end_col = end_col })
-      )
-
-      -- Emit trailing punctuation as a separate text segment
-      if #trailing_punct > 0 then
-        emit_text(trailing_punct, next_end - #trailing_punct + 1)
-      end
-    end
-    idx = next_end + 1
+    )
+    idx = expr_end + 1
   end
 
   return segments
@@ -300,7 +228,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
         i = content_start
       end
     else
-      -- Regular content line - parse for expressions and file references
+      -- Regular content line - parse for {{ }} expressions
       emit_text_with_parsing(line, current_line_num)
       if i < #lines then
         table.insert(segments, ast.text("\n", { start_line = current_line_num, end_line = current_line_num }))
@@ -574,7 +502,7 @@ local function parse_message(lines, start_idx, line_offset, diagnostics)
       table.insert(diagnostics, diag)
     end
   else
-    -- Other roles (System, etc.) - parse expressions and file references
+    -- Other roles (System, etc.) - parse {{ }} expressions
     local content = table.concat(content_lines, "\n")
     segments = parse_segments(content, content_start_line)
   end
@@ -626,11 +554,18 @@ function M.parse_lines(lines)
 end
 
 --- Parse inline content (for include() results) - no frontmatter, no message roles
---- Just scan for @./ file references and {{ }} expressions
+--- Scans for {{ }} expressions only; @./ file references are handled by the preprocessor
 ---@param text string|nil
 ---@return flemma.ast.Segment[]
 function M.parse_inline_content(text)
   return parse_segments(text or "")
+end
+
+---Register a post-parse hook that transforms the AST after parsing.
+---Used by the preprocessor to run rewriters on the parsed document.
+---@param hook (fun(doc: flemma.ast.DocumentNode, bufnr: integer): flemma.ast.DocumentNode)|nil
+function M.set_post_parse_hook(hook)
+  post_parse_hook = hook
 end
 
 --- Get parsed document with automatic caching based on buffer changedtick
@@ -686,12 +621,42 @@ function M.get_parsed_document(bufnr)
     doc = M.parse_lines(lines)
   end
 
+  -- Store raw (pre-rewriter) AST
+  buffer_state.raw_ast_cache = {
+    changedtick = current_tick,
+    document = doc,
+  }
+
+  -- Run post-parse hook (preprocessor rewriters in non-interactive mode)
+  if post_parse_hook then
+    local rewritten_doc = vim.deepcopy(doc)
+    rewritten_doc = post_parse_hook(rewritten_doc, bufnr)
+    doc = rewritten_doc
+  end
+
   buffer_state.ast_cache = {
     changedtick = current_tick,
     document = doc,
   }
 
   return doc
+end
+
+---Get the raw (pre-rewriter) parsed document.
+---Used by the send flow to start a fresh interactive rewriter pass.
+---@param bufnr integer
+---@return flemma.ast.DocumentNode
+function M.get_raw_document(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  local current_tick = vim.api.nvim_buf_get_changedtick(bufnr)
+
+  if buffer_state.raw_ast_cache and buffer_state.raw_ast_cache.changedtick == current_tick then
+    return buffer_state.raw_ast_cache.document
+  end
+
+  -- Calling get_parsed_document populates raw_ast_cache as a side effect
+  M.get_parsed_document(bufnr)
+  return buffer_state.raw_ast_cache.document
 end
 
 --- Snapshot the current AST for incremental parsing during streaming.

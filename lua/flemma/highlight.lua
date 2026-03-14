@@ -7,6 +7,7 @@ local color = require("flemma.utilities.color")
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local str = require("flemma.utilities.string")
+local preprocessor_syntax = require("flemma.preprocessor.syntax")
 local roles = require("flemma.utilities.roles")
 
 ---Get color from a highlight group attribute
@@ -349,8 +350,9 @@ M.apply_syntax = function()
   set_highlight("FlemmaSystem", syntax_config.highlights.system)
   set_highlight("FlemmaUser", syntax_config.highlights.user)
   set_highlight("FlemmaAssistant", syntax_config.highlights.assistant)
-  set_highlight("FlemmaUserLuaExpression", syntax_config.highlights.user_lua_expression) -- Highlight for {{expression}} in user messages
-  set_highlight("FlemmaUserFileReference", syntax_config.highlights.user_file_reference) -- Highlight for @./file in user messages
+  set_highlight("FlemmaLuaExpression", syntax_config.highlights.lua_expression)
+  -- Apply rewriter-owned syntax rules and highlights
+  preprocessor_syntax.apply(syntax_config, set_highlight)
 
   -- Set up spinner highlight with fg-only (no bg) so hl_mode="combine" inherits line highlight bg
   local spinner_fg = get_hl_color("FlemmaAssistant", "fg") or get_default_color("fg")

@@ -13,7 +13,7 @@ Configuration keys map to dedicated highlight groups:
 | `highlights.system`              | System messages (`FlemmaSystem`)                                         |
 | `highlights.user`                | User messages (`FlemmaUser`)                                             |
 | `highlights.assistant`           | Assistant messages (`FlemmaAssistant`)                                   |
-| `highlights.user_lua_expression` | `{{ expression }}` fragments                                             |
+| `highlights.lua_expression`      | `{{ expression }}` fragments (in `@You` and `@System` messages)          |
 | `highlights.user_file_reference` | `@./path` fragments                                                      |
 | `highlights.thinking_tag`        | `<thinking>` / `</thinking>` tags                                        |
 | `highlights.thinking_block`      | Content inside thinking blocks                                           |

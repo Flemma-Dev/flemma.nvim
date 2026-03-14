@@ -2,6 +2,7 @@ local stub = require("luassert.stub")
 
 describe("File References and Path Parsing", function()
   local parser, processor, context_util
+  local runner_mod, file_refs_mod
   local stubs = {}
 
   local function create_stub(obj, method, replacement)
@@ -17,9 +18,17 @@ describe("File References and Path Parsing", function()
     package.loaded["flemma.tools.context"] = nil
     package.loaded["flemma.tools.injector"] = nil
     package.loaded["flemma.context"] = nil
+    package.loaded["flemma.preprocessor"] = nil
+    package.loaded["flemma.preprocessor.registry"] = nil
+    package.loaded["flemma.preprocessor.runner"] = nil
+    package.loaded["flemma.preprocessor.context"] = nil
+    package.loaded["flemma.preprocessor.utilities"] = nil
+    package.loaded["flemma.preprocessor.rewriters.file_references"] = nil
     parser = require("flemma.parser")
     processor = require("flemma.processor")
     context_util = require("flemma.context")
+    runner_mod = require("flemma.preprocessor.runner")
+    file_refs_mod = require("flemma.preprocessor.rewriters.file_references")
     stubs = {}
   end)
 
@@ -35,6 +44,13 @@ describe("File References and Path Parsing", function()
   local function parse_and_get_file_parts(content, context)
     local lines = { "@You:", content }
     local doc = parser.parse_lines(lines)
+
+    -- Run file-references rewriter to convert @./file -> include() expressions
+    doc = runner_mod.run_pipeline(doc, 0, {
+      interactive = false,
+      rewriters = { file_refs_mod.rewriter },
+    })
+
     local result = processor.evaluate(doc, context or {})
 
     local file_parts = {}
@@ -448,7 +464,12 @@ describe("File References and Path Parsing", function()
           "@You:",
           "Look at @./image.png",
         }
-        local prompt = pipeline.run(parser.parse_lines(lines), {})
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt = pipeline.run(doc, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -514,7 +535,12 @@ describe("File References and Path Parsing", function()
           "@You:",
           "Review @./document.pdf",
         }
-        local prompt = pipeline.run(parser.parse_lines(lines), {})
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt = pipeline.run(doc, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -569,7 +595,12 @@ describe("File References and Path Parsing", function()
           "@You:",
           "Read @./notes.txt",
         }
-        local prompt = pipeline.run(parser.parse_lines(lines), {})
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt = pipeline.run(doc, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -623,7 +654,12 @@ describe("File References and Path Parsing", function()
           "@You:",
           "Analyze @./chart.png",
         }
-        local prompt = pipeline.run(parser.parse_lines(lines), {})
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt = pipeline.run(doc, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -691,7 +727,12 @@ describe("File References and Path Parsing", function()
           "@You:",
           "Summarize @./report.pdf",
         }
-        local prompt = pipeline.run(parser.parse_lines(lines), {})
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt = pipeline.run(doc, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -749,7 +790,12 @@ describe("File References and Path Parsing", function()
           "@You:",
           "Process @./data.txt",
         }
-        local prompt = pipeline.run(parser.parse_lines(lines), {})
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt = pipeline.run(doc, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -810,7 +856,12 @@ describe("File References and Path Parsing", function()
           "@You:",
           "Describe @./photo.png",
         }
-        local prompt = pipeline.run(parser.parse_lines(lines), {})
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt = pipeline.run(doc, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -875,7 +926,12 @@ describe("File References and Path Parsing", function()
           "@You:",
           "Analyze @./study.pdf",
         }
-        local prompt = pipeline.run(parser.parse_lines(lines), {})
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt = pipeline.run(doc, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -929,7 +985,12 @@ describe("File References and Path Parsing", function()
           "@You:",
           "Check @./config.txt",
         }
-        local prompt = pipeline.run(parser.parse_lines(lines), {})
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt = pipeline.run(doc, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -974,7 +1035,12 @@ describe("File References and Path Parsing", function()
         "@You:",
         "File @./symlink-file.sh",
       }
-      local _, evaluated = pipeline.run(parser.parse_lines(lines), {})
+      local doc = parser.parse_lines(lines)
+      doc = runner_mod.run_pipeline(doc, 0, {
+        interactive = false,
+        rewriters = { file_refs_mod.rewriter },
+      })
+      local _, evaluated = pipeline.run(doc, {})
 
       -- Check diagnostics
       local file_diags = vim.tbl_filter(function(d)
@@ -1032,7 +1098,12 @@ describe("File References and Path Parsing", function()
         "@You:",
         "Binary file @./binary.bin",
       }
-      local _, evaluated = pipeline.run(parser.parse_lines(lines), {})
+      local doc = parser.parse_lines(lines)
+      doc = runner_mod.run_pipeline(doc, 0, {
+        interactive = false,
+        rewriters = { file_refs_mod.rewriter },
+      })
+      local _, evaluated = pipeline.run(doc, {})
 
       -- Check diagnostics
       local file_diags = vim.tbl_filter(function(d)

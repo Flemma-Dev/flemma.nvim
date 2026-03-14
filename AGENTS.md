@@ -30,7 +30,7 @@ Explore `lua/flemma/` to understand the codebase — module files are named desc
 - `tools/` — tool registry (`get_all()` filters by `enabled`), executor, injector, approval, and built-in definitions in `tools/definitions/`
 - `utilities/` — stateless shared infrastructure: `json.lua`, `roles.lua`, `modeline.lua`, `truncate.lua`, `display.lua`, `folding.lua`, `buffer.lua`, `bash/`
 - `core.lua` — main orchestration; `state.lua` — ephemeral per-buffer state; `config.lua` — `vim.tbl_deep_extend` merge, `state.get_config()` for runtime access
-- Production file names never contain underscores; test files use `_spec.lua` suffix.
+- Production file names prefer single words; multi-word descriptive names use snake_case (`secret_tool.lua`, `coding_assistant.lua`), while established domain concepts are concatenated (`writequeue.lua`, `textobject.lua`). Test files use `_spec.lua` suffix.
 - Tests live in `tests/flemma/*_spec.lua` with fixtures in `tests/fixtures/`.
 
 ## Coding Conventions
