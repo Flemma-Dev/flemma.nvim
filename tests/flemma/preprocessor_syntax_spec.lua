@@ -85,10 +85,7 @@ describe("preprocessor.syntax", function()
         options = "display",
         hl = "Include",
       })
-      assert.are.equal(
-        'syntax match TestSyntaxMatch "test" display contained containedin=FlemmaUser',
-        cmd
-      )
+      assert.are.equal('syntax match TestSyntaxMatch "test" display contained containedin=FlemmaUser', cmd)
     end)
 
     it("should generate a region command", function()
