@@ -25,6 +25,9 @@ vim.api.nvim_create_autocmd("User", {
   group = augroup,
   pattern = "FlemmaRequestSending",
   callback = function(ev)
+    if not ev.data or not ev.data.bufnr then
+      return
+    end
     busy_buffers[ev.data.bufnr] = true
     vim.schedule(vim.cmd.redrawtabline)
   end,
@@ -34,6 +37,9 @@ vim.api.nvim_create_autocmd("User", {
   group = augroup,
   pattern = "FlemmaRequestFinished",
   callback = function(ev)
+    if not ev.data or not ev.data.bufnr then
+      return
+    end
     busy_buffers[ev.data.bufnr] = nil
     vim.schedule(vim.cmd.redrawtabline)
   end,
@@ -75,11 +81,15 @@ end
 ---
 ---In factory mode (called with {icon} or no args):
 ---returns a new dual-mode handler with the custom icon.
+---@alias flemma.integrations.bufferline.ElementIcon fun(opts?: table): string|nil, string|nil
+
 ---@param icon string
----@return fun(opts?: table): ...
+---@return flemma.integrations.bufferline.ElementIcon
 local function factory(icon)
+  ---@overload fun(opts: {path: string, filetype?: string, extension?: string, directory?: boolean}): string|nil, string|nil
+  ---@overload fun(opts?: {icon?: string}): flemma.integrations.bufferline.ElementIcon
   ---@param opts? table
-  ---@return string|nil icon_char, string|nil highlight_group
+  ---@return string|nil|flemma.integrations.bufferline.ElementIcon icon_or_handler, string|nil highlight_group
   local function element_icon(opts)
     opts = opts or {}
     if is_bufferline_call(opts) then
@@ -92,7 +102,7 @@ local function factory(icon)
       end
       return
     end
-    return factory(opts.icon or icon) --[[@as string|nil]]
+    return factory(opts.icon or icon)
   end
   return element_icon
 end
