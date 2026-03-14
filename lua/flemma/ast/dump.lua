@@ -12,19 +12,26 @@ local parser = require("flemma.parser")
 local INDENT = "  "
 
 ---Format a position as a bracket string.
+---Collapses [N - N] to [N] when start and end are identical with no columns.
 ---@param pos flemma.ast.Position|nil
 ---@return string
 local function format_position(pos)
   if not pos then
     return ""
   end
+  local has_start_col = pos.start_col ~= nil
+  local has_end_col = pos.end_col ~= nil
   local start_str = tostring(pos.start_line)
-  if pos.start_col then
+  if has_start_col then
     start_str = start_str .. ":" .. pos.start_col
   end
   if pos.end_line then
+    -- Collapse [N - N] to [N] when no columns are involved
+    if pos.end_line == pos.start_line and not has_start_col and not has_end_col then
+      return " [" .. start_str .. "]"
+    end
     local end_str = tostring(pos.end_line)
-    if pos.end_col then
+    if has_end_col then
       end_str = end_str .. ":" .. pos.end_col
     end
     return " [" .. start_str .. " - " .. end_str .. "]"
@@ -387,11 +394,17 @@ end
 ---@return string
 function M.foldexpr(lnum)
   local line = vim.fn.getline(lnum)
+
+  -- Empty lines (from multiline content blocks) inherit the previous fold level
+  if line == "" then
+    return "="
+  end
+
   local indent = #(line:match("^(%s*)") or "")
   local level = indent / #INDENT
 
   -- Node header lines start a fold at their indent level + 1
-  -- Match kind + position bracket, or a bare kind word (no position) followed by inline fields
+  -- Match kind + position bracket, or a bare kind word followed by inline fields
   if line:match("^%s*%w+%s*%[") or line:match("^%s*%w+%s+%w+") then
     return ">" .. (level + 1)
   end
