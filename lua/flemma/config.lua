@@ -143,6 +143,7 @@
 ---@field tool_execute string
 ---@field message_next string
 ---@field message_prev string
+---@field fold_toggle string|false
 
 ---@class flemma.config.InsertKeymaps
 ---@field send string
@@ -335,6 +336,7 @@ return {
       tool_execute = "<M-CR>", -- Execute tool at cursor
       message_next = "]m", -- Jump to next message
       message_prev = "[m", -- Jump to previous message
+      fold_toggle = "<Space>", -- Toggle fold under cursor; set false to disable (skipped when key matches mapleader)
     },
     insert = {
       send = "<C-]>",

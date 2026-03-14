@@ -190,7 +190,7 @@ Model thoughts stream here and auto-fold.
 | Level 2    | `<thinking>...</thinking>` | Reasoning traces are useful, but often secondary to the answer. |
 | Level 1    | Each message               | Collapse long exchanges without losing context.                 |
 
-Toggle folds with your usual mappings (`za`, `zc`, etc.). The fold text shows a snippet of the hidden content so you know whether to expand it. The initial fold level is configurable via `editing.foldlevel` (default `1`, which collapses thinking blocks).
+Press `<Space>` to toggle the fold under the cursor, or use your usual mappings (`za`, `zc`, etc.). The fold text shows a snippet of the hidden content so you know whether to expand it. The initial fold level is configurable via `editing.foldlevel` (default `1`, which collapses thinking blocks). The `<Space>` binding is automatically skipped when it conflicts with your `mapleader`.
 
 Flemma draws a ruler on each role marker line using the configured `ruler.char` and highlight, visually separating messages without consuming extra vertical space.
 
@@ -198,6 +198,7 @@ Flemma draws a ruler on each role marker line using the configured `ruler.char` 
 
 Inside `.chat` buffers Flemma defines:
 
+- `<Space>` – toggle the fold under the cursor (automatically skipped when `<Space>` is your `mapleader`).
 - `]m` / `[m` – jump to the next/previous message header.
 - `im` / `am` (configurable) – select the inside or entire message as a text object. `am` selects linewise and includes thinking blocks and trailing blank lines, making `dam` delete entire conversation turns. `im` skips `<thinking>` sections so yanking `im` never includes reasoning traces.
 - Buffer-local mappings for send/cancel default to `<C-]>` and `<C-c>` in normal mode. `<C-]>` is a hybrid key with three phases: inject approval placeholders, execute approved tools, send the conversation. `<M-CR>` (Alt-Enter) executes the single tool under the cursor – useful for stepping through pending tools one at a time. Insert-mode `<C-]>` behaves identically to normal mode but re-enters insert when the operation finishes.

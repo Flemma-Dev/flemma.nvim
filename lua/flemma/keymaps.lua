@@ -107,6 +107,15 @@ M.setup = function()
           )
         end
 
+        -- Fold toggle keymap (skip when the key conflicts with mapleader)
+        local fold_toggle_key = config.keymaps.normal.fold_toggle
+        if fold_toggle_key then
+          local leader = vim.g.mapleader or "\\"
+          if vim.keycode(fold_toggle_key) ~= leader then
+            vim.keymap.set("n", fold_toggle_key, "za", { buffer = true, desc = "Toggle fold" })
+          end
+        end
+
         -- Set up text objects with configured key
         textobject.setup({ text_object = config.text_object })
 

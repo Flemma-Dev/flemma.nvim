@@ -141,6 +141,7 @@ require("flemma").setup({
       tool_execute = "<M-CR>",               -- Execute tool at cursor
       message_next = "]m",
       message_prev = "[m",
+      fold_toggle = "<Space>",               -- Toggle fold; false to disable
     },
     insert = {
       send = "<C-]>",                        -- Same hybrid behaviour, re-enters insert after
