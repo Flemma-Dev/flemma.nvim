@@ -366,8 +366,8 @@ describe("flemma.preprocessor.runner", function()
 
       local result_doc, diagnostics = runner.run_pipeline(doc, nil, make_opts({ rewriter }))
       assert.equals(1, #diagnostics)
-      assert.truthy(diagnostics[1].message:find("handler error"))
-      assert.truthy(diagnostics[1].message:find("handler exploded"))
+      assert.truthy(diagnostics[1].error:find("handler error"))
+      assert.truthy(diagnostics[1].error:find("handler exploded"))
 
       -- Original text should be preserved
       local segments = result_doc.messages[1].segments
@@ -392,7 +392,7 @@ describe("flemma.preprocessor.runner", function()
 
       local result_doc, diagnostics = runner.run_pipeline(doc, nil, make_opts({ rewriter }))
       assert.equals(1, #diagnostics)
-      assert.truthy(diagnostics[1].message:find("segment handler error"))
+      assert.truthy(diagnostics[1].error:find("segment handler error"))
 
       -- Original segment preserved
       local segments = result_doc.messages[1].segments

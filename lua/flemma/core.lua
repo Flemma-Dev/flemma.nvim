@@ -708,7 +708,7 @@ function M.send_to_provider(opts)
         if i <= max_per_type then
           local loc = format_position(d.position)
           local rw_name = d.rewriter_name and (" [" .. d.rewriter_name .. "]") or ""
-          table.insert(diagnostic_lines, string.format("  %s%s %s", loc, rw_name, d.error or d.message or "unknown"))
+          table.insert(diagnostic_lines, string.format("  %s%s %s", loc, rw_name, d.error or "unknown"))
         elseif i == max_per_type + 1 then
           table.insert(diagnostic_lines, string.format("  …and %d more", #by_type.rewriter - max_per_type))
           break

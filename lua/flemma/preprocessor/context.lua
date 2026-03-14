@@ -84,7 +84,7 @@ end
 --- Record an emission to prepend to the system message.
 ---@param emission flemma.preprocessor.Emission
 function SystemAccessor:prepend(emission)
-  local position = self._ctx and self._ctx.position or nil
+  local position = self._ctx and self._ctx.position and vim.deepcopy(self._ctx.position) or nil
   table.insert(self._prepends, {
     emission = emission,
     position = position,
@@ -94,7 +94,7 @@ end
 --- Record an emission to append to the system message.
 ---@param emission flemma.preprocessor.Emission
 function SystemAccessor:append(emission)
-  local position = self._ctx and self._ctx.position or nil
+  local position = self._ctx and self._ctx.position and vim.deepcopy(self._ctx.position) or nil
   table.insert(self._appends, {
     emission = emission,
     position = position,
@@ -209,10 +209,9 @@ M.FrontmatterAccessor = FrontmatterAccessor
 --------------------------------------------------------------------------------
 
 ---@class flemma.preprocessor.DiagnosticOpts
----@field lnum? integer 0-indexed line number
----@field col? integer 0-indexed column
----@field end_lnum? integer 0-indexed end line
----@field end_col? integer 0-indexed end column
+---@field label? string Short label for the diagnostic
+---@field filename? string Associated filename
+---@field raw? string Raw source text that triggered the diagnostic
 
 --------------------------------------------------------------------------------
 -- Context class
@@ -264,27 +263,27 @@ end
 ---@param str string The literal text
 ---@return flemma.preprocessor.TextEmission
 function Context:text(str)
-  return { type = "text", text = str }
+  return { kind = "text", value = str }
 end
 
 --- Create an expression emission that replaces matched text with a sandboxed Lua expression.
 ---@param code string The Lua expression code
 ---@return flemma.preprocessor.ExpressionEmission
 function Context:expression(code)
-  return { type = "expression", code = code }
+  return { kind = "expression", code = code }
 end
 
 --- Create a remove emission that deletes the matched text.
 ---@return flemma.preprocessor.RemoveEmission
 function Context:remove()
-  return { type = "remove" }
+  return { kind = "remove" }
 end
 
 --- Create a rewrite emission that replaces matched text with new literal content.
 ---@param replacement_text string The replacement text
 ---@return flemma.preprocessor.RewriteEmission
 function Context:rewrite(replacement_text)
-  return { type = "rewrite", text = replacement_text }
+  return { kind = "rewrite", value = replacement_text }
 end
 
 --------------------------------------------------------------------------------
@@ -311,9 +310,9 @@ end
 
 --- Record a diagnostic from the current rewriter.
 --- The type and rewriter_name fields are auto-filled from the context.
----@param severity integer vim.diagnostic.severity value
+---@param severity "error"|"warning" Diagnostic severity
 ---@param message string Human-readable diagnostic message
----@param opts? flemma.preprocessor.DiagnosticOpts Optional position overrides
+---@param opts? flemma.preprocessor.DiagnosticOpts Optional extra fields
 function Context:diagnostic(severity, message, opts)
   opts = opts or {}
   ---@type flemma.preprocessor.RewriterDiagnostic
@@ -321,11 +320,14 @@ function Context:diagnostic(severity, message, opts)
     type = "rewriter",
     rewriter_name = self._rewriter_name or "unknown",
     severity = severity,
-    message = message,
-    lnum = opts.lnum,
-    col = opts.col,
-    end_lnum = opts.end_lnum,
-    end_col = opts.end_col,
+    error = message,
+    position = self.position and {
+      start_line = self.position.line,
+      start_col = self.position.col,
+    } or nil,
+    label = opts.label,
+    filename = opts.filename,
+    raw = opts.raw,
   }
   table.insert(self._diagnostics, diagnostic)
 end

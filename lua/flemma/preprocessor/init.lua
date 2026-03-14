@@ -23,22 +23,22 @@ local DEFAULT_PRIORITY = 500
 
 --- A text emission preserves the matched text as literal content.
 ---@class flemma.preprocessor.TextEmission
----@field type "text"
----@field text string
+---@field kind "text"
+---@field value string
 
 --- An expression emission replaces the matched text with a sandboxed Lua expression.
 ---@class flemma.preprocessor.ExpressionEmission
----@field type "expression"
+---@field kind "expression"
 ---@field code string
 
 --- A remove emission deletes the matched text entirely.
 ---@class flemma.preprocessor.RemoveEmission
----@field type "remove"
+---@field kind "remove"
 
 --- A rewrite emission replaces the matched text with new literal content.
 ---@class flemma.preprocessor.RewriteEmission
----@field type "rewrite"
----@field text string
+---@field kind "rewrite"
+---@field value string
 
 ---@alias flemma.preprocessor.Emission flemma.preprocessor.TextEmission|flemma.preprocessor.ExpressionEmission|flemma.preprocessor.RemoveEmission|flemma.preprocessor.RewriteEmission
 
@@ -54,6 +54,7 @@ local DEFAULT_PRIORITY = 500
 ---@field start_col integer 1-indexed start column within the line
 ---@field end_col integer 1-indexed end column within the line (inclusive)
 ---@field captures string[] Capture groups from the pattern
+---@field _line? integer Internal: line number for position derivation
 
 --------------------------------------------------------------------------------
 -- Forward declarations (defined in submodules)
@@ -76,12 +77,12 @@ local DEFAULT_PRIORITY = 500
 ---@class flemma.preprocessor.RewriterDiagnostic
 ---@field type "rewriter"
 ---@field rewriter_name string
----@field severity integer vim.diagnostic.severity value
----@field message string
----@field lnum? integer 0-indexed line number
----@field col? integer 0-indexed column
----@field end_lnum? integer 0-indexed end line
----@field end_col? integer 0-indexed end column
+---@field severity "error"|"warning"
+---@field error string Human-readable diagnostic message
+---@field position? flemma.ast.Position
+---@field label? string Short label for the diagnostic
+---@field filename? string Associated filename
+---@field raw? string Raw source text that triggered the diagnostic
 
 --------------------------------------------------------------------------------
 -- Rewriter class

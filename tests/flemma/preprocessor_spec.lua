@@ -157,28 +157,28 @@ describe("flemma.preprocessor", function()
       it("creates a text emission", function()
         local ctx = context_module.new({})
         local emission = ctx:text("hello world")
-        assert.equals("text", emission.type)
-        assert.equals("hello world", emission.text)
+        assert.equals("text", emission.kind)
+        assert.equals("hello world", emission.value)
       end)
 
       it("creates an expression emission", function()
         local ctx = context_module.new({})
         local emission = ctx:expression("os.date()")
-        assert.equals("expression", emission.type)
+        assert.equals("expression", emission.kind)
         assert.equals("os.date()", emission.code)
       end)
 
       it("creates a remove emission", function()
         local ctx = context_module.new({})
         local emission = ctx:remove()
-        assert.equals("remove", emission.type)
+        assert.equals("remove", emission.kind)
       end)
 
       it("creates a rewrite emission", function()
         local ctx = context_module.new({})
         local emission = ctx:rewrite("replacement text")
-        assert.equals("rewrite", emission.type)
-        assert.equals("replacement text", emission.text)
+        assert.equals("rewrite", emission.kind)
+        assert.equals("replacement text", emission.value)
       end)
     end)
 
@@ -208,44 +208,54 @@ describe("flemma.preprocessor", function()
           position = { line = 5, col = 10 },
           _rewriter_name = "test_rewriter",
         })
-        ctx:diagnostic(vim.diagnostic.severity.WARN, "something is wrong")
+        ctx:diagnostic("warning", "something is wrong")
 
         local diagnostics = ctx:get_diagnostics()
         assert.equals(1, #diagnostics)
         assert.equals("rewriter", diagnostics[1].type)
         assert.equals("test_rewriter", diagnostics[1].rewriter_name)
-        assert.equals(vim.diagnostic.severity.WARN, diagnostics[1].severity)
-        assert.equals("something is wrong", diagnostics[1].message)
+        assert.equals("warning", diagnostics[1].severity)
+        assert.equals("something is wrong", diagnostics[1].error)
       end)
 
-      it("includes optional position fields from opts", function()
+      it("derives position from context position", function()
         local ctx = context_module.new({
           position = { line = 5, col = 10 },
           _rewriter_name = "pos_test",
         })
-        ctx:diagnostic(vim.diagnostic.severity.ERROR, "bad thing", {
-          lnum = 3,
-          col = 7,
-          end_lnum = 3,
-          end_col = 15,
+        ctx:diagnostic("error", "bad thing")
+
+        local diagnostics = ctx:get_diagnostics()
+        assert.equals(5, diagnostics[1].position.start_line)
+        assert.equals(10, diagnostics[1].position.start_col)
+      end)
+
+      it("includes optional extra fields from opts", function()
+        local ctx = context_module.new({
+          position = { line = 5, col = 10 },
+          _rewriter_name = "opts_test",
+        })
+        ctx:diagnostic("error", "bad thing", {
+          label = "file_ref",
+          filename = "test.lua",
+          raw = "@./test.lua",
         })
 
         local diagnostics = ctx:get_diagnostics()
-        assert.equals(3, diagnostics[1].lnum)
-        assert.equals(7, diagnostics[1].col)
-        assert.equals(3, diagnostics[1].end_lnum)
-        assert.equals(15, diagnostics[1].end_col)
+        assert.equals("file_ref", diagnostics[1].label)
+        assert.equals("test.lua", diagnostics[1].filename)
+        assert.equals("@./test.lua", diagnostics[1].raw)
       end)
 
       it("accumulates multiple diagnostics", function()
         local ctx = context_module.new({ _rewriter_name = "multi_diag" })
-        ctx:diagnostic(vim.diagnostic.severity.WARN, "first")
-        ctx:diagnostic(vim.diagnostic.severity.ERROR, "second")
+        ctx:diagnostic("warning", "first")
+        ctx:diagnostic("error", "second")
 
         local diagnostics = ctx:get_diagnostics()
         assert.equals(2, #diagnostics)
-        assert.equals("first", diagnostics[1].message)
-        assert.equals("second", diagnostics[2].message)
+        assert.equals("first", diagnostics[1].error)
+        assert.equals("second", diagnostics[2].error)
       end)
     end)
 
@@ -294,8 +304,8 @@ describe("flemma.preprocessor", function()
 
         local prepends = accessor:get_prepends()
         assert.equals(1, #prepends)
-        assert.equals("text", prepends[1].emission.type)
-        assert.equals("prepended text", prepends[1].emission.text)
+        assert.equals("text", prepends[1].emission.kind)
+        assert.equals("prepended text", prepends[1].emission.value)
         assert.same({ line = 10, col = 5 }, prepends[1].position)
       end)
 
@@ -312,8 +322,8 @@ describe("flemma.preprocessor", function()
 
         local appends = accessor:get_appends()
         assert.equals(1, #appends)
-        assert.equals("rewrite", appends[1].emission.type)
-        assert.equals("appended instruction", appends[1].emission.text)
+        assert.equals("rewrite", appends[1].emission.kind)
+        assert.equals("appended instruction", appends[1].emission.value)
         assert.same({ line = 20, col = 0 }, appends[1].position)
       end)
 

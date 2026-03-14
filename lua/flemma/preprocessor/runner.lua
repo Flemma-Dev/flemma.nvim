@@ -64,8 +64,7 @@ local function build_match(line, m, current_line)
     end_col = m.end_pos,
     captures = m.captures,
   }
-  -- Attach line number for position derivation (not part of public Match type)
-  ---@diagnostic disable-next-line: inject-field
+  -- Attach line number for position derivation
   match._line = current_line
   return match
 end
@@ -109,7 +108,7 @@ local function emission_to_segments(emission, position, original_text, buffer_ed
 
   -- Check if this is an emission list (array of emissions)
   local emission_table = emission --[[@as table]]
-  if emission_table[1] ~= nil and emission_table.kind == nil and emission_table.type == nil then
+  if emission_table[1] ~= nil and emission_table.kind == nil then
     ---@cast emission flemma.preprocessor.EmissionList
     for _, single_emission in ipairs(emission) do
       local sub_segments = emission_to_segments(single_emission, position, nil, buffer_edits, interactive)
@@ -123,19 +122,22 @@ local function emission_to_segments(emission, position, original_text, buffer_ed
   ---@cast emission flemma.preprocessor.Emission
   local pos = { start_line = position.line, start_col = position.col }
 
-  if emission.type == "text" then
+  if emission.kind == "remove" then
+    -- Remove emission: produce no segments (delete matched text)
+    return segments
+  elseif emission.kind == "text" then
     ---@cast emission flemma.preprocessor.TextEmission
-    if #emission.text > 0 then
-      table.insert(segments, ast.text(emission.text, pos))
+    if #emission.value > 0 then
+      table.insert(segments, ast.text(emission.value, pos))
     end
-  elseif emission.type == "expression" then
+  elseif emission.kind == "expression" then
     ---@cast emission flemma.preprocessor.ExpressionEmission
     table.insert(segments, ast.expression(emission.code, pos))
-  elseif emission.type == "rewrite" then
+  elseif emission.kind == "rewrite" then
     ---@cast emission flemma.preprocessor.RewriteEmission
     -- Rewrite replaces text in the AST and queues a buffer edit in interactive mode
-    if #emission.text > 0 then
-      table.insert(segments, ast.text(emission.text, pos))
+    if #emission.value > 0 then
+      table.insert(segments, ast.text(emission.value, pos))
     end
     if interactive and original_text then
       -- Queue a buffer edit to replace the original text with the rewrite
@@ -144,7 +146,7 @@ local function emission_to_segments(emission, position, original_text, buffer_ed
       local end_line_0 = start_line_0
       local end_col_0 = start_col_0 + #original_text
       -- Split replacement into lines for nvim_buf_set_text
-      local replacement_lines = vim.split(emission.text, "\n", { plain = true })
+      local replacement_lines = vim.split(emission.value, "\n", { plain = true })
       table.insert(buffer_edits, {
         start_line = start_line_0,
         start_col = start_col_0,
@@ -272,7 +274,7 @@ local function run_text_handlers(text_segment, handlers, rewriter_state, opts)
           error(emission)
         end
         -- Handler error — record diagnostic, leave text unchanged
-        ctx:diagnostic(vim.diagnostic.severity.ERROR, "handler error: " .. tostring(emission))
+        ctx:diagnostic("error", "handler error: " .. tostring(emission))
         emit_text(result_segments, accepted.match.full, current_line, accepted.start_pos)
       else
         -- Convert emission to segments
@@ -360,7 +362,7 @@ local function run_segment_handlers(segment, handlers, rewriter_state, opts)
           if context_module.is_confirmation(emission) then
             error(emission)
           end
-          ctx:diagnostic(vim.diagnostic.severity.ERROR, "segment handler error: " .. tostring(emission))
+          ctx:diagnostic("error", "segment handler error: " .. tostring(emission))
           table.insert(next_segments, seg)
         else
           -- nil return means keep the original segment unchanged
@@ -590,11 +592,8 @@ function M.run_pipeline(doc, bufnr, opts)
       frontmatter = frontmatter_accessor,
       metadata = {},
       diagnostics = {},
+      _buffer_edits = all_buffer_edits,
     }
-
-    -- Attach buffer edits accumulator to rewriter state
-    ---@diagnostic disable-next-line: inject-field
-    rewriter_state._buffer_edits = all_buffer_edits
 
     -- Set up a dummy context for the system accessor's rewriter name
     local name_ctx = context_module.new({
