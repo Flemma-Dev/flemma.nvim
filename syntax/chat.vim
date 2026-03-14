@@ -10,15 +10,6 @@ syntax match FlemmaRoleAssistant '^@Assistant:\s*$' contained
 " Define the Lua expression match for User messages
 syntax match FlemmaUserLuaExpression "{{.\{-}}}" contained
 
-" Define the File Reference match for User messages: @./path or @../path, excluding trailing punctuation
-" @\v(\.\.?\/)\S*[^[:punct:]\s]
-" @                  - literal @
-" \v                 - very magic
-" (\.\.?\/)          - group: literal dot, optional literal dot, literal slash (./ or ../)
-" \S*                - zero or more non-whitespace characters
-" [^[:punct:]\s]     - a character that is NOT punctuation and NOT whitespace (ensures end is not punctuation)
-syntax match FlemmaUserFileReference "@\v(\.\.?\/)\S*[^[:punct:]\s]" contained
-
 " Define Thinking Tags (for highlighting the tags themselves)
 " Matches: <thinking>, <thinking provider:signature="...">, <thinking provider:signature="..."/>
 " Pattern [^/>] excludes both / and > so the final > can match
@@ -58,7 +49,7 @@ syntax region FlemmaFrontmatterBlockJson start="\%1l^```json$" end="^```$" keepe
 " System region
 syntax region FlemmaSystem start='^@System:\s*$' end='\(^@\(You\|Assistant\):\s*$\)\@=\|\%$' contains=FlemmaRoleSystem,@Markdown
 " User region (contains tool results)
-syntax region FlemmaUser start='^@You:\s*$' end='\(^@\(System\|Assistant\):\s*$\)\@=\|\%$' contains=FlemmaRoleUser,FlemmaUserLuaExpression,FlemmaUserFileReference,FlemmaToolResult,@Markdown
+syntax region FlemmaUser start='^@You:\s*$' end='\(^@\(System\|Assistant\):\s*$\)\@=\|\%$' contains=FlemmaRoleUser,FlemmaUserLuaExpression,FlemmaToolResult,@Markdown
 
 " Thinking Block Region (nested inside Assistant)
 " This region starts with <thinking> or <thinking provider:signature="..."> and ends with </thinking>.
