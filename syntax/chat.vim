@@ -27,7 +27,7 @@ syntax match FlemmaToolResultError "(error)" contained
 
 " Tool Use region (in assistant messages): **Tool Use:** `name` (`id`)
 " Note: Tool names and IDs in backticks are handled by treesitter markdown_inline as inline code
-syntax region FlemmaToolUse start="\*\*Tool Use:\*\*" end="$" oneline contained contains=FlemmaToolUseTitle
+syntax region FlemmaToolUse start="\*\*Tool Use:\*\*" end="$" oneline contained containedin=FlemmaAssistant contains=FlemmaToolUseTitle
 " Tool Result region (in user messages): **Tool Result:** `id` (optional: (error))
 syntax region FlemmaToolResult start="\*\*Tool Result:\*\*" end="$" oneline contained containedin=FlemmaUser contains=FlemmaToolResultTitle,FlemmaToolResultError
 
@@ -55,9 +55,9 @@ syntax region FlemmaUser start='^@You:\s*$' end='\(^@\(System\|Assistant\):\s*$\
 " This region starts with <thinking> or <thinking provider:signature="..."> and ends with </thinking>.
 " Self-closing tags like <thinking provider:signature="..."/> are handled by match, not region.
 " It contains the tags themselves (FlemmaThinkingTag) and markdown for the content.
-syntax region FlemmaThinkingBlock start="^<thinking\(\s.*[^/>]\)\?>$" end="^</thinking>$" keepend contains=FlemmaThinkingTag,@Markdown
+syntax region FlemmaThinkingBlock start="^<thinking\(\s.*[^/>]\)\?>$" end="^</thinking>$" keepend contained containedin=FlemmaAssistant contains=FlemmaThinkingTag,@Markdown
 
 " Assistant region contains role markers, markdown, thinking blocks, and tool use
-syntax region FlemmaAssistant start='^@Assistant:\s*$' end='\(^@\(System\|You\):\s*$\)\@=\|\%$' contains=FlemmaRoleAssistant,FlemmaThinkingBlock,FlemmaToolUse,@Markdown
+syntax region FlemmaAssistant start='^@Assistant:\s*$' end='\(^@\(System\|You\):\s*$\)\@=\|\%$' contains=FlemmaRoleAssistant,@Markdown
 
 let b:current_syntax = "chat"
