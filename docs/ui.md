@@ -236,6 +236,18 @@ progress = {
 }
 ```
 
+## AST inspection
+
+### Hover
+
+When `experimental.lsp` is enabled, hovering over any element in a `.chat` buffer shows a compact AST node dump in a fenced `flemma-ast` code block. The dump shows the node's kind, position, and key fields at depth 1 — container nodes (messages, documents) show a child summary instead of recursing.
+
+### AST diff
+
+`:Flemma ast:diff` opens a side-by-side diff comparing the raw AST (before preprocessor rewriters) with the rewritten AST (after rewriters). Both buffers use the `flemma-ast` filetype with syntax highlighting and fold support. The diff view scrolls to the node under the cursor in the source buffer.
+
+Use this to debug rewriter transformations — for example, to see how `@./file` references get rewritten to `{{ include() }}` expressions, or to verify that a custom rewriter is producing the expected AST changes. Fold regions let you collapse nodes to focus on the parts you care about.
+
 ## Plugin integrations
 
 Flemma ships optional integrations for lualine (statusline component) and bufferline (busy tab indicator). See [docs/integrations.md](integrations.md) for setup instructions and configuration.
