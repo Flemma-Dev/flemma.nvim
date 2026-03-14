@@ -1,5 +1,5 @@
 --- Optional bufferline.nvim integration — shows a busy icon on .chat tabs
---- while a request is in-flight.
+--- while a request or tool execution is in-flight.
 ---
 --- Usage (one line in bufferline config):
 ---   get_element_icon = require("flemma.integrations.bufferline").get_element_icon
@@ -12,8 +12,31 @@ local M = {}
 local DEFAULT_ICON = "󰔟"
 local HIGHLIGHT = "FlemmaBusy"
 
----@type table<integer, true>
-local busy_buffers = {}
+-- Nesting counter per buffer: incremented on each start event (request sending,
+-- tool executing), decremented on each end event (request finished, tool finished).
+-- Buffer is busy when count > 0. This handles overlapping request/tool lifecycles.
+---@type table<integer, integer>
+local busy_count = {}
+
+---Increment the busy counter for a buffer and trigger a redraw.
+---@param bufnr integer
+local function increment(bufnr)
+  busy_count[bufnr] = (busy_count[bufnr] or 0) + 1
+  vim.schedule(vim.cmd.redrawtabline)
+end
+
+---Decrement the busy counter for a buffer and trigger a redraw.
+---Clears the entry entirely when it reaches zero.
+---@param bufnr integer
+local function decrement(bufnr)
+  local count = busy_count[bufnr]
+  if not count or count <= 1 then
+    busy_count[bufnr] = nil
+  else
+    busy_count[bufnr] = count - 1
+  end
+  vim.schedule(vim.cmd.redrawtabline)
+end
 
 -- Register early fallback highlight so FlemmaBusy exists before any .chat buffer opens.
 -- apply_syntax() will re-register it from config, but this ensures the group is always defined.
@@ -23,32 +46,30 @@ local augroup = vim.api.nvim_create_augroup("FlemmaBufferlineIntegration", { cle
 
 vim.api.nvim_create_autocmd("User", {
   group = augroup,
-  pattern = "FlemmaRequestSending",
+  pattern = { "FlemmaRequestSending", "FlemmaToolExecuting" },
   callback = function(ev)
     if not ev.data or not ev.data.bufnr then
       return
     end
-    busy_buffers[ev.data.bufnr] = true
-    vim.schedule(vim.cmd.redrawtabline)
+    increment(ev.data.bufnr)
   end,
 })
 
 vim.api.nvim_create_autocmd("User", {
   group = augroup,
-  pattern = "FlemmaRequestFinished",
+  pattern = { "FlemmaRequestFinished", "FlemmaToolFinished" },
   callback = function(ev)
     if not ev.data or not ev.data.bufnr then
       return
     end
-    busy_buffers[ev.data.bufnr] = nil
-    vim.schedule(vim.cmd.redrawtabline)
+    decrement(ev.data.bufnr)
   end,
 })
 
 vim.api.nvim_create_autocmd("BufWipeout", {
   group = augroup,
   callback = function(ev)
-    busy_buffers[ev.buf] = nil
+    busy_count[ev.buf] = nil
   end,
 })
 
@@ -97,7 +118,7 @@ local function factory(icon)
         return
       end
       local bufnr = vim.fn.bufnr(opts.path)
-      if busy_buffers[bufnr] then
+      if busy_count[bufnr] then
         return icon, HIGHLIGHT
       end
       return
@@ -110,9 +131,9 @@ end
 M.get_element_icon = factory(DEFAULT_ICON)
 
 ---Exposed for testing only. Do not use in production code.
----@return table<integer, true>
-function M._get_busy_buffers()
-  return busy_buffers
+---@return table<integer, integer>
+function M._get_busy_count()
+  return busy_count
 end
 
 return M

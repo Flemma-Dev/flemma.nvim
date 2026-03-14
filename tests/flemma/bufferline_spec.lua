@@ -223,7 +223,7 @@ describe("Bufferline integration", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
 
       -- Use the test-only accessor to verify the entry was cleaned up
-      assert.is_nil(bufferline_integration._get_busy_buffers()[bufnr])
+      assert.is_nil(bufferline_integration._get_busy_count()[bufnr])
     end)
 
     it("should track multiple busy buffers independently", function()
@@ -257,38 +257,82 @@ describe("Bufferline integration", function()
       vim.api.nvim_buf_delete(buf2, { force = true })
     end)
 
-    it("should handle repeated FlemmaRequestSending idempotently", function()
+    it("should use nesting counter for overlapping events", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
-      vim.api.nvim_buf_set_name(bufnr, "/tmp/repeat.chat")
+      vim.api.nvim_buf_set_name(bufnr, "/tmp/nested.chat")
       vim.bo[bufnr].filetype = "chat"
 
-      -- Send twice
+      local opts = { path = "/tmp/nested.chat", filetype = "chat" }
+
+      -- Request starts (count=1)
       vim.api.nvim_exec_autocmds("User", {
         pattern = "FlemmaRequestSending",
         data = { bufnr = bufnr },
       })
+      assert.are.equal("󰔟", bufferline_integration.get_element_icon(opts))
+
+      -- Tool starts inside the request (count=2)
       vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaRequestSending",
-        data = { bufnr = bufnr },
+        pattern = "FlemmaToolExecuting",
+        data = { bufnr = bufnr, tool_name = "bash", tool_id = "t1" },
       })
+      assert.are.equal("󰔟", bufferline_integration.get_element_icon(opts))
+      assert.are.equal(2, bufferline_integration._get_busy_count()[bufnr])
 
-      local icon = bufferline_integration.get_element_icon({
-        path = "/tmp/repeat.chat",
-        filetype = "chat",
+      -- Tool finishes (count=1, still busy)
+      vim.api.nvim_exec_autocmds("User", {
+        pattern = "FlemmaToolFinished",
+        data = { bufnr = bufnr, tool_name = "bash", tool_id = "t1", status = "success" },
       })
-      assert.are.equal("󰔟", icon)
+      assert.are.equal("󰔟", bufferline_integration.get_element_icon(opts))
+      assert.are.equal(1, bufferline_integration._get_busy_count()[bufnr])
 
-      -- One finish should clear
+      -- Request finishes (count=0, no longer busy)
+      vim.api.nvim_exec_autocmds("User", {
+        pattern = "FlemmaRequestFinished",
+        data = { bufnr = bufnr, status = "completed" },
+      })
+      assert.is_nil(bufferline_integration.get_element_icon(opts))
+      assert.is_nil(bufferline_integration._get_busy_count()[bufnr])
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("should not go below zero on extra finish events", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_buf_set_name(bufnr, "/tmp/extra.chat")
+      vim.bo[bufnr].filetype = "chat"
+
+      -- Finish without a prior send
       vim.api.nvim_exec_autocmds("User", {
         pattern = "FlemmaRequestFinished",
         data = { bufnr = bufnr, status = "completed" },
       })
 
-      icon = bufferline_integration.get_element_icon({
-        path = "/tmp/repeat.chat",
-        filetype = "chat",
+      -- Counter should be nil (cleaned up), not negative
+      assert.is_nil(bufferline_integration._get_busy_count()[bufnr])
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("should show busy during tool execution alone", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_buf_set_name(bufnr, "/tmp/tool.chat")
+      vim.bo[bufnr].filetype = "chat"
+
+      local opts = { path = "/tmp/tool.chat", filetype = "chat" }
+
+      vim.api.nvim_exec_autocmds("User", {
+        pattern = "FlemmaToolExecuting",
+        data = { bufnr = bufnr, tool_name = "read", tool_id = "t2" },
       })
-      assert.is_nil(icon)
+      assert.are.equal("󰔟", bufferline_integration.get_element_icon(opts))
+
+      vim.api.nvim_exec_autocmds("User", {
+        pattern = "FlemmaToolFinished",
+        data = { bufnr = bufnr, tool_name = "read", tool_id = "t2", status = "success" },
+      })
+      assert.is_nil(bufferline_integration.get_element_icon(opts))
 
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
