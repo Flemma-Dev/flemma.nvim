@@ -85,6 +85,24 @@ local DEFAULT_PRIORITY = 500
 ---@field raw? string Raw source text that triggered the diagnostic
 
 --------------------------------------------------------------------------------
+-- Syntax rule type
+--------------------------------------------------------------------------------
+
+--- Declarative Vim syntax rule returned by rewriter:get_vim_syntax(config).
+--- Each rule describes a syntax item and its associated highlight group.
+---@class flemma.preprocessor.SyntaxRule
+---@field kind "match"|"region"
+---@field group string Full highlight group name (e.g., "FlemmaUserFileReference")
+---@field pattern? string For "match": the Vim pattern
+---@field start? string For "region": start pattern
+---@field end_? string For "region": end pattern (trailing _ avoids Lua reserved word)
+---@field containedin? string|string[] "*" (default) or subset like {"user", "system"}
+---@field contains? string Vim syntax groups this region contains (for nested highlighting)
+---@field hl string|table Highlight value (same format as config highlight values)
+---@field options? string Extra Vim syntax options ("oneline", "keepend", "display", etc.)
+---@field raw? string Escape hatch: raw VimScript string, bypasses generation
+
+--------------------------------------------------------------------------------
 -- Rewriter class
 --------------------------------------------------------------------------------
 
@@ -101,6 +119,7 @@ local DEFAULT_PRIORITY = 500
 ---@field priority integer
 ---@field text_handlers flemma.preprocessor.TextHandlerEntry[]
 ---@field segment_handlers flemma.preprocessor.SegmentHandlerEntry[]
+---@field get_vim_syntax? fun(self: flemma.preprocessor.Rewriter, config: flemma.Config): flemma.preprocessor.SyntaxRule[]
 local Rewriter = {}
 Rewriter.__index = Rewriter
 
