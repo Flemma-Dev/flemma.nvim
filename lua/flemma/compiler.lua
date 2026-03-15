@@ -7,6 +7,7 @@ local M = {}
 local ast = require("flemma.ast")
 local emittable = require("flemma.emittable")
 local json = require("flemma.utilities.json")
+local log = require("flemma.logging")
 local preproc_utils = require("flemma.preprocessor.utilities")
 
 ---@class flemma.compiler.LineMapEntry
@@ -141,6 +142,12 @@ function M.compile(segments)
 
   -- Syntax-check only (no env needed). execute() re-loads with the real env.
   local _, load_err = load(source, "template", "t")
+
+  if load_err then
+    log.debug("compiler: syntax error in compiled template: " .. load_err)
+  else
+    log.trace("compiler: compiled " .. #segments .. " segments into " .. #lines .. " lines")
+  end
 
   return {
     line_map = line_map,
@@ -381,6 +388,7 @@ function M.execute(result, env)
   -- Execute
   local ok, err = pcall(chunk)
   if not ok then
+    log.debug("compiler: runtime error in template: " .. tostring(err))
     local err_line = parse_error_line(tostring(err))
     local lnum = lookup_lnum(result.line_map, err_line)
     table.insert(diagnostics, {

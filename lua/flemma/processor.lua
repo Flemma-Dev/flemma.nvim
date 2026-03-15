@@ -2,6 +2,7 @@ local compiler = require("flemma.compiler")
 local ctxutil = require("flemma.context")
 local eval = require("flemma.eval")
 local codeblock_parsers = require("flemma.codeblock.parsers")
+local log = require("flemma.logging")
 local parser = require("flemma.parser")
 local symbols = require("flemma.symbols")
 
@@ -214,12 +215,16 @@ function M.evaluate(doc, base_context, opts)
       end
     else
       -- @System and @You: compile and execute via template engine
+      log.trace("processor: compiling @" .. msg.role .. " message (" .. #(msg.segments or {}) .. " segments)")
       local compile_result = compiler.compile(msg.segments or {})
       local exec_parts, exec_diagnostics = compiler.execute(compile_result, env)
       parts = exec_parts
       for _, d in ipairs(exec_diagnostics) do
         d.message_role = msg.role
         table.insert(diagnostics, d)
+      end
+      if #exec_diagnostics > 0 then
+        log.debug("processor: @" .. msg.role .. " template produced " .. #exec_diagnostics .. " diagnostics")
       end
     end
 
