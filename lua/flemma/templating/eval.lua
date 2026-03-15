@@ -348,7 +348,7 @@ function M.ensure_env(env)
   ensure_env_capabilities(env, M.eval_expression, templating.create_env)
 end
 
---- Execute code in a safe environment
+--- Execute code in a sandboxed template environment
 ---@param code string
 ---@param env_param flemma.templating.eval.Environment|nil
 ---@return table<string, any> globals New variables defined during execution
@@ -365,7 +365,7 @@ function M.execute_safe(code, env_param)
     initial_keys[k] = true
   end
 
-  local chunk, load_err = load(code, "safe_env", "t", env)
+  local chunk, load_err = load(code, "frontmatter", "t", env)
   if not chunk then
     error(string.format("Load error in frontmatter of '%s': %s", (env.__filename or "N/A"), load_err))
   end

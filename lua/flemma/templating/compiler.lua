@@ -348,7 +348,7 @@ function M.execute(result, env)
 
   -- Ensure essential builtins are available in the env.
   -- The generated code uses pcall (for expression wrappers), tostring, and error.
-  -- In production, the eval safe env provides these; in tests with minimal envs,
+  -- In production, the stdlib populator provides these; in tests with minimal envs,
   -- they may be missing. Preserve any existing overrides.
   if env.pcall == nil then
     env.pcall = pcall
