@@ -172,8 +172,18 @@ Assign variables in code blocks and reference them in later expressions or code 
 
 ```markdown
 @You:
-{% local label = string.upper(project) %}
+{% label = string.upper(project) %}
 Project: {{label}}
+```
+
+Use `local` when the variable is only needed within the current message. Without `local`, the variable is set on the shared environment and accessible from subsequent messages:
+
+```markdown
+@System:
+{% mode = "strict" %}
+
+@You:
+Mode is {{mode}}
 ```
 
 ### Error behaviour
@@ -236,11 +246,11 @@ Call `include("relative/or/absolute/path")` inside frontmatter or an expression 
 {{ include("system-prompt.md") }}
 ```
 
-**Binary mode** -- the file is read as raw bytes and attached as a structured content part (image, PDF, etc.), just like `@./path`:
+**Binary mode** -- the file is read as raw bytes and attached as a structured content part (image, PDF, etc.), just like `@./path`. Use the `symbols.BINARY` and `symbols.MIME` keys to control include mode:
 
 ```lua
 -- In frontmatter:
-screenshot = include('./latest.png', { binary = true })
+screenshot = include('./latest.png', { [symbols.BINARY] = true })
 ```
 
 ```markdown
@@ -248,11 +258,13 @@ screenshot = include('./latest.png', { binary = true })
 What do you see? {{ screenshot }}
 ```
 
-The `binary` flag and an optional `mime` override are passed as a second argument:
+The `symbols.BINARY` flag and an optional `symbols.MIME` override are passed as symbol keys in the second argument:
 
 ```lua
-include('./data.bin', { binary = true, mime = 'text/csv' })
+include('./data.bin', { [symbols.BINARY] = true, [symbols.MIME] = 'text/csv' })
 ```
+
+`symbols.BINARY` and `symbols.MIME` are opaque table references (not strings), so they never collide with user-defined string keys. All string keys in the second argument are template variables passed to the included file. The `symbols` table is a reserved environment key and must not be overwritten by frontmatter variables.
 
 ### Argument passing
 
@@ -270,8 +282,6 @@ Hello {{name}}, you are acting as a {{role}}.
 ```
 
 Included files have full template support at any nesting depth -- `{% %}` code blocks, `{{ }}` expressions, and nested `include()` calls all work. The child environment is isolated: it receives only the variables you pass (plus `__filename` and `__dirname`), not the parent's frontmatter variables.
-
-The keys `binary` and `mime` are reserved for controlling include mode and cannot be used as variable names.
 
 ### Safety guards
 
@@ -316,7 +326,7 @@ Compare these specs: @./specs/v1.pdf and @./specs/v2.pdf.
 - **URL-encoded paths:** percent-encoded characters are decoded before file resolution. `@./my%20report.txt` resolves to `my report.txt`.
 
 > [!TIP]
-> Under the hood, `@./path` desugars to an `include()` call in binary mode. This means `@./file.png` and `{{ include('./file.png', { binary = true }) }}` are equivalent – you can use whichever reads better in context.
+> Under the hood, `@./path` desugars to an `include()` call in binary mode. This means `@./file.png` and `{{ include('./file.png', { [symbols.BINARY] = true }) }}` are equivalent – you can use whichever reads better in context.
 
 ### Provider support matrix
 
