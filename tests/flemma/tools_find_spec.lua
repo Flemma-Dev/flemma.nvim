@@ -294,6 +294,77 @@ describe("Find Tool", function()
       end
     end)
 
+    it("normalizes absolute path matching cwd to relative output", function()
+      local project_root = vim.fn.getcwd()
+      local fixture_cwd = project_root .. "/tests/fixtures/ls_test"
+      local fixture_ctx = executor.build_execution_context({
+        bufnr = bufnr,
+        cwd = fixture_cwd,
+        timeout = 10,
+        tool_name = "find",
+      })
+
+      local result_captured
+      local done = false
+      find_def.execute(
+        { label = "test", pattern = "*.txt", path = fixture_cwd, limit = nil },
+        fixture_ctx,
+        function(result)
+          result_captured = result
+          done = true
+        end
+      )
+
+      vim.wait(5000, function()
+        return done
+      end)
+
+      assert.is_true(done, "callback should have been called")
+      assert.is_not_nil(result_captured)
+      assert.is_true(result_captured.success)
+      -- Output should not contain the absolute cwd path
+      assert.is_falsy(
+        result_captured.output:match(vim.pesc(fixture_cwd)),
+        "output should not contain absolute cwd path"
+      )
+      assert.is_truthy(result_captured.output:match("readme%.txt"))
+    end)
+
+    it("normalizes absolute subpath of cwd to relative output", function()
+      local project_root = vim.fn.getcwd()
+      local fixture_cwd = project_root .. "/tests/fixtures/ls_test"
+      local fixture_ctx = executor.build_execution_context({
+        bufnr = bufnr,
+        cwd = fixture_cwd,
+        timeout = 10,
+        tool_name = "find",
+      })
+
+      local result_captured
+      local done = false
+      find_def.execute(
+        { label = "test", pattern = "*.txt", path = fixture_cwd .. "/alpha", limit = nil },
+        fixture_ctx,
+        function(result)
+          result_captured = result
+          done = true
+        end
+      )
+
+      vim.wait(5000, function()
+        return done
+      end)
+
+      assert.is_true(done, "callback should have been called")
+      assert.is_not_nil(result_captured)
+      assert.is_true(result_captured.success)
+      -- Output should not contain the absolute cwd path
+      assert.is_falsy(
+        result_captured.output:match(vim.pesc(fixture_cwd)),
+        "output should not contain absolute cwd path"
+      )
+    end)
+
     it("returns cancel function", function()
       local project_root = vim.fn.getcwd()
       local fixture_ctx = executor.build_execution_context({

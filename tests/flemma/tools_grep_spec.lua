@@ -215,6 +215,51 @@ describe("Grep Tool", function()
     end)
   end)
 
+  describe("path normalization", function()
+    -- Helper to run grep asynchronously and wait for result
+    ---@param input table<string, any>
+    ---@param execution_ctx flemma.tools.ExecutionContext
+    ---@return flemma.tools.ExecutionResult
+    local function run_grep_async(input, execution_ctx)
+      local result = nil
+      grep_def.execute(input, execution_ctx, function(r)
+        result = r
+      end)
+      vim.wait(5000, function()
+        return result ~= nil
+      end, 50)
+      assert.is_not_nil(result, "grep did not complete within timeout")
+      return result
+    end
+
+    it("produces relative paths for relative input", function()
+      local result = run_grep_async({ label = "test", pattern = "hello", path = ".", glob = "*.lua", limit = nil }, ctx)
+      assert.is_true(result.success)
+      -- Output should not contain the absolute fixture_dir prefix
+      assert.is_falsy(result.output:match(vim.pesc(fixture_dir)), "output should not contain absolute cwd path")
+      -- Should contain relative paths
+      assert.is_truthy(result.output:match("%.lua:%d+:"))
+    end)
+
+    it("normalizes absolute path matching cwd to relative", function()
+      local result =
+        run_grep_async({ label = "test", pattern = "hello", path = fixture_dir, glob = "*.lua", limit = nil }, ctx)
+      assert.is_true(result.success)
+      -- Output paths should be relative (./file or file), not absolute
+      assert.is_falsy(result.output:match(vim.pesc(fixture_dir)), "output should not contain absolute cwd path")
+      assert.is_truthy(result.output:match("%.lua:%d+:"))
+    end)
+
+    it("normalizes absolute subpath of cwd to relative", function()
+      local subdir_absolute = fixture_dir .. "/subdir"
+      local result =
+        run_grep_async({ label = "test", pattern = "hello", path = subdir_absolute, glob = nil, limit = nil }, ctx)
+      assert.is_true(result.success)
+      -- Should not contain the cwd prefix in output
+      assert.is_falsy(result.output:match(vim.pesc(fixture_dir)), "output should not contain absolute cwd path")
+    end)
+  end)
+
   describe("integration", function()
     -- Helper to run grep asynchronously and wait for result
     ---@param input table<string, any>
