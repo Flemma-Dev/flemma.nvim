@@ -191,14 +191,11 @@ M.definitions = {
         return nil
       end
 
-      -- Resolve search path
+      -- Resolve search path relative to cwd (job runs with cwd = ctx.cwd).
+      -- Relative paths pass through; absolute paths pass through; nil/empty → "."
       local search_path = input.path
-      if search_path and search_path ~= "" then
-        if not vim.startswith(search_path, "/") then
-          search_path = ctx.cwd .. "/" .. search_path
-        end
-      else
-        search_path = ctx.cwd
+      if not search_path or search_path == "" then
+        search_path = "."
       end
 
       -- Gather exclude patterns from config

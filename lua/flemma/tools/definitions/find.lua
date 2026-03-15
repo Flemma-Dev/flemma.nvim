@@ -200,14 +200,11 @@ M.definitions = {
         return nil
       end
 
-      -- Resolve search path against cwd
+      -- Resolve search path relative to cwd (job runs with cwd = ctx.cwd).
+      -- Relative paths pass through; absolute paths pass through; nil/empty → "."
       local search_path = input.path
-      if search_path and search_path ~= "" then
-        if not vim.startswith(search_path, "/") then
-          search_path = ctx.cwd .. "/" .. search_path
-        end
-      else
-        search_path = ctx.cwd
+      if not search_path or search_path == "" then
+        search_path = "."
       end
 
       -- Get exclude patterns from config
@@ -255,7 +252,7 @@ M.definitions = {
       end
 
       local job_opts = {
-        cwd = (backend == "git") and search_path or nil,
+        cwd = ctx.cwd,
         on_stdout = function(_, data)
           if data then
             output_sink:write(table.concat(data, "\n"))
