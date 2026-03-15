@@ -228,6 +228,15 @@ local function emission_to_segments(emission, position, original_text, buffer_ed
         replacement = replacement_lines,
       })
     end
+  elseif emission.kind == "code" then
+    ---@cast emission flemma.preprocessor.CodeEmission
+    table.insert(
+      segments,
+      ast.code(emission.code, pos, {
+        trim_before = emission.trim_before,
+        trim_after = emission.trim_after,
+      })
+    )
   end
 
   return segments

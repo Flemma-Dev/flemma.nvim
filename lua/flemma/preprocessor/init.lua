@@ -40,7 +40,14 @@ local DEFAULT_PRIORITY = 500
 ---@field kind "rewrite"
 ---@field value string
 
----@alias flemma.preprocessor.Emission flemma.preprocessor.TextEmission|flemma.preprocessor.ExpressionEmission|flemma.preprocessor.RemoveEmission|flemma.preprocessor.RewriteEmission
+--- A code emission inserts a template code block ({% lua_code %}).
+---@class flemma.preprocessor.CodeEmission
+---@field kind "code"
+---@field code string
+---@field trim_before? boolean
+---@field trim_after? boolean
+
+---@alias flemma.preprocessor.Emission flemma.preprocessor.TextEmission|flemma.preprocessor.ExpressionEmission|flemma.preprocessor.RemoveEmission|flemma.preprocessor.RewriteEmission|flemma.preprocessor.CodeEmission
 
 ---@alias flemma.preprocessor.EmissionList flemma.preprocessor.Emission[]
 

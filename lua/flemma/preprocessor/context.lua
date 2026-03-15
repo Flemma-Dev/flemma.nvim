@@ -286,6 +286,20 @@ function Context:rewrite(replacement_text)
   return { kind = "rewrite", value = replacement_text }
 end
 
+--- Create a code emission that inserts a template code block ({% lua_code %}).
+---@param lua_code string The Lua code
+---@param opts? { trim_before?: boolean, trim_after?: boolean }
+---@return flemma.preprocessor.CodeEmission
+function Context:code(lua_code, opts)
+  opts = opts or {}
+  return {
+    kind = "code",
+    code = lua_code,
+    trim_before = opts.trim_before or nil,
+    trim_after = opts.trim_after or nil,
+  }
+end
+
 --------------------------------------------------------------------------------
 -- Metadata
 --------------------------------------------------------------------------------
