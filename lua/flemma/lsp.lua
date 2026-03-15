@@ -123,7 +123,7 @@ local function handle_hover(params)
 end
 
 ---Handle a textDocument/definition request.
----Resolves include expressions (@./file, {{ include() }}) to file locations.
+---Resolves tool siblings (tool_use <-> tool_result) and include expressions.
 ---@param params table LSP DefinitionParams
 ---@return table|nil result LSP Location or nil
 local function handle_definition(params)
@@ -132,6 +132,35 @@ local function handle_definition(params)
     return nil
   end
 
+  -- Try tool sibling navigation first
+  local doc = parser.get_parsed_document(bufnr)
+  local seg = ast.find_segment_at_position(doc, lnum, col)
+
+  if seg and (seg.kind == "tool_use" or seg.kind == "tool_result") then
+    ---@cast seg flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment
+    local counterpart = ast.find_tool_sibling(doc, seg)
+    if counterpart and counterpart.position then
+      log.debug(
+        "lsp definition: tool sibling "
+          .. seg.kind
+          .. " -> "
+          .. counterpart.kind
+          .. " at L"
+          .. counterpart.position.start_line
+      )
+      return {
+        uri = vim.uri_from_bufnr(bufnr),
+        range = {
+          start = { line = counterpart.position.start_line - 1, character = 0 },
+          ["end"] = { line = counterpart.position.start_line - 1, character = 0 },
+        },
+      }
+    end
+    log.debug("lsp definition: no tool sibling found for " .. seg.kind)
+    return nil
+  end
+
+  -- Fall through to include resolution
   local resolved_path = navigation.resolve_include_path(bufnr, lnum, col)
   if not resolved_path then
     log.debug("lsp definition: no include path resolved")

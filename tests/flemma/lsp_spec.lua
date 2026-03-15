@@ -335,4 +335,93 @@ describe("Flemma LSP", function()
     assert.is_truthy(result.contents.value:find("frontmatter"))
     assert.is_truthy(result.contents.value:find("yaml"))
   end)
+
+  it("returns definition from tool_use to tool_result", function()
+    local bufnr, client = setup_chat_buffer({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`call_nav1`)",
+      "```json",
+      '{"command": "ls"}',
+      "```",
+      "@You:",
+      "**Tool Result:** `call_nav1`",
+      "",
+      "```",
+      "output here",
+      "```",
+    })
+
+    -- Cursor on tool_use header (0-indexed line 1)
+    local result = definition_sync(client, bufnr, 1, 5)
+    assert.is_not_nil(result, "Expected definition from tool_use to tool_result")
+    -- Tool result header is at line 7 (1-indexed) = line 6 (0-indexed)
+    assert.equals(6, result.range.start.line)
+  end)
+
+  it("returns definition from tool_result to tool_use", function()
+    local bufnr, client = setup_chat_buffer({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`call_nav2`)",
+      "```json",
+      '{"command": "pwd"}',
+      "```",
+      "@You:",
+      "**Tool Result:** `call_nav2`",
+      "",
+      "```",
+      "result data",
+      "```",
+    })
+
+    -- Cursor on tool_result header (0-indexed line 6)
+    local result = definition_sync(client, bufnr, 6, 5)
+    assert.is_not_nil(result, "Expected definition from tool_result to tool_use")
+    -- Tool use header is at line 2 (1-indexed) = line 1 (0-indexed)
+    assert.equals(1, result.range.start.line)
+  end)
+
+  it("returns nil for tool_use with no result", function()
+    local bufnr, client = setup_chat_buffer({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`call_noresult`)",
+      "```json",
+      '{"command": "ls"}',
+      "```",
+    })
+
+    local result = definition_sync(client, bufnr, 1, 5)
+    assert.is_nil(result, "No definition when tool_use has no result")
+  end)
+
+  it("falls through to include resolution for non-tool segments", function()
+    local bufnr, client = setup_chat_buffer({
+      "@You:",
+      "Just some plain text",
+    })
+
+    -- Plain text should return nil (no definition)
+    local result = definition_sync(client, bufnr, 1, 5)
+    assert.is_nil(result)
+  end)
+
+  it("returns definition from tool_use json body to tool_result", function()
+    local bufnr, client = setup_chat_buffer({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`call_body`)",
+      "```json",
+      '{"command": "ls"}',
+      "```",
+      "@You:",
+      "**Tool Result:** `call_body`",
+      "",
+      "```",
+      "output",
+      "```",
+    })
+
+    -- Cursor on JSON body line (0-indexed line 3, inside tool_use segment)
+    local result = definition_sync(client, bufnr, 3, 2)
+    assert.is_not_nil(result, "Should navigate from tool_use body to tool_result")
+    assert.equals(6, result.range.start.line)
+  end)
 end)
