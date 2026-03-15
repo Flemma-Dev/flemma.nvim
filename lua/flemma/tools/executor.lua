@@ -395,7 +395,8 @@ function M.execute(bufnr, context, frontmatter_opts)
   local dirname = buffer_context:get_dirname()
 
   -- Resolve cwd: config value may be a URN or variable
-  local raw_cwd = config.tools and config.tools.bash and config.tools.bash.cwd
+  local tool_config = config.tools and config.tools[tool_name]
+  local raw_cwd = tool_config and tool_config.cwd
   local resolved_cwd
   if raw_cwd then
     resolved_cwd = variables.expand(raw_cwd, { bufnr = bufnr }) or vim.fn.getcwd()
