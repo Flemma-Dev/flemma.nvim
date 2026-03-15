@@ -8,14 +8,13 @@ local injector = require("flemma.tools.injector")
 local editing = require("flemma.buffer.editing")
 local state = require("flemma.state")
 local log = require("flemma.logging")
-local roles = require("flemma.utilities.roles")
-
 local autopilot = require("flemma.autopilot")
 local cursor = require("flemma.cursor")
 local bridge = require("flemma.core.bridge")
 local hooks = require("flemma.hooks")
 local context_module = require("flemma.context")
 local parser = require("flemma.parser")
+local ast = require("flemma.ast")
 local sandbox_module = require("flemma.sandbox")
 local tool_context = require("flemma.tools.context")
 local truncate_module = require("flemma.utilities.truncate")
@@ -99,23 +98,35 @@ end
 local function move_cursor_after_result(bufnr, tool_id, mode)
   local doc = parser.get_parsed_document(bufnr)
 
-  local target_line = nil
+  -- Find the tool_use segment by ID
+  ---@type flemma.ast.ToolUseSegment|nil
+  local tool_use_seg = nil
   for _, msg in ipairs(doc.messages) do
-    if roles.is_user(msg.role) then
-      for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_result" and seg.tool_use_id == tool_id then
-          if mode == "result" then
-            target_line = seg.position.start_line
-          elseif mode == "next" then
-            target_line = msg.position.end_line + 1
-          end
-          break
-        end
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "tool_use" and seg.id == tool_id then
+        tool_use_seg = seg --[[@as flemma.ast.ToolUseSegment]]
+        break
       end
     end
-    if target_line then
+    if tool_use_seg then
       break
     end
+  end
+
+  if not tool_use_seg then
+    return
+  end
+
+  local result_seg, result_msg = ast.find_tool_sibling(doc, tool_use_seg)
+  if not result_seg then
+    return
+  end
+
+  local target_line = nil
+  if mode == "result" then
+    target_line = result_seg.position.start_line
+  elseif mode == "next" and result_msg then
+    target_line = result_msg.position.end_line + 1
   end
 
   if target_line then
@@ -580,32 +591,25 @@ function M.execute_at_cursor(bufnr)
 
   -- Check if matching tool_result has a status that prevents execution
   local doc = parser.get_parsed_document(bufnr)
-  for _, msg in ipairs(doc.messages) do
-    if roles.is_user(msg.role) then
-      for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_result" and seg.tool_use_id == ctx.tool_id and seg.status then
-          if seg.status == "rejected" or seg.status == "denied" then
-            -- Resolve the block by injecting the appropriate error result
-            injector.inject_result(bufnr, ctx.tool_id, {
-              success = false,
-              error = injector.resolve_error_message(seg.status --[[@as "rejected"|"denied"]], seg.content),
-            })
-            -- Re-arm autopilot if it was paused (same logic as the pending/approved
-            -- path below) so that on_tools_complete can resume the loop.
-            if autopilot.get_state(bufnr) == "paused" then
-              autopilot.arm(bufnr)
-            end
-            editing.auto_write(bufnr)
-            -- Notify autopilot so it can resume the loop
-            vim.schedule(function()
-              if vim.api.nvim_buf_is_valid(bufnr) then
-                autopilot.on_tools_complete(bufnr)
-              end
-            end)
-            return true, nil
-          end
-        end
+  -- Use the tool_use from ctx.node (already resolved by tool_context.resolve)
+  local result_seg = ast.find_tool_sibling(doc, ctx.node)
+  if result_seg and result_seg.kind == "tool_result" then
+    ---@cast result_seg flemma.ast.ToolResultSegment
+    if result_seg.status and (result_seg.status == "rejected" or result_seg.status == "denied") then
+      injector.inject_result(bufnr, ctx.tool_id, {
+        success = false,
+        error = injector.resolve_error_message(result_seg.status --[[@as "rejected"|"denied"]], result_seg.content),
+      })
+      if autopilot.get_state(bufnr) == "paused" then
+        autopilot.arm(bufnr)
       end
+      editing.auto_write(bufnr)
+      vim.schedule(function()
+        if vim.api.nvim_buf_is_valid(bufnr) then
+          autopilot.on_tools_complete(bufnr)
+        end
+      end)
+      return true, nil
     end
   end
 
