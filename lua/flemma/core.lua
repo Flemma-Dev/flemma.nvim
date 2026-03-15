@@ -601,7 +601,7 @@ function M.send_to_provider(opts)
   -- Display diagnostics to user if any
   if #diagnostics > 0 then
     local has_errors = false
-    local by_type = { frontmatter = {}, expression = {}, file = {}, tool_result = {}, tool_use = {}, rewriter = {} }
+    local by_type = { frontmatter = {}, expression = {}, template = {}, file = {}, tool_result = {}, tool_use = {}, rewriter = {} }
 
     for _, diag in ipairs(diagnostics) do
       if diag.severity == "error" then
@@ -653,6 +653,20 @@ function M.send_to_provider(opts)
           table.insert(diagnostic_lines, string.format("    Expression: {{ %s }}", d.expression or ""))
         elseif i == max_per_type + 1 then
           table.insert(diagnostic_lines, string.format("  …and %d more", #by_type.expression - max_per_type))
+          break
+        end
+      end
+    end
+
+    -- Format template errors (code block syntax/runtime errors)
+    if #by_type.template > 0 then
+      table.insert(diagnostic_lines, "Template errors:")
+      for i, d in ipairs(by_type.template) do
+        if i <= max_per_type then
+          local loc = (d.source_file or "N/A") .. format_position(d.position)
+          table.insert(diagnostic_lines, string.format("  [%s] %s", loc, d.error or "Unknown error"))
+        elseif i == max_per_type + 1 then
+          table.insert(diagnostic_lines, string.format("  …and %d more", #by_type.template - max_per_type))
           break
         end
       end
