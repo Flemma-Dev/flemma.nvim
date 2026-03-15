@@ -7,8 +7,10 @@ syntax match FlemmaRoleSystem '^@System:\s*$' contained
 syntax match FlemmaRoleUser '^@You:\s*$' contained
 syntax match FlemmaRoleAssistant '^@Assistant:\s*$' contained
 
-" Define the Lua expression match for User and System messages
-syntax match FlemmaLuaExpression "{{.\{-}}}" contained containedin=FlemmaUser,FlemmaSystem
+" Template expression blocks: {{ ... }} with optional trim markers
+syntax region FlemmaLuaExpression matchgroup=FlemmaLuaDelimiter start="{{-\?" end="-\?}}" containedin=FlemmaUser,FlemmaSystem contained keepend
+" Template code blocks: {% ... %} with optional trim markers
+syntax region FlemmaLuaCodeBlock matchgroup=FlemmaLuaDelimiter start="{%-\?" end="-\?%}" containedin=FlemmaUser,FlemmaSystem contained keepend
 
 " Define Thinking Tags (for highlighting the tags themselves)
 " Matches: <thinking>, <thinking provider:signature="...">, <thinking provider:signature="..."/>

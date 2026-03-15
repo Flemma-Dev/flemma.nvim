@@ -351,6 +351,8 @@ M.apply_syntax = function()
   set_highlight("FlemmaUser", syntax_config.highlights.user)
   set_highlight("FlemmaAssistant", syntax_config.highlights.assistant)
   set_highlight("FlemmaLuaExpression", syntax_config.highlights.lua_expression)
+  set_highlight("FlemmaLuaCodeBlock", syntax_config.highlights.lua_code_block)
+  set_highlight("FlemmaLuaDelimiter", syntax_config.highlights.lua_delimiter)
   -- Apply rewriter-owned syntax rules and highlights
   preprocessor_syntax.apply(syntax_config, set_highlight)
 

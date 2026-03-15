@@ -7,6 +7,8 @@
 ---@field user flemma.config.HighlightValue
 ---@field assistant flemma.config.HighlightValue
 ---@field lua_expression flemma.config.HighlightValue
+---@field lua_code_block flemma.config.HighlightValue
+---@field lua_delimiter flemma.config.HighlightValue
 ---@field user_file_reference flemma.config.HighlightValue
 ---@field thinking_tag flemma.config.HighlightValue
 ---@field thinking_block flemma.config.HighlightValue
@@ -217,6 +219,8 @@ return {
     user = "Normal", -- Highlight group or hex color for user messages
     assistant = "Normal", -- Highlight group or hex color for assistant messages
     lua_expression = "PreProc", -- Highlight group or hex color for {{ expression }} syntax
+    lua_code_block = "PreProc", -- Highlight group or hex color for {% code %} block syntax
+    lua_delimiter = "Delimiter", -- Highlight group or hex color for template delimiters ({{ }}, {% %})
     user_file_reference = "Include", -- Highlight group or hex color for @./file references in user messages
     thinking_tag = "Comment", -- Highlight group or hex color for <thinking> and </thinking> tags
     thinking_block = { dark = "Comment+bg:#102020-fg:#111111", light = "Comment-bg:#102020+fg:#111111" }, -- Highlight group or hex color for content inside <thinking> blocks
