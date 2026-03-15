@@ -200,10 +200,14 @@ M.definitions = {
         return nil
       end
 
-      -- Resolve search path relative to cwd (job runs with cwd = ctx.cwd).
-      -- Relative paths pass through; absolute paths pass through; nil/empty → "."
+      -- Normalize search path relative to cwd (job runs with cwd = ctx.cwd).
+      -- If an absolute path matches cwd, replace with "." so output paths stay relative.
       local search_path = input.path
       if not search_path or search_path == "" then
+        search_path = "."
+      elseif vim.startswith(search_path, ctx.cwd .. "/") then
+        search_path = "." .. search_path:sub(#ctx.cwd + 1)
+      elseif search_path == ctx.cwd then
         search_path = "."
       end
 
