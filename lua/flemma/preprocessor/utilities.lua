@@ -25,6 +25,9 @@ function M.lua_string_escape(str)
   str = str:gsub("\\", "\\\\")
   str = str:gsub("'", "\\'")
   str = str:gsub("\n", "\\n")
+  str = str:gsub("\r", "\\r")
+  str = str:gsub("\t", "\\t")
+  str = str:gsub("%z", "\\0")
   return str
 end
 

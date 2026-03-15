@@ -93,26 +93,88 @@ local function parse_segments(text, base_line)
   end
 
   while idx <= #s do
-    local expr_start, expr_end, expr_code = s:find("{{(.-)}}", idx)
+    -- Find next opening delimiter: {{ or {%
+    local expr_start = s:find("{{", idx, true)
+    local code_start = s:find("{%%", idx) -- pattern mode: %% matches literal %
 
-    if not expr_start then
+    -- Pick whichever comes first
+    local next_start, is_code
+    if expr_start and code_start then
+      if code_start < expr_start then
+        next_start = code_start
+        is_code = true
+      else
+        next_start = expr_start
+        is_code = false
+      end
+    elseif code_start then
+      next_start = code_start
+      is_code = true
+    elseif expr_start then
+      next_start = expr_start
+      is_code = false
+    else
+      -- No more delimiters — emit remaining text
       emit_text(s:sub(idx), idx)
       break
     end
 
     -- Emit preceding text
-    emit_text(s:sub(idx, expr_start - 1), idx)
+    emit_text(s:sub(idx, next_start - 1), idx)
 
-    local line, col = char_to_line_col(expr_start)
-    local end_line, end_col = char_to_line_col(expr_end)
-    table.insert(
-      segments,
-      ast.expression(
-        expr_code --[[@as string]],
-        { start_line = line, start_col = col, end_line = end_line, end_col = end_col }
-      )
-    )
-    idx = expr_end + 1
+    -- Detect trim-before: {{- or {%-
+    local trim_before = false
+    local content_offset = 2 -- skip {{ or {%
+    if s:sub(next_start + 2, next_start + 2) == "-" then
+      trim_before = true
+      content_offset = 3
+    end
+
+    -- Find closing delimiter
+    local close_pattern = is_code and "%-?%%}" or "%-?}}"
+    local close_start, close_end = s:find(close_pattern, next_start + content_offset)
+
+    if not close_start then
+      -- Unclosed delimiter — emit rest as text (graceful degradation)
+      emit_text(s:sub(next_start), next_start)
+      break
+    end
+
+    -- Detect trim-after: -%} or -}}
+    local trim_after = s:sub(close_start, close_start) == "-"
+
+    -- Extract content between delimiters
+    local content_start = next_start + content_offset
+    local content_end = close_start - 1
+    local content = s:sub(content_start, content_end)
+
+    -- Build position
+    local start_line, start_col = char_to_line_col(next_start)
+    local end_line, end_col = char_to_line_col(close_end)
+
+    local pos = {
+      start_line = start_line,
+      start_col = start_col,
+      end_line = end_line,
+      end_col = end_col,
+    }
+
+    -- Build trim opts (only include if true to match nil-means-absent convention)
+    local opts = nil
+    if trim_before or trim_after then
+      opts = {
+        trim_before = trim_before or nil,
+        trim_after = trim_after or nil,
+      }
+    end
+
+    if is_code then
+      table.insert(segments, ast.code(content, pos, opts))
+    else
+      table.insert(segments, ast.expression(content, pos, opts))
+    end
+
+    idx = close_end + 1
   end
 
   return segments
