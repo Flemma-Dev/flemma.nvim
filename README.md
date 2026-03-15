@@ -16,7 +16,7 @@ https://github.com/user-attachments/assets/586bdd15-8edb-41aa-be4d-64fed4290232
 - **User at the wheel** – every tool call is visible in the buffer with a preview of what it will do. Approve tools one at a time with <kbd>Alt-Enter</kbd>, bulk-approve with <kbd>Ctrl-]</kbd>, or let autopilot handle everything. Pause, inspect, edit, resume at any point.
 - **Multi-provider** – Anthropic, OpenAI, and Vertex AI through one unified interface.
 - **Extended thinking** – unified `thinking` parameter across all providers, with automatic mapping to Anthropic budgets, OpenAI reasoning effort, and Vertex thinking budgets.
-- **Template system** – Lua/JSON frontmatter, inline `{{ expressions }}`, `include()` helpers.
+- **Template system** – Lua/JSON frontmatter, inline `{{ expressions }}`, `{% code %}` blocks, `include()` helpers.
 - **Context attachments** – reference local files with `@./path`; MIME detection and provider-aware formatting.
 - **Usage reporting** – per-request and session token totals, costs, and cache metrics.
 - **Filesystem sandboxing** – shell commands run inside a read-only rootfs with write access limited to your project directory. Limits the blast radius of common accidents. Auto-detects the best available backend; silently degrades on platforms without one.
@@ -415,7 +415,7 @@ Override per-buffer via `flemma.opt.sandbox` in frontmatter, or toggle at runtim
 
 ## Template System
 
-Flemma's prompt pipeline supports Lua/JSON frontmatter, inline `{{ expressions }}`, and an `include()` helper for composable prompts. Errors surface as diagnostics before the request leaves your editor. Embed local files with `@./path` syntax – Flemma detects MIME types and formats attachments per-provider. File references are tracked for content drift: if a referenced file changes between requests, Flemma warns you so the model works with up-to-date context. See [docs/templates.md](docs/templates.md) for the full reference.
+Flemma's prompt pipeline supports Lua/JSON frontmatter, inline `{{ expressions }}`, `{% code %}` blocks for control flow and variable assignment, and an `include()` helper for composable prompts. Expressions degrade gracefully on error; code blocks fail the message with precise diagnostics. Whitespace trimming (`{%- -%}`, `{{- -}}`) keeps output clean. Embed local files with `@./path` syntax -- Flemma detects MIME types and formats attachments per-provider. File references are tracked for content drift: if a referenced file changes between requests, Flemma warns you so the model works with up-to-date context. See [docs/templates.md](docs/templates.md) for the full reference.
 
 ---
 

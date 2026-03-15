@@ -141,18 +141,101 @@ Draft a short update for {{recipient}} covering:
 - Tables are automatically JSON-encoded via `flemma.utilities.json.encode()`.
 - Errors are downgraded to warnings. The request still sends, and the literal `{{ expression }}` remains in the prompt so you can see what failed.
 
+## Template code blocks
+
+Use `{% code %}` to embed Lua statements directly in your messages. Unlike `{{ expressions }}`, which output a value, code blocks execute statements -- control flow, variable assignment, loops -- without emitting output themselves. Use `__emit()` inside code blocks when you need to output text.
+
+```markdown
+@System:
+{% if task == "review" then %}
+You are a code reviewer. Be concise and direct.
+{% else %}
+You are a helpful assistant.
+{% end %}
+```
+
+### Control flow
+
+Standard Lua `if`/`elseif`/`else`/`end` and `for`/`while`/`repeat` loops all work. Each `{% %}` block is a fragment of the same Lua chunk, so you can open a block in one tag and close it in another:
+
+```markdown
+@You:
+{% for i, item in ipairs(items) do %}
+- Item {{i}}: {{item}}
+{% end %}
+```
+
+### Variable assignment
+
+Assign variables in code blocks and reference them in later expressions or code blocks within the same message:
+
+```markdown
+@You:
+{% local label = string.upper(project) %}
+Project: {{label}}
+```
+
+### Error behaviour
+
+Code block errors are **fatal** -- they block the request with a diagnostic showing the file and line number. This is different from `{{ expressions }}`, which degrade gracefully by emitting the raw expression text and sending the request with a warning. The distinction is intentional: a broken expression produces ugly but usable output, while a broken control flow structure (e.g., an `if` without `end`) would produce nonsensical output.
+
+## Whitespace trimming
+
+By default, the literal text between template tags is preserved exactly -- including the newlines around `{% %}` and `{{ }}` tags. This often produces unwanted blank lines in the output. Trimming modifiers strip whitespace adjacent to a tag:
+
+- `{%-` or `{{-` trims whitespace **before** the tag (back to and including the nearest newline).
+- `-%}` or `-}}` trims whitespace **after** the tag (up to and including the nearest newline).
+
+Combine both for fully clean output.
+
+### Before and after
+
+Without trimming:
+
+```markdown
+@System:
+{% if verbose then %}
+Include full details.
+{% end %}
+```
+
+Output (when `verbose` is true):
+
+```
+\n
+Include full details.
+\n
+```
+
+With trimming:
+
+```markdown
+@System:
+{%- if verbose then -%}
+Include full details.
+{%- end -%}
+```
+
+Output:
+
+```
+Include full details.
+```
+
+Trimming works on `{{ }}` expressions too. `{{- value -}}` strips surrounding whitespace, useful when an expression sits on its own line but the output should join adjacent text.
+
 ## `include()` helper
 
 Call `include("relative/or/absolute/path")` inside frontmatter or an expression to inline another template fragment. Includes support two modes:
 
-**Text mode** (default) – the included file is parsed for `{{ }}` expressions and `@./` file references, which are evaluated recursively. The result is inlined as text. Each included file gets its own `__filename` and `__dirname`, isolated from the parent's variables – the parent's frontmatter variables are not inherited.
+**Text mode** (default) -- the included file is parsed for `{{ }}` expressions, `{% %}` code blocks, and `@./` file references, which are evaluated recursively. The result is inlined as text. Each included file gets its own `__filename` and `__dirname`, isolated from the parent's variables -- the parent's frontmatter variables are not inherited.
 
 ```markdown
 @System:
 {{ include("system-prompt.md") }}
 ```
 
-**Binary mode** – the file is read as raw bytes and attached as a structured content part (image, PDF, etc.), just like `@./path`:
+**Binary mode** -- the file is read as raw bytes and attached as a structured content part (image, PDF, etc.), just like `@./path`:
 
 ```lua
 -- In frontmatter:
@@ -169,6 +252,25 @@ The `binary` flag and an optional `mime` override are passed as a second argumen
 ```lua
 include('./data.bin', { binary = true, mime = 'text/csv' })
 ```
+
+### Argument passing
+
+Pass variables to included files through the second argument. Keys become local variables in the child environment:
+
+```markdown
+@System:
+{{ include("greeting.md", { name = "Alice", role = "reviewer" }) }}
+```
+
+Inside `greeting.md`:
+
+```markdown
+Hello {{name}}, you are acting as a {{role}}.
+```
+
+Included files have full template support at any nesting depth -- `{% %}` code blocks, `{{ }}` expressions, and nested `include()` calls all work. The child environment is isolated: it receives only the variables you pass (plus `__filename` and `__dirname`), not the parent's frontmatter variables.
+
+The keys `binary` and `mime` are reserved for controlling include mode and cannot be used as variable names.
 
 ### Safety guards
 
