@@ -3,7 +3,7 @@
 ---@class flemma.codeblock.parsers.Lua
 local M = {}
 
-local eval = require("flemma.eval")
+local eval = require("flemma.templating.eval")
 local ctxutil = require("flemma.context")
 local opt_module = require("flemma.buffer.opt")
 

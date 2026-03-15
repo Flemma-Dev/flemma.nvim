@@ -1,6 +1,6 @@
 local compiler = require("flemma.templating.compiler")
 local ctxutil = require("flemma.context")
-local eval = require("flemma.eval")
+local eval = require("flemma.templating.eval")
 local codeblock_parsers = require("flemma.codeblock.parsers")
 local log = require("flemma.logging")
 local parser = require("flemma.parser")

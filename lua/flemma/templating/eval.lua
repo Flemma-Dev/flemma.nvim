@@ -10,7 +10,7 @@
 ---
 --- User-defined variables from frontmatter are stored as top-level keys in the environment.
 
----@class flemma.Eval
+---@class flemma.templating.Eval
 local M = {}
 
 local compiler = require("flemma.templating.compiler")
@@ -28,7 +28,7 @@ local PERSONALITY_URN_PREFIX = "urn:flemma:personality:"
 
 --- Check for file content drift and push a diagnostic if the file changed since
 --- the last evaluation. Stores the current hash for future comparisons.
----@param env flemma.eval.Environment Eval environment with symbol-keyed fields
+---@param env flemma.templating.eval.Environment Eval environment with symbol-keyed fields
 ---@param target_path string Resolved absolute file path
 ---@param content string Current file content (text or binary)
 local function check_file_drift(env, target_path, content)
@@ -57,7 +57,7 @@ local function check_file_drift(env, target_path, content)
   buffer_state.file_reference_hashes[target_path] = hash
 end
 
----@alias flemma.eval.Environment table<string, any>
+---@alias flemma.templating.eval.Environment table<string, any>
 
 --- MIME detection: override or auto-detect via `file` command + extension fallback.
 ---@param path string
@@ -111,10 +111,10 @@ end
 
 --- Build the include() closure for a given environment.
 --- The include_stack is threaded through closures — not stored on the env.
----@param env flemma.eval.Environment The environment where include() will be installed
+---@param env flemma.templating.eval.Environment The environment where include() will be installed
 ---@param include_stack string[] Captured include stack (immutable from this scope)
----@param eval_expr_fn fun(expr: string, env: flemma.eval.Environment): any
----@param create_env_fn fun(): flemma.eval.Environment
+---@param eval_expr_fn fun(expr: string, env: flemma.templating.eval.Environment): any
+---@param create_env_fn fun(): flemma.templating.eval.Environment
 local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
   ---@param relative_path string
   ---@param opts? table Template variables (string keys) merged into child env. Symbol keys [BINARY] and [MIME] control include mode.
@@ -326,9 +326,9 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
   end
 end
 
----@param env flemma.eval.Environment
----@param eval_expr_fn fun(expr: string, env: flemma.eval.Environment): any
----@param create_env_fn fun(): flemma.eval.Environment
+---@param env flemma.templating.eval.Environment
+---@param eval_expr_fn fun(expr: string, env: flemma.templating.eval.Environment): any
+---@param create_env_fn fun(): flemma.templating.eval.Environment
 local function ensure_env_capabilities(env, eval_expr_fn, create_env_fn)
   if env.include == nil then
     -- Build the initial include stack from __filename
@@ -342,7 +342,7 @@ end
 
 --- Ensure an eval environment has all capabilities installed (include, etc.).
 --- Call this before passing the env to the compiler for template execution.
----@param env flemma.eval.Environment
+---@param env flemma.templating.eval.Environment
 function M.ensure_env(env)
   ensure_env_capabilities(env, M.eval_expression, M.create_safe_env)
 end
@@ -352,7 +352,7 @@ end
 --- User-defined variables from frontmatter are merged as top-level keys by context.to_eval_env().
 --- The 'include' function is added by ensure_env_capabilities to capture the correct environment.
 --- User-visible fields (__filename, __dirname) and internal symbol-keyed fields are set by context.to_eval_env().
----@return flemma.eval.Environment
+---@return flemma.templating.eval.Environment
 function M.create_safe_env()
   return {
     -- String manipulation
@@ -437,7 +437,7 @@ end
 
 --- Execute code in a safe environment
 ---@param code string
----@param env_param flemma.eval.Environment|nil
+---@param env_param flemma.templating.eval.Environment|nil
 ---@return table<string, any> globals New variables defined during execution
 function M.execute_safe(code, env_param)
   -- Create environment and store initial keys
@@ -475,7 +475,7 @@ end
 
 --- Evaluate an expression in a given environment
 ---@param expr string
----@param env flemma.eval.Environment
+---@param env flemma.templating.eval.Environment
 ---@return any result
 function M.eval_expression(expr, env)
   -- Ensure 'env' is not nil, though callers should guarantee this.

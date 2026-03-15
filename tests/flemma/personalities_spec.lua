@@ -422,7 +422,7 @@ describe("cross-buffer personality environment isolation", function()
     package.loaded["flemma.personalities.builder"] = nil
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.context"] = nil
-    package.loaded["flemma.eval"] = nil
+    package.loaded["flemma.templating.eval"] = nil
     package.loaded["flemma.personalities"] = nil
     package.loaded["flemma.personalities.coding_assistant"] = nil
     package.loaded["flemma.tools"] = nil
@@ -439,7 +439,7 @@ describe("cross-buffer personality environment isolation", function()
   end)
 
   it("personality include uses correct buffer when another buffer has focus", function()
-    local eval_mod = require("flemma.eval")
+    local eval_mod = require("flemma.templating.eval")
     local emittable_mod = require("flemma.emittable")
 
     local buf1 = vim.api.nvim_create_buf(false, true)
@@ -487,10 +487,10 @@ describe("URN dispatch in include()", function()
   local eval
 
   before_each(function()
-    package.loaded["flemma.eval"] = nil
+    package.loaded["flemma.templating.eval"] = nil
     package.loaded["flemma.personalities"] = nil
     package.loaded["flemma.personalities.coding_assistant"] = nil
-    eval = require("flemma.eval")
+    eval = require("flemma.templating.eval")
     local pers = require("flemma.personalities")
     pers.setup()
   end)
@@ -524,7 +524,7 @@ end)
 
 describe("personality system integration", function()
   before_each(function()
-    package.loaded["flemma.eval"] = nil
+    package.loaded["flemma.templating.eval"] = nil
     package.loaded["flemma.personalities"] = nil
     package.loaded["flemma.personalities.builder"] = nil
     package.loaded["flemma.personalities.coding_assistant"] = nil
@@ -557,7 +557,7 @@ describe("personality system integration", function()
   end)
 
   it("renders a complete prompt via include URN", function()
-    local eval = require("flemma.eval")
+    local eval = require("flemma.templating.eval")
     local env = eval.create_safe_env()
     env.__dirname = vim.fn.getcwd()
 

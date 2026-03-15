@@ -4,7 +4,7 @@ describe("Include expression navigation", function()
   before_each(function()
     package.loaded["flemma.navigation"] = nil
     package.loaded["flemma.parser"] = nil
-    package.loaded["flemma.eval"] = nil
+    package.loaded["flemma.templating.eval"] = nil
     package.loaded["flemma.context"] = nil
     package.loaded["flemma.processor"] = nil
     package.loaded["flemma.state"] = nil
