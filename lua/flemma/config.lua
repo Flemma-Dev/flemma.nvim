@@ -83,6 +83,17 @@
 ---@field cwd? string Working directory; supports "urn:flemma:buffer:path" (default: "urn:flemma:buffer:path")
 ---@field env? table<string, string>
 
+---@class flemma.config.GrepToolConfig
+---@field cwd? string Working directory (default: "urn:flemma:buffer:path")
+---@field exclude? string[] Glob patterns to exclude from search
+
+---@class flemma.config.FindToolConfig
+---@field cwd? string Working directory (default: "urn:flemma:buffer:path")
+---@field exclude? string[] Glob patterns to exclude from results
+
+---@class flemma.config.LsToolConfig
+---@field cwd? string Working directory (default: "urn:flemma:buffer:path")
+
 ---@class flemma.config.SandboxPolicy
 ---@field rw_paths? string[] Read-write paths; supports urn:flemma:* URNs, $ENV, ${ENV:-default} (default: see config defaults)
 ---@field network? boolean Allow network access (default: true)
@@ -123,6 +134,9 @@
 ---@field show_spinner boolean
 ---@field cursor_after_result "result"|"stay"|"next"
 ---@field bash flemma.config.BashToolConfig
+---@field grep? flemma.config.GrepToolConfig
+---@field find? flemma.config.FindToolConfig
+---@field ls? flemma.config.LsToolConfig
 ---@field modules? string[] Lua module paths for third-party tool sources
 ---@field max_concurrent integer
 
@@ -311,6 +325,17 @@ return {
       shell = nil, -- Shell to use (default: bash)
       cwd = "urn:flemma:buffer:path", -- Working directory; resolves to .chat file's directory (set nil for Neovim cwd)
       env = nil, -- Environment variables to add
+    },
+    grep = {
+      cwd = "urn:flemma:buffer:path",
+      exclude = {}, ---@type string[]
+    },
+    find = {
+      cwd = "urn:flemma:buffer:path",
+      exclude = {}, ---@type string[]
+    },
+    ls = {
+      cwd = "urn:flemma:buffer:path",
     },
     modules = {}, -- Lua module paths for third-party tool sources (e.g., "3rd.tools.todos")
   },
