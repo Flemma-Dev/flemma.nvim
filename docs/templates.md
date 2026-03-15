@@ -160,9 +160,9 @@ Standard Lua `if`/`elseif`/`else`/`end` and `for`/`while`/`repeat` loops all wor
 
 ```markdown
 @You:
-{% for i, item in ipairs(items) do %}
+{% for item, loop in each(items) do %}
 
-- Item {{i}}: {{item}}
+- Item {{loop.index}}: {{item}}
   {% end %}
 ```
 
