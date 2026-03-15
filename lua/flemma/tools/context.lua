@@ -5,6 +5,7 @@ local M = {}
 
 local parser = require("flemma.parser")
 local roles = require("flemma.utilities.roles")
+local ast = require("flemma.ast")
 
 ---@class flemma.tools.ToolContext
 ---@field tool_id string The unique ID of the tool call
@@ -296,19 +297,20 @@ function M.resolve(bufnr, cursor_pos)
               and cursor_line >= seg.position.start_line
               and cursor_line <= seg.position.end_line
             then
-              -- Find corresponding tool_use by ID
-              for _, tu in ipairs(tool_uses) do
-                if tu.id == seg.tool_use_id then
-                  return {
-                    tool_id = tu.id,
-                    tool_name = tu.name,
-                    input = tu.input or {},
-                    node = tu,
-                    start_line = tu.position.start_line,
-                    end_line = tu.position.end_line,
-                  },
-                    nil
-                end
+              -- Find corresponding tool_use by ID (document-wide, safe because IDs are unique)
+              ---@cast seg flemma.ast.ToolResultSegment
+              local tu, _ = ast.find_tool_sibling(doc, seg)
+              if tu and tu.kind == "tool_use" then
+                ---@cast tu flemma.ast.ToolUseSegment
+                return {
+                  tool_id = tu.id,
+                  tool_name = tu.name,
+                  input = tu.input or {},
+                  node = tu,
+                  start_line = tu.position.start_line,
+                  end_line = tu.position.end_line,
+                },
+                  nil
               end
             end
           end
@@ -330,18 +332,19 @@ function M.resolve(bufnr, cursor_pos)
             end
           end
           if nearest_result then
-            for _, tu in ipairs(tool_uses) do
-              if tu.id == nearest_result.tool_use_id then
-                return {
-                  tool_id = tu.id,
-                  tool_name = tu.name,
-                  input = tu.input or {},
-                  node = tu,
-                  start_line = tu.position.start_line,
-                  end_line = tu.position.end_line,
-                },
-                  nil
-              end
+            ---@cast nearest_result flemma.ast.ToolResultSegment
+            local tu, _ = ast.find_tool_sibling(doc, nearest_result)
+            if tu and tu.kind == "tool_use" then
+              ---@cast tu flemma.ast.ToolUseSegment
+              return {
+                tool_id = tu.id,
+                tool_name = tu.name,
+                input = tu.input or {},
+                node = tu,
+                start_line = tu.position.start_line,
+                end_line = tu.position.end_line,
+              },
+                nil
             end
           end
           -- Final fallback: last tool_use
