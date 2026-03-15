@@ -44,6 +44,17 @@ require("flemma").setup({
       cwd = "urn:flemma:buffer:path",        -- Working directory; resolves to .chat file's directory (set nil for Neovim cwd)
       env = nil,                             -- Extra environment variables
     },
+    grep = {                                 -- [experimental.tools] Grep tool configuration
+      cwd = "urn:flemma:buffer:path",        -- Working directory for searches
+      exclude = { ".git", "node_modules", "__pycache__", ".venv", "target", "dist", "build", "vendor" },
+    },
+    find = {                                 -- [experimental.tools] Find tool configuration
+      cwd = "urn:flemma:buffer:path",        -- Working directory for file searches
+      exclude = { ".git", "node_modules", "__pycache__", ".venv", "target", "dist", "build", "vendor" },
+    },
+    ls = {                                   -- [experimental.tools] Ls tool configuration
+      cwd = "urn:flemma:buffer:path",        -- Working directory for directory listings
+    },
     modules = {},                            -- Lua module paths for third-party tool sources (e.g., "3rd.tools.todos")
   },
   defaults = {
@@ -55,6 +66,8 @@ require("flemma").setup({
     user = "Normal",
     assistant = "Normal",
     lua_expression = "PreProc",
+    lua_code_block = "PreProc",              -- {% code %} block content
+    lua_delimiter = "FlemmaLuaExpression",   -- {{ }} and {% %} delimiters
     user_file_reference = "Include",
     thinking_tag = "Comment",
     thinking_block = { dark = "Comment+bg:#102020-fg:#111111",
@@ -165,6 +178,7 @@ require("flemma").setup({
   },
   experimental = {
     lsp = vim.lsp ~= nil,                   -- In-process LSP for .chat buffers (hover, go-to-definition)
+    tools = false,                          -- Enable exploration tools (grep, find, ls) — see docs/tools.md
   },
 })
 ```
@@ -350,6 +364,16 @@ Flemma includes an in-process LSP server for `.chat` buffers. It provides hover 
 | `experimental.lsp` | `vim.lsp ~= nil` | Enable the LSP server. Auto-enabled when `vim.lsp` is available. |
 
 The LSP attaches automatically to `.chat` buffers. Use your usual LSP keybindings (e.g., `K` for hover) to inspect buffer structure.
+
+### Experimental exploration tools
+
+Three additional built-in tools (`grep`, `find`, `ls`) are available for codebase exploration. They are disabled by default and must be opted into explicitly.
+
+| Key                  | Default | Effect                                                                                                                      |
+| -------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `experimental.tools` | `false` | Enable `grep`, `find`, and `ls` tools. See [docs/tools.md](tools.md#experimental-exploration-tools) for the full reference. |
+
+Each tool has an optional config section under `tools` (`tools.grep`, `tools.find`, `tools.ls`) for working directory and exclude patterns.
 
 ### Per-buffer overrides
 

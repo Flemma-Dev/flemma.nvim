@@ -14,6 +14,8 @@ Configuration keys map to dedicated highlight groups:
 | `highlights.user`                | User messages (`FlemmaUser`)                                             |
 | `highlights.assistant`           | Assistant messages (`FlemmaAssistant`)                                   |
 | `highlights.lua_expression`      | `{{ expression }}` fragments (in `@You` and `@System` messages)          |
+| `highlights.lua_code_block`      | `{% code %}` block content (in `@You` and `@System` messages)            |
+| `highlights.lua_delimiter`       | `{{ }}` and `{% %}` delimiters including trim markers                    |
 | `highlights.user_file_reference` | `@./path` fragments                                                      |
 | `highlights.thinking_tag`        | `<thinking>` / `</thinking>` tags                                        |
 | `highlights.thinking_block`      | Content inside thinking blocks                                           |
@@ -144,6 +146,10 @@ When `hl = true`, the sign colour is derived from the corresponding `highlights.
 While a request is in flight, Flemma writes an `@Assistant:` marker on its own line and renders "Thinking…" as end-of-line virtual text with an animated braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`). The spinner animates at 100ms intervals and is removed once streaming starts.
 
 When the model enters a thinking/reasoning phase, the spinner animation is replaced with a live character count – e.g., `Thinking… (3.2k characters)` – so you can gauge progress at a glance.
+
+### Booting indicator
+
+When async tool sources (registered via `tools.modules` or `tools.register()` with a resolve function) are still loading, Flemma shows a booting state. The `#{booting}` statusline variable (default: `⏳`) is non-empty during this phase and clears once all sources resolve. A `FlemmaBootComplete` User autocmd fires when booting finishes. If you send a request while booting, the buffer shows "Waiting for tool definitions to load…" and auto-sends once everything resolves.
 
 ### Tool execution indicators
 

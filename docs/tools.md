@@ -254,6 +254,70 @@ Tool previews use the `FlemmaToolPreview` highlight group (default: linked to `C
 
 ---
 
+## Experimental: Exploration tools
+
+> [!CAUTION]
+> **Experimental and untested.** These tools are gated behind `experimental.tools = true` and are not enabled by default. They have not been tested in real-world usage and their interface, behaviour, and configuration may change without notice in any release. Enable them if you want to try them out, but expect rough edges.
+
+Flemma ships three additional built-in tools for codebase exploration. Enable them by setting `experimental.tools = true` in your config:
+
+```lua
+require("flemma").setup({
+  experimental = { tools = true },
+})
+```
+
+| Tool   | Type  | Description                                                                                                                   |
+| ------ | ----- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `grep` | async | Search file contents using ripgrep (`rg`), GNU grep with PCRE (`grep -P`), or POSIX ERE (`grep -E`) – whichever is available. |
+| `find` | async | Find files by glob pattern using `fd`, `git ls-files`, or GNU `find` – whichever is available.                                |
+| `ls`   | sync  | List directory contents with configurable recursion depth and entry limit. Directories appear first (suffixed with `/`).      |
+
+All three tools declare `can_auto_approve_if_sandboxed`, so when the sandbox is enabled and `auto_approve_sandboxed` is `true` (the default), they execute without manual approval.
+
+### Configuration
+
+Each tool has an optional config section under `tools`:
+
+```lua
+tools = {
+  grep = {
+    cwd = "urn:flemma:buffer:path",                         -- working directory
+    exclude = { ".git", "node_modules", "__pycache__",      -- patterns to exclude
+                ".venv", "target", "dist", "build", "vendor" },
+  },
+  find = {
+    cwd = "urn:flemma:buffer:path",
+    exclude = { ".git", "node_modules", "__pycache__",
+                ".venv", "target", "dist", "build", "vendor" },
+  },
+  ls = {
+    cwd = "urn:flemma:buffer:path",
+  },
+}
+```
+
+### Backend detection
+
+`grep` and `find` auto-detect the best available backend at first use and cache the result:
+
+| Tool   | Priority 1                | Priority 2                     | Priority 3            |
+| ------ | ------------------------- | ------------------------------ | --------------------- |
+| `grep` | `rg` (ripgrep, JSON mode) | `grep -P` (GNU grep with PCRE) | `grep -E` (POSIX ERE) |
+| `find` | `fd` / `fdfind`           | `git ls-files`                 | GNU `find`            |
+
+When using the `grep -E` fallback, Perl-style shorthand classes (`\d`, `\w`, `\s`) are automatically translated to POSIX equivalents.
+
+### Preview formatters
+
+| Tool   | Preview format                                  | Example                                      |
+| ------ | ----------------------------------------------- | -------------------------------------------- |
+| `grep` | `/pattern/` with optional path, glob, and label | `grep: /TODO/  *.lua  # finding TODOs`       |
+| `find` | Pattern with optional search path and label     | `find: *.test.lua  in src/  # finding tests` |
+| `ls`   | Path with optional depth and label              | `ls: src/  depth=3  # exploring structure`   |
+
+---
+
 ## Per-buffer tool selection
 
 Control which tools are available per-buffer using `flemma.opt` in Lua frontmatter:
