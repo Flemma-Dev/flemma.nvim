@@ -15,6 +15,7 @@ local M = {}
 
 local compiler = require("flemma.compiler")
 local emittable = require("flemma.emittable")
+local log = require("flemma.logging")
 local mime_util = require("flemma.mime")
 local parser = require("flemma.parser")
 local personality_builder = require("flemma.personalities.builder")
@@ -116,7 +117,7 @@ end
 ---@param create_env_fn fun(): flemma.eval.Environment
 local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
   ---@param relative_path string
-  ---@param opts? table<string, any> Template variables merged into child env. Keys `binary` and `mime` are reserved for binary mode.
+  ---@param opts? table Template variables (string keys) merged into child env. Symbol keys [BINARY] and [MIME] control include mode.
   ---@return table emittable An IncludePart with an emit() method
   env.include = function(relative_path, opts)
     if type(relative_path) ~= "string" then
@@ -165,6 +166,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
 
     -- Check file exists
     if vim.fn.filereadable(target_path) ~= 1 then
+      log.debug("eval: include() file not found: " .. target_path)
       error({
         type = "file",
         filename = target_path,
@@ -176,8 +178,9 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
 
     -- Binary mode: read raw bytes, detect MIME, return binary IncludePart
     -- No circular detection needed — binary reads don't recurse into content
-    if opts.binary then
-      local mime = detect_mime(target_path, opts.mime)
+    if opts[symbols.INCLUDE_BINARY] then
+      log.debug("eval: include() binary mode for " .. target_path)
+      local mime = detect_mime(target_path, opts[symbols.INCLUDE_MIME])
       if not mime then
         error({
           type = "file",
@@ -218,6 +221,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
     end
 
     -- Text mode: read, parse, compile, execute, return composite IncludePart
+    log.trace("eval: include() text mode for " .. target_path)
     local content, read_err = read_file(target_path)
     if not content then
       error({
@@ -239,10 +243,10 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
     child_env.__filename = target_path
     child_env.__dirname = vim.fn.fnamemodify(target_path, ":h")
 
-    -- Inject caller-provided arguments (excluding reserved keys)
-    local RESERVED_INCLUDE_KEYS = { binary = true, mime = true }
+    -- Inject caller-provided arguments: only string keys are template variables.
+    -- Symbol keys (BINARY, MIME) are include() control flags, not variables.
     for key, value in pairs(opts) do
-      if not RESERVED_INCLUDE_KEYS[key] then
+      if type(key) == "string" then
         child_env[key] = value
       end
     end
@@ -276,6 +280,9 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
 
     -- Compile and execute via compiler
     local compile_result = compiler.compile(segments)
+    if compile_result.error then
+      log.debug("eval: include() compile error in " .. target_path .. ": " .. compile_result.error)
+    end
     local compiled_parts, compile_diagnostics = compiler.execute(compile_result, child_env)
 
     -- Re-throw fatal diagnostics (severity "error") so include errors propagate
@@ -417,6 +424,14 @@ function M.create_safe_env()
 
     -- Useful constants
     _VERSION = _VERSION,
+
+    -- Symbols table: opaque table keys for include() mode flags.
+    -- Mirrors flemma.symbols — user code writes { [symbols.BINARY] = true }.
+    -- "symbols" is a reserved key and must not be overwritten by frontmatter variables.
+    symbols = {
+      BINARY = symbols.INCLUDE_BINARY,
+      MIME = symbols.INCLUDE_MIME,
+    },
   }
 end
 

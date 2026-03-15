@@ -120,7 +120,7 @@ describe("flemma.eval", function()
       env.__filename = parent_file
       env.__dirname = temp_dir
 
-      local result = eval.eval_expression("include('test.txt', { binary = true })", env)
+      local result = eval.eval_expression("include('test.txt', { [symbols.BINARY] = true })", env)
       assert.is_true(emittable.is_emittable(result))
 
       -- Emit and check it produces a file part
@@ -170,7 +170,7 @@ describe("flemma.eval", function()
       env.__filename = parent_file
       env.__dirname = temp_dir
 
-      local ok, err = pcall(eval.eval_expression, "include('nonexistent.png', { binary = true })", env)
+      local ok, err = pcall(eval.eval_expression, "include('nonexistent.png', { [symbols.BINARY] = true })", env)
       assert.is_false(ok)
       -- Structured error table is preserved through eval_expression
       assert.equals("table", type(err))

@@ -37,15 +37,15 @@ file_refs:on_text("@(%.%.?%/[%.%/]*%S+)", function(match, ctx)
     if mime_with_punct then
       local mime = mime_with_punct:gsub("[%p]+$", "")
       trailing = mime_with_punct:sub(#mime + 1)
-      table.insert(opts_parts, "binary = true")
-      table.insert(opts_parts, "mime = '" .. lua_string_escape(mime) .. "'")
+      table.insert(opts_parts, "[symbols.BINARY] = true")
+      table.insert(opts_parts, "[symbols.MIME] = '" .. lua_string_escape(mime) .. "'")
     end
   else
     raw_path = match.captures[1]
     local stripped
     stripped, trailing = strip_trailing_punctuation(raw_path)
     raw_path = stripped
-    table.insert(opts_parts, "binary = true")
+    table.insert(opts_parts, "[symbols.BINARY] = true")
   end
 
   local path = url_decode(raw_path)

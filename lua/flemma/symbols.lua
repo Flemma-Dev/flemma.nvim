@@ -46,6 +46,20 @@ M.VARIABLES = {}
 ---@type table
 M.DIAGNOSTICS = {}
 
+--- Include binary mode flag.
+--- Used as a table key in include() opts to request binary (raw bytes) mode.
+--- Exposed in the safe eval environment via `symbols.BINARY` so template code
+--- can write `include('file.png', { [symbols.BINARY] = true })`.
+---@type table
+M.INCLUDE_BINARY = {}
+
+--- Include MIME override.
+--- Used as a table key in include() opts to override auto-detected MIME type.
+--- Exposed in the safe eval environment via `symbols.MIME` so template code
+--- can write `include('data.bin', { [symbols.BINARY] = true, [symbols.MIME] = 'text/csv' })`.
+---@type table
+M.INCLUDE_MIME = {}
+
 --- Deep-copy a table while preserving symbol key identity.
 ---
 --- vim.deepcopy copies table *keys* by value, creating new table references

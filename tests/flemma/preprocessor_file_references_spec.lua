@@ -56,7 +56,7 @@ describe("flemma.preprocessor.rewriters.file_references", function()
     assert.equals(1, #segs)
     assert.equals("expression", segs[1].kind)
     assert.truthy(segs[1].code:match("include%('%.%/readme%.md'"))
-    assert.truthy(segs[1].code:match("binary = true"))
+    assert.truthy(segs[1].code:match("%[symbols%.BINARY%] = true"))
   end)
 
   it("converts @../file to include() expression", function()
@@ -109,7 +109,7 @@ describe("flemma.preprocessor.rewriters.file_references", function()
     local segs = doc.messages[1].segments
     assert.equals(1, #segs)
     assert.equals("expression", segs[1].kind)
-    assert.truthy(segs[1].code:match("binary = true"))
+    assert.truthy(segs[1].code:match("%[symbols%.BINARY%] = true"))
     assert.truthy(segs[1].code:match("image/png"))
   end)
 
