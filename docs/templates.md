@@ -137,9 +137,9 @@ Draft a short update for {{recipient}} covering:
 ### Evaluation rules
 
 - Expressions without an explicit `return` are auto-wrapped: `{{ 1 + 1 }}` becomes `return 1 + 1` internally.
-- `nil` results produce no output (empty string).
+- `nil` results produce no output (empty string) — but note that **accessing an undefined variable is an error**, not nil (see [strict variable checking](#strict-variable-checking) below). Only variables that are explicitly defined with a nil value produce no output.
 - Tables are automatically JSON-encoded via `flemma.utilities.json.encode()`.
-- Errors are downgraded to warnings. The request still sends, and the literal `{{ expression }}` remains in the prompt so you can see what failed.
+- Errors (including undefined variable access) are downgraded to warnings. The request still sends, and the literal `{{ expression }}` remains in the prompt so you can see what failed.
 
 ## Template code blocks
 
@@ -185,6 +185,14 @@ Use `local` when the variable is only needed within the current message. Without
 @You:
 Mode is {{mode}}
 ```
+
+### Strict variable checking
+
+The template environment errors when you access a variable that was never defined. This catches typos early — `{{ mane }}` when you meant `{{ name }}` will produce a diagnostic instead of silently inserting nothing.
+
+The checking applies to all variable access: `{{ mane }}`, `{{ string.upper(mane) }}`, and `{% if mane then %}` all error if `mane` was never defined. Variables are considered "defined" if they were set by frontmatter, passed as `include()` arguments, or provided by a populator (the standard library, iterators, etc.).
+
+In `{{ expressions }}`, undefined variable errors degrade gracefully like any other expression error — the raw `{{ mane }}` text is preserved in the output and a warning diagnostic is shown. In `{% code %}` blocks, undefined variable errors are fatal (just like any other code block error).
 
 ### Error behaviour
 
@@ -355,7 +363,7 @@ Populators run in priority order (lower first). Later populators can override or
 Flemma groups diagnostics by type in the notification shown before sending:
 
 - **Frontmatter errors** (blocking) – malformed code, unknown parser, include failures.
-- **Expression warnings** (non-blocking) – runtime errors during `{{ }}` evaluation. The original expression text is preserved in the output.
+- **Expression warnings** (non-blocking) – undefined variables, runtime errors, or type errors during `{{ }}` evaluation. The original expression text is preserved in the output.
 - **File reference warnings** (non-blocking) – missing files, unsupported MIME types, read errors.
 
 All diagnostics include position information (line and column) for precise error location. If any blocking error occurs the buffer becomes modifiable again and the request is cancelled before hitting the network.

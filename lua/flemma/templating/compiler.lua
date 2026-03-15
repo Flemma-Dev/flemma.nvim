@@ -350,13 +350,14 @@ function M.execute(result, env)
   -- The generated code uses pcall (for expression wrappers), tostring, and error.
   -- In production, the stdlib populator provides these; in tests with minimal envs,
   -- they may be missing. Preserve any existing overrides.
-  if env.pcall == nil then
+  -- Uses rawget to bypass the strict __index metamethod on create_env() tables.
+  if rawget(env, "pcall") == nil then
     env.pcall = pcall
   end
-  if env.tostring == nil then
+  if rawget(env, "tostring") == nil then
     env.tostring = tostring
   end
-  if env.error == nil then
+  if rawget(env, "error") == nil then
     env.error = error
   end
 

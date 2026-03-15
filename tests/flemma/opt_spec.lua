@@ -429,7 +429,9 @@ describe("flemma.opt", function()
       local context = ctx.from_file("test.chat")
       local prompt = pipeline.run(parser.parse_lines(lines), context)
 
-      -- flemma should be nil in expression env, so type(flemma) returns "nil"
+      -- flemma is not exposed in the expression env. The strict sandbox
+      -- catches the undefined variable access, so the expression degrades
+      -- to its raw text form (pcall catches the error).
       local user_msg = prompt.history[1]
       local all_text = {}
       for _, p in ipairs(user_msg.parts) do
@@ -438,7 +440,7 @@ describe("flemma.opt", function()
         end
       end
       local content = table.concat(all_text, "")
-      assert.are.equal("type is nil", content)
+      assert.are.equal("type is {{ type(flemma) }}", content)
     end)
   end)
 

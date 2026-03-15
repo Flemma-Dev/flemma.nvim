@@ -28,6 +28,27 @@ describe("flemma.templating.eval", function()
       local result = eval.eval_expression("my_var * 2", env)
       assert.are.equal(20, result)
     end)
+
+    it("should error on undefined variable access", function()
+      local env = templating.create_env()
+      local ok, err = pcall(eval.eval_expression, "mane", env)
+      assert.is_false(ok)
+      assert.truthy(tostring(err):match("Undefined variable 'mane'"))
+    end)
+
+    it("should error on undefined variable inside stdlib call", function()
+      local env = templating.create_env()
+      local ok, err = pcall(eval.eval_expression, "string.upper(mane)", env)
+      assert.is_false(ok)
+      assert.truthy(tostring(err):match("Undefined variable 'mane'"))
+    end)
+
+    it("should allow access to defined variables", function()
+      local env = templating.create_env()
+      env.name = "Alice"
+      local result = eval.eval_expression("name", env)
+      assert.are.equal("Alice", result)
+    end)
   end)
 
   describe("execute_frontmatter", function()
@@ -48,8 +69,6 @@ describe("flemma.templating.eval", function()
 
   describe("include() isolation", function()
     it("should NOT propagate user variables from caller environment to included file", function()
-      local emittable = require("flemma.emittable")
-
       -- Setup: Create test files
       local temp_dir = vim.fn.tempname() .. "_include_isolation_test"
       vim.fn.mkdir(temp_dir, "p")
@@ -69,27 +88,11 @@ describe("flemma.templating.eval", function()
       env.__dirname = temp_dir
       env.name = "World" -- User variable defined in frontmatter
 
-      -- Call include() - returns IncludePart now, not a string
-      local result = eval.eval_expression("include('child.txt')", env)
-
-      -- Result should be emittable (IncludePart)
-      assert.is_true(emittable.is_emittable(result))
-
-      -- Emit it and check the output
-      local ctx = emittable.EmitContext.new()
-      result:emit(ctx)
-
-      -- Combine all text parts
-      local texts = {}
-      for _, part in ipairs(ctx.parts) do
-        if part.kind == "text" then
-          table.insert(texts, part.text)
-        end
-      end
-      local output = table.concat(texts, "")
-
-      -- The variable is not propagated, so the expression evaluates to empty
-      assert.are.equal("Hello !", output)
+      -- Include should error because 'name' is not passed to the child env,
+      -- and the child's strict env will reject the undefined variable access.
+      local ok, err = pcall(eval.eval_expression, "include('child.txt')", env)
+      assert.is_false(ok)
+      assert.truthy(tostring(err):match("Undefined variable 'name'"))
 
       -- Cleanup
       vim.fn.delete(temp_dir, "rf")
@@ -378,6 +381,97 @@ describe("flemma.templating.eval", function()
 
       vim.fn.delete(temp_dir, "rf")
       vim.fn.delete(other_dir, "rf")
+    end)
+  end)
+
+  describe("strict env through compiler (integration)", function()
+    local compiler = require("flemma.templating.compiler")
+    local ast = require("flemma.ast.nodes")
+
+    it("undefined variable produces expression diagnostic", function()
+      local pos = { start_line = 5 }
+      local segments = {
+        ast.text("Hello ", pos),
+        ast.expression(" mane ", pos),
+        ast.text("!", pos),
+      }
+      local result = compiler.compile(segments)
+      assert.is_nil(result.error)
+
+      local env = templating.create_env()
+      env.__filename = "test.chat"
+      local parts, diagnostics = compiler.execute(result, env)
+
+      -- Expression degrades to raw text
+      local text = ""
+      for _, p in ipairs(parts) do
+        if p.kind == "text" then
+          text = text .. p.text
+        end
+      end
+      assert.truthy(text:find("{{ mane }}"))
+
+      -- Diagnostic is produced with the undefined variable error
+      assert.is_true(#diagnostics > 0)
+      assert.equals("expression", diagnostics[1].type)
+      assert.equals("warning", diagnostics[1].severity)
+      assert.truthy(diagnostics[1].error:find("Undefined variable 'mane'"))
+    end)
+
+    it("underscore-prefixed user variable is caught", function()
+      local pos = { start_line = 1 }
+      local segments = { ast.expression(" __name__ ", pos) }
+      local result = compiler.compile(segments)
+
+      local env = templating.create_env()
+      env.__filename = "test.chat"
+      local parts, diagnostics = compiler.execute(result, env)
+
+      -- Should degrade to raw text, not silently produce nil
+      local text = ""
+      for _, p in ipairs(parts) do
+        if p.kind == "text" then
+          text = text .. p.text
+        end
+      end
+      assert.truthy(text:find("__name__"))
+      assert.is_true(#diagnostics > 0)
+      assert.truthy(diagnostics[1].error:find("Undefined variable '__name__'"))
+    end)
+  end)
+
+  describe("strict env through pipeline (E2E)", function()
+    it("undefined variable in @You message produces diagnostic", function()
+      local parser = require("flemma.parser")
+      local pipeline = require("flemma.pipeline")
+      local ctx = require("flemma.context")
+
+      local lines = {
+        "@You:",
+        "Hello {{ mane }}!",
+      }
+      local context = ctx.from_file("test.chat")
+      local prompt, evaluated = pipeline.run(parser.parse_lines(lines), context)
+
+      -- Expression degrades to raw text in the output
+      local user_msg = prompt.history[1]
+      local text = ""
+      for _, p in ipairs(user_msg.parts) do
+        if p.kind == "text" then
+          text = text .. (p.text or "")
+        end
+      end
+      assert.truthy(text:find("{{ mane }}"), "expected raw expression text, got: " .. text)
+
+      -- Diagnostic is present in the evaluated result
+      local found_diagnostic = false
+      for _, d in ipairs(evaluated.diagnostics) do
+        if d.type == "expression" and d.error and d.error:find("Undefined variable 'mane'") then
+          found_diagnostic = true
+          break
+        end
+      end
+      assert.is_true(found_diagnostic, "expected diagnostic about undefined variable 'mane'")
     end)
   end)
 end)

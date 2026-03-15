@@ -331,7 +331,7 @@ end
 ---@param eval_expr_fn fun(expr: string, env: flemma.templating.eval.Environment): any
 ---@param create_env_fn fun(): flemma.templating.eval.Environment
 local function ensure_env_capabilities(env, eval_expr_fn, create_env_fn)
-  if env.include == nil then
+  if rawget(env, "include") == nil then
     -- Build the initial include stack from __filename
     local initial_stack = {}
     if env.__filename then

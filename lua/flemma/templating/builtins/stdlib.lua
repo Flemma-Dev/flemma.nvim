@@ -72,6 +72,7 @@ function M.populate(env)
   env.error = error
   env.ipairs = ipairs
   env.pairs = pairs
+  env.pcall = pcall
   env.select = select
   env.tonumber = tonumber
   env.tostring = tostring

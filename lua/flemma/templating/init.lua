@@ -70,8 +70,33 @@ function M.register_module(module_path)
   end
 end
 
+--- Framework-internal keys that may be read before being explicitly set on a
+--- given env instance. Pre-registering them in known_keys prevents false
+--- positives from the strict __index while still catching user-variable typos
+--- (including underscore-prefixed names like __name__).
+---@type string[]
+local FRAMEWORK_KEYS = {
+  -- set by context.to_eval_env()
+  "__filename",
+  "__dirname",
+  -- set/cleared by compiler.execute()
+  "__emit",
+  "__emit_part",
+  "__emit_expr_error",
+  "__segments",
+}
+
 ---Create a new template environment by running all populators in priority order.
----@return table env Fresh environment table
+---
+---The returned environment has a strict __index metamethod that errors when
+---sandboxed code accesses a variable that was never defined. This catches
+---typos like {{ mane }} or {{ __name__ }} instead of silently producing nil.
+---
+---Keys are considered "known" if they were set by a populator, added after
+---creation (e.g., user variables from frontmatter), or are framework-internal
+---keys (FRAMEWORK_KEYS). Non-string keys (symbol keys) are exempt and always
+---return nil without error.
+---@return table env Fresh environment table with strict undefined-variable checking
 function M.create_env()
   ensure_modules_loaded()
   local sorted = {}
@@ -81,10 +106,39 @@ function M.create_env()
   table.sort(sorted, function(a, b)
     return a.priority < b.priority
   end)
-  local env = {}
+
+  -- Phase 1: Run populators with __newindex tracking.
+  -- This captures every key that was ever set, even if a later populator
+  -- removes it (e.g., env.utf8 = nil in LuaJIT where utf8 is undefined).
+  local known_keys = {} ---@type table<any, boolean>
+  for _, key in ipairs(FRAMEWORK_KEYS) do
+    known_keys[key] = true
+  end
+  local env = setmetatable({}, {
+    __newindex = function(self, key, value)
+      known_keys[key] = true
+      rawset(self, key, value)
+    end,
+  })
+
   for _, p in ipairs(sorted) do
     p.populate(env)
   end
+
+  -- Phase 2: Install strict __index that errors on truly undefined variables.
+  setmetatable(env, {
+    __index = function(_, key)
+      if known_keys[key] or type(key) ~= "string" then
+        return nil
+      end
+      error(string.format("Undefined variable '%s'", key), 2)
+    end,
+    __newindex = function(self, key, value)
+      known_keys[key] = true
+      rawset(self, key, value)
+    end,
+  })
+
   return env
 end
 
