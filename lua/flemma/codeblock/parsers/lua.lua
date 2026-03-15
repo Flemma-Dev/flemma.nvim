@@ -14,12 +14,12 @@ local opt_module = require("flemma.buffer.opt")
 function M.parse(code, context)
   local env = ctxutil.to_eval_env(context or {})
 
-  -- Inject flemma.opt into sandbox env before execute_safe
+  -- Inject flemma.opt into sandbox env before execute_frontmatter
   -- This makes it part of initial_keys, so it won't leak to user_globals
   local opt_proxy, resolve = opt_module.create()
   env.flemma = { opt = opt_proxy }
 
-  local user_globals = eval.execute_safe(code, env)
+  local user_globals = eval.execute_frontmatter(code, env)
 
   -- Safety net: ensure flemma doesn't leak to returned globals
   user_globals.flemma = nil

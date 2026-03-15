@@ -115,7 +115,7 @@ function M.extend(base, vars)
   return c
 end
 
----Prepare a safe eval environment from a Context
+---Prepare a template environment from a Context
 ---
 ---User-visible fields (__filename, __dirname) are set as string keys so sandbox
 ---code can read them. Internal fields (frontmatter opts) use symbol keys so they

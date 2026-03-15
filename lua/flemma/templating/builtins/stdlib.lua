@@ -1,5 +1,5 @@
 --- Standard library populator for the Flemma template environment.
---- Provides safe access to string, table, math, utf8, vim, and essential Lua globals.
+--- Provides access to string, table, math, utf8, vim, and essential Lua globals.
 ---@class flemma.templating.builtins.Stdlib : flemma.templating.Populator
 local M = {}
 
@@ -8,7 +8,7 @@ local symbols = require("flemma.symbols")
 M.name = "stdlib"
 M.priority = 100
 
----Populate the environment with standard library functions and safe globals.
+---Populate the environment with standard library functions and globals.
 ---@param env table
 function M.populate(env)
   -- String manipulation

@@ -30,17 +30,17 @@ describe("flemma.templating.eval", function()
     end)
   end)
 
-  describe("execute_safe", function()
+  describe("execute_frontmatter", function()
     it("should execute code and return new globals", function()
       local env = templating.create_env()
-      local globals = eval.execute_safe("my_var = 'test'", env)
+      local globals = eval.execute_frontmatter("my_var = 'test'", env)
       assert.are.equal("test", globals.my_var)
     end)
 
     it("should not return pre-existing environment variables as new globals", function()
       local env = templating.create_env()
       env.existing_var = "hello"
-      local globals = eval.execute_safe("new_var = 'world'", env)
+      local globals = eval.execute_frontmatter("new_var = 'world'", env)
       assert.are.equal("world", globals.new_var)
       assert.is_nil(globals.existing_var)
     end)
@@ -174,7 +174,7 @@ describe("flemma.templating.eval", function()
       vim.fn.delete(temp_dir, "rf")
     end)
 
-    it("should propagate structured errors through execute_safe (frontmatter)", function()
+    it("should propagate structured errors through execute_frontmatter (frontmatter)", function()
       local temp_dir = vim.fn.tempname() .. "_include_frontmatter_error_test"
       vim.fn.mkdir(temp_dir, "p")
 
@@ -183,9 +183,9 @@ describe("flemma.templating.eval", function()
       env.__filename = parent_file
       env.__dirname = temp_dir
 
-      local ok, err = pcall(eval.execute_safe, "include('nonexistent.txt')", env)
+      local ok, err = pcall(eval.execute_frontmatter, "include('nonexistent.txt')", env)
       assert.is_false(ok)
-      -- Structured error table must survive execute_safe, not become "table: 0x..."
+      -- Structured error table must survive execute_frontmatter, not become "table: 0x..."
       assert.equals("table", type(err))
       assert.equals("file", err.type)
       assert.is_true(err.error:match("File not found") ~= nil)

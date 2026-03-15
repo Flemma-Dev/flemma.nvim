@@ -352,7 +352,7 @@ end
 ---@param code string
 ---@param env_param flemma.templating.eval.Environment|nil
 ---@return table<string, any> globals New variables defined during execution
-function M.execute_safe(code, env_param)
+function M.execute_frontmatter(code, env_param)
   -- Create environment and store initial keys
   local env = env_param or templating.create_env()
 
