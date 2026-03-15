@@ -312,13 +312,13 @@ Flemma provides two iterator helpers for concise array iteration in templates:
 
 The `loop` table provides:
 
-| Field | Description |
-|-------|-------------|
-| `index` | 1-based position |
-| `index0` | 0-based position |
-| `first` | `true` for the first element |
-| `last` | `true` for the last element |
-| `length` | Total number of elements |
+| Field    | Description                  |
+| -------- | ---------------------------- |
+| `index`  | 1-based position             |
+| `index0` | 0-based position             |
+| `first`  | `true` for the first element |
+| `last`   | `true` for the last element  |
+| `length` | Total number of elements     |
 
 ### Extending the Environment
 
