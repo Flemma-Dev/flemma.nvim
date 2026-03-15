@@ -35,6 +35,15 @@ local M = {}
 ---@class flemma.ast.ExpressionSegment
 ---@field kind "expression"
 ---@field code string
+---@field trim_before? boolean
+---@field trim_after? boolean
+---@field position flemma.ast.Position|nil
+
+---@class flemma.ast.CodeSegment
+---@field kind "code"
+---@field code string
+---@field trim_before? boolean
+---@field trim_after? boolean
 ---@field position flemma.ast.Position|nil
 
 ---@class flemma.ast.ThinkingSegment : flemma.ast.GenericThinkingPart
@@ -52,7 +61,7 @@ local M = {}
 ---@field message string
 ---@field position flemma.ast.Position
 
----@alias flemma.ast.Segment flemma.ast.TextSegment|flemma.ast.ExpressionSegment|flemma.ast.ThinkingSegment|flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|flemma.ast.AbortedSegment
+---@alias flemma.ast.Segment flemma.ast.TextSegment|flemma.ast.ExpressionSegment|flemma.ast.CodeSegment|flemma.ast.ThinkingSegment|flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|flemma.ast.AbortedSegment
 
 ---@class flemma.ast.Diagnostic
 ---@field type string Diagnostic category. Internal types are unprefixed (e.g., "frontmatter", "expression", "file"). Custom types from symbols.DIAGNOSTICS must use the "custom:" prefix (e.g., "custom:file_drift").
@@ -162,9 +171,32 @@ end
 
 ---@param code string
 ---@param pos flemma.ast.Position|nil
+---@param opts? { trim_before?: boolean, trim_after?: boolean }
 ---@return flemma.ast.ExpressionSegment
-function M.expression(code, pos)
-  return { kind = "expression", code = code, position = pos }
+function M.expression(code, pos, opts)
+  opts = opts or {}
+  return {
+    kind = "expression",
+    code = code,
+    position = pos,
+    trim_before = opts.trim_before or nil,
+    trim_after = opts.trim_after or nil,
+  }
+end
+
+---@param code string
+---@param pos flemma.ast.Position|nil
+---@param opts? { trim_before?: boolean, trim_after?: boolean }
+---@return flemma.ast.CodeSegment
+function M.code(code, pos, opts)
+  opts = opts or {}
+  return {
+    kind = "code",
+    code = code,
+    position = pos,
+    trim_before = opts.trim_before or nil,
+    trim_after = opts.trim_after or nil,
+  }
 end
 
 ---@param content string
