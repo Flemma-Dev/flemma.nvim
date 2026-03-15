@@ -161,8 +161,9 @@ Standard Lua `if`/`elseif`/`else`/`end` and `for`/`while`/`repeat` loops all wor
 ```markdown
 @You:
 {% for i, item in ipairs(items) do %}
+
 - Item {{i}}: {{item}}
-{% end %}
+  {% end %}
 ```
 
 ### Variable assignment
