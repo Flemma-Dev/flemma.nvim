@@ -1,35 +1,29 @@
 describe("flemma.templating.eval", function()
   local eval
+  local templating
 
   -- Before each test, get a fresh instance of the eval module
   before_each(function()
     -- Invalidate the package cache to ensure we get a fresh module
     package.loaded["flemma.templating.eval"] = nil
+    package.loaded["flemma.templating"] = nil
+    package.loaded["flemma.templating.builtins.stdlib"] = nil
+    package.loaded["flemma.templating.builtins.iterators"] = nil
     eval = require("flemma.templating.eval")
-  end)
-
-  describe("create_safe_env", function()
-    it("should create an environment with safe libraries", function()
-      local env = eval.create_safe_env()
-      assert.is_table(env.string, "Environment should contain the 'string' library")
-      assert.is_table(env.math, "Environment should contain the 'math' library")
-    end)
-
-    it("should not include unsafe libraries like 'os'", function()
-      local env = eval.create_safe_env()
-      assert.is_nil(env.os, "Environment should not contain the 'os' library")
-    end)
+    templating = require("flemma.templating")
+    templating.clear()
+    templating.setup()
   end)
 
   describe("eval_expression", function()
     it("should evaluate a simple expression correctly", function()
-      local env = eval.create_safe_env()
+      local env = templating.create_env()
       local result = eval.eval_expression("1 + 1", env)
       assert.are.equal(2, result)
     end)
 
     it("should evaluate an expression using the provided environment", function()
-      local env = eval.create_safe_env()
+      local env = templating.create_env()
       env.my_var = 10
       local result = eval.eval_expression("my_var * 2", env)
       assert.are.equal(20, result)
@@ -38,13 +32,13 @@ describe("flemma.templating.eval", function()
 
   describe("execute_safe", function()
     it("should execute code and return new globals", function()
-      local env = eval.create_safe_env()
+      local env = templating.create_env()
       local globals = eval.execute_safe("my_var = 'test'", env)
       assert.are.equal("test", globals.my_var)
     end)
 
     it("should not return pre-existing environment variables as new globals", function()
-      local env = eval.create_safe_env()
+      local env = templating.create_env()
       env.existing_var = "hello"
       local globals = eval.execute_safe("new_var = 'world'", env)
       assert.are.equal("world", globals.new_var)
@@ -70,7 +64,7 @@ describe("flemma.templating.eval", function()
       local parent_file = temp_dir .. "/parent.chat"
 
       -- Create environment with user variable 'name'
-      local env = eval.create_safe_env()
+      local env = templating.create_env()
       env.__filename = parent_file
       env.__dirname = temp_dir
       env.name = "World" -- User variable defined in frontmatter
@@ -116,7 +110,7 @@ describe("flemma.templating.eval", function()
       f:close()
 
       local parent_file = temp_dir .. "/parent.chat"
-      local env = eval.create_safe_env()
+      local env = templating.create_env()
       env.__filename = parent_file
       env.__dirname = temp_dir
 
@@ -148,7 +142,7 @@ describe("flemma.templating.eval", function()
       f2:close()
 
       local parent_file = temp_dir .. "/parent.chat"
-      local env = eval.create_safe_env()
+      local env = templating.create_env()
       env.__filename = parent_file
       env.__dirname = temp_dir
 
@@ -166,7 +160,7 @@ describe("flemma.templating.eval", function()
       vim.fn.mkdir(temp_dir, "p")
 
       local parent_file = temp_dir .. "/parent.chat"
-      local env = eval.create_safe_env()
+      local env = templating.create_env()
       env.__filename = parent_file
       env.__dirname = temp_dir
 
@@ -185,7 +179,7 @@ describe("flemma.templating.eval", function()
       vim.fn.mkdir(temp_dir, "p")
 
       local parent_file = temp_dir .. "/parent.chat"
-      local env = eval.create_safe_env()
+      local env = templating.create_env()
       env.__filename = parent_file
       env.__dirname = temp_dir
 
@@ -214,7 +208,7 @@ describe("flemma.templating.eval", function()
       f:close()
 
       local parent_file = temp_dir .. "/parent.chat"
-      local env = eval.create_safe_env()
+      local env = templating.create_env()
       env.__filename = parent_file
       env.__dirname = temp_dir
 
@@ -243,7 +237,7 @@ describe("flemma.templating.eval", function()
 
       -- Create parent environment
       local parent_file = temp_dir .. "/parent.chat"
-      local env = eval.create_safe_env()
+      local env = templating.create_env()
       env.__filename = parent_file
       env.__dirname = temp_dir
 
@@ -281,7 +275,7 @@ describe("flemma.templating.eval", function()
 
       -- Create parent environment with name = "Parent"
       local parent_file = temp_dir .. "/parent.chat"
-      local env = eval.create_safe_env()
+      local env = templating.create_env()
       env.__filename = parent_file
       env.__dirname = temp_dir
       env.name = "Parent"
@@ -322,7 +316,7 @@ describe("flemma.templating.eval", function()
       f:write("{% if mode == 'strict' then %}Be strict.{% else %}Be friendly.{% end %}")
       f:close()
 
-      local env = eval.create_safe_env()
+      local env = templating.create_env()
       env.__filename = temp_dir .. "/test.chat"
       env.__dirname = temp_dir
 
@@ -364,7 +358,7 @@ describe("flemma.templating.eval", function()
       local other_dir = vim.fn.tempname() .. "_include_abspath_other"
       vim.fn.mkdir(other_dir, "p")
 
-      local env = eval.create_safe_env()
+      local env = templating.create_env()
       env.__filename = other_dir .. "/parent.chat"
       env.__dirname = other_dir
 

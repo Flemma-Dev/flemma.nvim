@@ -362,6 +362,9 @@ describe("context.to_eval_env bufnr threading", function()
   before_each(function()
     package.loaded["flemma.context"] = nil
     package.loaded["flemma.symbols"] = nil
+    package.loaded["flemma.templating"] = nil
+    package.loaded["flemma.templating.builtins.stdlib"] = nil
+    package.loaded["flemma.templating.builtins.iterators"] = nil
     ctxutil = require("flemma.context")
     sym = require("flemma.symbols")
   end)
@@ -423,6 +426,9 @@ describe("cross-buffer personality environment isolation", function()
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.context"] = nil
     package.loaded["flemma.templating.eval"] = nil
+    package.loaded["flemma.templating"] = nil
+    package.loaded["flemma.templating.builtins.stdlib"] = nil
+    package.loaded["flemma.templating.builtins.iterators"] = nil
     package.loaded["flemma.personalities"] = nil
     package.loaded["flemma.personalities.coding_assistant"] = nil
     package.loaded["flemma.tools"] = nil
@@ -484,19 +490,25 @@ describe("cross-buffer personality environment isolation", function()
 end)
 
 describe("URN dispatch in include()", function()
-  local eval
+  local eval, templating
 
   before_each(function()
     package.loaded["flemma.templating.eval"] = nil
+    package.loaded["flemma.templating"] = nil
+    package.loaded["flemma.templating.builtins.stdlib"] = nil
+    package.loaded["flemma.templating.builtins.iterators"] = nil
     package.loaded["flemma.personalities"] = nil
     package.loaded["flemma.personalities.coding_assistant"] = nil
     eval = require("flemma.templating.eval")
+    templating = require("flemma.templating")
+    templating.clear()
+    templating.setup()
     local pers = require("flemma.personalities")
     pers.setup()
   end)
 
   it("dispatches urn:flemma:personality: to personality registry", function()
-    local env = eval.create_safe_env()
+    local env = templating.create_env()
     env.__dirname = vim.fn.getcwd()
 
     local result = eval.eval_expression("include('urn:flemma:personality:coding-assistant')", env)
@@ -505,7 +517,7 @@ describe("URN dispatch in include()", function()
   end)
 
   it("errors on unknown personality URN", function()
-    local env = eval.create_safe_env()
+    local env = templating.create_env()
     env.__dirname = vim.fn.getcwd()
 
     assert.has_error(function()
@@ -514,7 +526,7 @@ describe("URN dispatch in include()", function()
   end)
 
   it("still resolves file paths normally", function()
-    local env = eval.create_safe_env()
+    local env = templating.create_env()
     env.__dirname = vim.fn.fnamemodify("tests/fixtures", ":p")
 
     local ok = pcall(eval.eval_expression, "include('nonexistent.txt')", env)
@@ -525,6 +537,9 @@ end)
 describe("personality system integration", function()
   before_each(function()
     package.loaded["flemma.templating.eval"] = nil
+    package.loaded["flemma.templating"] = nil
+    package.loaded["flemma.templating.builtins.stdlib"] = nil
+    package.loaded["flemma.templating.builtins.iterators"] = nil
     package.loaded["flemma.personalities"] = nil
     package.loaded["flemma.personalities.builder"] = nil
     package.loaded["flemma.personalities.coding_assistant"] = nil
@@ -557,8 +572,11 @@ describe("personality system integration", function()
   end)
 
   it("renders a complete prompt via include URN", function()
+    local templating = require("flemma.templating")
+    templating.clear()
+    templating.setup()
     local eval = require("flemma.templating.eval")
-    local env = eval.create_safe_env()
+    local env = templating.create_env()
     env.__dirname = vim.fn.getcwd()
 
     local result = eval.eval_expression("include('urn:flemma:personality:coding-assistant')", env)
