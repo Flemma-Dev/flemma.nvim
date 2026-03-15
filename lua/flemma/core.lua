@@ -616,6 +616,16 @@ function M.send_to_provider(opts)
     local diagnostic_lines = {}
     local max_per_type = 5
 
+    ---@param path string|nil
+    ---@return string
+    local function format_path(path)
+      if not path or path == "N/A" then
+        return "N/A"
+      end
+      -- Resolve to relative path from cwd for shorter display
+      return vim.fn.fnamemodify(path, ":.")
+    end
+
     local function format_position(pos)
       if not pos then
         return ""
@@ -634,7 +644,7 @@ function M.send_to_provider(opts)
       table.insert(diagnostic_lines, "Frontmatter errors:")
       for i, d in ipairs(by_type.frontmatter) do
         if i <= max_per_type then
-          local loc = (d.source_file or "N/A") .. format_position(d.position)
+          local loc = format_path(d.source_file) .. format_position(d.position)
           table.insert(diagnostic_lines, string.format("  [%s] %s", loc, d.error))
         elseif i == max_per_type + 1 then
           table.insert(diagnostic_lines, string.format("  …and %d more", #by_type.frontmatter - max_per_type))
@@ -648,7 +658,7 @@ function M.send_to_provider(opts)
       table.insert(diagnostic_lines, "Expression evaluation errors (request will still be sent):")
       for i, d in ipairs(by_type.expression) do
         if i <= max_per_type then
-          local loc = (d.source_file or "N/A") .. format_position(d.position)
+          local loc = format_path(d.source_file) .. format_position(d.position)
           local role_info = d.message_role and (" in @" .. d.message_role) or ""
           table.insert(diagnostic_lines, string.format("  [%s%s] %s", loc, role_info, d.error))
           table.insert(diagnostic_lines, string.format("    Expression: {{ %s }}", d.expression or ""))
@@ -664,7 +674,7 @@ function M.send_to_provider(opts)
       table.insert(diagnostic_lines, "Template errors:")
       for i, d in ipairs(by_type.template) do
         if i <= max_per_type then
-          local loc = (d.source_file or "N/A") .. format_position(d.position)
+          local loc = format_path(d.source_file) .. format_position(d.position)
           table.insert(diagnostic_lines, string.format("  [%s] %s", loc, d.error or "Unknown error"))
         elseif i == max_per_type + 1 then
           table.insert(diagnostic_lines, string.format("  …and %d more", #by_type.template - max_per_type))
@@ -678,13 +688,13 @@ function M.send_to_provider(opts)
       table.insert(diagnostic_lines, "File reference errors:")
       for i, d in ipairs(by_type.file) do
         if i <= max_per_type then
-          local loc = (d.source_file or "N/A") .. format_position(d.position)
+          local loc = format_path(d.source_file) .. format_position(d.position)
           local ref = d.filename or d.raw or "unknown"
           table.insert(diagnostic_lines, string.format("  [%s] %s: %s", loc, ref, d.error))
           if d.include_stack and #d.include_stack > 0 then
             table.insert(diagnostic_lines, "  Caused by:")
-            for _, path in ipairs(d.include_stack) do
-              table.insert(diagnostic_lines, "  ↓ " .. path)
+            for _, stack_path in ipairs(d.include_stack) do
+              table.insert(diagnostic_lines, "  ↓ " .. format_path(stack_path))
             end
             table.insert(diagnostic_lines, "  → " .. (d.raw or d.filename))
           end
