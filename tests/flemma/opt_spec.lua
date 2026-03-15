@@ -471,7 +471,7 @@ describe("flemma.opt", function()
 
       local req = p:build_request(prompt)
       assert.is_not_nil(req.tools)
-      assert.equals(8, #req.tools)
+      assert.equals(5, #req.tools)
     end)
 
     it("openai filters tools by opts", function()

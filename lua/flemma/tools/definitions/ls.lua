@@ -82,6 +82,9 @@ end
 M.definitions = {
   {
     name = "ls",
+    enabled = function(config)
+      return config and config.experimental and config.experimental.tools or false
+    end,
     capabilities = { "can_auto_approve_if_sandboxed" },
     description = "List directory contents. Output is truncated to "
       .. truncate.MAX_LINES

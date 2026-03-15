@@ -191,10 +191,14 @@ end
 
 ---Get all registered tools (excludes disabled tools by default).
 ---Loads any pending third-party modules before returning.
----@param opts? { include_disabled: boolean }
+---@param opts? { include_disabled?: boolean, config?: flemma.Config }
 ---@return table<string, flemma.tools.ToolDefinition>
 function M.get_all(opts)
   ensure_modules_loaded()
+  opts = opts or {}
+  if not opts.config then
+    opts.config = state.get_config()
+  end
   return registry.get_all(opts)
 end
 

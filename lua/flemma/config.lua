@@ -171,6 +171,7 @@
 
 ---@class flemma.config.Experimental
 ---@field lsp boolean Enable in-process LSP for .chat buffers
+---@field tools boolean Enable experimental exploration tools (grep, find, ls)
 
 ---User-facing setup options — every field is optional (merged with defaults).
 ---@class flemma.Config.Opts
@@ -328,11 +329,11 @@ return {
     },
     grep = {
       cwd = "urn:flemma:buffer:path",
-      exclude = {}, ---@type string[]
+      exclude = { ".git", "node_modules", "__pycache__", ".venv", "target", "dist", "build", "vendor" },
     },
     find = {
       cwd = "urn:flemma:buffer:path",
-      exclude = {}, ---@type string[]
+      exclude = { ".git", "node_modules", "__pycache__", ".venv", "target", "dist", "build", "vendor" },
     },
     ls = {
       cwd = "urn:flemma:buffer:path",
@@ -399,5 +400,6 @@ return {
   },
   experimental = {
     lsp = vim.lsp ~= nil,
+    tools = false, -- Enable experimental exploration tools (grep, find, ls)
   },
 }

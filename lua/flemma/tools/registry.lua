@@ -40,7 +40,7 @@ local M = {}
 ---@field input_schema flemma.tools.JSONSchema JSON Schema for the tool input
 ---@field output_schema? flemma.tools.JSONSchema JSON Schema for the tool output (used in description)
 ---@field async? boolean True if execute takes a callback (default false)
----@field enabled? boolean Set to false to exclude from API requests by default (still executable, can be enabled via flemma.opt.tools)
+---@field enabled? boolean|fun(config: flemma.Config): boolean Set to false to exclude from API requests by default (still executable, can be enabled via flemma.opt.tools). When a function, evaluated at query time with the resolved config.
 ---@field executable? boolean Set to false to disable execution
 ---@field execute? fun(input: table<string, any>, context: flemma.tools.ExecutionContext, callback?: fun(result: flemma.tools.ExecutionResult)): any Executor function (sync returns ExecutionResult, async returns cancel fn or nil)
 ---@field capabilities? string[] Declarative capability tags (e.g., "can_auto_approve_if_sandboxed") queried by resolvers and policies
@@ -88,17 +88,35 @@ function M.get(name)
   return tools[name]
 end
 
+---Evaluate a tool's enabled field. Supports boolean and function forms.
+---When enabled is absent (nil), the tool is enabled by default. When defined,
+---the result is checked for truthiness: nil and false both disable the tool.
+---@param def flemma.tools.ToolDefinition
+---@param config flemma.Config|nil Resolved config (passed to function-typed enabled fields)
+---@return boolean
+local function is_enabled(def, config)
+  local enabled = def.enabled
+  if enabled == nil then
+    return true
+  end
+  if type(enabled) == "function" then
+    enabled = enabled(config --[[@as flemma.Config]])
+  end
+  return not not enabled
+end
+
 ---Get all registered tools (excludes disabled tools by default)
----@param opts? { include_disabled: boolean }
+---@param opts? { include_disabled?: boolean, config?: flemma.Config|nil }
 ---@return table<string, flemma.tools.ToolDefinition> tools A copy of matching tool definitions
 function M.get_all(opts)
   opts = opts or {}
   if opts.include_disabled then
     return vim.deepcopy(tools)
   end
+  local config = opts.config
   local result = {}
   for name, def in pairs(tools) do
-    if def.enabled ~= false then
+    if is_enabled(def, config) then
       result[name] = vim.deepcopy(def)
     end
   end

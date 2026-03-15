@@ -108,6 +108,9 @@ end
 M.definitions = {
   {
     name = "grep",
+    enabled = function(config)
+      return config and config.experimental and config.experimental.tools or false
+    end,
     capabilities = { "can_auto_approve_if_sandboxed" },
     description = "Search file contents using ripgrep (rg) or grep. "
       .. "Returns matching lines with file paths and line numbers. "

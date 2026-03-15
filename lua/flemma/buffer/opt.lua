@@ -235,9 +235,19 @@ end
 local option_defs = {
   tools = function()
     local all_tools = tools.get_all({ include_disabled = true })
+    local resolved_config = state.get_config()
     local entries = {}
     for name, def in pairs(all_tools) do
-      table.insert(entries, { name = name, enabled = def.enabled ~= false })
+      local enabled = def.enabled
+      if enabled == nil then
+        enabled = true
+      else
+        if type(enabled) == "function" then
+          enabled = enabled(resolved_config)
+        end
+        enabled = not not enabled
+      end
+      table.insert(entries, { name = name, enabled = enabled })
     end
     table.sort(entries, function(a, b)
       return a.name < b.name
