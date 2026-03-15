@@ -137,7 +137,9 @@ function M.truncate_line(line, max_chars)
   end
   local suffix = "... [truncated]"
   local keep = max_chars - #suffix
-  if keep < 1 then keep = 1 end
+  if keep < 1 then
+    keep = 1
+  end
   return { text = line:sub(1, keep) .. suffix, truncated = true }
 end
 

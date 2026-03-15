@@ -52,7 +52,7 @@ end
 ---@return string directory_prefix The directory prefix portion
 ---@return string filename_part The filename portion
 local function split_pattern(pattern)
-  local last_slash = pattern:match(".*()/" )
+  local last_slash = pattern:match(".*()/")
   if last_slash then
     return pattern:sub(1, last_slash), pattern:sub(last_slash + 1)
   end

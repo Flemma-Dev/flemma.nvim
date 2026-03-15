@@ -47,10 +47,7 @@ end
 ---@param pattern string
 ---@return string
 local function translate_ere_pattern(pattern)
-  return (pattern
-    :gsub("\\d", "[0-9]")
-    :gsub("\\w", "[a-zA-Z0-9_]")
-    :gsub("\\s", "[[:space:]]"))
+  return (pattern:gsub("\\d", "[0-9]"):gsub("\\w", "[a-zA-Z0-9_]"):gsub("\\s", "[[:space:]]"))
 end
 
 M._translate_ere_pattern = translate_ere_pattern

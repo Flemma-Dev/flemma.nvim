@@ -152,8 +152,7 @@ describe("Ls Tool", function()
   end)
 
   it("handles absolute paths", function()
-    local result =
-      ls_def.execute({ label = "test", path = fixture_dir .. "/alpha", max_depth = 1, limit = 500 }, ctx)
+    local result = ls_def.execute({ label = "test", path = fixture_dir .. "/alpha", max_depth = 1, limit = 500 }, ctx)
     assert.is_true(result.success)
     assert.is_truthy(result.output:match("nested%.txt"))
   end)
