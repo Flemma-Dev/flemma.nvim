@@ -1,4 +1,4 @@
---- Safe environment and execution for Lua code in Flemma, where safe is a loose term.
+--- Expression evaluation and include() capability for Flemma templates.
 ---
 --- User-visible environment fields (string keys, accessible to sandbox code):
 ---   __filename  - Current file path for error reporting and path resolution
@@ -14,6 +14,7 @@
 local M = {}
 
 local compiler = require("flemma.templating.compiler")
+local templating = require("flemma.templating")
 local emittable = require("flemma.emittable")
 local log = require("flemma.logging")
 local mime_util = require("flemma.mime")
@@ -344,95 +345,7 @@ end
 --- Call this before passing the env to the compiler for template execution.
 ---@param env flemma.templating.eval.Environment
 function M.ensure_env(env)
-  ensure_env_capabilities(env, M.eval_expression, M.create_safe_env)
-end
-
---- Create a safe environment for executing Lua code
----
---- User-defined variables from frontmatter are merged as top-level keys by context.to_eval_env().
---- The 'include' function is added by ensure_env_capabilities to capture the correct environment.
---- User-visible fields (__filename, __dirname) and internal symbol-keyed fields are set by context.to_eval_env().
----@return flemma.templating.eval.Environment
-function M.create_safe_env()
-  return {
-    -- String manipulation
-    string = {
-      byte = string.byte,
-      char = string.char,
-      find = string.find,
-      format = string.format,
-      gmatch = string.gmatch,
-      gsub = string.gsub,
-      len = string.len,
-      lower = string.lower,
-      match = string.match,
-      rep = string.rep,
-      reverse = string.reverse,
-      sub = string.sub,
-      upper = string.upper,
-    },
-
-    -- Table operations for data structuring
-    table = {
-      concat = table.concat,
-      insert = table.insert,
-      remove = table.remove,
-      sort = table.sort,
-      unpack = table.unpack,
-    },
-
-    -- Math for calculations in templates
-    math = {
-      abs = math.abs,
-      ceil = math.ceil,
-      floor = math.floor,
-      max = math.max,
-      min = math.min,
-      random = math.random,
-      randomseed = math.randomseed,
-      round = math.floor, -- common alias
-      pi = math.pi,
-    },
-
-    -- UTF-8 support for unicode string handling (available in Lua 5.3+, nil in LuaJIT)
-    utf8 = utf8, ---@diagnostic disable-line: undefined-global
-
-    -- Neovim API functions required by include()
-    vim = {
-      fn = {
-        fnamemodify = vim.fn.fnamemodify,
-        getcwd = vim.fn.getcwd,
-        filereadable = vim.fn.filereadable,
-        simplify = vim.fn.simplify,
-      },
-      fs = {
-        normalize = vim.fs.normalize,
-        abspath = vim.fs.abspath,
-      },
-    },
-
-    -- Essential functions for template operation
-    assert = assert,
-    error = error,
-    ipairs = ipairs,
-    pairs = pairs,
-    select = select,
-    tonumber = tonumber,
-    tostring = tostring,
-    type = type,
-    print = print,
-
-    -- Useful constants
-    _VERSION = _VERSION,
-
-    -- Symbols table: opaque table keys for include() mode flags.
-    -- Mirrors flemma.symbols — user code writes { [symbols.BINARY] = true }.
-    -- "symbols" is a reserved key and must not be overwritten by frontmatter variables.
-    symbols = {
-      BINARY = symbols.INCLUDE_BINARY,
-      MIME = symbols.INCLUDE_MIME,
-    },
-  }
+  ensure_env_capabilities(env, M.eval_expression, templating.create_env)
 end
 
 --- Execute code in a safe environment
@@ -441,11 +354,11 @@ end
 ---@return table<string, any> globals New variables defined during execution
 function M.execute_safe(code, env_param)
   -- Create environment and store initial keys
-  local env = env_param or M.create_safe_env() -- Use provided env or create a new one
+  local env = env_param or templating.create_env()
 
   -- Ensure 'include' is available and correctly contextualized for this environment.
-  -- M.eval_expression and M.create_safe_env are used for recursive calls from 'include'.
-  ensure_env_capabilities(env, M.eval_expression, M.create_safe_env)
+  -- M.eval_expression and templating.create_env are used for recursive calls from 'include'.
+  ensure_env_capabilities(env, M.eval_expression, templating.create_env)
 
   local initial_keys = {}
   for k in pairs(env) do
@@ -484,7 +397,7 @@ function M.eval_expression(expr, env)
   end
 
   -- Ensure 'include' is available and correctly contextualized for this environment.
-  ensure_env_capabilities(env, M.eval_expression, M.create_safe_env)
+  ensure_env_capabilities(env, M.eval_expression, templating.create_env)
 
   -- Wrap expression in return statement if it's not already a statement
   if not expr:match("^%s*return%s+") then

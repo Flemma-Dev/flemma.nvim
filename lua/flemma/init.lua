@@ -20,6 +20,7 @@ local personalities = require("flemma.personalities")
 local secrets = require("flemma.secrets")
 local tools = require("flemma.tools")
 local preprocessor = require("flemma.preprocessor")
+local templating = require("flemma.templating")
 local tools_presets = require("flemma.tools.presets")
 local tools_approval = require("flemma.tools.approval")
 local cursor = require("flemma.cursor")
@@ -135,6 +136,9 @@ M.setup = function(user_opts)
 
   -- Set up chat filetype handling
   ui.setup_chat_filetype_autocmds()
+
+  -- Initialize templating registry with built-in populators
+  templating.setup()
 
   -- Initialize tool registry with built-in tools
   tools.setup()

@@ -4,7 +4,7 @@
 ---@class flemma.ContextUtil
 local M = {}
 
-local eval = require("flemma.templating.eval")
+local templating = require("flemma.templating")
 local symbols = require("flemma.symbols")
 
 --- Context carries document identity: file path, frontmatter options, and user
@@ -124,9 +124,9 @@ end
 ---extracted from the context.
 ---@param ctx flemma.Context|table
 ---@param bufnr? integer Buffer number for context-aware operations (personality caching etc.)
----@return flemma.templating.eval.Environment env
+---@return table env
 function M.to_eval_env(ctx, bufnr)
-  local env = eval.create_safe_env()
+  local env = templating.create_env()
 
   -- User-visible string keys
   if ctx and type(ctx.get_filename) == "function" then
