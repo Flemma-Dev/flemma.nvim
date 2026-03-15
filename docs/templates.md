@@ -120,7 +120,7 @@ Only options you actually touch appear in the resolved overrides – unmodified 
 
 ## Inline expressions
 
-Use `{{ expression }}` inside any `@System:` or `@You:` message. Expressions run in a sandboxed environment that includes standard Lua libraries, select Neovim APIs, and variables from frontmatter. The full list of available functions is defined in `lua/flemma/eval.lua` (`create_safe_env`).
+Use `{{ expression }}` inside any `@System:` or `@You:` message. Expressions run in an environment built from registered populators that includes standard Lua libraries, select Neovim APIs, and variables from frontmatter. The built-in populators are defined in `lua/flemma/templating/builtins/`.
 
 Key built-ins:
 
@@ -289,6 +289,66 @@ Included files have full template support at any nesting depth -- `{% %}` code b
 - Circular includes are detected via an immutable stack threaded through each call. The error message includes the full include chain: `"Circular include for 'c.md' (requested by 'b.md'). Include stack: a.chat -> b.md -> c.md"`.
 - Missing files or read errors raise diagnostics that block the request.
 - Binary includes skip circular detection since they don't recurse.
+
+### Iterator Helpers
+
+Flemma provides two iterator helpers for concise array iteration in templates:
+
+**`values(t)`** — iterate over array values without the index variable:
+
+```
+{% for item in values(items) do %}
+- {{ item }}
+{% end %}
+```
+
+**`each(t)`** — iterate with a loop metadata context:
+
+```
+{% for item, loop in each(items) do %}
+- Item {{ loop.index }} of {{ loop.length }}: {{ item }}
+{% end %}
+```
+
+The `loop` table provides:
+
+| Field | Description |
+|-------|-------------|
+| `index` | 1-based position |
+| `index0` | 0-based position |
+| `first` | `true` for the first element |
+| `last` | `true` for the last element |
+| `length` | Total number of elements |
+
+### Extending the Environment
+
+The template environment is built from registered populators — functions that receive a table and populate it with globals. Flemma ships two built-in populators (`stdlib` at priority 100, `iterators` at priority 200).
+
+Third-party populators are registered via `templating.modules` in setup:
+
+```lua
+require("flemma").setup({
+  templating = {
+    modules = { "my.custom.templating" },
+  },
+})
+```
+
+Each module returns a table with `name`, `priority`, and `populate`:
+
+```lua
+-- my/custom/templating.lua
+return {
+  name = "custom",
+  priority = 300,
+  populate = function(env)
+    env.my_helper = function() return "hello" end
+    env.os = nil -- remove something from an earlier populator
+  end,
+}
+```
+
+Populators run in priority order (lower first). Later populators can override or remove anything set by earlier ones.
 
 ## Diagnostics at a glance
 
