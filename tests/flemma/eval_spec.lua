@@ -310,6 +310,43 @@ describe("flemma.eval", function()
     end)
   end)
 
+  describe("include() with {% %} code blocks", function()
+    it("should evaluate code blocks inside included files", function()
+      local emittable_mod = require("flemma.emittable")
+
+      local temp_dir = vim.fn.tempname() .. "_include_code_blocks"
+      vim.fn.mkdir(temp_dir, "p")
+
+      local template_path = temp_dir .. "/conditional.md"
+      local f = io.open(template_path, "w")
+      f:write("{% if mode == 'strict' then %}Be strict.{% else %}Be friendly.{% end %}")
+      f:close()
+
+      local env = eval.create_safe_env()
+      env.__filename = temp_dir .. "/test.chat"
+      env.__dirname = temp_dir
+
+      -- Test with mode = "strict"
+      local result = eval.eval_expression("include('conditional.md', { mode = 'strict' })", env)
+      assert.is_true(emittable_mod.is_emittable(result))
+
+      local ctx = emittable_mod.EmitContext.new()
+      result:emit(ctx)
+
+      local texts = {}
+      for _, part in ipairs(ctx.parts) do
+        if part.kind == "text" then
+          table.insert(texts, part.text)
+        end
+      end
+      local output = table.concat(texts, "")
+      assert.truthy(output:find("Be strict"))
+      assert.is_nil(output:find("Be friendly"))
+
+      vim.fn.delete(temp_dir, "rf")
+    end)
+  end)
+
   describe("include() absolute paths", function()
     it("should resolve absolute paths without prepending dirname", function()
       local emittable = require("flemma.emittable")

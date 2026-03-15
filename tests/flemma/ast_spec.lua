@@ -570,6 +570,73 @@ describe("Processor", function()
     assert.is_true(text:match("{{") ~= nil, "Failed expression should remain in output")
   end)
 
+  it("evaluates {% code %} blocks in @System messages", function()
+    local base = ctx.from_file("tests/fixtures/doc.chat")
+    local lines = {
+      "```lua",
+      "mode = 'strict'",
+      "```",
+      "@System:",
+      "{% if mode == 'strict' then %}",
+      "Be precise and thorough.",
+      "{% else %}",
+      "Be friendly and concise.",
+      "{% end %}",
+    }
+    local doc = parser.parse_lines(lines)
+    local out = processor.evaluate(doc, base)
+    assert.equals(1, #out.messages)
+    local text = ""
+    for _, p in ipairs(out.messages[1].parts) do
+      if p.kind == "text" then
+        text = text .. p.text
+      end
+    end
+    assert.truthy(text:find("Be precise and thorough"))
+    assert.is_nil(text:find("Be friendly and concise"))
+  end)
+
+  it("evaluates {% for %} loops in @You messages", function()
+    local base = ctx.from_file("tests/fixtures/doc.chat")
+    local lines = {
+      "```lua",
+      'items = {"alpha", "beta", "gamma"}',
+      "```",
+      "@You:",
+      "Review these:",
+      "{% for _, item in ipairs(items) do %}",
+      "- {{ item }}",
+      "{% end %}",
+    }
+    local doc = parser.parse_lines(lines)
+    local out = processor.evaluate(doc, base)
+    local text = ""
+    for _, p in ipairs(out.messages[1].parts) do
+      if p.kind == "text" then
+        text = text .. p.text
+      end
+    end
+    assert.truthy(text:find("alpha"))
+    assert.truthy(text:find("beta"))
+    assert.truthy(text:find("gamma"))
+  end)
+
+  it("{% code %} error produces template diagnostic", function()
+    local base = ctx.from_file("tests/fixtures/doc.chat")
+    local lines = {
+      "@You:",
+      "{% iff true then %}",
+      "text",
+      "{% end %}",
+    }
+    local doc = parser.parse_lines(lines)
+    local out = processor.evaluate(doc, base)
+    local template_diags = vim.tbl_filter(function(d)
+      return d.type == "template"
+    end, out.diagnostics or {})
+    assert.is_true(#template_diags > 0, "Should have template diagnostic for syntax error")
+  end)
+
   it("preserves thinking nodes in evaluation", function()
     local lines = {
       "@Assistant:",

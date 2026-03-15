@@ -233,6 +233,9 @@ local function coalesce_segments(segments)
     elseif seg.kind == "expression" then
       ---@cast seg flemma.ast.ExpressionSegment
       table.insert(text_accumulator, "{{ " .. seg.code .. " }}")
+    elseif seg.kind == "code" then
+      ---@cast seg flemma.ast.CodeSegment
+      table.insert(text_accumulator, "{% " .. seg.code .. " %}")
     elseif seg.kind == "tool_use" then
       flush_text()
       table.insert(entries, {
