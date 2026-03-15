@@ -74,6 +74,47 @@ function M.build_tool_name_map(doc)
   return map
 end
 
+---@class flemma.ast.ToolSibling
+---@field use? flemma.ast.ToolUseSegment
+---@field use_message? flemma.ast.MessageNode
+---@field result? flemma.ast.ToolResultSegment
+---@field result_message? flemma.ast.MessageNode
+
+---Find the counterpart of a tool_use or tool_result segment.
+---Given a tool_use, returns the matching tool_result and its parent message.
+---Given a tool_result, returns the matching tool_use and its parent message.
+---Returns first match in document order for duplicates.
+---@param doc flemma.ast.DocumentNode
+---@param segment flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment
+---@return flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|nil counterpart
+---@return flemma.ast.MessageNode|nil counterpart_message
+function M.find_tool_sibling(doc, segment)
+  if segment.kind == "tool_use" then
+    ---@cast segment flemma.ast.ToolUseSegment
+    local target_id = segment.id
+    for _, msg in ipairs(doc.messages) do
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "tool_result" and seg.tool_use_id == target_id then
+          ---@cast seg flemma.ast.ToolResultSegment
+          return seg, msg
+        end
+      end
+    end
+  elseif segment.kind == "tool_result" then
+    ---@cast segment flemma.ast.ToolResultSegment
+    local target_id = segment.tool_use_id
+    for _, msg in ipairs(doc.messages) do
+      for _, seg in ipairs(msg.segments) do
+        if seg.kind == "tool_use" and seg.id == target_id then
+          ---@cast seg flemma.ast.ToolUseSegment
+          return seg, msg
+        end
+      end
+    end
+  end
+  return nil, nil
+end
+
 ---Find the segment and its parent message at a given cursor position.
 ---All parameters are 1-indexed (matching Neovim cursor conventions and AST position conventions).
 ---@param doc flemma.ast.DocumentNode
