@@ -13,6 +13,7 @@
 ---@class flemma.Eval
 local M = {}
 
+local compiler = require("flemma.compiler")
 local emittable = require("flemma.emittable")
 local mime_util = require("flemma.mime")
 local parser = require("flemma.parser")
@@ -115,7 +116,7 @@ end
 ---@param create_env_fn fun(): flemma.eval.Environment
 local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
   ---@param relative_path string
-  ---@param opts? { binary?: boolean, mime?: string }
+  ---@param opts? table<string, any> Template variables merged into child env. Keys `binary` and `mime` are reserved for binary mode.
   ---@return table emittable An IncludePart with an emit() method
   env.include = function(relative_path, opts)
     if type(relative_path) ~= "string" then
@@ -216,7 +217,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
       end
     end
 
-    -- Text mode: read, parse, evaluate, return composite IncludePart
+    -- Text mode: read, parse, compile, execute, return composite IncludePart
     local content, read_err = read_file(target_path)
     if not content then
       error({
@@ -238,6 +239,14 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
     child_env.__filename = target_path
     child_env.__dirname = vim.fn.fnamemodify(target_path, ":h")
 
+    -- Inject caller-provided arguments (excluding reserved keys)
+    local RESERVED_INCLUDE_KEYS = { binary = true, mime = true }
+    for key, value in pairs(opts) do
+      if not RESERVED_INCLUDE_KEYS[key] then
+        child_env[key] = value
+      end
+    end
+
     -- Create extended include stack for the child
     local child_stack = {}
     for _, p in ipairs(include_stack) do
@@ -248,26 +257,61 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
     -- Install include() on child env with extended stack
     install_include(child_env, child_stack, eval_expr_fn, create_env_fn)
 
-    -- Process segments into children for the composite part
+    -- Override pcall in child env so the compiler's expression wrappers re-throw
+    -- errors instead of degrading gracefully. Inside includes, expression errors are
+    -- fatal (matching pre-compiler behavior) — the compiler's graceful degradation
+    -- is only appropriate at the top-level processor where messages are evaluated.
+    child_env.pcall = function(fn, ...)
+      local results = { pcall(fn, ...) }
+      if not results[1] then
+        local err = results[2]
+        -- Enrich structured errors from deeper includes with this level's stack
+        if type(err) == "table" and err.type and not err.include_stack then
+          err.include_stack = { unpack(child_stack) }
+        end
+        error(err)
+      end
+      return unpack(results)
+    end
+
+    -- Compile and execute via compiler
+    local compile_result = compiler.compile(segments)
+    local compiled_parts, compile_diagnostics = compiler.execute(compile_result, child_env)
+
+    -- Re-throw fatal diagnostics (severity "error") so include errors propagate
+    -- to the caller. The custom pcall above ensures expression errors are promoted
+    -- to chunk-level failures, which the compiler records as severity "error".
+    for _, diag in ipairs(compile_diagnostics) do
+      if diag.severity == "error" then
+        error(diag.error or "Unknown template error")
+      end
+    end
+
+    -- Propagate non-fatal diagnostics to parent
+    local parent_collector = env[symbols.DIAGNOSTICS]
+    if parent_collector then
+      for _, diag in ipairs(compile_diagnostics) do
+        table.insert(parent_collector, diag)
+      end
+    end
+
+    -- Convert compiler output parts to emittable children for composite_include_part
     local children = {}
-    for _, seg in ipairs(segments) do
-      if seg.kind == "text" then
-        children[#children + 1] = seg.value
-      elseif seg.kind == "expression" then
-        local ok, result = pcall(eval_expr_fn, seg.code, child_env)
-        if not ok then
-          -- Enrich structured errors from deeper includes with this level's stack
-          if type(result) == "table" and result.type and not result.include_stack then
-            result.include_stack = { unpack(child_stack) }
-          end
-          error(result)
-        end
-        -- If result is emittable, keep it as a child; otherwise stringify
-        if emittable.is_emittable(result) then
-          children[#children + 1] = result
-        else
-          children[#children + 1] = result == nil and "" or tostring(result)
-        end
+    for _, part in ipairs(compiled_parts) do
+      if part.kind == "text" then
+        children[#children + 1] = part.text
+      elseif part.kind == "file" then
+        children[#children + 1] = emittable.binary_include_part(part.filename, part.mime_type, part.data)
+      else
+        -- Structural parts (tool_use, tool_result, thinking, aborted): wrap as emittable
+        children[#children + 1] = {
+          _part = part,
+          ---@param self table
+          ---@param ctx flemma.emittable.EmitContext
+          emit = function(self, ctx)
+            table.insert(ctx.parts, self._part)
+          end,
+        }
       end
     end
 
@@ -287,6 +331,13 @@ local function ensure_env_capabilities(env, eval_expr_fn, create_env_fn)
     end
     install_include(env, initial_stack, eval_expr_fn, create_env_fn)
   end
+end
+
+--- Ensure an eval environment has all capabilities installed (include, etc.).
+--- Call this before passing the env to the compiler for template execution.
+---@param env flemma.eval.Environment
+function M.ensure_env(env)
+  ensure_env_capabilities(env, M.eval_expression, M.create_safe_env)
 end
 
 --- Create a safe environment for executing Lua code

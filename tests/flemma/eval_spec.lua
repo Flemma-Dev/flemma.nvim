@@ -228,6 +228,88 @@ describe("flemma.eval", function()
     end)
   end)
 
+  describe("include() parameterized arguments", function()
+    it("should pass arguments to the included template", function()
+      local emittable_mod = require("flemma.emittable")
+
+      local temp_dir = vim.fn.tempname() .. "_include_args_test"
+      vim.fn.mkdir(temp_dir, "p")
+
+      -- Create a template file that uses a parameter
+      local greeting_file = temp_dir .. "/greeting.md"
+      local f = io.open(greeting_file, "w")
+      f:write("Hello, {{ name }}!")
+      f:close()
+
+      -- Create parent environment
+      local parent_file = temp_dir .. "/parent.chat"
+      local env = eval.create_safe_env()
+      env.__filename = parent_file
+      env.__dirname = temp_dir
+
+      -- Call include() with arguments
+      local result = eval.eval_expression("include('greeting.md', { name = 'Alice' })", env)
+      assert.is_true(emittable_mod.is_emittable(result))
+
+      -- Emit and check the output
+      local ctx = emittable_mod.EmitContext.new()
+      result:emit(ctx)
+
+      local texts = {}
+      for _, part in ipairs(ctx.parts) do
+        if part.kind == "text" then
+          table.insert(texts, part.text)
+        end
+      end
+      local output = table.concat(texts, "")
+      assert.are.equal("Hello, Alice!", output)
+
+      vim.fn.delete(temp_dir, "rf")
+    end)
+
+    it("should isolate arguments from parent environment", function()
+      local emittable_mod = require("flemma.emittable")
+
+      local temp_dir = vim.fn.tempname() .. "_include_isolation_args_test"
+      vim.fn.mkdir(temp_dir, "p")
+
+      -- Create a template file that uses 'name'
+      local child_file = temp_dir .. "/child.md"
+      local f = io.open(child_file, "w")
+      f:write("{{ name }}")
+      f:close()
+
+      -- Create parent environment with name = "Parent"
+      local parent_file = temp_dir .. "/parent.chat"
+      local env = eval.create_safe_env()
+      env.__filename = parent_file
+      env.__dirname = temp_dir
+      env.name = "Parent"
+
+      -- Call include() with name = "Child" as argument
+      local result = eval.eval_expression("include('child.md', { name = 'Child' })", env)
+      assert.is_true(emittable_mod.is_emittable(result))
+
+      -- Emit and check the child got "Child", not "Parent"
+      local ctx = emittable_mod.EmitContext.new()
+      result:emit(ctx)
+
+      local texts = {}
+      for _, part in ipairs(ctx.parts) do
+        if part.kind == "text" then
+          table.insert(texts, part.text)
+        end
+      end
+      local output = table.concat(texts, "")
+      assert.are.equal("Child", output)
+
+      -- Verify parent environment is unchanged
+      assert.are.equal("Parent", env.name)
+
+      vim.fn.delete(temp_dir, "rf")
+    end)
+  end)
+
   describe("include() absolute paths", function()
     it("should resolve absolute paths without prepending dirname", function()
       local emittable = require("flemma.emittable")

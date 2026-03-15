@@ -307,19 +307,36 @@ function M.execute(result, env)
     end
   end
 
-  -- __emit_expr_error: report expression evaluation failures as diagnostics
+  -- __emit_expr_error: report expression evaluation failures as diagnostics.
+  -- Structured error tables (e.g., from include()) are used as-is with defaults
+  -- filled in. Plain errors are wrapped in a new diagnostic.
   ---@param err any
   ---@param segment_index integer
   local function emit_expr_error(err, segment_index)
     local segment = result.segments[segment_index]
-    table.insert(diagnostics, {
-      type = "expression",
-      severity = "warning",
-      expression = segment and segment.code or nil,
-      error = tostring(err),
+    local defaults = {
       position = segment and segment.position or nil,
       source_file = env.__filename or "N/A",
-    })
+      severity = "warning",
+    }
+    if type(err) == "table" and err.type then
+      -- Structured error: preserve its type and fields, fill in defaults
+      for k, v in pairs(defaults) do
+        if err[k] == nil then
+          err[k] = v
+        end
+      end
+      table.insert(diagnostics, err)
+    else
+      table.insert(diagnostics, {
+        type = "expression",
+        severity = "warning",
+        expression = segment and segment.code or nil,
+        error = tostring(err),
+        position = segment and segment.position or nil,
+        source_file = env.__filename or "N/A",
+      })
+    end
   end
 
   -- Ensure essential builtins are available in the env.

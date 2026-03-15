@@ -1,7 +1,6 @@
+local compiler = require("flemma.compiler")
 local ctxutil = require("flemma.context")
 local eval = require("flemma.eval")
-local emittable = require("flemma.emittable")
-local json = require("flemma.utilities.json")
 local codeblock_parsers = require("flemma.codeblock.parsers")
 local parser = require("flemma.parser")
 local symbols = require("flemma.symbols")
@@ -31,21 +30,6 @@ local function error_to_diagnostic(err, defaults, fallback)
     fallback[k] = v
   end
   return fallback
-end
-
----@param v any
----@return string
-local function to_text(v)
-  if v == nil then
-    return ""
-  end
-  if type(v) == "table" then
-    local ok, encoded = pcall(json.encode, v)
-    if ok then
-      return encoded
-    end
-  end
-  return tostring(v)
 end
 
 -- Part types shared with ast.lua (canonical definitions live there)
@@ -188,91 +172,54 @@ function M.evaluate(doc, base_context, opts)
   -- 2) Evaluate messages
   local evaluated_messages = {}
   local env = ctxutil.to_eval_env(context, opts.bufnr)
+  eval.ensure_env(env)
 
   for _, msg in ipairs(doc.messages or {}) do
-    local parts = {}
+    local parts
 
-    for _, seg in ipairs(msg.segments or {}) do
-      if seg.kind == "text" then
-        if seg.value and #seg.value > 0 then
-          table.insert(parts, { kind = "text", text = seg.value })
-        end
-      elseif seg.kind == "thinking" then
-        -- Preserve thinking nodes - providers can choose to filter them
-        -- Include signature if present (for provider state preservation)
-        -- Include redacted flag for encrypted thinking blocks
-        table.insert(parts, {
-          kind = "thinking",
-          content = seg.content,
-          signature = seg.signature, -- table { value, provider } or nil
-          redacted = seg.redacted,
-        })
-      elseif seg.kind == "expression" then
-        local ok, result = pcall(eval.eval_expression, seg.code, env)
-        if not ok then
-          table.insert(
-            diagnostics,
-            error_to_diagnostic(result, {
-              position = seg.position,
-              message_role = msg.role,
-              source_file = context:get_filename() or "N/A",
-              severity = "warning",
-            }, {
-              type = "expression",
-              expression = seg.code,
-            })
-          )
-          -- Keep original expression text in output
-          table.insert(parts, { kind = "text", text = "{{" .. (seg.code or "") .. "}}" })
-        elseif emittable.is_emittable(result) then
-          -- Emittable result: create EmitContext and collect parts
-          local emit_ctx = emittable.EmitContext.new({
-            position = seg.position,
-            diagnostics = diagnostics,
-            source_file = context:get_filename() or "N/A",
-          })
-          local emit_ok, emit_err = pcall(result.emit, result, emit_ctx)
-          if emit_ok then
-            for _, ep in ipairs(emit_ctx.parts) do
-              table.insert(parts, ep)
-            end
-          else
-            table.insert(diagnostics, {
-              type = "expression",
-              severity = "warning",
-              expression = seg.code,
-              error = "Error during emit: " .. tostring(emit_err),
-              position = seg.position,
-              message_role = msg.role,
-              source_file = context:get_filename() or "N/A",
-            })
-            table.insert(parts, { kind = "text", text = "{{" .. (seg.code or "") .. "}}" })
+    if msg.role == "Assistant" then
+      -- @Assistant messages: pass-through, no template evaluation
+      parts = {}
+      for _, seg in ipairs(msg.segments or {}) do
+        if seg.kind == "text" then
+          if seg.value and #seg.value > 0 then
+            table.insert(parts, { kind = "text", text = seg.value })
           end
-        else
-          local str_result = to_text(result)
-          if str_result and #str_result > 0 then
-            table.insert(parts, { kind = "text", text = str_result })
-          end
-        end
-      elseif seg.kind == "tool_use" then
-        table.insert(parts, {
-          kind = "tool_use",
-          id = seg.id,
-          name = seg.name,
-          input = seg.input,
-        })
-      elseif seg.kind == "tool_result" then
-        -- Skip flemma:tool placeholder blocks (they are not resolved results)
-        if not seg.status then
+        elseif seg.kind == "thinking" then
           table.insert(parts, {
-            kind = "tool_result",
-            tool_use_id = seg.tool_use_id,
+            kind = "thinking",
             content = seg.content,
-            is_error = seg.is_error,
+            signature = seg.signature,
+            redacted = seg.redacted,
           })
+        elseif seg.kind == "tool_use" then
+          table.insert(parts, {
+            kind = "tool_use",
+            id = seg.id,
+            name = seg.name,
+            input = seg.input,
+          })
+        elseif seg.kind == "tool_result" then
+          if not seg.status then
+            table.insert(parts, {
+              kind = "tool_result",
+              tool_use_id = seg.tool_use_id,
+              content = seg.content,
+              is_error = seg.is_error,
+            })
+          end
+        elseif seg.kind == "aborted" then
+          table.insert(parts, { kind = "aborted", message = seg.message })
         end
-      elseif seg.kind == "aborted" then
-        table.insert(parts, { kind = "aborted", message = seg.message })
+      end
+    else
+      -- @System and @You: compile and execute via template engine
+      local compile_result = compiler.compile(msg.segments or {})
+      local exec_parts, exec_diagnostics = compiler.execute(compile_result, env)
+      parts = exec_parts
+      for _, d in ipairs(exec_diagnostics) do
+        d.message_role = msg.role
+        table.insert(diagnostics, d)
       end
     end
 

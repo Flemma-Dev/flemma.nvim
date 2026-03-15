@@ -448,10 +448,10 @@ describe("Processor", function()
     for _, p in ipairs(parts) do
       kinds[#kinds + 1] = p.kind
     end
-    -- Expected: text("File1: "), text("hello"), text(" and File2: "), file, text(".")
+    -- The compiler merges adjacent text segments, so we get:
+    -- text("File1: hello and File2: "), file(a.txt), text(".")
     assert.equals("text", kinds[1])
-    assert.equals("text", kinds[2])
-    assert.equals("file", kinds[4])
+    assert.equals("file", kinds[2])
     local file_diags = vim.tbl_filter(function(d)
       return d.type == "file"
     end, out.diagnostics or {})
