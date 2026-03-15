@@ -14,6 +14,7 @@ local str = require("flemma.utilities.string")
 
 M.MAX_LINES = 2000
 M.MAX_BYTES = 50 * 1024 -- 50KB
+M.MAX_LINE_CHARS = 500
 
 ---@class flemma.utilities.TruncationOptions
 ---@field max_lines? integer Maximum number of lines (default: 2000)
@@ -119,6 +120,25 @@ function M.truncate_head(content, opts)
     last_line_partial = false,
     first_line_exceeds_limit = false,
   }
+end
+
+---@class flemma.utilities.TruncateLineResult
+---@field text string The (possibly truncated) line text
+---@field truncated boolean Whether truncation occurred
+
+---Truncate a single line to a maximum character count.
+---@param line string The line to truncate
+---@param max_chars? integer Maximum characters (default: MAX_LINE_CHARS)
+---@return flemma.utilities.TruncateLineResult
+function M.truncate_line(line, max_chars)
+  max_chars = max_chars or M.MAX_LINE_CHARS
+  if #line <= max_chars then
+    return { text = line, truncated = false }
+  end
+  local suffix = "... [truncated]"
+  local keep = max_chars - #suffix
+  if keep < 1 then keep = 1 end
+  return { text = line:sub(1, keep) .. suffix, truncated = true }
 end
 
 ---Truncate content from the tail (keep last N lines/bytes).
