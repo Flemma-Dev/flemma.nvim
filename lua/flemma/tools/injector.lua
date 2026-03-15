@@ -6,6 +6,7 @@ local M = {}
 local buffer = require("flemma.utilities.buffer")
 local codeblock = require("flemma.codeblock")
 local json = require("flemma.utilities.json")
+local ast = require("flemma.ast")
 local parser = require("flemma.parser")
 local roles = require("flemma.utilities.roles")
 
@@ -26,38 +27,23 @@ function M.resolve_error_message(status, content)
   return M.DENIED_MESSAGE
 end
 
---- Find the assistant message containing a tool_use with the given ID
---- @param doc table Parsed document AST
---- @param tool_id string Tool use ID
---- @return table|nil assistant_msg, integer|nil msg_index
-local function find_assistant_message_for_tool(doc, tool_id)
+---Find the tool_use segment for a given tool ID
+---@param doc flemma.ast.DocumentNode
+---@param tool_id string
+---@return flemma.ast.ToolUseSegment|nil segment
+---@return flemma.ast.MessageNode|nil message
+---@return integer|nil message_index
+local function find_tool_use_by_id(doc, tool_id)
   for i, msg in ipairs(doc.messages) do
     if msg.role == "Assistant" then
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "tool_use" and seg.id == tool_id then
-          return msg, i
+          return seg --[[@as flemma.ast.ToolUseSegment]], msg, i
         end
       end
     end
   end
-  return nil, nil
-end
-
---- Find existing tool_result segment for a tool_id in the document
---- @param doc table Parsed document AST
---- @param tool_id string Tool use ID
---- @return table|nil segment, table|nil message
-local function find_existing_tool_result(doc, tool_id)
-  for _, msg in ipairs(doc.messages) do
-    if roles.is_user(msg.role) then
-      for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_result" and seg.tool_use_id == tool_id then
-          return seg, msg
-        end
-      end
-    end
-  end
-  return nil, nil
+  return nil, nil, nil
 end
 
 --- Find the @You: message immediately following a given message index
@@ -153,17 +139,15 @@ function M.inject_placeholder(bufnr, tool_id, inject_opts)
 
   local doc = parser.get_parsed_document(bufnr)
 
-  -- Check if tool_result already exists for this tool_id
-  local existing_result = find_existing_tool_result(doc, tool_id)
-  if existing_result then
-    -- Reuse existing - return its position
-    return existing_result.position.start_line, nil, { modified = false }
+  local tool_use_seg, assistant_msg, assistant_idx = find_tool_use_by_id(doc, tool_id)
+  if not tool_use_seg or not assistant_msg or not assistant_idx then
+    return nil, "Tool use block not found in buffer", { modified = false }
   end
 
-  -- Find the assistant message containing this tool_use
-  local assistant_msg, assistant_idx = find_assistant_message_for_tool(doc, tool_id)
-  if not assistant_msg or not assistant_idx then
-    return nil, "Tool use block not found in buffer", { modified = false }
+  -- Check if tool_result already exists for this tool_id
+  local existing_result = ast.find_tool_sibling(doc, tool_use_seg)
+  if existing_result and existing_result.kind == "tool_result" then
+    return existing_result.position.start_line, nil, { modified = false }
   end
 
   -- Get all tool_use segments from this message (ordered by position)
@@ -266,7 +250,7 @@ function M.inject_placeholder(bufnr, tool_id, inject_opts)
     end
   else
     -- No @You: message exists - create one after the assistant message
-    local insert_after = assistant_msg.position.end_line
+    local insert_after = assistant_msg.position.end_line --[[@as integer]]
     set_lines(bufnr, insert_after, insert_after, { "", "@You:", "", header_text, "", fence_open, "```" })
     return insert_after + 4, nil, { modified = true } -- +1 blank +1 @You: +1 blank +1 header = +4
   end
@@ -287,14 +271,16 @@ function M.inject_result(bufnr, tool_id, result)
   local doc = parser.get_parsed_document(bufnr)
 
   -- Find existing tool_result placeholder
-  local existing_seg = find_existing_tool_result(doc, tool_id)
+  local tool_use_seg = find_tool_use_by_id(doc, tool_id)
+  local sibling = tool_use_seg and ast.find_tool_sibling(doc, tool_use_seg) or nil
+  local existing_seg = (sibling and sibling.kind == "tool_result") and sibling --[[@as flemma.ast.ToolResultSegment]] or nil
 
   local content_lines, is_error = format_result_lines(result)
 
   if existing_seg then
     -- Update existing: replace content from header line to end of block
     local header_line = existing_seg.position.start_line
-    local end_line = existing_seg.position.end_line
+    local end_line = existing_seg.position.end_line --[[@as integer]]
 
     -- Rebuild header with optional (error) suffix
     local header_text = ("**Tool Result:** `%s`"):format(tool_id)
@@ -349,10 +335,12 @@ function M.strip_fence_info_string(bufnr, tool_id)
 
   local doc = parser.get_parsed_document(bufnr)
 
-  local seg = find_existing_tool_result(doc, tool_id)
-  if not seg then
+  local tool_use_seg = find_tool_use_by_id(doc, tool_id)
+  local seg = tool_use_seg and ast.find_tool_sibling(doc, tool_use_seg) or nil
+  if not seg or seg.kind ~= "tool_result" then
     return false, "Tool result not found: " .. tool_id
   end
+  ---@cast seg flemma.ast.ToolResultSegment
 
   if not seg.fence_line then
     return false, "Tool result has no flemma:tool fence: " .. tool_id
