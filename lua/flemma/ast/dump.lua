@@ -18,6 +18,7 @@ local NODE_KINDS = {
   message = true,
   text = true,
   expression = true,
+  code = true,
   thinking = true,
   tool_use = true,
   tool_result = true,
@@ -216,6 +217,22 @@ local function inline_fields(seg)
     if seg.status then
       table.insert(parts, 'status="' .. seg.status .. '"')
     end
+  elseif kind == "expression" then
+    ---@cast seg flemma.ast.ExpressionSegment
+    if seg.trim_before then
+      table.insert(parts, "trim_before")
+    end
+    if seg.trim_after then
+      table.insert(parts, "trim_after")
+    end
+  elseif kind == "code" then
+    ---@cast seg flemma.ast.CodeSegment
+    if seg.trim_before then
+      table.insert(parts, "trim_before")
+    end
+    if seg.trim_after then
+      table.insert(parts, "trim_after")
+    end
   elseif kind == "aborted" then
     ---@cast seg flemma.ast.AbortedSegment
     table.insert(parts, 'message="' .. seg.message .. '"')
@@ -303,6 +320,9 @@ function M.tree(node, opts)
     append_multiline(output, level + 1, "value", node.value)
   elseif kind == "expression" then
     ---@cast node flemma.ast.ExpressionSegment
+    append_multiline(output, level + 1, "code", node.code)
+  elseif kind == "code" then
+    ---@cast node flemma.ast.CodeSegment
     append_multiline(output, level + 1, "code", node.code)
   elseif kind == "thinking" then
     ---@cast node flemma.ast.ThinkingSegment
