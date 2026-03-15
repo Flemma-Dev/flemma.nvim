@@ -38,7 +38,8 @@ local function find_tool_use_by_id(doc, tool_id)
     if msg.role == "Assistant" then
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "tool_use" and seg.id == tool_id then
-          return seg --[[@as flemma.ast.ToolUseSegment]], msg, i
+          ---@cast seg flemma.ast.ToolUseSegment
+          return seg, msg, i
         end
       end
     end
@@ -273,7 +274,8 @@ function M.inject_result(bufnr, tool_id, result)
   -- Find existing tool_result placeholder
   local tool_use_seg = find_tool_use_by_id(doc, tool_id)
   local sibling = tool_use_seg and ast.find_tool_sibling(doc, tool_use_seg) or nil
-  local existing_seg = (sibling and sibling.kind == "tool_result") and sibling --[[@as flemma.ast.ToolResultSegment]] or nil
+  local existing_seg = (sibling and sibling.kind == "tool_result") and sibling --[[@as flemma.ast.ToolResultSegment]]
+    or nil
 
   local content_lines, is_error = format_result_lines(result)
 
