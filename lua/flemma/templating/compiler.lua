@@ -1,7 +1,7 @@
 --- Template compiler for Flemma
 --- Compiles AST segment lists into Lua source code with line maps,
 --- and executes compiled templates in sandboxed environments.
----@class flemma.Compiler
+---@class flemma.templating.Compiler
 local M = {}
 
 local ast = require("flemma.ast")
@@ -10,11 +10,11 @@ local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local preproc_utils = require("flemma.preprocessor.utilities")
 
----@class flemma.compiler.LineMapEntry
+---@class flemma.templating.compiler.LineMapEntry
 ---@field lnum integer Buffer line number (1-based)
 
----@class flemma.compiler.CompilationResult
----@field line_map flemma.compiler.LineMapEntry[] Generated-line → buffer-line mapping
+---@class flemma.templating.compiler.CompilationResult
+---@field line_map flemma.templating.compiler.LineMapEntry[] Generated-line → buffer-line mapping
 ---@field source string The generated Lua source
 ---@field segments flemma.ast.Segment[] Original segment list (for __emit_part references)
 ---@field error string|nil Syntax error from load() validation (non-nil means invalid code)
@@ -84,7 +84,7 @@ end
 ---   __emit_expr_error(err, idx) — report expression evaluation failures
 ---   __segments              — the original segment array (for index references)
 ---@param segments flemma.ast.Segment[]
----@return flemma.compiler.CompilationResult
+---@return flemma.templating.compiler.CompilationResult
 function M.compile(segments)
   segments = apply_trim(segments)
 
@@ -222,7 +222,7 @@ local function parse_error_line(err_msg)
 end
 
 --- Look up buffer line from a generated-code line number.
----@param line_map flemma.compiler.LineMapEntry[]
+---@param line_map flemma.templating.compiler.LineMapEntry[]
 ---@param generated_line integer|nil
 ---@return integer lnum Buffer line (0 if not found)
 local function lookup_lnum(line_map, generated_line)
@@ -237,7 +237,7 @@ end
 --- Loads the source with the provided env, installs __emit/__emit_part/__segments,
 --- then runs. Expression errors degrade gracefully (emit raw text); code block
 --- errors fail the entire message with diagnostics.
----@param result flemma.compiler.CompilationResult
+---@param result flemma.templating.compiler.CompilationResult
 ---@param env table Execution environment
 ---@return table[] parts Evaluated parts
 ---@return table[] diagnostics

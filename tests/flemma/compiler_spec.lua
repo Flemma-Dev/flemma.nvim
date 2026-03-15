@@ -1,13 +1,13 @@
 local ast = require("flemma.ast")
 
-describe("flemma.compiler", function()
+describe("flemma.templating.compiler", function()
   local compiler
 
   before_each(function()
-    package.loaded["flemma.compiler"] = nil
+    package.loaded["flemma.templating.compiler"] = nil
     package.loaded["flemma.ast"] = nil
     package.loaded["flemma.ast.nodes"] = nil
-    compiler = require("flemma.compiler")
+    compiler = require("flemma.templating.compiler")
   end)
 
   describe("compile", function()

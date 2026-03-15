@@ -13,7 +13,7 @@
 ---@class flemma.Eval
 local M = {}
 
-local compiler = require("flemma.compiler")
+local compiler = require("flemma.templating.compiler")
 local emittable = require("flemma.emittable")
 local log = require("flemma.logging")
 local mime_util = require("flemma.mime")
