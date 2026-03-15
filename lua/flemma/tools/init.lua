@@ -15,6 +15,9 @@ local BUILTIN_TOOLS = {
   "flemma.tools.definitions.read",
   "flemma.tools.definitions.edit",
   "flemma.tools.definitions.write",
+  "flemma.tools.definitions.grep",
+  "flemma.tools.definitions.find",
+  "flemma.tools.definitions.ls",
 }
 
 --------------------------------------------------------------------------------
