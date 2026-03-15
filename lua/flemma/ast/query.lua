@@ -115,6 +115,36 @@ function M.find_tool_sibling(doc, segment)
   return nil, nil
 end
 
+---Build a complete index of all tool pairs in the document, keyed by tool ID.
+---For duplicate tool_result segments with the same tool_use_id, the last one
+---in document order wins (most recent result is the current one).
+---@param doc flemma.ast.DocumentNode
+---@return table<string, flemma.ast.ToolSibling>
+function M.build_tool_sibling_table(doc)
+  ---@type table<string, flemma.ast.ToolSibling>
+  local index = {}
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "tool_use" then
+        ---@cast seg flemma.ast.ToolUseSegment
+        if not index[seg.id] then
+          index[seg.id] = {}
+        end
+        index[seg.id].use = seg
+        index[seg.id].use_message = msg
+      elseif seg.kind == "tool_result" then
+        ---@cast seg flemma.ast.ToolResultSegment
+        if not index[seg.tool_use_id] then
+          index[seg.tool_use_id] = {}
+        end
+        index[seg.tool_use_id].result = seg
+        index[seg.tool_use_id].result_message = msg
+      end
+    end
+  end
+  return index
+end
+
 ---Find the segment and its parent message at a given cursor position.
 ---All parameters are 1-indexed (matching Neovim cursor conventions and AST position conventions).
 ---@param doc flemma.ast.DocumentNode

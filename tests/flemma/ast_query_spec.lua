@@ -242,4 +242,132 @@ describe("ast.query", function()
       assert.equals("pending", counterpart.status)
     end)
   end)
+
+  describe("build_tool_sibling_table", function()
+    it("returns empty table for empty document", function()
+      local doc = parser.parse_lines({})
+      local table_ = ast.build_tool_sibling_table(doc)
+      assert.same({}, table_)
+    end)
+
+    it("indexes paired tool use and result", function()
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`call_x`)",
+        "```json",
+        '{"command": "ls"}',
+        "```",
+        "@You:",
+        "**Tool Result:** `call_x`",
+        "",
+        "```",
+        "output",
+        "```",
+      })
+
+      local siblings = ast.build_tool_sibling_table(doc)
+      assert.is_not_nil(siblings["call_x"])
+      assert.is_not_nil(siblings["call_x"].use)
+      assert.equals("bash", siblings["call_x"].use.name)
+      assert.is_not_nil(siblings["call_x"].use_message)
+      assert.equals("Assistant", siblings["call_x"].use_message.role)
+      assert.is_not_nil(siblings["call_x"].result)
+      assert.equals("call_x", siblings["call_x"].result.tool_use_id)
+      assert.is_not_nil(siblings["call_x"].result_message)
+      assert.equals("You", siblings["call_x"].result_message.role)
+    end)
+
+    it("handles orphan tool_use (no result)", function()
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`call_orphan_use`)",
+        "```json",
+        '{"command": "pwd"}',
+        "```",
+      })
+
+      local siblings = ast.build_tool_sibling_table(doc)
+      assert.is_not_nil(siblings["call_orphan_use"])
+      assert.is_not_nil(siblings["call_orphan_use"].use)
+      assert.is_nil(siblings["call_orphan_use"].result)
+    end)
+
+    it("last tool_result wins for duplicate tool_use_id", function()
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`call_dup2`)",
+        "```json",
+        '{"command": "echo"}',
+        "```",
+        "@You:",
+        "**Tool Result:** `call_dup2`",
+        "",
+        "```",
+        "first",
+        "```",
+        "**Tool Result:** `call_dup2`",
+        "",
+        "```",
+        "second",
+        "```",
+      })
+
+      local siblings = ast.build_tool_sibling_table(doc)
+      assert.is_not_nil(siblings["call_dup2"])
+      assert.equals("second", siblings["call_dup2"].result.content)
+    end)
+
+    it("preserves status on tool_result entries", function()
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`call_status`)",
+        "```json",
+        '{"command": "rm /"}',
+        "```",
+        "@You:",
+        "**Tool Result:** `call_status`",
+        "",
+        "```flemma:tool status=pending",
+        "```",
+      })
+
+      local siblings = ast.build_tool_sibling_table(doc)
+      assert.is_not_nil(siblings["call_status"])
+      assert.is_not_nil(siblings["call_status"].result)
+      assert.equals("pending", siblings["call_status"].result.status)
+    end)
+
+    it("indexes multiple pairs correctly", function()
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`id_1`)",
+        "```json",
+        '{"command": "a"}',
+        "```",
+        "**Tool Use:** `read` (`id_2`)",
+        "```json",
+        '{"path": "b"}',
+        "```",
+        "@You:",
+        "**Tool Result:** `id_1`",
+        "",
+        "```",
+        "res_a",
+        "```",
+        "**Tool Result:** `id_2`",
+        "",
+        "```",
+        "res_b",
+        "```",
+      })
+
+      local siblings = ast.build_tool_sibling_table(doc)
+      assert.is_not_nil(siblings["id_1"])
+      assert.is_not_nil(siblings["id_2"])
+      assert.equals("bash", siblings["id_1"].use.name)
+      assert.equals("read", siblings["id_2"].use.name)
+      assert.equals("res_a", siblings["id_1"].result.content)
+      assert.equals("res_b", siblings["id_2"].result.content)
+    end)
+  end)
 end)
