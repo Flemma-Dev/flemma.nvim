@@ -140,6 +140,9 @@
 ---@field modules? string[] Lua module paths for third-party tool sources
 ---@field max_concurrent integer
 
+---@class flemma.config.TemplatingConfig
+---@field modules? string[] Lua module paths for third-party environment populators
+
 ---@class flemma.config.AutoClose
 ---@field thinking boolean
 ---@field tool_use boolean
@@ -189,6 +192,7 @@
 ---@field model? string
 ---@field parameters? flemma.config.Parameters
 ---@field tools? flemma.config.ToolsConfig
+---@field templating? flemma.config.TemplatingConfig
 ---@field presets? table<string, any>
 ---@field text_object? string|false
 ---@field editing? flemma.config.Editing
@@ -213,6 +217,7 @@
 ---@field provider string
 ---@field parameters flemma.config.Parameters
 ---@field tools flemma.config.ToolsConfig
+---@field templating flemma.config.TemplatingConfig
 ---@field presets table<string, any>
 ---@field text_object string|false
 ---@field editing flemma.config.Editing
@@ -339,6 +344,9 @@ return {
       cwd = "urn:flemma:buffer:path",
     },
     modules = {}, -- Lua module paths for third-party tool sources (e.g., "3rd.tools.todos")
+  },
+  templating = {
+    modules = {}, -- Lua module paths for third-party environment populators (e.g., "my.templating.unsafe_io")
   },
   presets = {}, -- Named presets for :Flemma switch (use ["$name"] key syntax)
   text_object = "m", -- Default text object key, set to false to disable
