@@ -16,6 +16,7 @@ local parser = require("flemma.parser")
 local cursor = require("flemma.cursor")
 local writequeue = require("flemma.buffer.writequeue")
 local str = require("flemma.utilities.string")
+local ast = require("flemma.ast")
 
 -- Extmark priority constants
 -- Higher values take precedence when multiple extmarks overlap on the same line.
@@ -1054,18 +1055,7 @@ end
 function M.add_tool_previews(bufnr, doc)
   vim.api.nvim_buf_clear_namespace(bufnr, tool_preview_ns, 0, -1)
 
-  -- Build tool_use lookup: id -> ToolUseSegment
-  ---@type table<string, flemma.ast.ToolUseSegment>
-  local tool_use_map = {}
-  for _, msg in ipairs(doc.messages) do
-    if msg.role == "Assistant" then
-      for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_use" then
-          tool_use_map[seg.id] = seg --[[@as flemma.ast.ToolUseSegment]]
-        end
-      end
-    end
-  end
+  local siblings = ast.build_tool_sibling_table(doc)
 
   -- Compute available text width from the buffer's window
   local winid = vim.fn.bufwinid(bufnr)
@@ -1078,7 +1068,8 @@ function M.add_tool_previews(bufnr, doc)
     if roles.is_user(msg.role) then
       for _, seg in ipairs(msg.segments) do
         if seg.kind == "tool_result" and seg.status and seg.content == "" then
-          local tool_use = tool_use_map[seg.tool_use_id]
+          local sibling = siblings[seg.tool_use_id]
+          local tool_use = sibling and sibling.use or nil
           if tool_use then
             -- Opening fence is one line before closing fence (empty content)
             local opening_fence_line = seg.position.end_line - 1
@@ -1326,22 +1317,13 @@ function M.reposition_tool_indicators(bufnr)
     return
   end
 
-  -- Build tool_use_id → start_line map from AST
   local doc = parser.get_parsed_document(bufnr)
-  local result_positions = {}
-  for _, msg in ipairs(doc.messages) do
-    if roles.is_user(msg.role) then
-      for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_result" then
-          result_positions[seg.tool_use_id] = seg.position.start_line - 1 -- 0-based
-        end
-      end
-    end
-  end
+  local siblings = ast.build_tool_sibling_table(doc)
 
   local indicators = get_tool_indicators(bufnr)
   for tool_id, ind in pairs(indicators) do
-    local target_line = result_positions[tool_id]
+    local sibling = siblings[tool_id]
+    local target_line = sibling and sibling.result and (sibling.result.position.start_line - 1) or nil
     if target_line then
       local current_line = get_extmark_line(bufnr, ind.extmark_id)
       if current_line and current_line ~= target_line then
