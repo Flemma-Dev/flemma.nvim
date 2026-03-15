@@ -220,7 +220,7 @@ return {
     assistant = "Normal", -- Highlight group or hex color for assistant messages
     lua_expression = "PreProc", -- Highlight group or hex color for {{ expression }} syntax
     lua_code_block = "PreProc", -- Highlight group or hex color for {% code %} block syntax
-    lua_delimiter = "Delimiter", -- Highlight group or hex color for template delimiters ({{ }}, {% %})
+    lua_delimiter = "FlemmaLuaExpression", -- Highlight group or hex color for template delimiters ({{ }}, {% %})
     user_file_reference = "Include", -- Highlight group or hex color for @./file references in user messages
     thinking_tag = "Comment", -- Highlight group or hex color for <thinking> and </thinking> tags
     thinking_block = { dark = "Comment+bg:#102020-fg:#111111", light = "Comment-bg:#102020+fg:#111111" }, -- Highlight group or hex color for content inside <thinking> blocks
