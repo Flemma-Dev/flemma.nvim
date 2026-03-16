@@ -282,7 +282,7 @@ return {
     },
 
     vertex = {
-      default = "gemini-2.5-pro",
+      default = "gemini-3.1-pro-preview",
       models = {
         -- Gemini 3.1 Pro Preview
         ["gemini-3.1-pro-preview"] = {
@@ -426,7 +426,7 @@ return {
     },
 
     openai = {
-      default = "gpt-5",
+      default = "gpt-5.4",
       models = {
         -- GPT-5.4 models
         ["gpt-5.4"] = {

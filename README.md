@@ -104,7 +104,7 @@ secret-tool store --label="Vertex AI Service Account" service vertex key api pro
    - export them via `VERTEX_SERVICE_ACCOUNT='{"type": "..."}'`, **or**
    - store them in the Secret Service entry above (the JSON is stored verbatim).
 3. Ensure the Google Cloud CLI is on your `$PATH`; Flemma shells out to `gcloud auth print-access-token` whenever it needs to refresh the token.
-4. Set the project/location in configuration or via `:Flemma switch vertex gemini-2.5-pro project_id=my-project location=us-central1`.
+4. Set the project/location in configuration or via `:Flemma switch vertex gemini-3.1-pro-preview project_id=my-project location=us-central1`.
 
 **Note:** If you only supply `VERTEX_AI_ACCESS_TOKEN`, Flemma uses that token until it expires and skips `gcloud`.
 
@@ -299,11 +299,14 @@ When thinking is active, the Lualine component shows the resolved level – e.g.
 
 ### Provider-specific capabilities
 
-| Provider  | Defaults            | Extra parameters                                                                                                        | Notes                                                                              |
-| --------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Anthropic | `claude-sonnet-4-6` | `thinking_budget` overrides the unified `thinking` parameter with an exact token budget (clamped to min 1,024).         | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer. |
-| OpenAI    | `gpt-5`             | `reasoning` overrides the unified `thinking` parameter with an explicit effort level (`"low"`, `"medium"`, `"high"`).   | Cost notifications include reasoning tokens. Lualine shows the reasoning level.    |
-| Vertex AI | `gemini-2.5-pro`    | `project_id` (required), `location` (default `global`), `thinking_budget` overrides with an exact token budget (min 1). | `thinking_budget` overrides the unified `thinking` parameter for Vertex.           |
+| Provider  | Defaults                 | Extra parameters                                                                                                        | Notes                                                                              |
+| --------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Anthropic | `claude-sonnet-4-6`      | `thinking_budget` overrides the unified `thinking` parameter with an exact token budget (clamped to min 1,024).         | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer. |
+| OpenAI    | `gpt-5.4`                | `reasoning` overrides the unified `thinking` parameter with an explicit effort level (`"low"`, `"medium"`, `"high"`).   | Cost notifications include reasoning tokens. Lualine shows the reasoning level.    |
+| Vertex AI | `gemini-3.1-pro-preview` | `project_id` (required), `location` (default `global`), `thinking_budget` overrides with an exact token budget (min 1). | `thinking_budget` overrides the unified `thinking` parameter for Vertex.           |
+
+> [!NOTE]
+> Defaults favour capability at a reasonable price point, **not minimum cost**. Older or smaller models (e.g., `gpt-5.2`, `gemini-2.5-flash`) can be significantly cheaper and may perform just as well for your workload; choosing the right cost/capability trade-off is up to you.
 
 The full model catalogue (including pricing) is in `lua/flemma/models.lua`. You can access it from Neovim with:
 
