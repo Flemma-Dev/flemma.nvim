@@ -9,7 +9,7 @@ Flemma turns Neovim into an AI agent. Give it a task, and it works – calling t
 
 Streaming conversations, reusable prompt templates, file attachments, cost tracking, and ergonomic commands for Anthropic, OpenAI, and Google Vertex AI.
 
-https://github.com/user-attachments/assets/586bdd15-8edb-41aa-be4d-64fed4290232
+https://github.com/user-attachments/assets/72f790ff-5675-431f-9add-2ba22e4b14fd
 
 - **Autonomous agent loop** – Flemma executes approved tool calls and re-sends results automatically, repeating until the task is done or your approval is needed. One keypress can kick off an entire multi-step workflow.
 - **Tool calling** – bash, file read/edit/write, with approval policies, parallel execution, and inline previews that show what each tool will do before you approve it. Register your own tools, approval resolvers, and preview formatters.

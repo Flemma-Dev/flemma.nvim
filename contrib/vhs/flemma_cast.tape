@@ -4,8 +4,8 @@ Set Shell bash
 Set Width 1920
 Set Height 1080
 Set Padding 8
-Set Theme "Catppuccin Frappe"
-Set FontFamily "Adwaita Mono"
+Set Theme "Catppuccin Mocha"
+Set FontFamily "IBM Plex Mono"
 Set FontSize 32
 Set LetterSpacing 0
 Set LineHeight 1

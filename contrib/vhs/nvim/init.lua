@@ -4,7 +4,7 @@ vim.opt.runtimepath:prepend(cwd .. "/.vapor/catppuccin/nvim.git")
 vim.opt.runtimepath:prepend(cwd .. "/.vapor/NStefan002/screenkey.nvim.git")
 
 vim.opt.termguicolors = true
-vim.cmd.colorscheme("catppuccin-frappe")
+vim.cmd.colorscheme("catppuccin-mocha")
 
 vim.opt.updatetime = 100
 vim.opt.timeoutlen = 100
@@ -104,7 +104,7 @@ require("lualine").setup({
         function()
           return require("screenkey").get_keys()
         end,
-        icon = "⌨",
+        icon = "⌨ ",
       },
     },
     lualine_x = {
