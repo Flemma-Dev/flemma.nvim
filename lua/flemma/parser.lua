@@ -1,10 +1,21 @@
 local ast = require("flemma.ast")
 local codeblock = require("flemma.codeblock")
 local json = require("flemma.utilities.json")
+local modeline = require("flemma.utilities.modeline")
 local roles = require("flemma.utilities.roles")
+local state = require("flemma.state")
 
 ---@class flemma.Parser
 local M = {}
+
+---@type (fun(doc: flemma.ast.DocumentNode, bufnr: integer): flemma.ast.DocumentNode)|nil
+local post_parse_hook = nil
+
+---@class flemma.parser.Snapshot
+---@field frontmatter flemma.ast.FrontmatterNode|nil Frozen frontmatter node
+---@field messages flemma.ast.MessageNode[] Frozen message nodes (all messages before resume point)
+---@field errors flemma.ast.Diagnostic[] Diagnostics from frozen portion
+---@field resume_line integer 1-indexed buffer line where incremental parsing resumes (first line NOT in snapshot)
 
 local TOOL_USE_PATTERN = "^%*%*Tool Use:%*%*%s*`([^`]+)`%s*%(`([^)]+)`%)"
 local TOOL_RESULT_PATTERN = "^%*%*Tool Result:%*%*%s*`([^`]+)`"
@@ -22,32 +33,10 @@ local TOOL_STATUS_MAP = {
   deny = "denied",
 }
 
----@param str string|nil
----@return string|nil
-local function url_decode(str)
-  if not str then
-    return nil
-  end
-  str = string.gsub(str, "+", " ")
-  str = string.gsub(str, "%%(%x%x)", function(h)
-    return string.char(tonumber(h, 16))
-  end)
-  return str
-end
-
---- Escape a string for use inside a Lua single-quoted string literal.
----@param str string
----@return string
-local function lua_string_escape(str)
-  str = str:gsub("\\", "\\\\")
-  str = str:gsub("'", "\\'")
-  str = str:gsub("\n", "\\n")
-  return str
-end
-
---- Unified segment parser: parse text for {{ }} expressions and @./ file references
+--- Unified segment parser: parse text for {{ }} expressions
 --- Returns array of AST segments (text, expression)
 --- Note: <thinking> tags are NOT parsed here - only in @Assistant messages
+--- Note: @./ file references are handled by the preprocessor rewriter, not here
 ---@param text string|nil
 ---@param base_line integer|nil 1-indexed line number for accurate position tracking
 ---@return flemma.ast.Segment[]
@@ -77,31 +66,55 @@ local function parse_segments(text, base_line)
 
   local function emit_text(str, char_start)
     if str and #str > 0 then
-      local start_line = char_to_line_col(char_start)
+      local start_line, start_col = char_to_line_col(char_start)
       local end_line = start_line
+      local end_col = start_col + #str - 1
+      -- Count newlines to compute end position (matches runner convention:
+      -- trailing \n means end_line is bumped, end_col is length after last \n)
       for i = 1, #str do
         if str:sub(i, i) == "\n" then
           end_line = end_line + 1
         end
       end
-      table.insert(segments, ast.text(str, { start_line = start_line, end_line = end_line }))
+      if end_line > start_line then
+        local last_newline = str:find("\n[^\n]*$")
+        end_col = #str - last_newline
+      end
+      table.insert(
+        segments,
+        ast.text(str, {
+          start_line = start_line,
+          start_col = start_col,
+          end_line = end_line,
+          end_col = end_col,
+        })
+      )
     end
   end
 
   while idx <= #s do
-    local expr_start, expr_end, expr_code = s:find("{{(.-)}}", idx)
-    local file_start, file_end, file_full = s:find("@(%.%.?%/[%.%/]*%S+)", idx)
+    -- Find next opening delimiter: {{ or {%
+    local expr_start = s:find("{{", idx, true)
+    local code_start = s:find("{%%", idx) -- pattern mode: %% matches literal %
 
-    local next_kind, next_start, next_end, payload = nil, nil, nil, nil
-
-    -- Choose earliest match
-    if expr_start and (not file_start or expr_start < file_start) then
-      next_kind, next_start, next_end, payload = "expr", expr_start, expr_end, expr_code
-    elseif file_start then
-      next_kind, next_start, next_end, payload = "file", file_start, file_end, file_full
-    end
-
-    if not next_kind then
+    -- Pick whichever comes first
+    local next_start, is_code
+    if expr_start and code_start then
+      if code_start < expr_start then
+        next_start = code_start
+        is_code = true
+      else
+        next_start = expr_start
+        is_code = false
+      end
+    elseif code_start then
+      next_start = code_start
+      is_code = true
+    elseif expr_start then
+      next_start = expr_start
+      is_code = false
+    else
+      -- No more delimiters — emit remaining text
       emit_text(s:sub(idx), idx)
       break
     end
@@ -109,47 +122,59 @@ local function parse_segments(text, base_line)
     -- Emit preceding text
     emit_text(s:sub(idx, next_start - 1), idx)
 
-    if next_kind == "expr" then
-      local line, col = char_to_line_col(next_start)
-      table.insert(segments, ast.expression(payload --[[@as string]], { start_line = line, start_col = col }))
-    elseif next_kind == "file" then
-      ---@cast payload string
-      local raw_file_match, mime_with_punct = payload:match("^([^;]+);type=(.+)$")
-      local mime_override = nil
-      local trailing_punct
-
-      if not raw_file_match then
-        raw_file_match = payload
-        local filename_no_punct = raw_file_match:gsub("[%p]+$", "")
-        trailing_punct = raw_file_match:sub(#filename_no_punct + 1)
-        raw_file_match = filename_no_punct
-      else
-        local mime_no_punct = mime_with_punct:gsub("[%p]+$", "")
-        trailing_punct = mime_with_punct:sub(#mime_no_punct + 1)
-        mime_override = mime_no_punct
-      end
-
-      -- URL-decode and escape the path for use in a Lua string literal
-      local cleaned_path = url_decode(raw_file_match)
-      ---@cast cleaned_path string
-      local escaped_path = lua_string_escape(cleaned_path)
-      local line, col = char_to_line_col(next_start)
-
-      -- Build the include() expression code
-      local opts_parts = { "binary = true" }
-      if mime_override then
-        opts_parts[#opts_parts + 1] = "mime = '" .. lua_string_escape(mime_override) .. "'"
-      end
-      local code = "include('" .. escaped_path .. "', { " .. table.concat(opts_parts, ", ") .. " })"
-
-      table.insert(segments, ast.expression(code, { start_line = line, start_col = col }))
-
-      -- Emit trailing punctuation as a separate text segment
-      if #trailing_punct > 0 then
-        emit_text(trailing_punct, next_end - #trailing_punct + 1)
-      end
+    -- Detect trim-before: {{- or {%-
+    local trim_before = false
+    local content_offset = 2 -- skip {{ or {%
+    if s:sub(next_start + 2, next_start + 2) == "-" then
+      trim_before = true
+      content_offset = 3
     end
-    idx = next_end + 1
+
+    -- Find closing delimiter
+    local close_pattern = is_code and "%-?%%}" or "%-?}}"
+    local close_start, close_end = s:find(close_pattern, next_start + content_offset)
+
+    if not close_start then
+      -- Unclosed delimiter — emit rest as text (graceful degradation)
+      emit_text(s:sub(next_start), next_start)
+      break
+    end
+
+    -- Detect trim-after: -%} or -}}
+    local trim_after = s:sub(close_start, close_start) == "-"
+
+    -- Extract content between delimiters
+    local content_start = next_start + content_offset
+    local content_end = close_start - 1
+    local content = s:sub(content_start, content_end)
+
+    -- Build position
+    local start_line, start_col = char_to_line_col(next_start)
+    local end_line, end_col = char_to_line_col(close_end)
+
+    local pos = {
+      start_line = start_line,
+      start_col = start_col,
+      end_line = end_line,
+      end_col = end_col,
+    }
+
+    -- Build trim opts (only include if true to match nil-means-absent convention)
+    local opts = nil
+    if trim_before or trim_after then
+      opts = {
+        trim_before = trim_before or nil,
+        trim_after = trim_after or nil,
+      }
+    end
+
+    if is_code then
+      table.insert(segments, ast.code(content, pos, opts))
+    else
+      table.insert(segments, ast.expression(content, pos, opts))
+    end
+
+    idx = close_end + 1
   end
 
   return segments
@@ -168,13 +193,22 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
     return { ast.text("") }, diagnostics
   end
 
-  local function emit_text_with_parsing(text, line_num)
-    if text and #text > 0 then
-      local parsed = parse_segments(text, line_num)
+  -- Accumulator for consecutive plain-text lines to avoid per-line segment splitting
+  local accum_lines = {} ---@type string[]
+  local accum_start_line = base_line_num
+
+  local function flush_accum()
+    if #accum_lines == 0 then
+      return
+    end
+    local text = table.concat(accum_lines, "\n")
+    if #text > 0 then
+      local parsed = parse_segments(text, accum_start_line)
       for _, seg in ipairs(parsed) do
         table.insert(segments, seg)
       end
     end
+    accum_lines = {}
   end
 
   local i = 1
@@ -185,6 +219,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
     -- Check for **Tool Result:** marker
     local tool_use_id = line:match(TOOL_RESULT_PATTERN)
     if tool_use_id then
+      flush_accum()
       local is_error = line:match(TOOL_RESULT_ERROR_PATTERN) ~= nil
       local result_start_line = current_line_num
 
@@ -201,7 +236,6 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
       if block then
         if block.language == "flemma:tool" then
           -- Tool status placeholder — parse info string for status
-          local modeline = require("flemma.utilities.modeline")
           local parsed = modeline.parse(block.info or "")
           local tool_status = TOOL_STATUS_MAP[parsed.status] or "pending"
 
@@ -281,14 +315,16 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
         i = content_start
       end
     else
-      -- Regular content line - parse for expressions and file references
-      emit_text_with_parsing(line, current_line_num)
-      if i < #lines then
-        table.insert(segments, ast.text("\n", { start_line = current_line_num, end_line = current_line_num }))
+      -- Regular content line — accumulate for batch parsing
+      if #accum_lines == 0 then
+        accum_start_line = current_line_num
       end
+      table.insert(accum_lines, line)
       i = i + 1
     end
   end
+
+  flush_accum()
 
   return segments, diagnostics
 end
@@ -306,10 +342,29 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
     return { ast.text("") }, diagnostics
   end
 
-  local function emit_text(str, line_num)
-    if str and #str > 0 then
-      table.insert(segments, ast.text(str, { start_line = line_num, end_line = line_num }))
+  -- Accumulator for consecutive plain-text lines to avoid per-line segment splitting
+  local accum_lines = {} ---@type string[]
+  local accum_start_line = base_line_num
+
+  local function flush_accum()
+    if #accum_lines == 0 then
+      return
     end
+    local text = table.concat(accum_lines, "\n")
+    if #text > 0 then
+      local end_line = accum_start_line + #accum_lines - 1
+      local end_col = #accum_lines[#accum_lines]
+      table.insert(
+        segments,
+        ast.text(text, {
+          start_line = accum_start_line,
+          start_col = 1,
+          end_line = end_line,
+          end_col = end_col,
+        })
+      )
+    end
+    accum_lines = {}
   end
 
   local i = 1
@@ -329,6 +384,7 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
     local redacted_open_tag = line:match("^<thinking%s+redacted>$")
 
     if self_closing_sig then
+      flush_accum()
       -- Self-closing tag with signature, no content
       local thinking_line = current_line_num
       table.insert(
@@ -340,6 +396,7 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
       )
       i = i + 1
     elseif open_tag_sig or simple_open_tag or redacted_open_tag then
+      flush_accum()
       local signature = open_tag_sig and { value = open_tag_sig, provider = open_tag_provider } or nil
       local redacted = redacted_open_tag ~= nil
       local thinking_start_line = current_line_num
@@ -366,6 +423,7 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
         end
       end
     elseif line:match(TOOL_USE_PATTERN) then
+      flush_accum()
       local tool_name, tool_id = line:match(TOOL_USE_PATTERN)
       local tool_start_line = current_line_num
 
@@ -432,21 +490,24 @@ local function parse_assistant_segments(lines, base_line_num, diagnostics)
     else
       local aborted_message = line:match(ABORTED_PATTERN)
       if aborted_message then
+        flush_accum()
         table.insert(
           segments,
           ast.aborted(aborted_message, { start_line = current_line_num, end_line = current_line_num })
         )
         i = i + 1
       else
-        -- Regular text line
-        emit_text(line, current_line_num)
-        if i < #lines then
-          emit_text("\n", current_line_num)
+        -- Regular text line — accumulate for batch emission
+        if #accum_lines == 0 then
+          accum_start_line = current_line_num
         end
+        table.insert(accum_lines, line)
         i = i + 1
       end
     end
   end
+
+  flush_accum()
 
   return segments, diagnostics
 end
@@ -511,13 +572,35 @@ local function parse_message(lines, start_idx, line_offset, diagnostics)
   local content_lines = {}
 
   local i = start_idx + 1
+  local active_fence_length = 0 -- 0 = not inside a fence; >0 = min backticks needed to close
   while i <= #lines do
     local next_line = lines[i]
-    if next_line:match("^@[%w]+:%s*$") then
-      break
+
+    if active_fence_length > 0 then
+      -- Inside a fenced code block — check for closing fence
+      local close_ticks = next_line:match("^(`+)%s*$")
+      if close_ticks and #close_ticks >= active_fence_length then
+        active_fence_length = 0
+      end
+    else
+      -- Outside a fence — check for role marker (message boundary)
+      if next_line:match("^@[%w]+:%s*$") then
+        break
+      end
+      -- Check for fence opener (CommonMark: backtick fence info string cannot contain backticks)
+      local open_ticks = next_line:match("^(`+)")
+      if open_ticks and #open_ticks >= 3 and not next_line:sub(#open_ticks + 1):find("`") then
+        active_fence_length = #open_ticks
+      end
     end
+
     table.insert(content_lines, next_line)
     i = i + 1
+  end
+
+  -- Strip trailing empty lines (inter-message whitespace before the next @Role: marker)
+  while #content_lines > 0 and content_lines[#content_lines] == "" do
+    table.remove(content_lines)
   end
 
   local segments
@@ -538,7 +621,7 @@ local function parse_message(lines, start_idx, line_offset, diagnostics)
       table.insert(diagnostics, diag)
     end
   else
-    -- Other roles (System, etc.) - parse expressions and file references
+    -- Other roles (System, etc.) - parse {{ }} expressions
     local content = table.concat(content_lines, "\n")
     segments = parse_segments(content, content_start_line)
   end
@@ -550,20 +633,19 @@ local function parse_message(lines, start_idx, line_offset, diagnostics)
   return msg, (i - 1), diagnostics
 end
 
----@param lines string[]|nil
----@return flemma.ast.DocumentNode
-function M.parse_lines(lines)
-  lines = lines or {}
-  local errors = {}
-  local fm, _, body, body_start = parse_frontmatter(lines)
+--- Parse message blocks from content lines with a line offset.
+--- Shared by full parse and incremental (snapshot) parse paths.
+---@param lines string[]
+---@param line_offset integer Offset added to line indices for absolute positions
+---@return flemma.ast.MessageNode[] messages
+---@return flemma.ast.Diagnostic[] errors
+local function parse_messages(lines, line_offset)
   local messages = {}
+  local errors = {}
   local i = 1
-  local content_lines = body or lines
-  -- Calculate line offset: if frontmatter exists, messages start after it
-  local line_offset = body and (body_start - 1) or 0
 
-  while i <= #content_lines do
-    local msg, last, diagnostics = parse_message(content_lines, i, line_offset, {})
+  while i <= #lines do
+    local msg, last, diagnostics = parse_message(lines, i, line_offset, {})
     if msg then
       table.insert(messages, msg)
       for _, diag in ipairs(diagnostics) do
@@ -575,16 +657,34 @@ function M.parse_lines(lines)
     end
   end
 
+  return messages, errors
+end
+
+---@param lines string[]|nil
+---@return flemma.ast.DocumentNode
+function M.parse_lines(lines)
+  lines = lines or {}
+  local fm, _, body, body_start = parse_frontmatter(lines)
+  local content_lines = body or lines
+  local line_offset = body and (body_start - 1) or 0
+  local messages, errors = parse_messages(content_lines, line_offset)
   local doc = ast.document(fm, messages, errors, { start_line = 1, end_line = #lines })
   return doc
 end
 
 --- Parse inline content (for include() results) - no frontmatter, no message roles
---- Just scan for @./ file references and {{ }} expressions
+--- Scans for {{ }} expressions only; @./ file references are handled by the preprocessor
 ---@param text string|nil
 ---@return flemma.ast.Segment[]
 function M.parse_inline_content(text)
   return parse_segments(text or "")
+end
+
+---Register a post-parse hook that transforms the AST after parsing.
+---Used by the preprocessor to run rewriters on the parsed document.
+---@param hook (fun(doc: flemma.ast.DocumentNode, bufnr: integer): flemma.ast.DocumentNode)|nil
+function M.set_post_parse_hook(hook)
+  post_parse_hook = hook
 end
 
 --- Get parsed document with automatic caching based on buffer changedtick
@@ -592,7 +692,6 @@ end
 ---@param bufnr integer
 ---@return flemma.ast.DocumentNode
 function M.get_parsed_document(bufnr)
-  local state = require("flemma.state")
   local buffer_state = state.get_buffer_state(bufnr)
   local current_tick = vim.api.nvim_buf_get_changedtick(bufnr)
 
@@ -601,9 +700,58 @@ function M.get_parsed_document(bufnr)
     return buffer_state.ast_cache.document
   end
 
-  -- Parse and cache
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local doc = M.parse_lines(lines)
+  local doc
+  local snapshot = buffer_state.ast_snapshot_before_send
+
+  if snapshot then
+    -- Incremental parse: read only lines from resume point onwards.
+    -- resume_line is 1-indexed; nvim_buf_get_lines is 0-indexed, hence - 1.
+    -- The same offset (resume_line - 1) is passed to parse_messages so that
+    -- local index 1 in suffix_lines maps to absolute line resume_line:
+    --   parse_message computes start_line = start_idx + line_offset = 1 + (resume_line - 1) = resume_line
+    local total_lines = vim.api.nvim_buf_line_count(bufnr)
+    local suffix_lines = vim.api.nvim_buf_get_lines(bufnr, snapshot.resume_line - 1, -1, false)
+    local new_messages, new_errors = parse_messages(suffix_lines, snapshot.resume_line - 1)
+
+    -- Merge frozen + new
+    local all_messages = {}
+    for i, msg in ipairs(snapshot.messages) do
+      all_messages[i] = msg
+    end
+    for _, msg in ipairs(new_messages) do
+      all_messages[#all_messages + 1] = msg
+    end
+
+    local all_errors = {}
+    for i, err in ipairs(snapshot.errors) do
+      all_errors[i] = err
+    end
+    for _, err in ipairs(new_errors) do
+      all_errors[#all_errors + 1] = err
+    end
+
+    doc = ast.document(snapshot.frontmatter, all_messages, all_errors, {
+      start_line = 1,
+      end_line = total_lines,
+    })
+  else
+    -- Full parse
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    doc = M.parse_lines(lines)
+  end
+
+  -- Store raw (pre-rewriter) AST
+  buffer_state.raw_ast_cache = {
+    changedtick = current_tick,
+    document = doc,
+  }
+
+  -- Run post-parse hook (preprocessor rewriters in non-interactive mode)
+  if post_parse_hook then
+    local rewritten_doc = vim.deepcopy(doc)
+    rewritten_doc = post_parse_hook(rewritten_doc, bufnr)
+    doc = rewritten_doc
+  end
 
   buffer_state.ast_cache = {
     changedtick = current_tick,
@@ -611,6 +759,58 @@ function M.get_parsed_document(bufnr)
   }
 
   return doc
+end
+
+---Get the raw (pre-rewriter) parsed document.
+---Used by the send flow to start a fresh interactive rewriter pass.
+---@param bufnr integer
+---@return flemma.ast.DocumentNode
+function M.get_raw_document(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  local current_tick = vim.api.nvim_buf_get_changedtick(bufnr)
+
+  if buffer_state.raw_ast_cache and buffer_state.raw_ast_cache.changedtick == current_tick then
+    return buffer_state.raw_ast_cache.document
+  end
+
+  -- Calling get_parsed_document populates raw_ast_cache as a side effect
+  M.get_parsed_document(bufnr)
+  return buffer_state.raw_ast_cache.document
+end
+
+--- Snapshot the current AST for incremental parsing during streaming.
+--- Call this before writing the @Assistant: placeholder. The snapshot
+--- captures all messages up to the current buffer end, so only content
+--- appended after this point needs re-parsing.
+---@param bufnr integer
+function M.create_ast_snapshot_before_send(bufnr)
+  local doc = M.get_parsed_document(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+
+  -- Shallow-copy arrays so the snapshot is independent of the cached doc
+  local messages = {}
+  for i, msg in ipairs(doc.messages) do
+    messages[i] = msg
+  end
+  local errors = {}
+  for i, err in ipairs(doc.errors) do
+    errors[i] = err
+  end
+
+  buffer_state.ast_snapshot_before_send = {
+    frontmatter = doc.frontmatter,
+    messages = messages,
+    errors = errors,
+    resume_line = doc.position.end_line + 1,
+  }
+end
+
+--- Clear the AST snapshot, restoring full-parse behavior.
+--- Must be called on every request exit path (success, error, cancel, job failure).
+---@param bufnr integer
+function M.clear_ast_snapshot_before_send(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  buffer_state.ast_snapshot_before_send = nil
 end
 
 return M

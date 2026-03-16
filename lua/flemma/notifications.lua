@@ -2,6 +2,10 @@
 ---@class flemma.Notifications
 local M = {}
 
+local bar = require("flemma.bar")
+local state = require("flemma.state")
+local usage = require("flemma.usage")
+
 local ns_id = vim.api.nvim_create_namespace("flemma_notifications_bar")
 local border_ns_id = vim.api.nvim_create_namespace("flemma_notifications_border")
 
@@ -49,7 +53,6 @@ end
 ---@param new_segments? flemma.bar.Segment[] Segments being added (not yet in buffer_state)
 ---@return table<string, integer>
 local function compute_aligned_widths(target_bufnr, new_segments)
-  local bar = require("flemma.bar")
   local widths_list = {} ---@type table<string, integer>[]
 
   local buf = buffer_state[target_bufnr]
@@ -93,7 +96,6 @@ end
 --- Get notification config from state
 ---@return flemma.Config.Notifications
 local function get_config()
-  local state = require("flemma.state")
   return state.get_config().notifications
 end
 
@@ -101,7 +103,6 @@ end
 ---@param gutter_width integer
 ---@return boolean
 local function gutter_fits_icon(gutter_width)
-  local bar = require("flemma.bar")
   return gutter_width >= bar.PREFIX_DISPLAY_WIDTH
 end
 
@@ -121,7 +122,6 @@ end
 ---@param gutter_width integer Gutter width in columns
 ---@param row integer Row offset from window top
 local function update_gutter_icon(notif, winid, gutter_width, row)
-  local bar = require("flemma.bar")
   local config = get_config()
 
   -- Build icon text: emoji right-aligned in the gutter with a trailing space
@@ -414,7 +414,6 @@ local function create_notification(target_bufnr, segments, item_widths)
   local use_gutter_icon = gutter_fits_icon(gutter_width)
 
   -- Render for text area width (excludes gutter); skip prefix when icon is in gutter
-  local bar = require("flemma.bar")
   local render_opts = use_gutter_icon and { skip_prefix = true } or nil
   local render_result = bar.render(segments, text_width, item_widths, render_opts)
 
@@ -495,7 +494,6 @@ local function rerender_notification(notif, win_width, item_widths, render_opts)
     return
   end
 
-  local bar = require("flemma.bar")
   local new_result = bar.render(notif.segments, win_width, item_widths, render_opts)
   notif.render_result = new_result
 
@@ -701,7 +699,6 @@ function M.recall_last()
     return
   end
 
-  local state = require("flemma.state")
   local session = state.get_session()
   local latest_request = session:get_latest_request_for_filepath(filepath)
   if not latest_request then
@@ -709,7 +706,6 @@ function M.recall_last()
     return
   end
 
-  local usage = require("flemma.usage")
   local segments = usage.build_segments(latest_request, session)
   if #segments == 0 then
     vim.notify("No notification for this buffer.", vim.log.levels.WARN)
@@ -779,5 +775,10 @@ function M.setup()
     end,
   })
 end
+
+-- Register cleanup hook with state (breaks circular dependency: state cannot require notifications)
+state.register_cleanup("notifications", function(bufnr)
+  M.cleanup_buffer(bufnr)
+end)
 
 return M

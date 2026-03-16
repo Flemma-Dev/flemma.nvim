@@ -45,6 +45,8 @@
 ---@field thinking_budgets? flemma.models.ThinkingBudgets Per-model token budgets for each thinking level
 ---@field min_thinking_budget? integer Minimum thinking budget the API accepts
 ---@field max_thinking_budget? integer Maximum thinking budget the API accepts
+---@field thinking_effort_map? table<string, string> Maps Flemma canonical levels to provider API values
+---@field supports_adaptive_thinking? boolean True for 4.6 models that use thinking.type="adaptive" (vs budget-based)
 ---@field min_cache_tokens? integer Minimum tokens for cache prefix to be accepted (informational)
 
 ---@class flemma.models.ProviderModels
@@ -73,6 +75,8 @@ return {
           thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
           min_thinking_budget = 1024,
           min_cache_tokens = 2048,
+          supports_adaptive_thinking = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" },
         },
 
         -- Claude Sonnet 4.6
@@ -88,6 +92,8 @@ return {
           thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
           min_thinking_budget = 1024,
           min_cache_tokens = 2048,
+          supports_adaptive_thinking = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
         },
 
         -- Claude Sonnet 4.5
@@ -159,6 +165,7 @@ return {
           thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
           min_thinking_budget = 1024,
           min_cache_tokens = 2048,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
         },
         ["claude-opus-4-5-20251101"] = {
           pricing = {
@@ -172,6 +179,7 @@ return {
           thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
           min_thinking_budget = 1024,
           min_cache_tokens = 2048,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
         },
 
         -- Claude Opus 4.1 (as of Aug 2025)
@@ -274,7 +282,7 @@ return {
     },
 
     vertex = {
-      default = "gemini-2.5-pro",
+      default = "gemini-3.1-pro-preview",
       models = {
         -- Gemini 3.1 Pro Preview
         ["gemini-3.1-pro-preview"] = {
@@ -288,6 +296,7 @@ return {
           thinking_budgets = { minimal = 128, low = 2048, medium = 8192, high = 32768 },
           min_thinking_budget = 1,
           max_thinking_budget = 32768,
+          thinking_effort_map = { minimal = "LOW", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
         },
 
         -- Gemini 3.1 Flash Lite Preview
@@ -299,6 +308,7 @@ return {
           },
           max_input_tokens = 1048576,
           max_output_tokens = 65536,
+          thinking_effort_map = { minimal = "MINIMAL", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
         },
 
         -- Gemini 3 Flash Preview
@@ -313,9 +323,10 @@ return {
           thinking_budgets = { minimal = 128, low = 2048, medium = 8192, high = 24576 },
           min_thinking_budget = 1,
           max_thinking_budget = 24576,
+          thinking_effort_map = { minimal = "MINIMAL", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
         },
 
-        -- Gemini 3 Pro Preview
+        -- Gemini 3 Pro Preview (discontinuing March 26, 2026)
         ["gemini-3-pro-preview"] = {
           pricing = {
             input = 2.0,
@@ -327,6 +338,7 @@ return {
           thinking_budgets = { minimal = 128, low = 2048, medium = 8192, high = 32768 },
           min_thinking_budget = 1,
           max_thinking_budget = 32768,
+          thinking_effort_map = { minimal = "LOW", low = "LOW", medium = "HIGH", high = "HIGH", max = "HIGH" },
         },
 
         -- Gemini 2.5 Pro models
@@ -414,7 +426,7 @@ return {
     },
 
     openai = {
-      default = "gpt-5",
+      default = "gpt-5.4",
       models = {
         -- GPT-5.4 models
         ["gpt-5.4"] = {
@@ -426,6 +438,7 @@ return {
           max_input_tokens = 272000,
           max_output_tokens = 128000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
         },
         ["gpt-5.4-pro"] = {
           pricing = {
@@ -447,6 +460,7 @@ return {
           max_input_tokens = 272000,
           max_output_tokens = 128000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
         },
         ["gpt-5.3-codex"] = {
           pricing = {
@@ -457,6 +471,7 @@ return {
           max_input_tokens = 272000,
           max_output_tokens = 128000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
         },
         ["gpt-5.3-codex-spark"] = {
           pricing = {
@@ -467,6 +482,7 @@ return {
           max_input_tokens = 100000,
           max_output_tokens = 32000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
         },
 
         -- GPT-5.2 models
@@ -479,6 +495,7 @@ return {
           max_input_tokens = 272000,
           max_output_tokens = 128000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
         },
         ["gpt-5.2-chat-latest"] = {
           pricing = {
@@ -489,6 +506,7 @@ return {
           max_input_tokens = 128000,
           max_output_tokens = 16384,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
         },
         ["gpt-5.2-codex"] = {
           pricing = {
@@ -499,6 +517,7 @@ return {
           max_input_tokens = 272000,
           max_output_tokens = 128000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
         },
         ["gpt-5.2-pro"] = {
           pricing = {
@@ -520,6 +539,7 @@ return {
           max_input_tokens = 272000,
           max_output_tokens = 128000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
         },
         ["gpt-5.1-chat-latest"] = {
           pricing = {
@@ -530,6 +550,7 @@ return {
           max_input_tokens = 128000,
           max_output_tokens = 16384,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
         },
         ["gpt-5.1-codex"] = {
           pricing = {
@@ -540,6 +561,7 @@ return {
           max_input_tokens = 272000,
           max_output_tokens = 128000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
         },
         ["gpt-5.1-codex-max"] = {
           pricing = {
@@ -550,6 +572,7 @@ return {
           max_input_tokens = 272000,
           max_output_tokens = 128000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
         },
         ["gpt-5.1-codex-mini"] = {
           pricing = {
@@ -560,6 +583,7 @@ return {
           max_input_tokens = 272000,
           max_output_tokens = 128000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
         },
 
         -- GPT-5 models
@@ -572,6 +596,7 @@ return {
           max_input_tokens = 272000,
           max_output_tokens = 128000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "minimal", low = "low", medium = "medium", high = "high", max = "high" },
         },
         ["gpt-5-chat-latest"] = {
           pricing = {
@@ -582,6 +607,7 @@ return {
           max_input_tokens = 272000,
           max_output_tokens = 128000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "minimal", low = "low", medium = "medium", high = "high", max = "high" },
         },
         ["gpt-5-codex"] = {
           pricing = {
@@ -592,6 +618,7 @@ return {
           max_input_tokens = 272000,
           max_output_tokens = 128000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "minimal", low = "low", medium = "medium", high = "high", max = "high" },
         },
         ["gpt-5-mini"] = {
           pricing = {
@@ -602,6 +629,7 @@ return {
           max_input_tokens = 272000,
           max_output_tokens = 128000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "minimal", low = "low", medium = "medium", high = "high", max = "high" },
         },
         ["gpt-5-nano"] = {
           pricing = {
@@ -612,6 +640,7 @@ return {
           max_input_tokens = 272000,
           max_output_tokens = 128000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "minimal", low = "low", medium = "medium", high = "high", max = "high" },
         },
         ["gpt-5-pro"] = {
           pricing = {
@@ -754,6 +783,7 @@ return {
           max_input_tokens = 200000,
           max_output_tokens = 100000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
         },
         ["o1-pro"] = {
           pricing = {
@@ -773,6 +803,7 @@ return {
           max_input_tokens = 200000,
           max_output_tokens = 100000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
         },
         ["o3-pro"] = {
           pricing = {
@@ -792,6 +823,7 @@ return {
           max_input_tokens = 200000,
           max_output_tokens = 100000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
         },
         ["o3-mini"] = {
           pricing = {
@@ -802,6 +834,7 @@ return {
           max_input_tokens = 200000,
           max_output_tokens = 100000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
         },
         ["o4-mini"] = {
           pricing = {
@@ -812,6 +845,7 @@ return {
           max_input_tokens = 200000,
           max_output_tokens = 100000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
         },
         ["o4-mini-deep-research"] = {
           pricing = {
@@ -822,6 +856,7 @@ return {
           max_input_tokens = 200000,
           max_output_tokens = 100000,
           supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
         },
 
         -- Search and specialized models

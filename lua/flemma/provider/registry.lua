@@ -8,6 +8,7 @@ local M = {}
 
 -- Load models from centralized models.lua
 local models_data = require("flemma.models")
+local registry_utils = require("flemma.registry")
 
 --------------------------------------------------------------------------------
 -- Provider registry
@@ -86,7 +87,6 @@ function M.register(source, entry)
   if entry then
     -- Two-arg form: register("name", entry)
     name = source
-    local registry_utils = require("flemma.registry")
     registry_utils.validate_name(name, "provider")
     definition = entry
   else

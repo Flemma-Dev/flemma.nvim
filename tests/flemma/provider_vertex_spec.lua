@@ -2,12 +2,14 @@
 
 -- Ensure tools module loads fresh
 package.loaded["flemma.tools"] = nil
+package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.registry"] = nil
 package.loaded["extras.flemma.tools.calculator"] = nil
 package.loaded["flemma.tools.definitions.bash"] = nil
 package.loaded["flemma.tools.definitions.read"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
 package.loaded["flemma.tools.definitions.write"] = nil
+package.loaded["flemma.provider.providers.vertex"] = nil
 
 describe("Vertex AI Provider", function()
   local vertex = require("flemma.provider.providers.vertex")
@@ -412,7 +414,7 @@ describe("Vertex AI Provider", function()
 
     it("should use thinkingLevel LOW for Gemini 3 Flash with thinking=low", function()
       local provider = vertex.new({
-        model = "gemini-3-flash",
+        model = "gemini-3-flash-preview",
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
@@ -428,7 +430,7 @@ describe("Vertex AI Provider", function()
 
     it("should use thinkingLevel MEDIUM for Gemini 3 Flash with thinking=medium", function()
       local provider = vertex.new({
-        model = "gemini-3-flash",
+        model = "gemini-3-flash-preview",
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
@@ -460,7 +462,7 @@ describe("Vertex AI Provider", function()
 
     it("should use thinkingLevel LOW for Gemini 3 Pro with thinking=low", function()
       local provider = vertex.new({
-        model = "gemini-3-pro",
+        model = "gemini-3-pro-preview",
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
@@ -476,7 +478,7 @@ describe("Vertex AI Provider", function()
 
     it("should use thinkingLevel MINIMAL for Gemini 3 Flash with thinking=minimal", function()
       local provider = vertex.new({
-        model = "gemini-3-flash",
+        model = "gemini-3-flash-preview",
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
@@ -492,7 +494,7 @@ describe("Vertex AI Provider", function()
 
     it("should clamp thinking='max' to HIGH for Gemini 3 Flash", function()
       local provider = vertex.new({
-        model = "gemini-3-flash",
+        model = "gemini-3-flash-preview",
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
@@ -508,7 +510,7 @@ describe("Vertex AI Provider", function()
 
     it("should map thinking='minimal' to LOW for Gemini 3 Pro", function()
       local provider = vertex.new({
-        model = "gemini-3-pro",
+        model = "gemini-3-pro-preview",
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
@@ -542,7 +544,7 @@ describe("Vertex AI Provider", function()
     it("should still resolve numeric thinking to thinkingLevel for Gemini 3", function()
       -- A numeric budget like 4096 resolves to level="medium" via budget_to_effort()
       local provider = vertex.new({
-        model = "gemini-3-flash",
+        model = "gemini-3-flash-preview",
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
@@ -612,26 +614,27 @@ describe("Vertex AI Provider", function()
   end)
 
   describe("reset with opts", function()
-    it("should clear api_key and token tracking when opts.auth is true", function()
+    it("should invalidate all secrets when opts.invalidate_all_secrets is true", function()
+      local secrets_cache = require("flemma.secrets.cache")
       local provider = vertex.new({
         model = "gemini-2.5-pro",
         project_id = "test-project",
         location = "us-central1",
       })
 
-      -- Simulate a cached gcloud token
-      provider.state.api_key = "ya29.fake-token"
-      provider._token_generated_at = os.time()
-      provider._token_from = "gcloud"
+      -- Seed a cache entry so we can verify it gets cleared
+      secrets_cache.set(
+        "access_token:vertex",
+        { value = "ya29.fake-token" },
+        { kind = "access_token", service = "vertex" }
+      )
 
-      provider:reset({ auth = true })
+      provider:reset({ invalidate_all_secrets = true })
 
-      assert.is_nil(provider.state.api_key)
-      assert.is_nil(provider._token_generated_at)
-      assert.is_nil(provider._token_from)
+      assert.is_nil(secrets_cache.get("access_token:vertex"))
     end)
 
-    it("should NOT reset the response buffer when opts.auth is true", function()
+    it("should NOT reset the response buffer when opts.invalidate_all_secrets is true", function()
       local provider = vertex.new({
         model = "gemini-2.5-pro",
         project_id = "test-project",
@@ -642,8 +645,8 @@ describe("Vertex AI Provider", function()
       local original_buffer = provider._response_buffer
       assert.is_not_nil(original_buffer)
 
-      -- Auth reset should preserve the response buffer
-      provider:reset({ auth = true })
+      -- Secrets reset should preserve the response buffer
+      provider:reset({ invalidate_all_secrets = true })
       assert.equals(original_buffer, provider._response_buffer)
     end)
 
@@ -738,88 +741,45 @@ describe("Vertex AI Provider", function()
     end)
   end)
 
-  describe("proactive token refresh", function()
-    it("should clear stale gcloud token when age exceeds threshold", function()
-      local provider = vertex.new({
-        model = "gemini-2.5-pro",
-        project_id = "test-project",
-        location = "us-central1",
-      })
+  describe("get_api_key via secrets module", function()
+    local secrets_module = require("flemma.secrets")
 
-      -- Simulate a gcloud token generated 56 minutes ago (past the 55-min threshold)
-      provider.state.api_key = "ya29.stale-token"
-      provider._token_from = "gcloud"
-      provider._token_generated_at = os.time() - (56 * 60)
-
-      -- Set VERTEX_AI_ACCESS_TOKEN to catch the call after cache is cleared
-      -- (otherwise get_api_key would try gcloud/keyring which we can't mock easily)
-      local original_env = os.getenv("VERTEX_AI_ACCESS_TOKEN")
-      vim.env.VERTEX_AI_ACCESS_TOKEN = "ya29.fresh-env-token"
-
-      local token = provider:get_api_key()
-
-      -- Restore env
-      if original_env then
-        vim.env.VERTEX_AI_ACCESS_TOKEN = original_env
-      else
-        vim.env.VERTEX_AI_ACCESS_TOKEN = nil
-      end
-
-      -- Should have picked up the env token since the stale one was cleared
-      assert.equals("ya29.fresh-env-token", token)
-      assert.equals("env", provider._token_from)
+    before_each(function()
+      secrets_module.invalidate_all()
     end)
 
-    it("should keep valid gcloud token when age is within threshold", function()
-      local provider = vertex.new({
-        model = "gemini-2.5-pro",
-        project_id = "test-project",
-        location = "us-central1",
-      })
-
-      -- Simulate a gcloud token generated 30 minutes ago (within the 55-min threshold)
-      provider.state.api_key = "ya29.valid-token"
-      provider._token_from = "gcloud"
-      provider._token_generated_at = os.time() - (30 * 60)
-
-      -- Temporarily clear VERTEX_AI_ACCESS_TOKEN to avoid short-circuiting
-      local original_env = os.getenv("VERTEX_AI_ACCESS_TOKEN")
+    after_each(function()
       vim.env.VERTEX_AI_ACCESS_TOKEN = nil
-
-      local token = provider:get_api_key()
-
-      -- Restore env
-      if original_env then
-        vim.env.VERTEX_AI_ACCESS_TOKEN = original_env
-      end
-
-      -- Should still use the cached token
-      assert.equals("ya29.valid-token", token)
-      assert.equals("gcloud", provider._token_from)
+      secrets_module.invalidate_all()
     end)
 
-    it("should not check staleness for env tokens", function()
+    it("should resolve access token from environment via secrets", function()
+      vim.env.VERTEX_AI_ACCESS_TOKEN = "ya29.env-token"
       local provider = vertex.new({
         model = "gemini-2.5-pro",
         project_id = "test-project",
         location = "us-central1",
       })
 
-      -- Simulate an env token that's old (but env tokens are always re-read)
-      provider.state.api_key = "old-env-token"
-      provider._token_from = "env"
-      provider._token_generated_at = os.time() - (120 * 60) -- 2 hours old
-
-      vim.env.VERTEX_AI_ACCESS_TOKEN = "ya29.current-env-token"
-
       local token = provider:get_api_key()
+      assert.equals("ya29.env-token", token)
+    end)
 
-      -- Restore env
-      vim.env.VERTEX_AI_ACCESS_TOKEN = nil
+    it("should use cached secret on subsequent calls", function()
+      vim.env.VERTEX_AI_ACCESS_TOKEN = "ya29.cached-token"
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+      })
 
-      -- Should pick up the current env token (re-read on every call)
-      assert.equals("ya29.current-env-token", token)
-      assert.equals("env", provider._token_from)
+      local first = provider:get_api_key()
+      assert.equals("ya29.cached-token", first)
+
+      -- Change the env var; the secrets cache should return the cached value
+      vim.env.VERTEX_AI_ACCESS_TOKEN = "ya29.different-token"
+      local second = provider:get_api_key()
+      assert.equals("ya29.cached-token", second)
     end)
   end)
 

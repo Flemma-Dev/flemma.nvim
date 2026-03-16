@@ -6,6 +6,7 @@ describe("flemma.usage", function()
   before_each(function()
     package.loaded["flemma.usage"] = nil
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
     package.loaded["flemma.pricing"] = nil
     package.loaded["flemma.session"] = nil
     package.loaded["flemma.bar"] = nil
@@ -19,15 +20,6 @@ describe("flemma.usage", function()
       model = "gpt-4o",
       pricing = { enabled = true },
     })
-  end)
-
-  describe("format_number", function()
-    it("should add comma separators", function()
-      assert.are.equal("20,449", usage.format_number(20449))
-      assert.are.equal("1,000,000", usage.format_number(1000000))
-      assert.are.equal("100", usage.format_number(100))
-      assert.are.equal("0", usage.format_number(0))
-    end)
   end)
 
   describe("calculate_cache_percent", function()
@@ -283,7 +275,7 @@ describe("flemma.usage", function()
 
       local result = usage.format_notification(request, nil, 120)
 
-      assert.has_match("\xE2\x97\x8B 25", result.text)
+      assert.has_match("25\xE2\x81\x82", result.text)
     end)
 
     it("should format large numbers with commas", function()

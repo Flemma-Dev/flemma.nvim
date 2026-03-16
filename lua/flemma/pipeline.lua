@@ -10,34 +10,25 @@ local M = {}
 ---@field name string
 ---@field position flemma.ast.Position|nil
 
---- Validate that all tool_uses have matching tool_results.
---- Operates on the AST directly so positions come from the source of truth
---- rather than being threaded through intermediate representations.
+--- Validate that all tool_uses have matching resolved tool_results.
+--- A tool_result with a non-nil status (e.g., pending, approved) is treated as
+--- unresolved — only status=nil means the result is final.
 ---@param doc flemma.ast.DocumentNode
 ---@return flemma.pipeline.UnresolvedTool[]
 local function validate_tool_results(doc)
-  local pending_tool_uses = {}
-
-  for _, msg in ipairs(doc.messages) do
-    for _, seg in ipairs(msg.segments) do
-      if seg.kind == "tool_use" then
-        pending_tool_uses[seg.id] = {
-          id = seg.id,
-          name = seg.name,
-          position = seg.position,
-        }
-      elseif seg.kind == "tool_result" then
-        -- Only clear when this is a resolved result (no status), not a flemma:tool placeholder
-        if not seg.status then
-          pending_tool_uses[seg.tool_use_id] = nil
-        end
-      end
-    end
-  end
+  local siblings = ast.build_tool_sibling_table(doc)
 
   local unresolved = {}
-  for _, tool in pairs(pending_tool_uses) do
-    table.insert(unresolved, tool)
+  for _, sibling in pairs(siblings) do
+    if sibling.use then
+      if not sibling.result or sibling.result.status then
+        table.insert(unresolved, {
+          id = sibling.use.id,
+          name = sibling.use.name,
+          position = sibling.use.position,
+        })
+      end
+    end
   end
   return unresolved
 end
@@ -81,11 +72,11 @@ end
 --- re-evaluating frontmatter code.
 ---@param doc flemma.ast.DocumentNode
 ---@param context flemma.Context|nil
----@param evaluated_frontmatter flemma.processor.EvaluatedFrontmatter|nil
+---@param opts? flemma.processor.EvaluateOpts
 ---@return flemma.pipeline.Prompt prompt
 ---@return flemma.processor.EvaluatedResult evaluated
-function M.run(doc, context, evaluated_frontmatter)
-  local evaluated = processor.evaluate(doc, context, evaluated_frontmatter)
+function M.run(doc, context, opts)
+  local evaluated = processor.evaluate(doc, context, opts)
 
   local history = {}
   local system = nil

@@ -51,6 +51,7 @@ syntax region FlemmaStatusStrikethrough matchgroup=Conceal start=/\~\~/ end=/\~\
 
 " Legend
 syntax match FlemmaStatusLegend "^✲.*$"
+syntax match FlemmaStatusLegend "^⊡.*$"
 
 " Config dump region with embedded Lua highlighting
 syntax region FlemmaStatusConfigBlock start="^\(Model Info\|Config (full)\)$" end="\%$" keepend contains=FlemmaStatusConfigTitle,FlemmaStatusConfigSeparator,@FlemmaStatusLua
@@ -59,6 +60,7 @@ syntax region FlemmaStatusConfigBlock start="^\(Model Info\|Config (full)\)$" en
 syntax match FlemmaStatusToolEnabled "^\s\+✓ .*$"
 syntax match FlemmaStatusToolDisabled "^\s\+✗ .*$"
 syntax match FlemmaStatusToolPending "^\s\+⋯ .*$"
+syntax match FlemmaStatusBooting "^\s\+⏳ .*$"
 
 " Highlight groups
 highlight default link FlemmaStatusTitle Title
@@ -78,5 +80,6 @@ highlight default link FlemmaStatusLegend Comment
 highlight default link FlemmaStatusToolEnabled DiagnosticOk
 highlight default link FlemmaStatusToolDisabled DiagnosticWarn
 highlight default link FlemmaStatusToolPending DiagnosticInfo
+highlight default link FlemmaStatusBooting WarningMsg
 
-let b:current_syntax = "flemma_status"
+let b:current_syntax = "flemma-status"

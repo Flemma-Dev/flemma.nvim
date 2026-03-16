@@ -116,6 +116,34 @@ These values come from provider documentation and API error messages, NOT from m
 | Vertex | gemini-2.0-flash* | — | — | — | — | — | — (no thinking) |
 | OpenAI | o-series / gpt-5* | — | — | — | — | — | — (effort-based, not budget) |
 
+### Thinking effort maps
+
+Models that use effort/level-based thinking (not budget-based) need a `thinking_effort_map` field that maps Flemma's canonical levels (`minimal`, `low`, `medium`, `high`, `max`) to the provider's accepted API values. Discover valid values from two sources:
+
+#### Source 1: Pi source code (ground truth)
+
+Clone the Pi mono-repo if it doesn't already exist:
+
+```bash
+[ -d contrib/pi-mono.git ] || git clone --depth 1 https://github.com/badlogic/pi-mono.git contrib/pi-mono.git
+```
+
+Launch a sub-agent to search `contrib/pi-mono.git` for how Pi maps thinking/reasoning levels internally. Look for effort maps, thinking level enums, reasoning effort tables, and per-model level restrictions. Report back the exact mappings Pi uses for each model family across all three providers.
+
+#### Source 2: Provider documentation
+
+Cross-reference the Pi findings with provider docs:
+
+- **OpenAI**: Check the reasoning effort docs for each model family — which values (`minimal`, `low`, `medium`, `high`, `xhigh`) each model accepts. Map Flemma levels to valid API values, clamping unsupported ones to the nearest valid value.
+- **Anthropic**: Models with adaptive thinking (`thinking.type = "adaptive"`) need a map + `supports_adaptive_thinking = true`. Check which effort levels each model accepts (e.g., `max` may be restricted to certain models). Models using only budget-based thinking do not need a map.
+- **Vertex**: Gemini models using `thinkingLevel` (discrete enum like `MINIMAL`, `LOW`, `MEDIUM`, `HIGH`) need a map. Check which enum values each model family supports — some may lack `MINIMAL` or `MEDIUM`. Budget-based models (`thinkingBudget`) do not need a map.
+
+#### Rules
+
+- Budget-only models (no effort/level API parameter) should NOT have `thinking_effort_map`.
+- When Pi and provider docs disagree, prefer the provider docs (Pi may lag behind API changes).
+- When provider docs are ambiguous or silent, Pi's mappings are authoritative.
+
 ### Cache minimums (Anthropic only)
 
 | Model | min_cache_tokens |

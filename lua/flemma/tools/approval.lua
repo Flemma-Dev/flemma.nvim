@@ -6,8 +6,13 @@
 ---@class flemma.tools.Approval
 local M = {}
 
-local state = require("flemma.state")
+local loader = require("flemma.loader")
 local log = require("flemma.logging")
+local registry_utils = require("flemma.registry")
+local sandbox = require("flemma.sandbox")
+local state = require("flemma.state")
+local tool_presets = require("flemma.tools.presets")
+local tools_registry = require("flemma.tools.registry")
 
 ---@alias flemma.tools.ApprovalResult "approve"|"require_approval"|"deny"
 
@@ -76,7 +81,6 @@ end
 ---@param name string Unique resolver name
 ---@param definition flemma.tools.ApprovalResolverDefinition
 function M.register(name, definition)
-  local registry_utils = require("flemma.registry")
   registry_utils.validate_name(name, "approval resolver")
   register_entry(name, definition)
 end
@@ -145,6 +149,18 @@ end
 ---@param context flemma.config.AutoApproveContext
 ---@return flemma.tools.ApprovalResult
 function M.resolve(tool_name, input, context)
+  local result = M.resolve_with_source(tool_name, input, context)
+  return result
+end
+
+---Like resolve(), but also returns the name of the resolver that made the decision.
+---Used by status display to annotate why a tool was approved/denied.
+---@param tool_name string
+---@param input table<string, any>
+---@param context flemma.config.AutoApproveContext
+---@return flemma.tools.ApprovalResult result
+---@return string source Resolver name, or "default" if no resolver matched
+function M.resolve_with_source(tool_name, input, context)
   ensure_sorted()
 
   for _, entry in ipairs(resolvers) do
@@ -153,13 +169,13 @@ function M.resolve(tool_name, input, context)
       log.warn("approval: resolver '" .. entry.name .. "' error: " .. tostring(result))
     elseif result ~= nil then
       if VALID_RESULTS[result] then
-        return result
+        return result, entry.name
       end
       log.warn("approval: resolver '" .. entry.name .. "' returned invalid result: " .. tostring(result))
     end
   end
 
-  return "require_approval"
+  return "require_approval", "default"
 end
 
 ---Resolve an auto_approve policy (string[] or function) against a tool call.
@@ -172,7 +188,6 @@ end
 ---@return flemma.tools.ApprovalResult|nil
 local function resolve_auto_approve_policy(policy, tool_name, input, context, error_result)
   if type(policy) == "table" then
-    local tool_presets = require("flemma.tools.presets")
     local approved = {}
     local denied = {}
 
@@ -242,7 +257,6 @@ end
 ---@param module_path string Dot-notation Lua module path
 ---@return fun(tool_name: string, input: table, context: flemma.config.AutoApproveContext): flemma.tools.ApprovalResult|nil
 local function build_module_resolver(module_path)
-  local loader = require("flemma.loader")
   loader.assert_exists(module_path)
   ---@type { resolve: fun(tool_name: string, input: table, context: flemma.config.AutoApproveContext): flemma.tools.ApprovalResult|nil }|nil
   local loaded_resolver = nil
@@ -275,7 +289,6 @@ function M.setup()
 
   local auto_approve = tools_config and tools_config.auto_approve
   if auto_approve ~= nil then
-    local loader = require("flemma.loader")
     if type(auto_approve) == "string" and loader.is_module_path(auto_approve) then
       -- Single module path: validate now, load lazily on first resolve
       -- Registered under the module path so users can get()/unregister() by path
@@ -385,8 +398,7 @@ function M.setup()
       end
 
       -- Only handle tools that declare the sandbox auto-approve capability
-      local registry = require("flemma.tools.registry")
-      local definition = registry.get(tool_name)
+      local definition = tools_registry.get(tool_name)
       if not definition or not definition.capabilities then
         return nil
       end
@@ -400,10 +412,15 @@ function M.setup()
         return nil
       end
 
+      -- An explicit (assigned) policy is a complete specification — don't grant
+      -- additional approvals beyond what the assignment lists.
+      if context.opts and context.opts.auto_approve_explicit then
+        return nil
+      end
+
       -- Verify sandbox is enabled (respects runtime override from :Flemma
       -- sandbox:disable and frontmatter sandbox options) and a backend is
       -- actually available (same check as :Flemma status)
-      local sandbox = require("flemma.sandbox")
       if not sandbox.is_enabled(context.opts) then
         return nil
       end

@@ -6,6 +6,8 @@
 ---@class flemma.Emittable
 local M = {}
 
+local symbols = require("flemma.symbols")
+
 --- Check whether a value implements the emit protocol (duck-typed).
 ---@param value any
 ---@return boolean
@@ -87,6 +89,7 @@ M.EmitContext = EmitContext
 ---@return table emittable A table with an emit(self, ctx) method
 function M.binary_include_part(filename, mime_type, data)
   return {
+    [symbols.SOURCE_PATH] = filename,
     _filename = filename,
     _mime_type = mime_type,
     _data = data,
@@ -101,9 +104,11 @@ end
 ---Create a composite IncludePart (emits children in order).
 ---Children may be strings or emittable tables.
 ---@param children any[] Array of strings or emittable tables
+---@param opts? { source_path?: string } Optional metadata for the include part
 ---@return table emittable A table with an emit(self, ctx) method
-function M.composite_include_part(children)
+function M.composite_include_part(children, opts)
   return {
+    [symbols.SOURCE_PATH] = opts and opts.source_path or nil,
     _children = children,
     ---@param self table
     ---@param ctx flemma.emittable.EmitContext

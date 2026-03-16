@@ -251,6 +251,56 @@ describe("base.resolve_thinking", function()
       assert.are.equal("high", result.effort)
       assert.are.equal("high", result.level)
     end)
+
+    describe("with thinking_effort_map", function()
+      it("maps minimal to low via effort map", function()
+        local model_info = {
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
+        }
+        local result = base.resolve_thinking({ thinking = "minimal" }, caps, model_info)
+        assert.is_true(result.enabled)
+        assert.are.equal("low", result.effort)
+        assert.are.equal("minimal", result.level)
+      end)
+
+      it("maps max to xhigh via effort map", function()
+        local model_info = {
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
+        }
+        local result = base.resolve_thinking({ thinking = "max" }, caps, model_info)
+        assert.is_true(result.enabled)
+        assert.are.equal("xhigh", result.effort)
+        assert.are.equal("max", result.level)
+      end)
+
+      it("maps numeric budget through budget_to_effort then effort map", function()
+        local model_info = {
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
+        }
+        -- 100 maps to "minimal" via budget_to_effort, then "minimal" -> "low" via effort map
+        local result = base.resolve_thinking({ thinking = 100 }, caps, model_info)
+        assert.is_true(result.enabled)
+        assert.are.equal("low", result.effort)
+        assert.are.equal("minimal", result.level)
+      end)
+
+      it("raw reasoning param is also mapped through effort map", function()
+        local model_info = {
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
+        }
+        local result = base.resolve_thinking({ reasoning = "minimal" }, caps, model_info)
+        assert.is_true(result.enabled)
+        assert.are.equal("low", result.effort)
+        assert.are.equal("minimal", result.level)
+      end)
+
+      it("falls back to raw effort when no effort map", function()
+        local result = base.resolve_thinking({ thinking = "minimal" }, caps, nil)
+        assert.is_true(result.enabled)
+        assert.are.equal("minimal", result.effort)
+        assert.are.equal("minimal", result.level)
+      end)
+    end)
   end)
 
   describe("per-model thinking budgets", function()

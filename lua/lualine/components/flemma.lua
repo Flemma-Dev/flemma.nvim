@@ -1,81 +1,178 @@
---- Lualine component for Flemma model display
+--- Lualine component for Flemma status display with tmux-style format strings.
+---
+--- Uses lazy-evaluated variable resolvers — only variables referenced by the
+--- format string trigger data lookups.  Variables are cached per render cycle.
 local lualine_component = require("lualine.component")
 local state = require("flemma.state")
 local registry = require("flemma.provider.registry")
+local format = require("flemma.utilities.format")
+local session = require("flemma.session")
+local str = require("flemma.utilities.string")
+local tools = require("flemma.tools")
 
--- Create a new component for displaying the Flemma model
-local flemma_model_component = lualine_component:extend()
+-- Create a new component for displaying Flemma status
+local flemma_component = lualine_component:extend()
 
----Get the current thinking/reasoning level (unified across providers).
+---@param options table Lualine component options
+function flemma_component:init(options)
+  lualine_component.init(self, options)
+
+  vim.api.nvim_create_autocmd("User", {
+    pattern = "FlemmaBootComplete",
+    callback = function()
+      local ok, lualine = pcall(require, "lualine")
+      if ok then
+        lualine.refresh()
+      end
+    end,
+  })
+end
+
+---Resolve the current thinking/reasoning level (unified across providers).
 ---Reads from the provider's parameter proxy which includes frontmatter overrides.
----@return string|nil level "low"|"medium"|"high" or nil if thinking is not active
-local function get_current_thinking_level()
-  local current_config = state.get_config()
-  if not current_config or not current_config.provider then
-    return nil
-  end
-
-  local capabilities = registry.get_capabilities(current_config.provider)
+---@param config flemma.Config
+---@return string level "low"|"medium"|"high" or "" if thinking is not active
+local function resolve_thinking(config)
+  local capabilities = registry.get_capabilities(config.provider)
   if not capabilities then
-    return nil
+    return ""
   end
 
   -- For effort-based providers (OpenAI), check per-model reasoning support
-  if capabilities.supports_reasoning and current_config.model then
+  if capabilities.supports_reasoning and config.model then
     local models = require("flemma.models")
-    local model_info = models.providers[current_config.provider]
-      and models.providers[current_config.provider].models
-      and models.providers[current_config.provider].models[current_config.model]
+    local model_info = models.providers[config.provider]
+      and models.providers[config.provider].models
+      and models.providers[config.provider].models[config.model]
     if not model_info or not model_info.supports_reasoning_effort then
-      return nil
+      return ""
     end
   end
 
   -- Read from the provider's parameter proxy (includes frontmatter overrides)
   local provider = state.get_provider()
-  local params = provider and provider.parameters or current_config.parameters
+  local params = provider and provider.parameters or config.parameters
   if not params then
-    return nil
+    return ""
   end
 
   local base = require("flemma.provider.base")
   local thinking = base.resolve_thinking(params --[[@as flemma.provider.Parameters]], capabilities)
   if not thinking.enabled then
-    return nil
+    return ""
   end
 
-  return thinking.level
+  return thinking.level or ""
+end
+
+---Build resolver functions that close over a single config snapshot.
+---@param config flemma.Config
+---@return table<string, fun(): string>
+local function make_resolvers(config)
+  return {
+    -- Boot state
+    booting = function()
+      return tools.is_ready() and "" or "1"
+    end,
+
+    -- Identity
+    model = function()
+      return config.model or ""
+    end,
+    provider = function()
+      return config.provider or ""
+    end,
+    thinking = function()
+      return resolve_thinking(config)
+    end,
+
+    -- Session totals
+    ["session.cost"] = function()
+      local s = session.get()
+      local total = s:get_total_cost()
+      return total > 0 and str.format_cost(total) or ""
+    end,
+    ["session.requests"] = function()
+      local s = session.get()
+      local count = s:get_request_count()
+      return count > 0 and tostring(count) or ""
+    end,
+    ["session.tokens.input"] = function()
+      local s = session.get()
+      local total = s:get_total_input_tokens()
+      return total > 0 and str.format_tokens(total) or ""
+    end,
+    ["session.tokens.output"] = function()
+      local s = session.get()
+      local total = s:get_total_output_tokens()
+      return total > 0 and str.format_tokens(total) or ""
+    end,
+
+    -- Last request
+    ["last.cost"] = function()
+      local s = session.get()
+      local request = s:get_latest_request()
+      if not request then
+        return ""
+      end
+      local total = request:get_total_cost()
+      return total > 0 and str.format_cost(total) or ""
+    end,
+    ["last.tokens.input"] = function()
+      local s = session.get()
+      local request = s:get_latest_request()
+      if not request then
+        return ""
+      end
+      return request.input_tokens > 0 and str.format_tokens(request.input_tokens) or ""
+    end,
+    ["last.tokens.output"] = function()
+      local s = session.get()
+      local request = s:get_latest_request()
+      if not request then
+        return ""
+      end
+      local total = request:get_total_output_tokens()
+      return total > 0 and str.format_tokens(total) or ""
+    end,
+  }
+end
+
+---Build a lazy variable table for a single render cycle.
+---Variables are resolved on first access and cached for the remainder of the cycle.
+---@param config flemma.Config
+---@return table
+local function build_vars(config)
+  local resolvers = make_resolvers(config)
+  return setmetatable({}, {
+    __index = function(self, key)
+      local resolver = resolvers[key]
+      if not resolver then
+        return ""
+      end
+      local value = resolver()
+      rawset(self, key, value)
+      return value
+    end,
+  })
 end
 
 ---Updates the status of the component.
 ---Called by lualine to get the text to display.
 ---@return string
-function flemma_model_component:update_status()
-  -- Only show the model if the filetype is 'chat'
-  if vim.bo.filetype == "chat" then
-    local flemma_ok, flemma = pcall(require, "flemma")
-    if flemma_ok and flemma then
-      local model_name = flemma.get_current_model_name and flemma.get_current_model_name()
-      if not model_name or model_name == "" then
-        return "" -- No model, show nothing
-      end
-
-      -- Get format string from config
-      local full_config = state.get_config() or {}
-      local statusline_config = full_config.statusline or {}
-      local thinking_format = statusline_config.thinking_format or "{model} ({level})"
-
-      local level = get_current_thinking_level()
-      if level then
-        local result = thinking_format:gsub("{model}", model_name):gsub("{level}", level)
-        return result
-      end
-
-      return model_name
-    end
-    return "" -- Fallback if flemma module is not available
+function flemma_component:update_status()
+  if vim.bo.filetype ~= "chat" then
+    return ""
   end
-  return "" -- Return empty string if not a 'chat' buffer
+
+  local config = state.get_config()
+  if not config or not config.model or config.model == "" then
+    return ""
+  end
+
+  local fmt = config.statusline.format
+
+  return format.expand(fmt, build_vars(config))
 end
 
-return flemma_model_component -- Return the component instance directly
+return flemma_component

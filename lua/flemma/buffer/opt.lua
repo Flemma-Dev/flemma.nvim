@@ -3,11 +3,21 @@
 ---@class flemma.buffer.Opt
 local M = {}
 
+local config_manager = require("flemma.core.config.manager")
+local loader = require("flemma.loader")
+local provider_registry = require("flemma.provider.registry")
+local state = require("flemma.state")
+local str = require("flemma.utilities.string")
+local tools = require("flemma.tools")
+local tool_presets = require("flemma.tools.presets")
+
 ---@class flemma.opt.FrontmatterOpts
 ---@field tools string[]|nil List of allowed tool names
 ---@field auto_approve flemma.config.AutoApprove|nil Per-buffer auto-approve policy
 ---@field auto_approve_exclusions table<string, boolean>|nil Tools to exclude from preset expansion
+---@field auto_approve_explicit boolean|nil True when auto_approve was set via assignment (explicit policy)
 ---@field autopilot boolean|nil Per-buffer autopilot override (true/false)
+---@field max_concurrent integer|nil Per-buffer max concurrent tools override
 ---@field parameters table<string, any>|nil General parameter overrides (provider-agnostic)
 ---@field anthropic table<string, any>|nil Per-buffer Anthropic parameter overrides
 ---@field openai table<string, any>|nil Per-buffer OpenAI parameter overrides
@@ -24,42 +34,15 @@ local M = {}
 ---@field _universe table<string, boolean> Set of all valid names (private)
 ---@field _exclusions table<string, true> Names excluded via :remove() when not in _entries (private)
 ---@field _dirty boolean True when any mutation method has been called (private)
+---@field _explicit boolean True when created via assignment (explicit policy) (private)
 local ListOption = {}
 ListOption.__index = ListOption
-
---- Levenshtein distance between two strings
----@param a string
----@param b string
----@return integer
-local function levenshtein(a, b)
-  local la, lb = #a, #b
-  if la == 0 then
-    return lb
-  end
-  if lb == 0 then
-    return la
-  end
-  local prev, curr = {}, {}
-  for j = 0, lb do
-    prev[j] = j
-  end
-  for i = 1, la do
-    curr[0] = i
-    for j = 1, lb do
-      local cost = a:byte(i) == b:byte(j) and 0 or 1
-      curr[j] = math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
-    end
-    prev, curr = curr, prev
-  end
-  return prev[lb]
-end
 
 --- Validate that a name exists in the universe; errors with suggestion if not.
 --- Module paths (containing dots) bypass the universe check and are validated via loader instead.
 ---@param self flemma.opt.ListOption
 ---@param name string
 local function validate_name(self, name)
-  local loader = require("flemma.loader")
   -- Module paths bypass the universe check — validated via loader instead
   if loader.is_module_path(name) then
     loader.assert_exists(name)
@@ -68,16 +51,10 @@ local function validate_name(self, name)
     return
   end
   if not self._universe[name] then
-    local best, best_dist = nil, math.huge
-    for candidate in pairs(self._universe) do
-      local dist = levenshtein(name, candidate)
-      if dist < best_dist then
-        best, best_dist = candidate, dist
-      end
-    end
     local msg = string.format("flemma.opt: unknown value '%s'", name)
-    if best and best_dist <= 3 then
-      msg = msg .. string.format(". Did you mean '%s'?", best)
+    local suggestion = str.closest_match(name, self._universe)
+    if suggestion then
+      msg = msg .. string.format(". Did you mean '%s'?", suggestion)
     end
     error(msg)
   end
@@ -257,11 +234,20 @@ end
 ---@type table<string, flemma.opt.DefaultFn>
 local option_defs = {
   tools = function()
-    local tools_module = require("flemma.tools")
-    local all_tools = tools_module.get_all({ include_disabled = true })
+    local all_tools = tools.get_all({ include_disabled = true })
+    local resolved_config = state.get_config()
     local entries = {}
     for name, def in pairs(all_tools) do
-      table.insert(entries, { name = name, enabled = def.enabled ~= false })
+      local enabled = def.enabled
+      if enabled == nil then
+        enabled = true
+      else
+        if type(enabled) == "function" then
+          enabled = enabled(resolved_config)
+        end
+        enabled = not not enabled
+      end
+      table.insert(entries, { name = name, enabled = enabled })
     end
     table.sort(entries, function(a, b)
       return a.name < b.name
@@ -298,10 +284,9 @@ function M.create()
   local raw_options = {}
 
   -- Build auto_approve universe: all tool names + all preset names
-  local tool_presets = require("flemma.tools.presets")
   ---@type table<string, boolean>
   local auto_approve_universe = {}
-  local all_tools_for_universe = require("flemma.tools").get_all({ include_disabled = true })
+  local all_tools_for_universe = tools.get_all({ include_disabled = true })
   for name in pairs(all_tools_for_universe) do
     auto_approve_universe[name] = true
   end
@@ -309,37 +294,35 @@ function M.create()
     auto_approve_universe[preset_name] = true
   end
 
+  ---@class flemma.opt.CreateAutoApproveOpts
+  ---@field explicit? boolean Mark as an explicit (assigned) policy — prevents lower-priority resolvers from adding extras
+
   --- Create a ListOption for auto_approve from a string[] of names
   ---@param names string[]
+  ---@param opts? flemma.opt.CreateAutoApproveOpts
   ---@return flemma.opt.ListOption
-  local function create_auto_approve_option(names)
+  local function create_auto_approve_option(names, opts)
     local entries = {}
     for _, name in ipairs(names) do
       -- Validate against auto_approve_universe (module paths bypass via validate_name logic)
-      local loader = require("flemma.loader")
       if not auto_approve_universe[name] then
         if loader.is_module_path(name) then
           loader.assert_exists(name)
           auto_approve_universe[name] = true
         else
-          local best, best_dist = nil, math.huge
-          for candidate in pairs(auto_approve_universe) do
-            local dist = levenshtein(name, candidate)
-            if dist < best_dist then
-              best, best_dist = candidate, dist
-            end
-          end
           local msg = string.format("flemma.opt: unknown value '%s'", name)
-          if best and best_dist <= 3 then
-            msg = msg .. string.format(". Did you mean '%s'?", best)
+          local suggestion = str.closest_match(name, auto_approve_universe)
+          if suggestion then
+            msg = msg .. string.format(". Did you mean '%s'?", suggestion)
           end
           error(msg)
         end
       end
       table.insert(entries, { name = name, enabled = true })
     end
+    local explicit = opts and opts.explicit or false
     return setmetatable(
-      { _entries = entries, _universe = auto_approve_universe, _exclusions = {}, _dirty = false },
+      { _entries = entries, _universe = auto_approve_universe, _exclusions = {}, _dirty = false, _explicit = explicit },
       ListOption
     )
   end
@@ -356,7 +339,7 @@ function M.create()
     if auto_approve_option or auto_approve_fn then
       return
     end
-    local config = require("flemma.state").get_config()
+    local config = state.get_config()
     local default_policy = config.tools and config.tools.auto_approve
     if type(default_policy) == "table" then
       auto_approve_option = create_auto_approve_option(default_policy --[[@as string[] ]])
@@ -381,6 +364,9 @@ function M.create()
       if key == "autopilot" then
         return raw_options.autopilot
       end
+      if key == "max_concurrent" then
+        return raw_options.max_concurrent
+      end
       return ListOption[key]
     end,
     __newindex = function(_, key, value)
@@ -395,7 +381,7 @@ function M.create()
           return
         end
         if type(value) == "table" then
-          auto_approve_option = create_auto_approve_option(value)
+          auto_approve_option = create_auto_approve_option(value, { explicit = true })
           auto_approve_option._dirty = true
           auto_approve_fn = nil
           return
@@ -407,6 +393,15 @@ function M.create()
           error(string.format("flemma.opt.tools.autopilot: expected boolean, got %s", type(value)))
         end
         raw_options.autopilot = value
+        return
+      end
+      if key == "max_concurrent" then
+        if type(value) ~= "number" or value ~= math.floor(value) or value < 0 then
+          error(
+            string.format("flemma.opt.tools.max_concurrent: expected non-negative integer, got %s", tostring(value))
+          )
+        end
+        raw_options.max_concurrent = value
         return
       end
       rawset(tools_option, key, value)
@@ -427,8 +422,6 @@ function M.create()
   ---@type table<string, any>
   local general_params = {}
 
-  local config_manager = require("flemma.core.config.manager")
-
   local opt_proxy = setmetatable({}, {
     ---@param _ table
     ---@param key string
@@ -440,7 +433,7 @@ function M.create()
       if key == "sandbox" then
         return raw_options.sandbox
       end
-      local provider_reg = require("flemma.provider.registry")
+      local provider_reg = provider_registry
       if provider_reg.has(key) then
         if not provider_proxies[key] then
           provider_params[key] = provider_params[key] or {}
@@ -485,7 +478,7 @@ function M.create()
         raw_options.sandbox = vim.tbl_deep_extend("force", raw_options.sandbox or {}, value)
         return
       end
-      local provider_reg = require("flemma.provider.registry")
+      local provider_reg = provider_registry
       if provider_reg.has(key) then
         if type(value) ~= "table" then
           error(string.format("flemma.opt.%s: expected table, got %s", key, type(value)))
@@ -514,11 +507,17 @@ function M.create()
     if auto_approve_option and auto_approve_option._dirty then
       result.auto_approve = auto_approve_option:get()
       result.auto_approve_exclusions = auto_approve_option:get_exclusions()
+      if auto_approve_option._explicit then
+        result.auto_approve_explicit = true
+      end
     elseif auto_approve_fn then
       result.auto_approve = auto_approve_fn
     end
     if raw_options.autopilot ~= nil then
       result.autopilot = raw_options.autopilot
+    end
+    if raw_options.max_concurrent ~= nil then
+      result.max_concurrent = raw_options.max_concurrent
     end
     if raw_options.sandbox ~= nil then
       result.sandbox = vim.deepcopy(raw_options.sandbox)

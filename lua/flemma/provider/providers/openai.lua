@@ -4,6 +4,10 @@ local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local models = require("flemma.models")
+local secrets = require("flemma.secrets")
+local sink = require("flemma.sink")
+local tools_module = require("flemma.tools")
+local provider_registry = require("flemma.provider.registry")
 
 ---@class flemma.provider.OpenAI : flemma.provider.Base
 local M = {}
@@ -20,7 +24,6 @@ local NOOP_EVENTS = {
   ["response.content_part.added"]           = true, -- content part started; we accumulate via text.delta
   ["response.content_part.done"]            = true, -- content part finished; final text in response.completed
   ["response.output_text.done"]             = true, -- final text for output; redundant with accumulated deltas
-  ["response.function_call_arguments.delta"] = true, -- incremental args; final args come via output_item.done
   ["response.function_call_arguments.done"] = true, -- final args; redundant with output_item.done
   ["response.reasoning_summary_part.added"] = true, -- reasoning summary part started
   ["response.reasoning_summary_part.done"]  = true, -- reasoning summary part finished
@@ -51,7 +54,7 @@ function M.new(merged_config)
   provider.endpoint = "https://api.openai.com/v1/responses"
 
   -- Set metatable BEFORE reset so M.reset (not base.reset) initializes provider-specific state
-  setmetatable(provider, { __index = setmetatable(M, { __index = base }) })
+  base._init_provider(M, provider)
   provider:reset()
 
   return provider --[[@as flemma.provider.OpenAI]]
@@ -59,16 +62,8 @@ end
 
 ---@param self flemma.provider.OpenAI
 function M.reset(self)
-  -- Destroy previous sink if it exists
-  if self._response_buffer and self._response_buffer.extra then
-    if self._response_buffer.extra.reasoning_sink then
-      self._response_buffer.extra.reasoning_sink:destroy()
-    end
-  end
-
   base.reset(self)
 
-  local sink = require("flemma.sink")
   self._response_buffer.extra.tool_calls = {}
   self._response_buffer.extra.reasoning_sink = sink.create({
     name = "openai/reasoning",
@@ -78,26 +73,14 @@ function M.reset(self)
 end
 
 ---@param self flemma.provider.OpenAI
----@param exit_code number
----@param callbacks flemma.provider.Callbacks
-function M.finalize_response(self, exit_code, callbacks)
-  if self._response_buffer and self._response_buffer.extra then
-    if self._response_buffer.extra.reasoning_sink then
-      self._response_buffer.extra.reasoning_sink:destroy()
-    end
-  end
-  base.finalize_response(self, exit_code, callbacks)
-end
-
----@param self flemma.provider.OpenAI
 ---@return string|nil
 function M.get_api_key(self)
-  -- Call the base implementation with OpenAI-specific parameters
-  return base.get_api_key(self, {
-    env_var_name = "OPENAI_API_KEY",
-    keyring_service_name = "openai",
-    keyring_key_name = "api",
+  local result = secrets.resolve({
+    kind = "api_key",
+    service = "openai",
+    description = "OpenAI API key",
   })
+  return result and result.value or nil
 end
 
 ---Build request body for OpenAI Responses API
@@ -276,30 +259,24 @@ function M.build_request(self, prompt, context)
   end
 
   -- Inject synthetic error results for orphaned tool calls
-  local pending = prompt.pending_tool_calls
-  if pending and #pending > 0 then
-    for _, orphan in ipairs(pending) do
-      table.insert(input_items, {
-        type = "function_call_output",
-        call_id = base.normalize_tool_id(orphan.id),
-        output = "Error: No result provided",
-      })
-      log.debug(
-        "openai.build_request: Injected synthetic function_call_output for orphaned "
-          .. orphan.name
-          .. " ("
-          .. orphan.id
-          .. ")"
-      )
+  local orphan_results = base._inject_orphan_results(self, prompt.pending_tool_calls, function(orphan)
+    return {
+      type = "function_call_output",
+      call_id = base.normalize_tool_id(orphan.id),
+      output = "Error: No result provided",
+    }
+  end)
+  if orphan_results then
+    for _, result in ipairs(orphan_results) do
+      table.insert(input_items, result)
     end
   end
 
   -- Build tools array from registry (OpenAI format, filtered by per-buffer opts if present)
-  local tools_module = require("flemma.tools")
-  local all_tools = tools_module.get_for_prompt(prompt.opts)
+  local sorted_tools = tools_module.get_sorted_for_prompt(prompt.opts)
   local tools_array = {}
 
-  for _, definition in pairs(all_tools) do
+  for _, definition in ipairs(sorted_tools) do
     local tool_entry = {
       type = "function",
       name = definition.name,
@@ -311,11 +288,6 @@ function M.build_request(self, prompt, context)
     end
     table.insert(tools_array, tool_entry)
   end
-
-  -- Sort for deterministic ordering (improves prompt caching hit rates)
-  table.sort(tools_array, function(a, b)
-    return a.name < b.name
-  end)
 
   local request_body = {
     model = self.parameters.model,
@@ -333,19 +305,14 @@ function M.build_request(self, prompt, context)
   end
 
   -- Add reasoning configuration using unified resolution
-  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities)
+  local model_info = provider_registry.get_model_info("openai", self.parameters.model)
+  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
 
   if thinking.enabled and thinking.effort then
-    -- Map Flemma's canonical "max" to OpenAI's "xhigh" for models that support it
-    local effort = thinking.effort
-    if effort == "max" then
-      local model = self.parameters.model or ""
-      local supports_xhigh = model:match("gpt%-5%.2") ~= nil or model:match("gpt%-5%.3") ~= nil
-      effort = supports_xhigh and "xhigh" or "high"
-    end
+    -- effort is already mapped to provider API value by resolve_thinking via thinking_effort_map
     local reasoning_summary = self.parameters.reasoning_summary or "auto"
     request_body.reasoning = {
-      effort = effort,
+      effort = thinking.effort,
       summary = reasoning_summary,
     }
     request_body.include = { "reasoning.encrypted_content" }
@@ -397,38 +364,6 @@ function M.get_request_headers(self)
   }
 end
 
----Emit accumulated reasoning as a thinking block (called at response completion)
----@param self flemma.provider.OpenAI
----@param callbacks flemma.provider.Callbacks
-function M._emit_reasoning_block(self, callbacks)
-  local reasoning_item = self._response_buffer.extra.reasoning_item
-  if not reasoning_item then
-    return
-  end
-
-  local summary = self._response_buffer.extra.reasoning_sink:read()
-  local stripped = vim.trim(summary)
-
-  -- Serialize the full reasoning item as base64 for the signature attribute
-  local signature = vim.base64.encode(json.encode(reasoning_item))
-
-  local prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
-  if #stripped > 0 then
-    local thinking_block = prefix
-      .. '<thinking openai:signature="'
-      .. signature
-      .. '">\n'
-      .. stripped
-      .. "\n</thinking>\n"
-    base._signal_content(self, thinking_block, callbacks)
-  else
-    -- Signature but no visible summary — emit open/close tag (enables folding)
-    local tag = prefix .. '<thinking openai:signature="' .. signature .. '">\n</thinking>\n'
-    base._signal_content(self, tag, callbacks)
-  end
-  log.debug("openai._emit_reasoning_block(): Emitted thinking block")
-end
-
 ---Extract usage data from a response.completed or response.incomplete event
 ---@param self flemma.provider.OpenAI
 ---@param data table<string, any>
@@ -466,64 +401,48 @@ function M._extract_usage(self, data, callbacks)
   end
 end
 
---- Process a single line of OpenAI Responses API streaming response
---- Parses OpenAI's server-sent events format and extracts content, usage, and completion information
+--- Emit accumulated reasoning as a thinking block using base helper.
+--- Called at response completion and incomplete events.
 ---@param self flemma.provider.OpenAI
----@param line string A single line from the OpenAI API response stream
+---@param callbacks flemma.provider.Callbacks
+local function emit_reasoning(self, callbacks)
+  local reasoning_item = self._response_buffer.extra.reasoning_item
+  if reasoning_item then
+    local summary = self._response_buffer.extra.reasoning_sink:read()
+    local signature = vim.base64.encode(json.encode(reasoning_item))
+    base._emit_thinking_block(self, summary, signature, "openai", callbacks)
+  end
+end
+
+--- Process parsed SSE data for OpenAI Responses API events.
+--- Dispatches on data.type to handle content deltas, tool calls, reasoning,
+--- usage, completion, and error events.
+---@param self flemma.provider.OpenAI
+---@param data table Parsed JSON event data
+---@param _parsed flemma.provider.SSELine SSE line metadata (unused by OpenAI)
 ---@param callbacks flemma.provider.Callbacks Table of callback functions to handle parsed data
-function M.process_response_line(self, line, callbacks)
-  -- Use base SSE parser (no [DONE] in Responses API)
-  local parsed = base._parse_sse_line(line, { allow_done = false })
-  if not parsed then
-    -- Handle non-SSE lines
-    base._handle_non_sse_line(self, line, callbacks)
-    return
-  end
-
-  -- Skip event: lines (we use data.type instead)
-  if parsed.type == "event" then
-    return
-  end
-
-  -- Handle non-data SSE lines
-  if parsed.type ~= "data" then
-    return
-  end
-
-  -- Parse JSON content
-  local ok, data = pcall(json.decode, parsed.content)
-  if not ok then
-    log.error("openai.process_response_line(): Failed to parse JSON from response: " .. parsed.content)
-    return
-  end
-
-  if type(data) ~= "table" then
-    log.error("openai.process_response_line(): Expected table in response, got type: " .. type(data))
-    return
-  end
-
-  -- Handle error responses
-  if data.error then
-    local error_message = self:extract_json_response_error(data) or "Unknown API error"
-    log.error("openai.process_response_line(): OpenAI API error: " .. log.inspect(error_message))
-    if callbacks.on_error then
-      callbacks.on_error(error_message)
-    end
-    return
-  end
-
+function M._process_data(self, data, _parsed, callbacks)
   local event_type = data.type
 
   if not event_type then
-    log.trace("openai.process_response_line(): Data without type field, skipping")
+    log.trace("openai._process_data(): Data without type field, skipping")
     return
   end
 
   -- Handle text content deltas
   if event_type == "response.output_text.delta" then
     if data.delta then
-      log.trace("openai.process_response_line(): Text delta: " .. log.inspect(data.delta))
+      log.trace("openai._process_data(): Text delta: " .. log.inspect(data.delta))
       base._signal_content(self, data.delta, callbacks)
+    end
+    return
+  end
+
+  -- Handle incremental function call argument deltas (progress tracking only;
+  -- the final args arrive via output_item.done which is the source of truth)
+  if event_type == "response.function_call_arguments.delta" then
+    if data.delta and callbacks.on_tool_input then
+      callbacks.on_tool_input(data.delta)
     end
     return
   end
@@ -536,7 +455,7 @@ function M.process_response_line(self, line, callbacks)
         call_id = data.item.call_id or "",
       }
       log.debug(
-        "openai.process_response_line(): Started function_call: "
+        "openai._process_data(): Started function_call: "
           .. (data.item.name or "")
           .. " ("
           .. (data.item.call_id or "")
@@ -544,10 +463,10 @@ function M.process_response_line(self, line, callbacks)
       )
     elseif data.item and data.item.type == "reasoning" then
       self._response_buffer.extra.reasoning_sink:destroy()
-      self._response_buffer.extra.reasoning_sink = require("flemma.sink").create({
+      self._response_buffer.extra.reasoning_sink = sink.create({
         name = "openai/reasoning",
       })
-      log.debug("openai.process_response_line(): Reasoning item started")
+      log.debug("openai._process_data(): Reasoning item started")
     end
     return
   end
@@ -560,40 +479,18 @@ function M.process_response_line(self, line, callbacks)
       local arguments_json = data.item.arguments or ""
       local parse_ok, _ = pcall(json.decode, arguments_json)
       if not parse_ok then
-        log.warn("openai.process_response_line(): Failed to parse tool arguments JSON: " .. arguments_json)
+        log.warn("openai._process_data(): Failed to parse tool arguments JSON: " .. arguments_json)
         arguments_json = "{}"
       end
 
-      local max_ticks = 0
-      for ticks in arguments_json:gmatch("`+") do
-        max_ticks = math.max(max_ticks, #ticks)
-      end
-      local fence = string.rep("`", math.max(3, max_ticks + 1))
-
-      -- Use appropriate prefix based on what's already accumulated
-      local prefix = ""
-      if self:_has_content() then
-        prefix = self:_content_ends_with_newline() and "\n" or "\n\n"
-      end
-      local formatted = string.format(
-        "%s**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n",
-        prefix,
-        data.item.name or "",
-        data.item.call_id or "",
-        fence,
-        arguments_json,
-        fence
-      )
-
-      base._signal_content(self, formatted, callbacks)
-      log.debug("openai.process_response_line(): Emitted tool_use block for " .. (data.item.name or ""))
+      base._emit_tool_use_block(self, data.item.name or "", data.item.call_id or "", arguments_json, callbacks)
 
       -- Reset tool state for this output index
       self._response_buffer.extra.tool_calls[data.output_index] = nil
     elseif data.item and data.item.type == "reasoning" then
       -- Store the full reasoning item for signature (includes encrypted_content)
       self._response_buffer.extra.reasoning_item = data.item
-      log.debug("openai.process_response_line(): Reasoning item completed")
+      log.debug("openai._process_data(): Reasoning item completed")
     end
     return
   end
@@ -611,10 +508,10 @@ function M.process_response_line(self, line, callbacks)
 
   -- Handle response completion with usage
   if event_type == "response.completed" then
-    log.debug("openai.process_response_line(): Response completed")
+    log.debug("openai._process_data(): Response completed")
 
     -- Emit any accumulated reasoning as a thinking block
-    self:_emit_reasoning_block(callbacks)
+    emit_reasoning(self, callbacks)
 
     self:_extract_usage(data, callbacks)
     if callbacks.on_response_complete then
@@ -625,7 +522,7 @@ function M.process_response_line(self, line, callbacks)
 
   -- Handle incomplete response (truncation due to max_output_tokens, etc.)
   if event_type == "response.incomplete" then
-    log.warn("openai.process_response_line(): Response incomplete")
+    log.warn("openai._process_data(): Response incomplete")
 
     local reason = data.response and data.response.incomplete_details and data.response.incomplete_details.reason
       or "unknown"
@@ -635,7 +532,7 @@ function M.process_response_line(self, line, callbacks)
       { title = "Flemma" }
     )
     -- Emit any accumulated reasoning before completing
-    self:_emit_reasoning_block(callbacks)
+    emit_reasoning(self, callbacks)
 
     self:_extract_usage(data, callbacks)
     if callbacks.on_response_complete then
@@ -653,7 +550,7 @@ function M.process_response_line(self, line, callbacks)
     if data.message then
       error_message = error_message .. ": " .. data.message
     end
-    log.error("openai.process_response_line(): " .. error_message)
+    log.error("openai._process_data(): " .. error_message)
     if callbacks.on_error then
       callbacks.on_error(error_message)
     end
@@ -666,7 +563,7 @@ function M.process_response_line(self, line, callbacks)
     if data.response and data.response.error then
       error_message = data.response.error.message or error_message
     end
-    log.error("openai.process_response_line(): " .. error_message)
+    log.error("openai._process_data(): " .. error_message)
     if callbacks.on_error then
       callbacks.on_error(error_message)
     end
@@ -679,7 +576,7 @@ function M.process_response_line(self, line, callbacks)
   end
 
   -- Truly unknown events get logged for debugging
-  log.warn("openai.process_response_line(): Ignoring unknown event type: " .. event_type)
+  log.warn("openai._process_data(): Ignoring unknown event type: " .. event_type)
 end
 
 ---Validate provider-specific parameters

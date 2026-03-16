@@ -670,7 +670,8 @@ describe("flemma.session", function()
       })
 
       assert.are.equal(2, session:get_request_count())
-      assert.are.equal(300, session:get_total_input_tokens())
+      -- Total = (100 + 500 + 200) + (200 + 0 + 0) = 1000
+      assert.are.equal(1000, session:get_total_input_tokens())
 
       -- Verify first request preserved all raw fields
       local first = session.requests[1]
@@ -794,6 +795,22 @@ describe("flemma.session", function()
       assert.are.equal(cost_before, session:get_total_cost())
       assert.are.equal(input_cost_before, session:get_total_input_cost())
       assert.are.equal(output_cost_before, session:get_total_output_cost())
+    end)
+  end)
+
+  describe("singleton", function()
+    it("returns the same Session instance across calls", function()
+      local s1 = session_module.get()
+      local s2 = session_module.get()
+      assert.are.equal(s1, s2)
+    end)
+
+    it("does not require flemma.state", function()
+      package.loaded["flemma.session"] = nil
+      package.loaded["flemma.state"] = nil
+      package.loaded["flemma.tools"] = nil
+      local fresh = require("flemma.session")
+      assert.is_not_nil(fresh.get())
     end)
   end)
 end)

@@ -1,4 +1,7 @@
-.PHONY: default changeset test lint check
+.PHONY: default changeset qa develop screencast
+
+SHELL := $(shell which bash)
+VIMRUNTIME_PATH = $(shell dirname $(shell dirname $(shell readlink -f $(shell which nvim))))/share/nvim/runtime
 
 default:
 	@echo "Usage: make [$(shell cat ${MAKEFILE_LIST} | grep -E '^[a-zA-Z_-]+:' | sed 's/:.*//g' | grep -v '^default' | tr '\n' '|' | sed 's/|$$//')]"
@@ -8,47 +11,70 @@ default:
 changeset:
 	pnpm changeset
 
-# Run the test suite
-test:
-	nvim --headless --noplugin -u tests/minimal.vim -c "PlenaryBustedDirectory tests/flemma/ {minimal_init = 'tests/minimal_init.lua'}"
+# Run all quality gates — parallel, bail on first failure
+qa:
+	@d=$$(mktemp -d); trap 'rm -rf "$$d"' EXIT; \
+	declare -A gate; \
+	luacheck lua/ tests/ \
+		>"$$d/luacheck" 2>&1 & gate[$$!]=luacheck; \
+	VIMRUNTIME=$(VIMRUNTIME_PATH) \
+		lua-language-server --check lua/ --configpath ../.luarc-check.lua \
+		>"$$d/types" 2>&1 & gate[$$!]=types; \
+	bash scripts/lint-inline-requires.sh \
+		>"$$d/imports" 2>&1 & gate[$$!]=imports; \
+	nvim --headless --noplugin -u tests/minimal.vim \
+		-c "PlenaryBustedDirectory tests/flemma/ {minimal_init = 'tests/minimal_init.lua'}" \
+		>"$$d/test" 2>&1 & gate[$$!]=test; \
+	while (( $${#gate[@]} )); do \
+		pid=0; wait -n -p pid $${!gate[@]}; rc=$$?; \
+		name=$${gate[$$pid]}; unset "gate[$$pid]"; \
+		if (( rc )); then \
+			kill $${!gate[@]} 2>/dev/null; wait 2>/dev/null; \
+			echo "qa: FAILED — $$name"; echo ""; \
+			echo "--- $$name ---"; \
+			if [ "$$name" = test ]; then \
+				grep -vE '^.....(Success|Failed|Errors)' "$$d/$$name" \
+					| grep -v '^Scheduling' \
+					| grep -v '^Flemma: Switched to' \
+					| grep -v '^===='; \
+			else cat "$$d/$$name"; fi; \
+			echo ""; exit 1; \
+		fi; \
+	done; \
+	echo "qa: OK"
 
-# Run luacheck on the Lua files
-lint:
-	luacheck lua/ tests/
-
-# Run lua-language-server type checker on production code
-check:
-	@# VIMRUNTIME must be set so .luarc-check.lua can locate the Neovim runtime Lua stubs.
-	@# On NixOS, `nvim` might be symlinked to a store path, so we resolve it with `readlink -f`.
-	VIMRUNTIME=$(shell dirname $(shell dirname $(shell readlink -f $(shell which nvim))))/share/nvim/runtime \
-		lua-language-server --check lua/ --configpath ../.luarc-check.lua
-
-.PHONY: develop
 # Launch Flemma.nvim from local directory
 develop:
 	@-rm ~/.cache/nvim/flemma.log
-	@nvim --cmd "set runtimepath^=`pwd`"												\
-		-c "																			\
-		lua require(\"flemma\").setup({													\
+	@nvim --cmd "lua																	\
+			local cwd = vim.uv.cwd();													\
+			vim.opt.rtp:prepend(cwd);													\
+			package.loaded['lualine.components.flemma'] = setmetatable({}, {			\
+				__call = function(_, ...)												\
+					local m = dofile(cwd .. '/lua/lualine/components/flemma.lua');		\
+					package.loaded['lualine.components.flemma'] = m;					\
+					return m(...)														\
+				end,																	\
+			})																			\
+		"																				\
+		-c "lua																			\
+		require(\"flemma\").setup({														\
 			model = \"\$$haiku\",														\
 			parameters = { thinking = \"minimal\" },									\
 			presets = {																	\
 				[\"\$$haiku\"] = \"anthropic claude-haiku-4-5\",						\
-				[\"\$$gpt\"] = \"openai gpt-5.2\",										\
+				[\"\$$gpt\"] = \"openai gpt-5.4\",										\
 			},																			\
 			diagnostics = { enabled = true },											\
-			logging = { enabled = true },												\
+			logging = { enabled = true, level = \"TRACE\" },							\
 			editing = { auto_write = true },											\
 			tools = { modules = { \"extras.flemma.tools.calculator\" } },				\
+			experimental = { tools = true },											\
 		})																				\
-																						\
-		dofile(\"$(CURDIR)/contrib/extras/sink_viewer.lua\").setup({					\
-			pattern = {																	\
-				\"^anthropic/thinking\",												\
-				\"^openai/reasoning\",													\
-				\"^vertex/thinking\",													\
-			}																			\
-		})																				\
+		pcall(function()																\
+			require(\"bufferline.config\").options.get_element_icon =					\
+				require(\"flemma.integrations.bufferline\").get_element_icon			\
+		end)																			\
 		"																				\
 		-c ":edit $$HOME/.cache/nvim/flemma.log"										\
 		-c ":tabedit example.chat"

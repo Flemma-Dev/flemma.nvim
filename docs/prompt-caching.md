@@ -84,10 +84,17 @@ Gemini 2.5+ models support implicit context caching[^vertex-cache]. When consecu
 ---
 
 [^anthropic-cache]: https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching
+
 [^anthropic-cache-pricing]: https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching#pricing
+
 [^anthropic-cache-limits]: https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching#cache-limitations
+
 [^openai-cache]: https://platform.openai.com/docs/guides/prompt-caching
+
 [^openai-cache-pricing]: https://platform.openai.com/docs/pricing
+
 [^vertex-cache]: https://developers.googleblog.com/en/gemini-2-5-models-now-support-implicit-caching/
+
 [^vertex-cache-pricing]: https://cloud.google.com/vertex-ai/generative-ai/pricing
+
 [^vertex-cache-explicit]: https://docs.cloud.google.com/vertex-ai/generative-ai/docs/context-cache/context-cache-overview

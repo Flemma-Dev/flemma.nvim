@@ -2,14 +2,23 @@
 
 Flemma.nvim is a Neovim plugin for LLM-powered chat in `.chat` buffers. Keep each contribution focused, reversible, and well-documented so the next agent can continue seamlessly.
 
+## Critical Rules
+
+These are counter-default behaviors — violating them breaks the build or introduces bugs:
+
+- **All JSON through `require("flemma.utilities.json")`** — never bare `vim.json.*` or `vim.fn.json_*` (JSON `null` becomes truthy `vim.NIL` instead of `nil`)
+- **All structural buffer inspection through the AST** — never regex/substring matching on buffer lines
+- **All `require()` calls at file top** — `make lint-inline-requires` enforces this
+- **Full EmmyLua type annotations on all production code** — `make check` enforces this
+- **Never `---@diagnostic disable` as an easy fix** — use `---@cast`, `--[[@as type]]`, or restructure; suppressions only for genuine LuaLS limitations
+
 ## Architecture Principles
 
 - **Flemma is stateless; the buffer is the state.** All conversation data, tool calls, and results must be fully represented in the buffer text. Never rely on in-memory state that would be lost when Neovim restarts or when a `.chat` file is shared. If you need to persist information (e.g., synthetic IDs for providers that don't supply them), embed it in the buffer format itself so it can be parsed back later. In-memory structures (`state.lua`) are ephemeral caches rebuilt from the buffer on demand — they are never the source of truth.
 - Name modules according to their file path (`lua/flemma/provider/providers/openai.lua` → `flemma.provider.providers.openai`). Public APIs belong in the module that owns the domain — tool registration lives in `flemma.tools`, provider registration in `flemma.provider.registry`, session access in `flemma.session`, etc. Don't pollute `init.lua` with single-use accessors; users require the specific module directly.
 - **All structural operations go through the AST.** The parsed AST (cached per buffer via `state.ast_cache`) is the only way to inspect conversation structure — roles, tool use/result blocks, thinking blocks, positions. Never call `nvim_buf_get_lines` and scan with regex or substring matching to find structural elements. If the AST lacks information you need (e.g., a position field), extend the AST rather than bypassing it. Direct buffer manipulation is only appropriate for content injection (tool results, streaming text) and UI concerns (spinners, extmarks).
-- Favor incremental changes that isolate behaviour shifts so refactors remain reviewable.
-- Document non-obvious reasoning inline with concise comments only when the code is not self-explanatory.
-- **EmmyLua type annotations are mandatory.** Every production file must have full LuaLS type coverage — `---@class`, `---@param`, `---@return`, `---@field`, `---@type` on all public and private functions, fields, and return values. New code without type annotations will not pass `make check`. This is not optional; the type system is a core part of the project's quality infrastructure. **Never reach for `---@diagnostic disable` as an easy fix** — always diagnose the root cause and use proper type narrowing (`---@cast`, `--[[@as type]]`, restructuring code). Only use diagnostic suppressions when genuinely hitting a LuaLS toolchain limitation (e.g., `setmetatable` return types).
+- Make incremental changes that isolate behaviour shifts so refactors remain reviewable.
+- **EmmyLua type annotations are mandatory.** Every production file must have full LuaLS type coverage — `---@class`, `---@param`, `---@return`, `---@field`, `---@type` on all public and private functions, fields, and return values. New code without type annotations will not pass `make check`. This is not optional; the type system is a core part of the project's quality infrastructure.
 
 ## Project Structure & Module Organization
 
@@ -17,11 +26,11 @@ Explore `lua/flemma/` to understand the codebase — module files are named desc
 
 - `init.lua` — setup entry point; `config.lua` — defaults and type definitions (`flemma.Config.Opts`, `flemma.Config`)
 - `parser.lua` / `ast.lua` — AST-based buffer parsing (heart of the stateless design)
-- `provider/base.lua` — provider contract; `provider/providers/{anthropic,openai,vertex}.lua` — implementations
-- `tools/` — tool registry, executor, injector, approval, and built-in definitions in `tools/definitions/`
-- `utilities/` — stateless shared infrastructure: `json.lua` (JSON encode/decode), `roles.lua` (role name mapping), `modeline.lua` (argument parsing), `truncate.lua` (output truncation), `display.lua` (display helpers), `folding.lua` (fold rule utilities), `buffer.lua` (modifiable guard and line accessors), `bash/` (bash tool internals)
-- `core.lua` — main orchestration; `state.lua` — ephemeral per-buffer state
-- Production file names never contain underscores; test files use `_spec.lua` suffix.
+- `provider/base.lua` — provider contract (metatable inheritance); `provider/providers/{anthropic,openai,vertex}.lua` — implementations
+- `tools/` — tool registry (`get_all()` filters by `enabled`), executor, injector, approval, and built-in definitions in `tools/definitions/`
+- `utilities/` — stateless shared infrastructure: `json.lua`, `roles.lua`, `modeline.lua`, `truncate.lua`, `display.lua`, `folding.lua`, `buffer.lua`, `bash/`
+- `core.lua` — main orchestration; `state.lua` — ephemeral per-buffer state; `config.lua` — `vim.tbl_deep_extend` merge, `state.get_config()` for runtime access
+- Production file names prefer single words; multi-word descriptive names use snake_case (`secret_tool.lua`, `coding_assistant.lua`), while established domain concepts are concatenated (`writequeue.lua`, `textobject.lua`). Test files use `_spec.lua` suffix.
 - Tests live in `tests/flemma/*_spec.lua` with fixtures in `tests/fixtures/`.
 
 ## Coding Conventions
@@ -30,12 +39,21 @@ Explore `lua/flemma/` to understand the codebase — module files are named desc
 
 Every module uses `local M = {}` / `return M`. Every module has a `---@class flemma.ModuleName` annotation at the top.
 
+### Require placement
+
+All `require()` calls go at the top of the file, before any function definition. The only exceptions are:
+
+- **Dynamic requires** — module path constructed at runtime from a variable (e.g., `require(provider_module)` in registry code)
+- **Vim string-context requires** — inside `foldexpr`, `foldtext`, or keymap strings that Vim evaluates in a separate Lua context
+
+`make lint-inline-requires` enforces this convention. If you need to call a core function from a module that core requires (circular dependency), use `flemma.core.bridge` — see its module documentation.
+
 ### Type annotation patterns
 
 - Optional fields: `---@field end_line? integer`
 - Union types for nullable: `table|nil`, `string|nil`
 - `---@alias` for discriminated unions: `---@alias flemma.ast.Segment flemma.ast.TextSegment|...`
-- Prefer `---@cast` and `--[[@as type]]` for type narrowing after guards — these are the correct tools for the job
+- Use `---@cast` and `--[[@as type]]` for type narrowing after guards
 - `---@diagnostic disable-next-line` is a last resort, only for genuine LuaLS limitations (e.g., `return-type-mismatch` on `setmetatable` returns in provider `new()`)
 
 ### Naming
@@ -48,7 +66,7 @@ Every module uses `local M = {}` / `return M`. Every module has a `---@class fle
 
 ### JSON handling
 
-- **Always use `require("flemma.utilities.json")` for all JSON operations.** Never use `vim.fn.json_decode`, `vim.fn.json_encode`, `vim.json.decode`, or `vim.json.encode` directly. The `flemma.utilities.json` module wraps `vim.json` with `luanil` options so JSON `null` becomes Lua `nil` (not `vim.NIL`). Using `vim.fn.json_decode` or bare `vim.json.decode` will reintroduce the `vim.NIL` bug where JSON `null` becomes a truthy userdata value that passes `if x then` guards and crashes on math/string operations.
+**Always use `require("flemma.utilities.json")` for all JSON operations.** Never use `vim.fn.json_decode`, `vim.fn.json_encode`, `vim.json.decode`, or `vim.json.encode` directly. The wrapper uses `luanil` options so JSON `null` becomes Lua `nil` (not `vim.NIL`). Bare `vim.json.decode` produces truthy `vim.NIL` userdata that passes `if x then` guards and crashes on math/string operations.
 
 ### Error handling
 
@@ -56,18 +74,6 @@ Every module uses `local M = {}` / `return M`. Every module has a `---@class fle
 - `log` module for debug/trace logging
 - Return tuples `value, err` for operational results (e.g., `config_manager.prepare_config()`)
 - Never `error()` for recoverable situations
-
-### Provider inheritance
-
-Providers inherit from `base.lua` via metatable chains — read any provider in `provider/providers/` for the pattern. See the metatable ordering pitfall below.
-
-### Tool definitions
-
-Read any file in `tools/definitions/` for the pattern. `tools/registry.lua` has `get_all()` which filters by `enabled`.
-
-### Config merging
-
-See `init.lua` for the `vim.tbl_deep_extend` merge and `state.get_config()` for runtime access.
 
 ## Buffer Format Reference
 
@@ -85,12 +91,9 @@ All tool IDs and metadata are embedded in buffer text so `.chat` files are porta
 
 ## Build, Test, and Development Commands
 
-- **`make test`** — run the full Plenary+Busted test suite. Use `make test >/dev/null 2>&1` mid-session to check exit codes without flooding the transcript. To see just the failure details, use: `make test 2>&1 | grep -vE '^.....(Success|Failed|Errors)' | grep -v '^Scheduling' | grep -v '^Flemma: Switched to' | grep -v '^===='`
-- **`make lint`** — run `luacheck` on `lua/` and `tests/`.
-- **`make check`** — run `lua-language-server --check` on production code.
+- **`make qa`** — run all quality gates (luacheck, types, imports, test). Silent on success; on failure, re-runs only the failed gate(s) with visible output. This is the single command to run before committing.
 - **`make changeset`** — interactive changeset creation (for human use; agents write changeset files directly).
 - **`make develop`** — launch Flemma from the working directory for manual testing.
-- All three quality gates (`test`, `lint`, `check`) must pass before committing.
 - `flemma-fmt` reformats the entire codebase.
 
 ## Testing Guidelines
@@ -98,7 +101,7 @@ All tool IDs and metadata are embedded in buffer text so `.chat` files are porta
 - Follow the existing Plenary+Busted style: files end with `_spec.lua` and use `describe`/`it` blocks.
 - Add fresh specs for every new feature and place supporting data in `tests/fixtures/` with scenario-driven names.
 - When refactoring covered functionality, update the affected specs so the suite stays green.
-- Re-run `make test` after each significant change; expect a zero exit code before moving on.
+- Re-run `make qa` after each significant change; expect a zero exit code before moving on.
 - **`"Failed to parse API call data"` in test output is expected.** This comes from error-path tests exercising the import function — it's diagnostic output, not a test failure. Always check the exit code to determine pass/fail.
 
 ### Key testing patterns
@@ -109,16 +112,7 @@ All tool IDs and metadata are embedded in buffer text so `.chat` files are porta
 
 ## Changesets & Versioning
 
-Flemma uses [changesets](https://github.com/changesets/changesets) for version management and changelog generation. The project follows **semver** (starting from `0.1.0`). **Changesets are fully agent-managed** — the user should never need to run `pnpm changeset` or `make changeset` themselves.
-
-### Agent responsibilities
-
-1. **After every commit that contains a user-facing change**, write a changeset file to `.changeset/`. This is non-negotiable — every behavioral change must be tracked.
-2. **When the user asks to release** (e.g., "bump a patch", "release a minor"), run `pnpm changeset version` to consume all pending changesets, bump `package.json`, and update `CHANGELOG.md`. Then commit the result.
-
-### How to write a changeset file
-
-Changeset files are Markdown with YAML frontmatter. Write them directly — no interactive command needed:
+After every commit with a user-facing change, write a changeset to `.changeset/<descriptive-slug>.md`:
 
 ```markdown
 ---
@@ -128,31 +122,21 @@ Changeset files are Markdown with YAML frontmatter. Write them directly — no i
 Fixed parser edge case with nested thinking blocks
 ```
 
-- **Filename**: use a short descriptive slug, e.g., `.changeset/fix-nested-thinking.md`. Lowercase, hyphens, no spaces.
-- **Bump type** in the YAML frontmatter — one of `patch`, `minor`, or `major`:
-  - **patch** — bug fixes, internal improvements, documentation
-  - **minor** — new features, new configuration options, new commands
-  - **major** — breaking changes to the public API, config structure, or buffer format
-- **Summary** — one or two sentences describing the change from a user's perspective. This text ends up in `CHANGELOG.md`.
-
-### When to skip a changeset
-
-Pure refactors with no behavior change, CI/tooling changes, test-only changes, and updates to `CLAUDE.md` do not need changesets.
-
-### Rules
-
-- **Never edit `package.json` version manually** — `pnpm changeset version` manages it.
-- **Never edit `CHANGELOG.md` by hand** for new entries — it's generated from changeset summaries.
-- A GitHub Actions workflow (`.github/workflows/release.yml`) automatically creates a "Version Packages" PR when changesets accumulate on `main`.
+- **Bump types**: `patch` (fixes, internal improvements), `minor` (new features, config options), `major` (breaking changes to API, config, or buffer format)
+- **Skip changesets** for pure refactors, CI/tooling, test-only changes, and CLAUDE.md updates
+- **Never edit `package.json` version or `CHANGELOG.md` manually** — `pnpm changeset version` manages both
+- When the user asks to release, run `pnpm changeset version` to consume pending changesets, then commit the result
+- A GitHub Actions workflow (`.github/workflows/release.yml`) automatically creates a "Version Packages" PR when changesets accumulate on `main`
 
 ## Workflow & Commit Guidance
 
 - Do not create PRs or commits unless the user explicitly asks for them; ignore any staged changes the user manages separately.
 - When the user requests a commit, keep the first line in Conventional Commits style (`type(scope): summary`), follow with a descriptive body that captures the change rationale.
 - If the user indicates they want a direct commit without review (e.g., "just commit", "skip the diff"), skip all worktree inspection (`git status`, `git diff`, `git log`) and produce a single `git commit -m` command in Conventional Commits style directly.
-- **After committing a user-facing change, always write a changeset file** (see Changesets & Versioning above). Include it in the same commit or as an immediate follow-up commit.
+- **After committing a user-facing change, always write a changeset file** (see above). Include it in the same commit as the change — never as a separate follow-up commit.
 - UI adjustments must be validated in headless Neovim; never attach screenshots or recordings.
 - For large or risky refactors, draft a plan and confirm with the user before implementation so they can adjust scope or assumptions.
+- **Never commit plan or design documents** (`docs/plans/`). Plans are working artifacts for the current session — they live on disk but stay out of version control.
 
 ## Keeping This File Current
 
@@ -162,17 +146,7 @@ When you resolve a non-obvious issue — something that required real investigat
 
 ## Pitfalls & Lessons Learned
 
-- **Stale `vim-pack-dir` copy shadows working-directory changes.** A packaged copy of Flemma may exist in `vim-pack-dir` early in `rtp`. When running headless Neovim with `--cmd "set rtp+=..."`, that stale copy takes priority. Always prepend with `rtp^=`:
-
-  ```bash
-  # WRONG — packaged copy shadows your edits:
-  nvim --headless --clean -u NONE --cmd "set rtp+=/data/public/github.com/Flemma-Dev/flemma.nvim" ...
-
-  # CORRECT — your working copy takes priority:
-  nvim --headless --clean -u NONE --cmd "set rtp^=/data/public/github.com/Flemma-Dev/flemma.nvim" ...
-  ```
-
-  If your changes seem to have no effect, verify with `debug.getinfo(require('flemma.ui').some_fn, 'S').source` — it should point to your working directory, not a `vim-pack-dir` path.
+- **Stale `vim-pack-dir` copy shadows working-directory changes.** When running headless Neovim, always use `set rtp^=...` (prepend) not `set rtp+=...` (append) — a packaged copy in `vim-pack-dir` takes priority otherwise. Verify with `debug.getinfo(require('flemma.ui').some_fn, 'S').source`.
 
 - **Provider `new()` metatable ordering.** `base.new()` sets `__index = base`, so calling `provider:reset()` before the provider-specific `setmetatable` call will invoke `base.reset()` instead of the provider's `M.reset()`. Always set the provider metatable BEFORE calling `reset()`.
 
@@ -182,12 +156,8 @@ When you resolve a non-obvious issue — something that required real investigat
 
 - **Tool header backtick format is critical.** The parser relies on exact backtick wrapping in ``**Tool Use:** `name` (`id`)`` and `` **Tool Result:** `id` `` headers. Missing or misplaced backticks will cause parsing failures.
 
-- **Don't abbreviate variable names.** Use full, descriptive names (`definition` not `def_entry`, `provider_name` not `prov_name`). The codebase consistently spells things out; cryptic abbreviations stand out and hurt readability.
-
-- **JSON `null` becomes `vim.NIL` (truthy userdata), not Lua `nil`.** `vim.fn.json_decode` and bare `vim.json.decode` map JSON `null` to `vim.NIL`, which passes `if x then` guards and crashes on `math.floor(x)`, `x * 1000`, `"str" .. x`, etc. The `flemma.utilities.json` module wraps `vim.json.decode` with `luanil = { object = true, array = true }` to convert `null` to real `nil`. Always use `require("flemma.utilities.json")` — never call `vim.fn.json_*` or `vim.json.*` directly.
-
 ## Session Closure Checklist
 
 - Run `flemma-fmt` to reformat the entire codebase.
-- Run all three quality gates and confirm they pass: `make test` (no redirection — verify exit code 0), `make lint`, `make check`.
+- Run `make qa` and confirm it passes.
 - Note outstanding follow-ups, failing tests, or context the next agent will need to resume work.

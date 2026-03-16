@@ -4,6 +4,8 @@
 local M = {}
 
 local session_module = require("flemma.session")
+local client = require("flemma.client")
+local writequeue = require("flemma.buffer.writequeue")
 
 ---@class flemma.state.InflightUsage
 ---@field input_tokens number
@@ -13,22 +15,34 @@ local session_module = require("flemma.session")
 ---@field cache_read_input_tokens number
 ---@field cache_creation_input_tokens number
 
+---@alias flemma.state.ProgressPhase "waiting"|"thinking"|"streaming"|"buffering"
+
 ---@class flemma.state.BufferState
 ---@field current_request integer|nil Job ID of the active cURL request
 ---@field request_cancelled boolean Whether the current request has been cancelled
----@field spinner_timer integer|nil Timer ID for the spinner animation
 ---@field api_error_occurred boolean Whether an API error occurred during the last request
 ---@field inflight_usage flemma.state.InflightUsage Token counters accumulated during streaming
 ---@field locked boolean Whether the buffer is locked (non-modifiable) for request/tool execution
 ---@field waiting_for_tools? boolean Whether a send is queued waiting for async tool resolution
 ---@field ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached parsed AST
----@field spinner_extmark_id integer|nil Extmark ID for the spinner/thinking preview
----@field spinner_line_idx0 integer|nil 0-indexed line of the spinner extmark
----@field spinner_preview_text string|nil Thinking preview text for the spinner timer to render
+---@field raw_ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached raw (pre-rewriter) AST
+---@field ast_snapshot_before_send? flemma.parser.Snapshot Frozen AST for incremental parsing during streaming
+---@field progress_timer integer|nil Timer ID for the progress line animation
+---@field progress_phase flemma.state.ProgressPhase|nil Current progress line phase
+---@field progress_char_count integer Unified character counter across all delta types
+---@field progress_started_at integer|nil Monotonic timestamp (ms) from vim.uv.now() at curl spawn
+---@field progress_timeout integer|nil Effective timeout (seconds) for the current request
+---@field progress_extmark_id integer|nil Stable extmark ID for timer updates
+---@field progress_last_line integer|nil 0-indexed last content line (set by writequeue callbacks)
+---@field progress_float_winid integer|nil Window ID for the off-screen progress float
+---@field progress_float_bufnr integer|nil Buffer ID for the off-screen progress float
+---@field progress_gutter_icon_winid integer|nil Window ID for the progress gutter icon float
+---@field progress_gutter_icon_bufnr integer|nil Buffer ID for the progress gutter icon float
 ---@field autopilot_override? boolean Per-buffer autopilot override (set from frontmatter, nil = use global config)
 ---@field auto_closed_folds? table<string, boolean>
 ---@field pending_folds? table<string, boolean> Fold IDs that were attempted but failed to close (eligible for retry)
 ---@field fold_completed_tick? integer Last changedtick processed by fold_completed_blocks (prevents redundant folding)
+---@field personality_environment? flemma.personalities.CachedEnvironment Cached date/time for prompt caching (captured on first request)
 ---@field ui_update_tick? integer Last changedtick processed by update_ui (gates CursorHold redundancy)
 ---@field autopilot? flemma.autopilot.BufferState Per-buffer autopilot state machine
 ---@field tool_indicators? table<string, flemma.ui.ToolIndicator> Per-tool execution indicator state
@@ -38,15 +52,31 @@ local session_module = require("flemma.session")
 ---@field diagnostics_previous_request? string Raw JSON of the previous request sent from this buffer
 ---@field diagnostics_current_request? string Raw JSON of the most recent request sent from this buffer
 ---@field _diagnostics_raw_json? string Temporary storage for raw JSON during request lifecycle
+---@field cursor_pending? flemma.cursor.PendingTarget Deferred cursor move waiting for user idle
+---@field cursor_idle_timer? uv.uv_timer_t Per-buffer idle timer for cursor deferral
+---@field file_reference_hashes? table<string, string> SHA256 hashes of included files from the last evaluation (keyed by absolute path)
+---@field confirmation_answers? table<string, boolean> Cached answers for preprocessor confirmation prompts
+---@field rewriter_diagnostics? flemma.preprocessor.RewriterDiagnostic[] Diagnostics from the last preprocessor run
+---@field _pending_confirmation? flemma.preprocessor.Confirmation In-flight confirmation awaiting user response
 
 ---@diagnostic disable-next-line: missing-fields
 local config = {} ---@type flemma.Config
 ---@type flemma.provider.Base|nil
 local provider = nil
-local session = session_module.Session.new()
 
 ---@type table<integer, flemma.state.BufferState>
 local buffer_states = {}
+
+---@type table<string, fun(bufnr: integer)>
+local cleanup_hooks = {}
+
+---Register a buffer cleanup hook. Called during cleanup_buffer_state().
+---Used by modules that state cannot require directly (circular dependency).
+---@param name string Hook identifier (for idempotent registration)
+---@param fn fun(bufnr: integer) Cleanup function
+function M.register_cleanup(name, fn)
+  cleanup_hooks[name] = fn
+end
 
 ---Set the global plugin configuration
 ---@param conf flemma.Config
@@ -75,7 +105,7 @@ end
 ---Get the global session (tracks all requests across buffers)
 ---@return flemma.session.Session
 function M.get_session()
-  return session
+  return session_module.get()
 end
 
 -- Buffer state management
@@ -86,10 +116,20 @@ local function init_buffer(bufnr)
   buffer_states[bufnr] = {
     current_request = nil,
     request_cancelled = false,
-    spinner_timer = nil,
     api_error_occurred = false,
     locked = false,
     waiting_for_tools = false,
+    progress_timer = nil,
+    progress_phase = nil,
+    progress_char_count = 0,
+    progress_started_at = nil,
+    progress_timeout = nil,
+    progress_extmark_id = nil,
+    progress_last_line = nil,
+    progress_float_winid = nil,
+    progress_float_bufnr = nil,
+    progress_gutter_icon_winid = nil,
+    progress_gutter_icon_bufnr = nil,
     inflight_usage = {
       input_tokens = 0,
       output_tokens = 0,
@@ -98,6 +138,9 @@ local function init_buffer(bufnr)
       cache_read_input_tokens = 0,
       cache_creation_input_tokens = 0,
     },
+    confirmation_answers = nil,
+    rewriter_diagnostics = nil,
+    _pending_confirmation = nil,
   }
 end
 
@@ -137,25 +180,25 @@ function M.cleanup_buffer_state(bufnr)
   local st = buffer_states[bufnr]
   if st then
     if st.current_request then
-      -- Mark as cancelled and use client to terminate the job cleanly
       st.request_cancelled = true
-      local client = require("flemma.client")
       client.cancel_request(st.current_request)
     end
-    if st.spinner_timer then
-      vim.fn.timer_stop(st.spinner_timer)
+    if st.progress_timer then
+      vim.fn.timer_stop(st.progress_timer)
     end
-    -- Cancel in-flight tool executions before nilling buffer state
-    local ok, executor = pcall(require, "flemma.tools.executor")
-    if ok then
-      executor.cleanup_buffer(bufnr)
+    if st.progress_float_winid and vim.api.nvim_win_is_valid(st.progress_float_winid) then
+      vim.api.nvim_win_close(st.progress_float_winid, true)
     end
-    buffer_states[bufnr] = nil
+    if st.progress_gutter_icon_winid and vim.api.nvim_win_is_valid(st.progress_gutter_icon_winid) then
+      vim.api.nvim_win_close(st.progress_gutter_icon_winid, true)
+    end
   end
-  -- Clean up any notifications associated with this buffer
-  require("flemma.notifications").cleanup_buffer(bufnr)
-  -- Discard any pending write queue operations
-  local writequeue = require("flemma.buffer.writequeue")
+  -- Run registered cleanup hooks (executor, notifications) before clearing state.
+  -- Hooks may access buffer state (e.g., executor), so this runs before nil.
+  for _, fn in pairs(cleanup_hooks) do
+    pcall(fn, bufnr)
+  end
+  buffer_states[bufnr] = nil
   writequeue.clear(bufnr)
 end
 

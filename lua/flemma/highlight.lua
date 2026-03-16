@@ -6,6 +6,8 @@ local M = {}
 local color = require("flemma.utilities.color")
 local log = require("flemma.logging")
 local state = require("flemma.state")
+local str = require("flemma.utilities.string")
+local preprocessor_syntax = require("flemma.preprocessor.syntax")
 local roles = require("flemma.utilities.roles")
 
 ---Get color from a highlight group attribute
@@ -325,34 +327,10 @@ local function validate_role_style(role_style)
       if VALID_STYLE_ATTRIBUTES[style] then
         attrs[style] = true
       else
-        local best, best_dist = nil, math.huge
-        for candidate in pairs(VALID_STYLE_ATTRIBUTES) do
-          local la, lb = #style, #candidate
-          local dist
-          if math.abs(la - lb) <= 3 then
-            local prev = {}
-            for j = 0, lb do
-              prev[j] = j
-            end
-            for i = 1, la do
-              local curr = { [0] = i }
-              for j = 1, lb do
-                local cost = style:byte(i) == candidate:byte(j) and 0 or 1
-                curr[j] = math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
-              end
-              prev = curr
-            end
-            dist = prev[lb]
-          else
-            dist = math.max(la, lb)
-          end
-          if dist < best_dist then
-            best, best_dist = candidate, dist
-          end
-        end
         local msg = string.format("flemma: invalid role_style '%s'", style)
-        if best and best_dist <= 3 then
-          msg = msg .. string.format(". Did you mean '%s'?", best)
+        local suggestion = str.closest_match(style, VALID_STYLE_ATTRIBUTES)
+        if suggestion then
+          msg = msg .. string.format(". Did you mean '%s'?", suggestion)
         end
         vim.notify_once(msg, vim.log.levels.WARN)
       end
@@ -372,8 +350,11 @@ M.apply_syntax = function()
   set_highlight("FlemmaSystem", syntax_config.highlights.system)
   set_highlight("FlemmaUser", syntax_config.highlights.user)
   set_highlight("FlemmaAssistant", syntax_config.highlights.assistant)
-  set_highlight("FlemmaUserLuaExpression", syntax_config.highlights.user_lua_expression) -- Highlight for {{expression}} in user messages
-  set_highlight("FlemmaUserFileReference", syntax_config.highlights.user_file_reference) -- Highlight for @./file in user messages
+  set_highlight("FlemmaLuaExpression", syntax_config.highlights.lua_expression)
+  set_highlight("FlemmaLuaCodeBlock", syntax_config.highlights.lua_code_block)
+  set_highlight("FlemmaLuaDelimiter", syntax_config.highlights.lua_delimiter)
+  -- Apply rewriter-owned syntax rules and highlights
+  preprocessor_syntax.apply(syntax_config, set_highlight)
 
   -- Set up spinner highlight with fg-only (no bg) so hl_mode="combine" inherits line highlight bg
   local spinner_fg = get_hl_color("FlemmaAssistant", "fg") or get_default_color("fg")
@@ -433,6 +414,9 @@ M.apply_syntax = function()
   set_highlight("FlemmaToolPending", { link = "DiagnosticInfo", default = true })
   set_highlight("FlemmaToolSuccess", { link = "DiagnosticOk", default = true })
   set_highlight("FlemmaToolError", { link = "DiagnosticError", default = true })
+
+  -- Integration busy indicator highlight
+  set_highlight("FlemmaBusy", syntax_config.highlights.busy)
 
   -- Notification bar highlight groups
   -- Derived from the first group in notifications.hl that provides both fg and bg
@@ -513,6 +497,28 @@ M.apply_syntax = function()
         { [fallback_border_style] = true, sp = muted_fallback.fg, default = true }
       )
     end
+  end
+
+  -- Progress bar highlight groups
+  -- Derived from the first group in progress.highlight that provides both fg and bg
+  local progress_config = syntax_config.progress or { highlight = "@text.note,PmenuSel" }
+  local progress_bg_hex, progress_fg_hex
+  for candidate in (progress_config.highlight or ""):gmatch("[^,]+") do
+    candidate = vim.trim(candidate)
+    local bg = get_hl_color(candidate, "bg")
+    local fg = get_hl_color(candidate, "fg")
+    if bg and fg then
+      progress_bg_hex = bg
+      progress_fg_hex = fg
+      break
+    end
+  end
+
+  if progress_bg_hex and progress_fg_hex then
+    vim.api.nvim_set_hl(0, "FlemmaProgressBar", { bg = progress_bg_hex, fg = progress_fg_hex, default = true })
+  else
+    -- Fallback: link to StatusLine
+    vim.api.nvim_set_hl(0, "FlemmaProgressBar", { link = "StatusLine", default = true })
   end
 
   -- Create CursorLine blend variants after all base groups are defined

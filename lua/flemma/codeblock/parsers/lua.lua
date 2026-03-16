@@ -3,7 +3,7 @@
 ---@class flemma.codeblock.parsers.Lua
 local M = {}
 
-local eval = require("flemma.eval")
+local eval = require("flemma.templating.eval")
 local ctxutil = require("flemma.context")
 local opt_module = require("flemma.buffer.opt")
 
@@ -14,19 +14,19 @@ local opt_module = require("flemma.buffer.opt")
 function M.parse(code, context)
   local env = ctxutil.to_eval_env(context or {})
 
-  -- Inject flemma.opt into sandbox env before execute_safe
+  -- Inject flemma.opt into sandbox env before execute_frontmatter
   -- This makes it part of initial_keys, so it won't leak to user_globals
   local opt_proxy, resolve = opt_module.create()
   env.flemma = { opt = opt_proxy }
 
-  local user_globals = eval.execute_safe(code, env)
+  local user_globals = eval.execute_frontmatter(code, env)
 
   -- Safety net: ensure flemma doesn't leak to returned globals
   user_globals.flemma = nil
 
-  -- Store frontmatter opts on context
-  if context and type(context) == "table" then
-    context.__opts = resolve()
+  -- Store frontmatter opts on context via accessor
+  if context and type(context.set_opts) == "function" then
+    context:set_opts(resolve())
   end
 
   return user_globals

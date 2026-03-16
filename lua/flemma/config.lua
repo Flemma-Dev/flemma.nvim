@@ -6,7 +6,9 @@
 ---@field system flemma.config.HighlightValue
 ---@field user flemma.config.HighlightValue
 ---@field assistant flemma.config.HighlightValue
----@field user_lua_expression flemma.config.HighlightValue
+---@field lua_expression flemma.config.HighlightValue
+---@field lua_code_block flemma.config.HighlightValue
+---@field lua_delimiter flemma.config.HighlightValue
 ---@field user_file_reference flemma.config.HighlightValue
 ---@field thinking_tag flemma.config.HighlightValue
 ---@field thinking_block flemma.config.HighlightValue
@@ -18,6 +20,7 @@
 ---@field tool_preview flemma.config.HighlightValue
 ---@field fold_preview flemma.config.HighlightValue
 ---@field fold_meta flemma.config.HighlightValue
+---@field busy flemma.config.HighlightValue
 
 ---@class flemma.config.Ruler
 ---@field enabled boolean
@@ -54,11 +57,15 @@
 ---@class flemma.config.Pricing
 ---@field enabled boolean
 
+---@class flemma.Config.Progress
+---@field highlight string Comma-separated highlight groups to derive progress bar colors from (first with both fg+bg wins)
+---@field zindex integer Floating window stacking priority
+
 ---@class flemma.config.Diagnostics
 ---@field enabled boolean
 
 ---@class flemma.config.Statusline
----@field thinking_format string Format string when thinking is active. {model} = model name, {level} = thinking level
+---@field format string tmux-style format string for the lualine component. Variables: #{model}, #{provider}, #{thinking}, #{booting}. Supports conditionals: #{?cond,true,false}
 
 ---@class flemma.config.Parameters
 ---@field max_tokens? integer|string Integer token count or percentage string (e.g. "50%") of model's max_output_tokens
@@ -73,11 +80,22 @@
 
 ---@class flemma.config.BashToolConfig
 ---@field shell? string
----@field cwd? string Working directory; supports "$FLEMMA_BUFFER_PATH" pseudo-variable (default: "$FLEMMA_BUFFER_PATH")
+---@field cwd? string Working directory; supports "urn:flemma:buffer:path" (default: "urn:flemma:buffer:path")
 ---@field env? table<string, string>
 
+---@class flemma.config.GrepToolConfig
+---@field cwd? string Working directory (default: "urn:flemma:buffer:path")
+---@field exclude? string[] Glob patterns to exclude from search
+
+---@class flemma.config.FindToolConfig
+---@field cwd? string Working directory (default: "urn:flemma:buffer:path")
+---@field exclude? string[] Glob patterns to exclude from results
+
+---@class flemma.config.LsToolConfig
+---@field cwd? string Working directory (default: "urn:flemma:buffer:path")
+
 ---@class flemma.config.SandboxPolicy
----@field rw_paths? string[] Read-write paths; supports $CWD and $FLEMMA_BUFFER_PATH (default: {"$CWD", "$FLEMMA_BUFFER_PATH", "/tmp"})
+---@field rw_paths? string[] Read-write paths; supports urn:flemma:* URNs, $ENV, ${ENV:-default} (default: see config defaults)
 ---@field network? boolean Allow network access (default: true)
 ---@field allow_privileged? boolean Allow sudo/capabilities (default: false, enables --unshare-user)
 
@@ -116,7 +134,14 @@
 ---@field show_spinner boolean
 ---@field cursor_after_result "result"|"stay"|"next"
 ---@field bash flemma.config.BashToolConfig
+---@field grep? flemma.config.GrepToolConfig
+---@field find? flemma.config.FindToolConfig
+---@field ls? flemma.config.LsToolConfig
 ---@field modules? string[] Lua module paths for third-party tool sources
+---@field max_concurrent integer
+
+---@class flemma.config.TemplatingConfig
+---@field modules? string[] Lua module paths for third-party environment populators
 
 ---@class flemma.config.AutoClose
 ---@field thinking boolean
@@ -135,8 +160,9 @@
 ---@field send string
 ---@field cancel string
 ---@field tool_execute string
----@field next_message string
----@field prev_message string
+---@field message_next string
+---@field message_prev string
+---@field fold_toggle string|false
 
 ---@class flemma.config.InsertKeymaps
 ---@field send string
@@ -145,6 +171,10 @@
 ---@field normal flemma.config.NormalKeymaps
 ---@field insert flemma.config.InsertKeymaps
 ---@field enabled boolean
+
+---@class flemma.config.Experimental
+---@field lsp boolean Enable in-process LSP for .chat buffers
+---@field tools boolean Enable experimental exploration tools (grep, find, ls)
 
 ---User-facing setup options — every field is optional (merged with defaults).
 ---@class flemma.Config.Opts
@@ -155,12 +185,14 @@
 ---@field signs? flemma.config.Signs
 ---@field line_highlights? flemma.config.LineHighlights
 ---@field notifications? flemma.Config.Notifications
+---@field progress? flemma.Config.Progress
 ---@field pricing? flemma.config.Pricing
 ---@field statusline? flemma.config.Statusline
 ---@field provider? string
 ---@field model? string
 ---@field parameters? flemma.config.Parameters
 ---@field tools? flemma.config.ToolsConfig
+---@field templating? flemma.config.TemplatingConfig
 ---@field presets? table<string, any>
 ---@field text_object? string|false
 ---@field editing? flemma.config.Editing
@@ -168,6 +200,7 @@
 ---@field keymaps? flemma.config.Keymaps
 ---@field sandbox? flemma.config.SandboxConfig
 ---@field diagnostics? flemma.config.Diagnostics
+---@field experimental? flemma.config.Experimental
 
 ---Full resolved config (all fields present after merging with defaults).
 ---@class flemma.Config : flemma.Config.Opts
@@ -178,11 +211,13 @@
 ---@field signs flemma.config.Signs
 ---@field line_highlights flemma.config.LineHighlights
 ---@field notifications flemma.Config.Notifications
+---@field progress flemma.Config.Progress
 ---@field pricing flemma.config.Pricing
 ---@field statusline flemma.config.Statusline
 ---@field provider string
 ---@field parameters flemma.config.Parameters
 ---@field tools flemma.config.ToolsConfig
+---@field templating flemma.config.TemplatingConfig
 ---@field presets table<string, any>
 ---@field text_object string|false
 ---@field editing flemma.config.Editing
@@ -190,6 +225,7 @@
 ---@field keymaps flemma.config.Keymaps
 ---@field sandbox flemma.config.SandboxConfig
 ---@field diagnostics flemma.config.Diagnostics
+---@field experimental flemma.config.Experimental
 
 ---@type flemma.Config
 return {
@@ -202,7 +238,9 @@ return {
     system = "Special", -- Highlight group or hex color (e.g., "#ffccaa") for system messages
     user = "Normal", -- Highlight group or hex color for user messages
     assistant = "Normal", -- Highlight group or hex color for assistant messages
-    user_lua_expression = "PreProc", -- Highlight group or hex color for {{expression}} in user messages
+    lua_expression = "PreProc", -- Highlight group or hex color for {{ expression }} syntax
+    lua_code_block = "PreProc", -- Highlight group or hex color for {% code %} block syntax
+    lua_delimiter = "FlemmaLuaExpression", -- Highlight group or hex color for template delimiters ({{ }}, {% %})
     user_file_reference = "Include", -- Highlight group or hex color for @./file references in user messages
     thinking_tag = "Comment", -- Highlight group or hex color for <thinking> and </thinking> tags
     thinking_block = { dark = "Comment+bg:#102020-fg:#111111", light = "Comment-bg:#102020+fg:#111111" }, -- Highlight group or hex color for content inside <thinking> blocks
@@ -216,6 +254,7 @@ return {
     -- Folds
     fold_preview = "Comment", -- Highlight for tool content preview text in fold lines
     fold_meta = "Comment", -- Highlight for (N lines) suffix in fold lines
+    busy = "DiagnosticWarn", -- Highlight for busy indicator icon in integrations (e.g., bufferline)
   },
   role_style = "bold", -- style applied to role markers like @You:
   ruler = {
@@ -255,18 +294,22 @@ return {
     highlight = "@text.note,PmenuSel", -- Highlight group(s) for the notification bar; first with both fg+bg is used
     border = false, -- Bottom border: "underline", "underdouble", "undercurl", "underdotted", "underdashed", or false
   },
+  progress = {
+    highlight = "StatusLine", -- Highlight group(s) for the progress bar; first with both fg+bg is used
+    zindex = 50, -- Progress bar sits above notifications (zindex 30)
+  },
   pricing = {
     enabled = true, -- Whether to show pricing information in notifications
   },
   statusline = {
-    thinking_format = "{model} ({level})", -- Format string when thinking is active. {model} = model name, {level} = low/medium/high.
+    format = "#{model}#{?#{thinking}, (#{thinking}),}#{?#{booting}, ⏳,}", -- tmux-style format string. Variables: #{model}, #{provider}, #{thinking}, #{booting}
   },
   provider = "anthropic", -- Default provider: "anthropic", "openai", or "vertex"
   model = nil, -- Will use provider-specific default if nil
   parameters = {
     max_tokens = "50%", -- Default max tokens: percentage of model's max_output_tokens, or integer
     temperature = 0.7, -- Default temperature for all providers
-    timeout = 120, -- Default response timeout for cURL requests
+    timeout = 600, -- Default response timeout for cURL requests (previously 120)
     connect_timeout = 10, -- Default connection timeout for cURL requests
     cache_retention = "short", -- Default prompt caching: "short", "long", or "none"
     thinking = "high", -- Default thinking level: "low", "medium", "high", numeric budget, or false to disable
@@ -280,15 +323,30 @@ return {
       enabled = true, -- Auto-execute approved tools and re-send when resolved
       max_turns = 100, -- Safety limit on consecutive autonomous LLM turns
     },
+    max_concurrent = 2, -- Max tools executing simultaneously per buffer (0 = unlimited)
     default_timeout = 30, -- Default timeout for async tools (seconds)
     show_spinner = true, -- Show spinner animation during execution
     cursor_after_result = "result", -- Cursor behavior after result injection: "result", "stay", or "next"
     bash = {
       shell = nil, -- Shell to use (default: bash)
-      cwd = "$FLEMMA_BUFFER_PATH", -- Working directory; resolves to .chat file's directory (set nil for Neovim cwd)
+      cwd = "urn:flemma:buffer:path", -- Working directory; resolves to .chat file's directory (set nil for Neovim cwd)
       env = nil, -- Environment variables to add
     },
+    grep = {
+      cwd = "urn:flemma:buffer:path",
+      exclude = { ".git", "node_modules", "__pycache__", ".venv", "target", "dist", "build", "vendor" },
+    },
+    find = {
+      cwd = "urn:flemma:buffer:path",
+      exclude = { ".git", "node_modules", "__pycache__", ".venv", "target", "dist", "build", "vendor" },
+    },
+    ls = {
+      cwd = "urn:flemma:buffer:path",
+    },
     modules = {}, -- Lua module paths for third-party tool sources (e.g., "3rd.tools.todos")
+  },
+  templating = {
+    modules = {}, -- Lua module paths for third-party environment populators (e.g., "my.templating.unsafe_io")
   },
   presets = {}, -- Named presets for :Flemma switch (use ["$name"] key syntax)
   text_object = "m", -- Default text object key, set to false to disable
@@ -314,8 +372,9 @@ return {
       send = "<C-]>",
       cancel = "<C-c>",
       tool_execute = "<M-CR>", -- Execute tool at cursor
-      next_message = "]m", -- Jump to next message
-      prev_message = "[m", -- Jump to previous message
+      message_next = "]m", -- Jump to next message
+      message_prev = "[m", -- Jump to previous message
+      fold_toggle = "<Space>", -- Toggle fold under cursor; set false to disable (skipped when key matches mapleader)
     },
     insert = {
       send = "<C-]>",
@@ -329,7 +388,14 @@ return {
     enabled = true, -- Enable filesystem sandboxing
     backend = "auto", -- "auto" detects the best available backend; set explicitly to force one
     policy = {
-      rw_paths = { "$CWD", "$FLEMMA_BUFFER_PATH", "/tmp" }, -- Read-write paths (all others are read-only)
+      rw_paths = { -- Read-write paths (all others are read-only)
+        "urn:flemma:cwd",
+        "urn:flemma:buffer:path",
+        "/tmp",
+        "${TMPDIR:-/tmp}",
+        "${XDG_CACHE_HOME:-~/.cache}",
+        "${XDG_DATA_HOME:-~/.local/share}",
+      },
       network = true, -- Allow network access inside the sandbox
       allow_privileged = false, -- Allow sudo/capabilities (false = safer, drops privileges)
     },
@@ -339,5 +405,9 @@ return {
         extra_args = {}, -- Additional bwrap arguments for advanced use
       },
     },
+  },
+  experimental = {
+    lsp = vim.lsp ~= nil,
+    tools = false, -- Enable experimental exploration tools (grep, find, ls)
   },
 }

@@ -1,7 +1,5 @@
-local stub = require("luassert.stub")
-
 describe("Lualine component", function()
-  local flemma_component, flemma, core
+  local flemma_component, core
 
   before_each(function()
     -- Clean up any buffers created during previous tests
@@ -9,26 +7,32 @@ describe("Lualine component", function()
 
     -- Mock lualine.component before requiring the flemma component
     package.preload["lualine.component"] = function()
-      return {
-        extend = function()
-          return {}
-        end,
-      }
+      local component = {}
+      component.init = function() end
+      component.extend = function()
+        return setmetatable({}, { __index = component })
+      end
+      return component
     end
 
     -- Invalidate caches to ensure we get fresh modules
     package.loaded["flemma"] = nil
     package.loaded["flemma.config"] = nil
+    package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
+    package.loaded["flemma.utilities.format"] = nil
     package.loaded["lualine.components.flemma"] = nil
 
     -- Load the component to be tested
     flemma_component = require("lualine.components.flemma")
 
     -- Initialize flemma with default settings
-    flemma = require("flemma")
+    local flemma = require("flemma")
     core = require("flemma.core")
     flemma.setup({})
+
+    -- Reset session to prevent leakage between tests
+    require("flemma.session").get():reset()
 
     -- Set up a chat buffer
     local bufnr = vim.api.nvim_create_buf(false, false)
@@ -50,7 +54,7 @@ describe("Lualine component", function()
     -- Act
     local status = flemma_component:update_status()
 
-    -- Assert (uses default format "{model} ({level})")
+    -- Assert (default format from config.lua)
     assert.are.equal("o3 (high)", status)
   end)
 
@@ -155,19 +159,271 @@ describe("Lualine component", function()
   end)
 
   it("should return an empty string if model is not set", function()
-    -- Arrange
-    local s = stub.new(flemma, "get_current_model_name", function()
-      return nil
-    end)
+    -- Arrange: set model to nil via config
+    local state = require("flemma.state")
+    local config = state.get_config()
+    config.model = nil
 
     -- Act
     local status = flemma_component:update_status()
 
     -- Assert
     assert.are.equal("", status)
+  end)
 
-    -- Cleanup
-    s:revert()
+  describe("custom format strings", function()
+    it("should use provider:model format when configured", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{provider}:#{model}"
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("anthropic:claude-sonnet-4-5", status)
+    end)
+
+    it("should handle conditionals in custom format", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{model}#{?#{thinking}, [#{thinking}],}"
+      core.switch_provider("openai", "o3", { reasoning = "high", temperature = 1 })
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("o3 [high]", status)
+    end)
+
+    it("should collapse conditional when thinking is off", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{model}#{?#{thinking}, [#{thinking}],}"
+      core.switch_provider("openai", "gpt-4o", {})
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("gpt-4o", status)
+    end)
+
+    it("should support provider-conditional format", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{?#{==:#{provider},anthropic},A,O}: #{model}"
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("A: claude-sonnet-4-5", status)
+    end)
+  end)
+
+  describe("session variables", function()
+    it("should display session cost when format includes #{session.cost}", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{model} #{?#{session.cost},#{session.cost},}"
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+
+      -- Add a request to the session
+      local s = require("flemma.session").get()
+      s:reset()
+      s:add_request({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 1000,
+        output_tokens = 500,
+        input_price = 3.0,
+        output_price = 15.0,
+      })
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert: cost = (1000/1M)*3 + (500/1M)*15 = 0.003 + 0.0075 = 0.0105 → $0.01
+      assert.are.equal("claude-sonnet-4-5 $0.01", status)
+    end)
+
+    it("should display request count", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{model} (#{session.requests})"
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+
+      local s = require("flemma.session").get()
+      s:reset()
+      s:add_request({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 3.0,
+        output_price = 15.0,
+      })
+      s:add_request({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 200,
+        output_tokens = 100,
+        input_price = 3.0,
+        output_price = 15.0,
+      })
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("claude-sonnet-4-5 (2)", status)
+    end)
+
+    it("should hide session variables when no requests exist", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{model}#{?#{session.cost}, #{session.cost},}"
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+
+      local s = require("flemma.session").get()
+      s:reset()
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert: cost is empty, conditional collapses
+      assert.are.equal("claude-sonnet-4-5", status)
+    end)
+
+    it("should format tokens compactly", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "↑#{session.tokens.input} ↓#{session.tokens.output}"
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+
+      local s = require("flemma.session").get()
+      s:reset()
+      s:add_request({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 15000,
+        output_tokens = 2000000,
+        input_price = 3.0,
+        output_price = 15.0,
+      })
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("↑15K ↓2M", status)
+    end)
+
+    it("should display last request cost", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{model} last:#{last.cost}"
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
+
+      local s = require("flemma.session").get()
+      s:reset()
+      s:add_request({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 100000,
+        output_tokens = 5000,
+        input_price = 3.0,
+        output_price = 15.0,
+      })
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert: cost = (100000/1M)*3 + (5000/1M)*15 = 0.30 + 0.075 = 0.375
+      assert.are.equal("claude-sonnet-4-5 last:$0.38", status)
+    end)
+  end)
+
+  describe("booting variable", function()
+    it("should be truthy while async tool sources are pending", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{?#{booting},booting,ready}"
+
+      local tools = require("flemma.tools")
+      tools.clear()
+      local captured_done
+      tools.register_async(function(_register, done)
+        captured_done = done
+      end)
+
+      -- Act
+      local status_text = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("booting", status_text)
+
+      -- Cleanup: resolve the async source
+      captured_done()
+    end)
+
+    it("should refresh lualine on FlemmaBootComplete", function()
+      -- Arrange: track lualine.refresh() calls
+      local refresh_called = false
+      package.loaded["lualine"] = {
+        refresh = function()
+          refresh_called = true
+        end,
+      }
+
+      -- Re-require component so init() picks up the mock
+      package.loaded["lualine.components.flemma"] = nil
+      flemma_component = require("lualine.components.flemma")
+
+      -- Simulate init() being called (lualine calls this on component creation)
+      if flemma_component.init then
+        flemma_component:init({})
+      end
+
+      -- Act: emit the autocmd
+      vim.api.nvim_exec_autocmds("User", { pattern = "FlemmaBootComplete" })
+
+      -- Assert
+      assert.is_true(refresh_called)
+
+      -- Cleanup
+      package.loaded["lualine"] = nil
+    end)
+
+    it("should be falsy once all async tool sources resolve", function()
+      -- Arrange
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "#{?#{booting},booting,ready}"
+
+      local tools = require("flemma.tools")
+      tools.clear()
+
+      -- Act (no pending async sources)
+      local status_text = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("ready", status_text)
+    end)
   end)
 
   describe("frontmatter overrides", function()

@@ -3,15 +3,21 @@
 ---@class flemma.Tools
 local M = {}
 
+local config = require("flemma.config")
+local hooks = require("flemma.hooks")
 local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
 local registry = require("flemma.tools.registry")
+local state = require("flemma.state")
 
 local BUILTIN_TOOLS = {
   "flemma.tools.definitions.bash",
   "flemma.tools.definitions.read",
   "flemma.tools.definitions.edit",
   "flemma.tools.definitions.write",
+  "flemma.tools.definitions.grep",
+  "flemma.tools.definitions.find",
+  "flemma.tools.definitions.ls",
 }
 
 --------------------------------------------------------------------------------
@@ -24,13 +30,14 @@ local ready_callbacks = {}
 local active_timers = {}
 local generation = 0
 
----Fire all ready callbacks and clear the list
+---Fire all ready callbacks, clear the list, and emit the boot-complete autocmd
 local function fire_ready_callbacks()
   local callbacks = ready_callbacks
   ready_callbacks = {}
   for _, cb in ipairs(callbacks) do
     cb()
   end
+  hooks.dispatch("boot:complete")
 end
 
 ---Register an async tool source that resolves definitions asynchronously
@@ -69,7 +76,6 @@ function M.register_async(resolve_fn, opts)
   end
 
   -- Set up timeout
-  local config = require("flemma.config")
   local timeout_s = opts.timeout or config.tools.default_timeout or 30
   local timer = vim.uv.new_timer()
   if not timer then
@@ -156,9 +162,9 @@ function M.setup()
     M.register(module_name)
   end
 
-  local config = require("flemma.state").get_config()
-  if config.tools and config.tools.modules then
-    for _, module_path in ipairs(config.tools.modules) do
+  local resolved_config = state.get_config()
+  if resolved_config.tools and resolved_config.tools.modules then
+    for _, module_path in ipairs(resolved_config.tools.modules) do
       M.register_module(module_path)
     end
   end
@@ -185,10 +191,14 @@ end
 
 ---Get all registered tools (excludes disabled tools by default).
 ---Loads any pending third-party modules before returning.
----@param opts? { include_disabled: boolean }
+---@param opts? { include_disabled?: boolean, config?: flemma.Config }
 ---@return table<string, flemma.tools.ToolDefinition>
 function M.get_all(opts)
   ensure_modules_loaded()
+  opts = opts or {}
+  if not opts.config then
+    opts.config = state.get_config()
+  end
   return registry.get_all(opts)
 end
 
@@ -216,6 +226,23 @@ function M.get_for_prompt(opts)
     return filtered
   end
   return M.get_all()
+end
+
+--- Get all enabled tools for a prompt, sorted alphabetically by name.
+--- Returns an array (not a name-keyed table) for deterministic ordering
+--- in provider API requests, which improves prompt caching hit rates.
+---@param opts flemma.opt.FrontmatterOpts|nil Per-buffer options (for tool filtering)
+---@return flemma.tools.ToolDefinition[] sorted_tools Alphabetically sorted tool definitions
+function M.get_sorted_for_prompt(opts)
+  local all = M.get_for_prompt(opts)
+  local sorted = {}
+  for _, definition in pairs(all) do
+    table.insert(sorted, definition)
+  end
+  table.sort(sorted, function(a, b)
+    return a.name < b.name
+  end)
+  return sorted
 end
 
 ---Register a tool definition or source.

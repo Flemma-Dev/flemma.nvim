@@ -4,6 +4,11 @@
 local M = {}
 
 local log = require("flemma.logging")
+local bridge = require("flemma.core.bridge")
+local cursor = require("flemma.cursor")
+local parser = require("flemma.parser")
+local state = require("flemma.state")
+local tool_context = require("flemma.tools.context")
 
 ---@alias flemma.autopilot.State "idle"|"armed"|"sending"|"paused"
 
@@ -15,7 +20,6 @@ local log = require("flemma.logging")
 ---@param bufnr integer
 ---@return flemma.autopilot.BufferState
 local function get_state(bufnr)
-  local state = require("flemma.state")
   local buffer_state = state.get_buffer_state(bufnr)
   if not buffer_state.autopilot then
     buffer_state.autopilot = { state = "idle", iteration = 0 }
@@ -29,7 +33,6 @@ end
 ---@return boolean
 function M.is_enabled(bufnr)
   -- Check per-buffer override first (set by core.lua from frontmatter evaluation)
-  local state = require("flemma.state")
   local buffer_state = state.get_buffer_state(bufnr)
   if buffer_state.autopilot_override ~= nil then
     return buffer_state.autopilot_override
@@ -55,7 +58,6 @@ end
 ---by setup(); the nil guards are defensive for edge cases (e.g. tests).
 ---@param enabled boolean
 function M.set_enabled(enabled)
-  local state = require("flemma.state")
   local config = state.get_config()
   if config.tools and config.tools.autopilot then
     config.tools.autopilot.enabled = enabled
@@ -98,7 +100,6 @@ function M.on_response_complete(bufnr)
     return
   end
 
-  local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
 
   -- Find the last assistant message
@@ -132,7 +133,6 @@ function M.on_response_complete(bufnr)
   local bs = get_state(bufnr)
   bs.iteration = bs.iteration + 1
 
-  local state = require("flemma.state")
   local config = state.get_config()
   local autopilot_config = config.tools and config.tools.autopilot
   local max_turns = (autopilot_config and autopilot_config.max_turns) or 100
@@ -156,11 +156,10 @@ function M.on_response_complete(bufnr)
       return
     end
     -- Guard against a parallel on_tools_complete path that already dispatched a request
-    if require("flemma.state").get_buffer_state(bufnr).current_request then
+    if state.get_buffer_state(bufnr).current_request then
       return
     end
-    local core = require("flemma.core")
-    core.send_or_execute({ bufnr = bufnr })
+    bridge.send_or_execute({ bufnr = bufnr })
   end)
 end
 
@@ -176,8 +175,6 @@ function M.on_tools_complete(bufnr)
     log.debug("autopilot: on_tools_complete ignored (state=" .. bs.state .. ")")
     return
   end
-
-  local tool_context = require("flemma.tools.context")
 
   -- Check if there are still unprocessed tool_use blocks (Phase 1 for-loop mid-iteration)
   local unmatched = tool_context.resolve_all_pending(bufnr)
@@ -203,10 +200,7 @@ function M.on_tools_complete(bufnr)
   if first_empty_pending then
     bs.state = "paused"
     log.debug("autopilot: flemma:tool status=pending blocks remain, pausing")
-    local winid = vim.fn.bufwinid(bufnr)
-    if winid ~= -1 then
-      vim.api.nvim_win_set_cursor(winid, { first_empty_pending.tool_result.start_line, 0 })
-    end
+    cursor.request_move(bufnr, { line = first_empty_pending.tool_result.start_line, reason = "autopilot/pending-tool" })
     return
   end
 
@@ -218,11 +212,10 @@ function M.on_tools_complete(bufnr)
       if not vim.api.nvim_buf_is_valid(bufnr) then
         return
       end
-      if require("flemma.state").get_buffer_state(bufnr).current_request then
+      if state.get_buffer_state(bufnr).current_request then
         return
       end
-      local core = require("flemma.core")
-      core.send_or_execute({ bufnr = bufnr })
+      bridge.send_or_execute({ bufnr = bufnr })
     end)
     return
   end
@@ -235,18 +228,16 @@ function M.on_tools_complete(bufnr)
     if not vim.api.nvim_buf_is_valid(bufnr) then
       return
     end
-    if require("flemma.state").get_buffer_state(bufnr).current_request then
+    if state.get_buffer_state(bufnr).current_request then
       return
     end
-    local core = require("flemma.core")
-    core.send_or_execute({ bufnr = bufnr })
+    bridge.send_or_execute({ bufnr = bufnr })
   end)
 end
 
 ---Reset autopilot tracking for a buffer (used by tests for isolation)
 ---@param bufnr integer
 function M.cleanup_buffer(bufnr)
-  local state = require("flemma.state")
   state.get_buffer_state(bufnr).autopilot = nil
 end
 

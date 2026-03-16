@@ -2,7 +2,9 @@
 
 -- Clear module caches for clean state
 package.loaded["flemma.autopilot"] = nil
+package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.context"] = nil
+package.loaded["flemma.tools.injector"] = nil
 package.loaded["flemma.state"] = nil
 package.loaded["flemma.parser"] = nil
 
@@ -818,7 +820,9 @@ describe("Autopilot integration", function()
 
   before_each(function()
     package.loaded["flemma"] = nil
+    package.loaded["flemma.commands"] = nil
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.core.config.manager"] = nil
     package.loaded["flemma.provider.registry"] = nil

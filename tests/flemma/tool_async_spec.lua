@@ -1,4 +1,5 @@
 package.loaded["flemma.tools"] = nil
+package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.registry"] = nil
 
 local tools = require("flemma.tools")
@@ -104,6 +105,28 @@ describe("Async tool sources", function()
   end)
 
   describe("on_ready()", function()
+    it("emits FlemmaBootComplete autocmd when all sources resolve", function()
+      local fired = false
+      vim.api.nvim_create_autocmd("User", {
+        pattern = "FlemmaBootComplete",
+        once = true,
+        callback = function()
+          fired = true
+        end,
+      })
+
+      local captured_done
+      tools.register_async(function(_register, done)
+        captured_done = done
+      end)
+
+      captured_done()
+      vim.wait(100, function()
+        return fired
+      end)
+      assert.is_true(fired)
+    end)
+
     it("fires immediately when already ready", function()
       local called = false
       tools.on_ready(function()

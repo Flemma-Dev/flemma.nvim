@@ -126,6 +126,14 @@ function Request:get_total_cost()
   return self:get_input_cost() + self:get_output_cost()
 end
 
+--- Get total input tokens for display/billing (cache-aware)
+--- Total = input_tokens + cache_read_input_tokens + cache_creation_input_tokens
+--- because the API reports input_tokens as only the non-cached portion.
+---@return number Total input tokens
+function Request:get_total_input_tokens()
+  return self.input_tokens + self.cache_read_input_tokens + self.cache_creation_input_tokens
+end
+
 --- Get total output tokens for display/billing
 --- For Vertex: adds thoughts_tokens since they're separate
 --- For OpenAI/Anthropic: uses output_tokens alone since thoughts are already included
@@ -163,7 +171,7 @@ end
 function Session:get_total_input_tokens()
   local total = 0
   for _, request in ipairs(self.requests) do
-    total = total + request.input_tokens
+    total = total + request:get_total_input_tokens()
   end
   return total
 end
@@ -257,11 +265,12 @@ function Session:load(requests_data)
   end
 end
 
+local session_instance = Session.new()
+
 --- Get the global session instance (tracks all requests across buffers)
---- Lazy-requires state to avoid circular dependency (state.lua requires session.lua at load time).
 ---@return flemma.session.Session
 function M.get()
-  return require("flemma.state").get_session()
+  return session_instance
 end
 
 M.Request = Request

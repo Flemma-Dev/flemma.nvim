@@ -3,7 +3,7 @@
 local M = {}
 
 local utils = require("flemma.utilities.folding")
-local roles = require("flemma.utilities.roles")
+local ast = require("flemma.ast")
 
 M.name = "tool_blocks"
 M.auto_close = true
@@ -69,20 +69,15 @@ local function compute_fold_end(seg_index, msg, base_end_line, completed)
   return base_end_line
 end
 
----Build a tool_use_id -> terminal boolean lookup from all @You messages.
----Single O(M*S) pass eliminates the nested-loop bottleneck.
+---Build a tool_use_id -> terminal boolean lookup using the sibling table.
 ---@param doc flemma.ast.DocumentNode
 ---@return table<string, boolean>
 local function build_completion_map(doc)
+  local siblings = ast.build_tool_sibling_table(doc)
   local completed = {}
-  for _, msg in ipairs(doc.messages) do
-    if roles.is_user(msg.role) then
-      for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_result" then
-          ---@cast seg flemma.ast.ToolResultSegment
-          completed[seg.tool_use_id] = is_tool_result_terminal(seg)
-        end
-      end
+  for tool_id, sibling in pairs(siblings) do
+    if sibling.result then
+      completed[tool_id] = is_tool_result_terminal(sibling.result)
     end
   end
   return completed

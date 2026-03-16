@@ -105,6 +105,8 @@ describe("bash tool sandbox integration", function()
   before_each(function()
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
+    package.loaded["flemma.tools.approval"] = nil
+    package.loaded["flemma.tools.executor"] = nil
     local sandbox = require("flemma.sandbox")
     sandbox.reset_enabled()
     sandbox.setup()
@@ -167,24 +169,25 @@ describe("bash tool sandbox integration", function()
     vim.fn.delete(test_dir, "rf")
   end)
 
-  it("$CWD variable in rw_paths is expanded by our policy layer", function()
+  it("urn:flemma:cwd variable in rw_paths is expanded by our policy layer", function()
     if skip_unless_bwrap() then
       return
     end
 
-    -- $CWD should be expanded to vim.fn.getcwd() by sandbox/init.lua,
+    -- urn:flemma:cwd should be expanded to vim.fn.getcwd() by sandbox/init.lua,
     -- making the working directory writable inside the sandbox.
     local cwd = vim.fn.getcwd()
     local target = cwd .. "/sandbox_cwd_test_" .. tostring(os.time())
-    local result = execute_bash_tool("echo cwd_write > " .. target .. " && cat " .. target, sandbox_config({ "$CWD" }))
+    local result =
+      execute_bash_tool("echo cwd_write > " .. target .. " && cat " .. target, sandbox_config({ "urn:flemma:cwd" }))
 
-    assert.is_true(result.success, "$CWD expansion should make CWD writable: " .. tostring(result.error))
+    assert.is_true(result.success, "urn:flemma:cwd expansion should make CWD writable: " .. tostring(result.error))
     assert.is_truthy(result.output:match("cwd_write"))
 
     vim.fn.delete(target)
   end)
 
-  it("$FLEMMA_BUFFER_PATH variable expands to buffer file directory", function()
+  it("urn:flemma:buffer:path variable expands to buffer file directory", function()
     if skip_unless_bwrap() then
       return
     end
@@ -198,11 +201,11 @@ describe("bash tool sandbox integration", function()
     local target = test_dir .. "/dirname_proof.txt"
     local result = execute_bash_tool(
       "echo dirname_works > " .. target .. " && cat " .. target,
-      sandbox_config({ "$FLEMMA_BUFFER_PATH" }),
+      sandbox_config({ "urn:flemma:buffer:path" }),
       { bufnr = bufnr }
     )
 
-    assert.is_true(result.success, "$FLEMMA_BUFFER_PATH should expand: " .. tostring(result.error))
+    assert.is_true(result.success, "urn:flemma:buffer:path should expand: " .. tostring(result.error))
     assert.is_truthy(result.output:match("dirname_works"))
 
     vim.api.nvim_buf_delete(bufnr, { force = true })
@@ -277,6 +280,8 @@ describe("sandbox runtime toggle E2E", function()
   before_each(function()
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
+    package.loaded["flemma.tools.approval"] = nil
+    package.loaded["flemma.tools.executor"] = nil
     sandbox = require("flemma.sandbox")
     sandbox.reset_enabled()
   end)
@@ -351,12 +356,14 @@ end)
 -- ─── executor context plumbing ──────────────────────────────────────────────
 -- Tests that the executor builds ExecutionContext correctly and the bash tool
 -- receives it. We verify by observing the sandbox's behavior change based on
--- what bufnr is in the context (since $FLEMMA_BUFFER_PATH depends on it).
+-- what bufnr is in the context (since urn:flemma:buffer:path depends on it).
 
 describe("executor context plumbing", function()
   before_each(function()
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
+    package.loaded["flemma.tools.approval"] = nil
+    package.loaded["flemma.tools.executor"] = nil
     local sandbox = require("flemma.sandbox")
     sandbox.reset_enabled()
     sandbox.setup()
@@ -379,10 +386,10 @@ describe("executor context plumbing", function()
     local buf_b = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_name(buf_b, dir_b .. "/b.chat")
 
-    -- Policy uses only $FLEMMA_BUFFER_PATH — so RW access depends on which
+    -- Policy uses only urn:flemma:buffer:path — so RW access depends on which
     -- buffer's context is passed. This tests that our code correctly threads
-    -- bufnr through ctx → sandbox.wrap_command → resolve_policy → path_variables.
-    local config = sandbox_config({ "$FLEMMA_BUFFER_PATH" })
+    -- bufnr through ctx → sandbox.wrap_command → resolve_policy → variables.
+    local config = sandbox_config({ "urn:flemma:buffer:path" })
 
     -- Write to dir_a using buf_a's context — should succeed
     local result_a =
@@ -399,12 +406,12 @@ describe("executor context plumbing", function()
     vim.fn.delete(dir_b, "rf")
   end)
 
-  it("unnamed buffer gracefully skips $FLEMMA_BUFFER_PATH", function()
+  it("unnamed buffer gracefully skips urn:flemma:buffer:path", function()
     if skip_unless_bwrap() then
       return
     end
 
-    -- Unnamed buffer → $FLEMMA_BUFFER_PATH resolves to nil → skipped.
+    -- Unnamed buffer → urn:flemma:buffer:path resolves to nil → skipped.
     -- Only explicit paths in rw_paths should be writable.
     local test_dir = vim.fn.tempname()
     vim.fn.mkdir(test_dir, "p")
@@ -412,7 +419,7 @@ describe("executor context plumbing", function()
     local unnamed_buf = vim.api.nvim_create_buf(false, true)
     -- No nvim_buf_set_name — buffer is unnamed
 
-    local config = sandbox_config({ "$FLEMMA_BUFFER_PATH", test_dir })
+    local config = sandbox_config({ "urn:flemma:buffer:path", test_dir })
     local result = execute_bash_tool(
       "echo ok > " .. test_dir .. "/unnamed.txt && cat " .. test_dir .. "/unnamed.txt",
       config,
@@ -435,6 +442,8 @@ describe("sandbox process lifecycle through bash tool", function()
   before_each(function()
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
+    package.loaded["flemma.tools.approval"] = nil
+    package.loaded["flemma.tools.executor"] = nil
     local sandbox = require("flemma.sandbox")
     sandbox.reset_enabled()
     sandbox.setup()

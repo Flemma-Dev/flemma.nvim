@@ -5,28 +5,6 @@ package.loaded["flemma.utilities.truncate"] = nil
 local truncate = require("flemma.utilities.truncate")
 
 describe("Truncation Utilities", function()
-  describe("format_size", function()
-    it("formats bytes", function()
-      assert.equals("500B", truncate.format_size(500))
-    end)
-
-    it("formats kilobytes", function()
-      assert.equals("1.5KB", truncate.format_size(1536))
-    end)
-
-    it("formats megabytes", function()
-      assert.equals("2.0MB", truncate.format_size(2 * 1024 * 1024))
-    end)
-
-    it("formats zero", function()
-      assert.equals("0B", truncate.format_size(0))
-    end)
-
-    it("formats exactly 1KB", function()
-      assert.equals("1.0KB", truncate.format_size(1024))
-    end)
-  end)
-
   describe("truncate_head", function()
     it("returns content unchanged when within limits", function()
       local result = truncate.truncate_head("line1\nline2\nline3")

@@ -13,7 +13,9 @@ Configuration keys map to dedicated highlight groups:
 | `highlights.system`              | System messages (`FlemmaSystem`)                                         |
 | `highlights.user`                | User messages (`FlemmaUser`)                                             |
 | `highlights.assistant`           | Assistant messages (`FlemmaAssistant`)                                   |
-| `highlights.user_lua_expression` | `{{ expression }}` fragments                                             |
+| `highlights.lua_expression`      | `{{ expression }}` fragments (in `@You` and `@System` messages)          |
+| `highlights.lua_code_block`      | `{% code %}` block content (in `@You` and `@System` messages)            |
+| `highlights.lua_delimiter`       | `{{ }}` and `{% %}` delimiters including trim markers                    |
 | `highlights.user_file_reference` | `@./path` fragments                                                      |
 | `highlights.thinking_tag`        | `<thinking>` / `</thinking>` tags                                        |
 | `highlights.thinking_block`      | Content inside thinking blocks                                           |
@@ -25,6 +27,7 @@ Configuration keys map to dedicated highlight groups:
 | `highlights.tool_preview`        | Tool preview virtual lines in pending placeholders (`FlemmaToolPreview`) |
 | `highlights.fold_preview`        | Content preview text in fold lines (`FlemmaFoldPreview`)                 |
 | `highlights.fold_meta`           | Line count and padding in fold lines (`FlemmaFoldMeta`)                  |
+| `highlights.busy`                | Busy indicator icon in integrations like bufferline (`FlemmaBusy`)       |
 
 Each value accepts a highlight name, a hex colour string, or a table of highlight attributes (`{ fg = "#ffcc00", bold = true }`).
 
@@ -144,6 +147,10 @@ While a request is in flight, Flemma writes an `@Assistant:` marker on its own l
 
 When the model enters a thinking/reasoning phase, the spinner animation is replaced with a live character count – e.g., `Thinking… (3.2k characters)` – so you can gauge progress at a glance.
 
+### Booting indicator
+
+When async tool sources (registered via `tools.modules` or `tools.register()` with a resolve function) are still loading, Flemma shows a booting state. The `#{booting}` statusline variable (default: `⏳`) is non-empty during this phase and clears once all sources resolve. A `FlemmaBootComplete` User autocmd fires when booting finishes. If you send a request while booting, the buffer shows "Waiting for tool definitions to load…" and auto-sends once everything resolves.
+
 ### Tool execution indicators
 
 During tool execution, a separate spinner appears next to the `**Tool Result:**` block using circular quarter characters (`◐◓◑◒`). When execution completes, the indicator changes to `✓ Complete` or `✗ Failed`. Indicators reposition automatically if the buffer is modified during execution and clear on the next buffer edit.
@@ -224,31 +231,29 @@ Flemma uses a priority hierarchy to layer visual elements correctly when they ov
 
 This hierarchy is defined in `lua/flemma/ui/init.lua` and is not user-configurable, but understanding it explains why certain elements visually override others. Tool preview virtual lines use `virt_lines` extmarks (not line-level highlights), so they don't participate in this priority hierarchy.
 
-## Lualine integration
+## Progress bar
 
-Add the bundled component to show the active model and thinking level:
+While a request is streaming, Flemma shows a persistent progress indicator as a floating bar anchored to the assistant's response line. The bar displays the current phase (thinking, streaming text, receiving tool input) and repositions automatically if the target line scrolls off-screen. When the response line is visible in the window, the progress bar appears inline; when it scrolls out of view, a floating indicator appears so you always know what Flemma is doing.
 
 ```lua
-require("lualine").setup({
-  sections = {
-    lualine_x = {
-      { "flemma", icon = "🧠" },
-      "encoding",
-      "filetype",
-    },
-  },
-})
+progress = {
+  highlight = "StatusLine",  -- highlight group(s); first with both fg+bg is used
+  zindex = 50,               -- above notifications (zindex 30)
+}
 ```
 
-The component only renders in `chat` buffers and returns an empty string otherwise.
+## AST inspection
 
-### Format string
+### Hover
 
-The display format when thinking is active is configurable via `statusline.thinking_format` in the [configuration reference](configuration.md). The default is `"{model} ({level})"`. Available variables:
+When `experimental.lsp` is enabled, hovering over any element in a `.chat` buffer shows a compact AST node dump in a fenced `flemma-ast` code block. The dump shows the node's kind, position, and key fields at depth 1 — container nodes (messages, documents) show a child summary instead of recursing.
 
-| Variable  | Example                 |
-| --------- | ----------------------- |
-| `{model}` | `claude-sonnet-4-6`     |
-| `{level}` | `high`, `medium`, `low` |
+### AST diff
 
-When thinking is disabled or the model doesn't support it, only the model name is shown. The component respects per-buffer overrides from `flemma.opt` – if frontmatter changes the thinking level, the statusline reflects it.
+`:Flemma ast:diff` opens a side-by-side diff comparing the raw AST (before preprocessor rewriters) with the rewritten AST (after rewriters). Both buffers use the `flemma-ast` filetype with syntax highlighting and fold support. The diff view scrolls to the node under the cursor in the source buffer.
+
+Use this to debug rewriter transformations — for example, to see how `@./file` references get rewritten to `{{ include() }}` expressions, or to verify that a custom rewriter is producing the expected AST changes. Fold regions let you collapse nodes to focus on the parts you care about.
+
+## Plugin integrations
+
+Flemma ships optional integrations for lualine (statusline component) and bufferline (busy tab indicator). See [docs/integrations.md](integrations.md) for setup instructions and configuration.

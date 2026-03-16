@@ -2,6 +2,8 @@
 --- Write/create files with automatic parent directory creation
 --- Ported from pi by Mario Zechner (https://github.com/badlogic/pi-mono)
 --- Original: MIT License, Copyright (c) 2025 Mario Zechner
+local str = require("flemma.utilities.string")
+
 ---@class flemma.tools.definitions.Write
 ---@field definitions flemma.tools.ToolDefinition[]
 local M = {}
@@ -32,16 +34,17 @@ M.definitions = {
       required = { "label", "path", "content" },
       additionalProperties = false,
     },
+    personalities = {
+      ["coding-assistant"] = {
+        snippet = "Create new files or completely overwrite existing ones",
+        guidelines = {
+          "Prefer edit over write for modifying existing files",
+        },
+      },
+    },
     async = false,
     format_preview = function(input)
-      local size = #input.content
-      local display
-      if size < 1024 then
-        display = size .. " B"
-      else
-        display = string.format("%.1f KB", size / 1024)
-      end
-      local parts = { input.path, "(" .. display .. ")" }
+      local parts = { input.path, "(" .. str.format_size(#input.content) .. ")" }
       if input.label then
         table.insert(parts, "# " .. input.label)
       end

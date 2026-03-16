@@ -6,6 +6,7 @@ describe("flemma.usage segment building", function()
   before_each(function()
     package.loaded["flemma.usage"] = nil
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
     package.loaded["flemma.pricing"] = nil
     package.loaded["flemma.session"] = nil
     package.loaded["flemma.bar"] = nil
@@ -200,7 +201,7 @@ describe("flemma.usage segment building", function()
       end
 
       assert.is_not_nil(thinking_item)
-      assert.has_match("\xE2\x97\x8B 25", thinking_item.text)
+      assert.has_match("25\xE2\x81\x82", thinking_item.text)
       assert.are.equal(50, thinking_item.priority)
     end)
   end)

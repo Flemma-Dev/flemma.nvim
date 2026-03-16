@@ -120,7 +120,7 @@ Only options you actually touch appear in the resolved overrides – unmodified 
 
 ## Inline expressions
 
-Use `{{ expression }}` inside any `@System:` or `@You:` message. Expressions run in a sandboxed environment that includes standard Lua libraries, select Neovim APIs, and variables from frontmatter. The full list of available functions is defined in `lua/flemma/eval.lua` (`create_safe_env`).
+Use `{{ expression }}` inside any `@System:` or `@You:` message. Expressions run in an environment built from registered populators that includes standard Lua libraries, select Neovim APIs, and variables from frontmatter. The built-in populators are defined in `lua/flemma/templating/builtins/`.
 
 Key built-ins:
 
@@ -137,26 +137,128 @@ Draft a short update for {{recipient}} covering:
 ### Evaluation rules
 
 - Expressions without an explicit `return` are auto-wrapped: `{{ 1 + 1 }}` becomes `return 1 + 1` internally.
-- `nil` results produce no output (empty string).
+- `nil` results produce no output (empty string) — but note that **accessing an undefined variable is an error**, not nil (see [strict variable checking](#strict-variable-checking) below). Only variables that are explicitly defined with a nil value produce no output.
 - Tables are automatically JSON-encoded via `flemma.utilities.json.encode()`.
-- Errors are downgraded to warnings. The request still sends, and the literal `{{ expression }}` remains in the prompt so you can see what failed.
+- Errors (including undefined variable access) are downgraded to warnings. The request still sends, and the literal `{{ expression }}` remains in the prompt so you can see what failed.
+
+## Template code blocks
+
+Use `{% code %}` to embed Lua statements directly in your messages. Unlike `{{ expressions }}`, which output a value, code blocks execute statements -- control flow, variable assignment, loops -- without emitting output themselves. Use `__emit()` inside code blocks when you need to output text.
+
+```markdown
+@System:
+{% if task == "review" then %}
+You are a code reviewer. Be concise and direct.
+{% else %}
+You are a helpful assistant.
+{% end %}
+```
+
+### Control flow
+
+Standard Lua `if`/`elseif`/`else`/`end` and `for`/`while`/`repeat` loops all work. Each `{% %}` block is a fragment of the same Lua chunk, so you can open a block in one tag and close it in another:
+
+```markdown
+@You:
+{% for item, loop in each(items) do %}
+
+- Item {{loop.index}}: {{item}}
+  {% end %}
+```
+
+### Variable assignment
+
+Assign variables in code blocks and reference them in later expressions or code blocks within the same message:
+
+```markdown
+@You:
+{% label = string.upper(project) %}
+Project: {{label}}
+```
+
+Use `local` when the variable is only needed within the current message. Without `local`, the variable is set on the shared environment and accessible from subsequent messages:
+
+```markdown
+@System:
+{% mode = "strict" %}
+
+@You:
+Mode is {{mode}}
+```
+
+### Strict variable checking
+
+The template environment errors when you access a variable that was never defined. This catches typos early — `{{ mane }}` when you meant `{{ name }}` will produce a diagnostic instead of silently inserting nothing.
+
+The checking applies to all variable access: `{{ mane }}`, `{{ string.upper(mane) }}`, and `{% if mane then %}` all error if `mane` was never defined. Variables are considered "defined" if they were set by frontmatter, passed as `include()` arguments, or provided by a populator (the standard library, iterators, etc.).
+
+In `{{ expressions }}`, undefined variable errors degrade gracefully like any other expression error — the raw `{{ mane }}` text is preserved in the output and a warning diagnostic is shown. In `{% code %}` blocks, undefined variable errors are fatal (just like any other code block error).
+
+### Error behaviour
+
+Code block errors are **fatal** -- they block the request with a diagnostic showing the file and line number. This is different from `{{ expressions }}`, which degrade gracefully by emitting the raw expression text and sending the request with a warning. The distinction is intentional: a broken expression produces ugly but usable output, while a broken control flow structure (e.g., an `if` without `end`) would produce nonsensical output.
+
+## Whitespace trimming
+
+By default, the literal text between template tags is preserved exactly -- including the newlines around `{% %}` and `{{ }}` tags. This often produces unwanted blank lines in the output. Trimming modifiers strip whitespace adjacent to a tag:
+
+- `{%-` or `{{-` trims whitespace **before** the tag (back to and including the nearest newline).
+- `-%}` or `-}}` trims whitespace **after** the tag (up to and including the nearest newline).
+
+Combine both for fully clean output.
+
+### Before and after
+
+Without trimming:
+
+```markdown
+@System:
+{% if verbose then %}
+Include full details.
+{% end %}
+```
+
+Output (when `verbose` is true):
+
+```
+\n
+Include full details.
+\n
+```
+
+With trimming:
+
+```markdown
+@System:
+{%- if verbose then -%}
+Include full details.
+{%- end -%}
+```
+
+Output:
+
+```
+Include full details.
+```
+
+Trimming works on `{{ }}` expressions too. `{{- value -}}` strips surrounding whitespace, useful when an expression sits on its own line but the output should join adjacent text.
 
 ## `include()` helper
 
 Call `include("relative/or/absolute/path")` inside frontmatter or an expression to inline another template fragment. Includes support two modes:
 
-**Text mode** (default) – the included file is parsed for `{{ }}` expressions and `@./` file references, which are evaluated recursively. The result is inlined as text. Each included file gets its own `__filename` and `__dirname`, isolated from the parent's variables – the parent's frontmatter variables are not inherited.
+**Text mode** (default) -- the included file is parsed for `{{ }}` expressions, `{% %}` code blocks, and `@./` file references, which are evaluated recursively. The result is inlined as text. Each included file gets its own `__filename` and `__dirname`, isolated from the parent's variables -- the parent's frontmatter variables are not inherited.
 
 ```markdown
 @System:
 {{ include("system-prompt.md") }}
 ```
 
-**Binary mode** – the file is read as raw bytes and attached as a structured content part (image, PDF, etc.), just like `@./path`:
+**Binary mode** -- the file is read as raw bytes and attached as a structured content part (image, PDF, etc.), just like `@./path`. Use the `symbols.BINARY` and `symbols.MIME` keys to control include mode:
 
 ```lua
 -- In frontmatter:
-screenshot = include('./latest.png', { binary = true })
+screenshot = include('./latest.png', { [symbols.BINARY] = true })
 ```
 
 ```markdown
@@ -164,11 +266,30 @@ screenshot = include('./latest.png', { binary = true })
 What do you see? {{ screenshot }}
 ```
 
-The `binary` flag and an optional `mime` override are passed as a second argument:
+The `symbols.BINARY` flag and an optional `symbols.MIME` override are passed as symbol keys in the second argument:
 
 ```lua
-include('./data.bin', { binary = true, mime = 'text/csv' })
+include('./data.bin', { [symbols.BINARY] = true, [symbols.MIME] = 'text/csv' })
 ```
+
+`symbols.BINARY` and `symbols.MIME` are opaque table references (not strings), so they never collide with user-defined string keys. All string keys in the second argument are template variables passed to the included file. The `symbols` table is a reserved environment key and must not be overwritten by frontmatter variables.
+
+### Argument passing
+
+Pass variables to included files through the second argument. Keys become local variables in the child environment:
+
+```markdown
+@System:
+{{ include("greeting.md", { name = "Alice", role = "reviewer" }) }}
+```
+
+Inside `greeting.md`:
+
+```markdown
+Hello {{name}}, you are acting as a {{role}}.
+```
+
+Included files have full template support at any nesting depth -- `{% %}` code blocks, `{{ }}` expressions, and nested `include()` calls all work. The child environment is isolated: it receives only the variables you pass (plus `__filename` and `__dirname`), not the parent's frontmatter variables.
 
 ### Safety guards
 
@@ -177,12 +298,72 @@ include('./data.bin', { binary = true, mime = 'text/csv' })
 - Missing files or read errors raise diagnostics that block the request.
 - Binary includes skip circular detection since they don't recurse.
 
+### Iterator Helpers
+
+Flemma provides two iterator helpers for concise array iteration in templates:
+
+**`values(t)`** — iterate over array values without the index variable:
+
+```
+{% for item in values(items) do %}
+- {{ item }}
+{% end %}
+```
+
+**`each(t)`** — iterate with a loop metadata context:
+
+```
+{% for item, loop in each(items) do %}
+- Item {{ loop.index }} of {{ loop.length }}: {{ item }}
+{% end %}
+```
+
+The `loop` table provides:
+
+| Field    | Description                  |
+| -------- | ---------------------------- |
+| `index`  | 1-based position             |
+| `index0` | 0-based position             |
+| `first`  | `true` for the first element |
+| `last`   | `true` for the last element  |
+| `length` | Total number of elements     |
+
+### Extending the Environment
+
+The template environment is built from registered populators — functions that receive a table and populate it with globals. Flemma ships two built-in populators (`stdlib` at priority 100, `iterators` at priority 200).
+
+Third-party populators are registered via `templating.modules` in setup:
+
+```lua
+require("flemma").setup({
+  templating = {
+    modules = { "my.custom.templating" },
+  },
+})
+```
+
+Each module returns a table with `name`, `priority`, and `populate`:
+
+```lua
+-- my/custom/templating.lua
+return {
+  name = "custom",
+  priority = 300,
+  populate = function(env)
+    env.my_helper = function() return "hello" end
+    env.os = nil -- remove something from an earlier populator
+  end,
+}
+```
+
+Populators run in priority order (lower first). Later populators can override or remove anything set by earlier ones.
+
 ## Diagnostics at a glance
 
 Flemma groups diagnostics by type in the notification shown before sending:
 
 - **Frontmatter errors** (blocking) – malformed code, unknown parser, include failures.
-- **Expression warnings** (non-blocking) – runtime errors during `{{ }}` evaluation. The original expression text is preserved in the output.
+- **Expression warnings** (non-blocking) – undefined variables, runtime errors, or type errors during `{{ }}` evaluation. The original expression text is preserved in the output.
 - **File reference warnings** (non-blocking) – missing files, unsupported MIME types, read errors.
 
 All diagnostics include position information (line and column) for precise error location. If any blocking error occurs the buffer becomes modifiable again and the request is cancelled before hitting the network.
@@ -213,7 +394,7 @@ Compare these specs: @./specs/v1.pdf and @./specs/v2.pdf.
 - **URL-encoded paths:** percent-encoded characters are decoded before file resolution. `@./my%20report.txt` resolves to `my report.txt`.
 
 > [!TIP]
-> Under the hood, `@./path` desugars to an `include()` call in binary mode. This means `@./file.png` and `{{ include('./file.png', { binary = true }) }}` are equivalent – you can use whichever reads better in context.
+> Under the hood, `@./path` desugars to an `include()` call in binary mode. This means `@./file.png` and `{{ include('./file.png', { [symbols.BINARY] = true }) }}` are equivalent – you can use whichever reads better in context.
 
 ### Provider support matrix
 

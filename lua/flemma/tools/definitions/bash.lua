@@ -9,6 +9,7 @@ local M = {}
 -- Module-level require for description constants only (evaluated at load time).
 -- Runtime code inside execute() must use ctx.truncate instead.
 local truncate = require("flemma.utilities.truncate")
+local sink_module = require("flemma.sink")
 
 M.definitions = {
   {
@@ -42,6 +43,15 @@ M.definitions = {
       required = { "label", "command", "timeout" },
       additionalProperties = false,
     },
+    personalities = {
+      ["coding-assistant"] = {
+        snippet = "Execute shell commands in the user's project directory",
+        guidelines = {
+          "Prefer dedicated tools (read, edit, write) over bash for file operations",
+          "Never run destructive commands (rm -rf, git reset --hard) without user confirmation",
+        },
+      },
+    },
     async = true,
     format_preview = function(input)
       local parts = { "$ " .. input.command }
@@ -60,7 +70,6 @@ M.definitions = {
 
       local timeout = input.timeout or ctx.timeout
 
-      local sink_module = require("flemma.sink")
       local output_sink = sink_module.create({
         name = "bash/" .. (input.label or "cmd"):gsub("[^%w/%-]", "-"),
       })
@@ -159,7 +168,7 @@ M.definitions = {
       }
 
       -- Apply bash-specific config
-      -- cwd is already resolved by executor (config > $FLEMMA_BUFFER_PATH > Neovim cwd)
+      -- cwd is already resolved by executor (config > urn:flemma:buffer:path > Neovim cwd)
       job_opts.cwd = ctx.cwd
       local tool_config = ctx:get_config()
       if tool_config and tool_config.env then

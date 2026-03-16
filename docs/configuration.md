@@ -9,7 +9,7 @@ require("flemma").setup({
   parameters = {
     max_tokens = "50%",                           -- Percentage of model's max_output_tokens, or integer
     temperature = 0.7,
-    timeout = 120,                           -- Response timeout (seconds)
+    timeout = 600,                           -- Response timeout (seconds)
     connect_timeout = 10,                    -- Connection timeout (seconds)
     thinking = "high",                       -- "low" | "medium" | "high" | number | false
     cache_retention = "short",               -- "none" | "short" | "long"
@@ -29,7 +29,9 @@ require("flemma").setup({
   tools = {
     require_approval = true,                 -- When false, auto-approves all tools
     auto_approve = { "$default" },           -- $default approves read, write, edit
+    auto_approve_sandboxed = true,           -- Auto-approve sandboxed tools (set false to require manual approval)
     presets = {},                            -- User-defined presets: ["$name"] = { approve = {}, deny = {} }
+    max_concurrent = 2,                      -- Max tools executing simultaneously per buffer (0 = unlimited)
     default_timeout = 30,                    -- Async tool timeout (seconds)
     show_spinner = true,                     -- Animated spinner during execution
     cursor_after_result = "result",          -- "result" | "stay" | "next"
@@ -39,10 +41,24 @@ require("flemma").setup({
     },
     bash = {
       shell = nil,                           -- Shell binary (default: bash)
-      cwd = "$FLEMMA_BUFFER_PATH",           -- Working directory; resolves to .chat file's directory (set nil for Neovim cwd)
+      cwd = "urn:flemma:buffer:path",        -- Working directory; resolves to .chat file's directory (set nil for Neovim cwd)
       env = nil,                             -- Extra environment variables
     },
+    grep = {                                 -- [experimental.tools] Grep tool configuration
+      cwd = "urn:flemma:buffer:path",        -- Working directory for searches
+      exclude = { ".git", "node_modules", "__pycache__", ".venv", "target", "dist", "build", "vendor" },
+    },
+    find = {                                 -- [experimental.tools] Find tool configuration
+      cwd = "urn:flemma:buffer:path",        -- Working directory for file searches
+      exclude = { ".git", "node_modules", "__pycache__", ".venv", "target", "dist", "build", "vendor" },
+    },
+    ls = {                                   -- [experimental.tools] Ls tool configuration
+      cwd = "urn:flemma:buffer:path",        -- Working directory for directory listings
+    },
     modules = {},                            -- Lua module paths for third-party tool sources (e.g., "3rd.tools.todos")
+  },
+  templating = {
+    modules = {},                            -- Lua module paths for environment populators (see docs/templates.md)
   },
   defaults = {
     dark = { bg = "#000000", fg = "#ffffff" },
@@ -52,7 +68,9 @@ require("flemma").setup({
     system = "Special",
     user = "Normal",
     assistant = "Normal",
-    user_lua_expression = "PreProc",
+    lua_expression = "PreProc",
+    lua_code_block = "PreProc",              -- {% code %} block content
+    lua_delimiter = "FlemmaLuaExpression",   -- {{ }} and {% %} delimiters
     user_file_reference = "Include",
     thinking_tag = "Comment",
     thinking_block = { dark = "Comment+bg:#102020-fg:#111111",
@@ -65,6 +83,7 @@ require("flemma").setup({
     tool_preview = "Comment",
     fold_preview = "Comment",
     fold_meta = "Comment",
+    busy = "DiagnosticWarn",                 -- Busy indicator icon in integrations (e.g., bufferline)
   },
   role_style = "bold",
   ruler = {
@@ -92,12 +111,16 @@ require("flemma").setup({
     limit = 1,                                 -- Maximum stacked notifications per buffer
     position = "overlay",                      -- "overlay" (pinned to window top)
     zindex = 30,                               -- Floating window z-index (above nvim-treesitter-context)
-    highlight = "@text.note, PmenuSel",        -- Highlight group(s) for bar colours; first with both fg+bg wins
+    highlight = "@text.note,PmenuSel",         -- Highlight group(s) for bar colours; first with both fg+bg wins
     border = false,                            -- Bottom border style, or false to disable
+  },
+  progress = {
+    highlight = "StatusLine",                  -- Highlight group(s) for the progress bar; first with both fg+bg is used
+    zindex = 50,                               -- Progress bar sits above notifications (zindex 30)
   },
   pricing = { enabled = true },
   statusline = {
-    thinking_format = "{model} ({level})",   -- Format when thinking is active
+    format = '#{model}#{?#{thinking}, (#{thinking}),}#{?#{booting}, ⏳,}', -- tmux-style format string (see docs/integrations.md)
   },
   text_object = "m",                         -- "m" or false to disable
   editing = {
@@ -105,20 +128,32 @@ require("flemma").setup({
     auto_write = false,                      -- Write buffer after each request
     manage_updatetime = true,                -- Lower updatetime in chat buffers
     foldlevel = 1,                           -- 0=all closed, 1=thinking collapsed, 99=all open
+    auto_close = {
+      thinking = true,                       -- Auto-close thinking blocks when they become terminal
+      tool_use = true,                       -- Auto-close tool_use blocks when completed
+      tool_result = true,                    -- Auto-close tool_result blocks when terminal
+      frontmatter = false,                   -- Auto-close frontmatter blocks (disabled by default)
+    },
   },
   logging = {
     enabled = false,
     path = vim.fn.stdpath("cache") .. "/flemma.log",
     level = "DEBUG",                         -- Minimum log level: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"
   },
+  diagnostics = {
+    enabled = false,                         -- Enable request diagnostics for debugging prompt caching issues
+  },
   sandbox = {
     enabled = true,                          -- Enable filesystem sandboxing
     backend = "auto",                        -- "auto" | "required" | explicit name
     policy = {
-      rw_paths = {                           -- Read-write paths (all others read-only)
-        "$CWD",                              --   Vim working directory
-        "$FLEMMA_BUFFER_PATH",               --   Directory of the .chat file
-        "/tmp",                              --   System temp directory
+      rw_paths = {                              -- Read-write paths (all others read-only)
+        "urn:flemma:cwd",                       --   Vim working directory
+        "urn:flemma:buffer:path",               --   Directory of the .chat file
+        "/tmp",                                 --   System temp directory
+        "${TMPDIR:-/tmp}",                      --   TMPDIR (deduped with /tmp if same)
+        "${XDG_CACHE_HOME:-~/.cache}",          --   Package manager caches
+        "${XDG_DATA_HOME:-~/.local/share}",     --   Package manager stores
       },
       network = true,                        -- Allow network access
       allow_privileged = false,              -- Allow sudo/capabilities
@@ -136,12 +171,17 @@ require("flemma").setup({
       send = "<C-]>",                        -- Hybrid: execute pending tools or send
       cancel = "<C-c>",
       tool_execute = "<M-CR>",               -- Execute tool at cursor
-      next_message = "]m",
-      prev_message = "[m",
+      message_next = "]m",
+      message_prev = "[m",
+      fold_toggle = "<Space>",               -- Toggle fold; false to disable
     },
     insert = {
       send = "<C-]>",                        -- Same hybrid behaviour, re-enters insert after
     },
+  },
+  experimental = {
+    lsp = vim.lsp ~= nil,                   -- In-process LSP for .chat buffers (hover, go-to-definition)
+    tools = false,                          -- Enable exploration tools (grep, find, ls) — see docs/tools.md
   },
 })
 ```
@@ -168,20 +208,21 @@ This lets you set `thinking = "high"` as a cross-provider default and fine-tune 
 | `editing.auto_write`        | `false` | When `true`, automatically writes the buffer to disk after each completed request.                                                                                                                                    |
 | `editing.manage_updatetime` | `true`  | Lowers `updatetime` to 100ms while a chat buffer is focused (enables responsive `CursorHold` events for UI updates). The original value is restored on `BufLeave`, with reference counting for multiple chat buffers. |
 | `editing.foldlevel`         | `1`     | Initial fold level: `0` = all folds closed, `1` = thinking blocks and frontmatter collapsed, `99` = all folds open.                                                                                                   |
+| `editing.auto_close.*`      | varies  | Auto-close (fold) blocks when they reach a terminal state. See [Auto-close behaviour](#auto-close-behaviour) below.                                                                                                   |
 
 ### Notification options
 
 The `notifications` key accepts a table with these fields:
 
-| Key         | Default                  | Effect                                                                                                                                                    |
-| ----------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `enabled`   | `true`                   | Set `false` to suppress all notification bars.                                                                                                            |
-| `timeout`   | `10000`                  | Milliseconds before auto-dismiss. Set `0` for persistent notifications.                                                                                   |
-| `limit`     | `1`                      | Maximum stacked notifications per buffer. Oldest are dismissed when the limit is exceeded.                                                                |
-| `position`  | `"overlay"`              | Notification placement. Currently only `"overlay"` (pinned to the top of the chat window).                                                                |
-| `zindex`    | `30`                     | Floating window z-index for notification bars (above nvim-treesitter-context).                                                                            |
-| `highlight` | `"@text.note, PmenuSel"` | Comma-separated highlight groups to derive bar colours from. The first group that provides both `fg` and `bg` is used; remaining groups act as fallbacks. |
-| `border`    | `"underline"`            | Bottom border style: `"underline"`, `"underdouble"`, `"undercurl"`, `"underdotted"`, `"underdashed"`, or `false` to disable.                              |
+| Key         | Default                 | Effect                                                                                                                                                    |
+| ----------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`   | `true`                  | Set `false` to suppress all notification bars.                                                                                                            |
+| `timeout`   | `10000`                 | Milliseconds before auto-dismiss. Set `0` for persistent notifications.                                                                                   |
+| `limit`     | `1`                     | Maximum stacked notifications per buffer. Oldest are dismissed when the limit is exceeded.                                                                |
+| `position`  | `"overlay"`             | Notification placement. Currently only `"overlay"` (pinned to the top of the chat window).                                                                |
+| `zindex`    | `30`                    | Floating window z-index for notification bars (above nvim-treesitter-context).                                                                            |
+| `highlight` | `"@text.note,PmenuSel"` | Comma-separated highlight groups to derive bar colours from. The first group that provides both `fg` and `bg` is used; remaining groups act as fallbacks. |
+| `border`    | `false`                 | Bottom border style: `"underline"`, `"underdouble"`, `"undercurl"`, `"underdotted"`, `"underdashed"`, or `false` to disable.                              |
 
 ### Keymaps and hybrid dispatch
 
@@ -269,17 +310,73 @@ Preset names must begin with `$`. Switch using `:Flemma switch $fast` and overri
 
 Sandboxing constrains tool execution so that shell commands run inside a read-only filesystem with write access limited to an explicit allowlist. It is enabled by default and auto-detects a compatible backend (currently Bubblewrap on Linux). On platforms without a backend, Flemma silently degrades to unsandboxed execution.
 
-| Key                               | Default                                     | Effect                                                                                |
-| --------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `sandbox.enabled`                 | `true`                                      | Master switch for sandboxing.                                                         |
-| `sandbox.backend`                 | `"auto"`                                    | `"auto"` = detect silently, `"required"` = detect and warn, or explicit backend name. |
-| `sandbox.policy.rw_paths`         | `{ "$CWD", "$FLEMMA_BUFFER_PATH", "/tmp" }` | Paths with read-write access. Supports path variables.                                |
-| `sandbox.policy.network`          | `true`                                      | Allow network access inside the sandbox.                                              |
-| `sandbox.policy.allow_privileged` | `false`                                     | Allow `sudo` and capabilities inside the sandbox.                                     |
+| Key                               | Default                                                       | Effect                                                                                |
+| --------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `sandbox.enabled`                 | `true`                                                        | Master switch for sandboxing.                                                         |
+| `sandbox.backend`                 | `"auto"`                                                      | `"auto"` = detect silently, `"required"` = detect and warn, or explicit backend name. |
+| `sandbox.policy.rw_paths`         | `{ "urn:flemma:cwd", "urn:flemma:buffer:path", "/tmp", ... }` | Paths with read-write access. Supports URNs, `$ENV`, `${ENV:-default}`.               |
+| `sandbox.policy.network`          | `true`                                                        | Allow network access inside the sandbox.                                              |
+| `sandbox.policy.allow_privileged` | `false`                                                       | Allow `sudo` and capabilities inside the sandbox.                                     |
 
 Override per-buffer via `flemma.opt.sandbox` in frontmatter (boolean shorthand `true`/`false` supported). Toggle at runtime with `:Flemma sandbox:enable/disable/status`.
 
 See [docs/sandbox.md](sandbox.md) for the full reference on policy options, path variables, custom backends, and security considerations.
+
+### Auto-close behaviour
+
+When blocks reach a terminal state (e.g., a thinking block finishes streaming, a tool result is injected), Flemma can automatically close (fold) them to keep the buffer tidy. Each block type is independently configurable:
+
+| Key                              | Default | Effect                                                                     |
+| -------------------------------- | ------- | -------------------------------------------------------------------------- |
+| `editing.auto_close.thinking`    | `true`  | Auto-close `<thinking>` blocks when they finish streaming.                 |
+| `editing.auto_close.tool_use`    | `true`  | Auto-close `**Tool Use:**` blocks after the tool executes.                 |
+| `editing.auto_close.tool_result` | `true`  | Auto-close `**Tool Result:**` blocks when they reach a terminal state.     |
+| `editing.auto_close.frontmatter` | `false` | Auto-close frontmatter blocks. Disabled by default so you can edit freely. |
+
+### Tool concurrency
+
+`tools.max_concurrent` (default `2`) limits how many tools execute simultaneously per buffer. When the model returns more tool calls than the limit, Flemma queues the excess and starts them as earlier tools complete. Set to `0` for unlimited concurrency.
+
+Override per-buffer via `flemma.opt.tools.max_concurrent` in frontmatter.
+
+### Progress bar
+
+A persistent progress indicator appears as a floating bar while a request is streaming. It shows the current phase (thinking, streaming text, tool input) and repositions automatically if the target line scrolls off-screen.
+
+| Key                  | Default        | Effect                                                                  |
+| -------------------- | -------------- | ----------------------------------------------------------------------- |
+| `progress.highlight` | `"StatusLine"` | Highlight group(s) for the progress bar; first with both fg+bg is used. |
+| `progress.zindex`    | `50`           | Floating window z-index (above notifications at 30).                    |
+
+### Diagnostics
+
+Enable request diagnostics to inspect what Flemma sends to and receives from the provider. Useful for debugging prompt caching issues or understanding how the buffer maps to API requests.
+
+| Key                   | Default | Effect                                                                       |
+| --------------------- | ------- | ---------------------------------------------------------------------------- |
+| `diagnostics.enabled` | `false` | Enable request diagnostics. Use `:Flemma diagnostics:diff` to view the diff. |
+
+Toggle at runtime with `:Flemma diagnostics:enable` / `:Flemma diagnostics:disable`.
+
+### Experimental LSP
+
+Flemma includes an in-process LSP server for `.chat` buffers. It provides hover information (AST node details, segment types, message positions) and basic go-to-definition for `include()` expressions and `@./path` file references.
+
+| Key                | Default          | Effect                                                           |
+| ------------------ | ---------------- | ---------------------------------------------------------------- |
+| `experimental.lsp` | `vim.lsp ~= nil` | Enable the LSP server. Auto-enabled when `vim.lsp` is available. |
+
+The LSP attaches automatically to `.chat` buffers. Use your usual LSP keybindings (e.g., `K` for hover) to inspect buffer structure.
+
+### Experimental exploration tools
+
+Three additional built-in tools (`grep`, `find`, `ls`) are available for codebase exploration. They are disabled by default and must be opted into explicitly.
+
+| Key                  | Default | Effect                                                                                                                      |
+| -------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `experimental.tools` | `false` | Enable `grep`, `find`, and `ls` tools. See [docs/tools.md](tools.md#experimental-exploration-tools) for the full reference. |
+
+Each tool has an optional config section under `tools` (`tools.grep`, `tools.find`, `tools.ls`) for working directory and exclude patterns.
 
 ### Per-buffer overrides
 

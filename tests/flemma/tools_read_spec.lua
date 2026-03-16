@@ -1,6 +1,7 @@
 --- Tests for read tool definition
 
 package.loaded["flemma.tools"] = nil
+package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.registry"] = nil
 package.loaded["flemma.tools.executor"] = nil
 package.loaded["flemma.tools.definitions.read"] = nil

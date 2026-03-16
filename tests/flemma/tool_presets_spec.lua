@@ -1,3 +1,4 @@
+package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.presets"] = nil
 
 local presets = require("flemma.tools.presets")

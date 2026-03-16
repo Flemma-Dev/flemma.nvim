@@ -3,6 +3,14 @@
 ---@class flemma.Keymaps
 local M = {}
 
+local core = require("flemma.core")
+local cursor = require("flemma.cursor")
+local executor = require("flemma.tools.executor")
+local navigation = require("flemma.navigation")
+local state = require("flemma.state")
+local textobject = require("flemma.textobject")
+local ui = require("flemma.ui")
+
 local ROLE_NAMES = { ["@System"] = true, ["@You"] = true, ["@Assistant"] = true }
 local CANCEL_WINDOW_MS = 800
 
@@ -18,10 +26,22 @@ function M.handle_colon_insert()
   -- in normal mode it clamps to col == #line - 1 (on last char).
   -- Accept both: the line itself must be a valid role name.
   if ROLE_NAMES[line] and col >= #line - 1 then
-    -- Complete the role marker and add a blank line below
     local row = vim.api.nvim_win_get_cursor(0)[1]
-    vim.api.nvim_buf_set_lines(0, row - 1, row, false, { line .. ":", "" })
-    vim.api.nvim_win_set_cursor(0, { row + 1, 0 })
+    local line_count = vim.api.nvim_buf_line_count(0)
+    local next_line_blank = row < line_count
+      and vim.api.nvim_buf_get_lines(0, row, row + 1, false)[1]:match("^%s*$") ~= nil
+
+    if next_line_blank then
+      -- Blank line already present — just complete the marker, don't insert another
+      vim.api.nvim_buf_set_lines(0, row - 1, row, false, { line .. ":" })
+    else
+      -- Complete the role marker and add a blank line below
+      vim.api.nvim_buf_set_lines(0, row - 1, row, false, { line .. ":", "" })
+    end
+    cursor.request_move(
+      vim.api.nvim_get_current_buf(),
+      { line = row + 1, force = true, reason = "role-marker-completion" }
+    )
     return true
   end
 
@@ -30,12 +50,6 @@ end
 
 ---Setup function to initialize all keymaps
 M.setup = function()
-  local core = require("flemma.core")
-  local navigation = require("flemma.navigation")
-  local ui = require("flemma.ui")
-  local textobject = require("flemma.textobject")
-  local state = require("flemma.state")
-
   -- Create or clear the augroup for keymap-related autocmds
   local augroup = vim.api.nvim_create_augroup("FlemmaKeymaps", { clear = true })
 
@@ -49,14 +63,14 @@ M.setup = function()
         -- Normal mode mappings
         if config.keymaps.normal.send then
           vim.keymap.set("n", config.keymaps.normal.send, function()
-            core.send_or_execute()
+            core.send_or_execute({ user_initiated = true, bufnr = vim.api.nvim_get_current_buf() })
           end, { buffer = true, desc = "Send to Flemma" })
         end
 
         if config.keymaps.normal.tool_execute then
           vim.keymap.set("n", config.keymaps.normal.tool_execute, function()
             local bufnr = vim.api.nvim_get_current_buf()
-            local executor = require("flemma.tools.executor")
+
             local ok, err = executor.execute_at_cursor(bufnr)
             if not ok then
               vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
@@ -67,7 +81,7 @@ M.setup = function()
         if config.keymaps.normal.cancel then
           vim.keymap.set("n", config.keymaps.normal.cancel, function()
             local bufnr = vim.api.nvim_get_current_buf()
-            local executor = require("flemma.tools.executor")
+
             if not executor.cancel_for_buffer(bufnr) then
               vim.notify("Flemma: Nothing to cancel", vim.log.levels.INFO)
             end
@@ -75,22 +89,31 @@ M.setup = function()
         end
 
         -- Message navigation keymaps
-        if config.keymaps.normal.next_message then
+        if config.keymaps.normal.message_next then
           vim.keymap.set(
             "n",
-            config.keymaps.normal.next_message,
+            config.keymaps.normal.message_next,
             navigation.find_next_message,
             { buffer = true, desc = "Jump to next message" }
           )
         end
 
-        if config.keymaps.normal.prev_message then
+        if config.keymaps.normal.message_prev then
           vim.keymap.set(
             "n",
-            config.keymaps.normal.prev_message,
+            config.keymaps.normal.message_prev,
             navigation.find_prev_message,
             { buffer = true, desc = "Jump to previous message" }
           )
+        end
+
+        -- Fold toggle keymap (skip when the key conflicts with mapleader)
+        local fold_toggle_key = config.keymaps.normal.fold_toggle
+        if fold_toggle_key then
+          local leader = vim.g.mapleader or "\\"
+          if vim.keycode(fold_toggle_key) ~= leader then
+            vim.keymap.set("n", fold_toggle_key, "za", { buffer = true, desc = "Toggle fold" })
+          end
         end
 
         -- Set up text objects with configured key
@@ -150,6 +173,8 @@ M.setup = function()
             -- and we exit any textlock context (e.g., Copilot's keymap wrapper)
             vim.schedule(function()
               core.send_or_execute({
+                bufnr = bufnr,
+                user_initiated = true,
                 on_request_complete = function()
                   ui.buffer_cmd(bufnr, "startinsert!")
                 end,

@@ -6,6 +6,7 @@ describe("sandbox policy layer", function()
   before_each(function()
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
+    package.loaded["flemma.tools.approval"] = nil
     sandbox = require("flemma.sandbox")
     state = require("flemma.state")
     bwrap = require("flemma.sandbox.backends.bwrap")
@@ -28,7 +29,7 @@ describe("sandbox policy layer", function()
         enabled = false,
         backend = "bwrap",
         policy = {
-          rw_paths = { "$CWD", "$FLEMMA_BUFFER_PATH", "/tmp" },
+          rw_paths = { "urn:flemma:cwd", "urn:flemma:buffer:path", "/tmp" },
           network = true,
           allow_privileged = false,
         },
@@ -51,7 +52,7 @@ describe("sandbox policy layer", function()
       assert.is_true(cfg.enabled)
       assert.is_false(cfg.policy.network)
       -- Other defaults preserved
-      assert.are.same({ "$CWD", "$FLEMMA_BUFFER_PATH", "/tmp" }, cfg.policy.rw_paths)
+      assert.are.same({ "urn:flemma:cwd", "urn:flemma:buffer:path", "/tmp" }, cfg.policy.rw_paths)
     end)
 
     it("uses global config when no buffer opts", function()
@@ -72,11 +73,11 @@ describe("sandbox policy layer", function()
   end)
 
   describe("get_policy", function()
-    it("expands $CWD to global working directory", function()
+    it("expands urn:flemma:cwd to global working directory", function()
       state.set_config({
         sandbox = {
           enabled = true,
-          policy = { rw_paths = { "$CWD" } },
+          policy = { rw_paths = { "urn:flemma:cwd" } },
         },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
@@ -86,11 +87,11 @@ describe("sandbox policy layer", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
-    it("expands $FLEMMA_BUFFER_PATH to buffer file directory", function()
+    it("expands urn:flemma:buffer:path to buffer file directory", function()
       state.set_config({
         sandbox = {
           enabled = true,
-          policy = { rw_paths = { "$FLEMMA_BUFFER_PATH" } },
+          policy = { rw_paths = { "urn:flemma:buffer:path" } },
         },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
@@ -101,11 +102,11 @@ describe("sandbox policy layer", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
-    it("skips $FLEMMA_BUFFER_PATH for unnamed buffers", function()
+    it("skips urn:flemma:buffer:path for unnamed buffers", function()
       state.set_config({
         sandbox = {
           enabled = true,
-          policy = { rw_paths = { "$FLEMMA_BUFFER_PATH" } },
+          policy = { rw_paths = { "urn:flemma:buffer:path" } },
         },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
@@ -114,17 +115,58 @@ describe("sandbox policy layer", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
-    it("warns and skips unknown $VARIABLES", function()
+    it("skips unset $VAR without default", function()
       state.set_config({
         sandbox = {
           enabled = true,
-          policy = { rw_paths = { "$UNKNOWN_VAR", "/tmp" } },
+          policy = { rw_paths = { "$FLEMMA_TEST_NONEXISTENT_VAR_12345", "/tmp" } },
         },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
       local policy = sandbox.get_policy(bufnr)
       local expected_tmp = vim.fn.resolve(vim.fn.fnamemodify("/tmp", ":p"))
       assert.are.same({ expected_tmp }, policy.rw_paths)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("expands $HOME from environment", function()
+      state.set_config({
+        sandbox = {
+          enabled = true,
+          policy = { rw_paths = { "$HOME" } },
+        },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local policy = sandbox.get_policy(bufnr)
+      local expected = vim.fn.resolve(vim.fn.fnamemodify(os.getenv("HOME"), ":p"))
+      assert.are.same({ expected }, policy.rw_paths)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("expands ${VAR:-default} with fallback", function()
+      state.set_config({
+        sandbox = {
+          enabled = true,
+          policy = { rw_paths = { "${FLEMMA_TEST_NONEXISTENT:-/fallback}" } },
+        },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local policy = sandbox.get_policy(bufnr)
+      local expected = vim.fn.resolve(vim.fn.fnamemodify("/fallback", ":p"))
+      assert.are.same({ expected }, policy.rw_paths)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("deduplicates paths where parent subsumes child", function()
+      state.set_config({
+        sandbox = {
+          enabled = true,
+          policy = { rw_paths = { "/tmp", "/tmp/foo" } },
+        },
+      })
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local policy = sandbox.get_policy(bufnr)
+      assert.are.equal(1, #policy.rw_paths)
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 

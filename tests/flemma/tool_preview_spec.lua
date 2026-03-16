@@ -256,6 +256,8 @@ describe("Tool Preview", function()
       package.loaded["flemma.ui"] = nil
       package.loaded["flemma.ui.preview"] = nil
       package.loaded["flemma.parser"] = nil
+      package.loaded["flemma.tools.context"] = nil
+      package.loaded["flemma.tools.injector"] = nil
       ui = require("flemma.ui")
     end)
 
@@ -416,6 +418,7 @@ describe("Tool Preview", function()
     before_each(function()
       package.loaded["flemma"] = nil
       package.loaded["flemma.ui.preview"] = nil
+      package.loaded["flemma.tools.approval"] = nil
       package.loaded["flemma.tools.registry"] = nil
       package.loaded["flemma.tools"] = nil
       package.loaded["extras.flemma.tools.calculator"] = nil
@@ -495,18 +498,18 @@ describe("Tool Preview", function()
       local content = string.rep("x", 1536)
       local result =
         ui_preview.format_tool_preview("write", { path = "./src/main.lua", content = content, label = "create module" })
-      assert.are.equal("write: ./src/main.lua  (1.5 KB)  # create module", result)
+      assert.are.equal("write: ./src/main.lua  (1.5KB)  # create module", result)
     end)
 
     it("write shows bytes for small content", function()
       local result = ui_preview.format_tool_preview("write", { path = "./readme.txt", content = "hello" })
-      assert.are.equal("write: ./readme.txt  (5 B)", result)
+      assert.are.equal("write: ./readme.txt  (5B)", result)
     end)
 
     it("write shows label without content size when content is empty", function()
       local result =
         ui_preview.format_tool_preview("write", { path = "./empty.txt", content = "", label = "create empty" })
-      assert.are.equal("write: ./empty.txt  (0 B)  # create empty", result)
+      assert.are.equal("write: ./empty.txt  (0B)  # create empty", result)
     end)
   end)
 end)

@@ -1,11 +1,18 @@
 package.loaded["flemma.tools"] = nil
+package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.registry"] = nil
 package.loaded["extras.flemma.tools.calculator"] = nil
 package.loaded["flemma.tools.definitions.bash"] = nil
 package.loaded["flemma.tools.definitions.read"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
 package.loaded["flemma.tools.definitions.write"] = nil
+package.loaded["flemma.tools.definitions.grep"] = nil
+package.loaded["flemma.tools.definitions.find"] = nil
+package.loaded["flemma.tools.definitions.ls"] = nil
 package.loaded["flemma.utilities.truncate"] = nil
+package.loaded["flemma.provider.providers.anthropic"] = nil
+package.loaded["flemma.provider.providers.openai"] = nil
+package.loaded["flemma.provider.providers.vertex"] = nil
 
 local ast = require("flemma.ast")
 local client = require("flemma.client")
@@ -671,13 +678,19 @@ describe("Anthropic Streaming Tool Use Response (integration)", function()
 
   before_each(function()
     package.loaded["flemma"] = nil
+    package.loaded["flemma.commands"] = nil
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.core.config.manager"] = nil
     package.loaded["flemma.provider.registry"] = nil
+    package.loaded["flemma.provider.providers.anthropic"] = nil
+    package.loaded["flemma.provider.providers.openai"] = nil
+    package.loaded["flemma.provider.providers.vertex"] = nil
     package.loaded["flemma.models"] = nil
     flemma = require("flemma")
     flemma.setup({ parameters = { thinking = false } })
+    tools = require("flemma.tools")
     tools.clear()
     tools.setup()
     tools.register("extras.flemma.tools.calculator")
@@ -1027,14 +1040,20 @@ describe("OpenAI Streaming Tool Use Response (integration)", function()
 
   before_each(function()
     package.loaded["flemma"] = nil
+    package.loaded["flemma.commands"] = nil
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.core.config.manager"] = nil
     package.loaded["flemma.provider.registry"] = nil
+    package.loaded["flemma.provider.providers.anthropic"] = nil
+    package.loaded["flemma.provider.providers.openai"] = nil
+    package.loaded["flemma.provider.providers.vertex"] = nil
     package.loaded["flemma.models"] = nil
     flemma = require("flemma")
     flemma.setup({ parameters = { thinking = false } })
     core = require("flemma.core")
+    tools = require("flemma.tools")
     tools.clear()
     tools.setup()
     tools.register("extras.flemma.tools.calculator")
@@ -1392,14 +1411,20 @@ describe("Vertex AI Streaming Function Call Response (integration)", function()
 
   before_each(function()
     package.loaded["flemma"] = nil
+    package.loaded["flemma.commands"] = nil
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.core.config.manager"] = nil
     package.loaded["flemma.provider.registry"] = nil
+    package.loaded["flemma.provider.providers.anthropic"] = nil
+    package.loaded["flemma.provider.providers.openai"] = nil
+    package.loaded["flemma.provider.providers.vertex"] = nil
     package.loaded["flemma.models"] = nil
     flemma = require("flemma")
     flemma.setup({ parameters = { thinking = false } })
     core = require("flemma.core")
+    tools = require("flemma.tools")
     tools.clear()
     tools.setup()
     tools.register("extras.flemma.tools.calculator")

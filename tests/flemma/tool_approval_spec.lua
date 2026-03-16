@@ -5,6 +5,7 @@
 -- Clear module caches for clean state
 package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.presets"] = nil
+package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.context"] = nil
 package.loaded["flemma.tools.injector"] = nil
 package.loaded["flemma.state"] = nil
@@ -2725,7 +2726,9 @@ describe("Sandbox auto-approval resolver", function()
   before_each(function()
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
+    package.loaded["flemma.tools.approval"] = nil
     sandbox = require("flemma.sandbox")
+    approval = require("flemma.tools.approval")
     sandbox.clear()
     sandbox.reset_enabled()
     register_mock_backend()
@@ -2891,5 +2894,80 @@ describe("Sandbox auto-approval resolver", function()
     })
     local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
     assert.equals("require_approval", result)
+  end)
+
+  it("frontmatter table assignment blocks sandbox for unlisted tools", function()
+    setup_with_sandbox()
+    -- Assignment `= {}` populates exclusions for the entire universe.
+    -- The sandbox resolver sees bash in exclusions and defers.
+    local bufnr = create_buffer({
+      "```lua",
+      "flemma.opt.tools.auto_approve = {}",
+      "```",
+      "@You:",
+      "test",
+    })
+    local opts = evaluate_opts(bufnr)
+    assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+  end)
+
+  it("frontmatter table assignment with preset blocks sandbox for tools outside preset", function()
+    setup_with_sandbox()
+    -- Assignment `= { "$default" }` excludes everything not literally "$default".
+    -- bash is not "$default", so it lands in exclusions and sandbox skips it.
+    local bufnr = create_buffer({
+      "```lua",
+      'flemma.opt.tools.auto_approve = { "$default" }',
+      "```",
+      "@You:",
+      "test",
+    })
+    local opts = evaluate_opts(bufnr)
+    assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+    -- $default tools are still approved by the frontmatter resolver
+    assert.equals("approve", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t2", opts = opts }))
+  end)
+
+  it("frontmatter table assignment that explicitly includes bash still approves it", function()
+    setup_with_sandbox()
+    -- bash is in the assigned list → not excluded → frontmatter resolver approves it
+    local bufnr = create_buffer({
+      "```lua",
+      'flemma.opt.tools.auto_approve = { "$default", "bash" }',
+      "```",
+      "@You:",
+      "test",
+    })
+    local opts = evaluate_opts(bufnr)
+    assert.equals("approve", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+  end)
+
+  it("frontmatter function policy returning nil still allows sandbox fallthrough", function()
+    setup_with_sandbox()
+    -- Function returning nil means "no opinion" — sandbox should still work
+    local ctx = {
+      bufnr = 1,
+      tool_id = "t1",
+      opts = {
+        auto_approve = function()
+          return nil
+        end,
+      },
+    }
+    assert.equals("approve", approval.resolve("bash", {}, ctx))
+  end)
+
+  it("frontmatter mutation (append) does not block sandbox for unlisted tools", function()
+    setup_with_sandbox()
+    -- :append seeded from config — no exclusions populated, sandbox still works
+    local bufnr = create_buffer({
+      "```lua",
+      'flemma.opt.tools.auto_approve:append("calculator")',
+      "```",
+      "@You:",
+      "test",
+    })
+    local opts = evaluate_opts(bufnr)
+    assert.equals("approve", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
   end)
 end)

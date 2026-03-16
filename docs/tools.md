@@ -168,12 +168,18 @@ When you `:remove()` a tool that lives inside a preset (e.g., removing `"write"`
 
 - **Async tools** (like `bash`) show an animated spinner while running and can be cancelled.
 - **Buffer locking** – the buffer is made non-modifiable during tool execution to prevent race conditions.
-- **Output truncation** – large outputs (> 2000 lines or 50 KB) are automatically truncated. The full output is saved to a temporary file.
+- **Output truncation** – large outputs (> 2000 lines or 50KB) are automatically truncated. The full output is saved to a temporary file.
 - **Cursor positioning** – after injection, the cursor can move to the result (`"result"`), stay put (`"stay"`), or jump to the next `@You:` prompt (`"next"`). Controlled by `tools.cursor_after_result`.
 
 ### Parallel tool use
 
 All three providers support parallel tool calls. Press <kbd>Ctrl-]</kbd> to execute all pending calls at once, or use <kbd>Alt-Enter</kbd> on individual blocks. Flemma validates that every `**Tool Use:**` block has a matching `**Tool Result:**` before sending.
+
+### Concurrency limit
+
+`tools.max_concurrent` (default `2`) limits how many tools execute simultaneously per buffer. When the model returns more tool calls than the concurrency limit allows, Flemma queues the excess and starts them as earlier tools complete. This prevents resource exhaustion when the model emits many parallel calls.
+
+Set `tools.max_concurrent = 0` for unlimited concurrency. Override per-buffer via `flemma.opt.tools.max_concurrent` in frontmatter.
 
 ---
 
@@ -199,14 +205,12 @@ Previews are non-editable virtual text (extmarks) that disappear once the tool e
 
 Every built-in tool ships with a tailored `format_preview` function:
 
-| Tool               | Preview format                                     | Example                                     |
-| ------------------ | -------------------------------------------------- | ------------------------------------------- |
-| `calculator`       | The expression directly                            | `calculator: 2 + 2`                         |
-| `calculator_async` | Expression with optional delay                     | `calculator_async: sqrt(16)  # 500ms`       |
-| `bash`             | `$ command` with optional label                    | `bash: $ git status  # checking repo`       |
-| `read`             | Path with optional `+offset,limit` range and label | `read: config.lua  +100,50  # reading tail` |
-| `edit`             | Path with optional label                           | `edit: config.lua  # fixing typo`           |
-| `write`            | Path with content size and optional label          | `write: output.txt  (2.3 KB)  # saving log` |
+| Tool    | Preview format                                     | Example                                     |
+| ------- | -------------------------------------------------- | ------------------------------------------- |
+| `bash`  | `$ command` with optional label                    | `bash: $ git status  # checking repo`       |
+| `read`  | Path with optional `+offset,limit` range and label | `read: config.lua  +100,50  # reading tail` |
+| `edit`  | Path with optional label                           | `edit: config.lua  # fixing typo`           |
+| `write` | Path with content size and optional label          | `write: output.txt  (2.3KB)  # saving log`  |
 
 ### Generic fallback
 
@@ -247,6 +251,70 @@ The function receives the input table and the available character width (the tot
 ### Styling
 
 Tool previews use the `FlemmaToolPreview` highlight group (default: linked to `Comment`). Customise via `highlights.tool_preview` in your config – see [docs/ui.md](ui.md#highlights-and-styles) for details.
+
+---
+
+## Experimental: Exploration tools
+
+> [!CAUTION]
+> **Experimental and untested.** These tools are gated behind `experimental.tools = true` and are not enabled by default. They have not been tested in real-world usage and their interface, behaviour, and configuration may change without notice in any release. Enable them if you want to try them out, but expect rough edges.
+
+Flemma ships three additional built-in tools for codebase exploration. Enable them by setting `experimental.tools = true` in your config:
+
+```lua
+require("flemma").setup({
+  experimental = { tools = true },
+})
+```
+
+| Tool   | Type  | Description                                                                                                                   |
+| ------ | ----- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `grep` | async | Search file contents using ripgrep (`rg`), GNU grep with PCRE (`grep -P`), or POSIX ERE (`grep -E`) – whichever is available. |
+| `find` | async | Find files by glob pattern using `fd`, `git ls-files`, or GNU `find` – whichever is available.                                |
+| `ls`   | sync  | List directory contents with configurable recursion depth and entry limit. Directories appear first (suffixed with `/`).      |
+
+All three tools declare `can_auto_approve_if_sandboxed`, so when the sandbox is enabled and `auto_approve_sandboxed` is `true` (the default), they execute without manual approval.
+
+### Configuration
+
+Each tool has an optional config section under `tools`:
+
+```lua
+tools = {
+  grep = {
+    cwd = "urn:flemma:buffer:path",                         -- working directory
+    exclude = { ".git", "node_modules", "__pycache__",      -- patterns to exclude
+                ".venv", "target", "dist", "build", "vendor" },
+  },
+  find = {
+    cwd = "urn:flemma:buffer:path",
+    exclude = { ".git", "node_modules", "__pycache__",
+                ".venv", "target", "dist", "build", "vendor" },
+  },
+  ls = {
+    cwd = "urn:flemma:buffer:path",
+  },
+}
+```
+
+### Backend detection
+
+`grep` and `find` auto-detect the best available backend at first use and cache the result:
+
+| Tool   | Priority 1                | Priority 2                     | Priority 3            |
+| ------ | ------------------------- | ------------------------------ | --------------------- |
+| `grep` | `rg` (ripgrep, JSON mode) | `grep -P` (GNU grep with PCRE) | `grep -E` (POSIX ERE) |
+| `find` | `fd` / `fdfind`           | `git ls-files`                 | GNU `find`            |
+
+When using the `grep -E` fallback, Perl-style shorthand classes (`\d`, `\w`, `\s`) are automatically translated to POSIX equivalents.
+
+### Preview formatters
+
+| Tool   | Preview format                                  | Example                                      |
+| ------ | ----------------------------------------------- | -------------------------------------------- |
+| `grep` | `/pattern/` with optional path, glob, and label | `grep: /TODO/  *.lua  # finding TODOs`       |
+| `find` | Pattern with optional search path and label     | `find: *.test.lua  in src/  # finding tests` |
+| `ls`   | Path with optional depth and label              | `ls: src/  depth=3  # exploring structure`   |
 
 ---
 
@@ -393,11 +461,11 @@ local result = ctx.truncate.truncate_tail(full_output)
 local result = ctx.truncate.truncate_head(content)
 
 -- Format byte counts for display
-local size_str = ctx.truncate.format_size(12345)  -- "12.1 KB"
+local size_str = ctx.truncate.format_size(12345)  -- "12.1KB"
 
 -- Constants
 ctx.truncate.MAX_LINES  -- 2000
-ctx.truncate.MAX_BYTES  -- 51200 (50 KB)
+ctx.truncate.MAX_BYTES  -- 51200 (50KB)
 ```
 
 ### `ctx:get_config()` – Tool-specific config

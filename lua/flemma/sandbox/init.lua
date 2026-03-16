@@ -4,7 +4,11 @@
 ---@class flemma.Sandbox
 local M = {}
 
+local bwrap = require("flemma.sandbox.backends.bwrap")
+local loader = require("flemma.loader")
+local registry_utils = require("flemma.registry")
 local state = require("flemma.state")
+local variables = require("flemma.utilities.variables")
 
 -- ---------------------------------------------------------------------------
 -- Backend registry (mirrors tools/approval.lua pattern)
@@ -55,7 +59,6 @@ end
 ---@param name string Unique backend name
 ---@param definition flemma.sandbox.BackendDefinition
 function M.register(name, definition)
-  local registry_utils = require("flemma.registry")
   registry_utils.validate_name(name, "sandbox backend")
   for i, entry in ipairs(backends) do
     if entry.name == name then
@@ -137,7 +140,6 @@ end
 ---Validates existence immediately, loads and registers immediately.
 ---@param module_path string Lua module path (must contain a dot)
 function M.register_module(module_path)
-  local loader = require("flemma.loader")
   loader.assert_exists(module_path)
   local mod = loader.load(module_path)
   if type(mod.available) ~= "function" or type(mod.wrap) ~= "function" then
@@ -213,7 +215,6 @@ local function resolve_backend(cfg)
       return nil, "No sandbox backend configured"
     end
     -- If it's a module path, load and register it first
-    local loader = require("flemma.loader")
     if loader.is_module_path(backend_name) then
       local load_ok, load_err = pcall(M.register_module, backend_name)
       if not load_ok then
@@ -271,7 +272,6 @@ end
 ---Register built-in sandbox backends.
 ---Called during plugin setup in init.lua.
 function M.setup()
-  local bwrap = require("flemma.sandbox.backends.bwrap")
   if not M.get("bwrap") then
     M.register("bwrap", {
       available = bwrap.available,
@@ -282,7 +282,6 @@ function M.setup()
   end
 
   -- Validate module-path backend early (fail fast at startup)
-  local loader = require("flemma.loader")
   local config = state.get_config()
   if config.sandbox and config.sandbox.backend and loader.is_module_path(config.sandbox.backend) then
     loader.assert_exists(config.sandbox.backend)
@@ -297,21 +296,22 @@ end
 ---@type boolean|nil nil = no override, defer to config
 local runtime_override = nil
 
---- Known path variables and their resolvers.
---- Each resolver receives (bufnr) and returns an absolute path or nil.
----@type table<string, fun(bufnr: integer): string|nil>
-local path_variables = {
-  ["$CWD"] = function(_bufnr)
-    return vim.fn.getcwd()
-  end,
-  ["$FLEMMA_BUFFER_PATH"] = function(bufnr)
-    local bufname = vim.api.nvim_buf_get_name(bufnr)
-    if bufname == "" then
-      return nil
-    end
-    return vim.fn.fnamemodify(bufname, ":p:h")
-  end,
-}
+-- Register Flemma-specific URN resolvers (once at module load)
+variables.register("urn:flemma:cwd", function(_context)
+  return vim.fn.getcwd()
+end)
+
+variables.register("urn:flemma:buffer:path", function(context)
+  local bufnr = context and context.bufnr
+  if not bufnr then
+    return nil
+  end
+  local bufname = vim.api.nvim_buf_get_name(bufnr)
+  if bufname == "" then
+    return nil
+  end
+  return vim.fn.fnamemodify(bufname, ":p:h")
+end)
 
 --- Normalize a path to absolute, resolving symlinks
 ---@param path string
@@ -327,38 +327,19 @@ end
 ---@return flemma.config.SandboxPolicy resolved
 local function resolve_policy(policy, bufnr)
   local resolved = vim.deepcopy(policy)
-  local seen = {}
-  local expanded = {}
+  local context = { bufnr = bufnr }
 
-  for _, path in ipairs(resolved.rw_paths or {}) do
-    local abs
-    local resolver = path_variables[path]
-    if resolver then
-      abs = resolver(bufnr)
-      if not abs then
-        -- Variable resolved to nil (e.g., unnamed buffer for $FLEMMA_BUFFER_PATH)
-        goto continue
-      end
-      abs = normalize(abs)
-    elseif path:match("^%$") then
-      -- Unknown variable
-      vim.schedule(function()
-        vim.notify("Flemma sandbox: unknown path variable '" .. path .. "', skipping", vim.log.levels.WARN)
-      end)
-      goto continue
-    else
-      abs = normalize(path)
-    end
+  -- Expand variables, dropping nils
+  local expanded = variables.expand_list(resolved.rw_paths or {}, context)
 
-    if not seen[abs] then
-      seen[abs] = true
-      table.insert(expanded, abs)
-    end
-
-    ::continue::
+  -- Normalize to absolute paths
+  local normalized = {}
+  for _, path in ipairs(expanded) do
+    table.insert(normalized, normalize(path))
   end
 
-  resolved.rw_paths = expanded
+  -- Deduplicate: exact matches and prefix subsumption
+  resolved.rw_paths = variables.deduplicate_by_prefix(normalized)
   return resolved
 end
 

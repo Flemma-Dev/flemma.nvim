@@ -2,6 +2,7 @@ local stub = require("luassert.stub")
 
 describe("File References and Path Parsing", function()
   local parser, processor, context_util
+  local runner_mod, file_refs_mod
   local stubs = {}
 
   local function create_stub(obj, method, replacement)
@@ -14,10 +15,20 @@ describe("File References and Path Parsing", function()
     -- Clear the module cache to ensure fresh state
     package.loaded["flemma.parser"] = nil
     package.loaded["flemma.processor"] = nil
+    package.loaded["flemma.tools.context"] = nil
+    package.loaded["flemma.tools.injector"] = nil
     package.loaded["flemma.context"] = nil
+    package.loaded["flemma.preprocessor"] = nil
+    package.loaded["flemma.preprocessor.registry"] = nil
+    package.loaded["flemma.preprocessor.runner"] = nil
+    package.loaded["flemma.preprocessor.context"] = nil
+    package.loaded["flemma.preprocessor.utilities"] = nil
+    package.loaded["flemma.preprocessor.rewriters.file_references"] = nil
     parser = require("flemma.parser")
     processor = require("flemma.processor")
     context_util = require("flemma.context")
+    runner_mod = require("flemma.preprocessor.runner")
+    file_refs_mod = require("flemma.preprocessor.rewriters.file_references")
     stubs = {}
   end)
 
@@ -33,6 +44,13 @@ describe("File References and Path Parsing", function()
   local function parse_and_get_file_parts(content, context)
     local lines = { "@You:", content }
     local doc = parser.parse_lines(lines)
+
+    -- Run file-references rewriter to convert @./file -> include() expressions
+    doc = runner_mod.run_pipeline(doc, 0, {
+      interactive = false,
+      rewriters = { file_refs_mod.rewriter },
+    })
+
     local result = processor.evaluate(doc, context or {})
 
     local file_parts = {}
@@ -446,7 +464,12 @@ describe("File References and Path Parsing", function()
           "@You:",
           "Look at @./image.png",
         }
-        local prompt = pipeline.run(parser.parse_lines(lines), {})
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt = pipeline.run(doc, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -482,6 +505,67 @@ describe("File References and Path Parsing", function()
         assert.is_string(image_part.source.data)
       end)
 
+      it("formats PNG images with NUL bytes correctly (binary data regression)", function()
+        -- Regression test: binary data with embedded NUL bytes caused
+        -- Vim:E976 (Using a Blob as a String) because vim.fn.sha256
+        -- received a Blob when check_file_drift hashed the raw content.
+        local anthropic = require("flemma.provider.providers.anthropic")
+        local provider = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 1000 })
+
+        local filereadable_stub = create_stub(vim.fn, "filereadable")
+        filereadable_stub.returns(1)
+
+        local mime_util = require("flemma.mime")
+        local mime_stub = create_stub(mime_util, "get_mime_type")
+        mime_stub.returns("image/png", nil)
+
+        -- Use binary data with NUL bytes, like a real PNG header
+        local binary_data = "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+        local mock_file = {
+          read = function(self, mode)
+            if mode == "*a" then
+              return binary_data
+            end
+          end,
+          close = function(self) end,
+        }
+        local io_open_stub = create_stub(io, "open")
+        io_open_stub.returns(mock_file)
+
+        local pipeline = require("flemma.pipeline")
+        local lines = {
+          "@You:",
+          "Look at @./photo.png",
+        }
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt, evaluated = pipeline.run(doc, {})
+
+        -- No expression evaluation errors from the binary include
+        local expr_errors = vim.tbl_filter(function(d)
+          return d.type == "expression" and d.severity == "warning"
+        end, evaluated.diagnostics or {})
+        assert.equals(0, #expr_errors, "binary include should not produce expression errors")
+
+        local request_body = provider:build_request(prompt)
+
+        local user_message = request_body.messages[1]
+        local image_part = nil
+        for _, part in ipairs(user_message.content) do
+          if part.type == "image" then
+            image_part = part
+          end
+        end
+
+        assert.is_not_nil(image_part, "should have an image part in the request")
+        assert.equals("base64", image_part.source.type)
+        assert.equals("image/png", image_part.source.media_type)
+        assert.equals(vim.base64.encode(binary_data), image_part.source.data)
+      end)
+
       it("formats PDF documents correctly", function()
         -- Setup Anthropic provider
         local anthropic = require("flemma.provider.providers.anthropic")
@@ -512,7 +596,12 @@ describe("File References and Path Parsing", function()
           "@You:",
           "Review @./document.pdf",
         }
-        local prompt = pipeline.run(parser.parse_lines(lines), {})
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt = pipeline.run(doc, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -567,7 +656,12 @@ describe("File References and Path Parsing", function()
           "@You:",
           "Read @./notes.txt",
         }
-        local prompt = pipeline.run(parser.parse_lines(lines), {})
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt = pipeline.run(doc, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -621,7 +715,12 @@ describe("File References and Path Parsing", function()
           "@You:",
           "Analyze @./chart.png",
         }
-        local prompt = pipeline.run(parser.parse_lines(lines), {})
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt = pipeline.run(doc, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -689,7 +788,12 @@ describe("File References and Path Parsing", function()
           "@You:",
           "Summarize @./report.pdf",
         }
-        local prompt = pipeline.run(parser.parse_lines(lines), {})
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt = pipeline.run(doc, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -747,7 +851,12 @@ describe("File References and Path Parsing", function()
           "@You:",
           "Process @./data.txt",
         }
-        local prompt = pipeline.run(parser.parse_lines(lines), {})
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt = pipeline.run(doc, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -808,7 +917,12 @@ describe("File References and Path Parsing", function()
           "@You:",
           "Describe @./photo.png",
         }
-        local prompt = pipeline.run(parser.parse_lines(lines), {})
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt = pipeline.run(doc, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -873,7 +987,12 @@ describe("File References and Path Parsing", function()
           "@You:",
           "Analyze @./study.pdf",
         }
-        local prompt = pipeline.run(parser.parse_lines(lines), {})
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt = pipeline.run(doc, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -927,7 +1046,12 @@ describe("File References and Path Parsing", function()
           "@You:",
           "Check @./config.txt",
         }
-        local prompt = pipeline.run(parser.parse_lines(lines), {})
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt = pipeline.run(doc, {})
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -972,7 +1096,12 @@ describe("File References and Path Parsing", function()
         "@You:",
         "File @./symlink-file.sh",
       }
-      local _, evaluated = pipeline.run(parser.parse_lines(lines), {})
+      local doc = parser.parse_lines(lines)
+      doc = runner_mod.run_pipeline(doc, 0, {
+        interactive = false,
+        rewriters = { file_refs_mod.rewriter },
+      })
+      local _, evaluated = pipeline.run(doc, {})
 
       -- Check diagnostics
       local file_diags = vim.tbl_filter(function(d)
@@ -1030,7 +1159,12 @@ describe("File References and Path Parsing", function()
         "@You:",
         "Binary file @./binary.bin",
       }
-      local _, evaluated = pipeline.run(parser.parse_lines(lines), {})
+      local doc = parser.parse_lines(lines)
+      doc = runner_mod.run_pipeline(doc, 0, {
+        interactive = false,
+        rewriters = { file_refs_mod.rewriter },
+      })
+      local _, evaluated = pipeline.run(doc, {})
 
       -- Check diagnostics
       local file_diags = vim.tbl_filter(function(d)

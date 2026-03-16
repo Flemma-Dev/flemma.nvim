@@ -15,17 +15,26 @@ Methods are grouped into three categories:
   - `build_request(self, prompt, context)` — convert a canonical `Prompt`
     into the provider's API request format.
   - `get_request_headers(self)` — return a string array of HTTP headers.
-  - `process_response_line(self, line, callbacks)` — parse one SSE line
-    and call the appropriate callbacks.
+  - `_process_data(self, data, parsed, callbacks)` — handle a single parsed
+    SSE data event (JSON already decoded, errors already checked).
+
+  Template method — base drives, provider hooks
+  ----------------------------------------------
+  - `process_response_line(self, line, callbacks)` — SSE parsing, JSON
+    decoding, error detection; delegates to `_process_data`.
+  - `_is_error_response(self, data)` — detect provider-specific error shapes
+    (default: `data.error ~= nil`).
 
   Required, call super — provider MUST override and invoke the base
   ------------------------------------------------------------------
-  - `new(opts)` — constructor; must call `base.new(opts)` and set
-    provider-specific fields.
-  - `get_api_key(self, opts)` — authentication; call `base.get_api_key()`
-    with the appropriate env/keyring opts table.
+  - `new(opts)` — constructor; must call `base.new(opts)` and
+    `base._init_provider(M, provider)`, then call `provider:reset()`.
+  - `get_api_key(self)` — authentication; resolve credentials via
+    `require("flemma.secrets").resolve()` with the appropriate credential
+    descriptor (kind + service).
   - `reset(self)` — call `base.reset(self)` plus any provider-specific
-    state initialization.
+    state initialization. Sinks in `_response_buffer.extra` are
+    auto-destroyed by base.
 
   Virtual — sensible default provided, override only if needed
   -------------------------------------------------------------
@@ -34,6 +43,7 @@ Methods are grouped into three categories:
   - `validate_parameters(model_name, parameters)` — parameter validation
     (warnings, not failures).
   - `finalize_response(self, exit_code, callbacks)` — post-request cleanup.
+    Auto-destroys sinks in `_response_buffer.extra`.
   - `extract_json_response_error(self, data)` — custom error extraction
     from JSON responses.
   - `try_import_from_buffer(self, lines)` — import conversations from
@@ -71,6 +81,8 @@ Missing boolean capabilities default to `false` at registration time.
 
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local secrets = require("flemma.secrets")
+local sink = require("flemma.sink")
 
 -- ============================================================================
 -- Type definitions
@@ -86,9 +98,9 @@ local log = require("flemma.logging")
 ---@field on_response_complete fun() Called when the AI response content is complete
 ---@field on_content fun(text: string) Called when response content is received
 ---@field on_thinking? fun(text: string) Called when thinking/reasoning content is received (optional)
+---@field on_tool_input? fun(delta: string) Called when tool input JSON delta is received (optional, for progress tracking)
 
 ---@class flemma.provider.ProviderState
----@field api_key string|nil Cached API key
 
 --- Flattened per-provider parameters (result of config_manager.merge_parameters on flemma.config.Parameters).
 --- Provider-specific sub-tables (e.g. `vertex`, `openai`) are merged to top level.
@@ -111,8 +123,11 @@ local log = require("flemma.logging")
 ---@field state flemma.provider.ProviderState
 ---@field endpoint? string
 ---@field api_version? string
+---@field metadata? flemma.provider.Metadata
+---@field get_api_key fun(self): string|nil Resolve credentials via secrets module (providers must override)
 ---@field _response_buffer? flemma.provider.ResponseBuffer
 ---@field _response_headers? table<string, string[]>
+---@field _base_parameters table<string, any> Underlying parameter table (without per-request overrides), for iteration
 ---@field set_parameter_overrides fun(self, overrides: table<string, any>|nil)
 local M = {}
 
@@ -126,14 +141,8 @@ local M = {}
 ---@field opts flemma.opt.FrontmatterOpts|nil Per-buffer options from frontmatter
 ---@field pending_tool_calls flemma.pipeline.UnresolvedTool[]|nil Tool calls without matching results
 
----@class flemma.provider.ApiKeyOpts
----@field env_var_name? string
----@field keyring_service_name? string
----@field keyring_key_name? string
----@field keyring_project_id? string
-
 ---@class flemma.provider.ResetOpts
----@field auth? boolean If true, reset authentication state only
+---@field invalidate_all_secrets? boolean If true, invalidate all cached credentials only
 
 ---@class flemma.provider.SSELine
 ---@field type "data"|"event"|"done"
@@ -158,6 +167,14 @@ function M.build_request(self, prompt, context)
 end
 
 --- @abstract
+--- Resolve credentials via the secrets module.
+---@param self flemma.provider.Base
+---@return string|nil
+function M.get_api_key(self)
+  error("get_api_key() must be implemented by provider")
+end
+
+--- @abstract
 --- Return HTTP headers for the provider's API
 ---@param self flemma.provider.Base
 ---@return string[]|nil
@@ -165,16 +182,56 @@ function M.get_request_headers(self)
   error("get_request_headers() must be implemented by provider")
 end
 
---- @abstract
---- Process a single line of streaming API response data
----
---- Called for each line of data received from the streaming API response.
---- Parse the line, extract content/usage information, and call appropriate callbacks.
----@param self flemma.provider.Base The provider instance
+--- Process a single line of streaming API response data.
+--- Handles SSE parsing, JSON decoding, and error detection.
+--- Delegates to _process_data() for provider-specific event dispatch.
+---@param self flemma.provider.Base
 ---@param line string A single line from the API response stream
----@param callbacks flemma.provider.Callbacks Table of callback functions to handle parsed data
+---@param callbacks flemma.provider.Callbacks
 function M.process_response_line(self, line, callbacks)
-  error("process_response_line() must be implemented by provider")
+  local parsed = M._parse_sse_line(line)
+  if not parsed then
+    M._handle_non_sse_line(self, line, callbacks)
+    return
+  end
+
+  -- Handle [DONE] and event: lines
+  if parsed.type == "done" or parsed.type ~= "data" then
+    return
+  end
+
+  local ok, data = pcall(json.decode, parsed.content)
+  if not ok then
+    log.error(self.metadata.name .. ".process_response_line(): Failed to parse JSON: " .. parsed.content)
+    return
+  end
+  if type(data) ~= "table" then
+    log.error(self.metadata.name .. ".process_response_line(): Expected table, got: " .. type(data))
+    return
+  end
+
+  -- Provider-specific error detection
+  if self:_is_error_response(data) then
+    local message = self:extract_json_response_error(data) or "Unknown API error"
+    log.error(self.metadata.name .. ".process_response_line(): API error: " .. log.inspect(message))
+    if callbacks.on_error then
+      callbacks.on_error(message)
+    end
+    return
+  end
+
+  self:_process_data(data, parsed, callbacks)
+end
+
+--- @abstract
+--- Process parsed SSE data after base preamble (error checking, JSON decoding).
+--- Providers MUST override this to dispatch provider-specific events.
+---@param self flemma.provider.Base
+---@param data table Parsed JSON data from the SSE line
+---@param parsed flemma.provider.SSELine The parsed SSE line metadata
+---@param callbacks flemma.provider.Callbacks
+function M._process_data(self, data, parsed, callbacks)
+  error("_process_data() must be implemented by provider")
 end
 
 -- ============================================================================
@@ -203,9 +260,8 @@ function M.new(opts)
 
   local provider = setmetatable({
     parameters = params_proxy,
-    state = {
-      api_key = nil,
-    },
+    _base_parameters = base_params,
+    state = {},
   }, { __index = M })
 
   --- Set per-request parameter overrides (from frontmatter).
@@ -218,99 +274,44 @@ function M.new(opts)
   return provider
 end
 
----@param service_name string
----@param key_name string
----@param project_id string|nil
----@return string|nil
-local function try_keyring(service_name, key_name, project_id)
-  if vim.fn.has("linux") == 1 then
-    local cmd
-    if project_id then
-      -- Include project_id in the lookup if provided
-      cmd = string.format(
-        "secret-tool lookup service %s key %s project_id %s 2>/dev/null",
-        service_name,
-        key_name,
-        project_id
-      )
-    else
-      cmd = string.format("secret-tool lookup service %s key %s 2>/dev/null", service_name, key_name)
-    end
-
-    local handle = io.popen(cmd)
-    if handle then
-      local result = handle:read("*a")
-      handle:close()
-      if result and #result > 0 then
-        return result:gsub("%s+$", "") -- Trim whitespace
-      end
-    end
-  end
-  return nil
+--- Set up the standard metatable chain for a provider instance.
+--- Call this in provider constructors after base.new() and before reset().
+---@param provider_module table The provider module table (M)
+---@param provider flemma.provider.Base The provider instance from base.new()
+function M._init_provider(provider_module, provider)
+  setmetatable(provider, { __index = setmetatable(provider_module, { __index = M }) })
 end
 
---- Get API key from environment, keyring, or prompt.
---- Providers must call this with their specific opts table.
----@param self flemma.provider.Base
----@param opts flemma.provider.ApiKeyOpts|nil
----@return string|nil
-function M.get_api_key(self, opts)
-  -- Return cached key if we have it and it's not empty
-  if self.state.api_key and self.state.api_key ~= "" then
-    log.debug("get_api_key(): Using cached API key")
-    return self.state.api_key
+--- Destroy all sink objects in a response buffer's extra table.
+--- Finds values with a :destroy() method via duck typing.
+---@param response_buffer flemma.provider.ResponseBuffer|nil
+local function destroy_sinks(response_buffer)
+  if not response_buffer or not response_buffer.extra then
+    return
   end
-
-  -- Reset the API key to nil to ensure we don't use an empty string
-  self.state.api_key = nil
-
-  -- Try environment variable if provided
-  if opts and opts.env_var_name then
-    local env_key = os.getenv(opts.env_var_name)
-    -- Only set if not empty
-    if env_key and env_key ~= "" then
-      self.state.api_key = env_key
+  for _, value in pairs(response_buffer.extra) do
+    if type(value) == "table" and type(value.destroy) == "function" then
+      value:destroy()
     end
   end
-
-  -- Try system keyring if no env var and service/key names are provided
-  if not self.state.api_key and opts and opts.keyring_service_name and opts.keyring_key_name then
-    -- First try with project_id if provided
-    if opts.keyring_project_id then
-      local key = try_keyring(opts.keyring_service_name, opts.keyring_key_name, opts.keyring_project_id)
-      if key and key ~= "" then
-        self.state.api_key = key
-        log.debug(
-          "get_api_key(): Retrieved API key from keyring with project ID: " .. log.inspect(opts.keyring_project_id)
-        )
-      end
-    end
-
-    -- Fall back to generic lookup if project-specific key wasn't found
-    if not self.state.api_key then
-      local key = try_keyring(opts.keyring_service_name, opts.keyring_key_name)
-      if key and key ~= "" then
-        self.state.api_key = key
-      end
-    end
-  end
-
-  return self.state.api_key
 end
 
 --- Reset provider state before a new request.
 --- When called without opts, performs a full reset (response buffer, etc.).
 --- When called with opts, performs a selective reset (only the specified fields).
 --- Providers must call `base.reset(self)` plus any provider-specific state initialization.
+--- Sinks in `_response_buffer.extra` are auto-destroyed on full reset.
 ---@param self flemma.provider.Base
 ---@param opts? flemma.provider.ResetOpts
 function M.reset(self, opts)
   if opts then
-    if opts.auth then
-      self.state.api_key = nil
+    if opts.invalidate_all_secrets then
+      secrets.invalidate_all()
     end
     return
   end
+  -- Destroy provider-specific sinks in extra
+  destroy_sinks(self._response_buffer)
   -- Destroy previous response buffer sink if it exists
   if self._response_buffer and self._response_buffer.lines_sink then
     self._response_buffer.lines_sink:destroy()
@@ -396,6 +397,8 @@ end
 ---@param exit_code number The HTTP request exit code (0 for success, non-zero for failure)
 ---@param callbacks flemma.provider.Callbacks Table of callback functions for any remaining data processing
 function M.finalize_response(self, exit_code, callbacks)
+  -- Destroy provider-specific sinks in extra
+  destroy_sinks(self._response_buffer)
   -- Check buffered response if we haven't processed content successfully
   if self._response_buffer and not self._response_buffer.successful then
     self:_check_buffered_response(callbacks)
@@ -597,11 +600,8 @@ end
 
 --- Parse a single SSE (Server-Sent Events) line
 ---@param line string The raw line from the stream
----@param opts? { allow_done?: boolean }
 ---@return flemma.provider.SSELine|nil
-function M._parse_sse_line(line, opts)
-  opts = opts or {}
-
+function M._parse_sse_line(line)
   -- Skip empty lines
   if not line or line == "" or line == "\r" then
     return nil
@@ -618,7 +618,7 @@ function M._parse_sse_line(line, opts)
     local content = line:gsub("^data: ", "")
 
     -- Handle [DONE] message
-    if content == "[DONE]" and opts.allow_done ~= false then
+    if content == "[DONE]" then
       return { type = "done" }
     end
 
@@ -632,7 +632,6 @@ end
 --- Create a new response buffer for accumulating non-processable lines
 ---@param self flemma.provider.Base
 function M._new_response_buffer(self)
-  local sink = require("flemma.sink")
   self._response_buffer = {
     lines_sink = sink.create({ name = "provider/response-lines" }),
     successful = false,
@@ -753,6 +752,149 @@ function M._content_ends_with_newline(self)
 end
 
 -- ============================================================================
+-- Shared emission helpers — used by providers to format response blocks
+-- ============================================================================
+
+--- Get the appropriate content prefix for the next block.
+--- Returns "" if no content, "\n" if content ends with newline, "\n\n" otherwise.
+---@param self flemma.provider.Base
+---@return string prefix
+function M._get_content_prefix(self)
+  if not self:_has_content() then
+    return ""
+  end
+  return self:_content_ends_with_newline() and "\n" or "\n\n"
+end
+
+--- Emit a formatted tool use block to the buffer.
+--- Handles dynamic fence sizing, content prefix, and the standard format string.
+---@param self flemma.provider.Base
+---@param name string Tool name
+---@param id string Tool call ID
+---@param arguments_json string JSON string of tool arguments
+---@param callbacks flemma.provider.Callbacks
+function M._emit_tool_use_block(self, name, id, arguments_json, callbacks)
+  local max_ticks = 0
+  for ticks in arguments_json:gmatch("`+") do
+    max_ticks = math.max(max_ticks, #ticks)
+  end
+  local fence = string.rep("`", math.max(3, max_ticks + 1))
+
+  local prefix = self:_get_content_prefix()
+  local formatted =
+    string.format("%s**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n", prefix, name, id, fence, arguments_json, fence)
+
+  M._signal_content(self, formatted, callbacks)
+  log.debug(self.metadata.name .. ".process_response_line(): Emitted tool_use block for " .. name)
+end
+
+--- Emit a thinking block to the buffer.
+--- Handles content trimming, content prefix, signature attributes, and the fold-only empty tag case.
+---@param self flemma.provider.Base
+---@param content string Accumulated thinking text (may be empty)
+---@param signature string|nil Signature value (provider-prepared)
+---@param provider_prefix string Provider namespace for the signature attribute ("anthropic", "openai", "vertex")
+---@param callbacks flemma.provider.Callbacks
+function M._emit_thinking_block(self, content, signature, provider_prefix, callbacks)
+  local stripped = vim.trim(content)
+  local has_content = #stripped > 0
+  local has_signature = signature ~= nil and signature ~= ""
+
+  if not has_content and not has_signature then
+    return
+  end
+
+  local prefix = self:_get_content_prefix()
+  local open_tag
+  if has_signature then
+    open_tag = "<thinking " .. provider_prefix .. ':signature="' .. signature .. '">'
+  else
+    open_tag = "<thinking>"
+  end
+
+  local block
+  if has_content then
+    block = prefix .. open_tag .. "\n" .. stripped .. "\n</thinking>\n"
+  else
+    -- Signature but no content — emit open/close tag (enables folding)
+    block = prefix .. open_tag .. "\n</thinking>\n"
+  end
+
+  M._signal_content(self, block, callbacks)
+  log.debug(self.metadata.name .. "._emit_thinking_block(): Emitted thinking block")
+end
+
+--- Emit a redacted thinking block to the buffer.
+---@param self flemma.provider.Base
+---@param data string Opaque redacted thinking data
+---@param callbacks flemma.provider.Callbacks
+function M._emit_redacted_thinking(self, data, callbacks)
+  local prefix = self:_content_ends_with_newline() and "" or "\n"
+  local block = prefix .. "<thinking redacted>\n" .. data .. "\n</thinking>\n"
+  M._signal_content(self, block, callbacks)
+  log.debug(self.metadata.name .. "._emit_redacted_thinking(): Emitted redacted thinking block")
+end
+
+--- Warn the user about a truncated response and signal completion.
+---@param self flemma.provider.Base
+---@param callbacks flemma.provider.Callbacks
+function M._warn_truncated(self, callbacks)
+  log.warn(self.metadata.name .. ".process_response_line(): Response truncated (max_tokens)")
+  vim.schedule(function()
+    vim.notify("Flemma: Response truncated \u{2013} model reached max output tokens", vim.log.levels.WARN)
+  end)
+  if callbacks.on_response_complete then
+    callbacks.on_response_complete()
+  end
+end
+
+--- Signal that the response was blocked by content policy.
+---@param self flemma.provider.Base
+---@param reason string The block reason (e.g., "refusal", "SAFETY")
+---@param callbacks flemma.provider.Callbacks
+function M._signal_blocked(self, reason, callbacks)
+  local message = "Response blocked by " .. self.metadata.display_name .. " (" .. reason .. ")"
+  log.error(self.metadata.name .. ".process_response_line(): " .. message)
+  if callbacks.on_error then
+    callbacks.on_error(message)
+  end
+end
+
+--- Default error response detection. Override in providers with different error shapes.
+--- Default checks for `data.error` (covers OpenAI and Vertex).
+---@param self flemma.provider.Base
+---@param data table The parsed JSON response data
+---@return boolean is_error True if the data represents an error response
+function M._is_error_response(self, data)
+  return data.error ~= nil
+end
+
+--- Inject synthetic error results for orphaned tool calls.
+--- Providers supply a format function returning the provider-specific block shape.
+---@param self flemma.provider.Base
+---@param pending flemma.pipeline.UnresolvedTool[]|nil List of orphaned tool calls
+---@param format_fn fun(orphan: flemma.pipeline.UnresolvedTool): table Returns a provider-specific synthetic result block
+---@return table[]|nil results Array of formatted results, or nil if no orphans
+function M._inject_orphan_results(self, pending, format_fn)
+  if not pending or #pending == 0 then
+    return nil
+  end
+  local results = {}
+  for _, orphan in ipairs(pending) do
+    table.insert(results, format_fn(orphan))
+    log.debug(
+      self.metadata.name
+        .. ".build_request: Injected synthetic result for orphaned "
+        .. orphan.name
+        .. " ("
+        .. orphan.id
+        .. ")"
+    )
+  end
+  return results
+end
+
+-- ============================================================================
 -- Shared parameter resolution helpers
 -- ============================================================================
 
@@ -812,6 +954,17 @@ local function effort_to_budget(level, model_info)
   end
 end
 
+--- Map an effort level through model_info.thinking_effort_map if available
+---@param effort string The canonical Flemma effort level
+---@param model_info? flemma.models.ModelInfo
+---@return string mapped_effort The provider-specific API value
+local function map_effort(effort, model_info)
+  if model_info and model_info.thinking_effort_map then
+    return model_info.thinking_effort_map[effort] or effort
+  end
+  return effort
+end
+
 --- Resolve the unified `thinking` parameter into provider-appropriate values.
 ---
 --- Priority: provider-specific param > thinking > provider defaults.
@@ -869,7 +1022,8 @@ function M.resolve_thinking(params, caps, model_info)
     -- Priority: provider-specific reasoning > unified thinking
     local raw_reasoning = params.reasoning
     if raw_reasoning ~= nil and raw_reasoning ~= "" then
-      return { enabled = true, effort = raw_reasoning, level = raw_reasoning }
+      local mapped = map_effort(raw_reasoning, model_info)
+      return { enabled = true, effort = mapped, level = raw_reasoning }
     end
 
     -- Fall back to unified `thinking` parameter
@@ -878,11 +1032,13 @@ function M.resolve_thinking(params, caps, model_info)
       return { enabled = false }
     end
     if type(thinking) == "string" then
-      return { enabled = true, effort = thinking, level = thinking }
+      local mapped = map_effort(thinking, model_info)
+      return { enabled = true, effort = mapped, level = thinking }
     end
     if type(thinking) == "number" and thinking > 0 then
-      local effort = budget_to_effort(thinking)
-      return { enabled = true, effort = effort, level = effort }
+      local canonical = budget_to_effort(thinking)
+      local mapped = map_effort(canonical, model_info)
+      return { enabled = true, effort = mapped, level = canonical }
     end
     return { enabled = false }
   end

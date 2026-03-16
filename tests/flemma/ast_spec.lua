@@ -3,6 +3,8 @@ local ctx = require("flemma.context")
 local parser = require("flemma.parser")
 local processor = require("flemma.processor")
 local pipeline = require("flemma.pipeline")
+local runner = require("flemma.preprocessor.runner")
+local file_refs = require("flemma.preprocessor.rewriters.file_references")
 
 describe("AST and Context", function()
   it("creates AST nodes with proper structure", function()
@@ -98,31 +100,97 @@ describe("Parser", function()
     for _, s in ipairs(m1.segments) do
       kinds[#kinds + 1] = s.kind
     end
-    -- Expected: text("Hello "), expression(1+1), text(" world "), expression(include), text(".")
+    -- Parser no longer converts @./file to expression; only {{ }} are expressions
+    -- Expected: text("Hello "), expression(1+1), text(" world @./a.txt.")
     assert.equals("text", kinds[1])
     assert.equals("expression", kinds[2])
     assert.equals("text", kinds[3])
-    assert.equals("expression", kinds[4])
-    assert.equals("text", kinds[5])
   end)
 
-  it("parses MIME override and URL-encoded filenames", function()
+  it("parses MIME override and URL-encoded filenames as raw text (handled by preprocessor)", function()
     local lines = {
       "@You:",
       "See @./my%20file.bin;type=image/png!",
     }
     local doc = parser.parse_lines(lines)
-    -- After desugaring, @./file becomes an ExpressionSegment with include() code
-    local seg = doc.messages[1].segments[2]
-    assert.equals("expression", seg.kind)
-    -- The include() call should contain the decoded path and MIME override
-    assert.is_true(seg.code:match("my file.bin") ~= nil)
-    assert.is_true(seg.code:match("image/png") ~= nil)
-    assert.is_true(seg.code:match("binary = true") ~= nil)
-    -- Trailing punctuation should be a separate text segment
-    local trailing = doc.messages[1].segments[3]
-    assert.equals("text", trailing.kind)
-    assert.equals("!", trailing.value)
+    -- Parser no longer converts @./file to expression; it stays as text
+    -- The preprocessor file-references rewriter handles the conversion
+    local segs = doc.messages[1].segments
+    assert.equals(1, #segs)
+    assert.equals("text", segs[1].kind)
+    assert.equals("See @./my%20file.bin;type=image/png!", segs[1].value)
+  end)
+
+  it("does not treat role markers inside fenced code blocks as message boundaries", function()
+    local lines = {
+      "@You:",
+      "Here is how you use Flemma:",
+      "",
+      "```",
+      "@You:",
+      "Hello!",
+      "```",
+    }
+    local doc = parser.parse_lines(lines)
+    assert.equals(1, #doc.messages, "Should parse as a single message, not split on @You: inside fence")
+    assert.equals("You", doc.messages[1].role)
+  end)
+
+  it("handles nested fences with role markers inside inner fence", function()
+    local lines = {
+      "@You:",
+      "Outer content",
+      "",
+      "````",
+      "```",
+      "@Assistant:",
+      "```",
+      "````",
+    }
+    local doc = parser.parse_lines(lines)
+    assert.equals(1, #doc.messages, "Should parse as single message; inner ``` does not close ````")
+    assert.equals("You", doc.messages[1].role)
+  end)
+
+  it("does not treat inline fenced code as a fence opener", function()
+    -- Per CommonMark: backtick fence info string cannot contain backtick characters.
+    -- Lines where backticks open and close on the same line are not valid fences.
+    local cases = {
+      "```How are you?```",
+      "```markdown Hello!```",
+      "```    ...giving up```",
+      "```Hello `World?",
+    }
+    for _, inline_code in ipairs(cases) do
+      local lines = {
+        "@Assistant:",
+        "Hi!",
+        inline_code,
+        "",
+        "@You:",
+        "Goodbye!",
+      }
+      local doc = parser.parse_lines(lines)
+      assert.equals(2, #doc.messages, "Line '" .. inline_code .. "' should not be treated as a fence opener")
+      assert.equals("Assistant", doc.messages[1].role)
+      assert.equals("You", doc.messages[2].role)
+    end
+  end)
+
+  it("resumes normal parsing after a fenced code block closes", function()
+    local lines = {
+      "@You:",
+      "Before fence",
+      "```",
+      "@Assistant:",
+      "```",
+      "@Assistant:",
+      "After fence",
+    }
+    local doc = parser.parse_lines(lines)
+    assert.equals(2, #doc.messages, "Should find two messages: fence-protected @Assistant: and real @Assistant:")
+    assert.equals("You", doc.messages[1].role)
+    assert.equals("Assistant", doc.messages[2].role)
   end)
 
   it("parses thinking tags in Assistant messages", function()
@@ -207,6 +275,142 @@ describe("Parser", function()
   end)
 end)
 
+describe("Expression segment positions", function()
+  it("sets end_col on {{ }} expressions", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Hello {{ name }} world",
+    })
+    local segs = doc.messages[1].segments
+    -- Find the expression segment
+    local expr_seg
+    for _, seg in ipairs(segs) do
+      if seg.kind == "expression" then
+        expr_seg = seg
+        break
+      end
+    end
+    assert.is_not_nil(expr_seg)
+    assert.is_not_nil(expr_seg.position.start_col)
+    assert.is_not_nil(expr_seg.position.end_col)
+    assert.is_true(expr_seg.position.end_col > expr_seg.position.start_col)
+  end)
+
+  it("treats @./ file references as plain text (handled by preprocessor)", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "See @./readme.md for details",
+    })
+    local segs = doc.messages[1].segments
+    -- Parser no longer converts @./file to expression segments
+    assert.equals(1, #segs)
+    assert.equals("text", segs[1].kind)
+    assert.equals("See @./readme.md for details", segs[1].value)
+  end)
+end)
+
+describe("find_segment_at_position", function()
+  it("finds expression segment by line and column", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Hello {{ name }} world",
+    })
+    local seg, msg = ast.find_segment_at_position(doc, 2, 8)
+    assert.is_not_nil(seg)
+    assert.equals("expression", seg.kind)
+    assert.equals("You", msg.role)
+  end)
+
+  it("returns text segment when not on expression", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Hello {{ name }} world",
+    })
+    local seg, msg = ast.find_segment_at_position(doc, 2, 1)
+    assert.is_not_nil(seg)
+    assert.equals("text", seg.kind)
+    assert.equals("You", msg.role)
+  end)
+
+  it("returns nil for line outside any message", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Hello",
+    })
+    local seg, msg = ast.find_segment_at_position(doc, 99, 1)
+    assert.is_nil(seg)
+    assert.is_nil(msg)
+  end)
+
+  it("finds thinking segment by line", function()
+    local doc = parser.parse_lines({
+      "@Assistant:",
+      "<thinking>",
+      "I need to think about this",
+      "</thinking>",
+      "Here is my answer",
+    })
+    local seg, msg = ast.find_segment_at_position(doc, 3, 1)
+    assert.is_not_nil(seg)
+    assert.equals("thinking", seg.kind)
+    assert.equals("Assistant", msg.role)
+  end)
+
+  it("finds tool_use segment by line", function()
+    local doc = parser.parse_lines({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`call_123`)",
+      "```json",
+      '{"command": "ls"}',
+      "```",
+    })
+    local seg, msg = ast.find_segment_at_position(doc, 2, 1)
+    assert.is_not_nil(seg)
+    assert.equals("tool_use", seg.kind)
+    assert.equals("Assistant", msg.role)
+  end)
+
+  it("returns message without segment on role marker line", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Hello world",
+    })
+    local seg, msg = ast.find_segment_at_position(doc, 1, 1)
+    assert.is_nil(seg)
+    assert.is_not_nil(msg)
+    assert.equals("You", msg.role)
+  end)
+
+  it("distinguishes adjacent expressions on same line", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "{{ a }} and {{ b }}",
+    })
+    -- First expression
+    local seg1 = ast.find_segment_at_position(doc, 2, 1)
+    assert.is_not_nil(seg1)
+    assert.equals("expression", seg1.kind)
+    assert.equals(" a ", seg1.code)
+
+    -- Second expression
+    local seg2 = ast.find_segment_at_position(doc, 2, 14)
+    assert.is_not_nil(seg2)
+    assert.equals("expression", seg2.kind)
+    assert.equals(" b ", seg2.code)
+  end)
+end)
+
+--- Run the file-references preprocessor rewriter on a parsed document.
+--- Converts @./file text into include() expression segments.
+---@param doc flemma.ast.DocumentNode
+---@return flemma.ast.DocumentNode
+local function run_file_refs_rewriter(doc)
+  return runner.run_pipeline(doc, 0, {
+    interactive = false,
+    rewriters = { file_refs.rewriter },
+  })
+end
+
 describe("Processor", function()
   local function setup_fixtures()
     os.execute("mkdir -p tests/fixtures")
@@ -235,6 +439,8 @@ describe("Processor", function()
       "File1: {{ 'hello' }} and File2: @./a.txt.",
     }
     local doc = parser.parse_lines(lines)
+    -- Run file-references rewriter to convert @./file -> include() expressions
+    doc = run_file_refs_rewriter(doc)
     local out = processor.evaluate(doc, base)
     assert.equals(1, #out.messages)
     local parts = out.messages[1].parts
@@ -242,10 +448,10 @@ describe("Processor", function()
     for _, p in ipairs(parts) do
       kinds[#kinds + 1] = p.kind
     end
-    -- Expected: text("File1: "), text("hello"), text(" and File2: "), file, text(".")
+    -- The compiler merges adjacent text segments, so we get:
+    -- text("File1: hello and File2: "), file(a.txt), text(".")
     assert.equals("text", kinds[1])
-    assert.equals("text", kinds[2])
-    assert.equals("file", kinds[4])
+    assert.equals("file", kinds[2])
     local file_diags = vim.tbl_filter(function(d)
       return d.type == "file"
     end, out.diagnostics or {})
@@ -259,6 +465,8 @@ describe("Processor", function()
       "See @./my%20file.txt!",
     }
     local doc = parser.parse_lines(lines)
+    -- Run file-references rewriter to convert @./file -> include() expressions
+    doc = run_file_refs_rewriter(doc)
     local out = processor.evaluate(doc, base)
     local parts = out.messages[1].parts
     assert.equals("file", parts[2].kind)
@@ -276,6 +484,8 @@ describe("Processor", function()
       "Img: @./sample.bin;type=image/png",
     }
     local doc = parser.parse_lines(lines)
+    -- Run file-references rewriter to convert @./file -> include() expressions
+    doc = run_file_refs_rewriter(doc)
     local out = processor.evaluate(doc, base2)
     local parts = out.messages[1].parts
     assert.equals("file", parts[2].kind)
@@ -293,7 +503,7 @@ describe("Processor", function()
     assert.is_true(ok, "Processor should not crash; include() error handled in expression eval as text")
   end)
 
-  it("resolves @./ file references inside included content as file parts", function()
+  it("treats @./ file references inside included content as plain text", function()
     local f = io.open("tests/fixtures/with_ref.txt", "w")
     f:write("Content: @./a.txt here")
     f:close()
@@ -306,20 +516,23 @@ describe("Processor", function()
     local doc = parser.parse_lines(lines)
     local out = processor.evaluate(doc, b)
 
-    -- After the emit protocol: @./a.txt inside included content produces a FilePart
+    -- @./file inside included content is now plain text (preprocessor runs at document level only)
     local parts = out.messages[1].parts
     local has_text_content = false
-    local has_file_part = false
     for _, p in ipairs(parts) do
       if p.kind == "text" and p.text:match("Content:") then
         has_text_content = true
       end
-      if p.kind == "file" and p.data:match("hello A") then
-        has_file_part = true
-      end
     end
     assert.is_true(has_text_content, "Should have text content from included file")
-    assert.is_true(has_file_part, "Should have file part for @./a.txt (the key improvement)")
+    -- The @./a.txt reference is now literal text, not a resolved file part
+    local full_text = ""
+    for _, p in ipairs(parts) do
+      if p.kind == "text" then
+        full_text = full_text .. p.text
+      end
+    end
+    assert.is_true(full_text:match("@%./a%.txt") ~= nil, "@./a.txt should remain as literal text in included content")
   end)
 
   it("does not process expressions or file refs in @Assistant messages", function()
@@ -355,6 +568,73 @@ describe("Processor", function()
     -- Output should still contain the original expression
     local text = out.messages[1].parts[1].text
     assert.is_true(text:match("{{") ~= nil, "Failed expression should remain in output")
+  end)
+
+  it("evaluates {% code %} blocks in @System messages", function()
+    local base = ctx.from_file("tests/fixtures/doc.chat")
+    local lines = {
+      "```lua",
+      "mode = 'strict'",
+      "```",
+      "@System:",
+      "{% if mode == 'strict' then %}",
+      "Be precise and thorough.",
+      "{% else %}",
+      "Be friendly and concise.",
+      "{% end %}",
+    }
+    local doc = parser.parse_lines(lines)
+    local out = processor.evaluate(doc, base)
+    assert.equals(1, #out.messages)
+    local text = ""
+    for _, p in ipairs(out.messages[1].parts) do
+      if p.kind == "text" then
+        text = text .. p.text
+      end
+    end
+    assert.truthy(text:find("Be precise and thorough"))
+    assert.is_nil(text:find("Be friendly and concise"))
+  end)
+
+  it("evaluates {% for %} loops in @You messages", function()
+    local base = ctx.from_file("tests/fixtures/doc.chat")
+    local lines = {
+      "```lua",
+      'items = {"alpha", "beta", "gamma"}',
+      "```",
+      "@You:",
+      "Review these:",
+      "{% for _, item in ipairs(items) do %}",
+      "- {{ item }}",
+      "{% end %}",
+    }
+    local doc = parser.parse_lines(lines)
+    local out = processor.evaluate(doc, base)
+    local text = ""
+    for _, p in ipairs(out.messages[1].parts) do
+      if p.kind == "text" then
+        text = text .. p.text
+      end
+    end
+    assert.truthy(text:find("alpha"))
+    assert.truthy(text:find("beta"))
+    assert.truthy(text:find("gamma"))
+  end)
+
+  it("{% code %} error produces template diagnostic", function()
+    local base = ctx.from_file("tests/fixtures/doc.chat")
+    local lines = {
+      "@You:",
+      "{% iff true then %}",
+      "text",
+      "{% end %}",
+    }
+    local doc = parser.parse_lines(lines)
+    local out = processor.evaluate(doc, base)
+    local template_diags = vim.tbl_filter(function(d)
+      return d.type == "template"
+    end, out.diagnostics or {})
+    assert.is_true(#template_diags > 0, "Should have template diagnostic for syntax error")
   end)
 
   it("preserves thinking nodes in evaluation", function()
@@ -475,7 +755,10 @@ describe("Pipeline Integration", function()
       "Got it",
     }
 
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+    local doc = parser.parse_lines(lines)
+    -- Run file-references rewriter to convert @./file -> include() expressions
+    doc = run_file_refs_rewriter(doc)
+    local prompt = pipeline.run(doc, ctx.from_file("tests/fixtures/doc.chat"))
 
     assert.is_nil(prompt.system)
     assert.equals(2, #prompt.history)
@@ -532,7 +815,10 @@ describe("Provider Integration", function()
     }
 
     local context = ctx.from_file("tests/fixtures/doc.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), context)
+    local doc = parser.parse_lines(lines)
+    -- Run file-references rewriter to convert @./file -> include() expressions
+    doc = run_file_refs_rewriter(doc)
+    local prompt = pipeline.run(doc, context)
     local req = provider:build_request(prompt, context)
     -- Responses API uses input[] instead of messages[]
     local user_items = vim.tbl_filter(function(item)
@@ -540,5 +826,440 @@ describe("Provider Integration", function()
     end, req.input)
     assert.equals(1, #user_items)
     assert.equals("user", user_items[1].role)
+  end)
+end)
+
+describe("Expression segment positions", function()
+  it("sets end_col on {{ }} expressions", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Hello {{ name }} world",
+    })
+    local segs = doc.messages[1].segments
+    -- Find the expression segment
+    local expr_seg
+    for _, seg in ipairs(segs) do
+      if seg.kind == "expression" then
+        expr_seg = seg
+        break
+      end
+    end
+    assert.is_not_nil(expr_seg)
+    assert.is_not_nil(expr_seg.position.start_col)
+    assert.is_not_nil(expr_seg.position.end_col)
+    assert.is_true(expr_seg.position.end_col > expr_seg.position.start_col)
+  end)
+
+  it("treats @./ file references as plain text (handled by preprocessor)", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "See @./readme.md for details",
+    })
+    local segs = doc.messages[1].segments
+    -- Parser no longer converts @./file to expression segments
+    assert.equals(1, #segs)
+    assert.equals("text", segs[1].kind)
+    assert.equals("See @./readme.md for details", segs[1].value)
+  end)
+end)
+
+describe("find_segment_at_position", function()
+  it("finds expression segment by line and column", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Hello {{ name }} world",
+    })
+    local seg, msg = ast.find_segment_at_position(doc, 2, 8)
+    assert.is_not_nil(seg)
+    assert.equals("expression", seg.kind)
+    assert.equals("You", msg.role)
+  end)
+
+  it("returns text segment when not on expression", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Hello {{ name }} world",
+    })
+    local seg, msg = ast.find_segment_at_position(doc, 2, 1)
+    assert.is_not_nil(seg)
+    assert.equals("text", seg.kind)
+    assert.equals("You", msg.role)
+  end)
+
+  it("returns nil for line outside any message", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Hello",
+    })
+    local seg, msg = ast.find_segment_at_position(doc, 99, 1)
+    assert.is_nil(seg)
+    assert.is_nil(msg)
+  end)
+
+  it("finds thinking segment by line", function()
+    local doc = parser.parse_lines({
+      "@Assistant:",
+      "<thinking>",
+      "I need to think about this",
+      "</thinking>",
+      "Here is my answer",
+    })
+    local seg, msg = ast.find_segment_at_position(doc, 3, 1)
+    assert.is_not_nil(seg)
+    assert.equals("thinking", seg.kind)
+    assert.equals("Assistant", msg.role)
+  end)
+
+  it("finds tool_use segment by line", function()
+    local doc = parser.parse_lines({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`call_123`)",
+      "```json",
+      '{"command": "ls"}',
+      "```",
+    })
+    local seg, msg = ast.find_segment_at_position(doc, 2, 1)
+    assert.is_not_nil(seg)
+    assert.equals("tool_use", seg.kind)
+    assert.equals("Assistant", msg.role)
+  end)
+
+  it("distinguishes adjacent expressions on same line", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "{{ a }} and {{ b }}",
+    })
+    -- First expression
+    local seg1 = ast.find_segment_at_position(doc, 2, 1)
+    assert.is_not_nil(seg1)
+    assert.equals("expression", seg1.kind)
+    assert.equals(" a ", seg1.code)
+
+    -- Second expression
+    local seg2 = ast.find_segment_at_position(doc, 2, 14)
+    assert.is_not_nil(seg2)
+    assert.equals("expression", seg2.kind)
+    assert.equals(" b ", seg2.code)
+  end)
+
+  it("distinguishes text segments around an expression on same line", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Hello {{ name }} world",
+    })
+    -- "Hello " text segment at col 1
+    local seg1 = ast.find_segment_at_position(doc, 2, 1)
+    assert.is_not_nil(seg1)
+    assert.equals("text", seg1.kind)
+    assert.equals("Hello ", seg1.value)
+
+    -- " world" text segment at col 17
+    local seg3 = ast.find_segment_at_position(doc, 2, 17)
+    assert.is_not_nil(seg3)
+    assert.equals("text", seg3.kind)
+    assert.equals(" world", seg3.value)
+  end)
+
+  it("finds segment on start line of multi-line text with end_col on different line", function()
+    -- Simulates a rewriter-produced segment like [102:34 - 103:0]
+    local doc = ast.document(nil, {
+      ast.message("You", {
+        ast.text("prefix ", { start_line = 1, start_col = 1, end_line = 1, end_col = 7 }),
+        ast.expression("expr", { start_line = 1, start_col = 8, end_line = 1, end_col = 15 }),
+        ast.text(" trailing\n", { start_line = 1, start_col = 16, end_line = 2, end_col = 0 }),
+      }, { start_line = 1, end_line = 2 }),
+    }, {}, { start_line = 1, end_line = 2 })
+
+    -- Col 20 is on the start line of the multi-line text segment
+    local seg = ast.find_segment_at_position(doc, 1, 20)
+    assert.is_not_nil(seg)
+    assert.equals("text", seg.kind)
+    assert.equals(" trailing\n", seg.value)
+  end)
+end)
+
+describe("parser text segment accumulation", function()
+  it("produces single text segment for multi-line assistant content", function()
+    local doc = parser.parse_lines({
+      "@Assistant:",
+      "Line one",
+      "Line two",
+      "Line three",
+    })
+    local msg = doc.messages[1]
+    -- Should be one accumulated text segment, not per-line segments
+    assert.equals(1, #msg.segments)
+    assert.equals("text", msg.segments[1].kind)
+    assert.equals("Line one\nLine two\nLine three", msg.segments[1].value)
+  end)
+
+  it("produces single text segment for multi-line user content without expressions", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "Line one",
+      "Line two",
+      "Line three",
+    })
+    local msg = doc.messages[1]
+    assert.equals(1, #msg.segments)
+    assert.equals("text", msg.segments[1].kind)
+    assert.equals("Line one\nLine two\nLine three", msg.segments[1].value)
+  end)
+
+  it("flushes accumulated text before structural markers in assistant messages", function()
+    local doc = parser.parse_lines({
+      "@Assistant:",
+      "Text before",
+      "<thinking>",
+      "thought",
+      "</thinking>",
+      "Text after",
+    })
+    local msg = doc.messages[1]
+    -- text, thinking, text
+    assert.equals(3, #msg.segments)
+    assert.equals("text", msg.segments[1].kind)
+    assert.truthy(msg.segments[1].value:find("Text before"))
+    assert.equals("thinking", msg.segments[2].kind)
+    assert.equals("text", msg.segments[3].kind)
+    assert.truthy(msg.segments[3].value:find("Text after"))
+  end)
+
+  it("sets consistent end_line/end_col for trailing newlines", function()
+    local doc = parser.parse_lines({
+      "@You:",
+      "content",
+      "",
+      "@Assistant:",
+      "response",
+    })
+    -- The @You text segment includes trailing \n
+    local you_seg = doc.messages[1].segments[1]
+    assert.equals("text", you_seg.kind)
+    -- Trailing \n should bump end_line, end_col = 0
+    if you_seg.value:match("\n$") then
+      assert.equals(0, you_seg.position.end_col)
+      assert.is_true(you_seg.position.end_line > you_seg.position.start_line)
+    end
+  end)
+end)
+
+describe("multi-turn API content stability", function()
+  local json = require("flemma.utilities.json")
+  local anthropic
+
+  before_each(function()
+    package.loaded["flemma.provider.providers.anthropic"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.registry"] = nil
+    package.loaded["flemma.tools.approval"] = nil
+    anthropic = require("flemma.provider.providers.anthropic")
+    local tools = require("flemma.tools")
+    tools.clear()
+  end)
+
+  ---Build an Anthropic API request body from raw buffer lines.
+  ---@param buffer_lines string[]
+  ---@return table request_body
+  local function build_request_from_lines(buffer_lines)
+    local doc = parser.parse_lines(buffer_lines)
+    local prompt = pipeline.run(doc)
+    local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 100 })
+    return provider:build_request(prompt)
+  end
+
+  ---Extract text values from a request message's content blocks.
+  ---@param msg table Anthropic message with content array
+  ---@return string[] texts
+  local function extract_texts(msg)
+    local texts = {}
+    for _, block in ipairs(msg.content or {}) do
+      if block.type == "text" then
+        table.insert(texts, block.text)
+      end
+    end
+    return texts
+  end
+
+  it("appending a new turn does not change earlier message content", function()
+    local req1 = build_request_from_lines({
+      "@You:",
+      "Hello world",
+      "",
+      "@Assistant:",
+      "Hi there!",
+    })
+
+    -- Append a second exchange
+    local req2 = build_request_from_lines({
+      "@You:",
+      "Hello world",
+      "",
+      "@Assistant:",
+      "Hi there!",
+      "",
+      "@You:",
+      "Follow-up question",
+    })
+
+    -- Append a third exchange
+    local req3 = build_request_from_lines({
+      "@You:",
+      "Hello world",
+      "",
+      "@Assistant:",
+      "Hi there!",
+      "",
+      "@You:",
+      "Follow-up question",
+      "",
+      "@Assistant:",
+      "Sure, here you go.",
+      "",
+      "@You:",
+      "Thanks!",
+    })
+
+    -- First user message must be byte-identical across all three
+    assert.same(extract_texts(req1.messages[1]), extract_texts(req2.messages[1]))
+    assert.same(extract_texts(req1.messages[1]), extract_texts(req3.messages[1]))
+
+    -- First assistant message must be byte-identical across req2 and req3
+    assert.same(extract_texts(req1.messages[2]), extract_texts(req2.messages[2]))
+    assert.same(extract_texts(req1.messages[2]), extract_texts(req3.messages[2]))
+
+    -- No trailing newlines on any message in any request
+    for _, req in ipairs({ req1, req2, req3 }) do
+      for mi, msg in ipairs(req.messages) do
+        for _, text in ipairs(extract_texts(msg)) do
+          assert.is_falsy(
+            text:match("\n$"),
+            string.format("message %d (%s) should not end with newline: %s", mi, msg.role, text)
+          )
+        end
+      end
+    end
+  end)
+
+  it("JSON prefix is stable across turns (simulates diagnostics cache check)", function()
+    local req1 = build_request_from_lines({
+      "@You:",
+      "What is 2+2?",
+      "",
+      "@Assistant:",
+      "The answer is 4.",
+    })
+
+    local req2 = build_request_from_lines({
+      "@You:",
+      "What is 2+2?",
+      "",
+      "@Assistant:",
+      "The answer is 4.",
+      "",
+      "@You:",
+      "And 3+3?",
+    })
+
+    -- req1 has 2 messages, req2 has 3; the first 2 must be byte-identical when serialized
+    local first_two_from_req1 = json.encode({ req1.messages[1], req1.messages[2] })
+    local first_two_from_req2 = json.encode({ req2.messages[1], req2.messages[2] })
+    assert.equals(first_two_from_req1, first_two_from_req2)
+  end)
+
+  it("multi-line user message with expressions has stable content across turns", function()
+    local req1 = build_request_from_lines({
+      "@You:",
+      "Hello {{ 'world' }}! How are you?",
+      "",
+      "@Assistant:",
+      "I am fine, thank you!",
+    })
+
+    local req2 = build_request_from_lines({
+      "@You:",
+      "Hello {{ 'world' }}! How are you?",
+      "",
+      "@Assistant:",
+      "I am fine, thank you!",
+      "",
+      "@You:",
+      "Great to hear!",
+    })
+
+    -- First user message content blocks must be identical
+    assert.same(extract_texts(req1.messages[1]), extract_texts(req2.messages[1]))
+
+    -- Verify the expression was evaluated and no trailing newlines
+    local full = table.concat(extract_texts(req1.messages[1]))
+    assert.truthy(full:find("world"), "expression should be evaluated")
+    assert.is_falsy(full:match("\n"), "evaluated content should not contain newlines")
+  end)
+
+  it("multiple blank separator lines between messages do not leak into content", function()
+    -- Some users leave extra blank lines between messages for readability
+    local req1 = build_request_from_lines({
+      "@You:",
+      "First question",
+      "",
+      "",
+      "",
+      "@Assistant:",
+      "First answer",
+      "",
+      "",
+      "@You:",
+      "Second question",
+    })
+
+    -- All messages should have clean content without trailing newlines
+    for mi, msg in ipairs(req1.messages) do
+      for _, text in ipairs(extract_texts(msg)) do
+        assert.is_falsy(
+          text:match("\n$"),
+          string.format("message %d (%s) should not end with newline: %s", mi, msg.role, text)
+        )
+      end
+    end
+
+    -- Verify content is exactly what was typed, nothing more
+    assert.equals("First question", extract_texts(req1.messages[1])[1])
+    assert.equals("First answer", extract_texts(req1.messages[2])[1])
+    assert.equals("Second question", extract_texts(req1.messages[3])[1])
+  end)
+
+  it("multi-line assistant content is stable across turns", function()
+    local req1 = build_request_from_lines({
+      "@You:",
+      "Tell me about Lua.",
+      "",
+      "@Assistant:",
+      "Lua is a lightweight scripting language.",
+      "It was created in Brazil.",
+      "It is used in game development.",
+    })
+
+    local req2 = build_request_from_lines({
+      "@You:",
+      "Tell me about Lua.",
+      "",
+      "@Assistant:",
+      "Lua is a lightweight scripting language.",
+      "It was created in Brazil.",
+      "It is used in game development.",
+      "",
+      "@You:",
+      "Tell me more.",
+    })
+
+    -- Assistant content must be identical
+    local asst1 = extract_texts(req1.messages[2])
+    local asst2 = extract_texts(req2.messages[2])
+    assert.same(asst1, asst2)
+
+    -- Should be one text block with internal newlines but no trailing newline
+    assert.equals(1, #asst1)
+    assert.is_falsy(asst1[1]:match("\n$"), "assistant text should not end with newline")
+    assert.truthy(asst1[1]:find("\n"), "multi-line content should have internal newlines")
   end)
 end)

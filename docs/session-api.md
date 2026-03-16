@@ -25,7 +25,7 @@ for _, request in ipairs(session.requests) do
 end
 ```
 
-Each request stores raw data – tokens, per-million prices, cache multipliers, and timestamps – so costs are always derived from the underlying components. Available fields on a request:
+Each request stores raw data – tokens, per-million prices, cache pricing, and timestamps – so costs are always derived from the underlying components. Available fields on a request:
 
 | Field                                                    | Description                                                                             |
 | -------------------------------------------------------- | --------------------------------------------------------------------------------------- |
@@ -33,7 +33,7 @@ Each request stores raw data – tokens, per-million prices, cache multipliers, 
 | `input_tokens`, `output_tokens`, `thoughts_tokens`       | Raw token counts                                                                        |
 | `input_price`, `output_price`                            | USD per million tokens (snapshot at request time)                                       |
 | `cache_read_input_tokens`, `cache_creation_input_tokens` | Cache token counts                                                                      |
-| `cache_read_multiplier`, `cache_write_multiplier`        | Cache cost multipliers (nil when not applicable)                                        |
+| `cache_read_price`, `cache_write_price`                  | USD per million cache tokens (nil when not applicable)                                  |
 | `output_has_thoughts`                                    | Whether `output_tokens` already includes thinking tokens                                |
 | `started_at`, `completed_at`                             | Timestamps as seconds since epoch with microsecond precision (e.g. `1700000042.123456`) |
 | `filepath`, `bufnr`                                      | Source buffer identifier                                                                |

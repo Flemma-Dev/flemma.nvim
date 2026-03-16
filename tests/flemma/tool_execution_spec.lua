@@ -3,6 +3,7 @@
 
 -- Clear module caches for clean state
 package.loaded["flemma.tools"] = nil
+package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.registry"] = nil
 package.loaded["flemma.tools.executor"] = nil
 package.loaded["flemma.tools.injector"] = nil
@@ -2054,5 +2055,23 @@ describe("Tool Executor", function()
       pending = executor.get_pending(bufnr)
       assert.equals(0, #pending)
     end)
+  end)
+end)
+
+describe("Executor count_running", function()
+  local executor_module
+
+  before_each(function()
+    package.loaded["flemma.tools.executor"] = nil
+    executor_module = require("flemma.tools.executor")
+  end)
+
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("returns 0 when no tools are executing", function()
+    local bufnr = create_buffer({ "@You:", "test" })
+    assert.equals(0, executor_module.count_running(bufnr))
   end)
 end)

@@ -14,6 +14,9 @@ describe("State Management", function()
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.parser"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.context"] = nil
+    package.loaded["flemma.tools.injector"] = nil
 
     flemma = require("flemma")
     ui = require("flemma.ui")
@@ -346,8 +349,8 @@ describe("State Management", function()
     end)
   end)
 
-  describe("spinner timer isolation", function()
-    it("should track spinner timer per buffer", function()
+  describe("progress timer isolation", function()
+    it("should track progress timer per buffer", function()
       local buf1 = vim.api.nvim_create_buf(false, false)
       local buf2 = vim.api.nvim_create_buf(false, false)
 
@@ -355,13 +358,13 @@ describe("State Management", function()
       local state2 = state.get_buffer_state(buf2)
 
       -- Set timer for buf1
-      state1.spinner_timer = 123
+      state1.progress_timer = 123
 
       -- buf2 should not have a timer
-      assert.is_nil(state2.spinner_timer)
+      assert.is_nil(state2.progress_timer)
 
       -- buf1 should have its timer
-      assert.equals(123, state1.spinner_timer)
+      assert.equals(123, state1.progress_timer)
     end)
   end)
 
@@ -381,6 +384,42 @@ describe("State Management", function()
 
       -- buf1 should have its request
       assert.equals(456, state1.current_request)
+    end)
+  end)
+
+  describe("cleanup hooks", function()
+    it("register_cleanup stores and runs hooks during cleanup", function()
+      package.loaded["flemma.state"] = nil
+      package.loaded["flemma.tools"] = nil
+      local st = require("flemma.state")
+      local buf = vim.api.nvim_create_buf(false, true)
+      st.get_buffer_state(buf)
+
+      local hook_called_with = nil
+      st.register_cleanup("test_hook", function(bufnr)
+        hook_called_with = bufnr
+      end)
+
+      st.cleanup_buffer_state(buf)
+      assert.are.equal(buf, hook_called_with)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("hooks run even without prior buffer state", function()
+      package.loaded["flemma.state"] = nil
+      package.loaded["flemma.tools"] = nil
+      local st = require("flemma.state")
+      local buf = vim.api.nvim_create_buf(false, true)
+      -- Don't initialize buffer state
+
+      local hook_called = false
+      st.register_cleanup("test_hook2", function()
+        hook_called = true
+      end)
+
+      st.cleanup_buffer_state(buf)
+      assert.is_true(hook_called)
+      vim.api.nvim_buf_delete(buf, { force = true })
     end)
   end)
 

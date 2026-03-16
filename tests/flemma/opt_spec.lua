@@ -1,4 +1,5 @@
 package.loaded["flemma.tools"] = nil
+package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.registry"] = nil
 package.loaded["flemma.tools.presets"] = nil
 package.loaded["extras.flemma.tools.calculator"] = nil
@@ -6,7 +7,13 @@ package.loaded["flemma.tools.definitions.bash"] = nil
 package.loaded["flemma.tools.definitions.read"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
 package.loaded["flemma.tools.definitions.write"] = nil
+package.loaded["flemma.tools.definitions.grep"] = nil
+package.loaded["flemma.tools.definitions.find"] = nil
+package.loaded["flemma.tools.definitions.ls"] = nil
 package.loaded["flemma.buffer.opt"] = nil
+package.loaded["flemma.provider.providers.anthropic"] = nil
+package.loaded["flemma.provider.providers.openai"] = nil
+package.loaded["flemma.provider.providers.vertex"] = nil
 
 local tools = require("flemma.tools")
 local opt = require("flemma.buffer.opt")
@@ -422,7 +429,9 @@ describe("flemma.opt", function()
       local context = ctx.from_file("test.chat")
       local prompt = pipeline.run(parser.parse_lines(lines), context)
 
-      -- flemma should be nil in expression env, so type(flemma) returns "nil"
+      -- flemma is not exposed in the expression env. The strict sandbox
+      -- catches the undefined variable access, so the expression degrades
+      -- to its raw text form (pcall catches the error).
       local user_msg = prompt.history[1]
       local all_text = {}
       for _, p in ipairs(user_msg.parts) do
@@ -431,7 +440,7 @@ describe("flemma.opt", function()
         end
       end
       local content = table.concat(all_text, "")
-      assert.are.equal("type is nil", content)
+      assert.are.equal("type is {{ type(flemma) }}", content)
     end)
   end)
 
@@ -819,7 +828,7 @@ describe("flemma.opt", function()
     it("table flows through frontmatter pipeline", function()
       local lines = {
         "```lua",
-        'flemma.opt.sandbox = { enabled = true, policy = { rw_paths = { "$CWD" } } }',
+        'flemma.opt.sandbox = { enabled = true, policy = { rw_paths = { "urn:flemma:cwd" } } }',
         "```",
         "@You:",
         "test",
@@ -830,7 +839,7 @@ describe("flemma.opt", function()
       assert.is_not_nil(prompt.opts)
       assert.is_not_nil(prompt.opts.sandbox)
       assert.is_true(prompt.opts.sandbox.enabled)
-      assert.are.same({ "$CWD" }, prompt.opts.sandbox.policy.rw_paths)
+      assert.are.same({ "urn:flemma:cwd" }, prompt.opts.sandbox.policy.rw_paths)
     end)
   end)
 

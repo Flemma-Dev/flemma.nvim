@@ -5,6 +5,8 @@
 ---@class flemma.RegistryUtils
 local M = {}
 
+local loader = require("flemma.loader")
+
 --- Canonical registry contract.
 --- Every registry in Flemma should implement this interface. The type parameter T
 --- represents the stored value type (e.g., ToolDefinition, BackendEntry).
@@ -24,7 +26,6 @@ local M = {}
 ---@param name string The name to validate
 ---@param registry_label string Human-readable label for error messages (e.g., "tool", "sandbox backend")
 function M.validate_name(name, registry_label)
-  local loader = require("flemma.loader")
   if loader.is_module_path(name) then
     error(
       string.format("flemma: %s name '%s' must not contain dots (dots indicate module paths)", registry_label, name),

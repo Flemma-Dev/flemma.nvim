@@ -13,6 +13,7 @@ describe("Frontmatter evaluation caching", function()
   before_each(function()
     package.loaded["flemma"] = nil
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.core.config.manager"] = nil
     package.loaded["flemma.provider.registry"] = nil
@@ -347,7 +348,7 @@ describe("Frontmatter evaluation caching", function()
 
     -- Call without evaluated_frontmatter — should evaluate internally via the local function
     local eval_spy = spy.on(processor, "evaluate_frontmatter")
-    local _, evaluated = pipeline.run(doc, context, nil)
+    local _, evaluated = pipeline.run(doc, context)
 
     -- evaluate_frontmatter on the module table is NOT called (evaluate() uses
     -- evaluate_frontmatter_internal directly for backward compat)
@@ -383,7 +384,7 @@ describe("Frontmatter evaluation caching", function()
 
     -- Now call pipeline.run with the pre-resolved result
     local eval_spy = spy.on(processor, "evaluate_frontmatter")
-    local _, evaluated = pipeline.run(doc, context, evaluated_frontmatter)
+    local _, evaluated = pipeline.run(doc, context, { evaluated_frontmatter = evaluated_frontmatter })
 
     -- The spy should not have been called — frontmatter was reused
     assert.spy(eval_spy).was_called(0)

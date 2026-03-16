@@ -3,7 +3,9 @@
 ---@class flemma.tools.Context
 local M = {}
 
+local parser = require("flemma.parser")
 local roles = require("flemma.utilities.roles")
+local ast = require("flemma.ast")
 
 ---@class flemma.tools.ToolContext
 ---@field tool_id string The unique ID of the tool call
@@ -101,40 +103,24 @@ end
 ---@param bufnr integer Buffer number
 ---@return flemma.tools.ToolContext[] pending_contexts
 function M.resolve_all_pending(bufnr)
-  local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
+  local siblings = ast.build_tool_sibling_table(doc)
 
-  -- Collect all tool_result IDs across the entire document
-  local result_ids = {}
-  for _, msg in ipairs(doc.messages) do
-    if roles.is_user(msg.role) then
-      for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_result" then
-          result_ids[seg.tool_use_id] = true
-        end
-      end
-    end
-  end
-
-  -- Collect tool_use segments that have no matching tool_result
   local pending = {}
-  for _, msg in ipairs(doc.messages) do
-    if msg.role == "Assistant" then
-      local aborted_message = get_abort_message(msg)
-      for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_use" and not result_ids[seg.id] then
-          table.insert(pending, {
-            tool_id = seg.id,
-            tool_name = seg.name,
-            input = seg.input or {},
-            node = seg,
-            start_line = seg.position.start_line,
-            end_line = seg.position.end_line,
-            aborted = aborted_message and true or nil,
-            aborted_message = aborted_message,
-          })
-        end
-      end
+  for tool_id, sibling in pairs(siblings) do
+    if sibling.use and not sibling.result then
+      local use_msg = sibling.use_message
+      local aborted_message = use_msg and get_abort_message(use_msg) or nil
+      table.insert(pending, {
+        tool_id = tool_id,
+        tool_name = sibling.use.name,
+        input = sibling.use.input or {},
+        node = sibling.use,
+        start_line = sibling.use.position.start_line,
+        end_line = sibling.use.position.end_line,
+        aborted = aborted_message and true or nil,
+        aborted_message = aborted_message,
+      })
     end
   end
 
@@ -152,65 +138,28 @@ end
 ---Find all tool_result segments with a `flemma:tool` status, grouped by status.
 ---Each entry pairs the tool_result metadata with its matching tool_use context.
 ---Results with status=approved that have non-empty content are excluded from the
----groups (content-overwrite protection) and warned about. All other blocks
----(including pending with user-filled content) are grouped normally — callers
----decide what to do with each status/content combination.
+---groups (content-overwrite protection) and warned about.
 ---@param bufnr integer Buffer number
 ---@return table<flemma.ast.ToolStatus, flemma.tools.ToolBlockContext[]> groups
 function M.resolve_all_tool_blocks(bufnr)
-  local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
+  local siblings = ast.build_tool_sibling_table(doc)
 
-  -- Collect tool_result segments with status, keyed by tool_use_id
-  ---@type table<string, { status: flemma.ast.ToolStatus, content: string, is_error: boolean, tool_result_start_line: integer, fence_line?: integer }>
-  local status_results = {}
-  for _, msg in ipairs(doc.messages) do
-    if roles.is_user(msg.role) then
-      for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_result" and seg.status then
-          status_results[seg.tool_use_id] = {
-            status = seg.status,
-            content = seg.content,
-            is_error = seg.is_error,
-            tool_result_start_line = seg.position.start_line,
-            fence_line = seg.fence_line,
-          }
-        end
-      end
-    end
-  end
-
-  if vim.tbl_isempty(status_results) then
-    return {}
-  end
-
-  -- Build tool_use lookup and abort message map for matching
-  ---@type table<string, flemma.ast.ToolUseSegment>
-  local tool_use_map = {}
-  ---@type table<string, string>
-  local abort_message_map = {}
-  for _, msg in ipairs(doc.messages) do
-    if msg.role == "Assistant" then
-      local aborted_message = get_abort_message(msg)
-      for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_use" then
-          tool_use_map[seg.id] = seg --[[@as flemma.ast.ToolUseSegment]]
-          if aborted_message then
-            abort_message_map[seg.id] = aborted_message
-          end
-        end
-      end
-    end
-  end
-
-  -- Group by status, applying content-overwrite protection
   ---@type table<flemma.ast.ToolStatus, flemma.tools.ToolBlockContext[]>
   local groups = {}
   local conflict_count = 0
 
-  for tool_use_id, info in pairs(status_results) do
-    local tu = tool_use_map[tool_use_id]
-    if tu then
+  for _, sibling in pairs(siblings) do
+    if sibling.result and sibling.result.status and sibling.use then
+      local tu = sibling.use
+      ---@cast tu flemma.ast.ToolUseSegment
+      local result = sibling.result
+      ---@cast result flemma.ast.ToolResultSegment
+      local result_status = result.status
+      ---@cast result_status flemma.ast.ToolStatus
+      local use_msg = sibling.use_message
+      local aborted_message = use_msg and get_abort_message(use_msg) or nil
+
       ---@type flemma.tools.ToolBlockContext
       local block_context = {
         tool_id = tu.id,
@@ -219,23 +168,21 @@ function M.resolve_all_tool_blocks(bufnr)
         node = tu,
         start_line = tu.position.start_line,
         end_line = tu.position.end_line,
-        status = info.status,
-        content = info.content,
-        has_content = info.content ~= "",
-        is_error = info.is_error,
-        tool_result = { start_line = info.tool_result_start_line, fence_line = info.fence_line },
-        aborted_message = abort_message_map[tu.id],
+        status = result_status,
+        content = result.content,
+        has_content = result.content ~= "",
+        is_error = result.is_error,
+        tool_result = { start_line = result.position.start_line, fence_line = result.fence_line },
+        aborted_message = aborted_message,
       }
 
-      if info.status == "approved" and block_context.has_content then
-        -- Content-overwrite protection: approved with user-edited content.
-        -- Execution would overwrite the user's edits.
+      if result_status == "approved" and block_context.has_content then
         conflict_count = conflict_count + 1
       else
-        if not groups[info.status] then
-          groups[info.status] = {}
+        if not groups[result_status] then
+          groups[result_status] = {}
         end
-        table.insert(groups[info.status], block_context)
+        table.insert(groups[result_status], block_context)
       end
     end
   end
@@ -265,7 +212,6 @@ end
 ---@param cursor_pos {row: integer, col: integer} 1-based cursor position
 ---@return flemma.tools.ToolContext|nil context, string|nil error_message
 function M.resolve(bufnr, cursor_pos)
-  local parser = require("flemma.parser")
   local doc = parser.get_parsed_document(bufnr)
 
   local cursor_line = cursor_pos.row
@@ -298,19 +244,20 @@ function M.resolve(bufnr, cursor_pos)
               and cursor_line >= seg.position.start_line
               and cursor_line <= seg.position.end_line
             then
-              -- Find corresponding tool_use by ID
-              for _, tu in ipairs(tool_uses) do
-                if tu.id == seg.tool_use_id then
-                  return {
-                    tool_id = tu.id,
-                    tool_name = tu.name,
-                    input = tu.input or {},
-                    node = tu,
-                    start_line = tu.position.start_line,
-                    end_line = tu.position.end_line,
-                  },
-                    nil
-                end
+              -- Find corresponding tool_use by ID (document-wide, safe because IDs are unique)
+              ---@cast seg flemma.ast.ToolResultSegment
+              local tu, _ = ast.find_tool_sibling(doc, seg)
+              if tu and tu.kind == "tool_use" then
+                ---@cast tu flemma.ast.ToolUseSegment
+                return {
+                  tool_id = tu.id,
+                  tool_name = tu.name,
+                  input = tu.input or {},
+                  node = tu,
+                  start_line = tu.position.start_line,
+                  end_line = tu.position.end_line,
+                },
+                  nil
               end
             end
           end
@@ -332,18 +279,19 @@ function M.resolve(bufnr, cursor_pos)
             end
           end
           if nearest_result then
-            for _, tu in ipairs(tool_uses) do
-              if tu.id == nearest_result.tool_use_id then
-                return {
-                  tool_id = tu.id,
-                  tool_name = tu.name,
-                  input = tu.input or {},
-                  node = tu,
-                  start_line = tu.position.start_line,
-                  end_line = tu.position.end_line,
-                },
-                  nil
-              end
+            ---@cast nearest_result flemma.ast.ToolResultSegment
+            local tu, _ = ast.find_tool_sibling(doc, nearest_result)
+            if tu and tu.kind == "tool_use" then
+              ---@cast tu flemma.ast.ToolUseSegment
+              return {
+                tool_id = tu.id,
+                tool_name = tu.name,
+                input = tu.input or {},
+                node = tu,
+                start_line = tu.position.start_line,
+                end_line = tu.position.end_line,
+              },
+                nil
             end
           end
           -- Final fallback: last tool_use

@@ -4,6 +4,11 @@
 ---@class flemma.Usage
 local M = {}
 
+local bar = require("flemma.bar")
+local provider_registry = require("flemma.provider.registry")
+local state = require("flemma.state")
+local str = require("flemma.utilities.string")
+
 --- Item priorities (higher = more important, shown first when space is scarce)
 local PRIORITY = {
   MODEL_NAME = 110,
@@ -23,13 +28,7 @@ local PRIORITY = {
 ---@param number number The number to format
 ---@return string formatted The comma-separated string (e.g. 20449 -> "20,449")
 function M.format_number(number)
-  local integer_part = tostring(math.floor(number))
-  -- Reverse, insert commas every 3 digits, reverse back
-  local reversed = integer_part:reverse()
-  local with_commas = reversed:gsub("(%d%d%d)", "%1,")
-  -- Remove trailing comma if present (when digit count is a multiple of 3)
-  with_commas = with_commas:gsub(",$", "")
-  return with_commas:reverse()
+  return str.format_number(number)
 end
 
 --- Calculate cache hit percentage for a request
@@ -38,7 +37,7 @@ end
 ---@param request flemma.session.Request The request to calculate cache percentage for
 ---@return integer|nil percent Cache hit percentage (0-100), or nil when total input is 0
 function M.calculate_cache_percent(request)
-  local total_input = request.input_tokens + request.cache_read_input_tokens + request.cache_creation_input_tokens
+  local total_input = request:get_total_input_tokens()
   if total_input == 0 then
     return nil
   end
@@ -50,7 +49,6 @@ end
 ---@param session? flemma.session.Session Session instance
 ---@return flemma.bar.Segment[]
 function M.build_segments(request, session)
-  local state = require("flemma.state")
   local config = state.get_config()
   local pricing_enabled = config.pricing.enabled
 
@@ -88,7 +86,7 @@ function M.build_segments(request, session)
     if pricing_enabled then
       table.insert(request_items, {
         key = "request_cost",
-        text = string.format("$%.2f", request:get_total_cost()),
+        text = str.format_cost(request:get_total_cost()),
         priority = PRIORITY.REQUEST_COST,
         highlight = { group = "FlemmaNotificationsBar" },
       })
@@ -100,18 +98,14 @@ function M.build_segments(request, session)
       -- Suppress cache indicator when 0% is expected (below minimum cacheable tokens)
       local below_threshold = false
       if cache_percent == 0 then
-        local registry = require("flemma.provider.registry")
-        local model_info = registry.get_model_info(request.provider, request.model)
+        local model_info = provider_registry.get_model_info(request.provider, request.model)
         if model_info and model_info.min_cache_tokens then
-          local total_input = request.input_tokens
-            + request.cache_read_input_tokens
-            + request.cache_creation_input_tokens
-          below_threshold = total_input < model_info.min_cache_tokens
+          below_threshold = request:get_total_input_tokens() < model_info.min_cache_tokens
         end
       end
 
       if not below_threshold then
-        local cache_text = tostring(cache_percent) .. "%"
+        local cache_text = str.format_percent(cache_percent)
         local group = cache_percent > 50 and "FlemmaNotificationsCacheGood" or "FlemmaNotificationsCacheBad"
         table.insert(request_items, {
           key = "cache_percent",
@@ -124,10 +118,10 @@ function M.build_segments(request, session)
       end
     end
 
-    -- Input tokens
+    -- Input tokens (total including cached)
     table.insert(request_items, {
       key = "request_input_tokens",
-      text = M.format_number(request.input_tokens) .. "\xE2\x86\x91", -- ↑
+      text = M.format_number(request:get_total_input_tokens()) .. "\xE2\x86\x91", -- ↑
       priority = PRIORITY.REQUEST_INPUT_TOKENS,
       highlight = { group = "FlemmaNotificationsSecondary" },
     })
@@ -145,7 +139,7 @@ function M.build_segments(request, session)
     if request.thoughts_tokens > 0 then
       table.insert(request_items, {
         key = "thinking_tokens",
-        text = "\xE2\x97\x8B " .. M.format_number(request.thoughts_tokens), -- ○
+        text = M.format_number(request.thoughts_tokens) .. "\xE2\x81\x82", -- ⁂
         priority = PRIORITY.THINKING_TOKENS,
         highlight = { group = "FlemmaNotificationsSecondary" },
       })
@@ -168,7 +162,7 @@ function M.build_segments(request, session)
     if pricing_enabled then
       table.insert(session_items, {
         key = "session_cost",
-        text = string.format("$%.2f", session:get_total_cost()),
+        text = str.format_cost(session:get_total_cost()),
         priority = PRIORITY.SESSION_COST,
         highlight = { group = "FlemmaNotificationsBar" },
       })
@@ -209,7 +203,6 @@ end
 ---@param available_width integer Window width in display characters
 ---@return flemma.bar.RenderResult
 function M.format_notification(request, session, available_width)
-  local bar = require("flemma.bar")
   local segments = M.build_segments(request, session)
   if #segments == 0 then
     return { text = "", highlights = {} }
