@@ -505,6 +505,67 @@ describe("File References and Path Parsing", function()
         assert.is_string(image_part.source.data)
       end)
 
+      it("formats PNG images with NUL bytes correctly (binary data regression)", function()
+        -- Regression test: binary data with embedded NUL bytes caused
+        -- Vim:E976 (Using a Blob as a String) because vim.fn.sha256
+        -- received a Blob when check_file_drift hashed the raw content.
+        local anthropic = require("flemma.provider.providers.anthropic")
+        local provider = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 1000 })
+
+        local filereadable_stub = create_stub(vim.fn, "filereadable")
+        filereadable_stub.returns(1)
+
+        local mime_util = require("flemma.mime")
+        local mime_stub = create_stub(mime_util, "get_mime_type")
+        mime_stub.returns("image/png", nil)
+
+        -- Use binary data with NUL bytes, like a real PNG header
+        local binary_data = "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+        local mock_file = {
+          read = function(self, mode)
+            if mode == "*a" then
+              return binary_data
+            end
+          end,
+          close = function(self) end,
+        }
+        local io_open_stub = create_stub(io, "open")
+        io_open_stub.returns(mock_file)
+
+        local pipeline = require("flemma.pipeline")
+        local lines = {
+          "@You:",
+          "Look at @./photo.png",
+        }
+        local doc = parser.parse_lines(lines)
+        doc = runner_mod.run_pipeline(doc, 0, {
+          interactive = false,
+          rewriters = { file_refs_mod.rewriter },
+        })
+        local prompt, evaluated = pipeline.run(doc, {})
+
+        -- No expression evaluation errors from the binary include
+        local expr_errors = vim.tbl_filter(function(d)
+          return d.type == "expression" and d.severity == "warning"
+        end, evaluated.diagnostics or {})
+        assert.equals(0, #expr_errors, "binary include should not produce expression errors")
+
+        local request_body = provider:build_request(prompt)
+
+        local user_message = request_body.messages[1]
+        local image_part = nil
+        for _, part in ipairs(user_message.content) do
+          if part.type == "image" then
+            image_part = part
+          end
+        end
+
+        assert.is_not_nil(image_part, "should have an image part in the request")
+        assert.equals("base64", image_part.source.type)
+        assert.equals("image/png", image_part.source.media_type)
+        assert.equals(vim.base64.encode(binary_data), image_part.source.data)
+      end)
+
       it("formats PDF documents correctly", function()
         -- Setup Anthropic provider
         local anthropic = require("flemma.provider.providers.anthropic")

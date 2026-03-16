@@ -129,6 +129,38 @@ describe("flemma.templating.eval", function()
 
       vim.fn.delete(temp_dir, "rf")
     end)
+
+    it("should handle binary data with NUL bytes without E976 error", function()
+      local emittable = require("flemma.emittable")
+
+      local temp_dir = vim.fn.tempname() .. "_include_binary_nul_test"
+      vim.fn.mkdir(temp_dir, "p")
+
+      -- Create a file with binary content containing NUL bytes (like a real PNG)
+      local test_file = temp_dir .. "/image.png"
+      local f = io.open(test_file, "wb")
+      f:write("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01")
+      f:close()
+
+      local parent_file = temp_dir .. "/parent.chat"
+      local env = templating.create_env()
+      env.__filename = parent_file
+      env.__dirname = temp_dir
+
+      -- This previously threw Vim:E976: Using a Blob as a String
+      -- because check_file_drift called vim.fn.sha256 on binary data
+      local ok, result = pcall(eval.eval_expression, "include('image.png', { [symbols.BINARY] = true })", env)
+      assert.is_true(ok, "binary include with NUL bytes should not error: " .. tostring(result))
+      assert.is_true(emittable.is_emittable(result))
+
+      local ctx = emittable.EmitContext.new()
+      result:emit(ctx)
+      assert.equals(1, #ctx.parts)
+      assert.equals("file", ctx.parts[1].kind)
+      assert.equals("image/png", ctx.parts[1].mime_type)
+
+      vim.fn.delete(temp_dir, "rf")
+    end)
   end)
 
   describe("include() circular detection", function()

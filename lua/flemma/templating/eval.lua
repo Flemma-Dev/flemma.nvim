@@ -39,7 +39,12 @@ local function check_file_drift(env, target_path, content)
     return
   end
 
-  local hash = vim.fn.sha256(content)
+  -- vim.fn.sha256 cannot handle strings with embedded NUL bytes: Neovim
+  -- converts them to VimL Blobs at the Lua→VimL boundary, and sha256()
+  -- rejects Blobs with E976. Binary files (images, etc.) commonly contain
+  -- NULs, so base64-encode them first to produce a clean string input.
+  local safe_content = content:find("\0", 1, true) and vim.base64.encode(content) or content
+  local hash = vim.fn.sha256(safe_content)
   local buffer_state = state.get_buffer_state(bufnr)
   if not buffer_state.file_reference_hashes then
     buffer_state.file_reference_hashes = {}
