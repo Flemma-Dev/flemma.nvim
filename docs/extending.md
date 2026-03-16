@@ -153,5 +153,6 @@ These extension points have full documentation in their respective pages:
 | Approval resolvers  | Priority-based chain for tool approval decisions      | [docs/tools.md – Approval resolvers](tools.md#approval-resolvers)                         |
 | Sandbox backends    | Platform-specific sandbox enforcement                 | [docs/sandbox.md – Custom backends](sandbox.md#custom-backends)                           |
 | Personalities       | Dynamic system prompt generators                      | [docs/personalities.md](personalities.md)                                                 |
+| Template populators | Custom globals for `{{ }}` and `{% %}` expressions    | [docs/templates.md – Extending the Environment](templates.md#extending-the-environment)   |
 | Frontmatter parsers | Custom frontmatter languages (e.g., YAML)             | [docs/templates.md – Custom frontmatter parsers](templates.md#custom-frontmatter-parsers) |
 | Preview formatters  | Custom tool preview rendering in pending placeholders | [docs/tools.md – Custom preview formatters](tools.md#custom-preview-formatters)           |

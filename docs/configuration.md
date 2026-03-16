@@ -57,6 +57,9 @@ require("flemma").setup({
     },
     modules = {},                            -- Lua module paths for third-party tool sources (e.g., "3rd.tools.todos")
   },
+  templating = {
+    modules = {},                            -- Lua module paths for environment populators (see docs/templates.md)
+  },
   defaults = {
     dark = { bg = "#000000", fg = "#ffffff" },
     light = { bg = "#ffffff", fg = "#000000" },

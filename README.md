@@ -444,10 +444,11 @@ Flemma ships optional [plugin integrations](docs/integrations.md) for lualine (s
 
 ## Extending Flemma
 
-Flemma is designed to be extended. Hooks, custom tools, approval resolvers, sandbox backends, credential resolvers, and personalities are all pluggable through registry patterns. See [docs/extending.md](docs/extending.md) for the full guide, including:
+Flemma is designed to be extended. Hooks, custom tools, approval resolvers, sandbox backends, credential resolvers, template populators, and personalities are all pluggable through registry patterns. See [docs/extending.md](docs/extending.md) for the full guide, including:
 
 - **Hooks** – lifecycle events (`FlemmaRequestSending`, `FlemmaToolExecuting`, etc.) emitted as User autocmds. Listen with standard `vim.api.nvim_create_autocmd` to build integrations.
 - **Credential resolution** – pluggable resolver chain for API keys and tokens (environment variables, Linux keyring, macOS Keychain, gcloud CLI). Register custom resolvers for vault integrations or team-specific credential stores.
+- **Template extensibility** – register custom environment populators via `templating.modules` to add globals to `{{ }}` and `{% %}` expressions, or register custom frontmatter parsers (e.g., YAML). See [docs/templates.md](docs/templates.md#extending-the-environment).
 - **Custom tools** – register your own tool definitions with `require("flemma.tools").register()`. See [docs/tools.md](docs/tools.md#registering-custom-tools).
 - **Approval resolvers** – priority-based chain for tool approval policies. See [docs/tools.md](docs/tools.md#approval-resolvers).
 - **Sandbox backends** – add platform-specific sandboxing beyond Bubblewrap. See [docs/sandbox.md](docs/sandbox.md#custom-backends).
@@ -486,20 +487,19 @@ Inside the shell you gain convenience wrappers:
 - `flemma-codex` – launch the OpenAI Codex helper.
 - `flemma-claude` – launch Claude Code for this project.
 
-Run the automated tests with:
+Run all quality gates (luacheck, type checking, import conventions, tests) with a single command:
 
 ```bash
-make test
+make qa
 ```
 
-The suite boots headless Neovim via `tests/minimal_init.lua` and executes Plenary+Busted specs in `tests/flemma/`, printing detailed results for each spec so you can follow along.
+`make qa` runs all four gates in parallel and bails on the first failure, re-displaying only the failed gate's output. This is the single command to run before committing.
 
-Other useful Makefile targets:
+Other Makefile targets:
 
 ```bash
-make lint          # Run luacheck on all Lua files
-make check         # Run lua-language-server type checking
 make develop       # Launch Neovim with Flemma loaded for local testing
+make changeset     # Create a new changeset (interactive)
 make screencast    # Create a VHS screencast
 ```
 
