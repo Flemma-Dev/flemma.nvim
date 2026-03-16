@@ -1,5 +1,77 @@
 # Changelog
 
+## 0.7.0
+
+### Minor Changes
+
+- d36de50: Added `ast:diff` command for side-by-side comparison of raw and rewritten ASTs, with syntax highlighting, folding, and cursor-aware scrolling. LSP hover now uses the same tree dump format for consistent AST inspection.
+- ba903a8: Add booting indicator for async tool sources: `#{booting}` lualine variable, `FlemmaBootComplete` autocmd, and ⏳ indicator in `:Flemma status`
+- 464a909: Added optional bufferline.nvim integration that shows a busy icon on `.chat` tabs while a request is in-flight. Configure with `get_element_icon = require("flemma.integrations.bufferline").get_element_icon` in your bufferline setup. Custom icons supported via `get_element_icon({ icon = "+" })`.
+- 235b8e1: Added centralized cursor engine with focus-stealing prevention. System-initiated cursor moves (tool results, response completion, autopilot) are now deferred until user idle, preventing cursor hijacking during agent loops. User-initiated moves (send, navigation) execute immediately.
+- 0c6e6cb: Added experimental in-process LSP server for chat buffers with hover and goto-definition support. Enable with `experimental = { lsp = true }` in setup. Every buffer position returns a hover result: segments (expressions, thinking blocks, tool use/result, text) show structured dumps, role markers show message summaries with segment breakdowns, and frontmatter shows language and code. Goto-definition (`gd`, `<C-]>`, etc.) on `@./file` references and `{{ include() }}` expressions jumps to the referenced file, reusing the navigation module's path resolution.
+- 92bd667: Added three exploration tools for LLM-powered codebase navigation: `grep` (content search with rg/grep fallback, --json match counting, per-line truncation), `find` (file discovery with fd/git-ls-files/find fallback, recursive patterns, configurable excludes), and `ls` (directory listing with depth control). All tools use existing truncation, sink, and sandbox infrastructure. Executor cwd resolution generalized from bash-specific to per-tool.
+- cf30657: Added file drift detection: warns when `@./file` references change between requests, helping identify cache breaks and potential LLM confusion from stale conversation context
+- 393e18d: Added `<Space>` keymap to toggle folds in `.chat` buffers. Configurable via `keymaps.normal.fold_toggle`; automatically skipped when the key conflicts with `mapleader`.
+- 749c1c7: Added hooks module for external plugin integration. Flemma now dispatches User autocmds at key lifecycle points: FlemmaRequestSending, FlemmaRequestFinished (with status: completed/cancelled/errored), FlemmaToolExecuting, and FlemmaToolFinished (with status: success/error). Existing autocmds (FlemmaBootComplete, FlemmaSinkCreated, FlemmaSinkDestroyed) migrated to the new hooks infrastructure.
+- e6ecdd8: Added `gf` navigation for file references and include expressions in chat buffers. Cursor on `@./file` or `{{ include('path') }}` and press `gf` to open the file or `<C-w>f` for a split. Paths are resolved using the same logic as the expression evaluator, including frontmatter variables and buffer-relative resolution.
+- 3c6f1d5: Added LSP go-to-definition navigation between tool_use and tool_result siblings in `.chat` buffers
+- b7e5c50: Added `tools.max_concurrent` config option to limit per-buffer tool execution concurrency (default: 2, set 0 for unlimited)
+- ba9b05b: Added personality system for dynamic system prompt generation via `{{ include('urn:flemma:personality:<name>') }}`. Includes a `coding-assistant` personality that assembles tool listings, guidelines, environment context, and project-specific files into a complete system prompt. Tool definitions can contribute personality-scoped parts (snippets, guidelines, etc.) via a new `personalities` field.
+- 19dc325: Added preprocessor/rewriter pipeline for extensible AST transforms before expression evaluation. File references (@./file) are now handled by a rewriter instead of inline parser logic.
+- 80fc278: Added persistent progress indicator showing character count, elapsed time, and phase-specific animation throughout the full request lifecycle including tool use buffering. The indicator appears as a floating window at the bottom of the chat window when the progress line is off-screen, with spinner icon placed in the gutter to match notification bar layout. Configurable via `progress.highlight` and `progress.zindex`.
+- 308767b: Preprocessor rewriter modules can now declare their own Vim syntax rules and highlight groups via `get_vim_syntax(config)`, removing the need to modify the main syntax file when adding new rewriters.
+- fcbce89: Sandbox variable expansion overhaul and DNS fix:
+
+  - Path variables in `rw_paths` now use `urn:flemma:cwd` and `urn:flemma:buffer:path` instead of `$CWD` and `$FLEMMA_BUFFER_PATH` (breaking change for custom configs)
+  - Added `$ENV` and `${ENV:-default}` expansion with bash-style fallback syntax
+  - Default `rw_paths` now includes `${TMPDIR:-/tmp}`, `${XDG_CACHE_HOME:-~/.cache}`, and `${XDG_DATA_HOME:-~/.local/share}` for package manager compatibility
+  - Removed `--tmpfs /run` from bwrap backend, fixing DNS resolution on NixOS/systemd (nscd socket was hidden)
+  - Paths are now prefix-deduplicated (parent subsumes child)
+  - `:Flemma status` and `:Flemma sandbox:status` now show resolved rw_paths, network, and privilege policy
+
+- f08cb7a: Added pluggable secrets module for credential resolution. Providers now declare
+  what credentials they need (kind + service) and platform-aware resolvers handle
+  lookup from environment variables, GNOME Keyring (Linux), macOS Keychain, and
+  gcloud CLI. Includes TTL-aware caching with configurable freshness scaling.
+  Existing keyring entries stored under the previous scheme are still supported
+  via legacy fallback.
+- 08ecd55: Added template code blocks (`{% lua code %}`) for conditionals, loops, and logic in @System and @You messages. Added optional whitespace trimming (`{%- -%}`, `{{- -}}`). Added parameterized includes: `include('file.md', { name = "Alice" })`. Included files now support full template syntax at any depth. Binary include mode now uses symbol keys (`[symbols.BINARY]`, `[symbols.MIME]`) instead of reserved string keys, so `binary` and `mime` can be used as template variable names.
+- 8032850: Template machinery consolidated under `flemma.templating/` namespace. Environment is now extensible via `templating.modules` config. Populators are functions that build the Lua table available to `{{ }}` and `{% %}` blocks. Ships two built-in populators: `stdlib` (standard library) and `iterators` (provides `values()` and `each()` for concise array iteration).
+- 4927995: Increased default request timeout from 120s to 600s for modern thinking LLMs
+- bfc8f91: Added tmux-style format strings for the lualine statusline component. The new `statusline.format` config replaces `thinking_format` with a composable syntax supporting variable expansion (`#{model}`, `#{provider}`, `#{thinking}`), ternary conditionals (`#{?cond,true,false}`), string comparisons, and boolean operators. Variables are lazy-evaluated — only referenced variables trigger data lookups.
+- 5e14653: Added per-buffer tool execution concurrency limiting to prevent system overload from large batches of heavy tool calls
+- b43de9f: Updated default models: OpenAI `gpt-5` → `gpt-5.4`, Vertex AI `gemini-2.5-pro` → `gemini-3.1-pro-preview`
+
+### Patch Changes
+
+- 7a3fc43: Centralized formatting helpers (format_number, format_tokens, format_cost, format_size, format_percent) in flemma.utilities.string. Sub-cent costs now display with 4 decimal places everywhere, not just in the statusline.
+- 15d15a3: Comprehensive documentation update: fixed stale config defaults, added missing options (max_concurrent, auto_close, progress, diagnostics, experimental LSP), created docs/extending.md covering hooks/events and credential resolution, and added new feature mentions (gf navigation, tool concurrency, file drift detection, progress bar) to README.
+- 9c23aaf: Fixed emission list position overlap where trailing text after file references (e.g., the dot in `@./math.png.`) shared the expression's position range instead of getting its own correct offset
+- d7f760b: Exposed executor.count_running() for per-buffer tool concurrency tracking
+- a8cbcd1: Fixed binary file includes (e.g., `@./image.png`) crashing with `Vim:E976: Using a Blob as a String`
+- 518d0fb: Fixed race conditions where nvim_get_current_buf() could resolve to the wrong buffer during async operations
+- f06318d: Fixed cross-buffer personality environment leak where a background buffer's system prompt could pick up the focused buffer's cached date/time during tool-calling loops
+- 2c49af3: Fixed role marker colon handler inserting a duplicate blank line when one already exists (e.g. after using `S` to retype a role header)
+- 6bbf347: Fixed file-references rewriter incorrectly processing @./file references in Assistant messages
+- 18b05ec: Fixed parser treating inline fenced code (e.g., ` ```markdown Hello!``` `) as fence openers, which caused subsequent @Role: markers to be missed
+- 6a0e27e: Fixed input token count in notifications showing only non-cached tokens for Anthropic (e.g. 10 instead of ~6,500) and added missing debug logging for cache token flow
+- c6ba3b4: Fixed parser incorrectly splitting messages when role markers (`@You:`, `@Assistant:`, etc.) appear inside fenced code blocks
+- 3b89ba3: Fixed parser producing per-line text segments for assistant and user messages, fixed text segments missing column positions causing wrong segment lookup, and fixed find_segment_at_position failing on multi-line segments where end_col belongs to a different line
+- 0e31ec7: Fixed preprocessor runner producing structurally different ASTs for untouched text segments by adding a pre-scan early return and accumulating non-matching lines into single segments instead of splitting per-line
+- 5872ed2: Fixed trailing newlines from inter-message whitespace leaking into API content blocks, causing cache-breaking prefix drift in multi-turn conversations
+- 7e47167: Added `format_elapsed()` duration formatting utility to string module
+- 589855d: Fixed frontmatter `auto_approve = {}` (and other table assignments) not blocking sandbox auto-approval of bash. Table policies in frontmatter are now authoritative — tools not explicitly listed require approval, preventing lower-priority resolvers from granting additional approvals.
+- b70d052: Moved all inline require() calls to the top of each file for explicit dependency visibility. No behavioral changes.
+- 0e8ca7e: Fixed include() with absolute paths doubling the directory prefix, and improved error diagnostics for include failures to show the full include chain instead of `table: 0x...`
+- d127523: Optimized AST parsing during streaming: the parser now snapshots the document before a request and only re-parses newly appended content during streaming, reducing per-chunk parse cost from O(total_lines) to O(new_content_lines) for long conversations.
+- 499d3a9: Fixed progress character counter freezing during tool use for OpenAI and Vertex providers by emitting `on_tool_input` callback for function call argument deltas
+- d0a44e4: Refactored provider layer to eliminate ~370 lines of duplicated code across Anthropic, OpenAI, and Vertex providers. Base now owns the SSE parsing preamble, content emission (tool use blocks, thinking blocks, truncation warnings), and automatic sink lifecycle management. New providers need roughly one-third of the previous boilerplate.
+- df1ec98: Removed viewport centering (zz) on send that caused flickering with scrolloff=999
+- 6c7664c: Renamed `:Flemma diagnostics:open` command to `:Flemma diagnostics:diff` for clarity
+- 2f44b20: Fixed `:Flemma status` showing sandbox-auto-approved tools (e.g. bash) as "require approval" even when sandbox was active. The approval section now uses the actual resolver chain, so all approval sources (config, frontmatter, sandbox, community resolvers) are reflected accurately.
+- e917ea3: Fixed :Flemma status not reflecting parameter overrides from :Flemma switch commands
+- b43377d: Fixed thinking level mapping for OpenAI, Anthropic, and Vertex providers. Flemma's canonical thinking levels (minimal/low/medium/high/max) are now silently mapped to valid provider API values via per-model metadata instead of being passed through raw. This fixes the "Unsupported value: 'minimal'" error when using `thinking = "minimal"` with OpenAI models.
+
 ## 0.6.0
 
 ### Minor Changes
@@ -313,17 +385,20 @@ This release marks a major transition for Claudius, evolving from a Claude-speci
 This version introduces significant internal refactoring and configuration changes. Please review the following and update your configuration if necessary:
 
 1.  **Configuration Option Renames:**
+
     - The `prefix_style` option within `setup({})` has been renamed to `role_style`.
       - **Migration:** Rename `prefix_style` to `role_style` in your `require("claudius").setup({...})` call.
     - The `ruler.style` option within `setup({})` has been renamed to `ruler.hl`.
       - **Migration:** Rename `ruler.style` to `ruler.hl` in your `setup({})` call.
 
 2.  **Highlight Group Renames (Affects Manual Linking Only):**
+
     - Internal syntax highlight groups used by `syntax/chat.vim` have been renamed from `Chat*` to `Claudius*` (e.g., `ChatSystem` ⇒ `ClaudiusSystem`, `ChatSystemPrefix` ⇒ `ClaudiusRoleSystem`).
     - **Migration:** This **only** affects users who were manually linking these highlight groups in their Neovim configuration (e.g., using `vim.cmd("highlight link ChatSystem MyCustomGroup")`). If you were doing this, update the source group name (e.g., `vim.cmd("highlight link ClaudiusSystem MyCustomGroup")`).
     - **Users configuring highlights _only_ via the `highlights` table in `setup()` are _not_ affected by this change.**
 
 3.  **Configuration Structure (`model`, `provider`, `parameters`):**
+
     - A new top-level `provider` option specifies the AI provider (`"claude"`, `"openai"`, `"vertex"`). It defaults to `"claude"` for backward compatibility.
     - The `model` option now defaults based on the selected `provider` if set to `nil`. If you specify a `model`, ensure it's valid for the selected provider.
     - Provider-specific parameters (currently only for Vertex AI) are now nested (e.g., `parameters = { vertex = { project_id = "..." } }`).
