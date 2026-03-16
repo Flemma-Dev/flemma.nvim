@@ -41,4 +41,28 @@ describe("truncate_line()", function()
     assert.is_true(result.truncated)
     assert.truthy(#result.text > 0)
   end)
+
+  it("does not split multi-byte UTF-8 characters", function()
+    -- U+2500 (─) is 3 bytes: 0xe2 0x94 0x80
+    -- Build a line: "aaa" (3 bytes) + 200 box-drawing chars (600 bytes) = 603 bytes
+    local line = "aaa" .. string.rep("\xe2\x94\x80", 200)
+    -- max_chars=20, suffix "... [truncated]" is 15 bytes, budget = 5
+    -- Budget of 5 fits "aaa" (3 bytes) but not the next box char (needs 3 more bytes)
+    local result = truncate.truncate_line(line, 20)
+    assert.is_true(result.truncated)
+    assert.truthy(result.text:find("%[truncated%]$"))
+    -- The kept prefix must end at a valid UTF-8 boundary — just "aaa"
+    local suffix = "... [truncated]"
+    local kept = result.text:sub(1, #result.text - #suffix)
+    assert.equals("aaa", kept)
+  end)
+
+  it("keeps complete multi-byte characters that fit", function()
+    -- 2 box-drawing chars (6 bytes) + 1 ASCII = 7 bytes total
+    local line = "\xe2\x94\x80\xe2\x94\x80x"
+    -- Not truncated when limit is large enough
+    local result = truncate.truncate_line(line, 500)
+    assert.is_false(result.truncated)
+    assert.equals(line, result.text)
+  end)
 end)

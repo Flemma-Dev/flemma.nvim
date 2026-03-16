@@ -130,5 +130,18 @@ describe("Truncation Utilities", function()
       assert.is_false(result.truncated)
       assert.equals("", result.content)
     end)
+
+    it("does not split multi-byte UTF-8 on partial line", function()
+      -- Single line of 10 box-drawing chars (─): 30 bytes total
+      local content = string.rep("\xe2\x94\x80", 10)
+      -- Truncate to 8 bytes — raw sub would land mid-character
+      local result = truncate.truncate_tail(content, { max_bytes = 8 })
+      assert.is_true(result.truncated)
+      assert.is_true(result.last_line_partial)
+      -- Result must contain only complete 3-byte characters
+      -- 8 bytes fits 2 complete chars (6 bytes), not 2.67
+      assert.equals(6, #result.content)
+      assert.equals(string.rep("\xe2\x94\x80", 2), result.content)
+    end)
   end)
 end)

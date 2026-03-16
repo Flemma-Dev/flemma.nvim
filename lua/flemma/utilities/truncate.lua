@@ -16,6 +16,67 @@ M.MAX_LINES = 2000
 M.MAX_BYTES = 50 * 1024 -- 50KB
 M.MAX_LINE_CHARS = 500
 
+---Find the last byte position that ends a complete UTF-8 character at or before `pos`.
+---Returns 0 when no complete character fits (pos < 1 or first char is wider than pos).
+---@param text string
+---@param pos integer Byte position (1-based)
+---@return integer byte_pos Last safe byte position (0 means nothing fits)
+local function utf8_floor(text, pos)
+  if pos <= 0 then
+    return 0
+  end
+  if pos >= #text then
+    return #text
+  end
+  -- Walk backward from pos until we land on a UTF-8 character boundary.
+  -- A continuation byte has the bit pattern 10xxxxxx (0x80..0xBF).
+  local p = pos
+  while p > 0 and text:byte(p) >= 0x80 and text:byte(p) <= 0xBF do
+    p = p - 1
+  end
+  -- p now points at a lead byte (or we walked past the start).
+  -- Determine the expected length of the character starting at p.
+  if p < 1 then
+    return 0
+  end
+  local lead = text:byte(p)
+  local char_len
+  if lead < 0x80 then
+    char_len = 1
+  elseif lead < 0xE0 then
+    char_len = 2
+  elseif lead < 0xF0 then
+    char_len = 3
+  else
+    char_len = 4
+  end
+  -- If the full character fits within pos, keep it; otherwise back up before it.
+  if p + char_len - 1 <= pos then
+    return p + char_len - 1
+  end
+  return p - 1
+end
+
+---Find the first byte position that starts a complete UTF-8 character at or after `pos`.
+---Returns #text + 1 when no complete character starts at or after pos.
+---@param text string
+---@param pos integer Byte position (1-based)
+---@return integer byte_pos First safe byte position
+local function utf8_ceil(text, pos)
+  if pos <= 1 then
+    return 1
+  end
+  if pos > #text then
+    return #text + 1
+  end
+  -- Skip continuation bytes (10xxxxxx) to find the next lead byte.
+  local p = pos
+  while p <= #text and text:byte(p) >= 0x80 and text:byte(p) <= 0xBF do
+    p = p + 1
+  end
+  return p
+end
+
 ---@class flemma.utilities.TruncationOptions
 ---@field max_lines? integer Maximum number of lines (default: 2000)
 ---@field max_bytes? integer Maximum number of bytes (default: 50KB)
@@ -126,9 +187,10 @@ end
 ---@field text string The (possibly truncated) line text
 ---@field truncated boolean Whether truncation occurred
 
----Truncate a single line to a maximum character count.
+---Truncate a single line to a maximum byte count.
+---Uses character-aware slicing to avoid splitting multi-byte UTF-8 sequences.
 ---@param line string The line to truncate
----@param max_chars? integer Maximum characters (default: MAX_LINE_CHARS)
+---@param max_chars? integer Maximum bytes (default: MAX_LINE_CHARS)
 ---@return flemma.utilities.TruncateLineResult
 function M.truncate_line(line, max_chars)
   max_chars = max_chars or M.MAX_LINE_CHARS
@@ -136,11 +198,13 @@ function M.truncate_line(line, max_chars)
     return { text = line, truncated = false }
   end
   local suffix = "... [truncated]"
-  local keep = max_chars - #suffix
-  if keep < 1 then
-    keep = 1
+  local budget = max_chars - #suffix
+  if budget < 1 then
+    budget = 1
   end
-  return { text = line:sub(1, keep) .. suffix, truncated = true }
+  -- Find the last complete UTF-8 character that fits within the byte budget
+  local byte_pos = utf8_floor(line, budget)
+  return { text = line:sub(1, byte_pos) .. suffix, truncated = true }
 end
 
 ---Truncate content from the tail (keep last N lines/bytes).
@@ -186,9 +250,11 @@ function M.truncate_tail(content, opts)
     if output_bytes_count + line_bytes > max_bytes then
       truncated_by = "bytes"
       -- Edge case: if we haven't added ANY lines yet and this line exceeds max_bytes,
-      -- take the end of the line (partial)
+      -- take the end of the line (partial), aligned to a UTF-8 boundary
       if #output == 0 then
-        local truncated_line = line:sub(-max_bytes)
+        local raw_start = #line - max_bytes + 1
+        local safe_start = utf8_ceil(line, raw_start)
+        local truncated_line = line:sub(safe_start)
         table.insert(output, 1, truncated_line)
         output_bytes_count = #truncated_line
         last_line_partial = true
