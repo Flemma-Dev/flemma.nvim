@@ -411,15 +411,18 @@ end
 ---forces a complete re-evaluation. The fold map cache is also invalidated
 ---so get_fold_level rebuilds from the current AST even when changedtick
 ---has not advanced (e.g., update_ui on the same event loop tick).
+---
+---Unconditionally sets foldmethod=expr rather than guarding on the current
+---value: external view restoration (`:loadview` when `viewoptions` includes
+---`folds`) silently switches foldmethod to `manual`, which would prevent
+---foldexpr from being evaluated for new content. Re-asserting expr on every
+---UI cycle ensures self-healing regardless of session/view persistence.
 ---@param bufnr integer
 function M.invalidate_folds(bufnr)
   invalidate_cache()
   local winid = vim.fn.bufwinid(bufnr)
   if winid ~= -1 then
-    local foldmethod = vim.fn.win_execute(winid, "echo &foldmethod")
-    if vim.trim(foldmethod) == "expr" then
-      vim.fn.win_execute(winid, "set foldmethod=expr")
-    end
+    vim.fn.win_execute(winid, "set foldmethod=expr")
   end
 end
 
