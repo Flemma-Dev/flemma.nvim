@@ -357,6 +357,51 @@ describe("Lualine component", function()
     end)
   end)
 
+  describe("lualine options format override", function()
+    after_each(function()
+      flemma_component.options = nil
+    end)
+
+    it("should use format from lualine options when provided", function()
+      -- Arrange: simulates { 'flemma', format = '...' } in lualine section config
+      flemma_component.options = { format = "#{provider}:#{model}" }
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("anthropic:claude-sonnet-4-5", status)
+    end)
+
+    it("should fall back to flemma config format when lualine options has no format key", function()
+      -- Arrange: options table present but no format key
+      flemma_component.options = {}
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert: default format from flemma config
+      assert.are.equal("claude-sonnet-4-5", status)
+    end)
+
+    it("should prefer lualine options format over flemma config format", function()
+      -- Arrange: conflicting formats — lualine option should win
+      local state = require("flemma.state")
+      local config = state.get_config()
+      config.statusline.format = "config:#{model}"
+      flemma_component.options = { format = "options:#{model}" }
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("options:claude-sonnet-4-5", status)
+    end)
+  end)
+
   describe("booting variable", function()
     it("should be truthy while async tool sources are pending", function()
       -- Arrange

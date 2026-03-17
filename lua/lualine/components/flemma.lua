@@ -170,7 +170,7 @@ function flemma_component:update_status()
     return ""
   end
 
-  local fmt = config.statusline.format
+  local fmt = (self.options and self.options.format) or config.statusline.format
 
   return format.expand(fmt, build_vars(config))
 end
