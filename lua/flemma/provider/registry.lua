@@ -7,6 +7,7 @@
 local M = {}
 
 -- Load models from centralized models.lua
+local loader = require("flemma.loader")
 local models_data = require("flemma.models")
 local registry_utils = require("flemma.registry")
 
@@ -91,7 +92,7 @@ function M.register(source, entry)
     definition = entry
   else
     -- Single-arg form: register("module.path") — load module and read metadata
-    local mod = require(source)
+    local mod = loader.load(source)
     if not mod.metadata then
       error("Provider module " .. source .. " does not export metadata", 2)
     end
@@ -145,7 +146,7 @@ end
 ---Initialize built-in providers (called during setup)
 function M.setup()
   for _, module_path in ipairs(BUILTIN_PROVIDER_MODULES) do
-    local mod = require(module_path)
+    local mod = loader.load(module_path)
     if mod.metadata and not providers[mod.metadata.name] then
       M.register(module_path)
     end

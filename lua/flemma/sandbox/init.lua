@@ -220,7 +220,7 @@ local function resolve_backend(cfg)
       if not load_ok then
         return nil, tostring(load_err)
       end
-      local mod = require(backend_name)
+      local mod = loader.load(backend_name)
       backend_name = mod.name or backend_name:match("([^.]+)$")
     end
     local entry = M.get(backend_name)

@@ -36,7 +36,7 @@ local function ensure_modules_loaded()
   for _, module_path in ipairs(to_load) do
     if not loaded_modules[module_path] then
       loaded_modules[module_path] = true
-      local mod = require(module_path)
+      local mod = loader.load(module_path)
       M.register(mod.name, mod)
     end
   end
@@ -145,7 +145,7 @@ end
 ---Setup: register built-in populators and user-configured modules.
 function M.setup()
   for _, module_path in ipairs(BUILTIN_POPULATORS) do
-    local mod = require(module_path)
+    local mod = loader.load(module_path)
     M.register(mod.name, mod)
   end
   local resolved_config = state.get_config()

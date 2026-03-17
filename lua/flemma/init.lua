@@ -79,7 +79,7 @@ M.setup = function(user_opts)
     loader.assert_exists(config.provider)
     provider_registry.register(config.provider)
     -- Update config.provider to the registered name (from metadata.name)
-    local mod = require(config.provider)
+    local mod = loader.load(config.provider)
     config.provider = mod.metadata.name
     state.set_config(config)
   end

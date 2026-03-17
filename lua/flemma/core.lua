@@ -3,6 +3,7 @@
 ---@class flemma.Core
 local M = {}
 
+local loader = require("flemma.loader")
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local config_manager = require("flemma.core.config.manager")
@@ -62,7 +63,7 @@ local function initialize_provider(provider_name, model_name, parameters)
     return nil
   end
 
-  local new_provider = require(provider_module).new(provider_config.parameters)
+  local new_provider = loader.load(provider_module).new(provider_config.parameters)
 
   -- Update the global provider reference
   state.set_provider(new_provider)

@@ -3,6 +3,8 @@
 ---@class flemma.codeblock.Parsers
 local M = {}
 
+local loader = require("flemma.loader")
+
 ---@type table<string, string>
 local PARSER_MODULES = {
   lua = "flemma.codeblock.parsers.lua",
@@ -30,7 +32,7 @@ function M.get(language)
   if not parsers[lang_lower] then
     local module_path = PARSER_MODULES[lang_lower]
     if module_path then
-      local parser_module = require(module_path)
+      local parser_module = loader.load(module_path)
       parsers[lang_lower] = parser_module.parse
     end
   end
@@ -65,7 +67,7 @@ end
 function M.get_all()
   for lang, module_path in pairs(PARSER_MODULES) do
     if not parsers[lang] then
-      local parser_module = require(module_path)
+      local parser_module = loader.load(module_path)
       parsers[lang] = parser_module.parse
     end
   end

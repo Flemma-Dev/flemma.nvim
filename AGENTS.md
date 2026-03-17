@@ -43,7 +43,7 @@ Every module uses `local M = {}` / `return M`. Every module has a `---@class fle
 
 All `require()` calls go at the top of the file, before any function definition. The only exceptions are:
 
-- **Dynamic requires** — module path constructed at runtime from a variable (e.g., `require(provider_module)` in registry code)
+- **Dynamic requires via `flemma.loader`** — when resolving a module path string at runtime (from config, user input, or a `BUILTIN_*` list), use `loader.load(path)` instead of bare `require(path)`. The loader is Flemma's extensibility contract: users put string paths in config (e.g., `{ tools = { modules = { "my.custom.tool" } } }`) and the loader turns them into loaded modules. Never use bare `require()` for dynamic module path resolution.
 - **Vim string-context requires** — inside `foldexpr`, `foldtext`, or keymap strings that Vim evaluates in a separate Lua context
 
 `make lint-inline-requires` enforces this convention. If you need to call a function from a module that would create a circular require dependency, use `flemma.bridge` — see its module documentation.

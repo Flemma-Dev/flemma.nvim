@@ -261,7 +261,7 @@ function M.register(source, definition)
       registry.register(source, definition)
     else
       -- register("module.name") — load module
-      local mod = require(source)
+      local mod = loader.load(source)
       if type(mod.resolve) == "function" then
         M.register_async(mod.resolve, { timeout = mod.timeout })
       elseif mod.definitions then
