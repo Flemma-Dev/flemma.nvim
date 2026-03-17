@@ -878,3 +878,134 @@ describe("Autopilot integration", function()
     )
   end)
 end)
+
+-- ============================================================================
+-- Race Condition: sync + async tool in the same Phase 2 batch
+-- ============================================================================
+-- When the LLM returns multiple tool_use blocks and at least one tool is sync,
+-- the sync tool completes inline during advance_phase2's for loop.
+-- Its completion calls maybe_unlock_buffer → autopilot.on_tools_complete (state
+-- is already "armed" from on_response_complete), which schedules send_or_execute.
+-- That scheduled call runs after the for loop and finds the async tool's stale
+-- flemma:tool status=approved fence (executor.execute called inject_placeholder,
+-- which returned early without modifying the buffer), triggering a duplicate
+-- executor.execute → "Tool ... is already executing" error notification.
+
+describe("Autopilot race condition: sync + async tool dispatch", function()
+  local client = require("flemma.client")
+  local flemma_mod
+  local tools_registry
+  local orig_notify
+
+  before_each(function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.commands"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.registry"] = nil
+    package.loaded["flemma.tools.approval"] = nil
+    package.loaded["flemma.tools.executor"] = nil
+    package.loaded["flemma.core"] = nil
+    package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.provider.registry"] = nil
+    package.loaded["flemma.models"] = nil
+    package.loaded["flemma.autopilot"] = nil
+
+    flemma_mod = require("flemma")
+    require("flemma.core")
+    autopilot = require("flemma.autopilot")
+    tools_registry = require("flemma.tools.registry")
+
+    -- require_approval=false registers a catch-all resolver so all tools are
+    -- auto-approved without user interaction.
+    flemma_mod.setup({
+      parameters = { thinking = false },
+      tools = {
+        autopilot = { enabled = true },
+        require_approval = false,
+      },
+    })
+
+    orig_notify = vim.notify
+  end)
+
+  after_each(function()
+    vim.notify = orig_notify
+    client.clear_fixtures()
+    vim.cmd("silent! %bdelete!")
+    state.set_config({})
+  end)
+
+  it("does not double-execute when a sync tool completes before an async tool", function()
+    -- Sync tool: completes inline during Phase 2 for loop.
+    -- This triggers maybe_unlock_buffer → on_tools_complete (state is already
+    -- "armed") → vim.schedule(send_or_execute). That scheduled SE runs after the
+    -- for loop and, before the fix, finds the async tool's stale approved fence.
+    tools_registry.register("test_sync", {
+      name = "test_sync",
+      description = "Sync test tool for race condition test",
+      input_schema = { type = "object", properties = { value = { type = "string" } } },
+      execute = function(input)
+        return { success = true, output = input.value or "sync_ok" }
+      end,
+    })
+
+    -- Async tool: holds its callback so it stays in pending_executions.
+    -- Its flemma:tool status=approved fence remains in the buffer during the
+    -- race window, which is what the stale send_or_execute incorrectly picks up.
+    local async_callbacks = {}
+    tools_registry.register("test_async", {
+      name = "test_async",
+      description = "Async test tool for race condition test",
+      async = true,
+      input_schema = { type = "object", properties = { value = { type = "string" } } },
+      execute = function(_input, _context, callback)
+        table.insert(async_callbacks, callback)
+      end,
+    })
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Do two things" })
+
+    -- Fixture: two tool_use blocks — test_sync (index 0) then test_async (index 1).
+    -- Phase 2 processes them in document order, so sync executes first.
+    client.register_fixture(
+      "api%.anthropic%.com",
+      "tests/fixtures/tool_calling/anthropic_multi_tool_race_streaming.txt"
+    )
+
+    local race_errors = {}
+    vim.notify = function(msg, level, ...)
+      if type(msg) == "string" and msg:match("already executing") then
+        table.insert(race_errors, msg)
+      end
+      return orig_notify(msg, level, ...)
+    end
+
+    vim.cmd("Flemma send")
+
+    -- Wait until the async tool has been dispatched (callback captured).
+    -- This confirms Phase 2 has completed and both tools were started.
+    local dispatched = vim.wait(3000, function()
+      return #async_callbacks > 0
+    end)
+    assert.is_true(dispatched, "Async tool was not dispatched within 3s")
+
+    -- Pump the event loop: lets any on_tools_complete → send_or_execute
+    -- callbacks fire. This is the race window.
+    vim.wait(500, function()
+      return false
+    end)
+
+    assert.equals(0, #race_errors, "Race condition: " .. (race_errors[1] or "none"))
+
+    -- Resolve the async tool so executor cleanup runs cleanly.
+    for _, cb in ipairs(async_callbacks) do
+      cb({ success = true, output = "async_ok" })
+    end
+    vim.wait(200, function()
+      return false
+    end)
+  end)
+end)

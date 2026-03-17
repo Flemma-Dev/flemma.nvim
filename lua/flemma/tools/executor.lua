@@ -377,6 +377,19 @@ function M.execute(bufnr, context, frontmatter_opts)
   end
   pending[tool_id].placeholder_modified = (placeholder_opts and placeholder_opts.modified) or false
 
+  -- Strip any flemma:tool status fence when the placeholder already existed.
+  -- Phase 1 injects placeholders with status=approved; the executor's
+  -- inject_placeholder call above finds that existing block and returns early
+  -- (modified=false), leaving the flemma:tool fence in the buffer.
+  -- Without stripping it, on_tools_complete → resolve_all_tool_blocks
+  -- rediscovers this tool as "approved" and schedules a duplicate execution
+  -- attempt (race: sync tool completing inline during Phase 2's for loop triggers
+  -- on_tools_complete while the autopilot state is already "armed").
+  -- strip_fence_info_string is a no-op when no flemma:tool fence exists.
+  if placeholder_opts and not placeholder_opts.modified then
+    injector.strip_fence_info_string(bufnr, tool_id)
+  end
+
   -- Show execution indicator
   local config = state.get_config()
   if not config.tools or config.tools.show_spinner ~= false then
