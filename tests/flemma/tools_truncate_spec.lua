@@ -143,5 +143,30 @@ describe("Truncation Utilities", function()
       assert.equals(6, #result.content)
       assert.equals(string.rep("\xe2\x94\x80", 2), result.content)
     end)
+
+    it("does not split Cyrillic on partial line", function()
+      -- 20 Cyrillic chars (2 bytes each) = 40 bytes
+      local content = string.rep("\xd0\x9f", 20) -- "П" x 20
+      -- Truncate to 7 bytes — raw sub would land mid-character
+      local result = truncate.truncate_tail(content, { max_bytes = 7 })
+      assert.is_true(result.truncated)
+      assert.is_true(result.last_line_partial)
+      -- 7 bytes fits 3 complete 2-byte chars (6 bytes)
+      assert.equals(6, #result.content)
+      assert.equals(string.rep("\xd0\x9f", 3), result.content)
+    end)
+
+    it("does not split 4-byte emoji on partial line", function()
+      -- 10 emoji (4 bytes each) = 40 bytes
+      local emoji = "\xf0\x9f\x98\x80" -- U+1F600 😀
+      local content = string.rep(emoji, 10)
+      -- Truncate to 6 bytes — raw sub would land mid-emoji
+      local result = truncate.truncate_tail(content, { max_bytes = 6 })
+      assert.is_true(result.truncated)
+      assert.is_true(result.last_line_partial)
+      -- 6 bytes fits 1 complete 4-byte emoji (4 bytes)
+      assert.equals(4, #result.content)
+      assert.equals(emoji, result.content)
+    end)
   end)
 end)
