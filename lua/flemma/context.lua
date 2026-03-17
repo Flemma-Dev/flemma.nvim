@@ -4,7 +4,6 @@
 ---@class flemma.ContextUtil
 local M = {}
 
-local templating = require("flemma.templating")
 local symbols = require("flemma.symbols")
 
 --- Context carries document identity: file path, frontmatter options, and user
@@ -113,41 +112,6 @@ function M.extend(base, vars)
     c[symbols.VARIABLES][k] = v
   end
   return c
-end
-
----Prepare a template environment from a Context
----
----User-visible fields (__filename, __dirname) are set as string keys so sandbox
----code can read them. Internal fields (frontmatter opts) use symbol keys so they
----are invisible to user expressions but available to include() and the personality
----system. The buffer number is set only when provided explicitly — it is not
----extracted from the context.
----@param ctx flemma.Context|table
----@param bufnr? integer Buffer number for context-aware operations (personality caching etc.)
----@return table env
-function M.to_eval_env(ctx, bufnr)
-  local env = templating.create_env()
-
-  -- User-visible string keys
-  if ctx and type(ctx.get_filename) == "function" then
-    env.__filename = ctx:get_filename()
-    env.__dirname = ctx:get_dirname()
-  else
-    env.__filename = nil
-    env.__dirname = nil
-  end
-
-  -- Internal symbol keys (invisible to sandbox code)
-  env[symbols.FRONTMATTER_OPTS] = ctx and type(ctx.get_opts) == "function" and ctx:get_opts() or nil
-  env[symbols.BUFFER_NUMBER] = bufnr
-  env[symbols.DIAGNOSTICS] = {}
-
-  -- Merge user vars as top-level string keys
-  local variables = ctx and ctx[symbols.VARIABLES]
-  for k, v in pairs(variables or {}) do
-    env[k] = v
-  end
-  return env
 end
 
 return M

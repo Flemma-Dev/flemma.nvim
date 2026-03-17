@@ -356,8 +356,8 @@ describe("flemma.personalities.coding_assistant", function()
   end)
 end)
 
-describe("context.to_eval_env bufnr threading", function()
-  local ctxutil, sym
+describe("templating.from_context bufnr threading", function()
+  local ctxutil, sym, templating_mod
 
   before_each(function()
     package.loaded["flemma.context"] = nil
@@ -367,6 +367,7 @@ describe("context.to_eval_env bufnr threading", function()
     package.loaded["flemma.templating.builtins.iterators"] = nil
     ctxutil = require("flemma.context")
     sym = require("flemma.symbols")
+    templating_mod = require("flemma.templating")
   end)
 
   it("sets buffer number from explicit parameter", function()
@@ -378,7 +379,7 @@ describe("context.to_eval_env bufnr threading", function()
 
     -- Pass buf1 explicitly — should not fall back to focused buffer
     local context = ctxutil.from_buffer(buf1)
-    local env = ctxutil.to_eval_env(context, buf1)
+    local env = templating_mod.from_context(context, buf1)
 
     assert.equals(buf1, env[sym.BUFFER_NUMBER])
 
@@ -388,7 +389,7 @@ describe("context.to_eval_env bufnr threading", function()
 
   it("buffer number is nil when not provided", function()
     local context = ctxutil.from_file("/tmp/test.chat")
-    local env = ctxutil.to_eval_env(context)
+    local env = templating_mod.from_context(context)
 
     -- No bufnr passed, no fallback — should be nil
     assert.is_nil(env[sym.BUFFER_NUMBER])
@@ -397,7 +398,7 @@ describe("context.to_eval_env bufnr threading", function()
   it("symbol-keyed fields are invisible to sandbox iteration", function()
     local buf1 = vim.api.nvim_create_buf(false, true)
     local context = ctxutil.from_buffer(buf1)
-    local env = ctxutil.to_eval_env(context, buf1)
+    local env = templating_mod.from_context(context, buf1)
 
     -- Iterate env as sandbox code would — symbol keys should not appear
     local string_keys = {}
@@ -466,7 +467,7 @@ describe("cross-buffer personality environment isolation", function()
 
     -- Build eval env with explicit buf1 — the way processor.evaluate() now does it
     local context = ctxutil.from_buffer(buf1)
-    local env = ctxutil.to_eval_env(context, buf1)
+    local env = require("flemma.templating").from_context(context, buf1)
 
     -- Evaluate a personality include expression (the real code path)
     local result = eval_mod.eval_expression("include('urn:flemma:personality:coding-assistant')", env)

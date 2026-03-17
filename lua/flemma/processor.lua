@@ -1,6 +1,7 @@
 local compiler = require("flemma.templating.compiler")
 local ctxutil = require("flemma.context")
 local eval = require("flemma.templating.eval")
+local templating = require("flemma.templating")
 local codeblock_parsers = require("flemma.codeblock.parsers")
 local log = require("flemma.logging")
 local parser = require("flemma.parser")
@@ -172,7 +173,7 @@ function M.evaluate(doc, base_context, opts)
 
   -- 2) Evaluate messages
   local evaluated_messages = {}
-  local env = ctxutil.to_eval_env(context, opts.bufnr)
+  local env = templating.from_context(context, opts.bufnr)
   eval.ensure_env(env)
 
   for _, msg in ipairs(doc.messages or {}) do

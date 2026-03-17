@@ -4,15 +4,15 @@
 local M = {}
 
 local eval = require("flemma.templating.eval")
-local ctxutil = require("flemma.context")
 local opt_module = require("flemma.buffer.opt")
+local templating = require("flemma.templating")
 
 ---Parse Lua code and return global variables as a table
 ---@param code string The Lua code to execute
 ---@param context? flemma.Context Optional context with __filename, etc.
 ---@return table<string, any> variables Table of global variables defined in the code
 function M.parse(code, context)
-  local env = ctxutil.to_eval_env(context or {})
+  local env = templating.from_context(context)
 
   -- Inject flemma.opt into sandbox env before execute_frontmatter
   -- This makes it part of initial_keys, so it won't leak to user_globals

@@ -7,6 +7,7 @@ local ast = require("flemma.ast")
 local ctxutil = require("flemma.context")
 local cursor = require("flemma.cursor")
 local eval = require("flemma.templating.eval")
+local templating = require("flemma.templating")
 local log = require("flemma.logging")
 local parser = require("flemma.parser")
 local processor = require("flemma.processor")
@@ -90,7 +91,7 @@ function M.resolve_include_path(bufnr, lnum, col)
     end
   end
 
-  local env = ctxutil.to_eval_env(fm.context, bufnr)
+  local env = templating.from_context(fm.context, bufnr)
 
   -- Evaluate the expression using the real include() — the result is an
   -- emittable tagged with symbols.SOURCE_PATH when it originates from a file

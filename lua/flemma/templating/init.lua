@@ -6,6 +6,7 @@ local M = {}
 
 local loader = require("flemma.loader")
 local state = require("flemma.state")
+local symbols = require("flemma.symbols")
 
 ---@class flemma.templating.Populator
 ---@field name string Unique identifier for this populator
@@ -76,7 +77,7 @@ end
 --- (including underscore-prefixed names like __name__).
 ---@type string[]
 local FRAMEWORK_KEYS = {
-  -- set by context.to_eval_env()
+  -- set by templating.from_context()
   "__filename",
   "__dirname",
   -- set/cleared by compiler.execute()
@@ -138,6 +139,38 @@ function M.create_env()
       rawset(self, key, value)
     end,
   })
+
+  return env
+end
+
+---Create a template environment pre-seeded from a document context.
+---
+---Bridges document identity (file path, frontmatter options, user variables)
+---into a fresh template environment. User-visible fields (__filename, __dirname)
+---are set as string keys; internal metadata (frontmatter opts, bufnr, diagnostics)
+---uses symbol keys invisible to sandbox code.
+---@param ctx flemma.Context|nil Document context, or nil for an empty environment
+---@param bufnr? integer Buffer number for context-aware operations
+---@return table env
+function M.from_context(ctx, bufnr)
+  local env = M.create_env()
+
+  if ctx and type(ctx.get_filename) == "function" then
+    env.__filename = ctx:get_filename()
+    env.__dirname = ctx:get_dirname()
+  else
+    env.__filename = nil
+    env.__dirname = nil
+  end
+
+  env[symbols.FRONTMATTER_OPTS] = ctx and type(ctx.get_opts) == "function" and ctx:get_opts() or nil
+  env[symbols.BUFFER_NUMBER] = bufnr
+  env[symbols.DIAGNOSTICS] = {}
+
+  local variables = ctx and ctx[symbols.VARIABLES]
+  for k, v in pairs(variables or {}) do
+    env[k] = v
+  end
 
   return env
 end
