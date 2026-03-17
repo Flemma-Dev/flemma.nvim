@@ -907,6 +907,14 @@ function M.setup_chat_filetype_autocmds()
     group = augroup,
     pattern = "*.chat",
     callback = function(ev)
+      -- Clear any orphaned cursorline extmark from a prior session.
+      -- :e reload fires BufUnload first, which calls cleanup_buffer_state() and
+      -- sets buffer_states[bufnr] = nil — losing cursorline_extmark_id. The
+      -- actual extmark in cursorline_ns survives the reload (extmarks are owned
+      -- by the buffer object, not the text), leaving a permanently highlighted
+      -- line that no code path can remove. Clearing the namespace here runs
+      -- once per reload, not on every cursor move.
+      vim.api.nvim_buf_clear_namespace(ev.buf, cursorline_ns, 0, -1)
       migration.migrate_buffer(ev.buf)
       vim.bo[ev.buf].filetype = "chat"
       apply_chat_buffer_settings(ev.buf)
