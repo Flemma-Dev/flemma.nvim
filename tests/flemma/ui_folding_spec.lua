@@ -193,6 +193,36 @@ describe("UI Folding", function()
       assert.are.equal(">1", folding.get_fold_level(5))
     end)
 
+    it("should include blank separator in fold when AST snapshot is stale (streaming scenario)", function()
+      -- Regression test: when :Flemma send is called, create_ast_snapshot_before_send
+      -- captures @You: with end_line=2 (pre-send buffer had only 2 lines). Then
+      -- start_progress appends "" + "@Assistant:", making line 3 a blank separator.
+      -- During incremental parsing the snapshot preserves end_line=2, so line 3 fell
+      -- outside any fold. The merge step must fix up the last frozen message's end_line.
+      local parser = require("flemma.parser")
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      -- Pre-send buffer state
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Hi!" })
+
+      -- Snapshot taken before start_progress writes blank + @Assistant:
+      parser.create_ast_snapshot_before_send(bufnr)
+
+      -- start_progress appends blank separator then @Assistant: placeholder
+      vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "", "@Assistant:" })
+
+      -- Buffer is now: line 1 "@You:", line 2 "Hi!", line 3 "", line 4 "@Assistant:"
+      -- The blank separator (line 3) must be inside the @You: fold
+      assert.are.equal(">1", folding.get_fold_level(1), "@You: should start message fold")
+      assert.are.equal("=", folding.get_fold_level(2), "Hi! should be inside fold")
+      assert.are.equal("<1", folding.get_fold_level(3), "blank separator should end @You: fold")
+      assert.are.equal(">1", folding.get_fold_level(4), "@Assistant: should start message fold")
+
+      parser.clear_ast_snapshot_before_send(bufnr)
+    end)
+
     it("should return >2 for frontmatter on line 1", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)

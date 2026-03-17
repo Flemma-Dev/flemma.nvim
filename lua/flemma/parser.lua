@@ -722,6 +722,19 @@ function M.get_parsed_document(bufnr)
       all_messages[#all_messages + 1] = msg
     end
 
+    -- The last frozen message's end_line may be stale: it was captured before
+    -- start_progress appended blank separator lines ahead of @Assistant:.
+    -- Fix it up in place; the mutation is safe because the snapshot is
+    -- ephemeral (discarded at end of streaming) and idempotent (once
+    -- end_line is raised to first_new_start - 1 the guard never fires again).
+    if #snapshot.messages > 0 and #new_messages > 0 then
+      local last_frozen = all_messages[#snapshot.messages]
+      local first_new_start = new_messages[1].position.start_line
+      if last_frozen.position.end_line < first_new_start - 1 then
+        last_frozen.position.end_line = first_new_start - 1
+      end
+    end
+
     local all_errors = {}
     for i, err in ipairs(snapshot.errors) do
       all_errors[i] = err

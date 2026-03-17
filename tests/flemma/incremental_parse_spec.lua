@@ -306,12 +306,10 @@ describe("incremental get_parsed_document", function()
   end)
 
   it("incremental parse with blank lines between freeze and assistant", function()
-    -- Tests the accepted position divergence: a blank separator line added
-    -- after the snapshot will be absorbed into the last @You: message by a
-    -- full parse (extending its end_line) but NOT by the incremental parse
-    -- (the snapshot captured @You: before the blank existed). This is
-    -- documented in the Design Decisions section of the plan — the divergence
-    -- is visually invisible and corrected on clear_ast_snapshot_before_send.
+    -- The merge step in get_parsed_document fixes up the last frozen
+    -- message's end_line so it covers any blank separator lines that were
+    -- inserted after the snapshot was taken (e.g., by start_progress).
+    -- Incremental and full parse must now agree on @You: end_line.
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
       "@You:",
       "Hello",
@@ -338,14 +336,14 @@ describe("incremental get_parsed_document", function()
     assert.equals("You", incremental_doc.messages[1].role)
     assert.equals("Assistant", incremental_doc.messages[2].role)
 
-    -- @Assistant: message positions and content match exactly
+    -- All positions now agree between incremental and full parse
+    assert.equals(full_doc.messages[1].position.start_line, incremental_doc.messages[1].position.start_line)
+    assert.equals(full_doc.messages[1].position.end_line, incremental_doc.messages[1].position.end_line)
     assert.equals(full_doc.messages[2].position.start_line, incremental_doc.messages[2].position.start_line)
     assert.equals(full_doc.messages[2].position.end_line, incremental_doc.messages[2].position.end_line)
 
-    -- @You: end_line diverges by 1 (accepted — see Design Decisions)
-    -- Full parse: @You: absorbs the blank line (end_line = 3)
-    -- Incremental: @You: was snapshotted without it (end_line = 2)
-    assert.equals(2, incremental_doc.messages[1].position.end_line)
+    -- Sanity-check absolute values: @You: absorbs the blank separator
+    assert.equals(3, incremental_doc.messages[1].position.end_line)
     assert.equals(3, full_doc.messages[1].position.end_line)
   end)
 
