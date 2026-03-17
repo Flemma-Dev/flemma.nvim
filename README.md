@@ -141,7 +141,9 @@ Cancel an in-flight response with <kbd>Ctrl-C</kbd> or `:Flemma cancel`.
 
 ## The Buffer Is the State
 
-Most AI tools keep the real conversation hidden – in a SQLite file or a JSON log you can't touch. **Flemma doesn't.** The `.chat` buffer **is** the conversation, and nothing exists outside it. What you see is exactly what the model receives. Edit an assistant response to correct a hallucination, delete a tangent, rewrite your own message, paste in a tool result by hand – it all just works because there is no shadow state to fall out of sync. Want to fork a conversation? Duplicate the file. Want version history? You have Git. Switch from GPT to Claude mid-conversation, or turn thinking on for one turn and off for the next – every choice lives in the buffer where you can see and control it.
+Most AI tools keep the real conversation hidden – in a SQLite file or a JSON log you can't touch. **Flemma doesn't.** The `.chat` buffer **is** the conversation and nothing exists outside it. Everything the model receives is derived from what is written in the buffer – no hidden context, no server-side session, no state accumulating behind the scenes.
+
+That difference matters more than it sounds. In most AI tools, interrupting an agent mid-task is a gamble – you might need to coax it to resume, or lose context entirely. Rewinding is a one-way street with no way back. In Flemma, the conversation is a buffer and you have Vim! Interrupt a response and re-send – the model picks up exactly where the buffer says. Edit an assistant message to fix a hallucination, delete a tangent, rewrite your prompt – there is no shadow state to fall out of sync. Undo, redo, walk the undo tree. Fork a conversation by duplicating the file. Track every version with Git. Switch from Claude to GPT mid-conversation, or turn thinking on for one turn and off for the next. It's all just text in a buffer you control.
 
 ---
 
