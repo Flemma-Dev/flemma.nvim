@@ -11,7 +11,6 @@ describe("flemma.templating.eval", function()
     package.loaded["flemma.templating.builtins.iterators"] = nil
     eval = require("flemma.templating.eval")
     templating = require("flemma.templating")
-    templating.clear()
     templating.setup()
   end)
 

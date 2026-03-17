@@ -134,7 +134,6 @@ describe("flemma.templating.builtins.iterators", function()
       compiler = require("flemma.templating.compiler")
       ast = require("flemma.ast.nodes")
       local templating = require("flemma.templating")
-      templating.clear()
       templating.setup()
     end)
 

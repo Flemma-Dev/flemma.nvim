@@ -189,11 +189,4 @@ function M.setup()
   end
 end
 
----Clear all registered populators and module tracking.
-function M.clear()
-  populators = {}
-  pending_modules = {}
-  loaded_modules = {}
-end
-
 return M

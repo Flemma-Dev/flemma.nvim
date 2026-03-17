@@ -6,7 +6,6 @@ describe("flemma.templating", function()
     package.loaded["flemma.templating.builtins.stdlib"] = nil
     package.loaded["flemma.templating.builtins.iterators"] = nil
     templating = require("flemma.templating")
-    templating.clear()
   end)
 
   describe("register", function()
@@ -172,46 +171,11 @@ describe("flemma.templating", function()
     end)
   end)
 
-  describe("clear", function()
-    it("removes all populators", function()
-      templating.register("test", {
-        populate = function(env)
-          env.val = true
-        end,
-      })
-      templating.clear()
-      local env = templating.create_env()
-      -- Use rawget to bypass strict __index (key was never set in this env)
-      assert.is_nil(rawget(env, "val"))
-    end)
-
-    it("resets module tracking", function()
-      package.preload["test.templating.cleartest"] = function()
-        return {
-          name = "cleartest",
-          priority = 300,
-          populate = function(env)
-            env.cleared = true
-          end,
-        }
-      end
-
-      templating.register_module("test.templating.cleartest")
-      templating.clear()
-      local env = templating.create_env()
-      -- Use rawget to bypass strict __index (key was never set in this env)
-      assert.is_nil(rawget(env, "cleared"))
-
-      package.preload["test.templating.cleartest"] = nil
-      package.loaded["test.templating.cleartest"] = nil
-    end)
-  end)
-
   describe("from_context", function()
     local ctx_mod, sym
 
     before_each(function()
-      -- Clear symbols + context + templating together so all three share the same symbols instance
+      -- Clear all three together so they share the same symbols instance
       package.loaded["flemma.context"] = nil
       package.loaded["flemma.symbols"] = nil
       package.loaded["flemma.templating"] = nil
@@ -220,7 +184,6 @@ describe("flemma.templating", function()
       ctx_mod = require("flemma.context")
       sym = require("flemma.symbols")
       templating = require("flemma.templating")
-      templating.clear()
     end)
 
     it("sets __filename and __dirname from context", function()
