@@ -10,7 +10,7 @@ local buffer_utils = require("flemma.utilities.buffer")
 local preview = require("flemma.ui.preview")
 local folding = require("flemma.ui.folding")
 local roles = require("flemma.utilities.roles")
-local bridge = require("flemma.core.bridge")
+local bridge = require("flemma.bridge")
 local migration = require("flemma.migration")
 local parser = require("flemma.parser")
 local cursor = require("flemma.cursor")
@@ -910,6 +910,7 @@ function M.setup_chat_filetype_autocmds()
       migration.migrate_buffer(ev.buf)
       vim.bo[ev.buf].filetype = "chat"
       apply_chat_buffer_settings(ev.buf)
+      bridge.auto_prompt(ev.buf)
     end,
   })
 

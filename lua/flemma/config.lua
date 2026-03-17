@@ -150,6 +150,7 @@
 ---@field frontmatter boolean
 
 ---@class flemma.config.Editing
+---@field auto_prompt boolean
 ---@field disable_textwidth boolean
 ---@field auto_write boolean
 ---@field manage_updatetime boolean
@@ -351,6 +352,7 @@ return {
   presets = {}, -- Named presets for :Flemma switch (use ["$name"] key syntax)
   text_object = "m", -- Default text object key, set to false to disable
   editing = {
+    auto_prompt = true, -- Whether to prepend @You: to empty .chat buffers on open
     disable_textwidth = true, -- Whether to disable textwidth in chat buffers
     auto_write = false, -- Whether to automatically write the buffer after changes
     manage_updatetime = true, -- Whether to set updatetime to 100 in chat buffers and restore original value when leaving

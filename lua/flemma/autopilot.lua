@@ -4,7 +4,7 @@
 local M = {}
 
 local log = require("flemma.logging")
-local bridge = require("flemma.core.bridge")
+local bridge = require("flemma.bridge")
 local cursor = require("flemma.cursor")
 local parser = require("flemma.parser")
 local state = require("flemma.state")

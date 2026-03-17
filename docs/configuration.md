@@ -124,6 +124,7 @@ require("flemma").setup({
   },
   text_object = "m",                         -- "m" or false to disable
   editing = {
+    auto_prompt = true,                      -- Prepend @You: to empty .chat buffers on open
     disable_textwidth = true,
     auto_write = false,                      -- Write buffer after each request
     manage_updatetime = true,                -- Lower updatetime in chat buffers
@@ -204,6 +205,7 @@ This lets you set `thinking = "high"` as a cross-provider default and fine-tune 
 
 | Key                         | Default | Effect                                                                                                                                                                                                                |
 | --------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `editing.auto_prompt`       | `true`  | Prepend `@You:` to empty `.chat` buffers when opened, so new users have a clear starting point.                                                                                                                       |
 | `editing.disable_textwidth` | `true`  | Sets `textwidth = 0` in chat buffers to prevent hard wrapping.                                                                                                                                                        |
 | `editing.auto_write`        | `false` | When `true`, automatically writes the buffer to disk after each completed request.                                                                                                                                    |
 | `editing.manage_updatetime` | `true`  | Lowers `updatetime` to 100ms while a chat buffer is focused (enables responsive `CursorHold` events for UI updates). The original value is restored on `BufLeave`, with reference counting for multiple chat buffers. |
