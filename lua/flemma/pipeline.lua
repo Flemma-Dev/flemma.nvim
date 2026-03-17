@@ -88,14 +88,12 @@ function M.run(doc, context, opts)
   -- aborted parts are a processor-stage concept that to_generic_parts ignores.
   ---@type { role: string, evaluated_parts: flemma.processor.EvaluatedPart[] }[]
   local collected = {}
-  local last_assistant_idx = nil
 
   for _, msg in ipairs(evaluated.messages) do
     if roles.is_user(msg.role) then
       table.insert(collected, { role = roles.to_key(msg.role), evaluated_parts = msg.parts })
     elseif msg.role == roles.ASSISTANT then
       table.insert(collected, { role = roles.to_key(msg.role), evaluated_parts = msg.parts })
-      last_assistant_idx = #collected
     elseif msg.role == roles.SYSTEM then
       local parts, diags = ast.to_generic_parts(msg.parts, source_file)
       for _, d in ipairs(diags) do
@@ -112,21 +110,19 @@ function M.run(doc, context, opts)
   end
 
   -- Second pass: resolve aborted parts, then convert to generic parts.
-  -- Historical assistant messages: always strip (LLM doesn't need old abort context).
-  -- Last assistant message: strip when tool_use parts are present (the abort info is
-  -- already in the tool_result errors, and trailing text after tool_use blocks violates
-  -- Anthropic's API constraint). Preserve only for text-only messages so the LLM knows
-  -- the response was truncated and can continue.
-  for i, entry in ipairs(collected) do
+  -- Keep abort markers in ALL text-only assistant messages so the LLM sees that
+  -- previous responses were interrupted, and so the conversation prefix stays stable
+  -- across requests (avoiding prompt-cache busting).
+  -- Strip when tool_use parts are present — trailing text after tool_use blocks
+  -- violates the Anthropic API constraint, and the abort info is already conveyed
+  -- through the status=aborted tool_result placeholders.
+  for _, entry in ipairs(collected) do
     if entry.role == "assistant" then
-      local keep_aborted = (i == last_assistant_idx)
-      if keep_aborted then
-        -- Last assistant: strip if message contains tool_use parts
-        for _, part in ipairs(entry.evaluated_parts) do
-          if part.kind == "tool_use" then
-            keep_aborted = false
-            break
-          end
+      local keep_aborted = true
+      for _, part in ipairs(entry.evaluated_parts) do
+        if part.kind == "tool_use" then
+          keep_aborted = false
+          break
         end
       end
       entry.evaluated_parts = resolve_aborted_parts(entry.evaluated_parts, keep_aborted)
