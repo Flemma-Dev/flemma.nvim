@@ -322,10 +322,10 @@ function M.get_fold_text()
       return chunks
     elseif tool_kind == "tool_result" then
       ---@cast tool_seg flemma.ast.ToolResultSegment
-      local tool_name_map = query.build_tool_name_map(doc)
-      local tool_label_map = query.build_tool_label_map(doc)
-      local tool_name = tool_name_map[tool_seg.tool_use_id] or "result"
-      local tool_label = tool_label_map[tool_seg.tool_use_id]
+      local tool_use_index = query.build_tool_use_index(doc)
+      local tool_info = tool_use_index[tool_seg.tool_use_id]
+      local tool_name = tool_info and tool_info.name or "result"
+      local tool_label = tool_info and tool_info.label
 
       ---@type {[1]:string, [2]:string}[]
       local chunks = {

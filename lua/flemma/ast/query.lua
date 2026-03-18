@@ -56,37 +56,25 @@ function M.find_message_at_line(doc, lnum)
   return nil
 end
 
----Build a tool_use_id -> tool_name lookup from all Assistant messages in a document.
----@param doc flemma.ast.DocumentNode
----@return table<string, string>
-function M.build_tool_name_map(doc)
-  local map = {}
-  for _, msg in ipairs(doc.messages) do
-    if msg.role == "Assistant" then
-      for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_use" then
-          local tool_seg = seg --[[@as flemma.ast.ToolUseSegment]]
-          map[tool_seg.id] = tool_seg.name
-        end
-      end
-    end
-  end
-  return map
-end
+---@class flemma.ast.ToolUseInfo
+---@field name string Tool name
+---@field label? string Human-readable label from input.label, if present
 
----Build a tool_use_id -> label lookup from all tool_use segments in a document.
----Only includes entries where the tool_use input has a string "label" field.
+---Build a tool_use_id -> info lookup from all tool_use segments in a document.
 ---@param doc flemma.ast.DocumentNode
----@return table<string, string>
-function M.build_tool_label_map(doc)
+---@return table<string, flemma.ast.ToolUseInfo>
+function M.build_tool_use_index(doc)
   local map = {}
   for _, msg in ipairs(doc.messages) do
     for _, seg in ipairs(msg.segments) do
       if seg.kind == "tool_use" then
         local tool_seg = seg --[[@as flemma.ast.ToolUseSegment]]
+        ---@type flemma.ast.ToolUseInfo
+        local info = { name = tool_seg.name }
         if type(tool_seg.input.label) == "string" then
-          map[tool_seg.id] = tool_seg.input.label
+          info.label = tool_seg.input.label
         end
+        map[tool_seg.id] = info
       end
     end
   end

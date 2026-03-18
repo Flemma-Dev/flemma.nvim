@@ -340,16 +340,13 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
     return {}
   end
 
-  -- Build tool name and label lookups only when there are tool_result entries and a doc is available
-  ---@type table<string, string>|nil
-  local tool_name_map
-  ---@type table<string, string>|nil
-  local tool_label_map
+  -- Build tool_use index only when there are tool_result entries and a doc is available
+  ---@type table<string, flemma.ast.ToolUseInfo>|nil
+  local tool_use_index
   if doc then
     for _, entry in ipairs(entries) do
       if entry.kind == "tool_result" then
-        tool_name_map = query.build_tool_name_map(doc)
-        tool_label_map = query.build_tool_label_map(doc)
+        tool_use_index = query.build_tool_use_index(doc)
         break
       end
     end
@@ -433,8 +430,9 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       end
     elseif entry.kind == "tool_result" then
       local result_seg = entry.segment --[[@as flemma.ast.ToolResultSegment]]
-      local tool_name = (tool_name_map and tool_name_map[result_seg.tool_use_id]) or "result"
-      local tool_label = tool_label_map and tool_label_map[result_seg.tool_use_id]
+      local tool_info = tool_use_index and tool_use_index[result_seg.tool_use_id]
+      local tool_name = tool_info and tool_info.name or "result"
+      local tool_label = tool_info and tool_info.label
       local width_for_result = available - remainder_reserve
       if width_for_result < MIN_TOOL_PREVIEW_WIDTH then
         add_overflow(#entries - i + 1)

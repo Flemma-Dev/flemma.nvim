@@ -243,8 +243,8 @@ describe("ast.query", function()
     end)
   end)
 
-  describe("build_tool_label_map", function()
-    it("returns label for tool_use with input.label", function()
+  describe("build_tool_use_index", function()
+    it("returns name and label for tool_use with input.label", function()
       local query = require("flemma.ast.query")
       local doc = parser.parse_lines({
         "@Assistant:",
@@ -253,11 +253,12 @@ describe("ast.query", function()
         '{"command": "ls", "label": "List files", "timeout": 30}',
         "```",
       })
-      local map = query.build_tool_label_map(doc)
-      assert.are.equal("List files", map["call_001"])
+      local index = query.build_tool_use_index(doc)
+      assert.are.equal("bash", index["call_001"].name)
+      assert.are.equal("List files", index["call_001"].label)
     end)
 
-    it("omits tool_use without input.label", function()
+    it("returns name with nil label when input has no label", function()
       local query = require("flemma.ast.query")
       local doc = parser.parse_lines({
         "@Assistant:",
@@ -266,8 +267,9 @@ describe("ast.query", function()
         '{"command": "ls", "timeout": 30}',
         "```",
       })
-      local map = query.build_tool_label_map(doc)
-      assert.is_nil(map["call_002"])
+      local index = query.build_tool_use_index(doc)
+      assert.are.equal("bash", index["call_002"].name)
+      assert.is_nil(index["call_002"].label)
     end)
 
     it("handles multiple tools across messages", function()
@@ -283,9 +285,11 @@ describe("ast.query", function()
         '{"command": "ls", "label": "List files", "timeout": 30}',
         "```",
       })
-      local map = query.build_tool_label_map(doc)
-      assert.are.equal("Reading foo", map["call_003"])
-      assert.are.equal("List files", map["call_004"])
+      local index = query.build_tool_use_index(doc)
+      assert.are.equal("read", index["call_003"].name)
+      assert.are.equal("Reading foo", index["call_003"].label)
+      assert.are.equal("bash", index["call_004"].name)
+      assert.are.equal("List files", index["call_004"].label)
     end)
 
     it("ignores tool_result segments", function()
@@ -298,8 +302,8 @@ describe("ast.query", function()
         "output",
         "```",
       })
-      local map = query.build_tool_label_map(doc)
-      assert.is_nil(map["call_005"])
+      local index = query.build_tool_use_index(doc)
+      assert.is_nil(index["call_005"])
     end)
   end)
 
