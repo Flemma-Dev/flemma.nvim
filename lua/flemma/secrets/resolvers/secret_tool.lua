@@ -39,17 +39,25 @@ end
 
 ---@param _self flemma.secrets.resolvers.SecretTool
 ---@param _credential flemma.secrets.Credential
----@param _ctx flemma.config.ConfigAware<table>
+---@param ctx flemma.secrets.Context
 ---@return boolean
-function M.supports(_self, _credential, _ctx)
-  return vim.fn.has("linux") == 1 and vim.fn.executable("secret-tool") == 1
+function M.supports(_self, _credential, ctx)
+  if vim.fn.has("linux") ~= 1 then
+    ctx:diagnostic("not available (requires Linux)")
+    return false
+  end
+  if vim.fn.executable("secret-tool") ~= 1 then
+    ctx:diagnostic("secret-tool not found in PATH")
+    return false
+  end
+  return true
 end
 
 ---@param _self flemma.secrets.resolvers.SecretTool
 ---@param credential flemma.secrets.Credential
----@param _ctx flemma.config.ConfigAware<table>
+---@param ctx flemma.secrets.Context
 ---@return flemma.secrets.Result|nil
-function M.resolve(_self, credential, _ctx)
+function M.resolve(_self, credential, ctx)
   -- Try new convention first: service=<service> key=<kind>
   local value = try_lookup(credential.service, credential.kind)
   if value then
@@ -67,6 +75,7 @@ function M.resolve(_self, credential, _ctx)
     end
   end
 
+  ctx:diagnostic("no entry found for service=" .. credential.service .. " key=" .. credential.kind)
   return nil
 end
 

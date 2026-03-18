@@ -152,10 +152,33 @@ describe("flemma.secrets.resolvers.secret_tool", function()
     secret_tool = require("flemma.secrets.resolvers.secret_tool")
   end)
 
+  local function make_st_ctx()
+    return {
+      get_config = function(_self) return nil end,
+      diagnostic = function(_self, _msg) end,
+      get_diagnostics = function(_self) return {} end,
+    }
+  end
+
   describe("supports", function()
     it("returns based on platform availability", function()
       local expected = vim.fn.has("linux") == 1 and vim.fn.executable("secret-tool") == 1
-      assert.equals(expected, secret_tool:supports({ kind = "api_key", service = "test" }))
+      assert.equals(expected, secret_tool:supports({ kind = "api_key", service = "test" }, make_st_ctx()))
+    end)
+
+    it("emits diagnostic when not on Linux", function()
+      local diags = {}
+      local ctx = {
+        get_config = function(_self) return nil end,
+        diagnostic = function(_self, msg) table.insert(diags, msg) end,
+        get_diagnostics = function(_self) return diags end,
+      }
+
+      if vim.fn.has("linux") ~= 1 then
+        secret_tool:supports({ kind = "api_key", service = "test" }, ctx)
+        assert.equals(1, #diags)
+        assert.truthy(diags[1]:match("requires Linux"))
+      end
     end)
   end)
 
@@ -182,7 +205,7 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         }
       end
 
-      local result = secret_tool:resolve({ kind = "api_key", service = "anthropic" })
+      local result = secret_tool:resolve({ kind = "api_key", service = "anthropic" }, make_st_ctx())
 
       assert.is_not_nil(result)
       assert.equals("sk-from-keyring", result.value)
@@ -215,7 +238,7 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         }
       end
 
-      local result = secret_tool:resolve({ kind = "api_key", service = "anthropic" })
+      local result = secret_tool:resolve({ kind = "api_key", service = "anthropic" }, make_st_ctx())
 
       assert.is_not_nil(result)
       assert.equals("sk-legacy", result.value)
@@ -234,7 +257,7 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         }
       end
 
-      local result = secret_tool:resolve({ kind = "access_token", service = "vertex" })
+      local result = secret_tool:resolve({ kind = "access_token", service = "vertex" }, make_st_ctx())
 
       assert.is_nil(result)
       -- Should only try convention (key=access_token), not legacy (key=api)
@@ -251,7 +274,7 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         }
       end
 
-      local result = secret_tool:resolve({ kind = "api_key", service = "anthropic" })
+      local result = secret_tool:resolve({ kind = "api_key", service = "anthropic" }, make_st_ctx())
       assert.is_not_nil(result)
       assert.equals("sk-from-convention", result.value)
     end)
@@ -266,7 +289,7 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         }
       end
 
-      local result = secret_tool:resolve({ kind = "api_key", service = "test" })
+      local result = secret_tool:resolve({ kind = "api_key", service = "test" }, make_st_ctx())
       assert.is_not_nil(result)
       assert.equals("sk-test-key", result.value)
     end)
@@ -281,8 +304,31 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         }
       end
 
-      local result = secret_tool:resolve({ kind = "api_key", service = "test" })
+      local result = secret_tool:resolve({ kind = "api_key", service = "test" }, make_st_ctx())
       assert.is_nil(result)
+    end)
+
+    it("emits diagnostic when lookup fails", function()
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _)
+        return {
+          wait = function()
+            return { code = 1, stdout = "" }
+          end,
+        }
+      end
+
+      local diags = {}
+      local ctx = {
+        get_config = function(_self) return nil end,
+        diagnostic = function(_self, msg) table.insert(diags, msg) end,
+        get_diagnostics = function(_self) return diags end,
+      }
+
+      secret_tool:resolve({ kind = "api_key", service = "anthropic" }, ctx)
+
+      assert.is_true(#diags > 0)
+      assert.truthy(diags[1]:match("no entry found"))
     end)
   end)
 end)
