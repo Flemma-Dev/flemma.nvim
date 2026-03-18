@@ -15,16 +15,21 @@ local TOKEN_TTL_SECONDS = 3600
 
 ---@param _self flemma.secrets.resolvers.Gcloud
 ---@param credential flemma.secrets.Credential
+---@param ctx flemma.config.ConfigAware
 ---@return boolean
-function M.supports(_self, credential)
-  return credential.kind == "access_token" and vim.fn.executable("gcloud") == 1
+function M.supports(_self, credential, ctx)
+  local cfg = ctx:get_config()
+  ---@cast cfg flemma.config.SecretsGcloudConfig|nil
+  local path = (cfg and cfg.path) or "gcloud"
+  return credential.kind == "access_token" and vim.fn.executable(path) == 1
 end
 
---- Run gcloud auth print-access-token with optional environment override.
+--- Run gcloud auth print-access-token with the given binary path and optional env.
+---@param path string Binary path or name (e.g. "gcloud" or "/nix/store/.../bin/gcloud")
 ---@param env? table<string, string>
 ---@return string|nil token
-local function run_gcloud(env)
-  local cmd = { "gcloud", "auth", "print-access-token" }
+local function run_gcloud(path, env)
+  local cmd = { path, "auth", "print-access-token" }
   local opts = { text = true }
   if env then
     opts.env = env
@@ -53,8 +58,13 @@ end
 
 ---@param _self flemma.secrets.resolvers.Gcloud
 ---@param credential flemma.secrets.Credential
+---@param ctx flemma.config.ConfigAware
 ---@return flemma.secrets.Result|nil
-function M.resolve(_self, credential)
+function M.resolve(_self, credential, ctx)
+  local cfg = ctx:get_config()
+  ---@cast cfg flemma.config.SecretsGcloudConfig|nil
+  local path = (cfg and cfg.path) or "gcloud"
+
   -- Try to get a service account for this service
   local service_account = secrets.resolve({
     kind = "service_account",
@@ -72,7 +82,7 @@ function M.resolve(_self, credential)
     file:write(service_account.value)
     file:close()
 
-    local token = run_gcloud({ GOOGLE_APPLICATION_CREDENTIALS = tmp })
+    local token = run_gcloud(path, { GOOGLE_APPLICATION_CREDENTIALS = tmp })
 
     -- Delete temp file immediately
     os.remove(tmp)
@@ -88,7 +98,7 @@ function M.resolve(_self, credential)
 
   -- Fallback: try default gcloud credentials
   log.debug("gcloud: trying default credentials")
-  local token = run_gcloud()
+  local token = run_gcloud(path)
   if token then
     return { value = token, ttl = TOKEN_TTL_SECONDS }
   end

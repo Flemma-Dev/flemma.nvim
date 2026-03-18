@@ -251,12 +251,34 @@ describe("flemma.secrets.resolvers.gcloud", function()
     gcloud = require("flemma.secrets.resolvers.gcloud")
   end)
 
+  --- Build a minimal mock context with an optional config subtable.
+  ---@param cfg? table
+  ---@return table
+  local function make_ctx(cfg)
+    return {
+      get_config = function(_self)
+        return cfg
+      end,
+    }
+  end
+
   describe("supports", function()
     it("only supports access_token kind", function()
       local has_gcloud = vim.fn.executable("gcloud") == 1
-      assert.equals(has_gcloud, gcloud:supports({ kind = "access_token", service = "vertex" }))
-      assert.is_false(gcloud:supports({ kind = "api_key", service = "vertex" }))
-      assert.is_false(gcloud:supports({ kind = "service_account", service = "vertex" }))
+      assert.equals(has_gcloud, gcloud:supports({ kind = "access_token", service = "vertex" }, make_ctx(nil)))
+      assert.is_false(gcloud:supports({ kind = "api_key", service = "vertex" }, make_ctx(nil)))
+      assert.is_false(gcloud:supports({ kind = "service_account", service = "vertex" }, make_ctx(nil)))
+    end)
+
+    it("uses configured path for executable check", function()
+      local ctx = make_ctx({ path = "/nonexistent/gcloud-binary" })
+      assert.is_false(gcloud:supports({ kind = "access_token", service = "vertex" }, ctx))
+    end)
+
+    it("falls back to 'gcloud' when ctx returns nil config", function()
+      local ctx = make_ctx(nil)
+      local expected = vim.fn.executable("gcloud") == 1
+      assert.equals(expected, gcloud:supports({ kind = "access_token", service = "vertex" }, ctx))
     end)
   end)
 
@@ -295,7 +317,7 @@ describe("flemma.secrets.resolvers.gcloud", function()
         }
       end
 
-      local result = gcloud:resolve({ kind = "access_token", service = "vertex" })
+      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, make_ctx(nil))
 
       assert.is_not_nil(result)
       assert.equals("ya29.generated-token", result.value)
@@ -320,7 +342,7 @@ describe("flemma.secrets.resolvers.gcloud", function()
         }
       end
 
-      local result = gcloud:resolve({ kind = "access_token", service = "vertex" })
+      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, make_ctx(nil))
 
       assert.is_not_nil(result)
       assert.equals("ya29.default-token", result.value)
@@ -343,7 +365,7 @@ describe("flemma.secrets.resolvers.gcloud", function()
         }
       end
 
-      local result = gcloud:resolve({ kind = "access_token", service = "vertex" })
+      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, make_ctx(nil))
       assert.is_nil(result)
     end)
 
@@ -363,8 +385,33 @@ describe("flemma.secrets.resolvers.gcloud", function()
         }
       end
 
-      local result = gcloud:resolve({ kind = "access_token", service = "vertex" })
+      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, make_ctx(nil))
       assert.is_nil(result)
+    end)
+
+    it("uses configured gcloud path in command", function()
+      local secrets_mod = require("flemma.secrets")
+      ---@diagnostic disable-next-line: duplicate-set-field
+      secrets_mod.resolve = function(_)
+        return nil
+      end
+
+      local captured_cmd
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(cmd, _)
+        captured_cmd = cmd
+        return {
+          wait = function()
+            return { code = 0, stdout = "ya29.token\n" }
+          end,
+        }
+      end
+
+      local ctx = make_ctx({ path = "/nix/store/abc123/bin/gcloud" })
+      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, ctx)
+
+      assert.is_not_nil(result)
+      assert.equals("/nix/store/abc123/bin/gcloud", captured_cmd[1])
     end)
   end)
 end)
