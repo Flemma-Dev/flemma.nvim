@@ -2,6 +2,9 @@
 
 ---@alias flemma.config.HighlightValue string|{ dark: string, light: string }
 
+---@class flemma.config.ConfigAware
+---@field get_config fun(self): table|nil
+
 ---@class flemma.config.Highlights
 ---@field system flemma.config.HighlightValue
 ---@field user flemma.config.HighlightValue
@@ -103,6 +106,12 @@
 ---@field path? string Path to bwrap binary (default: "bwrap")
 ---@field extra_args? string[] Raw extra bwrap arguments
 
+---@class flemma.config.SecretsGcloudConfig
+---@field path? string Path to gcloud binary (default: "gcloud")
+
+---@class flemma.config.SecretsConfig
+---@field gcloud? flemma.config.SecretsGcloudConfig
+
 ---@class flemma.config.SandboxConfig
 ---@field enabled boolean Master switch (default: true)
 ---@field backend? string "auto" = detect quietly, "required" = detect and warn if none, or explicit name (default: "auto")
@@ -202,6 +211,7 @@
 ---@field sandbox? flemma.config.SandboxConfig
 ---@field diagnostics? flemma.config.Diagnostics
 ---@field experimental? flemma.config.Experimental
+---@field secrets? flemma.config.SecretsConfig
 
 ---Full resolved config (all fields present after merging with defaults).
 ---@class flemma.Config : flemma.Config.Opts
@@ -227,6 +237,7 @@
 ---@field sandbox flemma.config.SandboxConfig
 ---@field diagnostics flemma.config.Diagnostics
 ---@field experimental flemma.config.Experimental
+---@field secrets flemma.config.SecretsConfig
 
 ---@type flemma.Config
 return {
@@ -406,6 +417,11 @@ return {
         path = "bwrap", -- Path to bubblewrap binary
         extra_args = {}, -- Additional bwrap arguments for advanced use
       },
+    },
+  },
+  secrets = {
+    gcloud = {
+      path = "gcloud", -- Path to gcloud binary (set to full path on NixOS or non-PATH installs)
     },
   },
   experimental = {
