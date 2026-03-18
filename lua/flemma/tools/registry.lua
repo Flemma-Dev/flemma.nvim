@@ -33,6 +33,12 @@ local M = {}
 ---@field path flemma.tools.PathContext Path resolution utilities (lazy-loaded)
 ---@field get_config fun(self: flemma.tools.ExecutionContext): table? Tool-specific config subtree (read-only copy of config.tools[tool_name])
 
+---@class flemma.StructuredToolPreview
+---@field label? string  Human-readable intent — shown italic, truncated last
+---@field detail? string Raw technical summary — shown dimmer, truncated first
+
+---@alias flemma.tools.ToolPreview string | flemma.StructuredToolPreview
+
 ---@class flemma.tools.ToolDefinition
 ---@field name string Tool name (must match registry key)
 ---@field description string Human-readable description
@@ -44,7 +50,7 @@ local M = {}
 ---@field executable? boolean Set to false to disable execution
 ---@field execute? fun(input: table<string, any>, context: flemma.tools.ExecutionContext, callback?: fun(result: flemma.tools.ExecutionResult)): any Executor function (sync returns ExecutionResult, async returns cancel fn or nil)
 ---@field capabilities? string[] Declarative capability tags (e.g., "can_auto_approve_if_sandboxed") queried by resolvers and policies
----@field format_preview? fun(input: table<string, any>, max_length: integer): string Custom preview body generator (receives input and available width after "name: " prefix)
+---@field format_preview? fun(input: table<string, any>, max_length: integer): flemma.tools.ToolPreview Custom preview body generator. Returns a plain string (backward-compatible) or a StructuredToolPreview {label?, detail?}. When a string is returned, label is never auto-promoted. When StructuredToolPreview is returned, label is shown italic and detail is shown dimmer in fold text.
 ---@field personalities? table<string, table<string, string|string[]>> Personality-scoped parts keyed by personality name, then by part name
 
 ---@class flemma.tools.ExecutionResult

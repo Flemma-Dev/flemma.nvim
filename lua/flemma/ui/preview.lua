@@ -8,6 +8,18 @@ local str = require("flemma.utilities.string")
 local display = require("flemma.utilities.display")
 local tools = require("flemma.tools")
 
+---Normalise a raw format_preview return to a StructuredToolPreview.
+---String returns become { detail = raw }. Table returns are passed through.
+---Label is NEVER auto-promoted from input.label here — callers handle that separately.
+---@param raw flemma.tools.ToolPreview
+---@return flemma.StructuredToolPreview
+local function normalize_preview(raw)
+  if type(raw) == "string" then
+    return { detail = raw }
+  end
+  return raw --[[@as flemma.StructuredToolPreview]]
+end
+
 -- Constants for preview text
 local MAX_CONTENT_PREVIEW_LINES = 10
 local DEFAULT_MAX_LENGTH = 80
