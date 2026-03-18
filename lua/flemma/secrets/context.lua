@@ -7,6 +7,10 @@ local state = require("flemma.state")
 
 ---@class flemma.secrets.Context : flemma.config.ConfigAware<table>
 
+---@class flemma.secrets.ResolverDiagnostic
+---@field resolver string
+---@field message string
+
 --- Build a new context for the given resolver name.
 --- The resolver name must match the key used in the secrets config table.
 --- Convention: resolver.name == config key (e.g. name "gcloud" → secrets.gcloud).
@@ -14,6 +18,8 @@ local state = require("flemma.state")
 ---@return flemma.secrets.Context
 function M.new(resolver_name)
   local ctx = {}
+  ---@type flemma.secrets.ResolverDiagnostic[]
+  local diagnostics = {}
 
   ---@return table|nil
   function ctx:get_config()
@@ -26,6 +32,18 @@ function M.new(resolver_name)
       return nil
     end
     return vim.deepcopy(subtree)
+  end
+
+  --- Record a diagnostic message explaining why this resolver could not help.
+  ---@param message string
+  function ctx:diagnostic(message)
+    table.insert(diagnostics, { resolver = resolver_name, message = message })
+  end
+
+  --- Return all diagnostics recorded by this resolver. Always returns a table (possibly empty).
+  ---@return flemma.secrets.ResolverDiagnostic[]
+  function ctx:get_diagnostics()
+    return diagnostics
   end
 
   return ctx
