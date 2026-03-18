@@ -138,7 +138,7 @@ M.definitions = {
       end
       return {
         label = input.label,
-        detail = table.concat(detail_parts, "  "),
+        detail = detail_parts,
       }
     end,
     ---@param input table<string, any>

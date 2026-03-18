@@ -9,21 +9,27 @@ local display = require("flemma.utilities.display")
 local tools = require("flemma.tools")
 
 ---Normalise a raw format_preview return to a StructuredToolPreview.
----String returns become { detail = raw }. Table returns are passed through.
+---String returns become { detail = raw }. Table detail (string[]) is joined
+---with double-space so callers always see detail as string|nil.
 ---Label is NEVER auto-promoted from input.label here — callers handle that separately.
 ---@param raw flemma.tools.ToolPreview
----@return flemma.StructuredToolPreview
+---@return { label?: string, detail?: string }
 local function normalize_preview(raw)
   if type(raw) == "string" then
     return { detail = raw }
   end
-  return raw --[[@as flemma.StructuredToolPreview]]
+  local result = raw --[[@as flemma.StructuredToolPreview]]
+  if type(result.detail) == "table" then
+    result.detail = table.concat(result.detail --[[@as string[] ]], "  ")
+  end
+  return result
 end
 
 -- Constants for preview text
 local MAX_CONTENT_PREVIEW_LINES = 10
 local DEFAULT_MAX_LENGTH = 80
 local CONTENT_PREVIEW_TRUNCATION_MARKER = "…"
+local LABEL_DETAIL_SEPARATOR = " — "
 
 ---Get the available text area width for a window (total width minus signcolumn, numbercolumn, foldcolumn)
 ---Returns DEFAULT_MAX_LENGTH when the window is invalid (e.g., buffer not displayed or test environment).
@@ -290,7 +296,7 @@ end
 ---@param tool_name string
 ---@param input table<string, any>
 ---@param available integer Available width after "name: " prefix
----@return flemma.StructuredToolPreview
+---@return { label?: string, detail?: string }
 function M.get_tool_use_body(tool_name, input, available)
   local tool_def = tools.get(tool_name)
 
@@ -410,11 +416,12 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
           entry_width = entry_width + str.strwidth(label_text)
           remaining = remaining - str.strwidth(label_text)
 
-          if detail and remaining > 1 then
-            local detail_text = str.truncate(detail, remaining - 1, CONTENT_PREVIEW_TRUNCATION_MARKER)
+          local separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
+          if detail and remaining > separator_width then
+            local detail_text = str.truncate(detail, remaining - separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
             if detail_text ~= "" then
-              table.insert(entry_chunks, { " " .. detail_text, "FlemmaToolDetail" })
-              entry_width = entry_width + 1 + str.strwidth(detail_text)
+              table.insert(entry_chunks, { LABEL_DETAIL_SEPARATOR .. detail_text, "FlemmaToolDetail" })
+              entry_width = entry_width + separator_width + str.strwidth(detail_text)
             end
           end
         else
@@ -458,11 +465,12 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
         entry_width = entry_width + str.strwidth(label_text)
         remaining = remaining - str.strwidth(label_text)
 
-        if remaining > 1 then
-          local body = M.format_content_preview(result_seg.content, remaining - 1)
+        local separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
+        if remaining > separator_width then
+          local body = M.format_content_preview(result_seg.content, remaining - separator_width)
           if body ~= "" then
-            table.insert(entry_chunks, { " " .. body, "FlemmaToolDetail" })
-            entry_width = entry_width + 1 + str.strwidth(body)
+            table.insert(entry_chunks, { LABEL_DETAIL_SEPARATOR .. body, "FlemmaToolDetail" })
+            entry_width = entry_width + separator_width + str.strwidth(body)
           end
         end
       else

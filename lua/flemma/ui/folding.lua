@@ -14,6 +14,7 @@ local preview = require("flemma.ui.preview")
 local query = require("flemma.ast.query")
 
 local CONTENT_PREVIEW_TRUNCATION_MARKER = "…"
+local LABEL_DETAIL_SEPARATOR = " — "
 
 ---@class flemma.ui.folding.FoldRule
 ---@field name string
@@ -187,7 +188,7 @@ end
 ---Delegates to the shared preview helper.
 ---@param tool_seg flemma.ast.ToolUseSegment
 ---@param available integer Available width for the body
----@return flemma.StructuredToolPreview
+---@return { label?: string, detail?: string }
 local function get_tool_use_body(tool_seg, available)
   return preview.get_tool_use_body(tool_seg.name, tool_seg.input, available)
 end
@@ -288,8 +289,9 @@ function M.get_fold_text()
         + str.strwidth(": ")
         + str.strwidth(" ") -- trailing space before suffix
         + str.strwidth(suffix)
+      local separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
       if label then
-        fixed_chrome = fixed_chrome + str.strwidth(label) + str.strwidth(" ") -- label + space separator
+        fixed_chrome = fixed_chrome + str.strwidth(label) + separator_width -- label + em-dash separator
       end
       local available = text_width - fixed_chrome
 
@@ -303,16 +305,13 @@ function M.get_fold_text()
           if detail and available > 0 then
             local detail_text = str.truncate(detail, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
             if detail_text ~= "" then
-              table.insert(chunks, { " " .. detail_text, "FlemmaToolDetail" })
+              table.insert(chunks, { LABEL_DETAIL_SEPARATOR .. detail_text, "FlemmaToolDetail" })
             end
           end
         else
-          -- No label: show detail only
-          local detail_text = str.truncate(
-            detail --[[@as string]],
-            available + (label and 0 or str.strwidth(" ")),
-            CONTENT_PREVIEW_TRUNCATION_MARKER
-          )
+          -- No label: show detail only (reclaim separator space)
+          local detail_text =
+            str.truncate(detail --[[@as string]], available + separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
           table.insert(chunks, { detail_text, "FlemmaToolDetail" })
         end
         table.insert(chunks, { " ", "FlemmaFoldPreview" })
@@ -344,8 +343,9 @@ function M.get_fold_text()
       if tool_seg.is_error then
         fixed_chrome = fixed_chrome + str.strwidth("(error) ")
       end
+      local result_separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
       if tool_label then
-        fixed_chrome = fixed_chrome + str.strwidth(tool_label) + str.strwidth(" ") -- label + separator
+        fixed_chrome = fixed_chrome + str.strwidth(tool_label) + result_separator_width -- label + em-dash separator
       end
       local available = text_width - fixed_chrome
 
@@ -359,7 +359,7 @@ function M.get_fold_text()
         if available > 0 then
           local body = preview.format_content_preview(tool_seg.content, available)
           if body ~= "" then
-            table.insert(chunks, { " " .. body, "FlemmaToolDetail" })
+            table.insert(chunks, { LABEL_DETAIL_SEPARATOR .. body, "FlemmaToolDetail" })
           end
         end
       else

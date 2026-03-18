@@ -47,7 +47,7 @@ M.definitions = {
     format_preview = function(input)
       return {
         label = input.label,
-        detail = input.path .. "  (" .. str.format_size(#input.content) .. ")",
+        detail = { input.path, "(" .. str.format_size(#input.content) .. ")" },
       }
     end,
     execute = function(input, ctx)
