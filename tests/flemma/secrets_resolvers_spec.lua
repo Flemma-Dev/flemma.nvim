@@ -10,9 +10,13 @@ describe("flemma.secrets.resolvers.environment", function()
 
   local function make_env_ctx()
     return {
-      get_config = function(_self) return nil end,
+      get_config = function(_self)
+        return nil
+      end,
       diagnostic = function(_self, _msg) end,
-      get_diagnostics = function(_self) return {} end,
+      get_diagnostics = function(_self)
+        return {}
+      end,
     }
   end
 
@@ -108,9 +112,15 @@ describe("flemma.secrets.resolvers.environment", function()
 
       local diags = {}
       local ctx = {
-        get_config = function(_self) return nil end,
-        diagnostic = function(_self, msg) table.insert(diags, msg) end,
-        get_diagnostics = function(_self) return diags end,
+        get_config = function(_self)
+          return nil
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
       }
 
       environment:resolve({ kind = "api_key", service = "nonexistent" }, ctx)
@@ -126,9 +136,15 @@ describe("flemma.secrets.resolvers.environment", function()
 
       local diags = {}
       local ctx = {
-        get_config = function(_self) return nil end,
-        diagnostic = function(_self, msg) table.insert(diags, msg) end,
-        get_diagnostics = function(_self) return diags end,
+        get_config = function(_self)
+          return nil
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
       }
 
       environment:resolve({
@@ -154,9 +170,13 @@ describe("flemma.secrets.resolvers.secret_tool", function()
 
   local function make_st_ctx()
     return {
-      get_config = function(_self) return nil end,
+      get_config = function(_self)
+        return nil
+      end,
       diagnostic = function(_self, _msg) end,
-      get_diagnostics = function(_self) return {} end,
+      get_diagnostics = function(_self)
+        return {}
+      end,
     }
   end
 
@@ -169,9 +189,15 @@ describe("flemma.secrets.resolvers.secret_tool", function()
     it("emits diagnostic when not on Linux", function()
       local diags = {}
       local ctx = {
-        get_config = function(_self) return nil end,
-        diagnostic = function(_self, msg) table.insert(diags, msg) end,
-        get_diagnostics = function(_self) return diags end,
+        get_config = function(_self)
+          return nil
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
       }
 
       if vim.fn.has("linux") ~= 1 then
@@ -320,9 +346,15 @@ describe("flemma.secrets.resolvers.secret_tool", function()
 
       local diags = {}
       local ctx = {
-        get_config = function(_self) return nil end,
-        diagnostic = function(_self, msg) table.insert(diags, msg) end,
-        get_diagnostics = function(_self) return diags end,
+        get_config = function(_self)
+          return nil
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
       }
 
       secret_tool:resolve({ kind = "api_key", service = "anthropic" }, ctx)
@@ -384,9 +416,15 @@ describe("flemma.secrets.resolvers.gcloud", function()
     it("emits diagnostic when executable not found", function()
       local diags = {}
       local ctx = {
-        get_config = function(_self) return { path = "/nonexistent/gcloud" } end,
-        diagnostic = function(_self, msg) table.insert(diags, msg) end,
-        get_diagnostics = function(_self) return diags end,
+        get_config = function(_self)
+          return { path = "/nonexistent/gcloud" }
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
       }
 
       gcloud:supports({ kind = "access_token", service = "vertex" }, ctx)
@@ -399,9 +437,15 @@ describe("flemma.secrets.resolvers.gcloud", function()
     it("emits diagnostic for non-access_token kind", function()
       local diags = {}
       local ctx = {
-        get_config = function(_self) return nil end,
-        diagnostic = function(_self, msg) table.insert(diags, msg) end,
-        get_diagnostics = function(_self) return diags end,
+        get_config = function(_self)
+          return nil
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
       }
 
       gcloud:supports({ kind = "api_key", service = "vertex" }, ctx)
@@ -561,9 +605,15 @@ describe("flemma.secrets.resolvers.gcloud", function()
 
       local diags = {}
       local ctx = {
-        get_config = function(_self) return nil end,
-        diagnostic = function(_self, msg) table.insert(diags, msg) end,
-        get_diagnostics = function(_self) return diags end,
+        get_config = function(_self)
+          return nil
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
       }
 
       local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, ctx)
@@ -591,9 +641,15 @@ describe("flemma.secrets.resolvers.gcloud", function()
 
       local diags = {}
       local ctx = {
-        get_config = function(_self) return nil end,
-        diagnostic = function(_self, msg) table.insert(diags, msg) end,
-        get_diagnostics = function(_self) return diags end,
+        get_config = function(_self)
+          return nil
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
       }
 
       local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, ctx)
@@ -614,9 +670,13 @@ describe("flemma.secrets.resolvers.keychain", function()
 
   local function make_kc_ctx()
     return {
-      get_config = function(_self) return nil end,
+      get_config = function(_self)
+        return nil
+      end,
       diagnostic = function(_self, _msg) end,
-      get_diagnostics = function(_self) return {} end,
+      get_diagnostics = function(_self)
+        return {}
+      end,
     }
   end
 
@@ -629,9 +689,15 @@ describe("flemma.secrets.resolvers.keychain", function()
     it("emits diagnostic when not on macOS", function()
       local diags = {}
       local ctx = {
-        get_config = function(_self) return nil end,
-        diagnostic = function(_self, msg) table.insert(diags, msg) end,
-        get_diagnostics = function(_self) return diags end,
+        get_config = function(_self)
+          return nil
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
       }
 
       if vim.fn.has("mac") ~= 1 then
@@ -760,9 +826,15 @@ describe("flemma.secrets.resolvers.keychain", function()
 
       local diags = {}
       local ctx = {
-        get_config = function(_self) return nil end,
-        diagnostic = function(_self, msg) table.insert(diags, msg) end,
-        get_diagnostics = function(_self) return diags end,
+        get_config = function(_self)
+          return nil
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
       }
 
       keychain:resolve({ kind = "api_key", service = "anthropic" }, ctx)
