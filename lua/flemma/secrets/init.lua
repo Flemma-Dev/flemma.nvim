@@ -6,6 +6,7 @@ local M = {}
 local registry = require("flemma.secrets.registry")
 local cache = require("flemma.secrets.cache")
 local log = require("flemma.logging")
+local context = require("flemma.secrets.context")
 
 ---@class flemma.secrets.Credential
 ---@field kind string
@@ -44,9 +45,10 @@ function M.resolve(credential)
 
   local sorted = registry.get_all_sorted()
   for _, resolver in ipairs(sorted) do
-    if resolver:supports(credential) then
+    local ctx = context.new(resolver.name)
+    if resolver:supports(credential, ctx) then
       log.debug("secrets.resolve(): trying resolver " .. resolver.name .. " for " .. key)
-      local result = resolver:resolve(credential)
+      local result = resolver:resolve(credential, ctx)
       if result then
         log.debug("secrets.resolve(): resolved by " .. resolver.name)
         cache.set(key, result, credential)
