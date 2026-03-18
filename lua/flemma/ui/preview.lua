@@ -150,10 +150,9 @@ function M.format_tool_preview_body(input, max_length)
   return str.truncate(body, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
 end
 
----Format a compact preview string for a tool call
----Checks the tool registry for a custom format_preview function; falls back
----to the generic key-value body. Handles name prefix, newline collapsing,
----and truncation uniformly.
+---Format a compact preview string for a tool call (used by virt-line display).
+---This is a plain-string context: no italic chunks. When both label and detail
+---are present, renders as "name: label — detail" (em dash separator).
 ---@param tool_name string
 ---@param input table<string, any>
 ---@param max_length? integer Maximum total preview length (defaults to DEFAULT_MAX_LENGTH)
@@ -166,21 +165,38 @@ function M.format_tool_preview(tool_name, input, max_length)
 
   local tool_def = tools.get(tool_name)
 
-  local body
+  local structured
   if tool_def and tool_def.format_preview then
-    body = tool_def.format_preview(input, available)
-    -- Collapse newlines for single-line display
-    body = body:gsub("\n", display.get_newline_char())
+    structured = normalize_preview(tool_def.format_preview(input, available))
+    if structured.detail then
+      structured.detail = structured.detail:gsub("\n", display.get_newline_char())
+    end
   else
     local keys = vim.tbl_keys(input)
     if #keys == 0 then
       return tool_name
     end
-    body = M.format_tool_preview_body(input, available)
+    structured = {
+      label = type(input.label) == "string" and input.label or nil,
+      detail = M.format_tool_preview_body(input, available),
+    }
+  end
+
+  -- Build body: "label — detail" or just label or just detail
+  local label = structured.label
+  local detail = structured.detail
+  local body
+  if label and detail and detail ~= "" then
+    body = label .. " — " .. detail
+  elseif label then
+    body = label
+  elseif detail and detail ~= "" then
+    body = detail
+  else
+    return tool_name
   end
 
   local preview = name_prefix .. body
-
   return str.truncate(preview, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
 end
 
@@ -268,29 +284,38 @@ local function coalesce_segments(segments)
   return entries
 end
 
----Get the body text for a tool use (custom format_preview or generic key-value).
----Handles newline collapsing and post-hoc truncation for custom formatters.
+---Get the structured preview for a tool use (label + detail).
+---Returns a StructuredToolPreview. Truncation of detail is applied here;
+---label truncation is the caller's responsibility.
 ---@param tool_name string
 ---@param input table<string, any>
----@param available integer Available width for the body
----@return string
+---@param available integer Available width after "name: " prefix
+---@return flemma.StructuredToolPreview
 function M.get_tool_use_body(tool_name, input, available)
   local tool_def = tools.get(tool_name)
 
-  local body
   if tool_def and tool_def.format_preview then
-    body = tool_def.format_preview(input, available)
-    body = body:gsub("\n", display.get_newline_char())
-  else
-    local keys = vim.tbl_keys(input)
-    if #keys == 0 then
-      return ""
+    local structured = normalize_preview(tool_def.format_preview(input, available))
+    -- Collapse newlines in detail, then truncate detail to available
+    if structured.detail then
+      structured.detail = structured.detail:gsub("\n", display.get_newline_char())
+      structured.detail = str.truncate(structured.detail, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
     end
-    body = M.format_tool_preview_body(input, available)
+    return structured
   end
 
-  -- Post-hoc truncation for custom format_preview that may ignore max_length
-  return str.truncate(body, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
+  -- Generic fallback: auto-detect input.label; use key-value body for detail
+  local keys = vim.tbl_keys(input)
+  if #keys == 0 then
+    return {}
+  end
+  local label = type(input.label) == "string" and input.label or nil
+  local detail_available = label and (available - str.strwidth(label) - 1) or available
+  if detail_available < 0 then
+    detail_available = 0
+  end
+  local detail = M.format_tool_preview_body(input, detail_available)
+  return { label = label, detail = detail ~= "" and detail or nil }
 end
 
 ---Build a composite fold preview from a message's segments in buffer order.
