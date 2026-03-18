@@ -4,6 +4,7 @@ describe("flemma.config.schema.types", function()
   local types
 
   before_each(function()
+    package.loaded["flemma.config.schema"] = nil
     package.loaded["flemma.config.schema.types"] = nil
     types = require("flemma.config.schema.types")
   end)
