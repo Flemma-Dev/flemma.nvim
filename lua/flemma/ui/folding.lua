@@ -13,6 +13,8 @@ local str = require("flemma.utilities.string")
 local preview = require("flemma.ui.preview")
 local query = require("flemma.ast.query")
 
+local CONTENT_PREVIEW_TRUNCATION_MARKER = "…"
+
 ---@class flemma.ui.folding.FoldRule
 ---@field name string
 ---@field auto_close boolean
@@ -181,11 +183,11 @@ local function get_document()
   return parser.get_parsed_document(bufnr)
 end
 
----Get the body text for a tool use fold (custom format_preview or generic key-value).
+---Get the structured preview for a tool use fold.
 ---Delegates to the shared preview helper.
 ---@param tool_seg flemma.ast.ToolUseSegment
 ---@param available integer Available width for the body
----@return string
+---@return flemma.StructuredToolPreview
 local function get_tool_use_body(tool_seg, available)
   return preview.get_tool_use_body(tool_seg.name, tool_seg.input, available)
 end
@@ -274,27 +276,53 @@ function M.get_fold_text()
         { "Tool Use: ", "FlemmaToolUseTitle" },
       }
 
-      local fixed_width = str.strwidth("◆ ")
+      -- Pass generous available to get the untruncated structured preview;
+      -- we compute actual available after knowing label width.
+      local structured = get_tool_use_body(tool_seg, text_width)
+      local label = structured.label
+      local detail = structured.detail
+
+      local fixed_chrome = str.strwidth("◆ ")
         + str.strwidth("Tool Use: ")
         + str.strwidth(tool_seg.name)
         + str.strwidth(": ")
-        + str.strwidth(" ")
+        + str.strwidth(" ")  -- trailing space before suffix
         + str.strwidth(suffix)
-      local available = text_width - fixed_width
-      local body = get_tool_use_body(tool_seg, available)
+      if label then
+        fixed_chrome = fixed_chrome + str.strwidth(label) + str.strwidth(" ")  -- label + space separator
+      end
+      local available = text_width - fixed_chrome
 
-      if body ~= "" then
-        table.insert(chunks, { tool_seg.name, "FlemmaToolName" })
-        table.insert(chunks, { ": " .. body .. " ", "FlemmaFoldPreview" })
+      table.insert(chunks, { tool_seg.name, "FlemmaToolName" })
+
+      if label or detail then
+        table.insert(chunks, { ": ", "FlemmaToolName" })
+
+        if label then
+          table.insert(chunks, { label, "FlemmaToolLabel" })
+          if detail and available > 0 then
+            local detail_text = str.truncate(detail, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
+            if detail_text ~= "" then
+              table.insert(chunks, { " " .. detail_text, "FlemmaToolDetail" })
+            end
+          end
+        else
+          -- No label: show detail only
+          local detail_text = str.truncate(detail --[[@as string]], available + (label and 0 or str.strwidth(" ")), CONTENT_PREVIEW_TRUNCATION_MARKER)
+          table.insert(chunks, { detail_text, "FlemmaToolDetail" })
+        end
+        table.insert(chunks, { " ", "FlemmaFoldPreview" })
       else
-        table.insert(chunks, { tool_seg.name .. " ", "FlemmaToolName" })
+        table.insert(chunks, { " ", "FlemmaToolName" })
       end
       table.insert(chunks, { suffix, "FlemmaFoldMeta" })
       return chunks
     elseif tool_kind == "tool_result" then
       ---@cast tool_seg flemma.ast.ToolResultSegment
       local tool_name_map = query.build_tool_name_map(doc)
+      local tool_label_map = query.build_tool_label_map(doc)
       local tool_name = tool_name_map[tool_seg.tool_use_id] or "result"
+      local tool_label = tool_label_map[tool_seg.tool_use_id]
 
       ---@type {[1]:string, [2]:string}[]
       local chunks = {
@@ -303,30 +331,41 @@ function M.get_fold_text()
         { tool_name, "FlemmaToolName" },
       }
 
-      local fixed_width = str.strwidth("◆ ")
+      local fixed_chrome = str.strwidth("◆ ")
         + str.strwidth("Tool Result: ")
         + str.strwidth(tool_name)
         + str.strwidth(": ")
-        + str.strwidth(" ")
+        + str.strwidth(" ")  -- trailing space before suffix
         + str.strwidth(suffix)
       if tool_seg.is_error then
-        fixed_width = fixed_width + str.strwidth("(error) ")
+        fixed_chrome = fixed_chrome + str.strwidth("(error) ")
       end
-      local available = text_width - fixed_width
+      if tool_label then
+        fixed_chrome = fixed_chrome + str.strwidth(tool_label) + str.strwidth(" ")  -- label + separator
+      end
+      local available = text_width - fixed_chrome
 
-      local body = preview.format_content_preview(tool_seg.content, available)
+      table.insert(chunks, { ": ", "FlemmaFoldPreview" })
+      if tool_seg.is_error then
+        table.insert(chunks, { "(error) ", "FlemmaToolResultError" })
+      end
 
-      if body ~= "" or tool_seg.is_error then
-        table.insert(chunks, { ": ", "FlemmaFoldPreview" })
-        if tool_seg.is_error then
-          table.insert(chunks, { "(error) ", "FlemmaToolResultError" })
-        end
-        if body ~= "" then
-          table.insert(chunks, { body .. " ", "FlemmaFoldPreview" })
+      if tool_label then
+        table.insert(chunks, { tool_label, "FlemmaToolLabel" })
+        if available > 0 then
+          local body = preview.format_content_preview(tool_seg.content, available)
+          if body ~= "" then
+            table.insert(chunks, { " " .. body, "FlemmaToolDetail" })
+          end
         end
       else
-        table.insert(chunks, { " ", "FlemmaToolName" })
+        local body = preview.format_content_preview(tool_seg.content, available)
+        if body ~= "" then
+          table.insert(chunks, { body, "FlemmaFoldPreview" })
+        end
       end
+
+      table.insert(chunks, { " ", "FlemmaFoldPreview" })
       table.insert(chunks, { suffix, "FlemmaFoldMeta" })
       return chunks
     end
