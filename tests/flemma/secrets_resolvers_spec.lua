@@ -348,9 +348,16 @@ describe("flemma.secrets.resolvers.gcloud", function()
   ---@param cfg? table
   ---@return table
   local function make_ctx(cfg)
+    local diags = {}
     return {
       get_config = function(_self)
         return cfg
+      end,
+      diagnostic = function(_self, msg)
+        table.insert(diags, msg)
+      end,
+      get_diagnostics = function(_self)
+        return diags
       end,
     }
   end
@@ -372,6 +379,35 @@ describe("flemma.secrets.resolvers.gcloud", function()
       local ctx = make_ctx(nil)
       local expected = vim.fn.executable("gcloud") == 1
       assert.equals(expected, gcloud:supports({ kind = "access_token", service = "vertex" }, ctx))
+    end)
+
+    it("emits diagnostic when executable not found", function()
+      local diags = {}
+      local ctx = {
+        get_config = function(_self) return { path = "/nonexistent/gcloud" } end,
+        diagnostic = function(_self, msg) table.insert(diags, msg) end,
+        get_diagnostics = function(_self) return diags end,
+      }
+
+      gcloud:supports({ kind = "access_token", service = "vertex" }, ctx)
+
+      assert.equals(1, #diags)
+      assert.truthy(diags[1]:match("executable not found"))
+      assert.truthy(diags[1]:match("/nonexistent/gcloud"))
+    end)
+
+    it("emits diagnostic for non-access_token kind", function()
+      local diags = {}
+      local ctx = {
+        get_config = function(_self) return nil end,
+        diagnostic = function(_self, msg) table.insert(diags, msg) end,
+        get_diagnostics = function(_self) return diags end,
+      }
+
+      gcloud:supports({ kind = "api_key", service = "vertex" }, ctx)
+
+      assert.equals(1, #diags)
+      assert.truthy(diags[1]:match("only resolves access_token"))
     end)
   end)
 
@@ -505,6 +541,65 @@ describe("flemma.secrets.resolvers.gcloud", function()
 
       assert.is_not_nil(result)
       assert.equals("/nix/store/abc123/bin/gcloud", captured_cmd[1])
+    end)
+
+    it("emits diagnostic when gcloud command fails", function()
+      local secrets_mod = require("flemma.secrets")
+      ---@diagnostic disable-next-line: duplicate-set-field
+      secrets_mod.resolve = function(_)
+        return nil
+      end
+
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _)
+        return {
+          wait = function()
+            return { code = 2, stdout = "", stderr = "ERROR" }
+          end,
+        }
+      end
+
+      local diags = {}
+      local ctx = {
+        get_config = function(_self) return nil end,
+        diagnostic = function(_self, msg) table.insert(diags, msg) end,
+        get_diagnostics = function(_self) return diags end,
+      }
+
+      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, ctx)
+      assert.is_nil(result)
+      assert.is_true(#diags > 0)
+      assert.truthy(diags[1]:match("auth failed"))
+      assert.truthy(diags[1]:match("exit code 2"))
+    end)
+
+    it("emits diagnostic when token is empty", function()
+      local secrets_mod = require("flemma.secrets")
+      ---@diagnostic disable-next-line: duplicate-set-field
+      secrets_mod.resolve = function(_)
+        return nil
+      end
+
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _)
+        return {
+          wait = function()
+            return { code = 0, stdout = "\n" }
+          end,
+        }
+      end
+
+      local diags = {}
+      local ctx = {
+        get_config = function(_self) return nil end,
+        diagnostic = function(_self, msg) table.insert(diags, msg) end,
+        get_diagnostics = function(_self) return diags end,
+      }
+
+      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, ctx)
+      assert.is_nil(result)
+      assert.is_true(#diags > 0)
+      assert.truthy(diags[1]:match("returned empty token"))
     end)
   end)
 end)
