@@ -60,6 +60,19 @@ M.INCLUDE_BINARY = {}
 ---@type table
 M.INCLUDE_MIME = {}
 
+--- Schema alias definitions.
+--- Used as a key on schema object nodes to define shorthand paths that
+--- redirect reads and writes to canonical locations.
+---@type table
+M.ALIASES = {}
+
+--- Schema discovery callback.
+--- Used as a key on schema object nodes to provide lazy schema resolution
+--- for dynamically registered modules (providers, tools). The callback
+--- receives an unknown key and returns a schema node or nil.
+---@type table
+M.DISCOVER = {}
+
 --- Deep-copy a table while preserving symbol key identity.
 ---
 --- vim.deepcopy copies table *keys* by value, creating new table references
