@@ -36,9 +36,9 @@ end
 
 ---@param _self flemma.secrets.resolvers.Environment
 ---@param credential flemma.secrets.Credential
----@param _ctx flemma.config.ConfigAware<table>
+---@param ctx flemma.secrets.Context
 ---@return flemma.secrets.Result|nil
-function M.resolve(_self, credential, _ctx)
+function M.resolve(_self, credential, ctx)
   -- Try convention first
   local var_name = convention_env_var(credential.service, credential.kind)
   local value = try_env(var_name)
@@ -55,6 +55,12 @@ function M.resolve(_self, credential, _ctx)
       end
     end
   end
+
+  local msg = var_name .. " not set"
+  if credential.aliases and #credential.aliases > 0 then
+    msg = msg .. " (also tried: " .. table.concat(credential.aliases, ", ") .. ")"
+  end
+  ctx:diagnostic(msg)
 
   return nil
 end

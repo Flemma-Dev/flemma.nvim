@@ -8,6 +8,14 @@ describe("flemma.secrets.resolvers.environment", function()
     environment = require("flemma.secrets.resolvers.environment")
   end)
 
+  local function make_env_ctx()
+    return {
+      get_config = function(_self) return nil end,
+      diagnostic = function(_self, _msg) end,
+      get_diagnostics = function(_self) return {} end,
+    }
+  end
+
   describe("supports", function()
     it("supports any credential kind", function()
       assert.is_true(environment:supports({ kind = "api_key", service = "test" }))
@@ -20,7 +28,7 @@ describe("flemma.secrets.resolvers.environment", function()
     it("resolves using SERVICE_KIND convention", function()
       vim.env.ANTHROPIC_API_KEY = "sk-test-123"
 
-      local result = environment:resolve({ kind = "api_key", service = "anthropic" })
+      local result = environment:resolve({ kind = "api_key", service = "anthropic" }, make_env_ctx())
 
       assert.is_not_nil(result)
       assert.equals("sk-test-123", result.value)
@@ -31,7 +39,7 @@ describe("flemma.secrets.resolvers.environment", function()
     it("returns nil when env var is not set", function()
       vim.env.NONEXISTENT_API_KEY = nil
 
-      local result = environment:resolve({ kind = "api_key", service = "nonexistent" })
+      local result = environment:resolve({ kind = "api_key", service = "nonexistent" }, make_env_ctx())
 
       assert.is_nil(result)
     end)
@@ -39,7 +47,7 @@ describe("flemma.secrets.resolvers.environment", function()
     it("returns nil for empty env var", function()
       vim.env.EMPTY_API_KEY = ""
 
-      local result = environment:resolve({ kind = "api_key", service = "empty" })
+      local result = environment:resolve({ kind = "api_key", service = "empty" }, make_env_ctx())
 
       assert.is_nil(result)
 
@@ -54,7 +62,7 @@ describe("flemma.secrets.resolvers.environment", function()
         kind = "access_token",
         service = "vertex",
         aliases = { "VERTEX_AI_ACCESS_TOKEN" },
-      })
+      }, make_env_ctx())
 
       assert.is_not_nil(result)
       assert.equals("ya29.from-alias", result.value)
@@ -70,7 +78,7 @@ describe("flemma.secrets.resolvers.environment", function()
         kind = "access_token",
         service = "vertex",
         aliases = { "VERTEX_AI_ACCESS_TOKEN" },
-      })
+      }, make_env_ctx())
 
       assert.is_not_nil(result)
       assert.equals("ya29.from-convention", result.value)
@@ -87,12 +95,51 @@ describe("flemma.secrets.resolvers.environment", function()
         kind = "api_key",
         service = "test",
         aliases = { "FIRST_ALIAS", "SECOND_ALIAS" },
-      })
+      }, make_env_ctx())
 
       assert.is_not_nil(result)
       assert.equals("from-second", result.value)
 
       vim.env.SECOND_ALIAS = nil
+    end)
+
+    it("emits diagnostic when env var is not set", function()
+      vim.env.NONEXISTENT_API_KEY = nil
+
+      local diags = {}
+      local ctx = {
+        get_config = function(_self) return nil end,
+        diagnostic = function(_self, msg) table.insert(diags, msg) end,
+        get_diagnostics = function(_self) return diags end,
+      }
+
+      environment:resolve({ kind = "api_key", service = "nonexistent" }, ctx)
+
+      assert.equals(1, #diags)
+      assert.truthy(diags[1]:match("NONEXISTENT_API_KEY"))
+      assert.truthy(diags[1]:match("not set"))
+    end)
+
+    it("includes aliases in diagnostic when tried", function()
+      vim.env.VERTEX_ACCESS_TOKEN = nil
+      vim.env.VERTEX_AI_ACCESS_TOKEN = nil
+
+      local diags = {}
+      local ctx = {
+        get_config = function(_self) return nil end,
+        diagnostic = function(_self, msg) table.insert(diags, msg) end,
+        get_diagnostics = function(_self) return diags end,
+      }
+
+      environment:resolve({
+        kind = "access_token",
+        service = "vertex",
+        aliases = { "VERTEX_AI_ACCESS_TOKEN" },
+      }, ctx)
+
+      assert.equals(1, #diags)
+      assert.truthy(diags[1]:match("VERTEX_ACCESS_TOKEN"))
+      assert.truthy(diags[1]:match("VERTEX_AI_ACCESS_TOKEN"))
     end)
   end)
 end)
