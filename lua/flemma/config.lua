@@ -23,6 +23,7 @@
 ---@field tool_preview flemma.config.HighlightValue
 ---@field fold_preview flemma.config.HighlightValue
 ---@field fold_meta flemma.config.HighlightValue
+---@field tool_detail flemma.config.HighlightValue
 ---@field busy flemma.config.HighlightValue
 
 ---@class flemma.config.Ruler
@@ -266,6 +267,7 @@ return {
     -- Folds
     fold_preview = "Comment", -- Highlight for tool content preview text in fold lines
     fold_meta = "Comment", -- Highlight for (N lines) suffix in fold lines
+    tool_detail = "Comment", -- Highlight for raw technical detail in tool fold previews
     busy = "DiagnosticWarn", -- Highlight for busy indicator icon in integrations (e.g., bufferline)
   },
   role_style = "bold", -- style applied to role markers like @You:

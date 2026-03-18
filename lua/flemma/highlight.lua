@@ -410,6 +410,15 @@ M.apply_syntax = function()
   set_highlight("FlemmaFoldPreview", syntax_config.highlights.fold_preview)
   set_highlight("FlemmaFoldMeta", syntax_config.highlights.fold_meta)
 
+  -- FlemmaToolLabel: italic style override for human-readable tool intent in folds.
+  -- Defined unconditionally (not config-driven) because it has no color to configure —
+  -- only italic. nvim_set_hl silently ignores style attributes when link is also set,
+  -- so this must NOT use { link = ..., italic = true }.
+  vim.api.nvim_set_hl(0, "FlemmaToolLabel", { italic = true, default = true })
+
+  -- FlemmaToolDetail: dimmer highlight for raw technical detail in folds.
+  set_highlight("FlemmaToolDetail", syntax_config.highlights.tool_detail)
+
   -- Tool execution indicator highlights
   set_highlight("FlemmaToolPending", { link = "DiagnosticInfo", default = true })
   set_highlight("FlemmaToolSuccess", { link = "DiagnosticOk", default = true })
