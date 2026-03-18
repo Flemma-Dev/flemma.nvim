@@ -762,14 +762,14 @@ describe("format_message_fold_preview", function()
     assert.are.equal("FlemmaToolName", name_chunk[2])
   end)
 
-  it("uses FlemmaFoldPreview for tool body in tool_use entries", function()
+  it("uses FlemmaToolDetail for tool body in tool_use entries without label", function()
     local msg = make_message("Assistant", {
       ast.tool_use("t1", "bash", { command = "ls -la" }, { start_line = 2, end_line = 5 }),
     })
     local chunks = preview.format_message_fold_preview(msg, 80, nil, "FlemmaAssistant")
     local body_chunk = find_chunk(chunks, "ls %-la")
     assert.is_not_nil(body_chunk, "Should have a chunk with the tool body")
-    assert.are.equal("FlemmaFoldPreview", body_chunk[2])
+    assert.are.equal("FlemmaToolDetail", body_chunk[2])
   end)
 
   it("joins multiple tool uses with pipe separator", function()
@@ -970,6 +970,89 @@ describe("format_message_fold_preview", function()
     local chunks = preview.format_message_fold_preview(msg, 200, nil, "FlemmaUser")
     local result = chunks_to_string(chunks)
     assert.is_truthy(result:match("{{ 2 %+ 2 }}"), "Should show expression wrapped in {{ }}")
+  end)
+
+  ---Helper: find a chunk with a specific highlight group
+  ---@param chunks {[1]:string, [2]:string}[]
+  ---@param hl string
+  ---@return string|nil
+  local function find_chunk_with_hl(chunks, hl)
+    for _, chunk in ipairs(chunks) do
+      if chunk[2] == hl then
+        return chunk[1]
+      end
+    end
+    return nil
+  end
+
+  it("tool_use entry includes FlemmaToolLabel chunk for label", function()
+    local parser_mod = require("flemma.parser")
+    local doc = parser_mod.parse_lines({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`call_001`)",
+      "```json",
+      '{"command": "ls", "label": "List files", "timeout": 30}',
+      "```",
+      "@You:",
+      "**Tool Result:** `call_001`",
+      "",
+      "```",
+      "file.txt",
+      "```",
+    })
+    local msg = doc.messages[1]  -- Assistant message
+    local chunks = preview.format_message_fold_preview(msg, 120, doc)
+
+    local label_text = find_chunk_with_hl(chunks, "FlemmaToolLabel")
+    assert.is_not_nil(label_text, "should have a FlemmaToolLabel chunk")
+    assert.is_truthy(label_text:match("List files"), "label chunk should contain the label")
+  end)
+
+  it("tool_use entry includes FlemmaToolDetail chunk for detail", function()
+    local parser_mod = require("flemma.parser")
+    local doc = parser_mod.parse_lines({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`call_002`)",
+      "```json",
+      '{"command": "ls", "label": "List files", "timeout": 30}',
+      "```",
+      "@You:",
+      "**Tool Result:** `call_002`",
+      "",
+      "```",
+      "file.txt",
+      "```",
+    })
+    local msg = doc.messages[1]
+    local chunks = preview.format_message_fold_preview(msg, 120, doc)
+
+    local detail_text = find_chunk_with_hl(chunks, "FlemmaToolDetail")
+    assert.is_not_nil(detail_text, "should have a FlemmaToolDetail chunk")
+    -- Detail contains the generic key-value format (bash not registered in this test context)
+    assert.is_truthy(detail_text:match("command"), "detail chunk should contain input keys")
+  end)
+
+  it("tool_result entry includes FlemmaToolLabel chunk from paired tool_use", function()
+    local parser_mod = require("flemma.parser")
+    local doc = parser_mod.parse_lines({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`call_003`)",
+      "```json",
+      '{"command": "ls", "label": "List files", "timeout": 30}',
+      "```",
+      "@You:",
+      "**Tool Result:** `call_003`",
+      "",
+      "```",
+      "file.txt",
+      "```",
+    })
+    local msg = doc.messages[2]  -- You message (tool results)
+    local chunks = preview.format_message_fold_preview(msg, 120, doc)
+
+    local label_text = find_chunk_with_hl(chunks, "FlemmaToolLabel")
+    assert.is_not_nil(label_text, "tool_result fold should have FlemmaToolLabel chunk from paired tool_use")
+    assert.is_truthy(label_text:match("List files"))
   end)
 end)
 
