@@ -28,15 +28,17 @@ end
 
 ---@param _self flemma.secrets.resolvers.Environment
 ---@param _credential flemma.secrets.Credential
+---@param _ctx flemma.config.ConfigAware
 ---@return boolean
-function M.supports(_self, _credential)
+function M.supports(_self, _credential, _ctx)
   return true
 end
 
 ---@param _self flemma.secrets.resolvers.Environment
 ---@param credential flemma.secrets.Credential
+---@param _ctx flemma.config.ConfigAware
 ---@return flemma.secrets.Result|nil
-function M.resolve(_self, credential)
+function M.resolve(_self, credential, _ctx)
   -- Try convention first
   local var_name = convention_env_var(credential.service, credential.kind)
   local value = try_env(var_name)
