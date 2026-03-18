@@ -124,7 +124,7 @@ local sink = require("flemma.sink")
 ---@field endpoint? string
 ---@field api_version? string
 ---@field metadata? flemma.provider.Metadata
----@field get_api_key fun(self): string|nil Resolve credentials via secrets module (providers must override)
+---@field get_api_key fun(self): string|nil, flemma.secrets.ResolverDiagnostic[]|nil Resolve credentials via secrets module (providers must override)
 ---@field _response_buffer? flemma.provider.ResponseBuffer
 ---@field _response_headers? table<string, string[]>
 ---@field _base_parameters table<string, any> Underlying parameter table (without per-request overrides), for iteration
@@ -169,7 +169,7 @@ end
 --- @abstract
 --- Resolve credentials via the secrets module.
 ---@param self flemma.provider.Base
----@return string|nil
+---@return string|nil value, flemma.secrets.ResolverDiagnostic[]|nil diagnostics
 function M.get_api_key(self)
   error("get_api_key() must be implemented by provider")
 end

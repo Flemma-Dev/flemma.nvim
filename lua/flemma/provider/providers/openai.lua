@@ -73,14 +73,17 @@ function M.reset(self)
 end
 
 ---@param self flemma.provider.OpenAI
----@return string|nil
+---@return string|nil value, flemma.secrets.ResolverDiagnostic[]|nil diagnostics
 function M.get_api_key(self)
-  local result = secrets.resolve({
+  local result, diagnostics = secrets.resolve({
     kind = "api_key",
     service = "openai",
     description = "OpenAI API key",
   })
-  return result and result.value or nil
+  if result then
+    return result.value
+  end
+  return nil, diagnostics
 end
 
 ---Build request body for OpenAI Responses API

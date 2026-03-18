@@ -813,9 +813,15 @@ function M.send_to_provider(opts)
 
     local headers
     if not fixture_path then
-      local api_key = current_provider:get_api_key()
+      local api_key, api_key_diagnostics = current_provider:get_api_key()
       if not api_key then
-        error("No API key available for provider '" .. state.get_config().provider .. "'.", 0)
+        local msg = "No API key available for provider '" .. state.get_config().provider .. "'."
+        if api_key_diagnostics then
+          for _, d in ipairs(api_key_diagnostics) do
+            msg = msg .. "\n  [" .. d.resolver .. "] " .. d.message
+          end
+        end
+        error(msg, 0)
       end
       headers = current_provider:get_request_headers()
       if not headers then

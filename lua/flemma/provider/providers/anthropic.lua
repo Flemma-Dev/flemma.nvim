@@ -65,14 +65,17 @@ function M.reset(self)
 end
 
 ---@param self flemma.provider.Anthropic
----@return string|nil
+---@return string|nil value, flemma.secrets.ResolverDiagnostic[]|nil diagnostics
 function M.get_api_key(self)
-  local result = secrets.resolve({
+  local result, diagnostics = secrets.resolve({
     kind = "api_key",
     service = "anthropic",
     description = "Anthropic API key",
   })
-  return result and result.value or nil
+  if result then
+    return result.value
+  end
+  return nil, diagnostics
 end
 
 --- Anthropic uses `data.type == "error"` for errors (not `data.error`).

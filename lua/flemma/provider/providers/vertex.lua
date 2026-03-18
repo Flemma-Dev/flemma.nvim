@@ -91,10 +91,10 @@ function M.reset(self, opts)
 end
 
 ---@param self flemma.provider.Vertex
----@return string|nil
+---@return string|nil value, flemma.secrets.ResolverDiagnostic[]|nil diagnostics
 function M.get_api_key(self)
   _validate_config(self)
-  local result = secrets.resolve({
+  local result, diagnostics = secrets.resolve({
     kind = "access_token",
     service = "vertex",
     description = "Vertex AI access token",
@@ -102,7 +102,10 @@ function M.get_api_key(self)
     ttl_scale = 0.925,
     aliases = { "VERTEX_AI_ACCESS_TOKEN" },
   })
-  return result and result.value or nil
+  if result then
+    return result.value
+  end
+  return nil, diagnostics
 end
 
 --- Extract function name from Flemma synthetic ID

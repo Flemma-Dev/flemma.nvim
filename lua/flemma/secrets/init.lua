@@ -62,14 +62,6 @@ function M.resolve(credential)
   local description = credential.description or (credential.kind .. " for " .. credential.service)
   log.debug("secrets.resolve(): no resolver could fulfill: " .. description)
 
-  local msg = "Flemma: could not resolve credential: " .. description
-  if #all_diagnostics > 0 then
-    for _, d in ipairs(all_diagnostics) do
-      msg = msg .. "\n  [" .. d.resolver .. "] " .. d.message
-    end
-  end
-  vim.notify(msg, vim.log.levels.WARN)
-
   return nil, #all_diagnostics > 0 and all_diagnostics or nil
 end
 
