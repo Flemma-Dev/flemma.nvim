@@ -517,10 +517,33 @@ describe("flemma.secrets.resolvers.keychain", function()
     keychain = require("flemma.secrets.resolvers.keychain")
   end)
 
+  local function make_kc_ctx()
+    return {
+      get_config = function(_self) return nil end,
+      diagnostic = function(_self, _msg) end,
+      get_diagnostics = function(_self) return {} end,
+    }
+  end
+
   describe("supports", function()
     it("returns true only on macOS", function()
       local expected = vim.fn.has("mac") == 1
-      assert.equals(expected, keychain:supports({ kind = "api_key", service = "test" }))
+      assert.equals(expected, keychain:supports({ kind = "api_key", service = "test" }, make_kc_ctx()))
+    end)
+
+    it("emits diagnostic when not on macOS", function()
+      local diags = {}
+      local ctx = {
+        get_config = function(_self) return nil end,
+        diagnostic = function(_self, msg) table.insert(diags, msg) end,
+        get_diagnostics = function(_self) return diags end,
+      }
+
+      if vim.fn.has("mac") ~= 1 then
+        keychain:supports({ kind = "api_key", service = "test" }, ctx)
+        assert.equals(1, #diags)
+        assert.truthy(diags[1]:match("requires macOS"))
+      end
     end)
   end)
 
@@ -547,7 +570,7 @@ describe("flemma.secrets.resolvers.keychain", function()
         }
       end
 
-      local result = keychain:resolve({ kind = "api_key", service = "anthropic" })
+      local result = keychain:resolve({ kind = "api_key", service = "anthropic" }, make_kc_ctx())
 
       assert.is_not_nil(result)
       assert.equals("sk-from-keychain", result.value)
@@ -575,7 +598,7 @@ describe("flemma.secrets.resolvers.keychain", function()
         }
       end
 
-      local result = keychain:resolve({ kind = "api_key", service = "anthropic" })
+      local result = keychain:resolve({ kind = "api_key", service = "anthropic" }, make_kc_ctx())
 
       assert.is_not_nil(result)
       assert.equals("sk-legacy", result.value)
@@ -594,7 +617,7 @@ describe("flemma.secrets.resolvers.keychain", function()
         }
       end
 
-      local result = keychain:resolve({ kind = "access_token", service = "vertex" })
+      local result = keychain:resolve({ kind = "access_token", service = "vertex" }, make_kc_ctx())
 
       assert.is_nil(result)
       -- Should only try convention (-a access_token), not legacy (-a api)
@@ -611,7 +634,7 @@ describe("flemma.secrets.resolvers.keychain", function()
         }
       end
 
-      local result = keychain:resolve({ kind = "api_key", service = "test" })
+      local result = keychain:resolve({ kind = "api_key", service = "test" }, make_kc_ctx())
       assert.is_not_nil(result)
       assert.equals("sk-key", result.value)
     end)
@@ -626,8 +649,31 @@ describe("flemma.secrets.resolvers.keychain", function()
         }
       end
 
-      local result = keychain:resolve({ kind = "api_key", service = "test" })
+      local result = keychain:resolve({ kind = "api_key", service = "test" }, make_kc_ctx())
       assert.is_nil(result)
+    end)
+
+    it("emits diagnostic when lookup fails", function()
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _)
+        return {
+          wait = function()
+            return { code = 44, stdout = "" }
+          end,
+        }
+      end
+
+      local diags = {}
+      local ctx = {
+        get_config = function(_self) return nil end,
+        diagnostic = function(_self, msg) table.insert(diags, msg) end,
+        get_diagnostics = function(_self) return diags end,
+      }
+
+      keychain:resolve({ kind = "api_key", service = "anthropic" }, ctx)
+
+      assert.is_true(#diags > 0)
+      assert.truthy(diags[1]:match("no entry found"))
     end)
   end)
 end)
