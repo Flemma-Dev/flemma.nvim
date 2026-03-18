@@ -286,10 +286,10 @@ function M.get_fold_text()
         + str.strwidth("Tool Use: ")
         + str.strwidth(tool_seg.name)
         + str.strwidth(": ")
-        + str.strwidth(" ")  -- trailing space before suffix
+        + str.strwidth(" ") -- trailing space before suffix
         + str.strwidth(suffix)
       if label then
-        fixed_chrome = fixed_chrome + str.strwidth(label) + str.strwidth(" ")  -- label + space separator
+        fixed_chrome = fixed_chrome + str.strwidth(label) + str.strwidth(" ") -- label + space separator
       end
       local available = text_width - fixed_chrome
 
@@ -308,7 +308,11 @@ function M.get_fold_text()
           end
         else
           -- No label: show detail only
-          local detail_text = str.truncate(detail --[[@as string]], available + (label and 0 or str.strwidth(" ")), CONTENT_PREVIEW_TRUNCATION_MARKER)
+          local detail_text = str.truncate(
+            detail --[[@as string]],
+            available + (label and 0 or str.strwidth(" ")),
+            CONTENT_PREVIEW_TRUNCATION_MARKER
+          )
           table.insert(chunks, { detail_text, "FlemmaToolDetail" })
         end
         table.insert(chunks, { " ", "FlemmaFoldPreview" })
@@ -335,13 +339,13 @@ function M.get_fold_text()
         + str.strwidth("Tool Result: ")
         + str.strwidth(tool_name)
         + str.strwidth(": ")
-        + str.strwidth(" ")  -- trailing space before suffix
+        + str.strwidth(" ") -- trailing space before suffix
         + str.strwidth(suffix)
       if tool_seg.is_error then
         fixed_chrome = fixed_chrome + str.strwidth("(error) ")
       end
       if tool_label then
-        fixed_chrome = fixed_chrome + str.strwidth(tool_label) + str.strwidth(" ")  -- label + separator
+        fixed_chrome = fixed_chrome + str.strwidth(tool_label) + str.strwidth(" ") -- label + separator
       end
       local available = text_width - fixed_chrome
 

@@ -1000,7 +1000,7 @@ describe("format_message_fold_preview", function()
       "file.txt",
       "```",
     })
-    local msg = doc.messages[1]  -- Assistant message
+    local msg = doc.messages[1] -- Assistant message
     local chunks = preview.format_message_fold_preview(msg, 120, doc)
 
     local label_text = find_chunk_with_hl(chunks, "FlemmaToolLabel")
@@ -1047,7 +1047,7 @@ describe("format_message_fold_preview", function()
       "file.txt",
       "```",
     })
-    local msg = doc.messages[2]  -- You message (tool results)
+    local msg = doc.messages[2] -- You message (tool results)
     local chunks = preview.format_message_fold_preview(msg, 120, doc)
 
     local label_text = find_chunk_with_hl(chunks, "FlemmaToolLabel")
