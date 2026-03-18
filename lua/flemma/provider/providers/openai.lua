@@ -4,7 +4,6 @@ local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local models = require("flemma.models")
-local secrets = require("flemma.secrets")
 local sink = require("flemma.sink")
 local tools_module = require("flemma.tools")
 local provider_registry = require("flemma.provider.registry")
@@ -72,18 +71,10 @@ function M.reset(self)
   log.debug("openai.reset(): Reset OpenAI provider state")
 end
 
----@param self flemma.provider.OpenAI
----@return string|nil value, flemma.secrets.ResolverDiagnostic[]|nil diagnostics
-function M.get_api_key(self)
-  local result, diagnostics = secrets.resolve({
-    kind = "api_key",
-    service = "openai",
-    description = "OpenAI API key",
-  })
-  if result then
-    return result.value
-  end
-  return nil, diagnostics
+---@param _self flemma.provider.OpenAI
+---@return flemma.secrets.Credential
+function M.get_credential(_self)
+  return { kind = "api_key", service = "openai", description = "OpenAI API key" }
 end
 
 ---Build request body for OpenAI Responses API

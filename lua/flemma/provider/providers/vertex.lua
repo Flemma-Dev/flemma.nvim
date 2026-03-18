@@ -3,7 +3,6 @@
 local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
-local secrets = require("flemma.secrets")
 local sink = require("flemma.sink")
 local tools_module = require("flemma.tools")
 local provider_registry = require("flemma.provider.registry")
@@ -91,21 +90,17 @@ function M.reset(self, opts)
 end
 
 ---@param self flemma.provider.Vertex
----@return string|nil value, flemma.secrets.ResolverDiagnostic[]|nil diagnostics
-function M.get_api_key(self)
+---@return flemma.secrets.Credential
+function M.get_credential(self)
   _validate_config(self)
-  local result, diagnostics = secrets.resolve({
+  return {
     kind = "access_token",
     service = "vertex",
     description = "Vertex AI access token",
     ttl = 3600,
     ttl_scale = 0.925,
     aliases = { "VERTEX_AI_ACCESS_TOKEN" },
-  })
-  if result then
-    return result.value
-  end
-  return nil, diagnostics
+  }
 end
 
 --- Extract function name from Flemma synthetic ID

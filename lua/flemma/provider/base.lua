@@ -29,9 +29,9 @@ Methods are grouped into three categories:
   ------------------------------------------------------------------
   - `new(opts)` — constructor; must call `base.new(opts)` and
     `base._init_provider(M, provider)`, then call `provider:reset()`.
-  - `get_api_key(self)` — authentication; resolve credentials via
-    `require("flemma.secrets").resolve()` with the appropriate credential
-    descriptor (kind + service).
+  - `get_credential(self)` — return a `flemma.secrets.Credential` table
+    describing what this provider needs (kind, service, description, etc.).
+    `get_api_key()` in base calls this, then resolves via `secrets.resolve()`.
   - `reset(self)` — call `base.reset(self)` plus any provider-specific
     state initialization. Sinks in `_response_buffer.extra` are
     auto-destroyed by base.
@@ -124,7 +124,8 @@ local sink = require("flemma.sink")
 ---@field endpoint? string
 ---@field api_version? string
 ---@field metadata? flemma.provider.Metadata
----@field get_api_key fun(self): string|nil, flemma.secrets.ResolverDiagnostic[]|nil Resolve credentials via secrets module (providers must override)
+---@field get_credential fun(self): flemma.secrets.Credential Credential descriptor (providers must override)
+---@field get_api_key fun(self): string|nil, flemma.secrets.ResolverDiagnostic[]|nil Resolve credentials via secrets module
 ---@field _response_buffer? flemma.provider.ResponseBuffer
 ---@field _response_headers? table<string, string[]>
 ---@field _base_parameters table<string, any> Underlying parameter table (without per-request overrides), for iteration
@@ -167,11 +168,22 @@ function M.build_request(self, prompt, context)
 end
 
 --- @abstract
---- Resolve credentials via the secrets module.
+--- Return the credential descriptor for this provider.
+---@param self flemma.provider.Base
+---@return flemma.secrets.Credential
+function M.get_credential(self)
+  error("get_credential() must be implemented by provider")
+end
+
+--- Resolve credentials via the secrets module using the provider's credential descriptor.
 ---@param self flemma.provider.Base
 ---@return string|nil value, flemma.secrets.ResolverDiagnostic[]|nil diagnostics
 function M.get_api_key(self)
-  error("get_api_key() must be implemented by provider")
+  local result, diagnostics = secrets.resolve(self:get_credential())
+  if result then
+    return result.value
+  end
+  return nil, diagnostics
 end
 
 --- @abstract

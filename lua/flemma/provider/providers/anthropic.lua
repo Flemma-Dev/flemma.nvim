@@ -3,7 +3,6 @@
 local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
-local secrets = require("flemma.secrets")
 local sink = require("flemma.sink")
 local tools_module = require("flemma.tools")
 local provider_registry = require("flemma.provider.registry")
@@ -64,18 +63,10 @@ function M.reset(self)
   log.debug("anthropic.reset(): Reset Anthropic provider state")
 end
 
----@param self flemma.provider.Anthropic
----@return string|nil value, flemma.secrets.ResolverDiagnostic[]|nil diagnostics
-function M.get_api_key(self)
-  local result, diagnostics = secrets.resolve({
-    kind = "api_key",
-    service = "anthropic",
-    description = "Anthropic API key",
-  })
-  if result then
-    return result.value
-  end
-  return nil, diagnostics
+---@param _self flemma.provider.Anthropic
+---@return flemma.secrets.Credential
+function M.get_credential(_self)
+  return { kind = "api_key", service = "anthropic", description = "Anthropic API key" }
 end
 
 --- Anthropic uses `data.type == "error"` for errors (not `data.error`).
