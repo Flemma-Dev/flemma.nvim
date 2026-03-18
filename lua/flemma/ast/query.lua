@@ -74,6 +74,25 @@ function M.build_tool_name_map(doc)
   return map
 end
 
+---Build a tool_use_id -> label lookup from all tool_use segments in a document.
+---Only includes entries where the tool_use input has a string "label" field.
+---@param doc flemma.ast.DocumentNode
+---@return table<string, string>
+function M.build_tool_label_map(doc)
+  local map = {}
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "tool_use" then
+        local tool_seg = seg --[[@as flemma.ast.ToolUseSegment]]
+        if type(tool_seg.input.label) == "string" then
+          map[tool_seg.id] = tool_seg.input.label
+        end
+      end
+    end
+  end
+  return map
+end
+
 ---@class flemma.ast.ToolSibling
 ---@field use? flemma.ast.ToolUseSegment
 ---@field use_message? flemma.ast.MessageNode

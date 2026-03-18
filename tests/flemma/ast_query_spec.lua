@@ -243,6 +243,66 @@ describe("ast.query", function()
     end)
   end)
 
+  describe("build_tool_label_map", function()
+    it("returns label for tool_use with input.label", function()
+      local query = require("flemma.ast.query")
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`call_001`)",
+        "```json",
+        '{"command": "ls", "label": "List files", "timeout": 30}',
+        "```",
+      })
+      local map = query.build_tool_label_map(doc)
+      assert.are.equal("List files", map["call_001"])
+    end)
+
+    it("omits tool_use without input.label", function()
+      local query = require("flemma.ast.query")
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`call_002`)",
+        "```json",
+        '{"command": "ls", "timeout": 30}',
+        "```",
+      })
+      local map = query.build_tool_label_map(doc)
+      assert.is_nil(map["call_002"])
+    end)
+
+    it("handles multiple tools across messages", function()
+      local query = require("flemma.ast.query")
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `read` (`call_003`)",
+        "```json",
+        '{"path": "foo.lua", "label": "Reading foo", "offset": null, "limit": null}',
+        "```",
+        "**Tool Use:** `bash` (`call_004`)",
+        "```json",
+        '{"command": "ls", "label": "List files", "timeout": 30}',
+        "```",
+      })
+      local map = query.build_tool_label_map(doc)
+      assert.are.equal("Reading foo", map["call_003"])
+      assert.are.equal("List files", map["call_004"])
+    end)
+
+    it("ignores tool_result segments", function()
+      local query = require("flemma.ast.query")
+      local doc = parser.parse_lines({
+        "@You:",
+        "**Tool Result:** `call_005`",
+        "",
+        "```",
+        "output",
+        "```",
+      })
+      local map = query.build_tool_label_map(doc)
+      assert.is_nil(map["call_005"])
+    end)
+  end)
+
   describe("build_tool_sibling_table", function()
     it("returns empty table for empty document", function()
       local doc = parser.parse_lines({})
