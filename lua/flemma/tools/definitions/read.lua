@@ -52,20 +52,21 @@ M.definitions = {
       },
     },
     async = false,
+    ---@return flemma.tools.ToolPreview
     format_preview = function(input)
-      local parts = { input.path }
+      local detail_parts = { input.path }
       if input.offset or input.limit then
         local offset = input.offset or 0
         local range = "+" .. offset
         if input.limit then
           range = range .. "," .. input.limit
         end
-        table.insert(parts, range)
+        table.insert(detail_parts, range)
       end
-      if input.label then
-        table.insert(parts, "# " .. input.label)
-      end
-      return table.concat(parts, "  ")
+      return {
+        label = input.label,
+        detail = table.concat(detail_parts, "  "),
+      }
     end,
     execute = function(input, ctx)
       local path = input.path

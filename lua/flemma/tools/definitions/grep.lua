@@ -158,20 +158,19 @@ M.definitions = {
       },
     },
     async = true,
-    ---@param input table<string, any>
-    ---@return string
+    ---@return flemma.tools.ToolPreview
     format_preview = function(input)
-      local parts = { "/" .. input.pattern .. "/" }
+      local detail_parts = { "/" .. input.pattern .. "/" }
       if input.path then
-        table.insert(parts, input.path)
+        table.insert(detail_parts, input.path)
       end
       if input.glob then
-        table.insert(parts, input.glob)
+        table.insert(detail_parts, input.glob)
       end
-      if input.label then
-        table.insert(parts, "# " .. input.label)
-      end
-      return table.concat(parts, "  ")
+      return {
+        label = input.label,
+        detail = table.concat(detail_parts, "  "),
+      }
     end,
     ---@param input table<string, any>
     ---@param ctx flemma.tools.ExecutionContext

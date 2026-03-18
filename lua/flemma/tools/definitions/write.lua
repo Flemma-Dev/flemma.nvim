@@ -43,12 +43,12 @@ M.definitions = {
       },
     },
     async = false,
+    ---@return flemma.tools.ToolPreview
     format_preview = function(input)
-      local parts = { input.path, "(" .. str.format_size(#input.content) .. ")" }
-      if input.label then
-        table.insert(parts, "# " .. input.label)
-      end
-      return table.concat(parts, "  ")
+      return {
+        label = input.label,
+        detail = input.path .. "  (" .. str.format_size(#input.content) .. ")",
+      }
     end,
     execute = function(input, ctx)
       local path = input.path

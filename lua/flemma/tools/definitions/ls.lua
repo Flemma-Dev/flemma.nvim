@@ -130,17 +130,16 @@ M.definitions = {
       },
     },
     async = false,
-    ---@param input table<string, any>
-    ---@return string
+    ---@return flemma.tools.ToolPreview
     format_preview = function(input)
-      local parts = { input.path }
+      local detail_parts = { input.path }
       if input.max_depth and input.max_depth > 1 then
-        table.insert(parts, "depth=" .. input.max_depth)
+        table.insert(detail_parts, "depth=" .. input.max_depth)
       end
-      if input.label then
-        table.insert(parts, "# " .. input.label)
-      end
-      return table.concat(parts, "  ")
+      return {
+        label = input.label,
+        detail = table.concat(detail_parts, "  "),
+      }
     end,
     ---@param input table<string, any>
     ---@param ctx flemma.tools.ExecutionContext

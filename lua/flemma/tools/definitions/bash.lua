@@ -53,12 +53,12 @@ M.definitions = {
       },
     },
     async = true,
+    ---@return flemma.tools.ToolPreview
     format_preview = function(input)
-      local parts = { "$ " .. input.command }
-      if input.label then
-        table.insert(parts, "# " .. input.label)
-      end
-      return table.concat(parts, "  ")
+      return {
+        label = input.label,
+        detail = "$ " .. input.command,
+      }
     end,
     execute = function(input, ctx, callback)
       ---@cast callback -nil
