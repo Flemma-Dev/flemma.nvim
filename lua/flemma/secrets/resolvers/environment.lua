@@ -28,7 +28,7 @@ end
 
 ---@param _self flemma.secrets.resolvers.Environment
 ---@param _credential flemma.secrets.Credential
----@param _ctx flemma.config.ConfigAware
+---@param _ctx flemma.config.ConfigAware<table>
 ---@return boolean
 function M.supports(_self, _credential, _ctx)
   return true
@@ -36,7 +36,7 @@ end
 
 ---@param _self flemma.secrets.resolvers.Environment
 ---@param credential flemma.secrets.Credential
----@param _ctx flemma.config.ConfigAware
+---@param _ctx flemma.config.ConfigAware<table>
 ---@return flemma.secrets.Result|nil
 function M.resolve(_self, credential, _ctx)
   -- Try convention first

@@ -15,11 +15,10 @@ local TOKEN_TTL_SECONDS = 3600
 
 ---@param _self flemma.secrets.resolvers.Gcloud
 ---@param credential flemma.secrets.Credential
----@param ctx flemma.config.ConfigAware
+---@param ctx flemma.config.ConfigAware<flemma.config.SecretsGcloudConfig>
 ---@return boolean
 function M.supports(_self, credential, ctx)
   local cfg = ctx:get_config()
-  ---@cast cfg flemma.config.SecretsGcloudConfig|nil
   local path = (cfg and cfg.path) or "gcloud"
   return credential.kind == "access_token" and vim.fn.executable(path) == 1
 end
@@ -58,11 +57,10 @@ end
 
 ---@param _self flemma.secrets.resolvers.Gcloud
 ---@param credential flemma.secrets.Credential
----@param ctx flemma.config.ConfigAware
+---@param ctx flemma.config.ConfigAware<flemma.config.SecretsGcloudConfig>
 ---@return flemma.secrets.Result|nil
 function M.resolve(_self, credential, ctx)
   local cfg = ctx:get_config()
-  ---@cast cfg flemma.config.SecretsGcloudConfig|nil
   local path = (cfg and cfg.path) or "gcloud"
 
   -- Try to get a service account for this service

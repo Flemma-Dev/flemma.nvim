@@ -2,8 +2,8 @@
 
 ---@alias flemma.config.HighlightValue string|{ dark: string, light: string }
 
----@class flemma.config.ConfigAware
----@field get_config fun(self): table|nil
+---@class flemma.config.ConfigAware<T>
+---@field get_config fun(self): T|nil
 
 ---@class flemma.config.Highlights
 ---@field system flemma.config.HighlightValue

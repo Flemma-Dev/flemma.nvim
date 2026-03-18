@@ -22,7 +22,7 @@ local M = {}
 --- Context passed to tool execute functions as the third argument.
 --- Tools should code against this contract exclusively — never require() internal
 --- Flemma modules. Sandbox, truncate, and path namespaces are lazy-loaded on first access.
----@class flemma.tools.ExecutionContext : flemma.config.ConfigAware
+---@class flemma.tools.ExecutionContext : flemma.config.ConfigAware<table>
 ---@field bufnr integer Buffer number for the current execution
 ---@field cwd string Absolute, normalized working directory
 ---@field timeout integer Default timeout in seconds (resolved from config.tools.default_timeout)

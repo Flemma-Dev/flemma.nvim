@@ -8,8 +8,8 @@ local registry_utils = require("flemma.registry")
 ---@class flemma.secrets.Resolver
 ---@field name string
 ---@field priority integer
----@field supports fun(self: flemma.secrets.Resolver, credential: flemma.secrets.Credential, ctx: flemma.config.ConfigAware): boolean
----@field resolve fun(self: flemma.secrets.Resolver, credential: flemma.secrets.Credential, ctx: flemma.config.ConfigAware): flemma.secrets.Result|nil
+---@field supports fun(self: flemma.secrets.Resolver, credential: flemma.secrets.Credential, ctx: flemma.config.ConfigAware<table>): boolean
+---@field resolve fun(self: flemma.secrets.Resolver, credential: flemma.secrets.Credential, ctx: flemma.config.ConfigAware<table>): flemma.secrets.Result|nil
 
 ---@type table<string, flemma.secrets.Resolver>
 local resolvers = {}

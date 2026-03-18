@@ -39,7 +39,7 @@ end
 
 ---@param _self flemma.secrets.resolvers.Keychain
 ---@param _credential flemma.secrets.Credential
----@param _ctx flemma.config.ConfigAware
+---@param _ctx flemma.config.ConfigAware<table>
 ---@return boolean
 function M.supports(_self, _credential, _ctx)
   return vim.fn.has("mac") == 1
@@ -47,7 +47,7 @@ end
 
 ---@param _self flemma.secrets.resolvers.Keychain
 ---@param credential flemma.secrets.Credential
----@param _ctx flemma.config.ConfigAware
+---@param _ctx flemma.config.ConfigAware<table>
 ---@return flemma.secrets.Result|nil
 function M.resolve(_self, credential, _ctx)
   -- Try new convention first: -s <service> -a <kind>

@@ -5,7 +5,7 @@ local M = {}
 
 local state = require("flemma.state")
 
----@class flemma.secrets.Context : flemma.config.ConfigAware
+---@class flemma.secrets.Context : flemma.config.ConfigAware<table>
 
 --- Build a new context for the given resolver name.
 --- The resolver name must match the key used in the secrets config table.
