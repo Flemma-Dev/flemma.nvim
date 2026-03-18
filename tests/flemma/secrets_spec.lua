@@ -125,6 +125,78 @@ describe("flemma.secrets", function()
       assert.equals("anthropic-key", r1.value)
       assert.equals("openai-key", r2.value)
     end)
+
+    it("returns diagnostics as second value when resolution fails", function()
+      local resolver_with_diag = {
+        name = "mock_diag",
+        priority = 100,
+        supports = function(_, _, ctx)
+          ctx:diagnostic("not available on this platform")
+          return false
+        end,
+        resolve = function(_, _, _)
+          return nil
+        end,
+      }
+      registry.register("mock_diag", resolver_with_diag)
+
+      local result, diagnostics = secrets.resolve({
+        kind = "api_key",
+        service = "test",
+      })
+      assert.is_nil(result)
+      assert.is_not_nil(diagnostics)
+      assert.equals(1, #diagnostics)
+      assert.equals("mock_diag", diagnostics[1].resolver)
+      assert.equals("not available on this platform", diagnostics[1].message)
+    end)
+
+    it("collects diagnostics from multiple resolvers", function()
+      local resolver_a = {
+        name = "resolver_a",
+        priority = 100,
+        supports = function(_, _, ctx)
+          ctx:diagnostic("reason A")
+          return false
+        end,
+        resolve = function(_, _, _)
+          return nil
+        end,
+      }
+      local resolver_b = {
+        name = "resolver_b",
+        priority = 50,
+        supports = function(_, _, _)
+          return true
+        end,
+        resolve = function(_, _, ctx)
+          ctx:diagnostic("reason B")
+          return nil
+        end,
+      }
+      registry.register("resolver_a", resolver_a)
+      registry.register("resolver_b", resolver_b)
+
+      local result, diagnostics = secrets.resolve({
+        kind = "api_key",
+        service = "test",
+      })
+      assert.is_nil(result)
+      assert.equals(2, #diagnostics)
+      assert.equals("reason A", diagnostics[1].message)
+      assert.equals("reason B", diagnostics[2].message)
+    end)
+
+    it("returns no diagnostics on successful resolution", function()
+      registry.register("env", make_resolver("env", 100, { "api_key" }, "sk-test"))
+
+      local result, diagnostics = secrets.resolve({
+        kind = "api_key",
+        service = "test",
+      })
+      assert.is_not_nil(result)
+      assert.is_nil(diagnostics)
+    end)
   end)
 
   describe("invalidate", function()

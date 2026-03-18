@@ -33,7 +33,7 @@ end
 
 --- Resolve a credential. Checks cache first, then tries resolvers in priority order.
 ---@param credential flemma.secrets.Credential
----@return flemma.secrets.Result|nil
+---@return flemma.secrets.Result|nil result, flemma.secrets.ResolverDiagnostic[]|nil diagnostics
 function M.resolve(credential)
   local key = cache_key(credential.kind, credential.service)
 
@@ -43,6 +43,7 @@ function M.resolve(credential)
     return cached
   end
 
+  local all_diagnostics = {}
   local sorted = registry.get_all_sorted()
   for _, resolver in ipairs(sorted) do
     local ctx = context.new(resolver.name)
@@ -55,12 +56,21 @@ function M.resolve(credential)
         return result
       end
     end
+    vim.list_extend(all_diagnostics, ctx:get_diagnostics())
   end
 
   local description = credential.description or (credential.kind .. " for " .. credential.service)
   log.debug("secrets.resolve(): no resolver could fulfill: " .. description)
-  vim.notify("Flemma: could not resolve credential: " .. description, vim.log.levels.WARN)
-  return nil
+
+  local msg = "Flemma: could not resolve credential: " .. description
+  if #all_diagnostics > 0 then
+    for _, d in ipairs(all_diagnostics) do
+      msg = msg .. "\n  [" .. d.resolver .. "] " .. d.message
+    end
+  end
+  vim.notify(msg, vim.log.levels.WARN)
+
+  return nil, #all_diagnostics > 0 and all_diagnostics or nil
 end
 
 --- Invalidate a specific cached credential.

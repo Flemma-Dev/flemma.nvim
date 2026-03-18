@@ -6,6 +6,8 @@ local M = {}
 local state = require("flemma.state")
 
 ---@class flemma.secrets.Context : flemma.config.ConfigAware<table>
+---@field diagnostic fun(self: flemma.secrets.Context, message: string)
+---@field get_diagnostics fun(self: flemma.secrets.Context): flemma.secrets.ResolverDiagnostic[]
 
 ---@class flemma.secrets.ResolverDiagnostic
 ---@field resolver string
