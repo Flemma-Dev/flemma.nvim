@@ -6,6 +6,7 @@
 ---@class flemma.config.schema.types
 local M = {}
 
+local loader = require("flemma.loader")
 local symbols = require("flemma.symbols")
 
 -- =============================================================================
@@ -392,6 +393,20 @@ function MapNode:validate(value)
   return type(value) == "table"
 end
 
+--- Validate a single map key against the key schema.
+---@param key any
+---@return boolean
+function MapNode:validate_key(key)
+  return self._key_schema:validate(key)
+end
+
+--- Validate a single map value against the value schema.
+---@param value any
+---@return boolean
+function MapNode:validate_value(value)
+  return self._value_schema:validate(value)
+end
+
 M.MapNode = MapNode
 
 -- =============================================================================
@@ -417,6 +432,13 @@ end
 ---@return any
 function OptionalNode:materialize()
   return self._inner:materialize()
+end
+
+--- Delegate is_list() to the inner schema so that optional list fields are
+--- correctly identified as lists by the proxy/store layer.
+---@return boolean
+function OptionalNode:is_list()
+  return self._inner:is_list()
 end
 
 --- Return true for nil (not present) or any value valid under the inner schema.
@@ -521,15 +543,16 @@ function LoadableNode:materialize()
   return nil
 end
 
---- Return true if value is a string containing at least one dot
---- (Lua module path convention). Flemma URNs are not loadable module paths.
+--- Return true if value is a string that looks like a valid Lua module path.
+--- Delegates to flemma.loader.is_module_path() which handles the dot-notation
+--- check and correctly rejects Flemma URNs (urn:flemma:...).
 ---@param value any
 ---@return boolean
 function LoadableNode:validate(value)
   if type(value) ~= "string" then
     return false
   end
-  return value:find(".", 1, true) ~= nil
+  return loader.is_module_path(value)
 end
 
 M.LoadableNode = LoadableNode

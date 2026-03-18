@@ -391,6 +391,20 @@ describe("flemma.config.schema.types", function()
     it(":is_list() returns false", function()
       assert.is_false(types.MapNode.new(types.StringNode.new(), types.StringNode.new()):is_list())
     end)
+
+    it("validate_key() delegates to the key schema", function()
+      local node = types.MapNode.new(types.StringNode.new(), types.IntegerNode.new())
+      assert.is_true(node:validate_key("valid_key"))
+      assert.is_false(node:validate_key(42))
+      assert.is_false(node:validate_key({}))
+    end)
+
+    it("validate_value() delegates to the value schema", function()
+      local node = types.MapNode.new(types.StringNode.new(), types.IntegerNode.new())
+      assert.is_true(node:validate_value(10))
+      assert.is_false(node:validate_value("not an integer"))
+      assert.is_false(node:validate_value({}))
+    end)
   end)
 
   -- =========================================================================
@@ -423,8 +437,13 @@ describe("flemma.config.schema.types", function()
       assert.is_nil(node:materialize())
     end)
 
-    it(":is_list() returns false", function()
+    it(":is_list() returns false when wrapping a non-list schema", function()
       assert.is_false(types.OptionalNode.new(types.StringNode.new()):is_list())
+    end)
+
+    it(":is_list() delegates to inner schema", function()
+      local node = types.OptionalNode.new(types.ListNode.new(types.StringNode.new()))
+      assert.is_true(node:is_list())
     end)
 
     it(":describe() and :type_as() chain correctly", function()
@@ -508,6 +527,11 @@ describe("flemma.config.schema.types", function()
       assert.is_false(node:validate("nodots"))
       assert.is_false(node:validate(""))
       assert.is_false(node:validate(42))
+    end)
+
+    it("validate() returns false for Flemma URNs even when they contain dots", function()
+      local node = types.LoadableNode.new()
+      assert.is_false(node:validate("urn:flemma:some.dotted.segment"))
     end)
 
     it("validate() returns false for non-string values", function()
