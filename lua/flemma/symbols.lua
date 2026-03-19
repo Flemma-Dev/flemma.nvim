@@ -60,6 +60,22 @@ M.INCLUDE_BINARY = {}
 ---@type table
 M.INCLUDE_MIME = {}
 
+--- Schema alias map.
+--- Used as a table key in s.object() fields to define alias redirections.
+--- Alias values are strings referencing canonical paths (may contain dots).
+--- Resolution order: real field > alias > DISCOVER callback > validation error.
+---@type table
+M.ALIASES = {}
+
+--- Lazy schema resolver callback.
+--- Used as a table key in s.object() fields to define a discovery callback
+--- for unknown keys. The callback receives the key and returns a schema node
+--- (cached after first resolution) or nil (triggers validation error).
+--- Eliminates passthrough mode — every write is validated, even for dynamically
+--- registered providers and tools.
+---@type table
+M.DISCOVER = {}
+
 --- Deep-copy a table while preserving symbol key identity.
 ---
 --- vim.deepcopy copies table *keys* by value, creating new table references

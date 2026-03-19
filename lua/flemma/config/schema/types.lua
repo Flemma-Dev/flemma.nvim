@@ -1,0 +1,612 @@
+--- Schema node type classes for the config schema DSL.
+--- Defines the class hierarchy for all schema node types. Not part of the
+--- public API — consumers use the factory functions in flemma.config.schema.
+---@class flemma.config.schema.types
+local M = {}
+
+local symbols = require("flemma.symbols")
+local loader = require("flemma.loader")
+
+-- ---------------------------------------------------------------------------
+-- Node base class
+-- ---------------------------------------------------------------------------
+
+---@class flemma.config.schema.Node
+---@field _description? string Human-readable description for EmmyLua generation
+---@field _type_as? string Override generated type annotation
+local Node = {}
+Node.__index = Node
+
+--- Attach a human-readable description (emitted as EmmyLua field comment).
+---@param text string
+---@return flemma.config.schema.Node self
+function Node:describe(text)
+  self._description = text
+  return self
+end
+
+--- Override the generated EmmyLua type annotation.
+---@param type_string string
+---@return flemma.config.schema.Node self
+function Node:type_as(type_string)
+  self._type_as = type_string
+  return self
+end
+
+--- Whether this node has a meaningful default value to materialize.
+---@return boolean
+function Node:has_default()
+  return false
+end
+
+--- Return the default value for this node, or nil if none.
+---@return any
+function Node:materialize()
+  return nil
+end
+
+--- Whether this node represents a list (supports append/remove/prepend ops).
+---@return boolean
+function Node:is_list()
+  return false
+end
+
+--- Validate a value against this schema node.
+--- Returns true on success, false + error message on failure.
+---@param _value any
+---@return boolean, string?
+function Node:validate_value(_value)
+  return true
+end
+
+-- ---------------------------------------------------------------------------
+-- ScalarNode base (string, number, boolean)
+-- ---------------------------------------------------------------------------
+
+---@class flemma.config.schema.ScalarNode : flemma.config.schema.Node
+---@field _default? any Default scalar value (nil means no default)
+---@field _lua_type string Expected Lua type string (from type())
+local ScalarNode = setmetatable({}, { __index = Node })
+ScalarNode.__index = ScalarNode
+
+--- Whether this node has a meaningful default value to materialize.
+--- Uses `_default ~= nil`, which is safe for boolean defaults:
+--- `false ~= nil` is `true` in Lua, so a false default is correctly detected.
+---@return boolean
+function ScalarNode:has_default()
+  return self._default ~= nil
+end
+
+---@return any
+function ScalarNode:materialize()
+  return self._default
+end
+
+---@param value any
+---@return boolean, string?
+function ScalarNode:validate_value(value)
+  if type(value) ~= self._lua_type then
+    return false, "expected " .. self._lua_type .. ", got " .. type(value)
+  end
+  return true
+end
+
+-- ---------------------------------------------------------------------------
+-- StringNode
+-- ---------------------------------------------------------------------------
+
+---@class flemma.config.schema.StringNode : flemma.config.schema.ScalarNode
+---@field _default? string
+local StringNode = setmetatable({}, { __index = ScalarNode })
+StringNode.__index = StringNode
+
+---@param default? string
+---@return flemma.config.schema.StringNode
+function StringNode.new(default)
+  local node = setmetatable({}, StringNode)
+  node._lua_type = "string"
+  node._default = default
+  return node
+end
+
+-- ---------------------------------------------------------------------------
+-- NumberNode (any number, including floats)
+-- ---------------------------------------------------------------------------
+
+---@class flemma.config.schema.NumberNode : flemma.config.schema.ScalarNode
+---@field _default? number
+local NumberNode = setmetatable({}, { __index = ScalarNode })
+NumberNode.__index = NumberNode
+
+---@param default? number
+---@return flemma.config.schema.NumberNode
+function NumberNode.new(default)
+  local node = setmetatable({}, NumberNode)
+  node._lua_type = "number"
+  node._default = default
+  return node
+end
+
+-- ---------------------------------------------------------------------------
+-- BooleanNode
+-- ---------------------------------------------------------------------------
+
+---@class flemma.config.schema.BooleanNode : flemma.config.schema.ScalarNode
+---@field _default? boolean
+local BooleanNode = setmetatable({}, { __index = ScalarNode })
+BooleanNode.__index = BooleanNode
+
+---@param default? boolean
+---@return flemma.config.schema.BooleanNode
+function BooleanNode.new(default)
+  local node = setmetatable({}, BooleanNode)
+  node._lua_type = "boolean"
+  node._default = default
+  return node
+end
+
+-- ---------------------------------------------------------------------------
+-- IntegerNode (number that is a whole number)
+-- ---------------------------------------------------------------------------
+
+---@class flemma.config.schema.IntegerNode : flemma.config.schema.ScalarNode
+---@field _default? integer
+local IntegerNode = setmetatable({}, { __index = ScalarNode })
+IntegerNode.__index = IntegerNode
+
+---@param value any
+---@return boolean, string?
+function IntegerNode:validate_value(value)
+  if type(value) ~= "number" then
+    return false, "expected integer, got " .. type(value)
+  elseif value ~= math.floor(value) then
+    return false, "expected integer, got float (" .. tostring(value) .. ")"
+  end
+  return true
+end
+
+---@param default? integer
+---@return flemma.config.schema.IntegerNode
+function IntegerNode.new(default)
+  local node = setmetatable({}, IntegerNode)
+  node._lua_type = "number"
+  node._default = default
+  return node
+end
+
+-- ---------------------------------------------------------------------------
+-- EnumNode
+-- ---------------------------------------------------------------------------
+
+---@class flemma.config.schema.EnumNode : flemma.config.schema.Node
+---@field _values string[] Allowed values
+---@field _default? any Default enum value
+local EnumNode = setmetatable({}, { __index = Node })
+EnumNode.__index = EnumNode
+
+---@return boolean
+function EnumNode:has_default()
+  return self._default ~= nil
+end
+
+---@return any
+function EnumNode:materialize()
+  return self._default
+end
+
+---@param value any
+---@return boolean, string?
+function EnumNode:validate_value(value)
+  for _, allowed in ipairs(self._values) do
+    if value == allowed then
+      return true
+    end
+  end
+  local quoted = {}
+  for _, v in ipairs(self._values) do
+    table.insert(quoted, '"' .. tostring(v) .. '"')
+  end
+  return false, "expected one of [" .. table.concat(quoted, ", ") .. "], got " .. tostring(value)
+end
+
+---@param values string[]
+---@param default? any
+---@return flemma.config.schema.EnumNode
+function EnumNode.new(values, default)
+  local node = setmetatable({}, EnumNode)
+  node._values = values
+  node._default = default
+  return node
+end
+
+-- ---------------------------------------------------------------------------
+-- ListNode
+-- ---------------------------------------------------------------------------
+
+---@class flemma.config.schema.ListNode : flemma.config.schema.Node
+---@field _item_schema flemma.config.schema.Node Schema for each item
+---@field _default? any[] Default list value
+local ListNode = setmetatable({}, { __index = Node })
+ListNode.__index = ListNode
+
+---@return boolean
+function ListNode:is_list()
+  return true
+end
+
+---@return boolean
+function ListNode:has_default()
+  return self._default ~= nil
+end
+
+---@return any[]?
+function ListNode:materialize()
+  if self._default then
+    return vim.deepcopy(self._default)
+  end
+  return nil
+end
+
+---@param value any
+---@return boolean, string?
+function ListNode:validate_value(value)
+  if type(value) ~= "table" then
+    return false, "expected list (table), got " .. type(value)
+  end
+  for i, item in ipairs(value) do
+    local ok, err = self._item_schema:validate_value(item)
+    if not ok then
+      return false, "item[" .. i .. "]: " .. (err or "invalid")
+    end
+  end
+  return true
+end
+
+--- Validate a single item against the item schema.
+---@param item any
+---@return boolean, string?
+function ListNode:validate_item(item)
+  return self._item_schema:validate_value(item)
+end
+
+---@param item_schema flemma.config.schema.Node
+---@param default? any[]
+---@return flemma.config.schema.ListNode
+function ListNode.new(item_schema, default)
+  local node = setmetatable({}, ListNode)
+  node._item_schema = item_schema
+  node._default = default
+  return node
+end
+
+-- ---------------------------------------------------------------------------
+-- MapNode
+-- ---------------------------------------------------------------------------
+
+---@class flemma.config.schema.MapNode : flemma.config.schema.Node
+---@field _key_schema flemma.config.schema.Node Schema for map keys
+---@field _value_schema flemma.config.schema.Node Schema for map values
+local MapNode = setmetatable({}, { __index = Node })
+MapNode.__index = MapNode
+
+---@param value any
+---@return boolean, string?
+function MapNode:validate_value(value)
+  if type(value) ~= "table" then
+    return false, "expected map (table), got " .. type(value)
+  end
+  for k, v in pairs(value) do
+    local ok, err = self._key_schema:validate_value(k)
+    if not ok then
+      return false, "key " .. tostring(k) .. ": " .. (err or "invalid")
+    end
+    ok, err = self._value_schema:validate_value(v)
+    if not ok then
+      return false, "value[" .. tostring(k) .. "]: " .. (err or "invalid")
+    end
+  end
+  return true
+end
+
+---@param key_schema flemma.config.schema.Node
+---@param value_schema flemma.config.schema.Node
+---@return flemma.config.schema.MapNode
+function MapNode.new(key_schema, value_schema)
+  local node = setmetatable({}, MapNode)
+  node._key_schema = key_schema
+  node._value_schema = value_schema
+  return node
+end
+
+-- ---------------------------------------------------------------------------
+-- ObjectNode
+-- ---------------------------------------------------------------------------
+
+---@class flemma.config.schema.ObjectNode : flemma.config.schema.Node
+---@field _fields table<string, flemma.config.schema.Node> Named child schemas
+---@field _aliases table<string, string> Alias key → canonical path (dot-delimited; traversed by proxy/store, not schema)
+---@field _discover? fun(key: string): flemma.config.schema.Node? Lazy resolver
+---@field _discover_cache table<string, flemma.config.schema.Node> Cached results
+---@field _strict boolean Whether unknown keys are rejected (default true)
+local ObjectNode = setmetatable({}, { __index = Node })
+ObjectNode.__index = ObjectNode
+
+---@return boolean
+function ObjectNode:has_default()
+  for _, child in pairs(self._fields) do
+    if child:has_default() then
+      return true
+    end
+  end
+  return false
+end
+
+---@return table<string, any>?
+function ObjectNode:materialize()
+  local result = {}
+  local has_any = false
+  for k, child in pairs(self._fields) do
+    if child:has_default() then
+      result[k] = child:materialize()
+      has_any = true
+    end
+  end
+  return has_any and result or nil
+end
+
+--- Resolve an alias key to its canonical path.
+--- Returns the canonical path string (may contain dots) or nil if not an alias.
+--- Real fields are not aliases — returns nil for real field names.
+---@param key string
+---@return string?
+function ObjectNode:resolve_alias(key)
+  -- Real fields take priority over aliases
+  if self._fields[key] then
+    return nil
+  end
+  return self._aliases[key]
+end
+
+--- Get the schema node for a direct child key.
+--- Does NOT resolve aliases — call resolve_alias() first if needed.
+--- Invokes the DISCOVER callback for unknown keys (cached after first resolution).
+---@param key string
+---@return flemma.config.schema.Node?
+function ObjectNode:get_child_schema(key)
+  -- Real field takes priority
+  if self._fields[key] then
+    return self._fields[key]
+  end
+  -- DISCOVER for unknown keys
+  if self._discover then
+    if self._discover_cache[key] then
+      return self._discover_cache[key]
+    end
+    local discovered = self._discover(key)
+    if discovered then
+      self._discover_cache[key] = discovered
+      return discovered
+    end
+  end
+  return nil
+end
+
+--- Validate an object value against this schema.
+---
+--- Alias keys (defined in symbols.ALIASES) are silently passed through without
+--- value validation — alias resolution and value dispatch are the proxy/store's
+--- responsibility, not the schema's. Only real fields and DISCOVER-resolved keys
+--- have their values validated here.
+---@param value any
+---@return boolean, string?
+function ObjectNode:validate_value(value)
+  if type(value) ~= "table" then
+    return false, "expected table, got " .. type(value)
+  end
+  for k, v in pairs(value) do
+    -- Skip symbol keys (ALIASES, DISCOVER, etc.) — only validate string keys
+    if type(k) == "string" then
+      local child = self:get_child_schema(k)
+      if child == nil then
+        -- Alias keys: the proxy/store redirects these; no value to validate.
+        -- Truly unknown keys on strict objects are rejected.
+        if not self._aliases[k] and self._strict then
+          return false, 'unknown key "' .. k .. '"'
+        end
+      else
+        local ok, err = child:validate_value(v)
+        if not ok then
+          return false, k .. ": " .. (err or "invalid")
+        end
+      end
+    end
+  end
+  return true
+end
+
+--- Set strict mode (reject unknown keys). This is the default.
+---@return flemma.config.schema.ObjectNode self
+function ObjectNode:strict()
+  self._strict = true
+  return self
+end
+
+--- Set passthrough mode (allow unknown keys).
+---@return flemma.config.schema.ObjectNode self
+function ObjectNode:passthrough()
+  self._strict = false
+  return self
+end
+
+--- Construct an ObjectNode from a fields table.
+--- The fields table may include symbol keys:
+---   [symbols.ALIASES] = { alias = "canonical.path" }
+---   [symbols.DISCOVER] = function(key) return schema_node or nil end
+---@param fields table
+---@return flemma.config.schema.ObjectNode
+function ObjectNode.new(fields)
+  local node = setmetatable({}, ObjectNode)
+  node._fields = {}
+  node._aliases = {}
+  node._discover = nil
+  node._discover_cache = {}
+  node._strict = true
+
+  for k, v in pairs(fields) do
+    if k == symbols.ALIASES then
+      node._aliases = v
+    elseif k == symbols.DISCOVER then
+      node._discover = v
+    else
+      node._fields[k] = v
+    end
+  end
+
+  return node
+end
+
+-- ---------------------------------------------------------------------------
+-- OptionalNode
+-- ---------------------------------------------------------------------------
+
+---@class flemma.config.schema.OptionalNode : flemma.config.schema.Node
+---@field _inner flemma.config.schema.Node The wrapped schema (nil is also valid)
+local OptionalNode = setmetatable({}, { __index = Node })
+OptionalNode.__index = OptionalNode
+
+---@return boolean
+function OptionalNode:has_default()
+  return self._inner:has_default()
+end
+
+---@return any
+function OptionalNode:materialize()
+  return self._inner:materialize()
+end
+
+---@return boolean
+function OptionalNode:is_list()
+  return self._inner:is_list()
+end
+
+---@param value any
+---@return boolean, string?
+function OptionalNode:validate_value(value)
+  if value == nil then
+    return true
+  end
+  return self._inner:validate_value(value)
+end
+
+---@param inner_schema flemma.config.schema.Node
+---@return flemma.config.schema.OptionalNode
+function OptionalNode.new(inner_schema)
+  local node = setmetatable({}, OptionalNode)
+  node._inner = inner_schema
+  return node
+end
+
+-- ---------------------------------------------------------------------------
+-- UnionNode
+-- ---------------------------------------------------------------------------
+
+---@class flemma.config.schema.UnionNode : flemma.config.schema.Node
+---@field _branches flemma.config.schema.Node[] Schemas to try in order
+local UnionNode = setmetatable({}, { __index = Node })
+UnionNode.__index = UnionNode
+
+---@param value any
+---@return boolean, string?
+function UnionNode:validate_value(value)
+  local errors = {}
+  for _, branch in ipairs(self._branches) do
+    local ok, err = branch:validate_value(value)
+    if ok then
+      return true
+    end
+    table.insert(errors, err or "invalid")
+  end
+  return false, "no union branch matched: " .. table.concat(errors, "; ")
+end
+
+---@param branches flemma.config.schema.Node[]
+---@return flemma.config.schema.UnionNode
+function UnionNode.new(branches)
+  local node = setmetatable({}, UnionNode)
+  node._branches = branches
+  return node
+end
+
+-- ---------------------------------------------------------------------------
+-- LoadableNode
+-- ---------------------------------------------------------------------------
+
+---@class flemma.config.schema.LoadableNode : flemma.config.schema.StringNode
+local LoadableNode = setmetatable({}, { __index = StringNode })
+LoadableNode.__index = LoadableNode
+
+---@param value any
+---@return boolean, string?
+function LoadableNode:validate_value(value)
+  local ok, err = ScalarNode.validate_value(self, value)
+  if not ok then
+    return false, err
+  end
+  local load_ok, load_err = pcall(loader.assert_exists, value)
+  if not load_ok then
+    return false, tostring(load_err)
+  end
+  return true
+end
+
+---@param default? string
+---@return flemma.config.schema.LoadableNode
+function LoadableNode.new(default)
+  local node = setmetatable({}, LoadableNode)
+  node._lua_type = "string"
+  node._default = default
+  return node
+end
+
+-- ---------------------------------------------------------------------------
+-- FuncNode
+-- ---------------------------------------------------------------------------
+
+---@class flemma.config.schema.FuncNode : flemma.config.schema.Node
+local FuncNode = setmetatable({}, { __index = Node })
+FuncNode.__index = FuncNode
+
+---@param value any
+---@return boolean, string?
+function FuncNode:validate_value(value)
+  if type(value) ~= "function" then
+    return false, "expected function, got " .. type(value)
+  end
+  return true
+end
+
+---@return flemma.config.schema.FuncNode
+function FuncNode.new()
+  return setmetatable({}, FuncNode)
+end
+
+-- ---------------------------------------------------------------------------
+-- Exports
+-- ---------------------------------------------------------------------------
+
+M.Node = Node
+M.ScalarNode = ScalarNode
+M.StringNode = StringNode
+M.NumberNode = NumberNode
+M.BooleanNode = BooleanNode
+M.IntegerNode = IntegerNode
+M.EnumNode = EnumNode
+M.ListNode = ListNode
+M.MapNode = MapNode
+M.ObjectNode = ObjectNode
+M.OptionalNode = OptionalNode
+M.UnionNode = UnionNode
+M.LoadableNode = LoadableNode
+M.FuncNode = FuncNode
+
+return M

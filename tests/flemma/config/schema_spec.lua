@@ -1,0 +1,694 @@
+local symbols = require("flemma.symbols")
+
+describe("flemma.config.schema", function()
+  ---@type flemma.config.schema
+  local s
+
+  before_each(function()
+    package.loaded["flemma.config.schema"] = nil
+    package.loaded["flemma.config.schema.types"] = nil
+    -- flemma.loader is required by types.lua; clear it so preload manipulations
+    -- in s.loadable() tests don't bleed across test boundaries.
+    package.loaded["flemma.loader"] = nil
+    s = require("flemma.config.schema")
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- s.string()
+  -- ---------------------------------------------------------------------------
+
+  describe("s.string()", function()
+    it("materializes to its default", function()
+      assert.equals("anthropic", s.string("anthropic"):materialize())
+    end)
+
+    it("has_default() is true when default is set", function()
+      assert.is_true(s.string("hello"):has_default())
+    end)
+
+    it("has_default() is false when created without argument", function()
+      assert.is_false(s.string():has_default())
+    end)
+
+    it("materialize() returns nil when no default", function()
+      assert.is_nil(s.string():materialize())
+    end)
+
+    it("is_list() returns false", function()
+      assert.is_false(s.string():is_list())
+    end)
+
+    it("validates string values", function()
+      assert.is_true(s.string():validate_value("hello"))
+      assert.is_true(s.string():validate_value(""))
+    end)
+
+    it("rejects non-string values with descriptive error", function()
+      local ok, err = s.string():validate_value(123)
+      assert.is_false(ok)
+      assert.matches("string", err)
+
+      ok, err = s.string():validate_value(true)
+      assert.is_false(ok)
+      assert.matches("string", err)
+    end)
+
+    it("supports :describe() and :type_as() chaining", function()
+      local node = s.string("x"):describe("A description"):type_as("MyType")
+      assert.equals("A description", node._description)
+      assert.equals("MyType", node._type_as)
+      assert.equals("x", node:materialize())
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- s.integer()
+  -- ---------------------------------------------------------------------------
+
+  describe("s.integer()", function()
+    it("materializes to its default", function()
+      assert.equals(42, s.integer(42):materialize())
+    end)
+
+    it("has_default() is true when default is set", function()
+      assert.is_true(s.integer(0):has_default())
+    end)
+
+    it("validates whole number values", function()
+      assert.is_true(s.integer():validate_value(0))
+      assert.is_true(s.integer():validate_value(8192))
+      assert.is_true(s.integer():validate_value(-1))
+    end)
+
+    it("rejects float values", function()
+      local ok, err = s.integer():validate_value(3.14)
+      assert.is_false(ok)
+      assert.matches("integer", err)
+    end)
+
+    it("rejects non-number values", function()
+      local ok, err = s.integer():validate_value("42")
+      assert.is_false(ok)
+      assert.matches("integer", err)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- s.number()
+  -- ---------------------------------------------------------------------------
+
+  describe("s.number()", function()
+    it("materializes to its default", function()
+      assert.equals(0.7, s.number(0.7):materialize())
+    end)
+
+    it("validates integer values (numbers are numbers)", function()
+      assert.is_true(s.number():validate_value(42))
+    end)
+
+    it("validates float values", function()
+      assert.is_true(s.number():validate_value(3.14))
+    end)
+
+    it("rejects non-number values", function()
+      local ok, err = s.number():validate_value("3.14")
+      assert.is_false(ok)
+      assert.matches("number", err)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- s.boolean()
+  -- ---------------------------------------------------------------------------
+
+  describe("s.boolean()", function()
+    it("materializes true default", function()
+      assert.is_true(s.boolean(true):materialize())
+    end)
+
+    it("materializes false default", function()
+      assert.is_false(s.boolean(false):materialize())
+    end)
+
+    it("has_default() is true when default is false", function()
+      assert.is_true(s.boolean(false):has_default())
+    end)
+
+    it("has_default() is false when created without argument", function()
+      assert.is_false(s.boolean():has_default())
+    end)
+
+    it("validates boolean values", function()
+      assert.is_true(s.boolean():validate_value(true))
+      assert.is_true(s.boolean():validate_value(false))
+    end)
+
+    it("rejects non-boolean values", function()
+      local ok, err = s.boolean():validate_value(1)
+      assert.is_false(ok)
+      assert.matches("boolean", err)
+
+      ok = s.boolean():validate_value("true")
+      assert.is_false(ok)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- s.enum()
+  -- ---------------------------------------------------------------------------
+
+  describe("s.enum()", function()
+    it("materializes to its default", function()
+      assert.equals("low", s.enum({ "low", "medium", "high" }, "low"):materialize())
+    end)
+
+    it("has_default() is true when default is set", function()
+      assert.is_true(s.enum({ "a", "b" }, "a"):has_default())
+    end)
+
+    it("has_default() is false when no default", function()
+      assert.is_false(s.enum({ "a", "b" }):has_default())
+    end)
+
+    it("validates values in the enum", function()
+      local e = s.enum({ "low", "medium", "high" }, "low")
+      assert.is_true(e:validate_value("low"))
+      assert.is_true(e:validate_value("medium"))
+      assert.is_true(e:validate_value("high"))
+    end)
+
+    it("rejects values not in the enum", function()
+      local e = s.enum({ "low", "high" }, "low")
+      local ok, err = e:validate_value("invalid")
+      assert.is_false(ok)
+      assert.is_string(err)
+    end)
+
+    it("rejects nil", function()
+      local e = s.enum({ "low", "high" }, "low")
+      local ok, err = e:validate_value(nil)
+      assert.is_false(ok)
+      assert.is_string(err)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- s.list()
+  -- ---------------------------------------------------------------------------
+
+  describe("s.list()", function()
+    it("is_list() returns true", function()
+      assert.is_true(s.list(s.string(), {}):is_list())
+    end)
+
+    it("non-list nodes return is_list() false", function()
+      assert.is_false(s.string():is_list())
+      assert.is_false(s.integer():is_list())
+      assert.is_false(s.object({}):is_list())
+    end)
+
+    it("materializes to deep copy of default list", function()
+      local list = s.list(s.string(), { "a", "b" })
+      local result = list:materialize()
+      assert.are.same({ "a", "b" }, result)
+    end)
+
+    it("materialize() returns independent copy each call", function()
+      local list = s.list(s.string(), { "a" })
+      local m1 = list:materialize()
+      table.insert(m1, "b")
+      local m2 = list:materialize()
+      assert.equals(1, #m2)
+    end)
+
+    it("has_default() is true when default is set", function()
+      assert.is_true(s.list(s.string(), {}):has_default())
+      assert.is_true(s.list(s.string(), { "x" }):has_default())
+    end)
+
+    it("has_default() is false when no default", function()
+      assert.is_false(s.list(s.string()):has_default())
+    end)
+
+    it("validates a list of valid items", function()
+      local list = s.list(s.integer(), {})
+      assert.is_true(list:validate_value({ 1, 2, 3 }))
+    end)
+
+    it("rejects a list with an invalid item", function()
+      local list = s.list(s.integer(), {})
+      local ok, err = list:validate_value({ 1, "two", 3 })
+      assert.is_false(ok)
+      assert.matches("item%[2%]", err)
+    end)
+
+    it("rejects non-table values", function()
+      local ok, err = s.list(s.string(), {}):validate_value("not a list")
+      assert.is_false(ok)
+      assert.is_string(err)
+    end)
+
+    it("validate_item() validates a single item", function()
+      local list = s.list(s.string(), {})
+      assert.is_true(list:validate_item("hello"))
+      local ok, err = list:validate_item(42)
+      assert.is_false(ok)
+      assert.matches("string", err)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- s.map()
+  -- ---------------------------------------------------------------------------
+
+  describe("s.map()", function()
+    it("validates a map with correct key/value types", function()
+      local map = s.map(s.string(), s.integer())
+      assert.is_true(map:validate_value({ foo = 1, bar = 2 }))
+    end)
+
+    it("rejects a map with invalid values", function()
+      local map = s.map(s.string(), s.integer())
+      local ok, err = map:validate_value({ foo = "not-an-int" })
+      assert.is_false(ok)
+      assert.is_string(err)
+    end)
+
+    it("rejects non-table values", function()
+      local ok = s.map(s.string(), s.string()):validate_value("not a map")
+      assert.is_false(ok)
+    end)
+
+    it("has_default() is false", function()
+      assert.is_false(s.map(s.string(), s.string()):has_default())
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- s.object() — materialization and nested defaults
+  -- ---------------------------------------------------------------------------
+
+  describe("s.object() — materialization", function()
+    it("materializes flat defaults", function()
+      local obj = s.object({
+        provider = s.string("anthropic"),
+        count = s.integer(42),
+      })
+      local result = obj:materialize()
+      assert.equals("anthropic", result.provider)
+      assert.equals(42, result.count)
+    end)
+
+    it("omits fields without defaults", function()
+      local obj = s.object({
+        name = s.string("x"),
+        optional_val = s.optional(s.string()),
+      })
+      local result = obj:materialize()
+      assert.equals("x", result.name)
+      assert.is_nil(result.optional_val)
+    end)
+
+    it("handles nested object defaults", function()
+      local obj = s.object({
+        params = s.object({
+          timeout = s.integer(600),
+        }),
+      })
+      local result = obj:materialize()
+      assert.equals(600, result.params.timeout)
+    end)
+
+    it("has_default() is true when any child has a default", function()
+      local obj = s.object({
+        name = s.string("hello"),
+        count = s.optional(s.integer()),
+      })
+      assert.is_true(obj:has_default())
+    end)
+
+    it("has_default() is false when no child has a default", function()
+      local obj = s.object({
+        name = s.optional(s.string()),
+      })
+      assert.is_false(obj:has_default())
+    end)
+
+    it("has_default() is false for empty object", function()
+      assert.is_false(s.object({}):has_default())
+    end)
+
+    it("materialize() returns nil for empty object with no defaults", function()
+      assert.is_nil(s.object({}):materialize())
+    end)
+
+    it("materialize() returns nil when all fields exist but none have defaults", function()
+      local obj = s.object({ name = s.string(), count = s.optional(s.integer()) })
+      assert.is_nil(obj:materialize())
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- s.object() — strict validation
+  -- ---------------------------------------------------------------------------
+
+  describe("s.object() — strict mode (default)", function()
+    it("accepts known keys", function()
+      local obj = s.object({ name = s.string() })
+      assert.is_true(obj:validate_value({ name = "hello" }))
+    end)
+
+    it("rejects unknown keys", function()
+      local obj = s.object({ name = s.string() })
+      local ok, err = obj:validate_value({ unknown = "value" })
+      assert.is_false(ok)
+      assert.matches("unknown", err)
+    end)
+
+    it("validates nested field types", function()
+      local obj = s.object({ count = s.integer() })
+      local ok, err = obj:validate_value({ count = "not-an-int" })
+      assert.is_false(ok)
+      assert.matches("count", err)
+    end)
+
+    it("rejects non-table values", function()
+      local ok = s.object({ name = s.string() }):validate_value("not a table")
+      assert.is_false(ok)
+    end)
+  end)
+
+  describe("s.object():strict()", function()
+    it("returns self for chaining", function()
+      local obj = s.object({})
+      assert.equals(obj, obj:strict())
+    end)
+  end)
+
+  describe("s.object():passthrough()", function()
+    it("allows unknown keys", function()
+      local obj = s.object({}):passthrough()
+      assert.is_true(obj:validate_value({ anything = "value", other = 42 }))
+    end)
+
+    it("returns self for chaining", function()
+      local obj = s.object({})
+      assert.equals(obj, obj:passthrough())
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- s.object() — child schema navigation
+  -- ---------------------------------------------------------------------------
+
+  describe("s.object():get_child_schema()", function()
+    it("returns schema for known field", function()
+      local inner = s.string("x")
+      local obj = s.object({ name = inner })
+      assert.equals(inner, obj:get_child_schema("name"))
+    end)
+
+    it("returns nil for unknown field", function()
+      local obj = s.object({ name = s.string() })
+      assert.is_nil(obj:get_child_schema("unknown"))
+    end)
+
+    it("invokes DISCOVER for unknown keys", function()
+      local discovered = s.integer(0)
+      local obj = s.object({
+        [symbols.DISCOVER] = function(key)
+          if key == "dynamic_key" then
+            return discovered
+          end
+        end,
+      })
+      assert.equals(discovered, obj:get_child_schema("dynamic_key"))
+    end)
+
+    it("caches DISCOVER results", function()
+      local call_count = 0
+      local obj = s.object({
+        [symbols.DISCOVER] = function(_key)
+          call_count = call_count + 1
+          return s.string()
+        end,
+      })
+      obj:get_child_schema("foo")
+      obj:get_child_schema("foo")
+      assert.equals(1, call_count)
+    end)
+
+    it("does not cache DISCOVER misses — callback fires again on each lookup", function()
+      -- This is intentional: during the two-pass boot, a DISCOVER callback may
+      -- return nil on pass 1 (before module registration) but succeed on pass 2.
+      -- Caching nil would permanently block future successful resolutions.
+      local call_count = 0
+      local obj = s.object({
+        [symbols.DISCOVER] = function(_key)
+          call_count = call_count + 1
+          return nil
+        end,
+      })
+      obj:get_child_schema("missing")
+      obj:get_child_schema("missing")
+      assert.equals(2, call_count)
+    end)
+
+    it("returns nil when DISCOVER returns nil", function()
+      local obj = s.object({
+        [symbols.DISCOVER] = function(_key)
+          return nil
+        end,
+      })
+      assert.is_nil(obj:get_child_schema("missing"))
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- Alias resolution
+  -- ---------------------------------------------------------------------------
+
+  describe("alias resolution", function()
+    it("resolve_alias() returns canonical path for alias key", function()
+      local obj = s.object({
+        parameters = s.object({ timeout = s.integer(600) }),
+        [symbols.ALIASES] = { timeout = "parameters.timeout" },
+      })
+      assert.equals("parameters.timeout", obj:resolve_alias("timeout"))
+    end)
+
+    it("resolve_alias() returns nil for real fields", function()
+      local obj = s.object({
+        provider = s.string("anthropic"),
+        [symbols.ALIASES] = { timeout = "parameters.timeout" },
+      })
+      assert.is_nil(obj:resolve_alias("provider"))
+    end)
+
+    it("resolve_alias() returns nil for completely unknown keys", function()
+      local obj = s.object({
+        provider = s.string(),
+        [symbols.ALIASES] = { timeout = "parameters.timeout" },
+      })
+      assert.is_nil(obj:resolve_alias("nonexistent"))
+    end)
+
+    it("real field shadows alias with same name", function()
+      -- When both a real field and an alias share a name, the real field wins.
+      local obj = s.object({
+        timeout = s.integer(600), -- real field
+        [symbols.ALIASES] = { timeout = "parameters.timeout" }, -- same name alias
+      })
+      -- resolve_alias returns nil because "timeout" is a real field
+      assert.is_nil(obj:resolve_alias("timeout"))
+      -- get_child_schema returns the real field schema
+      local child = obj:get_child_schema("timeout")
+      assert.is_not_nil(child)
+      assert.is_true(child:has_default())
+    end)
+
+    it("nested object can have its own aliases", function()
+      local inner = s.object({
+        modules = s.list(s.string(), {}),
+        [symbols.ALIASES] = { approve = "auto_approve" },
+      })
+      assert.equals("auto_approve", inner:resolve_alias("approve"))
+      assert.is_nil(inner:resolve_alias("modules"))
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- Schema reuse
+  -- ---------------------------------------------------------------------------
+
+  describe("schema reuse", function()
+    it("produces independent materializations (lists are deep-copied)", function()
+      local schema = s.object({ items = s.list(s.string(), { "a" }) })
+      local mat1 = schema:materialize()
+      table.insert(mat1.items, "b")
+      local mat2 = schema:materialize()
+      assert.equals(1, #mat2.items)
+    end)
+
+    it("produces independent materializations (nested tables)", function()
+      local schema = s.object({ params = s.object({ name = s.string("x") }) })
+      local mat1 = schema:materialize()
+      mat1.params.name = "modified"
+      local mat2 = schema:materialize()
+      assert.equals("x", mat2.params.name)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- s.optional()
+  -- ---------------------------------------------------------------------------
+
+  describe("s.optional()", function()
+    it("nil is valid", function()
+      assert.is_true(s.optional(s.string()):validate_value(nil))
+    end)
+
+    it("inner type is also valid", function()
+      assert.is_true(s.optional(s.string()):validate_value("hello"))
+    end)
+
+    it("other types are rejected", function()
+      local ok, err = s.optional(s.string()):validate_value(42)
+      assert.is_false(ok)
+      assert.matches("string", err)
+    end)
+
+    it("has_default() is false when inner has no default", function()
+      assert.is_false(s.optional(s.string()):has_default())
+    end)
+
+    it("has_default() inherits from inner when inner has default", function()
+      assert.is_true(s.optional(s.string("hi")):has_default())
+    end)
+
+    it("materialize() inherits from inner", function()
+      assert.equals("hi", s.optional(s.string("hi")):materialize())
+      assert.is_nil(s.optional(s.string()):materialize())
+    end)
+
+    it("is_list() delegates to inner", function()
+      assert.is_true(s.optional(s.list(s.string(), {})):is_list())
+      assert.is_false(s.optional(s.string()):is_list())
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- s.union()
+  -- ---------------------------------------------------------------------------
+
+  describe("s.union()", function()
+    it("accepts a value matching the first branch", function()
+      local u = s.union(s.string(), s.integer())
+      assert.is_true(u:validate_value("hello"))
+    end)
+
+    it("accepts a value matching the second branch", function()
+      local u = s.union(s.string(), s.integer())
+      assert.is_true(u:validate_value(42))
+    end)
+
+    it("accepts a value matching any later branch", function()
+      local u = s.union(s.string(), s.integer(), s.boolean())
+      assert.is_true(u:validate_value(true))
+    end)
+
+    it("rejects a value not matching any branch", function()
+      local u = s.union(s.string(), s.integer())
+      local ok, err = u:validate_value(true)
+      assert.is_false(ok)
+      assert.is_string(err)
+    end)
+
+    it("has_default() is false", function()
+      assert.is_false(s.union(s.string(), s.integer()):has_default())
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- s.loadable()
+  -- ---------------------------------------------------------------------------
+
+  describe("s.loadable()", function()
+    it("accepts module paths that exist on package.path", function()
+      assert.is_true(s.loadable():validate_value("flemma.loader"))
+    end)
+
+    it("accepts modules in package.preload", function()
+      package.preload["test.schema.loadable"] = function()
+        return {}
+      end
+      assert.is_true(s.loadable():validate_value("test.schema.loadable"))
+      package.preload["test.schema.loadable"] = nil
+    end)
+
+    it("rejects nonexistent module paths", function()
+      local ok = s.loadable():validate_value("nonexistent.module.that.does.not.exist")
+      assert.is_false(ok)
+    end)
+
+    it("rejects non-string values", function()
+      local ok, err = s.loadable():validate_value(42)
+      assert.is_false(ok)
+      assert.matches("string", err)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- s.func()
+  -- ---------------------------------------------------------------------------
+
+  describe("s.func()", function()
+    it("accepts function values", function()
+      assert.is_true(s.func():validate_value(function() end))
+    end)
+
+    it("rejects non-function values", function()
+      local ok, err = s.func():validate_value("not a function")
+      assert.is_false(ok)
+      assert.matches("function", err)
+
+      ok = s.func():validate_value(42)
+      assert.is_false(ok)
+    end)
+
+    it("has_default() is false", function()
+      assert.is_false(s.func():has_default())
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- symbols.DISCOVER integration in object validation
+  -- ---------------------------------------------------------------------------
+
+  describe("symbols.DISCOVER in validate_value()", function()
+    it("discovered schema validates writes to that key", function()
+      local obj = s.object({
+        [symbols.DISCOVER] = function(key)
+          if key == "dynamic" then
+            return s.integer()
+          end
+        end,
+      })
+      assert.is_true(obj:validate_value({ dynamic = 42 }))
+      local ok, err = obj:validate_value({ dynamic = "not-an-int" })
+      assert.is_false(ok)
+      assert.matches("dynamic", err)
+    end)
+
+    it("nil DISCOVER result causes strict rejection", function()
+      local obj = s.object({
+        [symbols.DISCOVER] = function(_key)
+          return nil
+        end,
+      })
+      local ok, err = obj:validate_value({ unknown_key = "value" })
+      assert.is_false(ok)
+      assert.matches("unknown", err)
+    end)
+  end)
+end)
