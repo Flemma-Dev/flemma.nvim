@@ -51,6 +51,22 @@ function Node:is_list()
   return false
 end
 
+--- Return the inner schema for nodes that wrap another node (e.g. OptionalNode).
+--- Base implementation returns nil; OptionalNode overrides to return its inner schema.
+--- Used by schema navigation to unwrap optional wrappers during path traversal.
+---@return flemma.config.schema.Node?
+function Node:get_inner_schema()
+  return nil
+end
+
+--- Return the child schema for the given key. Base returns nil; ObjectNode overrides.
+--- Safe to call on any node: non-object nodes have no children and return nil.
+---@param _key string
+---@return flemma.config.schema.Node?
+function Node:get_child_schema(_key)
+  return nil
+end
+
 --- Validate a value against this schema node.
 --- Returns true on success, false + error message on failure.
 ---@param _value any
@@ -487,6 +503,11 @@ end
 ---@return boolean
 function OptionalNode:is_list()
   return self._inner:is_list()
+end
+
+---@return flemma.config.schema.Node
+function OptionalNode:get_inner_schema()
+  return self._inner
 end
 
 ---@param value any
