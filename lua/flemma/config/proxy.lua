@@ -179,9 +179,7 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
 
     __newindex = function(_, key, value)
       if layer == nil then
-        error(
-          string.format("config: write not permitted on read-only proxy (attempted key '%s')", tostring(key))
-        )
+        error(string.format("config: write not permitted on read-only proxy (attempted key '%s')", tostring(key)))
       end
 
       if type(key) ~= "string" then
