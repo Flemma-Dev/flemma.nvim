@@ -10,6 +10,8 @@
 ---@class flemma.config.store
 local M = {}
 
+local nav = require("flemma.config.schema.navigation")
+
 --- Layer priority constants.
 ---@type { DEFAULTS: integer, SETUP: integer, RUNTIME: integer, FRONTMATTER: integer }
 M.LAYERS = {
@@ -53,56 +55,18 @@ local global_ops = {
 local buffer_ops = {}
 
 -- ---------------------------------------------------------------------------
--- Schema navigation utilities
+-- Schema navigation
 -- ---------------------------------------------------------------------------
 
---- Walk a node through any OptionalNode wrappers to reach the concrete node.
---- Uses the `get_inner_schema()` virtual method; OptionalNode overrides it.
----
---- NOTE: This loop assumes no cycles in the schema graph. The current DSL makes
---- cycles impossible — OptionalNode.new() takes an externally constructed inner
---- node, so no schema node can wrap itself. If new wrapper node types are ever
---- added that could create cycles, this loop will spin forever. Add a depth guard
---- at that point.
----@param node flemma.config.schema.Node
----@return flemma.config.schema.Node
-local function unwrap_optional(node)
-  local inner = node:get_inner_schema()
-  while inner do
-    node = inner
-    inner = node:get_inner_schema()
-  end
-  return node
-end
-
---- Navigate the schema tree to find the leaf node at the given dot-delimited path.
---- Unwraps OptionalNode at each step so nested optional objects are traversable.
---- Returns nil if the path cannot be resolved in the current schema.
----@param root flemma.config.schema.Node
----@param path string Dot-delimited path, e.g. "tools.auto_approve"
----@return flemma.config.schema.Node?
-local function navigate_schema(root, path)
-  local parts = vim.split(path, ".", { plain = true })
-  local node = root
-  for _, part in ipairs(parts) do
-    node = unwrap_optional(node)
-    local child = node:get_child_schema(part)
-    if not child then
-      return nil
-    end
-    node = child
-  end
-  return unwrap_optional(node)
-end
-
 --- Return true if the given canonical path refers to a list field in the schema.
+--- Uses unwrap_leaf = true so the returned node's is_list() reflects the concrete type.
 ---@param path string Dot-delimited canonical path
 ---@return boolean
 local function is_list_path(path)
   if not schema_root then
     return false
   end
-  local node = navigate_schema(schema_root, path)
+  local node = nav.navigate_schema(schema_root, path, { unwrap_leaf = true })
   if not node then
     return false
   end
@@ -139,10 +103,7 @@ end
 ---@param path string Dot-delimited canonical path (aliases already resolved)
 ---@param value any Value for the operation
 function M.record(layer, bufnr, op, path, value)
-  assert(
-    op == "set" or op == "append" or op == "remove" or op == "prepend",
-    "invalid op: " .. tostring(op)
-  )
+  assert(op == "set" or op == "append" or op == "remove" or op == "prepend", "invalid op: " .. tostring(op))
   if layer == M.LAYERS.FRONTMATTER then
     assert(bufnr ~= nil, "bufnr is required for FRONTMATTER layer")
     if not buffer_ops[bufnr] then

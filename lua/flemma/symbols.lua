@@ -76,6 +76,12 @@ M.ALIASES = {}
 ---@type table
 M.DISCOVER = {}
 
+--- Clear operation on write proxies.
+--- Used as the key for the clear method on config write proxies, avoiding any
+--- collision with string-keyed config field names.
+---@type table
+M.CLEAR = {}
+
 --- Deep-copy a table while preserving symbol key identity.
 ---
 --- vim.deepcopy copies table *keys* by value, creating new table references

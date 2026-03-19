@@ -51,6 +51,14 @@ function Node:is_list()
   return false
 end
 
+--- Whether this node represents a fixed-shape object (supports sub-key navigation).
+--- Base implementation returns false; ObjectNode overrides to return true.
+--- Used by the proxy to distinguish navigation nodes from leaf nodes.
+---@return boolean
+function Node:is_object()
+  return false
+end
+
 --- Return the inner schema for nodes that wrap another node (e.g. OptionalNode).
 --- Base implementation returns nil; OptionalNode overrides to return its inner schema.
 --- Used by schema navigation to unwrap optional wrappers during path traversal.
@@ -64,6 +72,23 @@ end
 ---@param _key string
 ---@return flemma.config.schema.Node?
 function Node:get_child_schema(_key)
+  return nil
+end
+
+--- Resolve an alias key to its canonical sub-path at this schema level.
+--- Base implementation returns nil; ObjectNode overrides with real alias logic.
+--- Safe to call on any node: non-object nodes have no aliases.
+---@param _key string
+---@return string?
+function Node:resolve_alias(_key)
+  return nil
+end
+
+--- Return the item schema for list nodes.
+--- Base implementation returns nil; ListNode overrides to return its item schema.
+--- Used by the proxy to construct list proxies with item-level validation.
+---@return flemma.config.schema.Node?
+function Node:get_item_schema()
   return nil
 end
 
@@ -285,6 +310,12 @@ function ListNode:validate_item(item)
   return self._item_schema:validate_value(item)
 end
 
+--- Return the item schema for this list node.
+---@return flemma.config.schema.Node
+function ListNode:get_item_schema()
+  return self._item_schema
+end
+
 ---@param item_schema flemma.config.schema.Node
 ---@param default? any[]
 ---@return flemma.config.schema.ListNode
@@ -346,6 +377,11 @@ end
 ---@field _strict boolean Whether unknown keys are rejected (default true)
 local ObjectNode = setmetatable({}, { __index = Node })
 ObjectNode.__index = ObjectNode
+
+---@return boolean
+function ObjectNode:is_object()
+  return true
+end
 
 ---@return boolean
 function ObjectNode:has_default()
@@ -503,6 +539,11 @@ end
 ---@return boolean
 function OptionalNode:is_list()
   return self._inner:is_list()
+end
+
+---@return boolean
+function OptionalNode:is_object()
+  return self._inner:is_object()
 end
 
 ---@return flemma.config.schema.Node
