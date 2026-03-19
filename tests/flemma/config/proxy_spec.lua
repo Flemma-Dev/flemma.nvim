@@ -587,7 +587,7 @@ describe("flemma.config.proxy", function()
       local schema = make_composed_lens_schema()
       store.init(schema)
       store.record(L.SETUP, nil, "set", "parameters.anthropic.thinking_budget", 4096)
-      local lens = proxy.composed_lens(schema, nil, {
+      local lens = proxy.lens(schema, nil, {
         "parameters.anthropic",
         "parameters",
       })
@@ -599,7 +599,7 @@ describe("flemma.config.proxy", function()
       store.init(schema)
       -- 'thinking' exists on parameters but not on parameters.anthropic
       store.record(L.SETUP, nil, "set", "parameters.thinking", "high")
-      local lens = proxy.composed_lens(schema, nil, {
+      local lens = proxy.lens(schema, nil, {
         "parameters.anthropic",
         "parameters",
       })
@@ -609,7 +609,7 @@ describe("flemma.config.proxy", function()
     it("returns nil when no path resolves a value", function()
       local schema = make_composed_lens_schema()
       store.init(schema)
-      local lens = proxy.composed_lens(schema, nil, {
+      local lens = proxy.lens(schema, nil, {
         "parameters.anthropic",
         "parameters",
       })
@@ -622,7 +622,7 @@ describe("flemma.config.proxy", function()
       -- 'timeout' exists on both parameters and parameters.anthropic
       store.record(L.SETUP, nil, "set", "parameters.anthropic.timeout", 1200)
       store.record(L.RUNTIME, nil, "set", "parameters.timeout", 600)
-      local lens = proxy.composed_lens(schema, nil, {
+      local lens = proxy.lens(schema, nil, {
         "parameters.anthropic",
         "parameters",
       })
@@ -636,7 +636,7 @@ describe("flemma.config.proxy", function()
       store.init(schema)
       store.record(L.SETUP, nil, "set", "parameters.timeout", 600)
       store.record(L.RUNTIME, nil, "set", "parameters.timeout", 1200)
-      local lens = proxy.composed_lens(schema, nil, {
+      local lens = proxy.lens(schema, nil, {
         "parameters.anthropic",
         "parameters",
       })
@@ -647,7 +647,7 @@ describe("flemma.config.proxy", function()
     it("errors on any write attempt", function()
       local schema = make_composed_lens_schema()
       store.init(schema)
-      local lens = proxy.composed_lens(schema, nil, {
+      local lens = proxy.lens(schema, nil, {
         "parameters.anthropic",
         "parameters",
       })
@@ -660,7 +660,7 @@ describe("flemma.config.proxy", function()
       local schema = make_composed_lens_schema()
       store.init(schema)
       assert.has_error(function()
-        proxy.composed_lens(schema, nil, {
+        proxy.lens(schema, nil, {
           "parameters.anthropic",
           "nonexistent.path",
         })
@@ -672,7 +672,7 @@ describe("flemma.config.proxy", function()
       store.init(schema)
       store.record(L.SETUP, nil, "set", "parameters.timeout", 600)
       store.record(L.FRONTMATTER, 5, "set", "parameters.anthropic.timeout", 9999)
-      local lens = proxy.composed_lens(schema, 5, {
+      local lens = proxy.lens(schema, 5, {
         "parameters.anthropic",
         "parameters",
       })

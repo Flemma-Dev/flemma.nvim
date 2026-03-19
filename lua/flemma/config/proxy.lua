@@ -251,56 +251,69 @@ function M.write_proxy(root_schema, bufnr, layer)
   return make_proxy(root_schema, bufnr, layer, "", root_schema)
 end
 
---- Create a single-path frozen lens rooted at the given sub-path.
---- Reads resolve values relative to the lens root path through all store layers.
+--- Create a frozen lens rooted at the given path(s).
+--- A single string path is normalized to a single-element list.
+--- Reads check each base path in order (most specific first) and return the
+--- first non-nil value found. Object-typed keys return a new narrowed lens
+--- for further navigation. Aliases are resolved at each path's schema level.
 --- Writes are not permitted.
 ---@param root_schema flemma.config.schema.Node
 ---@param bufnr integer?
----@param path string Dot-delimited sub-path to root the lens at
+---@param paths string|string[] Single path or ordered list of paths (most specific first)
 ---@return table
-function M.lens(root_schema, bufnr, path)
-  local sub_schema = nav.navigate_schema(root_schema, path)
-  if not sub_schema then
-    error(string.format("config.lens: unknown path '%s'", path))
+function M.lens(root_schema, bufnr, paths)
+  if type(paths) == "string" then
+    paths = { paths }
   end
-  return make_proxy(root_schema, bufnr, nil, path, sub_schema)
-end
 
---- Create a multi-path composed lens.
---- Reads check each base path in order (most specific first) and return the first
---- non-nil value found across all store layers.
---- Writes are not permitted.
----@param root_schema flemma.config.schema.Node
----@param bufnr integer?
----@param paths string[] Ordered list of base paths (most specific first)
----@return table
-function M.composed_lens(root_schema, bufnr, paths)
   for _, path in ipairs(paths) do
     if not nav.navigate_schema(root_schema, path) then
-      error(string.format("config.composed_lens: unknown path '%s'", path))
+      error(string.format("config.lens: unknown path '%s'", path))
     end
   end
 
-  local proxy = {}
-  setmetatable(proxy, {
+  local lens_proxy = {}
+  setmetatable(lens_proxy, {
     __index = function(_, key)
+      if type(key) ~= "string" then
+        return nil
+      end
+
+      local object_paths = {}
+
       for _, base_path in ipairs(paths) do
-        local canonical = join_path(base_path, key)
-        local leaf = nav.navigate_schema(root_schema, canonical)
-        if leaf then
-          local value = store.resolve(canonical, bufnr)
-          if value ~= nil then
-            return value
+        local base_schema = nav.navigate_schema(root_schema, base_path)
+        if base_schema then
+          local unwrapped = nav.unwrap_optional(base_schema)
+          local alias_target = unwrapped:resolve_alias(key)
+          local canonical_key = alias_target or key
+          local canonical = join_path(base_path, canonical_key)
+
+          local leaf = nav.navigate_schema(root_schema, canonical)
+          if leaf then
+            if leaf:is_object() then
+              table.insert(object_paths, canonical)
+            else
+              local value = store.resolve(canonical, bufnr)
+              if value ~= nil then
+                return value
+              end
+            end
           end
         end
       end
+
+      if #object_paths > 0 then
+        return M.lens(root_schema, bufnr, object_paths)
+      end
+
       return nil
     end,
     __newindex = function(_, key, _)
-      error(string.format("config: write not permitted on composed lens (attempted key '%s')", key))
+      error(string.format("config: write not permitted on lens (attempted key '%s')", key))
     end,
   })
-  return proxy
+  return lens_proxy
 end
 
 return M
