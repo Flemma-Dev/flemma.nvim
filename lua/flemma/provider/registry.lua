@@ -27,18 +27,21 @@ local registry_utils = require("flemma.registry")
 ---@field capabilities flemma.provider.Capabilities
 ---@field display_name string
 ---@field default_parameters? table<string, any>
+---@field config_schema? flemma.config.schema.ObjectNode Provider-specific config schema for DISCOVER resolution
 
 ---@class flemma.provider.Metadata
 ---@field name string Provider identifier (e.g., "anthropic")
 ---@field display_name string Human-readable name
 ---@field capabilities flemma.provider.Capabilities
 ---@field default_parameters? table<string, any> Provider-specific param defaults
+---@field config_schema? flemma.config.schema.ObjectNode Provider-specific config schema for DISCOVER resolution
 
 ---@class flemma.provider.RegistrationEntry
 ---@field module string Lua module path
 ---@field capabilities flemma.provider.Capabilities
 ---@field display_name string
 ---@field default_parameters? table<string, any> Provider-specific param defaults
+---@field config_schema? flemma.config.schema.ObjectNode Provider-specific config schema
 ---@field default_model? string Default model name
 ---@field models? table<string, flemma.models.ModelInfo> Model definitions with pricing
 
@@ -102,6 +105,7 @@ function M.register(source, entry)
       capabilities = mod.metadata.capabilities,
       display_name = mod.metadata.display_name,
       default_parameters = mod.metadata.default_parameters,
+      config_schema = mod.metadata.config_schema,
     }
   end
 
@@ -117,6 +121,7 @@ function M.register(source, entry)
     capabilities = capabilities,
     display_name = definition.display_name,
     default_parameters = definition.default_parameters,
+    config_schema = definition.config_schema,
   }
 
   -- If models or default_model provided, update models_data
@@ -253,6 +258,15 @@ function M.get_default_parameters(provider_name)
   local resolved = M.resolve(provider_name)
   local provider = providers[resolved]
   return provider and provider.default_parameters or nil
+end
+
+---Get provider config schema for DISCOVER resolution
+---@param provider_name string The provider identifier
+---@return flemma.config.schema.ObjectNode|nil config_schema Provider config schema, or nil if not found
+function M.get_config_schema(provider_name)
+  local resolved = M.resolve(provider_name)
+  local provider = providers[resolved]
+  return provider and provider.config_schema or nil
 end
 
 --------------------------------------------------------------------------------

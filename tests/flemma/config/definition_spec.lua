@@ -459,4 +459,220 @@ describe("config.schema.definition", function()
       assert.is_false(ok)
     end)
   end)
+
+  -- ---------------------------------------------------------------------------
+  -- DISCOVER resolution with registered modules
+  -- ---------------------------------------------------------------------------
+
+  describe("DISCOVER resolution with registered modules", function()
+    local tools_module
+    local provider_reg
+
+    before_each(function()
+      tools_module = require("flemma.tools")
+      tools_module.clear()
+      provider_reg = require("flemma.provider.registry")
+      provider_reg.clear()
+    end)
+
+    describe("tool DISCOVER", function()
+      it("resolves bash tool config schema", function()
+        tools_module.register("flemma.tools.definitions.bash")
+        facade.apply(facade.LAYERS.SETUP, {
+          tools = { bash = { shell = "zsh" } },
+        })
+        assert.equals("zsh", facade.get().tools.bash.shell)
+      end)
+
+      it("resolves bash cwd and env config", function()
+        tools_module.register("flemma.tools.definitions.bash")
+        facade.apply(facade.LAYERS.SETUP, {
+          tools = { bash = { cwd = "/home", env = { PATH = "/usr/bin" } } },
+        })
+        local cfg = facade.get()
+        assert.equals("/home", cfg.tools.bash.cwd)
+        assert.same({ PATH = "/usr/bin" }, cfg.tools.bash.env)
+      end)
+
+      it("resolves grep tool config with exclude list", function()
+        tools_module.register("flemma.tools.definitions.grep")
+        facade.apply(facade.LAYERS.SETUP, {
+          tools = { grep = { exclude = { "node_modules", ".git" } } },
+        })
+        assert.same({ "node_modules", ".git" }, facade.get().tools.grep.exclude)
+      end)
+
+      it("resolves find tool config schema", function()
+        tools_module.register("flemma.tools.definitions.find")
+        facade.apply(facade.LAYERS.SETUP, {
+          tools = { find = { cwd = "/home" } },
+        })
+        assert.equals("/home", facade.get().tools.find.cwd)
+      end)
+
+      it("resolves ls tool config schema", function()
+        tools_module.register("flemma.tools.definitions.ls")
+        facade.apply(facade.LAYERS.SETUP, {
+          tools = { ls = { cwd = "/var" } },
+        })
+        assert.equals("/var", facade.get().tools.ls.cwd)
+      end)
+
+      it("rejects unknown field on discovered tool schema", function()
+        tools_module.register("flemma.tools.definitions.bash")
+        local ok, err = facade.apply(facade.LAYERS.SETUP, {
+          tools = { bash = { nonexistent = "value" } },
+        })
+        assert.is_nil(ok)
+        assert.truthy(err:find("unknown key"))
+      end)
+
+      it("rejects invalid type on discovered tool schema field", function()
+        tools_module.register("flemma.tools.definitions.bash")
+        local ok, err = facade.apply(facade.LAYERS.SETUP, {
+          tools = { bash = { shell = 42 } },
+        })
+        assert.is_nil(ok)
+        assert.truthy(err)
+      end)
+
+      it("errors for unregistered tool without defer_discover", function()
+        local ok, err = facade.apply(facade.LAYERS.SETUP, {
+          tools = { bash = { shell = "zsh" } },
+        })
+        assert.is_nil(ok)
+        assert.truthy(err:find("unknown key"))
+      end)
+    end)
+
+    describe("provider DISCOVER", function()
+      it("resolves custom provider config schema via registry", function()
+        local s = require("flemma.config.schema")
+        provider_reg.register("custom", {
+          module = "flemma.provider.providers.anthropic",
+          capabilities = {
+            supports_reasoning = false,
+            supports_thinking_budget = false,
+            outputs_thinking = false,
+            output_has_thoughts = false,
+          },
+          display_name = "Custom Provider",
+          config_schema = s.object({
+            api_url = s.optional(s.string()),
+          }),
+        })
+        facade.apply(facade.LAYERS.SETUP, {
+          parameters = { custom = { api_url = "https://custom.api" } },
+        })
+        assert.equals("https://custom.api", facade.get().parameters.custom.api_url)
+      end)
+
+      it("built-in provider schemas work without registry registration", function()
+        facade.apply(facade.LAYERS.SETUP, {
+          parameters = { anthropic = { thinking_budget = 4096 } },
+        })
+        assert.equals(4096, facade.get().parameters.anthropic.thinking_budget)
+      end)
+
+      it("rejects unknown field on custom provider schema", function()
+        local s = require("flemma.config.schema")
+        provider_reg.register("custom", {
+          module = "flemma.provider.providers.anthropic",
+          capabilities = {
+            supports_reasoning = false,
+            supports_thinking_budget = false,
+            outputs_thinking = false,
+            output_has_thoughts = false,
+          },
+          display_name = "Custom Provider",
+          config_schema = s.object({
+            api_url = s.optional(s.string()),
+          }),
+        })
+        local ok, err = facade.apply(facade.LAYERS.SETUP, {
+          parameters = { custom = { nonexistent = "value" } },
+        })
+        assert.is_nil(ok)
+        assert.truthy(err:find("unknown key"))
+      end)
+    end)
+
+    describe("deferred DISCOVER", function()
+      it("defers tool config writes and replays after registration", function()
+        local _, err, deferred = facade.apply(
+          facade.LAYERS.SETUP,
+          { tools = { bash = { shell = "zsh" } } },
+          { defer_discover = true }
+        )
+        assert.is_nil(err)
+        assert.is_not_nil(deferred)
+        assert.equals(1, #deferred)
+
+        tools_module.register("flemma.tools.definitions.bash")
+
+        local failures = facade.apply_deferred(facade.LAYERS.SETUP, deferred)
+        assert.is_nil(failures)
+        assert.equals("zsh", facade.get().tools.bash.shell)
+      end)
+
+      it("deferred write fails for genuinely unknown tool", function()
+        local _, _, deferred = facade.apply(
+          facade.LAYERS.SETUP,
+          { tools = { nonexistent = { foo = "bar" } } },
+          { defer_discover = true }
+        )
+        assert.is_not_nil(deferred)
+
+        local failures = facade.apply_deferred(facade.LAYERS.SETUP, deferred)
+        assert.is_not_nil(failures)
+        assert.equals(1, #failures)
+      end)
+
+      it("defers multiple tool config writes", function()
+        local _, _, deferred = facade.apply(
+          facade.LAYERS.SETUP,
+          { tools = { bash = { shell = "zsh" }, grep = { exclude = { ".git" } } } },
+          { defer_discover = true }
+        )
+        assert.is_not_nil(deferred)
+        assert.equals(2, #deferred)
+
+        tools_module.register("flemma.tools.definitions.bash")
+        tools_module.register("flemma.tools.definitions.grep")
+
+        local failures = facade.apply_deferred(facade.LAYERS.SETUP, deferred)
+        assert.is_nil(failures)
+        assert.equals("zsh", facade.get().tools.bash.shell)
+        assert.same({ ".git" }, facade.get().tools.grep.exclude)
+      end)
+
+      it("defers custom provider config and replays after registration", function()
+        local _, _, deferred = facade.apply(
+          facade.LAYERS.SETUP,
+          { parameters = { my_provider = { api_url = "https://api.mine" } } },
+          { defer_discover = true }
+        )
+        assert.is_not_nil(deferred)
+
+        local s = require("flemma.config.schema")
+        provider_reg.register("my_provider", {
+          module = "flemma.provider.providers.anthropic",
+          capabilities = {
+            supports_reasoning = false,
+            supports_thinking_budget = false,
+            outputs_thinking = false,
+            output_has_thoughts = false,
+          },
+          display_name = "My Provider",
+          config_schema = s.object({
+            api_url = s.optional(s.string()),
+          }),
+        })
+
+        local failures = facade.apply_deferred(facade.LAYERS.SETUP, deferred)
+        assert.is_nil(failures)
+        assert.equals("https://api.mine", facade.get().parameters.my_provider.api_url)
+      end)
+    end)
+  end)
 end)

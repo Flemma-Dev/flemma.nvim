@@ -308,6 +308,18 @@ function M.get(name)
   ensure_modules_loaded()
   return registry.get(name)
 end
+
+---Get a tool's config schema for DISCOVER resolution.
+---@param name string The tool name
+---@return flemma.config.schema.ObjectNode|nil config_schema Tool config schema, or nil if not found
+function M.get_config_schema(name)
+  local tool = M.get(name)
+  if not tool then
+    return nil
+  end
+  return tool.metadata and tool.metadata.config_schema
+end
+
 M.count = registry.count
 M.is_executable = registry.is_executable
 M.get_executor = registry.get_executor

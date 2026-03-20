@@ -8,12 +8,20 @@ local M = {}
 
 -- Module-level require for description constants only (evaluated at load time).
 -- Runtime code inside execute() must use ctx.truncate instead.
+local s = require("flemma.config.schema")
 local truncate = require("flemma.utilities.truncate")
 local sink_module = require("flemma.sink")
 
 M.definitions = {
   {
     name = "bash",
+    metadata = {
+      config_schema = s.object({
+        shell = s.optional(s.string()),
+        cwd = s.optional(s.string("urn:flemma:buffer:path")),
+        env = s.optional(s.map(s.string(), s.string())),
+      }),
+    },
     capabilities = { "can_auto_approve_if_sandboxed" },
     description = "Execute a bash command in the current working directory. "
       .. "Returns stdout and stderr. Output is truncated to last "

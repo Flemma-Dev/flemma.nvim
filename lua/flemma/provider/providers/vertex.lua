@@ -3,6 +3,7 @@
 local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local s = require("flemma.config.schema")
 local sink = require("flemma.sink")
 local tools_module = require("flemma.tools")
 local provider_registry = require("flemma.provider.registry")
@@ -37,6 +38,11 @@ M.metadata = {
     location = "global",
     thinking_budget = nil,
   },
+  config_schema = s.object({
+    project_id = s.optional(s.string()),
+    location = s.optional(s.string("global")),
+    thinking_budget = s.optional(s.integer()),
+  }),
 }
 
 ---@param self flemma.provider.Vertex

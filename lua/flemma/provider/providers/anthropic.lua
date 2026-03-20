@@ -3,6 +3,7 @@
 local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local s = require("flemma.config.schema")
 local sink = require("flemma.sink")
 local tools_module = require("flemma.tools")
 local provider_registry = require("flemma.provider.registry")
@@ -27,6 +28,9 @@ M.metadata = {
   default_parameters = {
     thinking_budget = nil,
   },
+  config_schema = s.object({
+    thinking_budget = s.optional(s.integer()),
+  }),
 }
 
 ---@param merged_config flemma.provider.Parameters

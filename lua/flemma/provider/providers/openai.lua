@@ -4,6 +4,7 @@ local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local models = require("flemma.models")
+local s = require("flemma.config.schema")
 local sink = require("flemma.sink")
 local tools_module = require("flemma.tools")
 local provider_registry = require("flemma.provider.registry")
@@ -42,6 +43,10 @@ M.metadata = {
   default_parameters = {
     reasoning_summary = "auto",
   },
+  config_schema = s.object({
+    reasoning_summary = s.optional(s.string("auto")),
+    reasoning = s.optional(s.string()),
+  }),
 }
 
 ---@param merged_config flemma.provider.Parameters

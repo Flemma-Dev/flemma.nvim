@@ -169,17 +169,7 @@ return s.object({
     vertex = VertexParametersSchema,
     -- Dynamic provider parameter schemas (resolved lazily)
     [symbols.DISCOVER] = function(key)
-      local ok, mod = pcall(require, "flemma.provider.registry")
-      ---@cast mod table
-      if not ok or not mod.get then
-        return nil
-      end
-      local provider = mod.get(key) --[[@as table?]]
-      if not provider then
-        return nil
-      end
-      local metadata = provider.metadata --[[@as table?]]
-      return metadata and metadata.config_schema --[[@as flemma.config.schema.Node?]]
+      return require("flemma.provider.registry").get_config_schema(key)
     end,
   }),
 
@@ -206,17 +196,7 @@ return s.object({
     modules = s.list(s.loadable(), {}),
     -- Tool-specific config schemas (resolved lazily via tools registry)
     [symbols.DISCOVER] = function(key)
-      local ok, mod = pcall(require, "flemma.tools")
-      ---@cast mod table
-      if not ok or not mod.get then
-        return nil
-      end
-      local tool = mod.get(key) --[[@as table?]]
-      if not tool then
-        return nil
-      end
-      local metadata = tool.metadata --[[@as table?]]
-      return metadata and metadata.config_schema --[[@as flemma.config.schema.Node?]]
+      return require("flemma.tools").get_config_schema(key)
     end,
     [symbols.ALIASES] = {
       approve = "auto_approve",

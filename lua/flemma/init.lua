@@ -177,13 +177,11 @@ M.setup = function(user_opts)
   end
 
   -- Replay deferred DISCOVER writes now that modules are registered.
-  -- Failures are expected until tools/providers expose metadata.config_schema.
+  -- Pass 2 failures mean the config key genuinely doesn't exist.
   if deferred then
     local failures = config_facade.apply_deferred(config_facade.LAYERS.SETUP, deferred)
     if failures then
-      for _, msg in ipairs(failures) do
-        log.debug("setup(): deferred config key not resolved: " .. msg)
-      end
+      vim.notify("Flemma: unknown config keys: " .. table.concat(failures, ", "), vim.log.levels.WARN)
     end
   end
 
