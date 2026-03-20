@@ -575,6 +575,22 @@ describe("flemma.config.schema", function()
       assert.is_true(s.optional(s.list(s.string(), {})):is_list())
       assert.is_false(s.optional(s.string()):is_list())
     end)
+
+    it("get_item_schema() delegates to inner ListNode", function()
+      local item = s.string()
+      local opt = s.optional(s.list(item, {}))
+      assert.equals(item, opt:get_item_schema())
+    end)
+
+    it("get_item_schema() delegates to inner UnionNode with list branch", function()
+      local item = s.string()
+      local opt = s.optional(s.union(s.list(item), s.func()))
+      assert.equals(item, opt:get_item_schema())
+    end)
+
+    it("get_item_schema() returns nil when inner has no list", function()
+      assert.is_nil(s.optional(s.string()):get_item_schema())
+    end)
   end)
 
   -- ---------------------------------------------------------------------------
@@ -606,6 +622,34 @@ describe("flemma.config.schema", function()
 
     it("has_default() is false", function()
       assert.is_false(s.union(s.string(), s.integer()):has_default())
+    end)
+
+    it("is_list() is true when any branch is a list", function()
+      local u = s.union(s.list(s.string()), s.func(), s.string())
+      assert.is_true(u:is_list())
+    end)
+
+    it("is_list() is false when no branch is a list", function()
+      local u = s.union(s.string(), s.integer(), s.boolean())
+      assert.is_false(u:is_list())
+    end)
+
+    it("get_item_schema() returns first list branch's item schema", function()
+      local item = s.string()
+      local u = s.union(s.list(item), s.func())
+      assert.equals(item, u:get_item_schema())
+    end)
+
+    it("get_item_schema() returns nil when no branch is a list", function()
+      local u = s.union(s.string(), s.func())
+      assert.is_nil(u:get_item_schema())
+    end)
+
+    it("get_item_schema() returns the first list branch when multiple exist", function()
+      local item_a = s.string()
+      local item_b = s.integer()
+      local u = s.union(s.list(item_a), s.list(item_b))
+      assert.equals(item_a, u:get_item_schema())
     end)
   end)
 

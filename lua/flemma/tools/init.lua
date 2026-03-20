@@ -40,11 +40,14 @@ local function fire_ready_callbacks()
   hooks.dispatch("boot:complete")
 end
 
---- Register a tool definition and materialize its config_schema defaults into L10.
+--- Register a tool definition, materialize its config_schema defaults into L10,
+--- and append its name to the tools allow_list so the default resolved tools
+--- list includes all registered tools.
 ---@param name string
 ---@param def flemma.tools.ToolDefinition
 local function register_tool(name, def)
   registry.register(name, def)
+  config_facade.record_default("append", "tools", name)
   if def.metadata and def.metadata.config_schema then
     config_facade.register_module_defaults("tools", name, def.metadata.config_schema)
   end

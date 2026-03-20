@@ -58,6 +58,8 @@ ListProxy.__index = ListProxy
 --- Coerce an item and record one or more ops of the given type.
 --- If coerce expands a single item into a table, each expanded item becomes
 --- a separate op (e.g., remove("$default") → remove("bash") + remove("ls")).
+--- Coerce functions that return a table MUST return a sequential array —
+--- non-sequential tables are silently truncated by ipairs.
 --- Validates each expanded item against the item schema (except for remove).
 ---@param self flemma.config.ListProxy
 ---@param op "append"|"remove"|"prepend"
@@ -261,11 +263,12 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
         return make_proxy(root_schema, bufnr, layer, canonical, leaf)
       end
 
-      -- List field on a write proxy → return a ListProxy for mutation ops.
-      -- get_item_schema() is non-nil when is_list() is true (ListNode guarantees this).
+      -- List-capable field on a write proxy → return a ListProxy for mutation ops.
+      -- get_item_schema() returns non-nil for ListNode, OptionalNode(ListNode),
+      -- and UnionNode with a list branch — generalizing the is_list() check.
       -- Pass the leaf's coerce function so list ops expand per-item at write time.
-      if leaf:is_list() and layer ~= nil then
-        local item_schema = leaf:get_item_schema() --[[@as flemma.config.schema.Node]]
+      local item_schema = leaf:get_item_schema()
+      if item_schema and layer ~= nil then
         local coerce_fn = leaf:has_coerce() and leaf:get_coerce() or nil
         return make_list_proxy(canonical, layer, bufnr, item_schema, coerce_fn)
       end

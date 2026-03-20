@@ -708,6 +708,14 @@ function OptionalNode:get_list_item_schema()
   return self._inner:get_list_item_schema()
 end
 
+--- Delegate item schema lookup to inner node.
+--- Enables OptionalNode(ListNode) and OptionalNode(UnionNode with list branch)
+--- to be detected as list-capable by the proxy's get_item_schema() check.
+---@return flemma.config.schema.Node?
+function OptionalNode:get_item_schema()
+  return self._inner:get_item_schema()
+end
+
 ---@return boolean
 function OptionalNode:has_discover()
   return self._inner:has_discover()
@@ -779,6 +787,12 @@ end
 --- materializes `false` because the boolean branch is checked first. If
 --- the branches were swapped, the enum (which has no default) would be
 --- checked first and the union would have no default.
+---
+--- **List semantics:** A union with a list branch (e.g., `s.union(s.list(...), s.func())`)
+--- is treated as a list-capable field. `is_list()` returns true and `get_item_schema()`
+--- returns the first list branch's item schema. This enables the store to use list
+--- resolution (bottom-up accumulation) and the proxy to return a ListProxy for write
+--- access, while still accepting non-list values (functions, strings) via `set` ops.
 ---@class flemma.config.schema.UnionNode : flemma.config.schema.Node
 ---@field _branches flemma.config.schema.Node[] Schemas to try in order
 local UnionNode = setmetatable({}, { __index = Node })
@@ -818,6 +832,32 @@ function UnionNode:validate_value(value)
     table.insert(errors, err or "invalid")
   end
   return false, "no union branch matched: " .. table.concat(errors, "; ")
+end
+
+--- Whether this union has a list branch (any branch where is_list() is true).
+--- Enables the store to use list resolution and the proxy to offer list ops.
+---@return boolean
+function UnionNode:is_list()
+  for _, branch in ipairs(self._branches) do
+    if branch:is_list() then
+      return true
+    end
+  end
+  return false
+end
+
+--- Return the item schema from the first list branch.
+--- Used by the proxy to construct a ListProxy with per-item validation.
+--- Returns nil when no branch is a list.
+---@return flemma.config.schema.Node?
+function UnionNode:get_item_schema()
+  for _, branch in ipairs(self._branches) do
+    local item = branch:get_item_schema()
+    if item then
+      return item
+    end
+  end
+  return nil
 end
 
 ---@param branches flemma.config.schema.Node[]

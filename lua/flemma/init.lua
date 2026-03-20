@@ -100,6 +100,12 @@ M.setup = function(user_opts)
   -- Register built-in sandbox backends and validate availability
   sandbox.setup()
 
+  -- Initialize tool approval presets before finalize so that the auto_approve
+  -- coerce function can expand $preset references during the coerce pass.
+  -- Read presets config from the store — L20 has the user's setup values.
+  local presets_cfg = config_facade.get()
+  tools_presets.setup(presets_cfg.tools and presets_cfg.tools.presets)
+
   -- Phase 3: Finalize — replay deferred DISCOVER writes + run coerce transforms
   -- Deferred user opts (e.g., parameters.vertex, tools.bash) now resolve.
   -- Coerce transforms re-run with populated ctx (preset expansion, etc.).
@@ -192,10 +198,8 @@ M.setup = function(user_opts)
   -- Initialize personality registry with built-in personalities
   personalities.setup()
 
-  -- Initialize tool approval presets (built-ins + user-defined)
-  tools_presets.setup(config.tools and config.tools.presets)
-
   -- Initialize approval resolver chain from config
+  -- (tools_presets.setup() already called before finalize in Phase 2)
   tools_approval.setup()
 
   -- Set up experimental LSP if enabled

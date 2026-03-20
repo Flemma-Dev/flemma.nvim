@@ -104,10 +104,15 @@ describe("config.schema.definition", function()
       assert.truthy(cfg.statusline.format:find("#{model}"))
     end)
 
+    it("materializes tools auto_approve default as unexpanded preset", function()
+      -- Before finalize/presets setup, $default is stored as-is
+      local cfg = config_facade.get()
+      assert.same({ "$default" }, cfg.tools.auto_approve)
+    end)
+
     it("materializes tools defaults", function()
       local cfg = config_facade.get()
       assert.is_true(cfg.tools.require_approval)
-      assert.same({ "$default" }, cfg.tools.auto_approve)
       assert.is_true(cfg.tools.auto_approve_sandboxed)
       assert.same({}, cfg.tools.presets)
       assert.is_true(cfg.tools.autopilot.enabled)
@@ -835,6 +840,220 @@ describe("config.schema.definition", function()
         assert.is_nil(failures)
         assert.equals("restricted", config_facade.get().sandbox.backends.firejail.profile)
       end)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- auto_approve coerce — preset expansion
+  -- ---------------------------------------------------------------------------
+
+  describe("auto_approve coerce", function()
+    local tools_presets
+
+    before_each(function()
+      package.loaded["flemma.tools.presets"] = nil
+      tools_presets = require("flemma.tools.presets")
+    end)
+
+    it("passes through non-$ strings unchanged", function()
+      local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
+      w.tools.auto_approve:append("bash")
+      local cfg = config_facade.get()
+      assert.truthy(vim.tbl_contains(cfg.tools.auto_approve, "bash"))
+    end)
+
+    it("passes through functions unchanged", function()
+      local fn = function() end
+      local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
+      w.tools.auto_approve = fn
+      local cfg = config_facade.get()
+      assert.equals(fn, cfg.tools.auto_approve)
+    end)
+
+    it("expands $default preset when presets are registered", function()
+      tools_presets.setup()
+      -- The L10 default has { "$default" }. Finalize expands it.
+      config_facade.finalize(config_facade.LAYERS.SETUP)
+      local cfg = config_facade.get()
+      local approve = cfg.tools.auto_approve
+      assert.is_table(approve)
+      assert.truthy(vim.tbl_contains(approve, "read"))
+      assert.truthy(vim.tbl_contains(approve, "write"))
+      assert.truthy(vim.tbl_contains(approve, "edit"))
+      -- $default itself is gone (expanded into individual tool names)
+      assert.is_falsy(vim.tbl_contains(approve, "$default"))
+    end)
+
+    it("leaves $default unexpanded before presets are registered", function()
+      -- No tools_presets.setup() call — presets registry is empty
+      config_facade.finalize(config_facade.LAYERS.SETUP)
+      local cfg = config_facade.get()
+      -- $default stays as-is because the preset isn't found
+      assert.truthy(vim.tbl_contains(cfg.tools.auto_approve, "$default"))
+    end)
+
+    it("expands $preset per-item in list set via write proxy", function()
+      tools_presets.setup({ ["$safe"] = { approve = { "read" } } })
+      local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
+      w.tools.auto_approve = { "$safe", "bash" }
+      local cfg = config_facade.get()
+      assert.are.same({ "read", "bash" }, cfg.tools.auto_approve)
+    end)
+
+    it("expands $preset in append via write proxy", function()
+      tools_presets.setup()
+      local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
+      w.tools.auto_approve:append("$default")
+      local ops = config_facade.dump_layer(config_facade.LAYERS.SETUP)
+      -- Should have expanded into individual append ops
+      local appended = {}
+      for _, op in ipairs(ops) do
+        if op.op == "append" and op.path == "tools.auto_approve" then
+          table.insert(appended, op.value)
+        end
+      end
+      assert.truthy(vim.tbl_contains(appended, "read"))
+      assert.truthy(vim.tbl_contains(appended, "write"))
+      assert.truthy(vim.tbl_contains(appended, "edit"))
+    end)
+
+    it("expands $preset in remove via write proxy", function()
+      tools_presets.setup()
+      -- Start with all $default tools
+      local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
+      w.tools.auto_approve = { "read", "write", "edit", "bash" }
+      -- Remove the $default preset (should expand to individual remove ops)
+      w.tools.auto_approve:remove("$default")
+      local cfg = config_facade.get()
+      assert.are.same({ "bash" }, cfg.tools.auto_approve)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- Union list proxy on auto_approve
+  -- ---------------------------------------------------------------------------
+
+  describe("auto_approve union list ops", function()
+    it("write proxy supports append on auto_approve", function()
+      local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
+      w.tools.auto_approve:append("bash")
+      local ops = config_facade.dump_layer(config_facade.LAYERS.SETUP)
+      local found = false
+      for _, op in ipairs(ops) do
+        if op.op == "append" and op.path == "tools.auto_approve" and op.value == "bash" then
+          found = true
+        end
+      end
+      assert.is_true(found)
+    end)
+
+    it("write proxy supports remove on auto_approve", function()
+      local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
+      w.tools.auto_approve:remove("read")
+      local ops = config_facade.dump_layer(config_facade.LAYERS.SETUP)
+      local found = false
+      for _, op in ipairs(ops) do
+        if op.op == "remove" and op.path == "tools.auto_approve" and op.value == "read" then
+          found = true
+        end
+      end
+      assert.is_true(found)
+    end)
+
+    it("write proxy supports set with list on auto_approve", function()
+      local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
+      w.tools.auto_approve = { "bash", "grep" }
+      local cfg = config_facade.get()
+      assert.are.same({ "bash", "grep" }, cfg.tools.auto_approve)
+    end)
+
+    it("write proxy supports set with function on auto_approve", function()
+      local fn = function() end
+      local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
+      w.tools.auto_approve = fn
+      local cfg = config_facade.get()
+      assert.equals(fn, cfg.tools.auto_approve)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- Tool name population in L10
+  -- ---------------------------------------------------------------------------
+
+  describe("tool name population via record_default", function()
+    -- Tests record_default directly. The tools module calls record_default in
+    -- register_tool() — verified by code inspection and integration tests
+    -- (testing via tools.register() here would require clearing the entire
+    -- tools module cache to avoid stale facade references).
+
+    it("appends a tool name to the tools list in L10", function()
+      config_facade.record_default("append", "tools", "test_tool")
+      local info = config_facade.inspect(nil, "tools")
+      assert.is_table(info.value)
+      assert.truthy(vim.tbl_contains(info.value, "test_tool"))
+    end)
+
+    it("multiple appends accumulate in the tools list", function()
+      config_facade.record_default("append", "tools", "tool_a")
+      config_facade.record_default("append", "tools", "tool_b")
+      local info = config_facade.inspect(nil, "tools")
+      assert.truthy(vim.tbl_contains(info.value, "tool_a"))
+      assert.truthy(vim.tbl_contains(info.value, "tool_b"))
+    end)
+
+    it("dedup moves existing tool name to end", function()
+      config_facade.record_default("append", "tools", "bash")
+      config_facade.record_default("append", "tools", "grep")
+      config_facade.record_default("append", "tools", "bash")
+      local info = config_facade.inspect(nil, "tools")
+      assert.are.same({ "grep", "bash" }, info.value)
+    end)
+
+    it("frontmatter set overrides default tool list", function()
+      config_facade.record_default("append", "tools", "bash")
+      config_facade.record_default("append", "tools", "grep")
+      config_facade.record_default("append", "tools", "read")
+      -- Frontmatter restricts to a subset
+      local store = require("flemma.config.store")
+      store.record(store.LAYERS.FRONTMATTER, 1, "set", "tools", { "bash" })
+      local info = config_facade.inspect(1, "tools")
+      assert.are.same({ "bash" }, info.value)
+    end)
+
+    it("frontmatter remove removes from default tool list", function()
+      config_facade.record_default("append", "tools", "bash")
+      config_facade.record_default("append", "tools", "grep")
+      config_facade.record_default("append", "tools", "read")
+      local store = require("flemma.config.store")
+      store.record(store.LAYERS.FRONTMATTER, 1, "remove", "tools", "bash")
+      local info = config_facade.inspect(1, "tools")
+      assert.are.same({ "grep", "read" }, info.value)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- apply() with hybrid list (tools = { "bash", "grep" })
+  -- ---------------------------------------------------------------------------
+
+  describe("apply with hybrid list", function()
+    it("accepts sequential table for hybrid object with allow_list", function()
+      local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
+        tools = { "bash", "grep" },
+      })
+      assert.is_nil(err)
+      assert.is_true(ok)
+      -- Hybrid object: list value is read via inspect(), not the read proxy.
+      local info = config_facade.inspect(nil, "tools")
+      assert.are.same({ "bash", "grep" }, info.value)
+    end)
+
+    it("still accepts table of named fields", function()
+      local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
+        tools = { require_approval = false },
+      })
+      assert.is_nil(err)
+      assert.is_true(ok)
+      assert.is_false(config_facade.get().tools.require_approval)
     end)
   end)
 end)

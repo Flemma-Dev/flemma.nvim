@@ -103,13 +103,32 @@ local function apply_recursive(ctx, path, value)
   end
 
   if leaf:is_object() and type(value) == "table" then
-    for k, v in pairs(value) do
-      local alias_target = leaf:resolve_alias(k)
-      local canonical_key = alias_target or k
-      local child_path = path .. "." .. canonical_key
-      local ok, err = apply_recursive(ctx, child_path, v)
-      if not ok then
-        return nil, err
+    -- Hybrid objects with allow_list: sequential table → list set.
+    -- Non-sequential tables fall through to normal object field walking.
+    -- Note: coerce is NOT run here — it is deferred to finalize(), which
+    -- re-runs coerce on all stored ops after modules/presets are registered.
+    local unwrapped_leaf = nav.unwrap_optional(leaf)
+    if unwrapped_leaf:has_list_part() and vim.islist(value) then
+      -- Validate each item against the list item schema.
+      local list_item_schema = unwrapped_leaf:get_list_item_schema()
+      if list_item_schema then
+        for i, item in ipairs(value) do
+          local ok, err = list_item_schema:validate_value(item)
+          if not ok then
+            return nil, string.format("config.apply: list item[%d] at '%s': %s", i, path, err or "invalid")
+          end
+        end
+      end
+      store.record(ctx.layer, ctx.bufnr, "set", path, value)
+    else
+      for k, v in pairs(value) do
+        local alias_target = leaf:resolve_alias(k)
+        local canonical_key = alias_target or k
+        local child_path = path .. "." .. canonical_key
+        local ok, err = apply_recursive(ctx, child_path, v)
+        if not ok then
+          return nil, err
+        end
       end
     end
   else
@@ -203,6 +222,17 @@ function M.apply(layer, opts, apply_opts)
     return true, nil, ctx.deferred
   end
   return true
+end
+
+--- Record a single operation on the DEFAULTS layer (L10).
+--- Used by registries to populate default values that aren't part of the
+--- schema's static materialization (e.g., appending tool names to the tools list).
+---@param op "set"|"append"|"remove"|"prepend" Operation type
+---@param path string Dot-delimited canonical path
+---@param value any Value for the operation
+function M.record_default(op, path, value)
+  assert(root_schema, "config.init() must be called before record_default()")
+  store.record(M.LAYERS.DEFAULTS, nil, op, path, value)
 end
 
 --- Materialize a discovered module's schema defaults into the DEFAULTS layer.

@@ -152,7 +152,19 @@ return s.object({
 
   tools = s.object({
     require_approval = s.boolean(true),
-    auto_approve = s.union(s.list(s.string(), { "$default" }), s.func(), s.string()),
+    auto_approve = s.union(s.list(s.string(), { "$default" }), s.func(), s.string()):coerce(function(value, _ctx)
+      -- Expand $-prefixed preset references to their approve list.
+      -- At boot time presets may not be registered yet; finalize() re-runs
+      -- coerce after tools_presets.setup() so deferred expansion succeeds.
+      if type(value) ~= "string" or not vim.startswith(value, "$") then
+        return value
+      end
+      local preset = require("flemma.tools.presets").get(value)
+      if not preset or not preset.approve then
+        return value
+      end
+      return preset.approve
+    end),
     auto_approve_sandboxed = s.boolean(true),
     presets = s.map(
       s.string(),

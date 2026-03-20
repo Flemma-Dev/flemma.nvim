@@ -1097,4 +1097,113 @@ describe("flemma.config.proxy", function()
       end)
     end)
   end)
+
+  -- ---------------------------------------------------------------------------
+  -- Union with list branch — s.union(s.list(...), s.func(), s.string())
+  -- ---------------------------------------------------------------------------
+
+  describe("union with list branch", function()
+    -- Mirrors tools.auto_approve: union of list, func, and string.
+    local function make_union_list_schema()
+      return s.object({
+        policy = s.union(s.list(s.string(), { "default" }), s.func(), s.string()),
+      })
+    end
+
+    it("write proxy returns ListProxy for union with list branch", function()
+      local schema = make_union_list_schema()
+      store.init(schema)
+      store.record(L.DEFAULTS, nil, "set", "policy", { "default" })
+      local w = proxy.write_proxy(schema, nil, L.SETUP)
+      -- Accessing the union field on a write proxy should allow list ops
+      w.policy:append("extra")
+      assert.are.same({ "default", "extra" }, store.resolve("policy", nil))
+    end)
+
+    it("write proxy: remove on union list works", function()
+      local schema = make_union_list_schema()
+      store.init(schema)
+      store.record(L.DEFAULTS, nil, "set", "policy", { "a", "b", "c" })
+      local w = proxy.write_proxy(schema, nil, L.SETUP)
+      w.policy:remove("b")
+      assert.are.same({ "a", "c" }, store.resolve("policy", nil))
+    end)
+
+    it("write proxy: prepend on union list works", function()
+      local schema = make_union_list_schema()
+      store.init(schema)
+      store.record(L.DEFAULTS, nil, "set", "policy", { "a", "b" })
+      local w = proxy.write_proxy(schema, nil, L.SETUP)
+      w.policy:prepend("z")
+      assert.are.same({ "z", "a", "b" }, store.resolve("policy", nil))
+    end)
+
+    it("write proxy: set with list table records set op", function()
+      local schema = make_union_list_schema()
+      store.init(schema)
+      store.record(L.DEFAULTS, nil, "set", "policy", { "default" })
+      local w = proxy.write_proxy(schema, nil, L.SETUP)
+      w.policy = { "only", "these" }
+      assert.are.same({ "only", "these" }, store.resolve("policy", nil))
+    end)
+
+    it("write proxy: set with function records set op", function()
+      local schema = make_union_list_schema()
+      store.init(schema)
+      local fn = function() end
+      local w = proxy.write_proxy(schema, nil, L.SETUP)
+      w.policy = fn
+      -- Function set is stored; list resolution returns it as-is
+      assert.equals(fn, store.resolve("policy", nil))
+    end)
+
+    it("write proxy: set with string records set op", function()
+      local schema = make_union_list_schema()
+      store.init(schema)
+      local w = proxy.write_proxy(schema, nil, L.SETUP)
+      w.policy = "my.module.path"
+      assert.equals("my.module.path", store.resolve("policy", nil))
+    end)
+
+    it("read proxy resolves union list through store", function()
+      local schema = make_union_list_schema()
+      store.init(schema)
+      store.record(L.DEFAULTS, nil, "set", "policy", { "a", "b" })
+      store.record(L.SETUP, nil, "append", "policy", "c")
+      local cfg = proxy.read_proxy(schema, nil)
+      assert.are.same({ "a", "b", "c" }, cfg.policy)
+    end)
+
+    it("read proxy resolves function set through store", function()
+      local schema = make_union_list_schema()
+      store.init(schema)
+      local fn = function() end
+      store.record(L.SETUP, nil, "set", "policy", fn)
+      local cfg = proxy.read_proxy(schema, nil)
+      assert.equals(fn, cfg.policy)
+    end)
+
+    it("operators work on union list write proxy", function()
+      local schema = make_union_list_schema()
+      store.init(schema)
+      store.record(L.DEFAULTS, nil, "set", "policy", { "a" })
+      local w = proxy.write_proxy(schema, nil, L.SETUP)
+      -- + appends, - removes, ^ prepends
+      w.policy = w.policy + "b"
+      w.policy = w.policy - "a"
+      w.policy = w.policy ^ "z"
+      assert.are.same({ "z", "b" }, store.resolve("policy", nil))
+    end)
+
+    it("rejects invalid list items on append", function()
+      local schema = s.object({
+        items = s.union(s.list(s.integer()), s.func()),
+      })
+      store.init(schema)
+      local w = proxy.write_proxy(schema, nil, L.SETUP)
+      assert.has_error(function()
+        w.items:append("not an integer")
+      end)
+    end)
+  end)
 end)

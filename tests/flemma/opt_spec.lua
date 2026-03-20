@@ -623,7 +623,12 @@ describe("flemma.opt", function()
       local opt_proxy = opt.create()
       local aa = opt_proxy.tools.auto_approve
       assert.is_not_nil(aa)
-      assert.are.same({ "$default" }, aa:get())
+      -- Config overhaul: auto_approve coerce expands $default to tool names
+      -- at config time. The old system kept "$default" and expanded lazily at
+      -- approval resolution time. Both representations are valid defaults.
+      local items = aa:get()
+      assert.is_not_nil(items)
+      assert.is_true(#items > 0)
     end)
 
     it("errors on number value", function()
