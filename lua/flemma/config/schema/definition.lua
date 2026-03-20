@@ -177,7 +177,12 @@ return s.object({
     autopilot = s.object({
       enabled = s.boolean(true),
       max_turns = s.integer(100),
-    }),
+    }):coerce(function(value, _ctx)
+      if type(value) == "boolean" then
+        return { enabled = value }
+      end
+      return value
+    end),
     max_concurrent = s.integer(2),
     default_timeout = s.integer(30),
     show_spinner = s.boolean(true),

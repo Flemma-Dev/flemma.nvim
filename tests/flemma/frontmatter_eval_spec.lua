@@ -8,7 +8,7 @@ local spy = require("luassert.spy")
 
 describe("Frontmatter evaluation caching", function()
   local client = require("flemma.client")
-  local flemma, state, core, processor
+  local flemma, core, processor
 
   before_each(function()
     package.loaded["flemma"] = nil
@@ -23,7 +23,6 @@ describe("Frontmatter evaluation caching", function()
     package.loaded["flemma.pipeline"] = nil
 
     flemma = require("flemma")
-    state = require("flemma.state")
     core = require("flemma.core")
     processor = require("flemma.processor")
 
@@ -143,7 +142,8 @@ describe("Frontmatter evaluation caching", function()
   -- Autopilot override from frontmatter
   -- =========================================================================
 
-  it("sets autopilot_override from frontmatter on dispatch", function()
+  it("frontmatter disables autopilot for buffer", function()
+    local autopilot = require("flemma.autopilot")
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
@@ -168,23 +168,19 @@ describe("Frontmatter evaluation caching", function()
       return false
     end)
 
-    -- Verify the buffer-local override was set from frontmatter
-    local buffer_state = state.get_buffer_state(bufnr)
-    assert.equals(false, buffer_state.autopilot_override)
+    -- autopilot.is_enabled reads from config facade which includes frontmatter
+    assert.is_false(autopilot.is_enabled(bufnr))
   end)
 
-  it("clears autopilot_override when frontmatter has no autopilot key", function()
+  it("autopilot uses global config when frontmatter has no autopilot key", function()
+    local autopilot = require("flemma.autopilot")
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
-
-    -- First, set an override manually to simulate a previous dispatch with autopilot=false
-    local buffer_state = state.get_buffer_state(bufnr)
-    buffer_state.autopilot_override = false
 
     -- Frontmatter without autopilot key
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
       "```lua",
-      "return { parameters = { temperature = 0.5 } }",
+      "flemma.opt.parameters.temperature = 0.5",
       "```",
       "",
       "@You:",
@@ -204,18 +200,18 @@ describe("Frontmatter evaluation caching", function()
       return false
     end)
 
-    -- autopilot_override should be nil (cleared), falling back to global config
-    buffer_state = state.get_buffer_state(bufnr)
-    assert.is_nil(buffer_state.autopilot_override)
+    -- Global setup has autopilot.enabled = true, frontmatter didn't override
+    assert.is_true(autopilot.is_enabled(bufnr))
   end)
 
-  it("sets autopilot_override=true from frontmatter, overriding global disabled config", function()
+  it("frontmatter enables autopilot overriding global disabled config", function()
     -- Setup: config has autopilot disabled globally
     flemma.setup({
       parameters = { thinking = false },
       tools = { autopilot = { enabled = false } },
     })
 
+    local autopilot = require("flemma.autopilot")
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
@@ -240,12 +236,7 @@ describe("Frontmatter evaluation caching", function()
       return false
     end)
 
-    -- autopilot_override should be true (from frontmatter), overriding global config
-    local buffer_state = state.get_buffer_state(bufnr)
-    assert.equals(true, buffer_state.autopilot_override)
-
-    -- autopilot.is_enabled should reflect the override
-    local autopilot = require("flemma.autopilot")
+    -- Frontmatter overrides global disabled → autopilot enabled for this buffer
     assert.is_true(autopilot.is_enabled(bufnr))
   end)
 

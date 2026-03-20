@@ -930,6 +930,34 @@ describe("config.schema.definition", function()
   end)
 
   -- ---------------------------------------------------------------------------
+  -- Autopilot boolean coerce
+  -- ---------------------------------------------------------------------------
+
+  describe("autopilot coerce", function()
+    it("coerces boolean false to { enabled = false }", function()
+      local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
+      w.tools.autopilot = false
+      local cfg = config_facade.materialize()
+      assert.is_false(cfg.tools.autopilot.enabled)
+      assert.equals(100, cfg.tools.autopilot.max_turns)
+    end)
+
+    it("coerces boolean true to { enabled = true }", function()
+      local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
+      w.tools.autopilot = true
+      local cfg = config_facade.materialize()
+      assert.is_true(cfg.tools.autopilot.enabled)
+    end)
+
+    it("passes through table value via apply", function()
+      config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = false, max_turns = 5 } } })
+      local cfg = config_facade.materialize()
+      assert.is_false(cfg.tools.autopilot.enabled)
+      assert.equals(5, cfg.tools.autopilot.max_turns)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
   -- Union list proxy on auto_approve
   -- ---------------------------------------------------------------------------
 

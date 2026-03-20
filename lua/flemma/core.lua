@@ -422,11 +422,6 @@ function M.send_or_execute(opts)
   -- After this call, config.get(bufnr) returns the resolved config including frontmatter.
   local evaluated_frontmatter = processor.evaluate_frontmatter(doc, context, bufnr)
 
-  -- Set per-buffer autopilot override from config store (nil clears a previous override)
-  local cfg = state.get_config()
-  local autopilot_cfg = cfg.tools and cfg.tools.autopilot
-  buffer_state.autopilot_override = autopilot_cfg and autopilot_cfg.enabled or nil
-
   -- Phase 1: Categorize — find tool_use blocks without matching tool_result
   local pending = tool_context.resolve_all_pending(bufnr)
 

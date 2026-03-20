@@ -38,7 +38,6 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field progress_float_bufnr integer|nil Buffer ID for the off-screen progress float
 ---@field progress_gutter_icon_winid integer|nil Window ID for the progress gutter icon float
 ---@field progress_gutter_icon_bufnr integer|nil Buffer ID for the progress gutter icon float
----@field autopilot_override? boolean Per-buffer autopilot override (set from frontmatter, nil = use global config)
 ---@field auto_closed_folds? table<string, boolean>
 ---@field pending_folds? table<string, boolean> Fold IDs that were attempted but failed to close (eligible for retry)
 ---@field fold_completed_tick? integer Last changedtick processed by fold_completed_blocks (prevents redundant folding)

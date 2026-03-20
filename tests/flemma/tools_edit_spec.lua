@@ -11,7 +11,8 @@ package.loaded["flemma.sandbox.backends.bwrap"] = nil
 local tools = require("flemma.tools")
 local registry = require("flemma.tools.registry")
 local executor = require("flemma.tools.executor")
-local state = require("flemma.state")
+local config_facade = require("flemma.config")
+local schema = require("flemma.config.schema.definition")
 
 describe("Edit Tool", function()
   local edit_def
@@ -233,7 +234,16 @@ describe("Edit Tool", function()
       package.loaded["flemma.sandbox"] = nil
       package.loaded["flemma.sandbox.backends.bwrap"] = nil
       package.loaded["flemma.tools.approval"] = nil
+      package.loaded["flemma.tools.executor"] = nil
+      package.loaded["flemma.config"] = nil
+      package.loaded["flemma.config.store"] = nil
+      package.loaded["flemma.config.proxy"] = nil
+      package.loaded["flemma.config.schema.definition"] = nil
       sandbox = require("flemma.sandbox")
+      executor = require("flemma.tools.executor")
+      config_facade = require("flemma.config")
+      schema = require("flemma.config.schema.definition")
+      config_facade.init(schema)
       sandbox.reset_enabled()
       sandbox.clear()
 
@@ -256,7 +266,7 @@ describe("Edit Tool", function()
     end)
 
     it("allows edits inside rw_paths", function()
-      state.set_config({
+      config_facade.apply(config_facade.LAYERS.SETUP, {
         sandbox = {
           enabled = true,
           backend = "mock",
@@ -284,7 +294,7 @@ describe("Edit Tool", function()
     end)
 
     it("denies edits outside rw_paths", function()
-      state.set_config({
+      config_facade.apply(config_facade.LAYERS.SETUP, {
         sandbox = {
           enabled = true,
           backend = "mock",
@@ -315,7 +325,7 @@ describe("Edit Tool", function()
     end)
 
     it("allows all edits when sandbox is disabled", function()
-      state.set_config({
+      config_facade.apply(config_facade.LAYERS.SETUP, {
         sandbox = {
           enabled = false,
           policy = { rw_paths = {} },

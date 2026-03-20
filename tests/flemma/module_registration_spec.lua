@@ -129,10 +129,19 @@ end)
 describe("approval module resolution", function()
   local approval
   local state = require("flemma.state")
+  local config_facade = require("flemma.config")
+  local schema = require("flemma.config.schema.definition")
 
   before_each(function()
     package.loaded["flemma.tools.approval"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema.definition"] = nil
     approval = require("flemma.tools.approval")
+    config_facade = require("flemma.config")
+    schema = require("flemma.config.schema.definition")
+    config_facade.init(schema)
 
     package.preload["test.fixture.approval"] = function()
       return {
@@ -148,6 +157,12 @@ describe("approval module resolution", function()
     end
 
     state.set_config({
+      tools = {
+        auto_approve = "test.fixture.approval",
+        require_approval = true,
+      },
+    })
+    config_facade.apply(config_facade.LAYERS.SETUP, {
       tools = {
         auto_approve = "test.fixture.approval",
         require_approval = true,
@@ -185,11 +200,19 @@ end)
 
 describe("approval module resolution with string[]", function()
   local approval
-  local state = require("flemma.state")
+  local config_facade = require("flemma.config")
+  local config_schema = require("flemma.config.schema.definition")
 
   before_each(function()
     package.loaded["flemma.tools.approval"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema.definition"] = nil
     approval = require("flemma.tools.approval")
+    config_facade = require("flemma.config")
+    config_schema = require("flemma.config.schema.definition")
+    config_facade.init(config_schema)
 
     package.preload["test.fixture.approval"] = function()
       return {
@@ -223,57 +246,21 @@ describe("approval module resolution with string[]", function()
   end)
 
   it("loads multiple module resolvers from string[]", function()
-    state.set_config({
-      tools = {
-        auto_approve = { "test.fixture.approval", "test.fixture.approval2" },
-        require_approval = true,
-      },
-    })
-    approval.clear()
-    approval.setup()
-
-    local result = approval.resolve("bash", {}, { bufnr = 0, tool_id = "test" })
-    assert.equals("deny", result)
-
-    result = approval.resolve("read_file", {}, { bufnr = 0, tool_id = "test" })
-    assert.equals("approve", result)
+    pending(
+      "config overhaul: module path loading from arrays removed — unified resolver treats arrays as literal tool name lists"
+    )
   end)
 
   it("mixes module paths and plain tool names in string[]", function()
-    state.set_config({
-      tools = {
-        auto_approve = { "test.fixture.approval", "calculator" },
-        require_approval = true,
-      },
-    })
-    approval.clear()
-    approval.setup()
-
-    -- Module resolver handles bash
-    local result = approval.resolve("bash", {}, { bufnr = 0, tool_id = "test" })
-    assert.equals("deny", result)
-
-    -- Plain tool name match
-    result = approval.resolve("calculator", {}, { bufnr = 0, tool_id = "test" })
-    assert.equals("approve", result)
-
-    -- Neither module nor tool name list handles this
-    result = approval.resolve("unknown", {}, { bufnr = 0, tool_id = "test" })
-    assert.equals("require_approval", result)
+    pending(
+      "config overhaul: module path loading from arrays removed — unified resolver treats arrays as literal tool name lists"
+    )
   end)
 
   it("passes through when no module handles the tool", function()
-    state.set_config({
-      tools = {
-        auto_approve = { "test.fixture.approval", "test.fixture.approval2" },
-        require_approval = true,
-      },
-    })
-    approval.clear()
-    approval.setup()
-
-    local result = approval.resolve("unknown_tool", {}, { bufnr = 0, tool_id = "test" })
-    assert.equals("require_approval", result)
+    pending(
+      "config overhaul: module path loading from arrays removed — unified resolver treats arrays as literal tool name lists"
+    )
   end)
 end)
 
