@@ -3,6 +3,7 @@
 ---@class flemma.Core
 local M = {}
 
+local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
 local log = require("flemma.logging")
 local state = require("flemma.state")
@@ -220,7 +221,7 @@ end
 
 ---Phase 2 (Execute): Process flemma:tool blocks by status.
 ---Called from Phase 1 via vim.schedule (undo boundary) or directly when Phase 1 has nothing.
----@param opts { on_request_complete?: fun(), bufnr: integer, evaluated_frontmatter?: flemma.processor.EvaluatedFrontmatter, frontmatter_opts?: flemma.opt.FrontmatterOpts, user_initiated?: boolean }
+---@param opts { on_request_complete?: fun(), bufnr: integer, evaluated_frontmatter?: flemma.processor.EvaluatedFrontmatter, user_initiated?: boolean }
 local function advance_phase2(opts)
   local bufnr = opts.bufnr
   if not vim.api.nvim_buf_is_valid(bufnr) then
@@ -279,15 +280,10 @@ local function advance_phase2(opts)
     })
   end
 
-  -- Process approved → execute tool (pass pre-evaluated opts to avoid re-evaluating frontmatter)
+  -- Process approved → execute tool
   local approved = tool_blocks["approved"] or {}
   local config = state.get_config()
-  local max_concurrent
-  if opts.frontmatter_opts and opts.frontmatter_opts.max_concurrent ~= nil then
-    max_concurrent = opts.frontmatter_opts.max_concurrent
-  else
-    max_concurrent = (config.tools and config.tools.max_concurrent) or DEFAULT_MAX_CONCURRENT
-  end
+  local max_concurrent = (config.tools and config.tools.max_concurrent) or DEFAULT_MAX_CONCURRENT
   local executed_count = 0
   local throttled = false
 
@@ -296,7 +292,7 @@ local function advance_phase2(opts)
       throttled = true
       break
     end
-    local ok, err = executor.execute(bufnr, ctx, opts.frontmatter_opts)
+    local ok, err = executor.execute(bufnr, ctx)
     if not ok then
       vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
     else
@@ -422,11 +418,14 @@ function M.send_or_execute(opts)
   -- Store rewriter diagnostics for diagnostic rendering in send_to_provider
   buffer_state.rewriter_diagnostics = rewriter_diagnostics
   local context = context_module.from_buffer(bufnr)
-  local evaluated_frontmatter = processor.evaluate_frontmatter(doc, context)
-  local frontmatter_opts = evaluated_frontmatter.context:get_opts()
+  -- Evaluate frontmatter — writes config ops to the store's FRONTMATTER layer.
+  -- After this call, config.get(bufnr) returns the resolved config including frontmatter.
+  local evaluated_frontmatter = processor.evaluate_frontmatter(doc, context, bufnr)
 
-  -- Set per-buffer autopilot override unconditionally (nil clears a previous override)
-  buffer_state.autopilot_override = frontmatter_opts and frontmatter_opts.autopilot
+  -- Set per-buffer autopilot override from config store (nil clears a previous override)
+  local cfg = state.get_config()
+  local autopilot_cfg = cfg.tools and cfg.tools.autopilot
+  buffer_state.autopilot_override = autopilot_cfg and autopilot_cfg.enabled or nil
 
   -- Phase 1: Categorize — find tool_use blocks without matching tool_result
   local pending = tool_context.resolve_all_pending(bufnr)
@@ -452,11 +451,7 @@ function M.send_or_execute(opts)
 
     -- Normal tools: run through approval flow
     for _, ctx in ipairs(normal_pending) do
-      local decision = tool_approval.resolve(
-        ctx.tool_name,
-        ctx.input,
-        { bufnr = bufnr, tool_id = ctx.tool_id, opts = frontmatter_opts }
-      )
+      local decision = tool_approval.resolve(ctx.tool_name, ctx.input, { bufnr = bufnr, tool_id = ctx.tool_id })
 
       ---@type flemma.ast.ToolStatus
       local status
@@ -488,7 +483,6 @@ function M.send_or_execute(opts)
       on_request_complete = opts.on_request_complete,
       bufnr = bufnr,
       evaluated_frontmatter = evaluated_frontmatter,
-      frontmatter_opts = frontmatter_opts,
       user_initiated = opts.user_initiated,
     }
     writequeue.schedule(bufnr, function()
@@ -503,7 +497,6 @@ function M.send_or_execute(opts)
     on_request_complete = opts.on_request_complete,
     bufnr = bufnr,
     evaluated_frontmatter = evaluated_frontmatter,
-    frontmatter_opts = frontmatter_opts,
     user_initiated = opts.user_initiated,
   })
 end
@@ -774,22 +767,41 @@ function M.send_to_provider(opts)
   log.debug("send_to_provider(): System instruction: " .. log.inspect(prompt.system))
 
   -- Apply frontmatter parameter overrides so that get_endpoint / get_api_key see them.
-  -- Merge general parameters (flemma.opt.cache_retention) with provider-specific ones
-  -- (flemma.opt.anthropic.thinking_budget). Provider-specific wins on conflict.
-  local provider_key = state.get_config().provider
-  local general_overrides = prompt.opts and prompt.opts.parameters
-  local provider_specific_overrides = prompt.opts and prompt.opts[provider_key]
+  -- When bufnr is available, read per-buffer resolved parameters (includes frontmatter
+  -- layer). Compare with global parameters to extract frontmatter-specific overrides.
+  -- This bridge will be replaced by config.lens() in the provider once
+  -- set_parameter_overrides() is eliminated.
   local merged_overrides = nil
-  if general_overrides or provider_specific_overrides then
-    merged_overrides = {}
-    if general_overrides then
-      for k, v in pairs(general_overrides) do
-        merged_overrides[k] = v
+  if prompt.bufnr then
+    local global_params = config_facade.inspect(nil, "parameters")
+    local buffer_params = config_facade.inspect(prompt.bufnr, "parameters")
+    if buffer_params and buffer_params.layer and buffer_params.layer ~= (global_params and global_params.layer) then
+      -- Frontmatter contributed to parameters — materialize the difference.
+      -- For now, use the full per-buffer materialized parameters as overrides.
+      local per_buffer = config_facade.materialize(prompt.bufnr)
+      local global = state.get_config()
+      local provider_key = global.provider
+      merged_overrides = {}
+      -- General parameter overrides (frontmatter set parameters.X)
+      if per_buffer.parameters then
+        for k, v in pairs(per_buffer.parameters) do
+          if type(v) ~= "table" and v ~= (global.parameters and global.parameters[k]) then
+            merged_overrides[k] = v
+          end
+        end
+        -- Provider-specific overrides (frontmatter set parameters.anthropic.X)
+        local provider_params = per_buffer.parameters[provider_key]
+        if type(provider_params) == "table" then
+          local global_provider_params = global.parameters and global.parameters[provider_key]
+          for k, v in pairs(provider_params) do
+            if v ~= (type(global_provider_params) == "table" and global_provider_params[k] or nil) then
+              merged_overrides[k] = v
+            end
+          end
+        end
       end
-    end
-    if provider_specific_overrides then
-      for k, v in pairs(provider_specific_overrides) do
-        merged_overrides[k] = v
+      if not next(merged_overrides) then
+        merged_overrides = nil
       end
     end
   end

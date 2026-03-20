@@ -139,7 +139,7 @@ local M = {}
 ---@class flemma.provider.Prompt
 ---@field history flemma.provider.HistoryMessage[] User/assistant messages (canonical roles)
 ---@field system string|nil The system instruction, if any
----@field opts flemma.opt.FrontmatterOpts|nil Per-buffer options from frontmatter
+---@field bufnr? integer Buffer number for per-buffer config resolution
 ---@field pending_tool_calls flemma.pipeline.UnresolvedTool[]|nil Tool calls without matching results
 
 ---@class flemma.provider.ResetOpts

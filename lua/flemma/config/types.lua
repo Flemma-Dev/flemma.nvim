@@ -115,7 +115,6 @@
 ---@class flemma.config.AutoApproveContext
 ---@field bufnr integer
 ---@field tool_id string
----@field opts? flemma.opt.FrontmatterOpts Pre-evaluated per-buffer opts (avoids re-evaluating frontmatter)
 
 ---@alias flemma.config.AutoApproveDecision true|false|"deny"
 

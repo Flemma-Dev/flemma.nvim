@@ -218,28 +218,36 @@ function M.get_all(opts)
   return registry.get_all(opts)
 end
 
---- Get tools filtered by resolved per-buffer opts
---- When opts.tools is present, only matching tools are returned (including disabled tools
---- that were explicitly listed — this allows users to enable disabled tools via flemma.opt).
---- When opts is nil or opts.tools is nil, all enabled tools are returned.
----@param opts flemma.opt.FrontmatterOpts|nil
+--- Get tools filtered by per-buffer config.
+--- When the config store has a tools list for this buffer (via frontmatter),
+--- only matching tools are returned (including disabled tools that were
+--- explicitly listed — this allows users to enable disabled tools).
+--- When bufnr is nil or the tools list is empty/unset, all enabled tools are returned.
+---@param bufnr? integer Buffer number for per-buffer config resolution
 ---@return table<string, flemma.tools.ToolDefinition>
-function M.get_for_prompt(opts)
+function M.get_for_prompt(bufnr)
   ensure_modules_loaded()
-  if opts and opts.tools then
-    -- Include disabled tools so users can explicitly enable them
-    local all_tools = M.get_all({ include_disabled = true })
-    local allowed = {}
-    for _, name in ipairs(opts.tools) do
-      allowed[name] = true
-    end
-    local filtered = {}
-    for name, def in pairs(all_tools) do
-      if allowed[name] then
-        filtered[name] = def
+  if bufnr then
+    local tools_info = config_facade.inspect(bufnr, "tools")
+    local tools_list = tools_info and tools_info.value
+    if type(tools_list) == "table" and #tools_list > 0 then
+      -- Check if the list was modified by a layer above DEFAULTS
+      local source = tools_info.layer
+      if source and source ~= "D" then
+        local all_tools = M.get_all({ include_disabled = true })
+        local allowed = {}
+        for _, name in ipairs(tools_list) do
+          allowed[name] = true
+        end
+        local filtered = {}
+        for name, def in pairs(all_tools) do
+          if allowed[name] then
+            filtered[name] = def
+          end
+        end
+        return filtered
       end
     end
-    return filtered
   end
   return M.get_all()
 end
@@ -247,10 +255,10 @@ end
 --- Get all enabled tools for a prompt, sorted alphabetically by name.
 --- Returns an array (not a name-keyed table) for deterministic ordering
 --- in provider API requests, which improves prompt caching hit rates.
----@param opts flemma.opt.FrontmatterOpts|nil Per-buffer options (for tool filtering)
+---@param bufnr? integer Buffer number for per-buffer config resolution
 ---@return flemma.tools.ToolDefinition[] sorted_tools Alphabetically sorted tool definitions
-function M.get_sorted_for_prompt(opts)
-  local all = M.get_for_prompt(opts)
+function M.get_sorted_for_prompt(bufnr)
+  local all = M.get_for_prompt(bufnr)
   local sorted = {}
   for _, definition in pairs(all) do
     table.insert(sorted, definition)

@@ -372,6 +372,19 @@ function M.layer_has_set(layer, bufnr, path)
   return store.layer_has_set(layer, bufnr, path)
 end
 
+--- Check whether a layer has a specific operation for the given path.
+--- Useful for detecting frontmatter intent (e.g., "did the user explicitly
+--- remove this tool from auto_approve?").
+---@param layer integer
+---@param bufnr? integer Required for FRONTMATTER
+---@param op string Operation type ("set", "append", "remove", "prepend")
+---@param path string Dot-delimited canonical path
+---@param value? any If provided, also match the op's value
+---@return boolean
+function M.layer_has_op(layer, bufnr, op, path, value)
+  return store.layer_has_op(layer, bufnr, op, path, value)
+end
+
 -- ---------------------------------------------------------------------------
 -- Finalization
 -- ---------------------------------------------------------------------------
@@ -425,6 +438,32 @@ function M.finalize(layer, deferred)
   coerce_walk(root_schema, "", ctx)
 
   return failures
+end
+
+-- ---------------------------------------------------------------------------
+-- Frontmatter lifecycle
+-- ---------------------------------------------------------------------------
+
+--- Prepare the frontmatter layer for evaluation.
+--- Clears the buffer's L40 ops and returns a write proxy that frontmatter
+--- code can use as `flemma.opt`. After frontmatter execution, call
+--- `coerce_frontmatter(bufnr)` to expand coerce transforms on the new ops.
+---@param bufnr integer Buffer number
+---@return table writer Write proxy for the frontmatter layer
+function M.prepare_frontmatter(bufnr)
+  assert(root_schema, "config.init() must be called before prepare_frontmatter()")
+  assert(bufnr ~= nil, "bufnr is required for prepare_frontmatter()")
+  store.clear(M.LAYERS.FRONTMATTER, bufnr)
+  return proxy.write_proxy(root_schema, bufnr, M.LAYERS.FRONTMATTER)
+end
+
+--- Run coerce transforms on all ops (including the frontmatter layer).
+--- Called after frontmatter execution to expand coerce-dependent values
+--- (e.g., $preset references in auto_approve) written during evaluation.
+function M.coerce_frontmatter()
+  assert(root_schema, "config.init() must be called before coerce_frontmatter()")
+  local ctx = store.make_coerce_context()
+  coerce_walk(root_schema, "", ctx)
 end
 
 return M

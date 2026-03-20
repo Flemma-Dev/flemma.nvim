@@ -46,7 +46,7 @@ end
 
 ---Collect parameters section data, including frontmatter overrides if present
 ---@param config flemma.Config
----@param opts flemma.opt.FrontmatterOpts|nil
+---@param opts table|nil
 ---@return { merged: table<string, any>, frontmatter_overrides: table<string, any>|nil, resolved_max_tokens: integer|nil }
 local function collect_parameters(config, opts)
   -- Flatten parameters from the materialized config. This reads from the
@@ -108,7 +108,7 @@ end
 ---Collect autopilot section data
 ---@param bufnr integer
 ---@param config flemma.Config
----@param opts flemma.opt.FrontmatterOpts|nil
+---@param opts table|nil
 ---@return { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, frontmatter_override: boolean|nil }
 local function collect_autopilot(bufnr, config, opts)
   local autopilot_config = config.tools and config.tools.autopilot
@@ -134,19 +134,19 @@ end
 
 ---Collect sandbox section data
 ---@param bufnr integer
----@param opts flemma.opt.FrontmatterOpts|nil
+---@param _opts table|nil
 ---@return { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil, policy: flemma.config.SandboxPolicy }
-local function collect_sandbox(bufnr, opts)
-  local sandbox_config = sandbox.resolve_config(opts)
+local function collect_sandbox(bufnr, _opts)
+  local sandbox_config = sandbox.resolve_config(bufnr)
   local runtime_override = sandbox.get_override()
 
-  local backend_name, backend_error = sandbox.detect_available_backend(opts)
-  local backend_available, validate_error = sandbox.validate_backend(opts)
+  local backend_name, backend_error = sandbox.detect_available_backend(bufnr)
+  local backend_available, validate_error = sandbox.validate_backend(bufnr)
 
-  local policy = sandbox.get_policy(bufnr, opts)
+  local policy = sandbox.get_policy(bufnr)
 
   return {
-    enabled = sandbox.is_enabled(opts),
+    enabled = sandbox.is_enabled(bufnr),
     config_enabled = sandbox_config.enabled == true,
     runtime_override = runtime_override,
     backend = backend_name,
@@ -161,7 +161,7 @@ end
 ---When frontmatter changes the tool list, items that differ from config are tracked
 ---in frontmatter_items so the formatter can annotate them.
 ---@param config flemma.Config
----@param opts flemma.opt.FrontmatterOpts|nil
+---@param opts table|nil
 ---@return { enabled: string[], disabled: string[], frontmatter_items: table<string, true>|nil, max_concurrent: integer, max_concurrent_frontmatter: integer|nil }
 local function collect_tools(config, opts)
   local all_tools = tools_registry.get_all({ include_disabled = true })
@@ -235,12 +235,12 @@ local RESULT_TO_BUCKET = {
 
 ---Resolve approval for a tool via the resolver chain, returning the bucket and source.
 ---@param tool_name string
----@param opts flemma.opt.FrontmatterOpts|nil
+---@param _opts table|nil
 ---@param bufnr integer
 ---@return "approved"|"denied"|"pending" bucket
 ---@return string source Resolver name that made the decision
-local function resolve_tool_approval(tool_name, opts, bufnr)
-  local result, source = tools_approval.resolve_with_source(tool_name, {}, { bufnr = bufnr, tool_id = "", opts = opts })
+local function resolve_tool_approval(tool_name, _opts, bufnr)
+  local result, source = tools_approval.resolve_with_source(tool_name, {}, { bufnr = bufnr, tool_id = "" })
   return RESULT_TO_BUCKET[result] or "pending", source
 end
 
@@ -248,7 +248,7 @@ end
 ---resolver chain — the same code path used at tool-execution time.
 ---When frontmatter changes a tool's approval status, it is tracked in frontmatter_items.
 ---@param config flemma.Config
----@param opts flemma.opt.FrontmatterOpts|nil
+---@param opts table|nil
 ---@param enabled_tools string[] Sorted list of enabled tool names
 ---@param bufnr integer Buffer number for resolver context
 ---@return { source: string|nil, approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil }
@@ -593,17 +593,19 @@ end
 function M.collect(bufnr)
   local config = state.get_config()
 
-  -- Resolve per-buffer frontmatter opts only for chat buffers
+  -- Evaluate frontmatter for chat buffers — writes to config store's FRONTMATTER layer.
+  -- After this, config.get(bufnr) returns the resolved config including frontmatter.
   local is_chat = vim.api.nvim_buf_is_valid(bufnr) and bufnr > 0 and vim.bo[bufnr].filetype == "chat"
-  local opts = nil
   if is_chat then
     local ok, processor = pcall(require, "flemma.processor")
     if ok then
-      local fm_result = processor.evaluate_buffer_frontmatter(bufnr)
-      opts = fm_result.context:get_opts()
+      processor.evaluate_buffer_frontmatter(bufnr)
     end
   end
 
+  -- Pass bufnr to collectors so they can read per-buffer config from the store.
+  -- The opts parameter is kept nil — collectors that still use it will be migrated.
+  local opts = nil
   local tools_data = collect_tools(config, opts)
 
   return {

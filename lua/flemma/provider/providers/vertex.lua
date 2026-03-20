@@ -335,7 +335,7 @@ function M.build_request(self, prompt, _context)
   end
 
   -- Build tools array from registry (Vertex AI format, filtered by per-buffer opts if present)
-  local sorted_tools = tools_module.get_sorted_for_prompt(prompt.opts)
+  local sorted_tools = tools_module.get_sorted_for_prompt(prompt.bufnr)
   local function_declarations = {}
 
   for _, definition in ipairs(sorted_tools) do

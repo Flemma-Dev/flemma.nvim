@@ -1,4 +1,5 @@
 local compiler = require("flemma.templating.compiler")
+local config = require("flemma.config")
 local ctxutil = require("flemma.context")
 local eval = require("flemma.templating.eval")
 local templating = require("flemma.templating")
@@ -62,27 +63,34 @@ end
 ---@class flemma.processor.EvaluatedResult
 ---@field messages flemma.processor.EvaluatedMessage[]
 ---@field diagnostics flemma.ast.Diagnostic[]
----@field opts flemma.opt.FrontmatterOpts|nil
 
 ---@class flemma.processor.EvaluatedFrontmatter
----@field context flemma.Context Evaluated context with frontmatter opts and user variables set
+---@field context flemma.Context Evaluated context with user variables set
 ---@field diagnostics flemma.ast.Diagnostic[] Frontmatter-specific diagnostics
 
----Evaluate frontmatter and return the resulting context (with frontmatter opts and user variables set).
+---Evaluate frontmatter and return the resulting context (with user variables set).
+---When bufnr is provided, frontmatter writes go directly to the config store's
+---FRONTMATTER layer — no separate resolve step needed.
 ---@param doc flemma.ast.DocumentNode
 ---@param base_context flemma.Context|nil
+---@param bufnr? integer Buffer number for config store writes
 ---@return flemma.Context context
 ---@return flemma.ast.Diagnostic[] diagnostics Frontmatter-specific diagnostics
-local function evaluate_frontmatter_internal(doc, base_context)
+local function evaluate_frontmatter_internal(doc, base_context, bufnr)
   local context = ctxutil.clone(base_context)
   local diagnostics = {}
+
+  -- Clear the frontmatter layer before evaluation so previous ops don't persist
+  if bufnr then
+    config.prepare_frontmatter(bufnr)
+  end
 
   if doc.frontmatter then
     local fm = doc.frontmatter ---@cast fm -nil
     local fm_parser = codeblock_parsers.get(fm.language)
 
     if fm_parser then
-      local ok, result = pcall(fm_parser, fm.code, context)
+      local ok, result = pcall(fm_parser, fm.code, context, bufnr)
       if ok then
         if type(result) == "table" then
           context = ctxutil.extend(context, result)
@@ -125,12 +133,14 @@ local function evaluate_frontmatter_internal(doc, base_context)
 end
 
 ---Evaluate frontmatter from a parsed document.
----Returns the evaluated context (with frontmatter opts and user variables) and any diagnostics.
+---Returns the evaluated context (with user variables) and any diagnostics.
+---When bufnr is provided, frontmatter config writes go to the config store.
 ---@param doc flemma.ast.DocumentNode
 ---@param base_context flemma.Context|nil
+---@param bufnr? integer Buffer number for config store writes
 ---@return flemma.processor.EvaluatedFrontmatter
-function M.evaluate_frontmatter(doc, base_context)
-  local context, diagnostics = evaluate_frontmatter_internal(doc, base_context)
+function M.evaluate_frontmatter(doc, base_context, bufnr)
+  local context, diagnostics = evaluate_frontmatter_internal(doc, base_context, bufnr)
   return { context = context, diagnostics = diagnostics }
 end
 
@@ -140,7 +150,7 @@ end
 ---@return flemma.processor.EvaluatedFrontmatter
 function M.evaluate_buffer_frontmatter(bufnr)
   local doc = parser.get_parsed_document(bufnr)
-  return M.evaluate_frontmatter(doc, ctxutil.from_buffer(bufnr))
+  return M.evaluate_frontmatter(doc, ctxutil.from_buffer(bufnr), bufnr)
 end
 
 --- Evaluate a document AST.
@@ -149,7 +159,7 @@ end
 --- once and thread the result through multiple consumers.
 ---@class flemma.processor.EvaluateOpts
 ---@field evaluated_frontmatter? flemma.processor.EvaluatedFrontmatter Pre-evaluated frontmatter (skips re-evaluation)
----@field bufnr? integer Buffer number for context-aware expression evaluation
+---@field bufnr integer Buffer number for per-buffer config resolution and expression evaluation
 
 ---@param doc flemma.ast.DocumentNode
 ---@param base_context flemma.Context|nil
@@ -162,7 +172,7 @@ function M.evaluate(doc, base_context, opts)
     context = opts.evaluated_frontmatter.context
     fm_diagnostics = opts.evaluated_frontmatter.diagnostics
   else
-    context, fm_diagnostics = evaluate_frontmatter_internal(doc, base_context)
+    context, fm_diagnostics = evaluate_frontmatter_internal(doc, base_context, opts.bufnr)
   end
 
   -- Merge parser errors with frontmatter diagnostics
@@ -244,7 +254,6 @@ function M.evaluate(doc, base_context, opts)
   return {
     messages = evaluated_messages,
     diagnostics = diagnostics,
-    opts = context:get_opts(),
   }
 end
 

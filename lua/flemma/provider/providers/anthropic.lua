@@ -247,7 +247,7 @@ function M.build_request(self, prompt, _context)
   -- nil when "none"
 
   -- Build tools array from registry (filtered by per-buffer opts if present)
-  local sorted_tools = tools_module.get_sorted_for_prompt(prompt.opts)
+  local sorted_tools = tools_module.get_sorted_for_prompt(prompt.bufnr)
   local tools_array = {}
   for _, def in ipairs(sorted_tools) do
     table.insert(tools_array, {

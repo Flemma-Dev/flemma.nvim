@@ -6,12 +6,12 @@
 ---@class flemma.tools.Approval
 local M = {}
 
+local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
 local log = require("flemma.logging")
 local registry_utils = require("flemma.registry")
 local sandbox = require("flemma.sandbox")
 local state = require("flemma.state")
-local tool_presets = require("flemma.tools.presets")
 local tools_registry = require("flemma.tools.registry")
 
 ---@alias flemma.tools.ApprovalResult "approve"|"require_approval"|"deny"
@@ -179,8 +179,9 @@ function M.resolve_with_source(tool_name, input, context)
 end
 
 ---Resolve an auto_approve policy (string[] or function) against a tool call.
----Shared by config and frontmatter resolvers to avoid duplicating the dispatch logic.
----@param policy flemma.config.AutoApprove The auto_approve value
+---The string[] path does a simple membership check — presets are already expanded
+---by the config store's coerce function.
+---@param policy flemma.config.AutoApprove The auto_approve value (resolved from config store)
 ---@param tool_name string
 ---@param input table<string, any>
 ---@param context flemma.config.AutoApproveContext
@@ -188,43 +189,12 @@ end
 ---@return flemma.tools.ApprovalResult|nil
 local function resolve_auto_approve_policy(policy, tool_name, input, context, error_result)
   if type(policy) == "table" then
-    local approved = {}
-    local denied = {}
-
     for _, entry in
       ipairs(policy --[[@as string[] ]])
     do
-      if vim.startswith(entry, "$") then
-        local preset = tool_presets.get(entry)
-        if preset then
-          if preset.approve then
-            for _, name in ipairs(preset.approve) do
-              approved[name] = true
-            end
-          end
-          if preset.deny then
-            for _, name in ipairs(preset.deny) do
-              denied[name] = true
-            end
-          end
-        end
-      else
-        approved[entry] = true
+      if entry == tool_name then
+        return "approve"
       end
-    end
-
-    local exclusions = context.opts and context.opts.auto_approve_exclusions
-    if exclusions then
-      for name in pairs(exclusions) do
-        approved[name] = nil
-      end
-    end
-
-    if denied[tool_name] then
-      return "deny"
-    end
-    if approved[tool_name] then
-      return "approve"
     end
     return nil
   end
@@ -290,96 +260,40 @@ function M.setup()
   local auto_approve = tools_config and tools_config.auto_approve
   if auto_approve ~= nil then
     if type(auto_approve) == "string" and loader.is_module_path(auto_approve) then
-      -- Single module path: validate now, load lazily on first resolve
-      -- Registered under the module path so users can get()/unregister() by path
+      -- Single module path: validate now, load lazily on first resolve.
+      -- This path is NOT unified — module resolvers are setup-time only.
       local module_resolve = build_module_resolver(auto_approve)
       register_entry(auto_approve, {
         priority = 100,
         description = "Built-in resolver from module " .. auto_approve,
         resolve = function(tool_name, input, context)
-          if context.opts and context.opts.auto_approve then
-            return nil -- defer to frontmatter resolver
-          end
           return module_resolve(tool_name, input, context)
         end,
       })
-    elseif type(auto_approve) == "table" then
-      -- String array: partition into module paths, preset refs, and plain tool names
-      ---@type string[]
-      local tool_names = {}
-      ---@type string[]
-      local module_paths = {}
-      for _, entry in
-        ipairs(auto_approve --[[@as string[] ]])
-      do
-        if loader.is_module_path(entry) then
-          table.insert(module_paths, entry)
-        else
-          -- Both $-prefixed preset refs and plain tool names stay in tool_names
-          table.insert(tool_names, entry)
-        end
-      end
-      -- Register a resolver per module path, addressable by path
-      for _, module_path in ipairs(module_paths) do
-        local module_resolve = build_module_resolver(module_path)
-        register_entry(module_path, {
-          priority = 100,
-          description = "Built-in resolver from module " .. module_path,
-          resolve = function(tool_name, input, context)
-            if context.opts and context.opts.auto_approve then
-              return nil -- defer to frontmatter resolver
-            end
-            return module_resolve(tool_name, input, context)
-          end,
-        })
-      end
-      -- Register a tool-name list resolver if any plain names or preset refs remain
-      if #tool_names > 0 then
-        register_entry("urn:flemma:approval:config", {
-          priority = 100,
-          description = "Built-in resolver from config.tools.auto_approve",
-          resolve = function(tool_name, input, context)
-            if context.opts and context.opts.auto_approve then
-              return nil -- defer to frontmatter resolver
-            end
-            return resolve_auto_approve_policy(tool_names, tool_name, input, context, "require_approval")
-          end,
-        })
-      end
-    elseif type(auto_approve) == "function" then
-      register_entry("urn:flemma:approval:config", {
-        priority = 100,
-        description = "Built-in resolver from config.tools.auto_approve",
-        resolve = function(tool_name, input, context)
-          if context.opts and context.opts.auto_approve then
-            return nil -- defer to frontmatter resolver
-          end
-          return resolve_auto_approve_policy(auto_approve, tool_name, input, context, "require_approval")
-        end,
-      })
-    else
-      log.warn("approval: unexpected auto_approve type: " .. type(auto_approve))
     end
   end
 
-  -- Frontmatter resolver: reads pre-evaluated opts from context.opts.
-  -- Always registered; no-op when opts are not provided or don't set auto_approve.
-  register_entry("urn:flemma:approval:frontmatter", {
-    priority = 90,
-    description = "Per-buffer approval from frontmatter flemma.opt.tools.auto_approve",
+  -- Unified auto_approve resolver: reads the resolved auto_approve from the
+  -- config store at resolve time. This single resolver replaces the old
+  -- separate config + frontmatter resolvers — layer resolution handles merging.
+  register_entry("urn:flemma:approval:config", {
+    priority = 100,
+    description = "Unified resolver from config store (all layers merged)",
     resolve = function(tool_name, input, context)
-      local opts = context.opts
-      if not opts or not opts.auto_approve then
+      local bufnr = context.bufnr
+      local resolved = config_facade.inspect(bufnr, "tools.auto_approve")
+      local policy = resolved and resolved.value
+      if policy == nil then
         return nil
       end
-      return resolve_auto_approve_policy(opts.auto_approve, tool_name, input, context)
+      return resolve_auto_approve_policy(policy, tool_name, input, context, "require_approval")
     end,
   })
 
   -- Sandbox-aware auto-approval: when sandboxing is enabled and a backend is
   -- available, auto-approve tools that declare "can_auto_approve_if_sandboxed"
   -- in their capabilities array (currently: bash).
-  -- Priority 25: below config (100), frontmatter (90), and the community default (50)
+  -- Priority 25: below config (100) and the community default (50)
   -- so both explicit user preferences and third-party resolvers win. Above the
   -- catch-all (0). Checks are deferred to resolve time so runtime overrides and
   -- frontmatter sandbox options are respected per-call.
@@ -387,6 +301,8 @@ function M.setup()
     priority = 25,
     description = "Auto-approve sandboxed tools when sandbox is enabled with an available backend",
     resolve = function(tool_name, _input, context)
+      local bufnr = context.bufnr
+
       -- Config-level guards (cheapest checks first)
       if not tools_config or tools_config.auto_approve_sandboxed == false then
         return nil
@@ -406,25 +322,33 @@ function M.setup()
         return nil
       end
 
-      -- Respect frontmatter exclusions (e.g. auto_approve:remove("bash"))
-      local exclusions = context.opts and context.opts.auto_approve_exclusions
-      if exclusions and exclusions[tool_name] then
+      -- Respect frontmatter exclusions: if frontmatter explicitly removed this
+      -- tool from auto_approve, don't override that decision via sandbox.
+      if
+        bufnr
+        and config_facade.layer_has_op(
+          config_facade.LAYERS.FRONTMATTER,
+          bufnr,
+          "remove",
+          "tools.auto_approve",
+          tool_name
+        )
+      then
         return nil
       end
 
-      -- An explicit (assigned) policy is a complete specification — don't grant
-      -- additional approvals beyond what the assignment lists.
-      if context.opts and context.opts.auto_approve_explicit then
+      -- An explicit (assigned) policy in frontmatter is a complete specification
+      -- — don't grant additional approvals beyond what the assignment lists.
+      if bufnr and config_facade.layer_has_set(config_facade.LAYERS.FRONTMATTER, bufnr, "tools.auto_approve") then
         return nil
       end
 
-      -- Verify sandbox is enabled (respects runtime override from :Flemma
-      -- sandbox:disable and frontmatter sandbox options) and a backend is
-      -- actually available (same check as :Flemma status)
-      if not sandbox.is_enabled(context.opts) then
+      -- Verify sandbox is enabled and a backend is available.
+      -- sandbox.is_enabled reads from the config store (includes frontmatter).
+      if not sandbox.is_enabled(bufnr) then
         return nil
       end
-      local backend_ok = sandbox.validate_backend(context.opts)
+      local backend_ok = sandbox.validate_backend(bufnr)
       if not backend_ok then
         return nil
       end

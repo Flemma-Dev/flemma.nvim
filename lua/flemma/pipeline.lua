@@ -65,14 +65,14 @@ end
 
 ---@class flemma.pipeline.Prompt : flemma.provider.Prompt
 ---@field pending_tool_calls flemma.pipeline.UnresolvedTool[]
----@field opts flemma.opt.FrontmatterOpts|nil
+---@field bufnr integer Buffer number for per-buffer config resolution
 
 --- Run full pipeline from a pre-parsed document and context.
 --- If a pre-evaluated frontmatter result is provided, it is reused instead of
 --- re-evaluating frontmatter code.
 ---@param doc flemma.ast.DocumentNode
 ---@param context flemma.Context|nil
----@param opts? flemma.processor.EvaluateOpts
+---@param opts flemma.processor.EvaluateOpts
 ---@return flemma.pipeline.Prompt prompt
 ---@return flemma.processor.EvaluatedResult evaluated
 function M.run(doc, context, opts)
@@ -153,7 +153,7 @@ function M.run(doc, context, opts)
   -- Update evaluated with merged diagnostics
   evaluated.diagnostics = all_diagnostics
 
-  return { history = history, system = system, pending_tool_calls = unresolved_tools, opts = evaluated.opts }, evaluated
+  return { history = history, system = system, pending_tool_calls = unresolved_tools, bufnr = opts.bufnr }, evaluated
 end
 
 return M

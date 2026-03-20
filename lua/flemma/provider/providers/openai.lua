@@ -272,7 +272,7 @@ function M.build_request(self, prompt, context)
   end
 
   -- Build tools array from registry (OpenAI format, filtered by per-buffer opts if present)
-  local sorted_tools = tools_module.get_sorted_for_prompt(prompt.opts)
+  local sorted_tools = tools_module.get_sorted_for_prompt(prompt.bufnr)
   local tools_array = {}
 
   for _, definition in ipairs(sorted_tools) do

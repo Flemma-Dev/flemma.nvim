@@ -163,7 +163,6 @@ function M.from_context(ctx, bufnr)
     env.__dirname = nil
   end
 
-  env[symbols.FRONTMATTER_OPTS] = ctx and type(ctx.get_opts) == "function" and ctx:get_opts() or nil
   env[symbols.BUFFER_NUMBER] = bufnr
   env[symbols.DIAGNOSTICS] = {}
 

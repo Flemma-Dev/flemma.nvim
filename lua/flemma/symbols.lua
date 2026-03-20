@@ -26,12 +26,6 @@ M.SOURCE_PATH = {}
 ---@type table
 M.BUFFER_NUMBER = {}
 
---- Evaluated frontmatter options (flemma.opt proxy result).
---- Carried on Context objects and eval environments so the personality system
---- and tool filtering can access per-buffer frontmatter configuration.
----@type table
-M.FRONTMATTER_OPTS = {}
-
 --- User-defined variables from frontmatter execution.
 --- Carried on Context objects; merged into the eval environment as top-level
 --- keys so expressions can reference them directly.

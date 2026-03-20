@@ -39,18 +39,6 @@ function Context:get_variables()
   return vim.deepcopy(self[symbols.VARIABLES] or {})
 end
 
----Get the per-buffer frontmatter options
----@return flemma.opt.FrontmatterOpts|nil opts The frontmatter options, or nil if none set
-function Context:get_opts()
-  return self[symbols.FRONTMATTER_OPTS]
-end
-
----Set the per-buffer frontmatter options
----@param opts flemma.opt.FrontmatterOpts
-function Context:set_opts(opts)
-  self[symbols.FRONTMATTER_OPTS] = opts
-end
-
 ---Create a context object from a buffer number
 ---
 ---This context is used for resolving relative file paths in both @./file references

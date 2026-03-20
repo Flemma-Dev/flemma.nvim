@@ -409,6 +409,33 @@ function M.layer_has_set(layer, bufnr, path)
   return false
 end
 
+--- Check whether the given layer has a specific operation for the given path and value.
+--- Useful for detecting frontmatter intent (e.g., "did the user explicitly remove
+--- this tool from auto_approve?").
+---@param layer integer
+---@param bufnr integer? Required for FRONTMATTER
+---@param op string Operation type to check for ("set", "append", "remove", "prepend")
+---@param path string Dot-delimited canonical path
+---@param value? any If provided, also match the op's value (for item-level checks)
+---@return boolean
+function M.layer_has_op(layer, bufnr, op, path, value)
+  local ops_array
+  if layer == M.LAYERS.FRONTMATTER then
+    assert(bufnr ~= nil, "bufnr is required for FRONTMATTER layer")
+    ops_array = buffer_ops[bufnr]
+  else
+    ops_array = global_ops[layer]
+  end
+  for _, entry in ipairs(ops_array or {}) do
+    if entry.op == op and entry.path == path then
+      if value == nil or entry.value == value then
+        return true
+      end
+    end
+  end
+  return false
+end
+
 --- Return a deep copy of the raw operations log for the given layer.
 ---@param layer integer
 ---@param bufnr integer? Required for FRONTMATTER

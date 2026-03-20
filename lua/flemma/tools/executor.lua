@@ -237,7 +237,6 @@ local DEFAULT_TIMEOUT = 30
 ---@field tool_name string Name of the tool being executed (for get_config lookup)
 ---@field __dirname? string Directory containing the .chat buffer
 ---@field __filename? string Full path of the .chat buffer
----@field opts? flemma.opt.FrontmatterOpts Per-buffer frontmatter options (captured by sandbox closures)
 
 ---Build an ExecutionContext with lazy-loaded sandbox/truncate/path namespaces.
 ---Sandbox, truncate, and path are loaded on first access via __index and then
@@ -246,7 +245,6 @@ local DEFAULT_TIMEOUT = 30
 ---@return flemma.tools.ExecutionContext
 function M.build_execution_context(params)
   local bufnr = params.bufnr
-  local opts = params.opts
   local tool_name = params.tool_name
   local dirname = params.__dirname
 
@@ -281,10 +279,10 @@ function M.build_execution_context(params)
         ---@type flemma.tools.SandboxContext
         local sandbox_namespace = {
           is_path_writable = function(path)
-            return sandbox_module.is_path_writable(path, bufnr, opts)
+            return sandbox_module.is_path_writable(path, bufnr)
           end,
           wrap_command = function(cmd)
-            return sandbox_module.wrap_command(cmd, bufnr, opts)
+            return sandbox_module.wrap_command(cmd, bufnr)
           end,
         }
         rawset(self, "sandbox", sandbox_namespace)
@@ -314,10 +312,9 @@ end
 ---Execute a tool call
 ---@param bufnr integer
 ---@param context flemma.tools.ToolContext
----@param frontmatter_opts? flemma.opt.FrontmatterOpts Pre-evaluated per-buffer opts (avoids re-evaluating frontmatter)
 ---@return boolean success
 ---@return string|nil error
-function M.execute(bufnr, context, frontmatter_opts)
+function M.execute(bufnr, context)
   local tool_id = context.tool_id
   local tool_name = context.tool_name
 
@@ -424,7 +421,6 @@ function M.execute(bufnr, context, frontmatter_opts)
     tool_name = tool_name,
     __dirname = dirname,
     __filename = buffer_context:get_filename(),
-    opts = frontmatter_opts,
   })
 
   hooks.dispatch("tool:executing", { bufnr = bufnr, tool_name = tool_name, tool_id = tool_id })

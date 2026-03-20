@@ -137,12 +137,11 @@ end
 --- Build complete RenderOpts for a personality.
 --- This is the main entry point — assembles all data the personality needs.
 ---@param personality_name string
----@param opts? flemma.opt.FrontmatterOpts Frontmatter opts for tool filtering
+---@param bufnr? integer Buffer number for per-buffer config resolution and environment context
 ---@param base_dir? string Base directory for project context (defaults to cwd)
----@param bufnr? integer Buffer number for environment context
 ---@return flemma.personalities.RenderOpts
-function M.build(personality_name, opts, base_dir, bufnr)
-  local sorted_tools = tools.get_sorted_for_prompt(opts)
+function M.build(personality_name, bufnr, base_dir)
+  local sorted_tools = tools.get_sorted_for_prompt(bufnr)
   return {
     tools = M.build_tools(personality_name, sorted_tools),
     environment = M.build_environment(bufnr),
