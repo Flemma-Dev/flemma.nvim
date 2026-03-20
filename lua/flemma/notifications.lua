@@ -94,7 +94,7 @@ local function get_gutter_width(winid)
 end
 
 --- Get notification config from state
----@return flemma.Config.Notifications
+---@return flemma.config.Notifications
 local function get_config()
   return state.get_config().notifications
 end

@@ -4,16 +4,12 @@
 --- and introspecting configuration. All structural access goes through proxies;
 --- all operations go through the layer store.
 ---
---- During the config overhaul, `lua/flemma/config.lua` (legacy) shadows
---- `lua/flemma/config/init.lua`. This module lives at `flemma.config.facade`
---- until the legacy file is deleted, then becomes `flemma.config` (init.lua).
----
 --- Usage:
----   local config = require("flemma.config.facade")
+---   local config = require("flemma.config")
 ---   config.init(schema)
 ---   config.apply(config.LAYERS.SETUP, user_opts)
 ---   local cfg = config.get(bufnr)
----@class flemma.config.facade
+---@class flemma.config.Facade
 local M = {}
 
 local nav = require("flemma.config.schema.navigation")
@@ -50,7 +46,7 @@ end
 
 --- Stable context threaded through apply_recursive calls.
 --- Created once per apply/init/apply_deferred invocation.
----@class flemma.config.facade.ApplyContext
+---@class flemma.config.ApplyContext
 ---@field schema flemma.config.schema.Node Root schema for navigation
 ---@field layer integer Target layer
 ---@field bufnr integer? Buffer number (required for FRONTMATTER)
@@ -64,7 +60,7 @@ end
 --- on objects with DISCOVER callbacks are accumulated in the deferred list
 --- instead of failing. The DISCOVER callback is NOT invoked — the key is
 --- assumed to be unresolvable until modules are registered.
----@param ctx flemma.config.facade.ApplyContext
+---@param ctx flemma.config.ApplyContext
 ---@param path string Current dot-delimited canonical path (empty for root)
 ---@param value any The value at this path
 ---@return boolean? ok True on success, nil on failure
@@ -170,7 +166,7 @@ function M.init(schema)
   local defaults = schema:materialize()
   if defaults then
     -- Defaults come from the schema itself — failure here is a schema bug.
-    ---@type flemma.config.facade.ApplyContext
+    ---@type flemma.config.ApplyContext
     local ctx = { schema = schema, layer = M.LAYERS.DEFAULTS, bufnr = nil, deferred = nil }
     local ok, err = apply_recursive(ctx, "", defaults)
     if not ok then
@@ -197,7 +193,7 @@ end
 function M.apply(layer, opts, apply_opts)
   assert(root_schema, "config.init() must be called before apply()")
   local defer = apply_opts and apply_opts.defer_discover
-  ---@type flemma.config.facade.ApplyContext
+  ---@type flemma.config.ApplyContext
   local ctx = { schema = root_schema, layer = layer, bufnr = nil, deferred = defer and {} or nil }
   local ok, err = apply_recursive(ctx, "", opts)
   if not ok then
@@ -223,7 +219,7 @@ function M.register_module_defaults(parent_path, name, config_schema)
     return
   end
   local base_path = parent_path .. "." .. name
-  ---@type flemma.config.facade.ApplyContext
+  ---@type flemma.config.ApplyContext
   local ctx = { schema = root_schema, layer = M.LAYERS.DEFAULTS, bufnr = nil, deferred = nil }
   local ok, err = apply_recursive(ctx, base_path, defaults)
   if not ok then
@@ -239,7 +235,7 @@ end
 ---@return { path: string, error: string }[]? failures Entries that still failed, or nil on success
 function M.apply_deferred(layer, deferred)
   assert(root_schema, "config.init() must be called before apply_deferred()")
-  ---@type flemma.config.facade.ApplyContext
+  ---@type flemma.config.ApplyContext
   local ctx = { schema = root_schema, layer = layer, bufnr = nil, deferred = nil }
   ---@type { path: string, error: string }[]
   local failures = {}

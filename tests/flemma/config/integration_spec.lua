@@ -1,7 +1,7 @@
 local symbols = require("flemma.symbols")
 
 describe("flemma.config — integration", function()
-  ---@type flemma.config.facade
+  ---@type flemma.config.Facade
   local config
   ---@type flemma.config.schema
   local s
@@ -38,14 +38,14 @@ describe("flemma.config — integration", function()
   end
 
   before_each(function()
-    package.loaded["flemma.config.facade"] = nil
+    package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.proxy"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.schema"] = nil
     package.loaded["flemma.config.schema.types"] = nil
     package.loaded["flemma.config.schema.navigation"] = nil
     package.loaded["flemma.loader"] = nil
-    config = require("flemma.config.facade")
+    config = require("flemma.config")
     s = require("flemma.config.schema")
     L = config.LAYERS
   end)

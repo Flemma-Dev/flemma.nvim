@@ -5,7 +5,7 @@
 local M = {}
 
 local bwrap = require("flemma.sandbox.backends.bwrap")
-local facade = require("flemma.config.facade")
+local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
 local registry_utils = require("flemma.registry")
 local state = require("flemma.state")
@@ -83,7 +83,7 @@ function M.register(name, definition)
 
   -- Materialize config_schema defaults into the DEFAULTS layer
   if definition.config_schema then
-    facade.register_module_defaults("sandbox.backends", name, definition.config_schema)
+    config_facade.register_module_defaults("sandbox.backends", name, definition.config_schema)
   end
 end
 

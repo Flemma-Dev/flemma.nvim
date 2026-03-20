@@ -3,7 +3,7 @@
 ---@class flemma.core.ConfigManager
 local M = {}
 
-local config_facade = require("flemma.config.facade")
+local config_facade = require("flemma.config")
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local registry = require("flemma.provider.registry")

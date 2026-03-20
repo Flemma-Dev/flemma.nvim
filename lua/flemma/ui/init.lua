@@ -5,7 +5,6 @@ local M = {}
 
 local log = require("flemma.logging")
 local state = require("flemma.state")
-local config = require("flemma.config")
 local buffer_utils = require("flemma.utilities.buffer")
 local preview = require("flemma.ui.preview")
 local folding = require("flemma.ui.folding")
@@ -878,7 +877,8 @@ end
 local function apply_chat_buffer_settings(bufnr)
   folding.setup_folding(bufnr)
 
-  if config.editing.disable_textwidth then
+  local current = state.get_config()
+  if current and current.editing and current.editing.disable_textwidth then
     vim.bo[bufnr].textwidth = 0
   end
 
@@ -932,7 +932,8 @@ function M.setup_chat_filetype_autocmds()
   })
 
   -- Handle updatetime management for chat buffers
-  if config.editing.manage_updatetime then
+  local editing_config = state.get_config()
+  if editing_config and editing_config.editing and editing_config.editing.manage_updatetime then
     vim.api.nvim_create_autocmd("BufEnter", {
       group = augroup,
       pattern = "*.chat",

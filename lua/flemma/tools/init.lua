@@ -3,8 +3,7 @@
 ---@class flemma.Tools
 local M = {}
 
-local config = require("flemma.config")
-local facade = require("flemma.config.facade")
+local config_facade = require("flemma.config")
 local hooks = require("flemma.hooks")
 local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
@@ -47,7 +46,7 @@ end
 local function register_tool(name, def)
   registry.register(name, def)
   if def.metadata and def.metadata.config_schema then
-    facade.register_module_defaults("tools", name, def.metadata.config_schema)
+    config_facade.register_module_defaults("tools", name, def.metadata.config_schema)
   end
 end
 
@@ -87,7 +86,10 @@ function M.register_async(resolve_fn, opts)
   end
 
   -- Set up timeout
-  local timeout_s = opts.timeout or config.tools.default_timeout or 30
+  local resolved_config = state.get_config()
+  local timeout_s = opts.timeout
+    or (resolved_config and resolved_config.tools and resolved_config.tools.default_timeout)
+    or 30
   local timer = vim.uv.new_timer()
   if not timer then
     done("Failed to create timer")

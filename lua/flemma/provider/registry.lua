@@ -7,7 +7,7 @@
 local M = {}
 
 -- Load models from centralized models.lua
-local facade = require("flemma.config.facade")
+local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
 local models_data = require("flemma.models")
 local registry_utils = require("flemma.registry")
@@ -146,7 +146,7 @@ function M.register(source, entry)
 
   -- Materialize config_schema defaults into the DEFAULTS layer
   if definition.config_schema then
-    facade.register_module_defaults("parameters", name, definition.config_schema)
+    config_facade.register_module_defaults("parameters", name, definition.config_schema)
   end
 
   -- Refresh defaults and models for this provider

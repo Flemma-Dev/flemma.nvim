@@ -1,21 +1,21 @@
 --- Tests for the global configuration schema definition.
 --- Verifies that the schema materializes correctly and matches the current
---- config.lua defaults, that provider schemas are accessible, and that
+--- schema defaults, that provider schemas are accessible, and that
 --- structural features (aliases, DISCOVER) are properly configured.
 
-local facade = require("flemma.config.facade")
+local config_facade = require("flemma.config")
 
 describe("config.schema.definition", function()
   local schema
 
   before_each(function()
     package.loaded["flemma.config.schema.definition"] = nil
-    package.loaded["flemma.config.facade"] = nil
+    package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
-    facade = require("flemma.config.facade")
+    config_facade = require("flemma.config")
     schema = require("flemma.config.schema.definition")
-    facade.init(schema)
+    config_facade.init(schema)
   end)
 
   -- ---------------------------------------------------------------------------
@@ -24,17 +24,17 @@ describe("config.schema.definition", function()
 
   describe("materialization", function()
     it("materializes provider default", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.equals("anthropic", cfg.provider)
     end)
 
     it("materializes model as nil (provider-specific default)", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.is_nil(cfg.model)
     end)
 
     it("materializes parameter defaults", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.equals("50%", cfg.parameters.max_tokens)
       assert.equals(0.7, cfg.parameters.temperature)
       assert.equals(600, cfg.parameters.timeout)
@@ -44,14 +44,14 @@ describe("config.schema.definition", function()
     end)
 
     it("materializes highlight defaults (string)", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.equals("Special", cfg.highlights.system)
       assert.equals("Normal", cfg.highlights.user)
       assert.equals("Function", cfg.highlights.tool_name)
     end)
 
     it("materializes highlight defaults (table)", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       local tb = cfg.highlights.thinking_block
       assert.is_table(tb)
       assert.equals("Comment+bg:#102020-fg:#111111", tb.dark)
@@ -59,26 +59,26 @@ describe("config.schema.definition", function()
     end)
 
     it("materializes ruler defaults", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.is_true(cfg.ruler.enabled)
       assert.is_table(cfg.ruler.hl)
     end)
 
     it("materializes signs defaults", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.is_false(cfg.signs.enabled)
       assert.is_true(cfg.signs.system.hl)
       assert.is_nil(cfg.signs.system.char)
     end)
 
     it("materializes line_highlights defaults", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.is_true(cfg.line_highlights.enabled)
       assert.is_table(cfg.line_highlights.frontmatter)
     end)
 
     it("materializes notifications defaults", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.is_true(cfg.notifications.enabled)
       assert.equals(10000, cfg.notifications.timeout)
       assert.equals(1, cfg.notifications.limit)
@@ -88,24 +88,24 @@ describe("config.schema.definition", function()
     end)
 
     it("materializes progress defaults", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.equals("StatusLine", cfg.progress.highlight)
       assert.equals(50, cfg.progress.zindex)
     end)
 
     it("materializes pricing defaults", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.is_true(cfg.pricing.enabled)
     end)
 
     it("materializes statusline defaults", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.is_string(cfg.statusline.format)
       assert.truthy(cfg.statusline.format:find("#{model}"))
     end)
 
     it("materializes tools defaults", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.is_true(cfg.tools.require_approval)
       assert.same({ "$default" }, cfg.tools.auto_approve)
       assert.is_true(cfg.tools.auto_approve_sandboxed)
@@ -120,22 +120,22 @@ describe("config.schema.definition", function()
     end)
 
     it("materializes templating defaults", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.same({}, cfg.templating.modules)
     end)
 
     it("materializes presets as empty map", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.same({}, cfg.presets)
     end)
 
     it("materializes text_object default", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.equals("m", cfg.text_object)
     end)
 
     it("materializes editing defaults", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.is_true(cfg.editing.auto_prompt)
       assert.is_true(cfg.editing.disable_textwidth)
       assert.is_false(cfg.editing.auto_write)
@@ -148,7 +148,7 @@ describe("config.schema.definition", function()
     end)
 
     it("materializes logging defaults", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.is_false(cfg.logging.enabled)
       assert.is_string(cfg.logging.path)
       assert.truthy(cfg.logging.path:find("flemma.log"))
@@ -156,7 +156,7 @@ describe("config.schema.definition", function()
     end)
 
     it("materializes keymaps defaults", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.is_true(cfg.keymaps.enabled)
       assert.equals("<C-]>", cfg.keymaps.normal.send)
       assert.equals("<C-c>", cfg.keymaps.normal.cancel)
@@ -168,12 +168,12 @@ describe("config.schema.definition", function()
     end)
 
     it("materializes diagnostics defaults", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.is_false(cfg.diagnostics.enabled)
     end)
 
     it("materializes sandbox defaults", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.is_true(cfg.sandbox.enabled)
       assert.equals("auto", cfg.sandbox.backend)
       assert.is_true(cfg.sandbox.policy.network)
@@ -185,12 +185,12 @@ describe("config.schema.definition", function()
     end)
 
     it("materializes secrets defaults", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.equals("gcloud", cfg.secrets.gcloud.path)
     end)
 
     it("materializes experimental defaults", function()
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.is_true(cfg.experimental.lsp)
       assert.is_false(cfg.experimental.tools)
     end)
@@ -204,7 +204,7 @@ describe("config.schema.definition", function()
     local provider_reg
 
     before_each(function()
-      -- Re-require the registry so its facade local picks up the current (re-init'd) facade
+      -- Re-require the registry so its config_facade local picks up the current (re-init'd) config_facade
       package.loaded["flemma.provider.registry"] = nil
       provider_reg = require("flemma.provider.registry")
       provider_reg.clear()
@@ -212,25 +212,25 @@ describe("config.schema.definition", function()
 
     it("materializes OpenAI reasoning_summary default after registration", function()
       provider_reg.register("flemma.provider.providers.openai")
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.equals("auto", cfg.parameters.openai.reasoning_summary)
     end)
 
     it("materializes Vertex location default after registration", function()
       provider_reg.register("flemma.provider.providers.vertex")
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.equals("global", cfg.parameters.vertex.location)
     end)
 
     it("does not materialize Anthropic defaults (all optional, no defaults)", function()
       provider_reg.register("flemma.provider.providers.anthropic")
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.is_nil(cfg.parameters.anthropic.thinking_budget)
     end)
 
     it("does not materialize Vertex project_id (optional, no default)", function()
       provider_reg.register("flemma.provider.providers.vertex")
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.is_nil(cfg.parameters.vertex.project_id)
     end)
   end)
@@ -241,87 +241,87 @@ describe("config.schema.definition", function()
 
   describe("setup overrides", function()
     it("accepts scalar override via apply", function()
-      facade.apply(facade.LAYERS.SETUP, { provider = "openai" })
-      local cfg = facade.get()
+      config_facade.apply(config_facade.LAYERS.SETUP, { provider = "openai" })
+      local cfg = config_facade.get()
       assert.equals("openai", cfg.provider)
     end)
 
     it("accepts parameter override via apply", function()
-      facade.apply(facade.LAYERS.SETUP, { parameters = { timeout = 1200 } })
-      local cfg = facade.get()
+      config_facade.apply(config_facade.LAYERS.SETUP, { parameters = { timeout = 1200 } })
+      local cfg = config_facade.get()
       assert.equals(1200, cfg.parameters.timeout)
       -- Other parameters retain defaults
       assert.equals(0.7, cfg.parameters.temperature)
     end)
 
     it("accepts integer max_tokens override", function()
-      facade.apply(facade.LAYERS.SETUP, { parameters = { max_tokens = 8192 } })
-      local cfg = facade.get()
+      config_facade.apply(config_facade.LAYERS.SETUP, { parameters = { max_tokens = 8192 } })
+      local cfg = config_facade.get()
       assert.equals(8192, cfg.parameters.max_tokens)
     end)
 
     it("accepts string max_tokens override", function()
-      facade.apply(facade.LAYERS.SETUP, { parameters = { max_tokens = "75%" } })
-      local cfg = facade.get()
+      config_facade.apply(config_facade.LAYERS.SETUP, { parameters = { max_tokens = "75%" } })
+      local cfg = config_facade.get()
       assert.equals("75%", cfg.parameters.max_tokens)
     end)
 
     it("accepts thinking = false (disable)", function()
-      facade.apply(facade.LAYERS.SETUP, { parameters = { thinking = false } })
-      local cfg = facade.get()
+      config_facade.apply(config_facade.LAYERS.SETUP, { parameters = { thinking = false } })
+      local cfg = config_facade.get()
       assert.is_false(cfg.parameters.thinking)
     end)
 
     it("rejects thinking = true (use a named level instead)", function()
-      local ok, err = facade.apply(facade.LAYERS.SETUP, { parameters = { thinking = true } })
+      local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, { parameters = { thinking = true } })
       assert.is_nil(ok)
       assert.truthy(err:find("no union branch matched"))
     end)
 
     it("accepts thinking numeric override", function()
-      facade.apply(facade.LAYERS.SETUP, { parameters = { thinking = 4096 } })
-      local cfg = facade.get()
+      config_facade.apply(config_facade.LAYERS.SETUP, { parameters = { thinking = 4096 } })
+      local cfg = config_facade.get()
       assert.equals(4096, cfg.parameters.thinking)
     end)
 
     it("accepts highlight string override for table-default field", function()
-      facade.apply(facade.LAYERS.SETUP, {
+      config_facade.apply(config_facade.LAYERS.SETUP, {
         highlights = { thinking_block = "MyCustomHighlight" },
       })
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.equals("MyCustomHighlight", cfg.highlights.thinking_block)
     end)
 
     it("accepts text_object = false", function()
-      facade.apply(facade.LAYERS.SETUP, { text_object = false })
-      local cfg = facade.get()
+      config_facade.apply(config_facade.LAYERS.SETUP, { text_object = false })
+      local cfg = config_facade.get()
       assert.is_false(cfg.text_object)
     end)
 
     it("rejects text_object = true", function()
-      local ok, err = facade.apply(facade.LAYERS.SETUP, { text_object = true })
+      local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, { text_object = true })
       assert.is_nil(ok)
       assert.truthy(err:find("no union branch matched"))
     end)
 
     it("accepts fold_toggle = false", function()
-      facade.apply(facade.LAYERS.SETUP, {
+      config_facade.apply(config_facade.LAYERS.SETUP, {
         keymaps = { normal = { fold_toggle = false } },
       })
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.is_false(cfg.keymaps.normal.fold_toggle)
     end)
 
     it("accepts notification border string override", function()
-      facade.apply(facade.LAYERS.SETUP, {
+      config_facade.apply(config_facade.LAYERS.SETUP, {
         notifications = { border = "underline" },
       })
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.equals("underline", cfg.notifications.border)
     end)
 
     it("rejects unknown top-level key", function()
-      local ok, err = facade.apply(facade.LAYERS.SETUP, { nonexistent = true })
+      local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, { nonexistent = true })
       assert.is_nil(ok)
       assert.truthy(err:find("unknown key"))
     end)
@@ -331,10 +331,10 @@ describe("config.schema.definition", function()
       local provider_reg = require("flemma.provider.registry")
       provider_reg.clear()
       provider_reg.register("flemma.provider.providers.anthropic")
-      facade.apply(facade.LAYERS.SETUP, {
+      config_facade.apply(config_facade.LAYERS.SETUP, {
         parameters = { anthropic = { thinking_budget = 2048 } },
       })
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.equals(2048, cfg.parameters.anthropic.thinking_budget)
     end)
   end)
@@ -345,34 +345,34 @@ describe("config.schema.definition", function()
 
   describe("aliases", function()
     it("resolves top-level timeout alias", function()
-      facade.apply(facade.LAYERS.SETUP, { timeout = 1200 })
-      local cfg = facade.get()
+      config_facade.apply(config_facade.LAYERS.SETUP, { timeout = 1200 })
+      local cfg = config_facade.get()
       assert.equals(1200, cfg.parameters.timeout)
     end)
 
     it("resolves top-level thinking alias", function()
-      facade.apply(facade.LAYERS.SETUP, { thinking = "low" })
-      local cfg = facade.get()
+      config_facade.apply(config_facade.LAYERS.SETUP, { thinking = "low" })
+      local cfg = config_facade.get()
       assert.equals("low", cfg.parameters.thinking)
     end)
 
     it("resolves top-level max_tokens alias", function()
-      facade.apply(facade.LAYERS.SETUP, { max_tokens = 4096 })
-      local cfg = facade.get()
+      config_facade.apply(config_facade.LAYERS.SETUP, { max_tokens = 4096 })
+      local cfg = config_facade.get()
       assert.equals(4096, cfg.parameters.max_tokens)
     end)
 
     it("resolves top-level temperature alias", function()
-      facade.apply(facade.LAYERS.SETUP, { temperature = 0.3 })
-      local cfg = facade.get()
+      config_facade.apply(config_facade.LAYERS.SETUP, { temperature = 0.3 })
+      local cfg = config_facade.get()
       assert.equals(0.3, cfg.parameters.temperature)
     end)
 
     it("resolves tools.approve alias", function()
-      facade.apply(facade.LAYERS.SETUP, {
+      config_facade.apply(config_facade.LAYERS.SETUP, {
         tools = { approve = { "bash", "read" } },
       })
-      local cfg = facade.get()
+      local cfg = config_facade.get()
       assert.same({ "bash", "read" }, cfg.tools.auto_approve)
     end)
   end)
@@ -506,7 +506,7 @@ describe("config.schema.definition", function()
     local sandbox_module
 
     before_each(function()
-      -- Re-require registries so their facade locals pick up the current (re-init'd) facade
+      -- Re-require registries so their config_facade locals pick up the current (re-init'd) config_facade
       package.loaded["flemma.tools"] = nil
       package.loaded["flemma.tools.registry"] = nil
       tools_module = require("flemma.tools")
@@ -522,49 +522,49 @@ describe("config.schema.definition", function()
     describe("tool DISCOVER", function()
       it("resolves bash tool config schema", function()
         tools_module.register("flemma.tools.definitions.bash")
-        facade.apply(facade.LAYERS.SETUP, {
+        config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { bash = { shell = "zsh" } },
         })
-        assert.equals("zsh", facade.get().tools.bash.shell)
+        assert.equals("zsh", config_facade.get().tools.bash.shell)
       end)
 
       it("resolves bash cwd and env config", function()
         tools_module.register("flemma.tools.definitions.bash")
-        facade.apply(facade.LAYERS.SETUP, {
+        config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { bash = { cwd = "/home", env = { PATH = "/usr/bin" } } },
         })
-        local cfg = facade.get()
+        local cfg = config_facade.get()
         assert.equals("/home", cfg.tools.bash.cwd)
         assert.same({ PATH = "/usr/bin" }, cfg.tools.bash.env)
       end)
 
       it("resolves grep tool config with exclude list", function()
         tools_module.register("flemma.tools.definitions.grep")
-        facade.apply(facade.LAYERS.SETUP, {
+        config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { grep = { exclude = { "node_modules", ".git" } } },
         })
-        assert.same({ "node_modules", ".git" }, facade.get().tools.grep.exclude)
+        assert.same({ "node_modules", ".git" }, config_facade.get().tools.grep.exclude)
       end)
 
       it("resolves find tool config schema", function()
         tools_module.register("flemma.tools.definitions.find")
-        facade.apply(facade.LAYERS.SETUP, {
+        config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { find = { cwd = "/home" } },
         })
-        assert.equals("/home", facade.get().tools.find.cwd)
+        assert.equals("/home", config_facade.get().tools.find.cwd)
       end)
 
       it("resolves ls tool config schema", function()
         tools_module.register("flemma.tools.definitions.ls")
-        facade.apply(facade.LAYERS.SETUP, {
+        config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { ls = { cwd = "/var" } },
         })
-        assert.equals("/var", facade.get().tools.ls.cwd)
+        assert.equals("/var", config_facade.get().tools.ls.cwd)
       end)
 
       it("rejects unknown field on discovered tool schema", function()
         tools_module.register("flemma.tools.definitions.bash")
-        local ok, err = facade.apply(facade.LAYERS.SETUP, {
+        local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { bash = { nonexistent = "value" } },
         })
         assert.is_nil(ok)
@@ -573,7 +573,7 @@ describe("config.schema.definition", function()
 
       it("rejects invalid type on discovered tool schema field", function()
         tools_module.register("flemma.tools.definitions.bash")
-        local ok, err = facade.apply(facade.LAYERS.SETUP, {
+        local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { bash = { shell = 42 } },
         })
         assert.is_nil(ok)
@@ -581,7 +581,7 @@ describe("config.schema.definition", function()
       end)
 
       it("errors for unregistered tool without defer_discover", function()
-        local ok, err = facade.apply(facade.LAYERS.SETUP, {
+        local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { bash = { shell = "zsh" } },
         })
         assert.is_nil(ok)
@@ -605,15 +605,15 @@ describe("config.schema.definition", function()
             api_url = s.optional(s.string()),
           }),
         })
-        facade.apply(facade.LAYERS.SETUP, {
+        config_facade.apply(config_facade.LAYERS.SETUP, {
           parameters = { custom = { api_url = "https://custom.api" } },
         })
-        assert.equals("https://custom.api", facade.get().parameters.custom.api_url)
+        assert.equals("https://custom.api", config_facade.get().parameters.custom.api_url)
       end)
 
       it("built-in provider schemas require registry registration (no special treatment)", function()
         -- Without registration, DISCOVER returns nil → unknown key error
-        local ok, err = facade.apply(facade.LAYERS.SETUP, {
+        local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
           parameters = { anthropic = { thinking_budget = 4096 } },
         })
         assert.is_nil(ok)
@@ -622,10 +622,10 @@ describe("config.schema.definition", function()
 
       it("built-in provider schemas work after registration", function()
         provider_reg.register("flemma.provider.providers.anthropic")
-        facade.apply(facade.LAYERS.SETUP, {
+        config_facade.apply(config_facade.LAYERS.SETUP, {
           parameters = { anthropic = { thinking_budget = 4096 } },
         })
-        assert.equals(4096, facade.get().parameters.anthropic.thinking_budget)
+        assert.equals(4096, config_facade.get().parameters.anthropic.thinking_budget)
       end)
 
       it("rejects unknown field on custom provider schema", function()
@@ -643,7 +643,7 @@ describe("config.schema.definition", function()
             api_url = s.optional(s.string()),
           }),
         })
-        local ok, err = facade.apply(facade.LAYERS.SETUP, {
+        local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
           parameters = { custom = { nonexistent = "value" } },
         })
         assert.is_nil(ok)
@@ -654,23 +654,23 @@ describe("config.schema.definition", function()
     describe("sandbox backend DISCOVER", function()
       it("resolves bwrap config schema after registration", function()
         sandbox_module.setup()
-        facade.apply(facade.LAYERS.SETUP, {
+        config_facade.apply(config_facade.LAYERS.SETUP, {
           sandbox = { backends = { bwrap = { path = "/usr/local/bin/bwrap" } } },
         })
-        assert.equals("/usr/local/bin/bwrap", facade.get().sandbox.backends.bwrap.path)
+        assert.equals("/usr/local/bin/bwrap", config_facade.get().sandbox.backends.bwrap.path)
       end)
 
       it("resolves bwrap extra_args config after registration", function()
         sandbox_module.setup()
-        facade.apply(facade.LAYERS.SETUP, {
+        config_facade.apply(config_facade.LAYERS.SETUP, {
           sandbox = { backends = { bwrap = { extra_args = { "--tmpfs", "/run" } } } },
         })
-        assert.same({ "--tmpfs", "/run" }, facade.get().sandbox.backends.bwrap.extra_args)
+        assert.same({ "--tmpfs", "/run" }, config_facade.get().sandbox.backends.bwrap.extra_args)
       end)
 
       it("rejects unknown field on bwrap schema", function()
         sandbox_module.setup()
-        local ok, err = facade.apply(facade.LAYERS.SETUP, {
+        local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
           sandbox = { backends = { bwrap = { nonexistent = "value" } } },
         })
         assert.is_nil(ok)
@@ -678,7 +678,7 @@ describe("config.schema.definition", function()
       end)
 
       it("errors for unregistered bwrap without defer_discover", function()
-        local ok, err = facade.apply(facade.LAYERS.SETUP, {
+        local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
           sandbox = { backends = { bwrap = { path = "/usr/bin/bwrap" } } },
         })
         assert.is_nil(ok)
@@ -698,10 +698,10 @@ describe("config.schema.definition", function()
             profile = s_mod.optional(s_mod.string()),
           }),
         })
-        facade.apply(facade.LAYERS.SETUP, {
+        config_facade.apply(config_facade.LAYERS.SETUP, {
           sandbox = { backends = { firejail = { profile = "restricted" } } },
         })
-        assert.equals("restricted", facade.get().sandbox.backends.firejail.profile)
+        assert.equals("restricted", config_facade.get().sandbox.backends.firejail.profile)
       end)
 
       it("rejects unknown field on custom backend schema", function()
@@ -717,7 +717,7 @@ describe("config.schema.definition", function()
             profile = s_mod.optional(s_mod.string()),
           }),
         })
-        local ok, err = facade.apply(facade.LAYERS.SETUP, {
+        local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
           sandbox = { backends = { firejail = { nonexistent = "value" } } },
         })
         assert.is_nil(ok)
@@ -725,7 +725,7 @@ describe("config.schema.definition", function()
       end)
 
       it("errors for unregistered backend without defer_discover", function()
-        local ok, err = facade.apply(facade.LAYERS.SETUP, {
+        local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
           sandbox = { backends = { nsjail = { config_path = "/etc/nsjail" } } },
         })
         assert.is_nil(ok)
@@ -735,8 +735,8 @@ describe("config.schema.definition", function()
 
     describe("deferred DISCOVER", function()
       it("defers tool config writes and replays after registration", function()
-        local _, err, deferred = facade.apply(
-          facade.LAYERS.SETUP,
+        local _, err, deferred = config_facade.apply(
+          config_facade.LAYERS.SETUP,
           { tools = { bash = { shell = "zsh" } } },
           { defer_discover = true }
         )
@@ -746,27 +746,27 @@ describe("config.schema.definition", function()
 
         tools_module.register("flemma.tools.definitions.bash")
 
-        local failures = facade.apply_deferred(facade.LAYERS.SETUP, deferred)
+        local failures = config_facade.apply_deferred(config_facade.LAYERS.SETUP, deferred)
         assert.is_nil(failures)
-        assert.equals("zsh", facade.get().tools.bash.shell)
+        assert.equals("zsh", config_facade.get().tools.bash.shell)
       end)
 
       it("deferred write fails for genuinely unknown tool", function()
-        local _, _, deferred = facade.apply(
-          facade.LAYERS.SETUP,
+        local _, _, deferred = config_facade.apply(
+          config_facade.LAYERS.SETUP,
           { tools = { nonexistent = { foo = "bar" } } },
           { defer_discover = true }
         )
         assert.is_not_nil(deferred)
 
-        local failures = facade.apply_deferred(facade.LAYERS.SETUP, deferred)
+        local failures = config_facade.apply_deferred(config_facade.LAYERS.SETUP, deferred)
         assert.is_not_nil(failures)
         assert.equals(1, #failures)
       end)
 
       it("defers multiple tool config writes", function()
-        local _, _, deferred = facade.apply(
-          facade.LAYERS.SETUP,
+        local _, _, deferred = config_facade.apply(
+          config_facade.LAYERS.SETUP,
           { tools = { bash = { shell = "zsh" }, grep = { exclude = { ".git" } } } },
           { defer_discover = true }
         )
@@ -776,15 +776,15 @@ describe("config.schema.definition", function()
         tools_module.register("flemma.tools.definitions.bash")
         tools_module.register("flemma.tools.definitions.grep")
 
-        local failures = facade.apply_deferred(facade.LAYERS.SETUP, deferred)
+        local failures = config_facade.apply_deferred(config_facade.LAYERS.SETUP, deferred)
         assert.is_nil(failures)
-        assert.equals("zsh", facade.get().tools.bash.shell)
-        assert.same({ ".git" }, facade.get().tools.grep.exclude)
+        assert.equals("zsh", config_facade.get().tools.bash.shell)
+        assert.same({ ".git" }, config_facade.get().tools.grep.exclude)
       end)
 
       it("defers custom provider config and replays after registration", function()
-        local _, _, deferred = facade.apply(
-          facade.LAYERS.SETUP,
+        local _, _, deferred = config_facade.apply(
+          config_facade.LAYERS.SETUP,
           { parameters = { my_provider = { api_url = "https://api.mine" } } },
           { defer_discover = true }
         )
@@ -805,14 +805,14 @@ describe("config.schema.definition", function()
           }),
         })
 
-        local failures = facade.apply_deferred(facade.LAYERS.SETUP, deferred)
+        local failures = config_facade.apply_deferred(config_facade.LAYERS.SETUP, deferred)
         assert.is_nil(failures)
-        assert.equals("https://api.mine", facade.get().parameters.my_provider.api_url)
+        assert.equals("https://api.mine", config_facade.get().parameters.my_provider.api_url)
       end)
 
       it("defers custom backend config and replays after registration", function()
-        local _, _, deferred = facade.apply(
-          facade.LAYERS.SETUP,
+        local _, _, deferred = config_facade.apply(
+          config_facade.LAYERS.SETUP,
           { sandbox = { backends = { firejail = { profile = "restricted" } } } },
           { defer_discover = true }
         )
@@ -831,9 +831,9 @@ describe("config.schema.definition", function()
           }),
         })
 
-        local failures = facade.apply_deferred(facade.LAYERS.SETUP, deferred)
+        local failures = config_facade.apply_deferred(config_facade.LAYERS.SETUP, deferred)
         assert.is_nil(failures)
-        assert.equals("restricted", facade.get().sandbox.backends.firejail.profile)
+        assert.equals("restricted", config_facade.get().sandbox.backends.firejail.profile)
       end)
     end)
   end)
