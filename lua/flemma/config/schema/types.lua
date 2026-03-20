@@ -333,6 +333,7 @@ end
 ---@class flemma.config.schema.MapNode : flemma.config.schema.Node
 ---@field _key_schema flemma.config.schema.Node Schema for map keys
 ---@field _value_schema flemma.config.schema.Node Schema for map values
+---@field _default? table Default map value
 local MapNode = setmetatable({}, { __index = Node })
 MapNode.__index = MapNode
 
@@ -355,13 +356,28 @@ function MapNode:validate_value(value)
   return true
 end
 
+---@return boolean
+function MapNode:has_default()
+  return self._default ~= nil
+end
+
+---@return table?
+function MapNode:materialize()
+  if self._default then
+    return vim.deepcopy(self._default)
+  end
+  return nil
+end
+
 ---@param key_schema flemma.config.schema.Node
 ---@param value_schema flemma.config.schema.Node
+---@param default? table
 ---@return flemma.config.schema.MapNode
-function MapNode.new(key_schema, value_schema)
+function MapNode.new(key_schema, value_schema, default)
   local node = setmetatable({}, MapNode)
   node._key_schema = key_schema
   node._value_schema = value_schema
+  node._default = default
   return node
 end
 
@@ -572,10 +588,43 @@ end
 -- UnionNode
 -- ---------------------------------------------------------------------------
 
+--- Union schema node: value must match one of the given branches.
+---
+--- **Default semantics:** A union's default is the default of the *first*
+--- branch that has one. Branch ordering matters — place the branch whose
+--- default you want materialized first. For example:
+---
+---   s.union(s.boolean(false), s.enum({ "underline", "underdashed" }))
+---
+--- materializes `false` because the boolean branch is checked first. If
+--- the branches were swapped, the enum (which has no default) would be
+--- checked first and the union would have no default.
 ---@class flemma.config.schema.UnionNode : flemma.config.schema.Node
 ---@field _branches flemma.config.schema.Node[] Schemas to try in order
 local UnionNode = setmetatable({}, { __index = Node })
 UnionNode.__index = UnionNode
+
+--- Whether this union has a default (delegates to branches in order).
+---@return boolean
+function UnionNode:has_default()
+  for _, branch in ipairs(self._branches) do
+    if branch:has_default() then
+      return true
+    end
+  end
+  return false
+end
+
+--- Return the default from the first branch that has one.
+---@return any
+function UnionNode:materialize()
+  for _, branch in ipairs(self._branches) do
+    if branch:has_default() then
+      return branch:materialize()
+    end
+  end
+  return nil
+end
 
 ---@param value any
 ---@return boolean, string?
@@ -653,6 +702,52 @@ function FuncNode.new()
 end
 
 -- ---------------------------------------------------------------------------
+-- LiteralNode
+-- ---------------------------------------------------------------------------
+
+--- Matches exactly one value (by equality). Useful for sentinel values like
+--- `false` in unions where a full boolean type would be too permissive.
+---
+--- Unlike other node types, LiteralNode carries an explicit `_has_default`
+--- flag because `nil` is a valid literal value — the `~= nil` shortcut used
+--- by ScalarNode/EnumNode/MapNode cannot distinguish "no default" from
+--- "default is nil".
+---@class flemma.config.schema.LiteralNode : flemma.config.schema.Node
+---@field _value any The exact value to match
+---@field _has_default boolean Whether the literal carries a default
+local LiteralNode = setmetatable({}, { __index = Node })
+LiteralNode.__index = LiteralNode
+
+---@return boolean
+function LiteralNode:has_default()
+  return self._has_default
+end
+
+---@return any
+function LiteralNode:materialize()
+  return self._value
+end
+
+---@param value any
+---@return boolean, string?
+function LiteralNode:validate_value(value)
+  if value ~= self._value then
+    return false, "expected " .. tostring(self._value) .. ", got " .. tostring(value)
+  end
+  return true
+end
+
+---@param value any
+---@param opts? { as_default?: boolean } Options (as_default defaults to true)
+---@return flemma.config.schema.LiteralNode
+function LiteralNode.new(value, opts)
+  local node = setmetatable({}, LiteralNode)
+  node._value = value
+  node._has_default = not opts or opts.as_default ~= false
+  return node
+end
+
+-- ---------------------------------------------------------------------------
 -- Exports
 -- ---------------------------------------------------------------------------
 
@@ -670,5 +765,6 @@ M.OptionalNode = OptionalNode
 M.UnionNode = UnionNode
 M.LoadableNode = LoadableNode
 M.FuncNode = FuncNode
+M.LiteralNode = LiteralNode
 
 return M

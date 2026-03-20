@@ -662,6 +662,74 @@ describe("flemma.config.schema", function()
   end)
 
   -- ---------------------------------------------------------------------------
+  -- s.literal()
+  -- ---------------------------------------------------------------------------
+
+  describe("s.literal()", function()
+    it("accepts the exact value", function()
+      assert.is_true(s.literal(false):validate_value(false))
+    end)
+
+    it("rejects different values of the same type", function()
+      local ok, err = s.literal(false):validate_value(true)
+      assert.is_false(ok)
+      assert.matches("expected false", err)
+    end)
+
+    it("rejects values of different types", function()
+      local ok, err = s.literal(false):validate_value("false")
+      assert.is_false(ok)
+      assert.matches("expected false", err)
+    end)
+
+    it("works with string literals", function()
+      assert.is_true(s.literal("sentinel"):validate_value("sentinel"))
+      local ok = s.literal("sentinel"):validate_value("other")
+      assert.is_false(ok)
+    end)
+
+    it("works with number literals", function()
+      assert.is_true(s.literal(0):validate_value(0))
+      local ok = s.literal(0):validate_value(1)
+      assert.is_false(ok)
+    end)
+
+    it("has_default() is true for non-nil values", function()
+      assert.is_true(s.literal(false):has_default())
+      assert.is_true(s.literal("x"):has_default())
+      assert.is_true(s.literal(0):has_default())
+    end)
+
+    it("has_default() is true even for nil literal", function()
+      assert.is_true(s.literal(nil):has_default())
+      assert.is_nil(s.literal(nil):materialize())
+    end)
+
+    it("has_default() can be explicitly disabled", function()
+      local types = require("flemma.config.schema.types")
+      local node = types.LiteralNode.new(false, { as_default = false })
+      assert.is_false(node:has_default())
+      assert.is_true(node:validate_value(false))
+    end)
+
+    it("materializes to the literal value", function()
+      assert.equals(false, s.literal(false):materialize())
+      assert.equals("x", s.literal("x"):materialize())
+    end)
+
+    it("works in unions as a false-sentinel", function()
+      local node = s.union(s.string("m"), s.literal(false))
+      assert.is_true(node:validate_value("m"))
+      assert.is_true(node:validate_value("custom"))
+      assert.is_true(node:validate_value(false))
+      assert.is_false(node:validate_value(true))
+      assert.is_false(node:validate_value(42))
+      -- Default comes from string branch
+      assert.equals("m", node:materialize())
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
   -- symbols.DISCOVER integration in object validation
   -- ---------------------------------------------------------------------------
 

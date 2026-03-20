@@ -55,16 +55,17 @@ end
 
 ---@param key_schema flemma.config.schema.Node
 ---@param value_schema flemma.config.schema.Node
+---@param default? table
 ---@return flemma.config.schema.MapNode
-function M.map(key_schema, value_schema)
-  return types.MapNode.new(key_schema, value_schema)
+function M.map(key_schema, value_schema, default)
+  return types.MapNode.new(key_schema, value_schema, default)
 end
 
 --- Fixed-shape object schema node. Strict by default (unknown keys rejected).
 --- The fields table may include special symbol keys:
 ---   [symbols.ALIASES] = { alias = "canonical.path" }
 ---   [symbols.DISCOVER] = function(key) return schema_node or nil end
----@param fields table<string|table, flemma.config.schema.Node|table>
+---@param fields table<string|table, flemma.config.schema.Node|table|function>
 ---@return flemma.config.schema.ObjectNode
 function M.object(fields)
   return types.ObjectNode.new(fields)
@@ -95,6 +96,14 @@ end
 ---@return flemma.config.schema.FuncNode
 function M.func()
   return types.FuncNode.new()
+end
+
+--- Matches exactly one value (by equality). Useful for sentinel values
+--- like `false` in unions where a full boolean type would be too permissive.
+---@param value any
+---@return flemma.config.schema.LiteralNode
+function M.literal(value)
+  return types.LiteralNode.new(value)
 end
 
 return M
