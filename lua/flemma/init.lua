@@ -136,27 +136,15 @@ M.setup = function(user_opts)
     config.model = resolved_preset.model
   end
 
-  -- Initialize provider based on the resolved config
+  -- Initialize provider based on the resolved config. Pass SETUP layer so the
+  -- validated provider/model go to the same layer as user opts (not RUNTIME).
   if resolved_preset then
     -- Merge preset parameters on top of config parameters (same pattern as switch_provider)
     local merged_params =
       config_manager.merge_parameters(config.parameters, resolved_preset.provider, resolved_preset.parameters)
-    core.initialize_provider(config.provider, config.model, merged_params)
+    core.initialize_provider(config.provider, config.model, merged_params, config_facade.LAYERS.SETUP)
   else
-    core.initialize_provider(config.provider, config.model, config.parameters)
-  end
-
-  -- Sync validated provider/model back to the facade. config_manager.apply_config()
-  -- writes these to state but doesn't know about the facade. Read from state
-  -- (not the local) to get the validated values. This entire bridge block
-  -- disappears when config_manager is rewritten to use the facade directly.
-  do
-    local validated = state.get_config()
-    local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
-    w.provider = validated.provider
-    if validated.model then
-      w.model = validated.model
-    end
+    core.initialize_provider(config.provider, config.model, config.parameters, config_facade.LAYERS.SETUP)
   end
 
   -- Phase 5: Remaining setup

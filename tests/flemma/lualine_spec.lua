@@ -173,11 +173,11 @@ describe("Lualine component", function()
 
   describe("custom format strings", function()
     it("should use provider:model format when configured", function()
-      -- Arrange
+      -- Arrange: switch first, then set format (switch_provider re-materializes state)
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       local state = require("flemma.state")
       local config = state.get_config()
       config.statusline.format = "#{provider}:#{model}"
-      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
 
       -- Act
       local status = flemma_component:update_status()
@@ -187,11 +187,11 @@ describe("Lualine component", function()
     end)
 
     it("should handle conditionals in custom format", function()
-      -- Arrange
+      -- Arrange: switch first, then set format (switch_provider re-materializes state)
+      core.switch_provider("openai", "o3", { reasoning = "high", temperature = 1 })
       local state = require("flemma.state")
       local config = state.get_config()
       config.statusline.format = "#{model}#{?#{thinking}, [#{thinking}],}"
-      core.switch_provider("openai", "o3", { reasoning = "high", temperature = 1 })
 
       -- Act
       local status = flemma_component:update_status()
@@ -215,11 +215,11 @@ describe("Lualine component", function()
     end)
 
     it("should support provider-conditional format", function()
-      -- Arrange
+      -- Arrange: switch first, then set format (switch_provider re-materializes state)
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       local state = require("flemma.state")
       local config = state.get_config()
       config.statusline.format = "#{?#{==:#{provider},anthropic},A,O}: #{model}"
-      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
 
       -- Act
       local status = flemma_component:update_status()
@@ -231,11 +231,11 @@ describe("Lualine component", function()
 
   describe("session variables", function()
     it("should display session cost when format includes #{session.cost}", function()
-      -- Arrange
+      -- Arrange: switch first, then set format (switch_provider re-materializes state)
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       local state = require("flemma.state")
       local config = state.get_config()
       config.statusline.format = "#{model} #{?#{session.cost},#{session.cost},}"
-      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
 
       -- Add a request to the session
       local s = require("flemma.session").get()
@@ -257,11 +257,11 @@ describe("Lualine component", function()
     end)
 
     it("should display request count", function()
-      -- Arrange
+      -- Arrange: switch first, then set format (switch_provider re-materializes state)
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       local state = require("flemma.state")
       local config = state.get_config()
       config.statusline.format = "#{model} (#{session.requests})"
-      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
 
       local s = require("flemma.session").get()
       s:reset()
@@ -290,11 +290,11 @@ describe("Lualine component", function()
     end)
 
     it("should hide session variables when no requests exist", function()
-      -- Arrange
+      -- Arrange: switch first, then set format (switch_provider re-materializes state)
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       local state = require("flemma.state")
       local config = state.get_config()
       config.statusline.format = "#{model}#{?#{session.cost}, #{session.cost},}"
-      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
 
       local s = require("flemma.session").get()
       s:reset()
@@ -307,11 +307,11 @@ describe("Lualine component", function()
     end)
 
     it("should format tokens compactly", function()
-      -- Arrange
+      -- Arrange: switch first, then set format (switch_provider re-materializes state)
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       local state = require("flemma.state")
       local config = state.get_config()
       config.statusline.format = "↑#{session.tokens.input} ↓#{session.tokens.output}"
-      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
 
       local s = require("flemma.session").get()
       s:reset()
@@ -332,11 +332,11 @@ describe("Lualine component", function()
     end)
 
     it("should display last request cost", function()
-      -- Arrange
+      -- Arrange: switch first, then set format (switch_provider re-materializes state)
+      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       local state = require("flemma.state")
       local config = state.get_config()
       config.statusline.format = "#{model} last:#{last.cost}"
-      core.switch_provider("anthropic", "claude-sonnet-4-5", {})
 
       local s = require("flemma.session").get()
       s:reset()
@@ -388,11 +388,11 @@ describe("Lualine component", function()
 
     it("should prefer lualine options format over flemma config format", function()
       -- Arrange: conflicting formats — lualine option should win
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
       local state = require("flemma.state")
       local config = state.get_config()
       config.statusline.format = "config:#{model}"
       flemma_component.options = { format = "options:#{model}" }
-      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
 
       -- Act
       local status = flemma_component:update_status()

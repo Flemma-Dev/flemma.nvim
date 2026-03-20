@@ -43,8 +43,9 @@ local last_request_body_for_testing = nil
 ---@param provider_name string
 ---@param model_name? string
 ---@param parameters? table<string, any>
+---@param layer? integer Facade layer for apply_config (default: RUNTIME)
 ---@return flemma.provider.Base|nil
-local function initialize_provider(provider_name, model_name, parameters)
+local function initialize_provider(provider_name, model_name, parameters, layer)
   -- Prepare configuration using the centralized config manager
   local provider_config, err = config_manager.prepare_config(provider_name, model_name, parameters)
   if not provider_config then
@@ -52,8 +53,8 @@ local function initialize_provider(provider_name, model_name, parameters)
     return nil
   end
 
-  -- Apply the configuration to global state
-  config_manager.apply_config(provider_config)
+  -- Apply the configuration to global state via the facade
+  config_manager.apply_config(provider_config, layer)
 
   -- Create a fresh provider instance with the merged parameters
   local provider_module = registry.get(provider_config.provider)
@@ -75,9 +76,10 @@ end
 ---@param provider_name string
 ---@param model_name? string
 ---@param parameters? table<string, any>
+---@param layer? integer Facade layer for apply_config (default: RUNTIME)
 ---@return flemma.provider.Base|nil
-function M.initialize_provider(provider_name, model_name, parameters)
-  return initialize_provider(provider_name, model_name, parameters)
+function M.initialize_provider(provider_name, model_name, parameters, layer)
+  return initialize_provider(provider_name, model_name, parameters, layer)
 end
 
 ---Switch to a different provider or model
@@ -107,21 +109,22 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
   local config = state.get_config()
   local merged_params = config_manager.merge_parameters(config.parameters, provider_name, parameters)
 
-  -- Initialize the new provider using the centralized approach
-  -- but do not commit the global config until validation succeeds.
+  -- Initialize the new provider. apply_config writes to the facade's RUNTIME
+  -- layer and re-materializes into state BEFORE we know if provider.new()
+  -- succeeds. On failure, the facade retains the new provider/model ops —
+  -- reverting would require transaction semantics on the store, which is
+  -- overkill for this narrow failure path (provider validated but module
+  -- load fails). The provider instance rollback below is sufficient.
   local prev_provider = state.get_provider()
-  state.set_provider(nil) -- Clear the current provider
+  state.set_provider(nil)
   local new_provider = initialize_provider(provider_name, model_name, merged_params)
 
   if not new_provider then
-    -- Restore previous provider and keep existing config unchanged.
     state.set_provider(prev_provider)
     log.warn("switch_provider(): Aborting switch due to invalid provider: " .. log.inspect(provider_name))
     return nil
   end
 
-  -- Commit the new configuration now that initialization succeeded.
-  -- The config has already been updated by initialize_provider via config_manager.apply_config
   local updated_config = state.get_config()
 
   -- Force the new provider to clear its API key cache

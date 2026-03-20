@@ -3,6 +3,7 @@
 ---@class flemma.core.ConfigManager
 local M = {}
 
+local config_facade = require("flemma.config.facade")
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local registry = require("flemma.provider.registry")
@@ -282,23 +283,28 @@ function M.prepare_config(provider_name, model_name, parameters)
   }, nil
 end
 
----Applies a configuration to the global state
+---Applies a configuration to the global state via the config facade.
+---Writes the validated provider/model to the given facade layer, then
+---re-materializes the full config into state for legacy consumers.
 ---@param config { provider: string, model: string, parameters: table<string, any> }
-function M.apply_config(config)
-  local updated_config = state.get_config()
-  updated_config.provider = config.provider
-  updated_config.model = config.model
-  -- NOTE: Do NOT overwrite updated_config.parameters here. The provider instance
-  -- holds its own flattened parameters. The global config must preserve the original
-  -- nested structure (with provider sub-tables like parameters.vertex) so that
-  -- future switch_provider calls can correctly resolve provider-specific params.
-  state.set_config(updated_config)
+---@param layer? integer Facade layer to write to (default: RUNTIME)
+function M.apply_config(config, layer)
+  layer = layer or config_facade.LAYERS.RUNTIME
+  local w = config_facade.writer(nil, layer)
+  w.provider = config.provider
+  if config.model then
+    w.model = config.model
+  end
+  state.set_config(config_facade.materialize())
 
   log.debug(
     "apply_config(): Applied config - provider: "
       .. log.inspect(config.provider)
       .. ", model: "
       .. log.inspect(config.model)
+      .. " (layer: "
+      .. tostring(layer)
+      .. ")"
   )
 end
 

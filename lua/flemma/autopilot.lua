@@ -3,6 +3,7 @@
 ---@class flemma.Autopilot
 local M = {}
 
+local config_facade = require("flemma.config.facade")
 local log = require("flemma.logging")
 local bridge = require("flemma.bridge")
 local cursor = require("flemma.cursor")
@@ -53,17 +54,14 @@ function M.is_enabled(bufnr)
   return autopilot.enabled == true
 end
 
----Enable or disable autopilot at runtime by mutating the live config.
----In normal usage config.tools and config.tools.autopilot are always populated
----by setup(); the nil guards are defensive for edge cases (e.g. tests).
+---Enable or disable autopilot at runtime via the config facade.
+---Writes to the RUNTIME layer so the change persists across re-materializations
+---and is visible in :Flemma status as a runtime override.
 ---@param enabled boolean
 function M.set_enabled(enabled)
-  local config = state.get_config()
-  if config.tools and config.tools.autopilot then
-    config.tools.autopilot.enabled = enabled
-  elseif config.tools then
-    config.tools.autopilot = { enabled = enabled, max_turns = 100 }
-  end
+  local w = config_facade.writer(nil, config_facade.LAYERS.RUNTIME)
+  w.tools.autopilot.enabled = enabled
+  state.set_config(config_facade.materialize())
   log.debug("autopilot: set_enabled(" .. tostring(enabled) .. ")")
 end
 
