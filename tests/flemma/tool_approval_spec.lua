@@ -1710,7 +1710,7 @@ describe("Pipeline flemma:tool exclusion", function()
     local doc = parser.parse_lines(lines)
     local pipeline = require("flemma.pipeline")
     local ctx = require("flemma.context")
-    local prompt = pipeline.run(doc, ctx.from_file("test.chat"))
+    local prompt = pipeline.run(doc, ctx.from_file("test.chat"), { bufnr = 0 })
 
     -- The tool should still be in pending_tool_calls because flemma:tool is a placeholder
     assert.equals(1, #prompt.pending_tool_calls)
@@ -1737,7 +1737,7 @@ describe("Pipeline flemma:tool exclusion", function()
     local doc = parser.parse_lines(lines)
     local pipeline = require("flemma.pipeline")
     local ctx = require("flemma.context")
-    local prompt = pipeline.run(doc, ctx.from_file("test.chat"))
+    local prompt = pipeline.run(doc, ctx.from_file("test.chat"), { bufnr = 0 })
 
     assert.equals(0, #prompt.pending_tool_calls)
   end)

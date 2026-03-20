@@ -482,7 +482,7 @@ describe("Anthropic Provider Tool Support", function()
       "@You:",
       "What is 15 * 7?",
     }
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
     local req = provider:build_request(prompt, {})
 
     assert.is_not_nil(req.tools, "Request should include tools array")
@@ -495,7 +495,7 @@ describe("Anthropic Provider Tool Support", function()
     local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
 
     local lines = { "@You:", "Calculate something" }
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
     local req = provider:build_request(prompt, {})
 
     assert.is_not_nil(req.tool_choice)
@@ -508,8 +508,11 @@ describe("Anthropic Provider Tool Support", function()
     local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
-    local prompt =
-      pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
+    local prompt = pipeline.run(
+      parser.parse_lines(lines),
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"),
+      { bufnr = 0 }
+    )
     local req = provider:build_request(prompt, {})
 
     local assistant_msg = nil
@@ -537,8 +540,11 @@ describe("Anthropic Provider Tool Support", function()
     local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
-    local prompt =
-      pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
+    local prompt = pipeline.run(
+      parser.parse_lines(lines),
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"),
+      { bufnr = 0 }
+    )
     local req = provider:build_request(prompt, {})
 
     local user_msgs = vim.tbl_filter(function(m)
@@ -556,8 +562,11 @@ describe("Anthropic Provider Tool Support", function()
     local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_tool_error.chat")
-    local prompt =
-      pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_tool_error.chat"))
+    local prompt = pipeline.run(
+      parser.parse_lines(lines),
+      ctx.from_file("tests/fixtures/tool_calling/conversation_tool_error.chat"),
+      { bufnr = 0 }
+    )
     local req = provider:build_request(prompt, {})
 
     local user_msgs = vim.tbl_filter(function(m)
@@ -761,8 +770,11 @@ describe("Request Body Validation", function()
     local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 4000, temperature = 0 })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
-    local prompt =
-      pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
+    local prompt = pipeline.run(
+      parser.parse_lines(lines),
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"),
+      { bufnr = 0 }
+    )
     local req = provider:build_request(prompt, {})
 
     -- Validate structure matches expected_tool_result_request.json
@@ -837,7 +849,7 @@ describe("OpenAI Provider Request Building with Tools", function()
 
     local lines = { "@You:", "Calculate something" }
     local context = ctx.from_file("tests/fixtures/doc.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), context)
+    local prompt = pipeline.run(parser.parse_lines(lines), context, { bufnr = 0 })
     local req = provider:build_request(prompt, context)
 
     assert.is_not_nil(req.tools, "Request should include tools array")
@@ -855,7 +867,7 @@ describe("OpenAI Provider Request Building with Tools", function()
 
     local lines = { "@You:", "Calculate something" }
     local context = ctx.from_file("tests/fixtures/doc.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), context)
+    local prompt = pipeline.run(parser.parse_lines(lines), context, { bufnr = 0 })
     local req = provider:build_request(prompt, context)
 
     assert.equals("auto", req.tool_choice)
@@ -868,7 +880,7 @@ describe("OpenAI Provider Request Building with Tools", function()
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
     local context = ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), context)
+    local prompt = pipeline.run(parser.parse_lines(lines), context, { bufnr = 0 })
     local req = provider:build_request(prompt, context)
 
     local function_calls = vim.tbl_filter(function(item)
@@ -886,7 +898,7 @@ describe("OpenAI Provider Request Building with Tools", function()
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
     local context = ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), context)
+    local prompt = pipeline.run(parser.parse_lines(lines), context, { bufnr = 0 })
     local req = provider:build_request(prompt, context)
 
     local function_call_outputs = vim.tbl_filter(function(item)
@@ -903,7 +915,7 @@ describe("OpenAI Provider Request Building with Tools", function()
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_tool_error.chat")
     local context = ctx.from_file("tests/fixtures/tool_calling/conversation_tool_error.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), context)
+    local prompt = pipeline.run(parser.parse_lines(lines), context, { bufnr = 0 })
     local req = provider:build_request(prompt, context)
 
     local function_call_outputs = vim.tbl_filter(function(item)
@@ -926,7 +938,7 @@ describe("OpenAI Provider Request Building with Tools", function()
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_tool_result_with_followup.chat")
     local context = ctx.from_file("tests/fixtures/tool_calling/conversation_tool_result_with_followup.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), context)
+    local prompt = pipeline.run(parser.parse_lines(lines), context, { bufnr = 0 })
     local req = provider:build_request(prompt, context)
 
     -- Find indices of function_call_output and follow-up user message in input array
@@ -1109,7 +1121,7 @@ describe("OpenAI Request Body Validation with Tools", function()
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
     local context = ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), context)
+    local prompt = pipeline.run(parser.parse_lines(lines), context, { bufnr = 0 })
     local req = provider:build_request(prompt, context)
 
     -- Validate structure matches Responses API format
@@ -1173,7 +1185,7 @@ describe("Vertex AI Provider Request Building with Tools", function()
     })
 
     local lines = { "@You:", "Calculate something" }
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
     local req = provider:build_request(prompt, {})
 
     assert.is_not_nil(req.tools, "Request should include tools array")
@@ -1196,7 +1208,7 @@ describe("Vertex AI Provider Request Building with Tools", function()
     })
 
     local lines = { "@You:", "Calculate something" }
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
     local req = provider:build_request(prompt, {})
 
     assert.is_not_nil(req.toolConfig)
@@ -1216,7 +1228,8 @@ describe("Vertex AI Provider Request Building with Tools", function()
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
     local prompt = pipeline.run(
       parser.parse_lines(lines),
-      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"),
+      { bufnr = 0 }
     )
     local req = provider:build_request(prompt, {})
 
@@ -1253,7 +1266,8 @@ describe("Vertex AI Provider Request Building with Tools", function()
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
     local prompt = pipeline.run(
       parser.parse_lines(lines),
-      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"),
+      { bufnr = 0 }
     )
     local req = provider:build_request(prompt, {})
 
@@ -1286,7 +1300,8 @@ describe("Vertex AI Provider Request Building with Tools", function()
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_tool_error_vertex.chat")
     local prompt = pipeline.run(
       parser.parse_lines(lines),
-      ctx.from_file("tests/fixtures/tool_calling/conversation_tool_error_vertex.chat")
+      ctx.from_file("tests/fixtures/tool_calling/conversation_tool_error_vertex.chat"),
+      { bufnr = 0 }
     )
     local req = provider:build_request(prompt, {})
 
@@ -1485,7 +1500,8 @@ describe("Anthropic Thinking Signature and Redacted Thinking Round-Trip", functi
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat")
     local prompt = pipeline.run(
       parser.parse_lines(lines),
-      ctx.from_file("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat")
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat"),
+      { bufnr = 0 }
     )
     local req = provider:build_request(prompt, {})
 
@@ -1528,7 +1544,8 @@ describe("Anthropic Thinking Signature and Redacted Thinking Round-Trip", functi
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat")
     local prompt = pipeline.run(
       parser.parse_lines(lines),
-      ctx.from_file("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat")
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat"),
+      { bufnr = 0 }
     )
     local req = provider:build_request(prompt, {})
 
@@ -1651,7 +1668,8 @@ describe("Vertex AI Thought Signature Support", function()
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_thought_signature_vertex.chat")
     local prompt = pipeline.run(
       parser.parse_lines(lines),
-      ctx.from_file("tests/fixtures/tool_calling/conversation_with_thought_signature_vertex.chat")
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_thought_signature_vertex.chat"),
+      { bufnr = 0 }
     )
     local req = provider:build_request(prompt, {})
 
@@ -1803,7 +1821,7 @@ describe("Vertex AI Thought Signature Support", function()
       "Simple arithmetic.",
       "</thinking>",
     }
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
     local req = provider:build_request(prompt, {})
 
     -- Find the model message
@@ -1856,7 +1874,8 @@ describe("Vertex AI Request Body Validation with Tools", function()
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
     local prompt = pipeline.run(
       parser.parse_lines(lines),
-      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"),
+      { bufnr = 0 }
     )
     local req = provider:build_request(prompt, {})
 
@@ -1992,7 +2011,8 @@ describe("Anthropic Provider with Vertex URN IDs", function()
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
     local prompt = pipeline.run(
       parser.parse_lines(lines),
-      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"),
+      { bufnr = 0 }
     )
     local req = provider:build_request(prompt, {})
 
@@ -2028,7 +2048,8 @@ describe("Anthropic Provider with Vertex URN IDs", function()
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
     local prompt = pipeline.run(
       parser.parse_lines(lines),
-      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat"),
+      { bufnr = 0 }
     )
     local req = provider:build_request(prompt, {})
 
@@ -2070,7 +2091,7 @@ describe("OpenAI Provider with Vertex URN IDs", function()
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
     local context = ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), context)
+    local prompt = pipeline.run(parser.parse_lines(lines), context, { bufnr = 0 })
     local req = provider:build_request(prompt, context)
 
     -- Find function_call items in input array
@@ -2094,7 +2115,7 @@ describe("OpenAI Provider with Vertex URN IDs", function()
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
     local context = ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools_vertex.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), context)
+    local prompt = pipeline.run(parser.parse_lines(lines), context, { bufnr = 0 })
     local req = provider:build_request(prompt, context)
 
     -- Find function_call_output items in input array
@@ -2123,8 +2144,11 @@ describe("Parallel Tool Use Validation", function()
 
   it("returns empty pending_tool_calls when all tool_uses have results", function()
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
-    local prompt =
-      pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
+    local prompt = pipeline.run(
+      parser.parse_lines(lines),
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"),
+      { bufnr = 0 }
+    )
 
     assert.is_not_nil(prompt.pending_tool_calls)
     assert.equals(0, #prompt.pending_tool_calls)
@@ -2134,7 +2158,8 @@ describe("Parallel Tool Use Validation", function()
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat")
     local prompt, evaluated = pipeline.run(
       parser.parse_lines(lines),
-      ctx.from_file("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat")
+      ctx.from_file("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat"),
+      { bufnr = 0 }
     )
 
     -- Should have one pending tool call (toolu_01BBB)
@@ -2311,7 +2336,8 @@ describe("Orphaned tool call synthetic injection", function()
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat")
     local prompt = pipeline.run(
       parser.parse_lines(lines),
-      ctx.from_file("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat")
+      ctx.from_file("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat"),
+      { bufnr = 0 }
     )
     local req = provider:build_request(prompt, {})
 
@@ -2337,7 +2363,7 @@ describe("Orphaned tool call synthetic injection", function()
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat")
     local context = ctx.from_file("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat")
-    local prompt = pipeline.run(parser.parse_lines(lines), context)
+    local prompt = pipeline.run(parser.parse_lines(lines), context, { bufnr = 0 })
     local req = provider:build_request(prompt, context)
 
     -- Find synthetic function_call_output for the orphaned call
@@ -2355,7 +2381,8 @@ describe("Orphaned tool call synthetic injection", function()
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat")
     local prompt = pipeline.run(
       parser.parse_lines(lines),
-      ctx.from_file("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat")
+      ctx.from_file("tests/fixtures/tool_calling/conversation_parallel_incomplete.chat"),
+      { bufnr = 0 }
     )
     local req = provider:build_request(prompt)
 
@@ -2380,8 +2407,11 @@ describe("Orphaned tool call synthetic injection", function()
     local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 1024, temperature = 0 })
 
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_tools.chat")
-    local prompt =
-      pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"))
+    local prompt = pipeline.run(
+      parser.parse_lines(lines),
+      ctx.from_file("tests/fixtures/tool_calling/conversation_with_tools.chat"),
+      { bufnr = 0 }
+    )
     local req = provider:build_request(prompt, {})
 
     -- The last message should be the assistant's final answer, not a synthetic tool_result

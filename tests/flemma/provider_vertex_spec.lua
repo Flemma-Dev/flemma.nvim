@@ -384,7 +384,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.is_not_nil(req.generationConfig.thinkingConfig)
@@ -403,7 +403,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.is_not_nil(req.generationConfig.thinkingConfig)
@@ -422,7 +422,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.equals("LOW", req.generationConfig.thinkingConfig.thinkingLevel)
@@ -438,7 +438,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.equals("MEDIUM", req.generationConfig.thinkingConfig.thinkingLevel)
@@ -454,7 +454,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.equals("HIGH", req.generationConfig.thinkingConfig.thinkingLevel)
@@ -470,7 +470,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.equals("LOW", req.generationConfig.thinkingConfig.thinkingLevel)
@@ -486,7 +486,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.equals("MINIMAL", req.generationConfig.thinkingConfig.thinkingLevel)
@@ -502,7 +502,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.equals("HIGH", req.generationConfig.thinkingConfig.thinkingLevel)
@@ -518,7 +518,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.equals("LOW", req.generationConfig.thinkingConfig.thinkingLevel)
@@ -534,7 +534,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.equals(4096, req.generationConfig.thinkingConfig.thinkingBudget)
@@ -552,7 +552,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.is_not_nil(

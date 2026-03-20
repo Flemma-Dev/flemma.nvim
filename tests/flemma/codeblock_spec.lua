@@ -65,7 +65,7 @@ describe("flemma.codeblock", function()
         "Value is {{ my_var }} and number is {{ my_num }}",
       }
       local base_context = ctx.from_file("test.chat")
-      local prompt = pipeline.run(parser.parse_lines(lines), base_context)
+      local prompt = pipeline.run(parser.parse_lines(lines), base_context, { bufnr = 0 })
 
       -- Check that expressions were evaluated using frontmatter variables
       assert.are.equal(1, #prompt.history)
@@ -89,7 +89,7 @@ describe("flemma.codeblock", function()
         "{{ greet('World') }}",
       }
       local base_context = ctx.from_file("test.chat")
-      local prompt = pipeline.run(parser.parse_lines(lines), base_context)
+      local prompt = pipeline.run(parser.parse_lines(lines), base_context, { bufnr = 0 })
 
       -- Check that function was called successfully
       assert.are.equal(1, #prompt.history)
@@ -115,7 +115,7 @@ describe("flemma.codeblock", function()
         "Name is {{ name }} and age is {{ age }}",
       }
       local base_context = ctx.from_file("test.chat")
-      local prompt = pipeline.run(parser.parse_lines(lines), base_context)
+      local prompt = pipeline.run(parser.parse_lines(lines), base_context, { bufnr = 0 })
 
       -- Check that expressions were evaluated using frontmatter variables
       assert.are.equal(1, #prompt.history)
@@ -139,7 +139,7 @@ describe("flemma.codeblock", function()
         "User {{ user.name }} has role {{ user.role }}",
       }
       local base_context = ctx.from_file("test.chat")
-      local prompt = pipeline.run(parser.parse_lines(lines), base_context)
+      local prompt = pipeline.run(parser.parse_lines(lines), base_context, { bufnr = 0 })
 
       -- Check nested access works
       assert.are.equal(1, #prompt.history)
@@ -163,7 +163,7 @@ describe("flemma.codeblock", function()
         "First tag is {{ tags[1] }} and second is {{ tags[2] }}",
       }
       local base_context = ctx.from_file("test.chat")
-      local prompt = pipeline.run(parser.parse_lines(lines), base_context)
+      local prompt = pipeline.run(parser.parse_lines(lines), base_context, { bufnr = 0 })
 
       -- Check array access works
       assert.are.equal(1, #prompt.history)
@@ -275,7 +275,7 @@ describe("flemma.codeblock", function()
       }
 
       local context = ctx.from_file("test.chat")
-      local prompt = pipeline.run(parser.parse_lines(lines), context)
+      local prompt = pipeline.run(parser.parse_lines(lines), context, { bufnr = 0 })
 
       -- Check that expression was evaluated
       assert.are.equal(1, #prompt.history)

@@ -469,7 +469,7 @@ describe("File References and Path Parsing", function()
           interactive = false,
           rewriters = { file_refs_mod.rewriter },
         })
-        local prompt = pipeline.run(doc, {})
+        local prompt = pipeline.run(doc, {}, { bufnr = 0 })
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -542,7 +542,7 @@ describe("File References and Path Parsing", function()
           interactive = false,
           rewriters = { file_refs_mod.rewriter },
         })
-        local prompt, evaluated = pipeline.run(doc, {})
+        local prompt, evaluated = pipeline.run(doc, {}, { bufnr = 0 })
 
         -- No expression evaluation errors from the binary include
         local expr_errors = vim.tbl_filter(function(d)
@@ -601,7 +601,7 @@ describe("File References and Path Parsing", function()
           interactive = false,
           rewriters = { file_refs_mod.rewriter },
         })
-        local prompt = pipeline.run(doc, {})
+        local prompt = pipeline.run(doc, {}, { bufnr = 0 })
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -661,7 +661,7 @@ describe("File References and Path Parsing", function()
           interactive = false,
           rewriters = { file_refs_mod.rewriter },
         })
-        local prompt = pipeline.run(doc, {})
+        local prompt = pipeline.run(doc, {}, { bufnr = 0 })
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -720,7 +720,7 @@ describe("File References and Path Parsing", function()
           interactive = false,
           rewriters = { file_refs_mod.rewriter },
         })
-        local prompt = pipeline.run(doc, {})
+        local prompt = pipeline.run(doc, {}, { bufnr = 0 })
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -793,7 +793,7 @@ describe("File References and Path Parsing", function()
           interactive = false,
           rewriters = { file_refs_mod.rewriter },
         })
-        local prompt = pipeline.run(doc, {})
+        local prompt = pipeline.run(doc, {}, { bufnr = 0 })
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -856,7 +856,7 @@ describe("File References and Path Parsing", function()
           interactive = false,
           rewriters = { file_refs_mod.rewriter },
         })
-        local prompt = pipeline.run(doc, {})
+        local prompt = pipeline.run(doc, {}, { bufnr = 0 })
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -922,7 +922,7 @@ describe("File References and Path Parsing", function()
           interactive = false,
           rewriters = { file_refs_mod.rewriter },
         })
-        local prompt = pipeline.run(doc, {})
+        local prompt = pipeline.run(doc, {}, { bufnr = 0 })
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -992,7 +992,7 @@ describe("File References and Path Parsing", function()
           interactive = false,
           rewriters = { file_refs_mod.rewriter },
         })
-        local prompt = pipeline.run(doc, {})
+        local prompt = pipeline.run(doc, {}, { bufnr = 0 })
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -1051,7 +1051,7 @@ describe("File References and Path Parsing", function()
           interactive = false,
           rewriters = { file_refs_mod.rewriter },
         })
-        local prompt = pipeline.run(doc, {})
+        local prompt = pipeline.run(doc, {}, { bufnr = 0 })
 
         -- Build request body
         local request_body = provider:build_request(prompt)
@@ -1101,7 +1101,7 @@ describe("File References and Path Parsing", function()
         interactive = false,
         rewriters = { file_refs_mod.rewriter },
       })
-      local _, evaluated = pipeline.run(doc, {})
+      local _, evaluated = pipeline.run(doc, {}, { bufnr = 0 })
 
       -- Check diagnostics
       local file_diags = vim.tbl_filter(function(d)
@@ -1164,7 +1164,7 @@ describe("File References and Path Parsing", function()
         interactive = false,
         rewriters = { file_refs_mod.rewriter },
       })
-      local _, evaluated = pipeline.run(doc, {})
+      local _, evaluated = pipeline.run(doc, {}, { bufnr = 0 })
 
       -- Check diagnostics
       local file_diags = vim.tbl_filter(function(d)

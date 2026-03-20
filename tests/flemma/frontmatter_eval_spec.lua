@@ -348,14 +348,14 @@ describe("Frontmatter evaluation caching", function()
 
     -- Call without evaluated_frontmatter — should evaluate internally via the local function
     local eval_spy = spy.on(processor, "evaluate_frontmatter")
-    local _, evaluated = pipeline.run(doc, context)
+    local _, evaluated = pipeline.run(doc, context, { bufnr = bufnr })
 
     -- evaluate_frontmatter on the module table is NOT called (evaluate() uses
     -- evaluate_frontmatter_internal directly for backward compat)
     assert.spy(eval_spy).was_called(0)
 
-    -- But the evaluation still happened — verify opts were resolved
-    assert.is_not_nil(evaluated.opts)
+    -- Evaluation happened without errors (opts removed in config overhaul)
+    assert.equals(0, #evaluated.diagnostics)
 
     eval_spy:revert()
   end)
@@ -384,13 +384,13 @@ describe("Frontmatter evaluation caching", function()
 
     -- Now call pipeline.run with the pre-resolved result
     local eval_spy = spy.on(processor, "evaluate_frontmatter")
-    local _, evaluated = pipeline.run(doc, context, { evaluated_frontmatter = evaluated_frontmatter })
+    local _, evaluated = pipeline.run(doc, context, { evaluated_frontmatter = evaluated_frontmatter, bufnr = bufnr })
 
     -- The spy should not have been called — frontmatter was reused
     assert.spy(eval_spy).was_called(0)
 
-    -- Opts should still be resolved from the pre-evaluated context
-    assert.is_not_nil(evaluated.opts)
+    -- Evaluation happened without errors (opts removed in config overhaul)
+    assert.equals(0, #evaluated.diagnostics)
 
     eval_spy:revert()
   end)
