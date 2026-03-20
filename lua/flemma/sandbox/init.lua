@@ -20,6 +20,7 @@ local variables = require("flemma.utilities.variables")
 ---@field wrap fun(policy: flemma.config.SandboxPolicy, backend_config: table, inner_cmd: string[]): string[]|nil, string|nil
 ---@field priority? integer Higher values are preferred during auto-detection (default: 50)
 ---@field description? string Human-readable description
+---@field config_schema? flemma.config.schema.ObjectNode Schema for backend-specific configuration (used by DISCOVER resolution)
 
 --- Internal registry entry (name added by register())
 ---@class flemma.sandbox.BackendEntry
@@ -28,6 +29,7 @@ local variables = require("flemma.utilities.variables")
 ---@field wrap fun(policy: flemma.config.SandboxPolicy, backend_config: table, inner_cmd: string[]): string[]|nil, string|nil
 ---@field priority integer Higher values are preferred during auto-detection
 ---@field description? string Human-readable description
+---@field config_schema? flemma.config.schema.ObjectNode Schema for backend-specific configuration
 
 local DEFAULT_PRIORITY = 50
 
@@ -73,6 +75,7 @@ function M.register(name, definition)
     wrap = definition.wrap,
     priority = definition.priority or DEFAULT_PRIORITY,
     description = definition.description,
+    config_schema = definition.config_schema,
   })
   registry_sorted = false
   registry_generation = registry_generation + 1
@@ -136,6 +139,17 @@ function M.count()
   return #backends
 end
 
+---Get a backend's config schema for DISCOVER resolution.
+---@param name string The backend name
+---@return flemma.config.schema.ObjectNode|nil config_schema Backend config schema, or nil if not found
+function M.get_config_schema(name)
+  local entry = M.get(name)
+  if not entry then
+    return nil
+  end
+  return entry.config_schema
+end
+
 ---Register a sandbox backend from a module path.
 ---Validates existence immediately, loads and registers immediately.
 ---@param module_path string Lua module path (must contain a dot)
@@ -153,7 +167,15 @@ function M.register_module(module_path)
   end
   -- Derive backend name from module metadata or last path segment
   local name = mod.name or module_path:match("([^.]+)$")
-  M.register(name, mod)
+  ---@type flemma.sandbox.BackendDefinition
+  local definition = {
+    available = mod.available,
+    wrap = mod.wrap,
+    priority = mod.priority,
+    description = mod.description,
+    config_schema = mod.metadata and mod.metadata.config_schema,
+  }
+  M.register(name, definition)
 end
 
 -- ---------------------------------------------------------------------------
@@ -278,6 +300,7 @@ function M.setup()
       wrap = bwrap.wrap,
       priority = 100,
       description = "Bubblewrap (Linux)",
+      config_schema = bwrap.metadata.config_schema,
     })
   end
 

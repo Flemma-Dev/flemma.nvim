@@ -266,11 +266,11 @@ return s.object({
       allow_privileged = s.boolean(false),
     }),
     backends = s.object({
-      bwrap = s.object({
-        path = s.string("bwrap"),
-        extra_args = s.list(s.string(), {}),
-      }),
-    }):passthrough(),
+      -- All backend schemas (including built-in bwrap) resolved via DISCOVER
+      [symbols.DISCOVER] = function(key)
+        return require("flemma.sandbox").get_config_schema(key)
+      end,
+    }),
   }),
 
   secrets = s.object({

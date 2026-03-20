@@ -181,8 +181,7 @@ describe("config.schema.definition", function()
       assert.is_table(cfg.sandbox.policy.rw_paths)
       assert.equals(6, #cfg.sandbox.policy.rw_paths)
       assert.equals("urn:flemma:cwd", cfg.sandbox.policy.rw_paths[1])
-      assert.equals("bwrap", cfg.sandbox.backends.bwrap.path)
-      assert.same({}, cfg.sandbox.backends.bwrap.extra_args)
+      -- backends object is empty at init — bwrap resolves via DISCOVER after registration
     end)
 
     it("materializes secrets defaults", function()
@@ -389,6 +388,20 @@ describe("config.schema.definition", function()
       local result = tools_schema:get_child_schema("nonexistent_tool")
       assert.is_nil(result)
     end)
+
+    it("sandbox backends object has DISCOVER configured", function()
+      local sandbox_schema = schema:get_child_schema("sandbox")
+      local backends_schema = sandbox_schema:get_child_schema("backends")
+      assert.is_not_nil(backends_schema)
+      assert.is_not_nil(backends_schema._discover)
+    end)
+
+    it("sandbox backends DISCOVER returns nil for unknown backend", function()
+      local sandbox_schema = schema:get_child_schema("sandbox")
+      local backends_schema = sandbox_schema:get_child_schema("backends")
+      local result = backends_schema:get_child_schema("nonexistent_backend")
+      assert.is_nil(result)
+    end)
   end)
 
   -- ---------------------------------------------------------------------------
@@ -467,12 +480,15 @@ describe("config.schema.definition", function()
   describe("DISCOVER resolution with registered modules", function()
     local tools_module
     local provider_reg
+    local sandbox_module
 
     before_each(function()
       tools_module = require("flemma.tools")
       tools_module.clear()
       provider_reg = require("flemma.provider.registry")
       provider_reg.clear()
+      sandbox_module = require("flemma.sandbox")
+      sandbox_module.clear()
     end)
 
     describe("tool DISCOVER", function()
@@ -597,6 +613,88 @@ describe("config.schema.definition", function()
       end)
     end)
 
+    describe("sandbox backend DISCOVER", function()
+      it("resolves bwrap config schema after registration", function()
+        sandbox_module.setup()
+        facade.apply(facade.LAYERS.SETUP, {
+          sandbox = { backends = { bwrap = { path = "/usr/local/bin/bwrap" } } },
+        })
+        assert.equals("/usr/local/bin/bwrap", facade.get().sandbox.backends.bwrap.path)
+      end)
+
+      it("resolves bwrap extra_args config after registration", function()
+        sandbox_module.setup()
+        facade.apply(facade.LAYERS.SETUP, {
+          sandbox = { backends = { bwrap = { extra_args = { "--tmpfs", "/run" } } } },
+        })
+        assert.same({ "--tmpfs", "/run" }, facade.get().sandbox.backends.bwrap.extra_args)
+      end)
+
+      it("rejects unknown field on bwrap schema", function()
+        sandbox_module.setup()
+        local ok, err = facade.apply(facade.LAYERS.SETUP, {
+          sandbox = { backends = { bwrap = { nonexistent = "value" } } },
+        })
+        assert.is_nil(ok)
+        assert.truthy(err:find("unknown key"))
+      end)
+
+      it("errors for unregistered bwrap without defer_discover", function()
+        local ok, err = facade.apply(facade.LAYERS.SETUP, {
+          sandbox = { backends = { bwrap = { path = "/usr/bin/bwrap" } } },
+        })
+        assert.is_nil(ok)
+        assert.truthy(err:find("unknown key"))
+      end)
+
+      it("resolves custom backend config schema via registry", function()
+        local s_mod = require("flemma.config.schema")
+        sandbox_module.register("firejail", {
+          available = function()
+            return true
+          end,
+          wrap = function(_, _, cmd)
+            return cmd
+          end,
+          config_schema = s_mod.object({
+            profile = s_mod.optional(s_mod.string()),
+          }),
+        })
+        facade.apply(facade.LAYERS.SETUP, {
+          sandbox = { backends = { firejail = { profile = "restricted" } } },
+        })
+        assert.equals("restricted", facade.get().sandbox.backends.firejail.profile)
+      end)
+
+      it("rejects unknown field on custom backend schema", function()
+        local s_mod = require("flemma.config.schema")
+        sandbox_module.register("firejail", {
+          available = function()
+            return true
+          end,
+          wrap = function(_, _, cmd)
+            return cmd
+          end,
+          config_schema = s_mod.object({
+            profile = s_mod.optional(s_mod.string()),
+          }),
+        })
+        local ok, err = facade.apply(facade.LAYERS.SETUP, {
+          sandbox = { backends = { firejail = { nonexistent = "value" } } },
+        })
+        assert.is_nil(ok)
+        assert.truthy(err:find("unknown key"))
+      end)
+
+      it("errors for unregistered backend without defer_discover", function()
+        local ok, err = facade.apply(facade.LAYERS.SETUP, {
+          sandbox = { backends = { nsjail = { config_path = "/etc/nsjail" } } },
+        })
+        assert.is_nil(ok)
+        assert.truthy(err:find("unknown key"))
+      end)
+    end)
+
     describe("deferred DISCOVER", function()
       it("defers tool config writes and replays after registration", function()
         local _, err, deferred = facade.apply(
@@ -672,6 +770,32 @@ describe("config.schema.definition", function()
         local failures = facade.apply_deferred(facade.LAYERS.SETUP, deferred)
         assert.is_nil(failures)
         assert.equals("https://api.mine", facade.get().parameters.my_provider.api_url)
+      end)
+
+      it("defers custom backend config and replays after registration", function()
+        local _, _, deferred = facade.apply(
+          facade.LAYERS.SETUP,
+          { sandbox = { backends = { firejail = { profile = "restricted" } } } },
+          { defer_discover = true }
+        )
+        assert.is_not_nil(deferred)
+
+        local s_mod = require("flemma.config.schema")
+        sandbox_module.register("firejail", {
+          available = function()
+            return true
+          end,
+          wrap = function(_, _, cmd)
+            return cmd
+          end,
+          config_schema = s_mod.object({
+            profile = s_mod.optional(s_mod.string()),
+          }),
+        })
+
+        local failures = facade.apply_deferred(facade.LAYERS.SETUP, deferred)
+        assert.is_nil(failures)
+        assert.equals("restricted", facade.get().sandbox.backends.firejail.profile)
       end)
     end)
   end)
