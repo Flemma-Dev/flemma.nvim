@@ -698,7 +698,7 @@ describe("flemma.config.proxy", function()
         autopilot = s.object({
           enabled = s.boolean(true),
           max_turns = s.integer(100),
-        }):coerce(function(v)
+        }):coerce(function(v, _ctx)
           if type(v) == "boolean" then
             return { enabled = v }
           end
@@ -716,7 +716,7 @@ describe("flemma.config.proxy", function()
       local schema = s.object({
         autopilot = s.object({
           enabled = s.boolean(true),
-        }):coerce(function(v)
+        }):coerce(function(v, _ctx)
           if type(v) == "boolean" then
             return { enabled = v }
           end
@@ -733,7 +733,7 @@ describe("flemma.config.proxy", function()
       local schema = s.object({
         setting = s.object({
           enabled = s.boolean(true),
-        }):coerce(function(v)
+        }):coerce(function(v, _ctx)
           if type(v) == "boolean" then
             return { enabled = v }
           end
@@ -749,11 +749,45 @@ describe("flemma.config.proxy", function()
       assert.equals(true, store.resolve("setting.enabled", nil))
     end)
 
+    it("coerce receives ctx from the proxy", function()
+      local received_ctx = nil
+      local schema = s.object({
+        name = s.string():coerce(function(v, ctx)
+          received_ctx = ctx
+          return v
+        end),
+      })
+      store.init(schema)
+      -- Write a value so ctx.get can return something
+      store.record(L.DEFAULTS, nil, "set", "name", "default")
+      local w = proxy.write_proxy(schema, nil, L.SETUP)
+      w.name = "hello"
+      assert.is_not_nil(received_ctx)
+      assert.is_not_nil(received_ctx.get)
+      assert.equals("function", type(received_ctx.get))
+    end)
+
+    it("coerce ctx.get resolves values from the store", function()
+      local resolved_value = nil
+      local schema = s.object({
+        source = s.string("original"),
+        target = s.string():coerce(function(v, ctx)
+          resolved_value = ctx.get("source")
+          return v
+        end),
+      })
+      store.init(schema)
+      store.record(L.DEFAULTS, nil, "set", "source", "original")
+      local w = proxy.write_proxy(schema, nil, L.SETUP)
+      w.target = "test"
+      assert.equals("original", resolved_value)
+    end)
+
     it("coerce with optional wrapping", function()
       local schema = s.object({
         feature = s.optional(s.object({
           enabled = s.boolean(true),
-        }):coerce(function(v)
+        }):coerce(function(v, _ctx)
           if type(v) == "boolean" then
             return { enabled = v }
           end
@@ -769,7 +803,7 @@ describe("flemma.config.proxy", function()
     it("coerce nil on optional node bypasses coerce", function()
       local coerce_called = false
       local schema = s.object({
-        feature = s.optional(s.string():coerce(function(v)
+        feature = s.optional(s.string():coerce(function(v, _ctx)
           coerce_called = true
           return v
         end)),

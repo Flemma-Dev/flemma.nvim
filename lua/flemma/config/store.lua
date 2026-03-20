@@ -310,20 +310,20 @@ function M.clear(layer, bufnr)
 end
 
 -- ---------------------------------------------------------------------------
--- Settle / transform
+-- Transform
 -- ---------------------------------------------------------------------------
 
---- Transform all ops at the given path across all layers using a settle function.
+--- Transform all ops at the given path across all layers using a coerce function.
 --- For "set" ops on lists: the value (a table) is passed to fn; result replaces it.
 --- For "append"/"remove"/"prepend" ops: the single item is passed to fn.
 ---   If fn returns a table, the single op is expanded into multiple ops of the same type.
 ---   If fn returns a non-table value, the op value is replaced.
 --- For "set" ops on scalars: value is passed to fn, result replaces it.
 ---
---- The function is called as fn(value, ctx) where ctx is a settle context.
+--- The function is called as fn(value, ctx) where ctx is a coerce context.
 ---@param path string Dot-delimited canonical path
----@param fn fun(value: any, ctx: any): any Settle transform function
----@param ctx any Settle context passed through to fn
+---@param fn fun(value: any, ctx: any): any Coerce transform function
+---@param ctx any Coerce context passed through to fn
 function M.transform_ops(path, fn, ctx)
   -- Determine whether this path is a list using the schema. This drives
   -- how set ops are handled: list paths do per-item transformation (each
@@ -420,6 +420,23 @@ function M.dump_layer(layer, bufnr)
   else
     return vim.deepcopy(global_ops[layer] or {})
   end
+end
+
+-- ---------------------------------------------------------------------------
+-- Coerce context
+-- ---------------------------------------------------------------------------
+
+--- Build a coerce context for value transformers.
+--- Provides read access to the resolved config (global layers only — no bufnr).
+--- Used by both the write proxy (at write time) and finalize (at setup time).
+---@return flemma.config.CoerceContext
+function M.make_coerce_context()
+  ---@type flemma.config.CoerceContext
+  return {
+    get = function(path)
+      return M.resolve(path, nil)
+    end,
+  }
 end
 
 return M

@@ -755,15 +755,18 @@ describe("flemma.config — integration", function()
       assert.equals(42, config.get().parameters.custom.custom_param)
     end)
 
-    it("runs settle hooks on stored ops", function()
-      local presets = {
+    it("runs coerce transforms on stored ops", function()
+      local preset_data = {
         ["$default"] = { "bash", "grep", "find" },
       }
       local schema = s.object({
         tools = s.object({
-          auto_approve = s.list(s.string(), { "$default" }):settle(function(value, _ctx)
+          auto_approve = s.list(s.string(), { "$default" }):coerce(function(value, ctx)
+            if not ctx then
+              return value
+            end
             if type(value) == "string" and vim.startswith(value, "$") then
-              return presets[value] or value
+              return preset_data[value] or value
             end
             return value
           end),
@@ -771,24 +774,27 @@ describe("flemma.config — integration", function()
       })
       config.init(schema)
       -- After init, L10 has set(["$default"])
-      -- Finalize should expand $default
+      -- Finalize should expand $default (ctx now available)
       config.finalize(L.DEFAULTS)
       local result = config.get().tools.auto_approve
       assert.are.same({ "bash", "grep", "find" }, result)
     end)
 
-    it("settle expands preset removes across layers", function()
-      local presets = {
+    it("coerce expands preset removes across layers", function()
+      local preset_data = {
         ["$default"] = { "bash", "grep" },
       }
-      local settle_fn = function(value, _ctx)
+      local coerce_fn = function(value, ctx)
+        if not ctx then
+          return value
+        end
         if type(value) == "string" and vim.startswith(value, "$") then
-          return presets[value] or value
+          return preset_data[value] or value
         end
         return value
       end
       local schema = s.object({
-        items = s.list(s.string(), { "$default" }):settle(settle_fn),
+        items = s.list(s.string(), { "$default" }):coerce(coerce_fn),
       })
       config.init(schema)
       -- L10: set(["$default"]), FRONTMATTER: remove("$default")
@@ -799,14 +805,17 @@ describe("flemma.config — integration", function()
       assert.are.same({}, config.get(1).items)
     end)
 
-    it("settle with context can read other config values", function()
+    it("coerce with context can read other config values", function()
       local schema = s.object({
         presets = s.object({
           fast = s.object({
             names = s.list(s.string(), { "a", "b" }),
           }),
         }),
-        items = s.list(s.string(), { "$fast" }):settle(function(value, ctx)
+        items = s.list(s.string(), { "$fast" }):coerce(function(value, ctx)
+          if not ctx then
+            return value
+          end
           if type(value) == "string" and vim.startswith(value, "$") then
             local preset_names = ctx.get("presets." .. value:sub(2) .. ".names")
             return preset_names or value
@@ -836,8 +845,8 @@ describe("flemma.config — integration", function()
       assert.is_nil(failures)
     end)
 
-    it("deferred writes and settle hooks interact correctly", function()
-      local presets = {
+    it("deferred writes and coerce transforms interact correctly", function()
+      local preset_data = {
         ["$default"] = { "bash", "grep" },
       }
       local registered = false
@@ -846,9 +855,12 @@ describe("flemma.config — integration", function()
       })
       local schema = s.object({
         tools = s.object({
-          auto_approve = s.list(s.string(), { "$default" }):settle(function(value, _ctx)
+          auto_approve = s.list(s.string(), { "$default" }):coerce(function(value, ctx)
+            if not ctx then
+              return value
+            end
             if type(value) == "string" and vim.startswith(value, "$") then
-              return presets[value] or value
+              return preset_data[value] or value
             end
             return value
           end),
@@ -871,7 +883,7 @@ describe("flemma.config — integration", function()
       -- Simulate module registration
       registered = true
 
-      -- Finalize: replays deferred (custom now resolves) AND runs settle ($default expands)
+      -- Finalize: replays deferred (custom now resolves) AND runs coerce ($default expands)
       local failures = config.finalize(L.SETUP, deferred)
       assert.is_nil(failures)
       assert.equals(99, config.get().tools.custom.custom_param)

@@ -206,7 +206,10 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
       -- Apply write-time coercion before validation (e.g., boolean → {enabled=bool}).
       -- Coerce runs before the object check because it may transform a non-table
       -- value (e.g., boolean) into a table suitable for object field assignment.
-      value = leaf:apply_coerce(value)
+      -- Context enables coerce functions to resolve deferred references (e.g.,
+      -- preset names) by reading other config values from the store.
+      local ctx = store.make_coerce_context()
+      value = leaf:apply_coerce(value, ctx)
 
       -- Object nodes: if coerce produced a table, recursively set each sub-field
       -- via a sub-proxy (which handles per-field validation and aliases). If the

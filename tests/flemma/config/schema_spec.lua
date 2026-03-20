@@ -774,105 +774,112 @@ describe("flemma.config.schema", function()
     end)
 
     it("apply_coerce transforms value when coerce is set", function()
-      local node = s.object({ enabled = s.boolean(true) }):coerce(function(v)
+      local node = s.object({ enabled = s.boolean(true) }):coerce(function(v, _ctx)
         if type(v) == "boolean" then
           return { enabled = v }
         end
         return v
       end)
-      local result = node:apply_coerce(false)
+      local result = node:apply_coerce(false, nil)
       assert.same({ enabled = false }, result)
     end)
 
     it("apply_coerce passes through when no coerce is set", function()
       local node = s.string()
-      assert.equals("hello", node:apply_coerce("hello"))
+      assert.equals("hello", node:apply_coerce("hello", nil))
     end)
 
     it("apply_coerce passes through non-matching values", function()
-      local node = s.object({ enabled = s.boolean(true) }):coerce(function(v)
+      local node = s.object({ enabled = s.boolean(true) }):coerce(function(v, _ctx)
         if type(v) == "boolean" then
           return { enabled = v }
         end
         return v
       end)
       local tbl = { enabled = false }
-      assert.same(tbl, node:apply_coerce(tbl))
+      assert.same(tbl, node:apply_coerce(tbl, nil))
+    end)
+
+    it("apply_coerce passes ctx to the coerce function", function()
+      local received_ctx = nil
+      local node = s.string():coerce(function(v, ctx)
+        received_ctx = ctx
+        return v
+      end)
+      local mock_ctx = { get = function() end }
+      node:apply_coerce("test", mock_ctx)
+      assert.equals(mock_ctx, received_ctx)
+    end)
+
+    it("apply_coerce passes nil ctx when not provided", function()
+      local received_ctx = "sentinel"
+      local node = s.string():coerce(function(v, ctx)
+        received_ctx = ctx
+        return v
+      end)
+      node:apply_coerce("test")
+      assert.is_nil(received_ctx)
+    end)
+
+    it("has_coerce() is false by default", function()
+      assert.is_false(s.string():has_coerce())
+      assert.is_false(s.list(s.string()):has_coerce())
+      assert.is_false(s.object({}):has_coerce())
+    end)
+
+    it("has_coerce() is true when coerce is set", function()
+      local node = s.list(s.string()):coerce(function(v, _ctx)
+        return v
+      end)
+      assert.is_true(node:has_coerce())
+    end)
+
+    it("get_coerce() returns the function", function()
+      local fn = function(v, _ctx)
+        return v
+      end
+      local node = s.string():coerce(fn)
+      assert.equals(fn, node:get_coerce())
+    end)
+
+    it("get_coerce() returns nil when not set", function()
+      assert.is_nil(s.string():get_coerce())
     end)
 
     it("optional delegates coerce to inner schema", function()
-      local inner = s.object({ enabled = s.boolean(true) }):coerce(function(v)
+      local inner = s.object({ enabled = s.boolean(true) }):coerce(function(v, _ctx)
         if type(v) == "boolean" then
           return { enabled = v }
         end
         return v
       end)
       local opt = s.optional(inner)
-      assert.same({ enabled = true }, opt:apply_coerce(true))
+      assert.same({ enabled = true }, opt:apply_coerce(true, nil))
     end)
 
     it("optional returns nil without coercing", function()
-      local inner = s.string():coerce(function()
+      local inner = s.string():coerce(function(_v, _ctx)
         return "coerced"
       end)
       local opt = s.optional(inner)
-      assert.is_nil(opt:apply_coerce(nil))
-    end)
-  end)
-
-  -- ---------------------------------------------------------------------------
-  -- :settle()
-  -- ---------------------------------------------------------------------------
-
-  describe(":settle()", function()
-    it("returns self for chaining", function()
-      local node = s.list(s.string())
-      local result = node:settle(function(v)
-        return v
-      end)
-      assert.equals(node, result)
+      assert.is_nil(opt:apply_coerce(nil, nil))
     end)
 
-    it("has_settle() is false by default", function()
-      assert.is_false(s.string():has_settle())
-      assert.is_false(s.list(s.string()):has_settle())
-      assert.is_false(s.object({}):has_settle())
-    end)
-
-    it("has_settle() is true when settle is set", function()
-      local node = s.list(s.string()):settle(function(v)
-        return v
-      end)
-      assert.is_true(node:has_settle())
-    end)
-
-    it("get_settle() returns the function", function()
-      local fn = function(v)
-        return v
-      end
-      local node = s.string():settle(fn)
-      assert.equals(fn, node:get_settle())
-    end)
-
-    it("get_settle() returns nil when not set", function()
-      assert.is_nil(s.string():get_settle())
-    end)
-
-    it("optional delegates has_settle to inner", function()
-      local inner = s.string():settle(function(v)
+    it("optional delegates has_coerce to inner", function()
+      local inner = s.string():coerce(function(v, _ctx)
         return v
       end)
       local opt = s.optional(inner)
-      assert.is_true(opt:has_settle())
+      assert.is_true(opt:has_coerce())
     end)
 
-    it("optional delegates get_settle to inner", function()
-      local fn = function(v)
+    it("optional delegates get_coerce to inner", function()
+      local fn = function(v, _ctx)
         return v
       end
-      local inner = s.string():settle(fn)
+      local inner = s.string():coerce(fn)
       local opt = s.optional(inner)
-      assert.equals(fn, opt:get_settle())
+      assert.equals(fn, opt:get_coerce())
     end)
   end)
 

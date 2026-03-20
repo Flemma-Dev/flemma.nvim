@@ -8,14 +8,22 @@ local symbols = require("flemma.symbols")
 local loader = require("flemma.loader")
 
 -- ---------------------------------------------------------------------------
+-- Coerce context type (used by Node:coerce and consumers)
+-- ---------------------------------------------------------------------------
+
+--- Context passed to coerce functions for resolving config values.
+--- Provides read access to the resolved config (global layers only).
+---@class flemma.config.CoerceContext
+---@field get fun(path: string): any Resolve a config path from global layers (L10-L30)
+
+-- ---------------------------------------------------------------------------
 -- Node base class
 -- ---------------------------------------------------------------------------
 
 ---@class flemma.config.schema.Node
 ---@field _description? string Human-readable description for EmmyLua generation
 ---@field _type_as? string Override generated type annotation
----@field _coerce? fun(value: any): any Write-time value transformer (runs before validation)
----@field _settle? fun(value: any, ctx: flemma.config.SettleContext): any Post-setup normalization of stored values
+---@field _coerce? fun(value: any, ctx: flemma.config.CoerceContext?): any Value transformer (runs before validation on writes; finalize() re-runs with ctx)
 local Node = {}
 Node.__index = Node
 
@@ -35,10 +43,12 @@ function Node:type_as(type_string)
   return self
 end
 
---- Attach a write-time value transformer.
---- Runs before validation on every write. Use for ergonomic shorthands
---- (e.g., accepting a boolean and expanding it to `{ enabled = bool }`).
----@param fn fun(value: any): any Receives the raw value, returns the transformed value
+--- Attach a value transformer.
+--- Runs before validation on every proxy write. Also invoked by
+--- `config.finalize()` to re-run transforms with a populated ctx.
+--- Use for ergonomic shorthands (e.g., `bool → { enabled = bool }`)
+--- and context-dependent expansions (e.g., preset names → tool lists).
+---@param fn fun(value: any, ctx: flemma.config.CoerceContext?): any Receives the raw value + optional context, returns the transformed value
 ---@return flemma.config.schema.Node self
 function Node:coerce(fn)
   self._coerce = fn
@@ -48,34 +58,25 @@ end
 --- Apply the coerce transformer to a value, if one is set.
 --- Returns the value unchanged when no coerce function is attached.
 ---@param value any
+---@param ctx flemma.config.CoerceContext? Context for config lookups (nil during boot)
 ---@return any
-function Node:apply_coerce(value)
+function Node:apply_coerce(value, ctx)
   if self._coerce then
-    return self._coerce(value)
+    return self._coerce(value, ctx)
   end
   return value
 end
 
---- Attach a post-setup normalization hook.
---- Invoked by `config.finalize()` on each stored op value for this node.
---- Use for expanding deferred references (e.g., preset names → concrete tool lists).
----@param fn fun(value: any, ctx: flemma.config.SettleContext): any Receives op value + context, returns transformed value (or table for list expansion)
----@return flemma.config.schema.Node self
-function Node:settle(fn)
-  self._settle = fn
-  return self
-end
-
---- Whether this node has a settle hook.
+--- Whether this node has a coerce transformer.
 ---@return boolean
-function Node:has_settle()
-  return self._settle ~= nil
+function Node:has_coerce()
+  return self._coerce ~= nil
 end
 
---- Return the settle function, or nil if none.
----@return (fun(value: any, ctx: flemma.config.SettleContext): any)?
-function Node:get_settle()
-  return self._settle
+--- Return the coerce function, or nil if none.
+---@return (fun(value: any, ctx: flemma.config.CoerceContext?): any)?
+function Node:get_coerce()
+  return self._coerce
 end
 
 --- Whether this node has a meaningful default value to materialize.
@@ -725,24 +726,25 @@ end
 
 --- Delegate coerce to the inner schema. Nil values bypass coercion.
 ---@param value any
+---@param ctx flemma.config.CoerceContext? Context for config lookups (nil during boot)
 ---@return any
-function OptionalNode:apply_coerce(value)
+function OptionalNode:apply_coerce(value, ctx)
   if value == nil then
     return nil
   end
-  return self._inner:apply_coerce(value)
+  return self._inner:apply_coerce(value, ctx)
 end
 
---- Delegate settle detection to the inner schema.
+--- Delegate coerce detection to the inner schema.
 ---@return boolean
-function OptionalNode:has_settle()
-  return self._inner:has_settle()
+function OptionalNode:has_coerce()
+  return self._inner:has_coerce()
 end
 
---- Delegate settle retrieval to the inner schema.
----@return (fun(value: any, ctx: flemma.config.SettleContext): any)?
-function OptionalNode:get_settle()
-  return self._inner:get_settle()
+--- Delegate coerce retrieval to the inner schema.
+---@return (fun(value: any, ctx: flemma.config.CoerceContext?): any)?
+function OptionalNode:get_coerce()
+  return self._inner:get_coerce()
 end
 
 ---@param value any

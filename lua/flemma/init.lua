@@ -100,21 +100,21 @@ M.setup = function(user_opts)
   -- Register built-in sandbox backends and validate availability
   sandbox.setup()
 
-  -- Phase 3: Resolve deferred DISCOVER writes + re-materialize
+  -- Phase 3: Finalize — replay deferred DISCOVER writes + run coerce transforms
   -- Deferred user opts (e.g., parameters.vertex, tools.bash) now resolve.
-  if deferred then
-    local failures = config_facade.apply_deferred(config_facade.LAYERS.SETUP, deferred)
-    if failures then
-      local paths = {}
-      for _, f in ipairs(failures) do
-        table.insert(paths, f.path)
-      end
-      vim.notify("Flemma: unknown config keys: " .. table.concat(paths, ", "), vim.log.levels.WARN)
+  -- Coerce transforms re-run with populated ctx (preset expansion, etc.).
+  local failures = config_facade.finalize(config_facade.LAYERS.SETUP, deferred)
+  if failures then
+    local paths = {}
+    for _, f in ipairs(failures) do
+      table.insert(paths, f.path)
     end
+    vim.notify("Flemma: unknown config keys: " .. table.concat(paths, ", "), vim.log.levels.WARN)
   end
 
-  -- Re-materialize with complete config: DISCOVER defaults and deferred user
-  -- opts are now resolved. This is the authoritative config for provider init.
+  -- Re-materialize with complete config: DISCOVER defaults, deferred user
+  -- opts, and coerced values are now resolved. This is the authoritative
+  -- config for provider init.
   config = config_facade.materialize()
   state.set_config(config)
 
