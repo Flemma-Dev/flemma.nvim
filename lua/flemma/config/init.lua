@@ -331,4 +331,87 @@ function M.dump_layer(layer, bufnr)
   return store.dump_layer(layer, bufnr)
 end
 
+--- Check whether a layer has a "set" operation for the given path.
+--- Useful for detecting explicit policy replacement (e.g., frontmatter
+--- explicitly assigned tools.auto_approve).
+---@param layer integer
+---@param bufnr? integer Required for FRONTMATTER
+---@param path string Dot-delimited canonical path
+---@return boolean
+function M.layer_has_set(layer, bufnr, path)
+  return store.layer_has_set(layer, bufnr, path)
+end
+
+-- ---------------------------------------------------------------------------
+-- Finalization
+-- ---------------------------------------------------------------------------
+
+---@class flemma.config.SettleContext
+---@field get fun(path: string): any Resolve a config path from global layers (L10-L30)
+
+--- Build a settle context for settle hooks.
+--- Provides read access to the resolved config (global layers only — no bufnr).
+--- This is correct for post-setup normalization: settle hooks expand deferred
+--- references (e.g., presets) using global config state. Buffer-specific
+--- resolution is not needed because settle runs once at setup time, before
+--- any buffer-scoped frontmatter evaluation.
+---@return flemma.config.SettleContext
+local function make_settle_context()
+  ---@type flemma.config.SettleContext
+  return {
+    get = function(path)
+      return store.resolve(path, nil)
+    end,
+  }
+end
+
+--- Walk the schema tree and apply settle hooks to all ops in all layers.
+--- For each node with a settle hook, every op on that path across all layers
+--- is transformed. When the hook returns a table for a non-set list op
+--- (append/remove/prepend), the single op is expanded into multiple ops.
+---@param schema flemma.config.schema.Node Schema node to walk
+---@param base_path string Current dot-delimited path
+---@param ctx flemma.config.SettleContext
+local function settle_walk(schema, base_path, ctx)
+  local unwrapped = nav.unwrap_optional(schema)
+
+  if unwrapped:has_settle() then
+    local settle_fn = unwrapped:get_settle() --[[@as fun(value: any, ctx: flemma.config.SettleContext): any]]
+    store.transform_ops(base_path, settle_fn, ctx)
+  end
+
+  if unwrapped:is_object() then
+    for k, child in unwrapped:all_known_fields() do
+      local child_path = base_path == "" and k or (base_path .. "." .. k)
+      settle_walk(child, child_path, ctx)
+    end
+  end
+end
+
+--- Finalize the config system after setup is complete.
+--- Applies deferred writes, runs settle hooks on all stored ops, and
+--- re-materializes. Call once at the end of setup(), after module registration.
+---
+--- Settle hooks run in schema-tree order. Each hook transforms op values
+--- for its path across all layers. This is the expansion point for
+--- deferred references (e.g., preset names → concrete tool lists).
+---@param layer integer Target layer for deferred replay
+---@param deferred? table[] Deferred writes from apply() pass 1
+---@return { path: string, error: string }[]? failures Deferred entries that failed, or nil
+function M.finalize(layer, deferred)
+  assert(root_schema, "config.init() must be called before finalize()")
+
+  -- Pass 2: replay deferred writes (DISCOVER should resolve now)
+  local failures = nil
+  if deferred and #deferred > 0 then
+    failures = M.apply_deferred(layer, deferred)
+  end
+
+  -- Run settle hooks on all stored ops
+  local ctx = make_settle_context()
+  settle_walk(root_schema, "", ctx)
+
+  return failures
+end
+
 return M

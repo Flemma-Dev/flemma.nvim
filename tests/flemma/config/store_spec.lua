@@ -469,4 +469,179 @@ describe("flemma.config.store", function()
       end)
     end)
   end)
+
+  -- ---------------------------------------------------------------------------
+  -- layer_has_set
+  -- ---------------------------------------------------------------------------
+
+  describe("layer_has_set", function()
+    it("returns true when layer has a set op for the path", function()
+      store.record(L.SETUP, nil, "set", "provider", "openai")
+      assert.is_true(store.layer_has_set(L.SETUP, nil, "provider"))
+    end)
+
+    it("returns false when layer has no ops for the path", function()
+      assert.is_false(store.layer_has_set(L.SETUP, nil, "provider"))
+    end)
+
+    it("returns false when layer has only non-set ops for the path", function()
+      store.record(L.SETUP, nil, "append", "tools.auto_approve", "bash")
+      assert.is_false(store.layer_has_set(L.SETUP, nil, "tools.auto_approve"))
+    end)
+
+    it("distinguishes between layers", function()
+      store.record(L.SETUP, nil, "set", "provider", "openai")
+      assert.is_true(store.layer_has_set(L.SETUP, nil, "provider"))
+      assert.is_false(store.layer_has_set(L.RUNTIME, nil, "provider"))
+    end)
+
+    it("works with FRONTMATTER layer", function()
+      store.record(L.FRONTMATTER, 1, "set", "tools.auto_approve", { "bash" })
+      assert.is_true(store.layer_has_set(L.FRONTMATTER, 1, "tools.auto_approve"))
+      assert.is_false(store.layer_has_set(L.FRONTMATTER, 2, "tools.auto_approve"))
+    end)
+
+    it("distinguishes between paths", function()
+      store.record(L.SETUP, nil, "set", "provider", "openai")
+      assert.is_true(store.layer_has_set(L.SETUP, nil, "provider"))
+      assert.is_false(store.layer_has_set(L.SETUP, nil, "model"))
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- transform_ops
+  -- ---------------------------------------------------------------------------
+
+  describe("transform_ops", function()
+    it("transforms set op values for lists (per-item)", function()
+      store.record(L.DEFAULTS, nil, "set", "tools.auto_approve", { "$default", "other" })
+      store.transform_ops("tools.auto_approve", function(value)
+        if value == "$default" then
+          return { "bash", "grep" }
+        end
+        return value
+      end, nil)
+      assert.are.same({ "bash", "grep", "other" }, store.resolve("tools.auto_approve", nil))
+    end)
+
+    it("expands append ops into multiple ops", function()
+      store.record(L.DEFAULTS, nil, "set", "tools.auto_approve", { "bash" })
+      store.record(L.SETUP, nil, "append", "tools.auto_approve", "$default")
+      store.transform_ops("tools.auto_approve", function(value)
+        if value == "$default" then
+          return { "grep", "find" }
+        end
+        return value
+      end, nil)
+      -- $default appended → expanded to append("grep"), append("find")
+      assert.are.same({ "bash", "grep", "find" }, store.resolve("tools.auto_approve", nil))
+    end)
+
+    it("expands remove ops into multiple ops", function()
+      store.record(L.DEFAULTS, nil, "set", "tools.auto_approve", { "bash", "grep", "find" })
+      store.record(L.FRONTMATTER, 1, "remove", "tools.auto_approve", "$all")
+      store.transform_ops("tools.auto_approve", function(value)
+        if value == "$all" then
+          return { "bash", "grep", "find" }
+        end
+        return value
+      end, nil)
+      -- remove("$all") → remove("bash"), remove("grep"), remove("find")
+      assert.are.same({}, store.resolve("tools.auto_approve", 1))
+    end)
+
+    it("expands prepend ops into multiple ops", function()
+      store.record(L.DEFAULTS, nil, "set", "tools.auto_approve", { "bash" })
+      store.record(L.SETUP, nil, "prepend", "tools.auto_approve", "$preset")
+      store.transform_ops("tools.auto_approve", function(value)
+        if value == "$preset" then
+          return { "grep", "find" }
+        end
+        return value
+      end, nil)
+      -- prepend("$preset") → prepend("grep"), prepend("find")
+      -- prepend inserts at front: find, grep, then bash after
+      assert.are.same({ "find", "grep", "bash" }, store.resolve("tools.auto_approve", nil))
+    end)
+
+    it("passes context to the transform function", function()
+      store.record(L.DEFAULTS, nil, "set", "provider", "test_value")
+      local received_ctx = nil
+      store.transform_ops("provider", function(value, ctx)
+        received_ctx = ctx
+        return value
+      end, { my_key = "my_value" })
+      assert.equals("my_value", received_ctx.my_key)
+    end)
+
+    it("leaves non-matching paths untouched", function()
+      store.record(L.DEFAULTS, nil, "set", "provider", "anthropic")
+      store.record(L.DEFAULTS, nil, "set", "model", "haiku")
+      store.transform_ops("provider", function()
+        return "transformed"
+      end, nil)
+      assert.equals("transformed", store.resolve("provider", nil))
+      assert.equals("haiku", store.resolve("model", nil))
+    end)
+
+    it("transforms ops across global and buffer layers", function()
+      store.record(L.DEFAULTS, nil, "set", "tools.auto_approve", { "$d" })
+      store.record(L.FRONTMATTER, 1, "remove", "tools.auto_approve", "$d")
+      store.transform_ops("tools.auto_approve", function(value)
+        if value == "$d" then
+          return { "bash", "grep" }
+        end
+        return value
+      end, nil)
+      -- D: set(["bash","grep"]), F(1): remove("bash"), remove("grep")
+      assert.are.same({}, store.resolve("tools.auto_approve", 1))
+    end)
+
+    it("non-table return replaces single item in set list", function()
+      store.record(L.DEFAULTS, nil, "set", "tools.auto_approve", { "old" })
+      store.transform_ops("tools.auto_approve", function(value)
+        if value == "old" then
+          return "new"
+        end
+        return value
+      end, nil)
+      assert.are.same({ "new" }, store.resolve("tools.auto_approve", nil))
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- allow_list: store recognizes ObjectNode with list part
+  -- ---------------------------------------------------------------------------
+
+  describe("allow_list store integration", function()
+    local function make_allow_list_schema()
+      return s.object({
+        tools = s.object({
+          auto_approve = s.list(s.string(), {}),
+        }):allow_list(s.string()),
+      })
+    end
+
+    it("list ops work on an allow_list object path", function()
+      store.init(make_allow_list_schema())
+      store.record(L.DEFAULTS, nil, "set", "tools", { "bash", "grep" })
+      store.record(L.SETUP, nil, "append", "tools", "find")
+      assert.are.same({ "bash", "grep", "find" }, store.resolve("tools", nil))
+    end)
+
+    it("sub-path ops work independently of list ops", function()
+      store.init(make_allow_list_schema())
+      store.record(L.DEFAULTS, nil, "set", "tools", { "bash" })
+      store.record(L.SETUP, nil, "set", "tools.auto_approve", { "grep" })
+      assert.are.same({ "bash" }, store.resolve("tools", nil))
+      assert.are.same({ "grep" }, store.resolve("tools.auto_approve", nil))
+    end)
+
+    it("remove op on list part works", function()
+      store.init(make_allow_list_schema())
+      store.record(L.DEFAULTS, nil, "set", "tools", { "bash", "grep", "find" })
+      store.record(L.FRONTMATTER, 1, "remove", "tools", "grep")
+      assert.are.same({ "bash", "find" }, store.resolve("tools", 1))
+    end)
+  end)
 end)

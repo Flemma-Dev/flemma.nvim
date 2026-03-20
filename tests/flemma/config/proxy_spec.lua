@@ -239,12 +239,20 @@ describe("flemma.config.proxy", function()
       end)
     end)
 
-    it("rejects direct assignment to an object field", function()
+    it("allows table assignment to object field (recursive sub-field writes)", function()
+      local schema = make_test_schema()
+      store.init(schema)
+      local w = proxy.write_proxy(schema, nil, L.SETUP)
+      w.parameters = { timeout = 500 }
+      assert.equals(500, store.resolve("parameters.timeout", nil))
+    end)
+
+    it("rejects non-table assignment to an object field", function()
       local schema = make_test_schema()
       store.init(schema)
       local w = proxy.write_proxy(schema, nil, L.SETUP)
       assert.has_error(function()
-        w.parameters = { timeout = 500 }
+        w.parameters = "not a table"
       end)
     end)
 
@@ -677,6 +685,99 @@ describe("flemma.config.proxy", function()
         "parameters",
       })
       assert.equals(9999, lens.timeout)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- :coerce() integration with write proxy
+  -- ---------------------------------------------------------------------------
+
+  describe("write proxy with :coerce()", function()
+    it("coerces value before validation and recording", function()
+      local schema = s.object({
+        autopilot = s.object({
+          enabled = s.boolean(true),
+          max_turns = s.integer(100),
+        }):coerce(function(v)
+          if type(v) == "boolean" then
+            return { enabled = v }
+          end
+          return v
+        end),
+      })
+      store.init(schema)
+      local w = proxy.write_proxy(schema, nil, L.SETUP)
+      w.autopilot = false
+      -- The coerced value { enabled = false } was recorded, not the boolean
+      assert.equals(false, store.resolve("autopilot.enabled", nil))
+    end)
+
+    it("coerce does not affect read proxy", function()
+      local schema = s.object({
+        autopilot = s.object({
+          enabled = s.boolean(true),
+        }):coerce(function(v)
+          if type(v) == "boolean" then
+            return { enabled = v }
+          end
+          return v
+        end),
+      })
+      store.init(schema)
+      store.record(L.SETUP, nil, "set", "autopilot.enabled", false)
+      local r = proxy.read_proxy(schema, nil)
+      assert.equals(false, r.autopilot.enabled)
+    end)
+
+    it("coerce runs before validation — invalid raw value becomes valid after coerce", function()
+      local schema = s.object({
+        setting = s.object({
+          enabled = s.boolean(true),
+        }):coerce(function(v)
+          if type(v) == "boolean" then
+            return { enabled = v }
+          end
+          return v
+        end),
+      })
+      store.init(schema)
+      local w = proxy.write_proxy(schema, nil, L.SETUP)
+      -- boolean would fail object validation, but coerce transforms it first
+      assert.has_no.errors(function()
+        w.setting = true
+      end)
+      assert.equals(true, store.resolve("setting.enabled", nil))
+    end)
+
+    it("coerce with optional wrapping", function()
+      local schema = s.object({
+        feature = s.optional(s.object({
+          enabled = s.boolean(true),
+        }):coerce(function(v)
+          if type(v) == "boolean" then
+            return { enabled = v }
+          end
+          return v
+        end)),
+      })
+      store.init(schema)
+      local w = proxy.write_proxy(schema, nil, L.SETUP)
+      w.feature = false
+      assert.equals(false, store.resolve("feature.enabled", nil))
+    end)
+
+    it("coerce nil on optional node bypasses coerce", function()
+      local coerce_called = false
+      local schema = s.object({
+        feature = s.optional(s.string():coerce(function(v)
+          coerce_called = true
+          return v
+        end)),
+      })
+      store.init(schema)
+      local w = proxy.write_proxy(schema, nil, L.SETUP)
+      w.feature = nil
+      assert.is_false(coerce_called)
     end)
   end)
 end)

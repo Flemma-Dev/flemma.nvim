@@ -196,8 +196,29 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
         error(string.format("config: unknown key '%s'", canonical))
       end
 
-      -- Reject direct assignment to object nodes — navigate into sub-fields instead.
+      -- Operator chains (+ - ^) already recorded their ops via the ListProxy and
+      -- return the proxy itself. When assigned back (e.g. `w.f = w.f + item`),
+      -- the ListProxy value is a sentinel: the ops are done, nothing to record.
+      if getmetatable(value) == ListProxy then
+        return
+      end
+
+      -- Apply write-time coercion before validation (e.g., boolean → {enabled=bool}).
+      -- Coerce runs before the object check because it may transform a non-table
+      -- value (e.g., boolean) into a table suitable for object field assignment.
+      value = leaf:apply_coerce(value)
+
+      -- Object nodes: if coerce produced a table, recursively set each sub-field
+      -- via a sub-proxy (which handles per-field validation and aliases). If the
+      -- value is NOT a table after coerce, it's a genuine type error.
       if leaf:is_object() then
+        if type(value) == "table" then
+          local sub_proxy = make_proxy(root_schema, bufnr, layer, canonical, leaf)
+          for k, v in pairs(value) do
+            sub_proxy[k] = v
+          end
+          return
+        end
         error(
           string.format(
             "config: cannot assign to object field '%s' — navigate into the field and write individual keys",
@@ -206,14 +227,7 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
         )
       end
 
-      -- Operator chains (+ - ^) already recorded their ops via the ListProxy and
-      -- return the proxy itself. When assigned back (e.g. `w.f = w.f + item`),
-      -- the ListProxy value is a sentinel: the ops are done, nothing to record.
-      if getmetatable(value) == ListProxy then
-        return
-      end
-
-      -- Validate the value against the schema.
+      -- Validate the coerced value against the schema.
       local ok, err = leaf:validate_value(value)
       if not ok then
         error(string.format("config write error at '%s': %s", canonical, err or "invalid"))

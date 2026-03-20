@@ -59,6 +59,7 @@ local buffer_ops = {}
 -- ---------------------------------------------------------------------------
 
 --- Return true if the given canonical path refers to a list field in the schema.
+--- Recognizes both standalone ListNodes and ObjectNodes with :allow_list().
 --- Uses unwrap_leaf = true so the returned node's is_list() reflects the concrete type.
 ---@param path string Dot-delimited canonical path
 ---@return boolean
@@ -70,7 +71,14 @@ local function is_list_path(path)
   if not node then
     return false
   end
-  return node:is_list()
+  if node:is_list() then
+    return true
+  end
+  -- ObjectNode with :allow_list() also supports list ops on its own path
+  if node:has_list_part() then
+    return true
+  end
+  return false
 end
 
 -- ---------------------------------------------------------------------------
@@ -299,6 +307,106 @@ function M.clear(layer, bufnr)
   else
     global_ops[layer] = {}
   end
+end
+
+-- ---------------------------------------------------------------------------
+-- Settle / transform
+-- ---------------------------------------------------------------------------
+
+--- Transform all ops at the given path across all layers using a settle function.
+--- For "set" ops on lists: the value (a table) is passed to fn; result replaces it.
+--- For "append"/"remove"/"prepend" ops: the single item is passed to fn.
+---   If fn returns a table, the single op is expanded into multiple ops of the same type.
+---   If fn returns a non-table value, the op value is replaced.
+--- For "set" ops on scalars: value is passed to fn, result replaces it.
+---
+--- The function is called as fn(value, ctx) where ctx is a settle context.
+---@param path string Dot-delimited canonical path
+---@param fn fun(value: any, ctx: any): any Settle transform function
+---@param ctx any Settle context passed through to fn
+function M.transform_ops(path, fn, ctx)
+  -- Determine whether this path is a list using the schema. This drives
+  -- how set ops are handled: list paths do per-item transformation (each
+  -- element passed to fn independently); scalar paths pass the whole value.
+  local path_is_list = is_list_path(path)
+
+  local all_ops = {}
+  for _, num in ipairs(GLOBAL_LAYER_NUMS) do
+    table.insert(all_ops, global_ops[num] or {})
+  end
+  for _, buf_ops in pairs(buffer_ops) do
+    table.insert(all_ops, buf_ops)
+  end
+
+  for _, ops_array in ipairs(all_ops) do
+    local i = 1
+    while i <= #ops_array do
+      local entry = ops_array[i]
+      if entry.path == path then
+        if entry.op == "set" then
+          -- List paths: transform each item independently (enables per-item preset expansion).
+          -- Scalar paths: transform the whole value as a single unit.
+          if path_is_list and type(entry.value) == "table" then
+            local new_list = {}
+            for _, item in ipairs(entry.value) do
+              local result = fn(item, ctx)
+              if type(result) == "table" then
+                for _, expanded in ipairs(result) do
+                  table.insert(new_list, expanded)
+                end
+              else
+                table.insert(new_list, result)
+              end
+            end
+            entry.value = new_list
+          else
+            entry.value = fn(entry.value, ctx)
+          end
+          i = i + 1
+        elseif entry.op == "append" or entry.op == "remove" or entry.op == "prepend" then
+          local result = fn(entry.value, ctx)
+          if type(result) == "table" then
+            -- Expand: replace single op with multiple ops of the same type
+            table.remove(ops_array, i)
+            for j, expanded in ipairs(result) do
+              table.insert(ops_array, i + j - 1, { op = entry.op, path = path, value = expanded })
+            end
+            i = i + #result
+          else
+            entry.value = result
+            i = i + 1
+          end
+        else
+          i = i + 1
+        end
+      else
+        i = i + 1
+      end
+    end
+  end
+end
+
+--- Check whether the given layer has a "set" operation for the given path.
+--- Useful for detecting whether a higher layer explicitly replaced a value
+--- (e.g., frontmatter explicitly assigned auto_approve).
+---@param layer integer
+---@param bufnr integer? Required for FRONTMATTER
+---@param path string Dot-delimited canonical path
+---@return boolean
+function M.layer_has_set(layer, bufnr, path)
+  local ops_array
+  if layer == M.LAYERS.FRONTMATTER then
+    assert(bufnr ~= nil, "bufnr is required for FRONTMATTER layer")
+    ops_array = buffer_ops[bufnr]
+  else
+    ops_array = global_ops[layer]
+  end
+  for _, entry in ipairs(ops_array or {}) do
+    if entry.op == "set" and entry.path == path then
+      return true
+    end
+  end
+  return false
 end
 
 --- Return a deep copy of the raw operations log for the given layer.

@@ -689,4 +689,193 @@ describe("flemma.config — integration", function()
       assert.are.same({ "$default", "bash" }, result.tools.auto_approve)
     end)
   end)
+
+  -- ---------------------------------------------------------------------------
+  -- layer_has_set
+  -- ---------------------------------------------------------------------------
+
+  describe("layer_has_set", function()
+    it("detects set op on FRONTMATTER layer", function()
+      config.init(make_schema())
+      local w = config.writer(1, L.FRONTMATTER)
+      w.tools.auto_approve = { "bash" }
+      assert.is_true(config.layer_has_set(L.FRONTMATTER, 1, "tools.auto_approve"))
+    end)
+
+    it("returns false when only append ops exist", function()
+      config.init(make_schema())
+      config.writer(1, L.FRONTMATTER).tools.auto_approve:append("bash")
+      assert.is_false(config.layer_has_set(L.FRONTMATTER, 1, "tools.auto_approve"))
+    end)
+
+    it("returns false for different buffer", function()
+      config.init(make_schema())
+      config.writer(1, L.FRONTMATTER).tools.auto_approve = { "bash" }
+      assert.is_false(config.layer_has_set(L.FRONTMATTER, 2, "tools.auto_approve"))
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- config.finalize()
+  -- ---------------------------------------------------------------------------
+
+  describe("config.finalize()", function()
+    it("applies deferred writes", function()
+      local discovered_schema = s.object({
+        custom_param = s.optional(s.integer()),
+      })
+      -- Simulate module not yet registered: DISCOVER returns nil on pass 1
+      local registered = false
+      local schema = s.object({
+        provider = s.string("anthropic"),
+        parameters = s.object({
+          timeout = s.optional(s.integer()),
+          [symbols.DISCOVER] = function(key)
+            if key == "custom" and registered then
+              return discovered_schema
+            end
+            return nil
+          end,
+        }),
+      })
+      config.init(schema)
+      -- Pass 1: deferred because custom is not yet discoverable
+      local ok, _, deferred = config.apply(L.SETUP, {
+        parameters = { custom = { custom_param = 42 } },
+      }, { defer_discover = true })
+      assert.is_true(ok)
+      assert.is_not_nil(deferred)
+
+      -- Simulate module registration
+      registered = true
+
+      -- Finalize replays deferred (DISCOVER now resolves)
+      local failures = config.finalize(L.SETUP, deferred)
+      assert.is_nil(failures)
+      assert.equals(42, config.get().parameters.custom.custom_param)
+    end)
+
+    it("runs settle hooks on stored ops", function()
+      local presets = {
+        ["$default"] = { "bash", "grep", "find" },
+      }
+      local schema = s.object({
+        tools = s.object({
+          auto_approve = s.list(s.string(), { "$default" }):settle(function(value, _ctx)
+            if type(value) == "string" and vim.startswith(value, "$") then
+              return presets[value] or value
+            end
+            return value
+          end),
+        }),
+      })
+      config.init(schema)
+      -- After init, L10 has set(["$default"])
+      -- Finalize should expand $default
+      config.finalize(L.DEFAULTS)
+      local result = config.get().tools.auto_approve
+      assert.are.same({ "bash", "grep", "find" }, result)
+    end)
+
+    it("settle expands preset removes across layers", function()
+      local presets = {
+        ["$default"] = { "bash", "grep" },
+      }
+      local settle_fn = function(value, _ctx)
+        if type(value) == "string" and vim.startswith(value, "$") then
+          return presets[value] or value
+        end
+        return value
+      end
+      local schema = s.object({
+        items = s.list(s.string(), { "$default" }):settle(settle_fn),
+      })
+      config.init(schema)
+      -- L10: set(["$default"]), FRONTMATTER: remove("$default")
+      config.writer(1, L.FRONTMATTER).items:remove("$default")
+      config.finalize(L.DEFAULTS)
+      -- $default expanded in both layers:
+      -- L10: set(["bash","grep"]), F(1): remove("bash"), remove("grep")
+      assert.are.same({}, config.get(1).items)
+    end)
+
+    it("settle with context can read other config values", function()
+      local schema = s.object({
+        presets = s.object({
+          fast = s.object({
+            names = s.list(s.string(), { "a", "b" }),
+          }),
+        }),
+        items = s.list(s.string(), { "$fast" }):settle(function(value, ctx)
+          if type(value) == "string" and vim.startswith(value, "$") then
+            local preset_names = ctx.get("presets." .. value:sub(2) .. ".names")
+            return preset_names or value
+          end
+          return value
+        end),
+      })
+      config.init(schema)
+      config.finalize(L.DEFAULTS)
+      assert.are.same({ "a", "b" }, config.get().items)
+    end)
+
+    it("returns failures from deferred writes", function()
+      local schema = s.object({
+        provider = s.string("anthropic"),
+      })
+      config.init(schema)
+      local failures = config.finalize(L.SETUP, { { path = "nonexistent", value = "x" } })
+      assert.is_not_nil(failures)
+      assert.equals(1, #failures)
+      assert.matches("nonexistent", failures[1].path)
+    end)
+
+    it("returns nil when no deferred writes provided", function()
+      config.init(make_schema())
+      local failures = config.finalize(L.SETUP)
+      assert.is_nil(failures)
+    end)
+
+    it("deferred writes and settle hooks interact correctly", function()
+      local presets = {
+        ["$default"] = { "bash", "grep" },
+      }
+      local registered = false
+      local discovered_schema = s.object({
+        custom_param = s.optional(s.integer()),
+      })
+      local schema = s.object({
+        tools = s.object({
+          auto_approve = s.list(s.string(), { "$default" }):settle(function(value, _ctx)
+            if type(value) == "string" and vim.startswith(value, "$") then
+              return presets[value] or value
+            end
+            return value
+          end),
+          [symbols.DISCOVER] = function(key)
+            if key == "custom" and registered then
+              return discovered_schema
+            end
+            return nil
+          end,
+        }),
+      })
+      config.init(schema)
+      -- Pass 1: deferred because "custom" not yet discoverable
+      local ok, _, deferred = config.apply(L.SETUP, {
+        tools = { custom = { custom_param = 99 } },
+      }, { defer_discover = true })
+      assert.is_true(ok)
+      assert.is_not_nil(deferred)
+
+      -- Simulate module registration
+      registered = true
+
+      -- Finalize: replays deferred (custom now resolves) AND runs settle ($default expands)
+      local failures = config.finalize(L.SETUP, deferred)
+      assert.is_nil(failures)
+      assert.equals(99, config.get().tools.custom.custom_param)
+      assert.are.same({ "bash", "grep" }, config.get().tools.auto_approve)
+    end)
+  end)
 end)

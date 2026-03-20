@@ -759,4 +759,166 @@ describe("flemma.config.schema", function()
       assert.matches("unknown", err)
     end)
   end)
+
+  -- ---------------------------------------------------------------------------
+  -- :coerce()
+  -- ---------------------------------------------------------------------------
+
+  describe(":coerce()", function()
+    it("returns self for chaining", function()
+      local node = s.object({ enabled = s.boolean(true) })
+      local result = node:coerce(function(v)
+        return v
+      end)
+      assert.equals(node, result)
+    end)
+
+    it("apply_coerce transforms value when coerce is set", function()
+      local node = s.object({ enabled = s.boolean(true) }):coerce(function(v)
+        if type(v) == "boolean" then
+          return { enabled = v }
+        end
+        return v
+      end)
+      local result = node:apply_coerce(false)
+      assert.same({ enabled = false }, result)
+    end)
+
+    it("apply_coerce passes through when no coerce is set", function()
+      local node = s.string()
+      assert.equals("hello", node:apply_coerce("hello"))
+    end)
+
+    it("apply_coerce passes through non-matching values", function()
+      local node = s.object({ enabled = s.boolean(true) }):coerce(function(v)
+        if type(v) == "boolean" then
+          return { enabled = v }
+        end
+        return v
+      end)
+      local tbl = { enabled = false }
+      assert.same(tbl, node:apply_coerce(tbl))
+    end)
+
+    it("optional delegates coerce to inner schema", function()
+      local inner = s.object({ enabled = s.boolean(true) }):coerce(function(v)
+        if type(v) == "boolean" then
+          return { enabled = v }
+        end
+        return v
+      end)
+      local opt = s.optional(inner)
+      assert.same({ enabled = true }, opt:apply_coerce(true))
+    end)
+
+    it("optional returns nil without coercing", function()
+      local inner = s.string():coerce(function()
+        return "coerced"
+      end)
+      local opt = s.optional(inner)
+      assert.is_nil(opt:apply_coerce(nil))
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- :settle()
+  -- ---------------------------------------------------------------------------
+
+  describe(":settle()", function()
+    it("returns self for chaining", function()
+      local node = s.list(s.string())
+      local result = node:settle(function(v)
+        return v
+      end)
+      assert.equals(node, result)
+    end)
+
+    it("has_settle() is false by default", function()
+      assert.is_false(s.string():has_settle())
+      assert.is_false(s.list(s.string()):has_settle())
+      assert.is_false(s.object({}):has_settle())
+    end)
+
+    it("has_settle() is true when settle is set", function()
+      local node = s.list(s.string()):settle(function(v)
+        return v
+      end)
+      assert.is_true(node:has_settle())
+    end)
+
+    it("get_settle() returns the function", function()
+      local fn = function(v)
+        return v
+      end
+      local node = s.string():settle(fn)
+      assert.equals(fn, node:get_settle())
+    end)
+
+    it("get_settle() returns nil when not set", function()
+      assert.is_nil(s.string():get_settle())
+    end)
+
+    it("optional delegates has_settle to inner", function()
+      local inner = s.string():settle(function(v)
+        return v
+      end)
+      local opt = s.optional(inner)
+      assert.is_true(opt:has_settle())
+    end)
+
+    it("optional delegates get_settle to inner", function()
+      local fn = function(v)
+        return v
+      end
+      local inner = s.string():settle(fn)
+      local opt = s.optional(inner)
+      assert.equals(fn, opt:get_settle())
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- :allow_list()
+  -- ---------------------------------------------------------------------------
+
+  describe(":allow_list()", function()
+    it("returns self for chaining", function()
+      local node = s.object({ name = s.string() })
+      local result = node:allow_list(s.string())
+      assert.equals(node, result)
+    end)
+
+    it("has_list_part() is false by default", function()
+      assert.is_false(s.object({}):has_list_part())
+    end)
+
+    it("has_list_part() is true when allow_list is set", function()
+      local node = s.object({}):allow_list(s.string())
+      assert.is_true(node:has_list_part())
+    end)
+
+    it("get_list_item_schema() returns the item schema", function()
+      local item = s.string()
+      local node = s.object({}):allow_list(item)
+      assert.equals(item, node:get_list_item_schema())
+    end)
+
+    it("get_list_item_schema() returns nil when not set", function()
+      assert.is_nil(s.object({}):get_list_item_schema())
+    end)
+
+    it("is_object() remains true", function()
+      local node = s.object({ name = s.string() }):allow_list(s.string())
+      assert.is_true(node:is_object())
+    end)
+
+    it("is_list() remains false (list part is separate)", function()
+      local node = s.object({}):allow_list(s.string())
+      assert.is_false(node:is_list())
+    end)
+
+    it("named field access still works", function()
+      local node = s.object({ name = s.string("default") }):allow_list(s.string())
+      assert.equals("default", node:materialize().name)
+    end)
+  end)
 end)

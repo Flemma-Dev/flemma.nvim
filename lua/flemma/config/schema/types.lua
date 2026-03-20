@@ -14,6 +14,8 @@ local loader = require("flemma.loader")
 ---@class flemma.config.schema.Node
 ---@field _description? string Human-readable description for EmmyLua generation
 ---@field _type_as? string Override generated type annotation
+---@field _coerce? fun(value: any): any Write-time value transformer (runs before validation)
+---@field _settle? fun(value: any, ctx: flemma.config.SettleContext): any Post-setup normalization of stored values
 local Node = {}
 Node.__index = Node
 
@@ -31,6 +33,49 @@ end
 function Node:type_as(type_string)
   self._type_as = type_string
   return self
+end
+
+--- Attach a write-time value transformer.
+--- Runs before validation on every write. Use for ergonomic shorthands
+--- (e.g., accepting a boolean and expanding it to `{ enabled = bool }`).
+---@param fn fun(value: any): any Receives the raw value, returns the transformed value
+---@return flemma.config.schema.Node self
+function Node:coerce(fn)
+  self._coerce = fn
+  return self
+end
+
+--- Apply the coerce transformer to a value, if one is set.
+--- Returns the value unchanged when no coerce function is attached.
+---@param value any
+---@return any
+function Node:apply_coerce(value)
+  if self._coerce then
+    return self._coerce(value)
+  end
+  return value
+end
+
+--- Attach a post-setup normalization hook.
+--- Invoked by `config.finalize()` on each stored op value for this node.
+--- Use for expanding deferred references (e.g., preset names → concrete tool lists).
+---@param fn fun(value: any, ctx: flemma.config.SettleContext): any Receives op value + context, returns transformed value (or table for list expansion)
+---@return flemma.config.schema.Node self
+function Node:settle(fn)
+  self._settle = fn
+  return self
+end
+
+--- Whether this node has a settle hook.
+---@return boolean
+function Node:has_settle()
+  return self._settle ~= nil
+end
+
+--- Return the settle function, or nil if none.
+---@return (fun(value: any, ctx: flemma.config.SettleContext): any)?
+function Node:get_settle()
+  return self._settle
 end
 
 --- Whether this node has a meaningful default value to materialize.
@@ -89,6 +134,20 @@ end
 --- Used by the proxy to construct list proxies with item-level validation.
 ---@return flemma.config.schema.Node?
 function Node:get_item_schema()
+  return nil
+end
+
+--- Whether this node has a list part (ObjectNode with :allow_list()).
+--- Base implementation returns false; ObjectNode overrides.
+---@return boolean
+function Node:has_list_part()
+  return false
+end
+
+--- Return the list item schema for the list part (ObjectNode with :allow_list()).
+--- Base implementation returns nil; ObjectNode overrides.
+---@return flemma.config.schema.Node?
+function Node:get_list_item_schema()
   return nil
 end
 
@@ -415,6 +474,7 @@ end
 ---@field _discover? fun(key: string): flemma.config.schema.Node? Lazy resolver
 ---@field _discover_cache table<string, flemma.config.schema.Node> Cached results
 ---@field _strict boolean Whether unknown keys are rejected (default true)
+---@field _list_schema? flemma.config.schema.Node Item schema for the list part (set via :allow_list())
 local ObjectNode = setmetatable({}, { __index = Node })
 ObjectNode.__index = ObjectNode
 
@@ -558,6 +618,29 @@ function ObjectNode:passthrough()
   return self
 end
 
+--- Enable list operations on this object's own path.
+--- The object retains its named fields for sub-path navigation while also
+--- accepting list ops (set with array, append, remove, prepend) validated
+--- against the given item schema. Mirrors Lua's mixed table semantics.
+---@param item_schema flemma.config.schema.Node Schema for each list item
+---@return flemma.config.schema.ObjectNode self
+function ObjectNode:allow_list(item_schema)
+  self._list_schema = item_schema
+  return self
+end
+
+--- Whether this object also accepts list operations on its own path.
+---@return boolean
+function ObjectNode:has_list_part()
+  return self._list_schema ~= nil
+end
+
+--- Return the list item schema (set via :allow_list()), or nil.
+---@return flemma.config.schema.Node?
+function ObjectNode:get_list_item_schema()
+  return self._list_schema
+end
+
 --- Construct an ObjectNode from a fields table.
 --- The fields table may include symbol keys:
 ---   [symbols.ALIASES] = { alias = "canonical.path" }
@@ -615,6 +698,16 @@ function OptionalNode:is_object()
 end
 
 ---@return boolean
+function OptionalNode:has_list_part()
+  return self._inner:has_list_part()
+end
+
+---@return flemma.config.schema.Node?
+function OptionalNode:get_list_item_schema()
+  return self._inner:get_list_item_schema()
+end
+
+---@return boolean
 function OptionalNode:has_discover()
   return self._inner:has_discover()
 end
@@ -628,6 +721,28 @@ end
 ---@return flemma.config.schema.Node
 function OptionalNode:get_inner_schema()
   return self._inner
+end
+
+--- Delegate coerce to the inner schema. Nil values bypass coercion.
+---@param value any
+---@return any
+function OptionalNode:apply_coerce(value)
+  if value == nil then
+    return nil
+  end
+  return self._inner:apply_coerce(value)
+end
+
+--- Delegate settle detection to the inner schema.
+---@return boolean
+function OptionalNode:has_settle()
+  return self._inner:has_settle()
+end
+
+--- Delegate settle retrieval to the inner schema.
+---@return (fun(value: any, ctx: flemma.config.SettleContext): any)?
+function OptionalNode:get_settle()
+  return self._inner:get_settle()
 end
 
 ---@param value any
