@@ -200,23 +200,36 @@ describe("config.schema.definition", function()
   -- Provider parameter schemas
   -- ---------------------------------------------------------------------------
 
-  describe("provider parameter schemas", function()
-    it("materializes OpenAI reasoning_summary default", function()
+  describe("provider parameter schemas (via registration)", function()
+    local provider_reg
+
+    before_each(function()
+      -- Re-require the registry so its facade local picks up the current (re-init'd) facade
+      package.loaded["flemma.provider.registry"] = nil
+      provider_reg = require("flemma.provider.registry")
+      provider_reg.clear()
+    end)
+
+    it("materializes OpenAI reasoning_summary default after registration", function()
+      provider_reg.register("flemma.provider.providers.openai")
       local cfg = facade.get()
       assert.equals("auto", cfg.parameters.openai.reasoning_summary)
     end)
 
-    it("materializes Vertex location default", function()
+    it("materializes Vertex location default after registration", function()
+      provider_reg.register("flemma.provider.providers.vertex")
       local cfg = facade.get()
       assert.equals("global", cfg.parameters.vertex.location)
     end)
 
     it("does not materialize Anthropic defaults (all optional, no defaults)", function()
+      provider_reg.register("flemma.provider.providers.anthropic")
       local cfg = facade.get()
       assert.is_nil(cfg.parameters.anthropic.thinking_budget)
     end)
 
     it("does not materialize Vertex project_id (optional, no default)", function()
+      provider_reg.register("flemma.provider.providers.vertex")
       local cfg = facade.get()
       assert.is_nil(cfg.parameters.vertex.project_id)
     end)
@@ -313,7 +326,11 @@ describe("config.schema.definition", function()
       assert.truthy(err:find("unknown key"))
     end)
 
-    it("accepts provider-specific parameter overrides", function()
+    it("accepts provider-specific parameter overrides after registration", function()
+      package.loaded["flemma.provider.registry"] = nil
+      local provider_reg = require("flemma.provider.registry")
+      provider_reg.clear()
+      provider_reg.register("flemma.provider.providers.anthropic")
       facade.apply(facade.LAYERS.SETUP, {
         parameters = { anthropic = { thinking_budget = 2048 } },
       })
@@ -445,7 +462,13 @@ describe("config.schema.definition", function()
       end
     end)
 
-    it("parameters has built-in provider fields", function()
+    it("parameters resolves built-in provider fields via DISCOVER after registration", function()
+      package.loaded["flemma.provider.registry"] = nil
+      local provider_reg = require("flemma.provider.registry")
+      provider_reg.clear()
+      provider_reg.register("flemma.provider.providers.anthropic")
+      provider_reg.register("flemma.provider.providers.openai")
+      provider_reg.register("flemma.provider.providers.vertex")
       local params = schema:get_child_schema("parameters")
       assert.is_not_nil(params:get_child_schema("anthropic"))
       assert.is_not_nil(params:get_child_schema("openai"))
@@ -483,10 +506,15 @@ describe("config.schema.definition", function()
     local sandbox_module
 
     before_each(function()
+      -- Re-require registries so their facade locals pick up the current (re-init'd) facade
+      package.loaded["flemma.tools"] = nil
+      package.loaded["flemma.tools.registry"] = nil
       tools_module = require("flemma.tools")
       tools_module.clear()
+      package.loaded["flemma.provider.registry"] = nil
       provider_reg = require("flemma.provider.registry")
       provider_reg.clear()
+      package.loaded["flemma.sandbox"] = nil
       sandbox_module = require("flemma.sandbox")
       sandbox_module.clear()
     end)
@@ -583,7 +611,17 @@ describe("config.schema.definition", function()
         assert.equals("https://custom.api", facade.get().parameters.custom.api_url)
       end)
 
-      it("built-in provider schemas work without registry registration", function()
+      it("built-in provider schemas require registry registration (no special treatment)", function()
+        -- Without registration, DISCOVER returns nil → unknown key error
+        local ok, err = facade.apply(facade.LAYERS.SETUP, {
+          parameters = { anthropic = { thinking_budget = 4096 } },
+        })
+        assert.is_nil(ok)
+        assert.truthy(err:find("unknown key"))
+      end)
+
+      it("built-in provider schemas work after registration", function()
+        provider_reg.register("flemma.provider.providers.anthropic")
         facade.apply(facade.LAYERS.SETUP, {
           parameters = { anthropic = { thinking_budget = 4096 } },
         })

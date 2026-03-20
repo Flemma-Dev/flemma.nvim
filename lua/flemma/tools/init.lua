@@ -4,6 +4,7 @@
 local M = {}
 
 local config = require("flemma.config")
+local facade = require("flemma.config.facade")
 local hooks = require("flemma.hooks")
 local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
@@ -40,6 +41,16 @@ local function fire_ready_callbacks()
   hooks.dispatch("boot:complete")
 end
 
+--- Register a tool definition and materialize its config_schema defaults into L10.
+---@param name string
+---@param def flemma.tools.ToolDefinition
+local function register_tool(name, def)
+  registry.register(name, def)
+  if def.metadata and def.metadata.config_schema then
+    facade.register_module_defaults("tools", name, def.metadata.config_schema)
+  end
+end
+
 ---Register an async tool source that resolves definitions asynchronously
 ---@param resolve_fn fun(register: fun(name: string, def: flemma.tools.ToolDefinition), done: fun(err?: string)) Resolver function
 ---@param opts? { timeout?: integer } Options (timeout in seconds)
@@ -72,7 +83,7 @@ function M.register_async(resolve_fn, opts)
   ---@param name string
   ---@param def flemma.tools.ToolDefinition
   local function register(name, def)
-    registry.register(name, def)
+    register_tool(name, def)
   end
 
   -- Set up timeout
@@ -258,7 +269,7 @@ function M.register(source, definition)
   if type(source) == "string" then
     if definition then
       -- register(name, def) — single definition
-      registry.register(source, definition)
+      register_tool(source, definition)
     else
       -- register("module.name") — load module
       local mod = loader.load(source)
@@ -266,7 +277,7 @@ function M.register(source, definition)
         M.register_async(mod.resolve, { timeout = mod.timeout })
       elseif mod.definitions then
         for _, def in ipairs(mod.definitions) do
-          registry.register(def.name, def)
+          register_tool(def.name, def)
         end
       end
     end
@@ -277,11 +288,11 @@ function M.register(source, definition)
       M.register_async(source.resolve, { timeout = source.timeout })
     elseif source.name then
       -- Single definition table
-      registry.register(source.name, source)
+      register_tool(source.name, source)
     else
       -- Array of definitions
       for _, def in ipairs(source) do
-        registry.register(def.name, def)
+        register_tool(def.name, def)
       end
     end
   end

@@ -5,6 +5,7 @@
 local M = {}
 
 local bwrap = require("flemma.sandbox.backends.bwrap")
+local facade = require("flemma.config.facade")
 local loader = require("flemma.loader")
 local registry_utils = require("flemma.registry")
 local state = require("flemma.state")
@@ -79,6 +80,11 @@ function M.register(name, definition)
   })
   registry_sorted = false
   registry_generation = registry_generation + 1
+
+  -- Materialize config_schema defaults into the DEFAULTS layer
+  if definition.config_schema then
+    facade.register_module_defaults("sandbox.backends", name, definition.config_schema)
+  end
 end
 
 ---Unregister a backend by name.

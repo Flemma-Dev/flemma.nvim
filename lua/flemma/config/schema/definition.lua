@@ -3,9 +3,9 @@
 --- This is the single source of truth for Flemma's configuration structure,
 --- types, and defaults. Replaces the legacy lua/flemma/config.lua defaults.
 ---
---- Provider-specific parameter schemas are defined inline (will move to
---- provider modules during refactoring). Tool-specific config schemas use
---- DISCOVER resolution via the tools registry.
+--- Provider, tool, and sandbox backend schemas are all resolved via DISCOVER.
+--- Each module owns its own config schema (M.metadata.config_schema).
+--- Defaults from discovered schemas materialize into L10 at registration time.
 
 local s = require("flemma.config.schema")
 local symbols = require("flemma.symbols")
@@ -36,25 +36,6 @@ end
 local function sign_highlight(default)
   return s.union(s.boolean(default), s.string(), s.object({ dark = s.string(), light = s.string() }))
 end
-
--- ---------------------------------------------------------------------------
--- Provider parameter schemas
--- ---------------------------------------------------------------------------
-
-local AnthropicParametersSchema = s.object({
-  thinking_budget = s.optional(s.integer()),
-})
-
-local OpenAIParametersSchema = s.object({
-  reasoning_summary = s.optional(s.string("auto")),
-  reasoning = s.optional(s.string()),
-})
-
-local VertexParametersSchema = s.object({
-  project_id = s.optional(s.string()),
-  location = s.optional(s.string("global")),
-  thinking_budget = s.optional(s.integer()),
-})
 
 -- ---------------------------------------------------------------------------
 -- The config schema
@@ -163,11 +144,7 @@ return s.object({
     connect_timeout = s.integer(10),
     cache_retention = s.enum({ "short", "long", "none" }, "short"),
     thinking = s.union(s.enum({ "minimal", "low", "medium", "high", "max" }, "high"), s.number(), s.literal(false)),
-    -- Built-in provider parameter schemas (statically referenced)
-    anthropic = AnthropicParametersSchema,
-    openai = OpenAIParametersSchema,
-    vertex = VertexParametersSchema,
-    -- Dynamic provider parameter schemas (resolved lazily)
+    -- All provider parameter schemas resolved via DISCOVER
     [symbols.DISCOVER] = function(key)
       return require("flemma.provider.registry").get_config_schema(key)
     end,

@@ -331,11 +331,11 @@ describe("flemma.config DISCOVER resolution", function()
   -- ---------------------------------------------------------------------------
 
   describe("defaults from discovered schemas", function()
-    it("discovered schemas with defaults materialize when the schema is accessed", function()
-      -- DISCOVER-resolved schemas can have defaults. These defaults don't
-      -- participate in layer 10 materialization (since DISCOVER is lazy), but
-      -- the schema's default value is used when the schema node is queried
-      -- and no ops exist at that path.
+    it("discovered schema defaults are NOT auto-materialized by the store", function()
+      -- DISCOVER-resolved schemas can have defaults, but the store itself
+      -- does not materialize them. Defaults are materialized into L10 by
+      -- facade.register_module_defaults() at registration time — not lazily
+      -- when the schema is first accessed.
       local schema = s.object({
         tools = s.object({
           [symbols.DISCOVER] = function(key)
@@ -350,10 +350,9 @@ describe("flemma.config DISCOVER resolution", function()
       })
       store.init(schema)
 
-      -- No ops recorded for tools.bash.shell — the schema has a default
-      -- but it won't appear via store.resolve since no op was recorded.
-      -- DISCOVER defaults are baked into the schema for validation, not
-      -- automatically materialized into the store.
+      -- No ops recorded for tools.bash.shell — the store has no defaults.
+      -- facade.register_module_defaults() is responsible for materializing
+      -- discovered schema defaults into L10 at registration time.
       assert.is_nil(store.resolve("tools.bash.shell", nil))
     end)
   end)

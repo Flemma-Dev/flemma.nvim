@@ -209,6 +209,28 @@ function M.apply(layer, opts, apply_opts)
   return true
 end
 
+--- Materialize a discovered module's schema defaults into the DEFAULTS layer.
+--- Called by registries (providers, tools, sandbox backends) after module
+--- registration so that DISCOVER-resolved schemas contribute their defaults
+--- to L10.
+---@param parent_path string Dot-delimited path to the parent object (e.g., "parameters", "tools", "sandbox.backends")
+---@param name string Module name (the DISCOVER key, e.g., "anthropic", "bash", "bwrap")
+---@param config_schema flemma.config.schema.Node Module's config schema
+function M.register_module_defaults(parent_path, name, config_schema)
+  assert(root_schema, "config.init() must be called before register_module_defaults()")
+  local defaults = config_schema:materialize()
+  if not defaults then
+    return
+  end
+  local base_path = parent_path .. "." .. name
+  ---@type flemma.config.facade.ApplyContext
+  local ctx = { schema = root_schema, layer = M.LAYERS.DEFAULTS, bufnr = nil, deferred = nil }
+  local ok, err = apply_recursive(ctx, base_path, defaults)
+  if not ok then
+    error("config.register_module_defaults: failed for " .. base_path .. ": " .. err)
+  end
+end
+
 --- Replay deferred writes from a previous `apply()` call.
 --- Invoked after module registration so DISCOVER callbacks can resolve.
 --- Failures in pass 2 are genuine — the config key doesn't exist.
