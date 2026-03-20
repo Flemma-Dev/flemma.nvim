@@ -236,16 +236,17 @@ end
 --- Failures in pass 2 are genuine — the config key doesn't exist.
 ---@param layer integer Target layer (same layer as the original apply)
 ---@param deferred table[] Deferred writes from `apply()`
----@return string[]? failures List of error messages for keys that still failed, or nil on success
+---@return { path: string, error: string }[]? failures Entries that still failed, or nil on success
 function M.apply_deferred(layer, deferred)
   assert(root_schema, "config.init() must be called before apply_deferred()")
   ---@type flemma.config.facade.ApplyContext
   local ctx = { schema = root_schema, layer = layer, bufnr = nil, deferred = nil }
+  ---@type { path: string, error: string }[]
   local failures = {}
   for _, entry in ipairs(deferred) do
     local ok, err = apply_recursive(ctx, entry.path, entry.value)
     if not ok then
-      table.insert(failures, err or ("unknown error at " .. entry.path))
+      table.insert(failures, { path = entry.path, error = err or ("unknown error at " .. entry.path) })
     end
   end
   if #failures > 0 then

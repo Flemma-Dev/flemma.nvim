@@ -559,7 +559,7 @@ describe("flemma.config — integration", function()
       local failures = config.apply_deferred(L.SETUP, deferred)
       assert.is_truthy(failures)
       assert.equals(1, #failures)
-      assert.matches("unknown key", failures[1])
+      assert.matches("unknown key", failures[1].error)
     end)
 
     it("known keys on DISCOVER objects are not deferred", function()

@@ -3,7 +3,6 @@
 ---@class flemma.Plugin
 local M = {}
 
-local plugin_config = require("flemma.config")
 local config_facade = require("flemma.config.facade")
 local schema_definition = require("flemma.config.schema.definition")
 local log = require("flemma.logging")
@@ -29,9 +28,6 @@ local cursor = require("flemma.cursor")
 local sandbox = require("flemma.sandbox")
 local lsp = require("flemma.lsp")
 
--- Module configuration (will hold merged user opts and defaults)
-local config = {}
-
 ---Setup function to initialize the plugin
 ---@param user_opts? flemma.Config.Opts User configuration overrides (merged with defaults)
 M.setup = function(user_opts)
@@ -50,20 +46,18 @@ M.setup = function(user_opts)
 
   user_opts = user_opts or {}
 
-  -- Initialize new config system: schema defaults (L10) + user opts (L20).
-  -- DISCOVER-backed keys (tool/provider-specific config) are deferred until
-  -- after module registration. Known keys are validated immediately.
+  -- Phase 1: Config foundation
+  -- Schema defaults (L10) + user opts (L20). DISCOVER-backed keys
+  -- (tool/provider/sandbox-specific config) are deferred until modules register.
   config_facade.init(schema_definition)
   local _, apply_err, deferred = config_facade.apply(config_facade.LAYERS.SETUP, user_opts, { defer_discover = true })
   if apply_err then
     log.warn("setup(): config validation: " .. apply_err)
   end
 
-  -- Old config system remains primary during the transition.
-  -- The new system validates and stores ops; the old system feeds consumers.
-  config = vim.tbl_deep_extend("force", {}, plugin_config, user_opts)
-
-  -- Store config in state module
+  -- Early materialize for consumers during module registration. DISCOVER
+  -- defaults aren't in L10 yet — those arrive as each module registers.
+  local config = config_facade.materialize()
   state.set_config(config)
 
   -- Hydrate preset definitions for fast lookup
@@ -71,15 +65,18 @@ M.setup = function(user_opts)
 
   -- Configure logging based on user settings
   log.configure({
-    enabled = state.get_config().logging.enabled,
-    path = state.get_config().logging.path,
-    level = state.get_config().logging.level,
+    enabled = config.logging.enabled,
+    path = config.logging.path,
+    level = config.logging.level,
   })
 
   -- Associate .chat files with the markdown treesitter parser
   vim.treesitter.language.register("markdown", { "chat" })
 
   log.info("setup(): Flemma starting...")
+
+  -- Phase 2: Module registration (populates DISCOVER caches)
+  -- These must run before the deferred apply so DISCOVER callbacks resolve.
 
   -- Initialize secrets module with built-in resolvers
   secrets.setup()
@@ -91,11 +88,38 @@ M.setup = function(user_opts)
   if loader.is_module_path(config.provider) then
     loader.assert_exists(config.provider)
     provider_registry.register(config.provider)
-    -- Update config.provider to the registered name (from metadata.name)
+    -- Write the resolved name to the SETUP layer so re-materialize picks it up.
     local mod = loader.load(config.provider)
+    local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
+    w.provider = mod.metadata.name
     config.provider = mod.metadata.name
-    state.set_config(config)
   end
+
+  -- Initialize tool registry with built-in tools
+  tools.setup()
+
+  -- Register built-in sandbox backends and validate availability
+  sandbox.setup()
+
+  -- Phase 3: Resolve deferred DISCOVER writes + re-materialize
+  -- Deferred user opts (e.g., parameters.vertex, tools.bash) now resolve.
+  if deferred then
+    local failures = config_facade.apply_deferred(config_facade.LAYERS.SETUP, deferred)
+    if failures then
+      local paths = {}
+      for _, f in ipairs(failures) do
+        table.insert(paths, f.path)
+      end
+      vim.notify("Flemma: unknown config keys: " .. table.concat(paths, ", "), vim.log.levels.WARN)
+    end
+  end
+
+  -- Re-materialize with complete config: DISCOVER defaults and deferred user
+  -- opts are now resolved. This is the authoritative config for provider init.
+  config = config_facade.materialize()
+  state.set_config(config)
+
+  -- Phase 4: Provider initialization (needs complete config)
 
   -- Resolve preset reference in model field (e.g., model = "$gemini-3-pro")
   local resolved_preset, preset_error = presets.resolve_default(config.model, user_opts.provider)
@@ -104,20 +128,38 @@ M.setup = function(user_opts)
     return
   end
   if resolved_preset then
+    -- Write resolved preset values to the SETUP layer.
+    local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
+    w.provider = resolved_preset.provider
+    w.model = resolved_preset.model
     config.provider = resolved_preset.provider
     config.model = resolved_preset.model
   end
 
-  -- Initialize provider based on the merged config
-  local current_config = state.get_config()
+  -- Initialize provider based on the resolved config
   if resolved_preset then
     -- Merge preset parameters on top of config parameters (same pattern as switch_provider)
     local merged_params =
-      config_manager.merge_parameters(current_config.parameters, resolved_preset.provider, resolved_preset.parameters)
-    core.initialize_provider(current_config.provider, current_config.model, merged_params)
+      config_manager.merge_parameters(config.parameters, resolved_preset.provider, resolved_preset.parameters)
+    core.initialize_provider(config.provider, config.model, merged_params)
   else
-    core.initialize_provider(current_config.provider, current_config.model, current_config.parameters)
+    core.initialize_provider(config.provider, config.model, config.parameters)
   end
+
+  -- Sync validated provider/model back to the facade. config_manager.apply_config()
+  -- writes these to state but doesn't know about the facade. Read from state
+  -- (not the local) to get the validated values. This entire bridge block
+  -- disappears when config_manager is rewritten to use the facade directly.
+  do
+    local validated = state.get_config()
+    local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
+    w.provider = validated.provider
+    if validated.model then
+      w.model = validated.model
+    end
+  end
+
+  -- Phase 5: Remaining setup
 
   -- Set up filetype detection for .chat files
   vim.filetype.add({
@@ -153,9 +195,6 @@ M.setup = function(user_opts)
   -- Initialize templating registry with built-in populators
   templating.setup()
 
-  -- Initialize tool registry with built-in tools
-  tools.setup()
-
   -- Initialize preprocessor with built-in rewriters and post-parse hook
   preprocessor.setup()
 
@@ -168,21 +207,9 @@ M.setup = function(user_opts)
   -- Initialize approval resolver chain from config
   tools_approval.setup()
 
-  -- Register built-in sandbox backends and validate availability
-  sandbox.setup()
-
   -- Set up experimental LSP if enabled
   if config.experimental and config.experimental.lsp then
     lsp.setup()
-  end
-
-  -- Replay deferred DISCOVER writes now that modules are registered.
-  -- Pass 2 failures mean the config key genuinely doesn't exist.
-  if deferred then
-    local failures = config_facade.apply_deferred(config_facade.LAYERS.SETUP, deferred)
-    if failures then
-      vim.notify("Flemma: unknown config keys: " .. table.concat(failures, ", "), vim.log.levels.WARN)
-    end
   end
 
   -- Defer sandbox backend check until the user enters a .chat buffer.
