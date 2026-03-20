@@ -92,6 +92,22 @@ function Node:get_item_schema()
   return nil
 end
 
+--- Whether this node has a DISCOVER callback for lazily resolving unknown keys.
+--- Base implementation returns false; ObjectNode overrides.
+---@return boolean
+function Node:has_discover()
+  return false
+end
+
+--- Iterate over all known fields (static + DISCOVER-cached) as (key, schema) pairs.
+--- Base implementation returns an empty iterator; ObjectNode overrides.
+--- Used by the facade's materialize() to walk the schema tree.
+---@return fun(t: table<string, flemma.config.schema.Node>, k?: string): string, flemma.config.schema.Node
+---@return table<string, flemma.config.schema.Node>
+function Node:all_known_fields()
+  return pairs({})
+end
+
 --- Validate a value against this schema node.
 --- Returns true on success, false + error message on failure.
 ---@param _value any
@@ -435,6 +451,27 @@ function ObjectNode:resolve_alias(key)
   return self._aliases[key]
 end
 
+--- Whether this object has a DISCOVER callback.
+---@return boolean
+function ObjectNode:has_discover()
+  return self._discover ~= nil
+end
+
+--- Iterate over all known fields: static fields first, then DISCOVER-cached entries.
+--- Returns (key, schema) pairs for every field the schema currently knows about.
+---@return fun(t: table<string, flemma.config.schema.Node>, k?: string): string, flemma.config.schema.Node
+---@return table<string, flemma.config.schema.Node>
+function ObjectNode:all_known_fields()
+  local combined = {}
+  for k, v in pairs(self._fields) do
+    combined[k] = v
+  end
+  for k, v in pairs(self._discover_cache) do
+    combined[k] = v
+  end
+  return pairs(combined)
+end
+
 --- Get the schema node for a direct child key.
 --- Does NOT resolve aliases — call resolve_alias() first if needed.
 --- Invokes the DISCOVER callback for unknown keys (cached after first resolution).
@@ -560,6 +597,17 @@ end
 ---@return boolean
 function OptionalNode:is_object()
   return self._inner:is_object()
+end
+
+---@return boolean
+function OptionalNode:has_discover()
+  return self._inner:has_discover()
+end
+
+---@return fun(t: table<string, flemma.config.schema.Node>, k?: string): string, flemma.config.schema.Node
+---@return table<string, flemma.config.schema.Node>
+function OptionalNode:all_known_fields()
+  return self._inner:all_known_fields()
 end
 
 ---@return flemma.config.schema.Node

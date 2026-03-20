@@ -4,6 +4,8 @@
 local M = {}
 
 local plugin_config = require("flemma.config")
+local config_facade = require("flemma.config.facade")
+local schema_definition = require("flemma.config.schema.definition")
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local core = require("flemma.core")
@@ -46,8 +48,19 @@ M.setup = function(user_opts)
     return
   end
 
-  -- Merge user config with defaults from the config module
   user_opts = user_opts or {}
+
+  -- Initialize new config system: schema defaults (L10) + user opts (L20).
+  -- DISCOVER-backed keys (tool/provider-specific config) are deferred until
+  -- after module registration. Known keys are validated immediately.
+  config_facade.init(schema_definition)
+  local _, apply_err, deferred = config_facade.apply(config_facade.LAYERS.SETUP, user_opts, { defer_discover = true })
+  if apply_err then
+    log.warn("setup(): config validation: " .. apply_err)
+  end
+
+  -- Old config system remains primary during the transition.
+  -- The new system validates and stores ops; the old system feeds consumers.
   config = vim.tbl_deep_extend("force", {}, plugin_config, user_opts)
 
   -- Store config in state module
@@ -161,6 +174,17 @@ M.setup = function(user_opts)
   -- Set up experimental LSP if enabled
   if config.experimental and config.experimental.lsp then
     lsp.setup()
+  end
+
+  -- Replay deferred DISCOVER writes now that modules are registered.
+  -- Failures are expected until tools/providers expose metadata.config_schema.
+  if deferred then
+    local failures = config_facade.apply_deferred(config_facade.LAYERS.SETUP, deferred)
+    if failures then
+      for _, msg in ipairs(failures) do
+        log.debug("setup(): deferred config key not resolved: " .. msg)
+      end
+    end
   end
 
   -- Defer sandbox backend check until the user enters a .chat buffer.

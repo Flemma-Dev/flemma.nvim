@@ -411,4 +411,282 @@ describe("flemma.config — integration", function()
       assert.is_nil(result.layer)
     end)
   end)
+
+  -- ---------------------------------------------------------------------------
+  -- defer_discover two-pass boot
+  -- ---------------------------------------------------------------------------
+
+  describe("defer_discover two-pass boot", function()
+    -- Schema with a DISCOVER-backed object for testing two-pass boot.
+    -- The DISCOVER callback resolves keys from a mutable registry table,
+    -- simulating provider/tool registration between pass 1 and pass 2.
+    local function make_discover_schema()
+      local registry = {}
+      local schema = s.object({
+        provider = s.string("default"),
+        parameters = s.object({
+          timeout = s.optional(s.integer()),
+          -- Built-in provider (statically defined)
+          builtin = s.object({
+            key_a = s.optional(s.string()),
+          }),
+          -- Dynamic providers resolved lazily
+          [symbols.DISCOVER] = function(key)
+            return registry[key]
+          end,
+        }),
+        tools = s.object({
+          modules = s.list(s.string(), {}),
+          timeout = s.integer(30),
+          -- Dynamic tool config resolved lazily
+          [symbols.DISCOVER] = function(key)
+            return registry["tool_" .. key]
+          end,
+        }),
+        [symbols.ALIASES] = {
+          timeout = "parameters.timeout",
+        },
+      })
+      return schema, registry
+    end
+
+    it("defers writes to DISCOVER-backed objects", function()
+      local schema, registry = make_discover_schema()
+      config.init(schema)
+
+      -- Pass 1: custom_provider is unknown (not in registry yet)
+      local ok, err, deferred = config.apply(L.SETUP, {
+        provider = "test",
+        parameters = {
+          timeout = 600,
+          custom_provider = { special_key = "value" },
+        },
+      }, { defer_discover = true })
+
+      assert.is_true(ok)
+      assert.is_nil(err)
+      assert.is_truthy(deferred)
+      assert.equals(1, #deferred)
+      assert.equals("parameters.custom_provider", deferred[1].path)
+
+      -- Known keys were applied immediately
+      assert.equals("test", config.get().provider)
+      assert.equals(600, config.get().parameters.timeout)
+
+      -- Register the schema
+      registry.custom_provider = s.object({
+        special_key = s.optional(s.string()),
+      })
+
+      -- Pass 2: deferred writes now resolve
+      local failures = config.apply_deferred(L.SETUP, deferred)
+      assert.is_nil(failures)
+
+      -- Value is accessible
+      assert.equals("value", config.get().parameters.custom_provider.special_key)
+    end)
+
+    it("defers multiple DISCOVER writes across different objects", function()
+      local schema, registry = make_discover_schema()
+      config.init(schema)
+
+      local ok, err, deferred = config.apply(L.SETUP, {
+        parameters = {
+          custom_provider = { key = "a" },
+        },
+        tools = {
+          bash = { shell = "/bin/zsh" },
+        },
+      }, { defer_discover = true })
+
+      assert.is_true(ok)
+      assert.is_nil(err)
+      assert.is_truthy(deferred)
+      assert.equals(2, #deferred)
+
+      -- Register both schemas
+      registry.custom_provider = s.object({ key = s.optional(s.string()) })
+      registry.tool_bash = s.object({ shell = s.optional(s.string()) })
+
+      local failures = config.apply_deferred(L.SETUP, deferred)
+      assert.is_nil(failures)
+
+      assert.equals("a", config.get().parameters.custom_provider.key)
+      assert.equals("/bin/zsh", config.get().tools.bash.shell)
+    end)
+
+    it("returns nil deferred when nothing needs deferring", function()
+      local schema = make_discover_schema()
+      config.init(schema)
+
+      local ok, err, deferred = config.apply(L.SETUP, {
+        provider = "openai",
+        parameters = { timeout = 1200 },
+      }, { defer_discover = true })
+
+      assert.is_true(ok)
+      assert.is_nil(err)
+      assert.is_nil(deferred)
+    end)
+
+    it("non-DISCOVER errors are still fatal in pass 1", function()
+      local schema = make_discover_schema()
+      config.init(schema)
+
+      -- Root object has no DISCOVER, so unknown root keys are immediate errors
+      local ok, err, deferred = config.apply(L.SETUP, {
+        completely_unknown = "value",
+      }, { defer_discover = true })
+
+      assert.is_nil(ok)
+      assert.is_truthy(err)
+      assert.matches("unknown key", err)
+      assert.is_nil(deferred)
+    end)
+
+    it("pass 2 fails for genuinely unknown keys", function()
+      local schema = make_discover_schema()
+      config.init(schema)
+
+      local ok, _, deferred = config.apply(L.SETUP, {
+        parameters = { nonexistent = "value" },
+      }, { defer_discover = true })
+
+      assert.is_true(ok)
+      assert.is_truthy(deferred)
+
+      -- Don't register anything — DISCOVER still returns nil
+      local failures = config.apply_deferred(L.SETUP, deferred)
+      assert.is_truthy(failures)
+      assert.equals(1, #failures)
+      assert.matches("unknown key", failures[1])
+    end)
+
+    it("known keys on DISCOVER objects are not deferred", function()
+      local schema = make_discover_schema()
+      config.init(schema)
+
+      -- "builtin" is a statically defined field on the parameters object
+      local ok, err, deferred = config.apply(L.SETUP, {
+        parameters = {
+          builtin = { key_a = "known" },
+        },
+      }, { defer_discover = true })
+
+      assert.is_true(ok)
+      assert.is_nil(err)
+      assert.is_nil(deferred)
+      assert.equals("known", config.get().parameters.builtin.key_a)
+    end)
+
+    it("without defer_discover, unknown DISCOVER keys fail immediately", function()
+      local schema = make_discover_schema()
+      config.init(schema)
+
+      -- Normal mode (no defer) — DISCOVER returns nil → error
+      local ok, err = config.apply(L.SETUP, {
+        parameters = { custom_provider = { key = "a" } },
+      })
+
+      assert.is_nil(ok)
+      assert.is_truthy(err)
+      assert.matches("unknown key", err)
+    end)
+
+    it("alias keys at root level are not deferred", function()
+      local schema = make_discover_schema()
+      config.init(schema)
+
+      local ok, err, deferred = config.apply(L.SETUP, {
+        timeout = 1200, -- alias for parameters.timeout
+      }, { defer_discover = true })
+
+      assert.is_true(ok)
+      assert.is_nil(err)
+      assert.is_nil(deferred)
+      assert.equals(1200, config.get().parameters.timeout)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- Materialization
+  -- ---------------------------------------------------------------------------
+
+  describe("materialize", function()
+    it("produces a plain table from defaults", function()
+      config.init(make_schema())
+      local result = config.materialize()
+      assert.equals("table", type(result))
+      assert.equals("anthropic", result.provider)
+      assert.equals("claude-sonnet-4-20250514", result.model)
+      assert.equals(120000, result.tools.timeout)
+      assert.are.same({ "$default" }, result.tools.auto_approve)
+      assert.are.same({}, result.tools.modules)
+    end)
+
+    it("includes setup layer values", function()
+      config.init(make_schema())
+      config.apply(L.SETUP, {
+        provider = "vertex",
+        parameters = { timeout = 600, thinking = "high" },
+      })
+      local result = config.materialize()
+      assert.equals("vertex", result.provider)
+      assert.equals(600, result.parameters.timeout)
+      assert.equals("high", result.parameters.thinking)
+    end)
+
+    it("includes runtime layer overrides", function()
+      config.init(make_schema())
+      config.apply(L.SETUP, { provider = "anthropic" })
+      config.writer(nil, L.RUNTIME).provider = "vertex"
+      local result = config.materialize()
+      assert.equals("vertex", result.provider)
+    end)
+
+    it("includes buffer-specific frontmatter values", function()
+      config.init(make_schema())
+      config.writer(1, L.FRONTMATTER).parameters.thinking = "low"
+      local global = config.materialize()
+      local buf1 = config.materialize(1)
+      assert.is_nil(global.parameters.thinking)
+      assert.equals("low", buf1.parameters.thinking)
+    end)
+
+    it("returns an independent copy safe for mutation", function()
+      config.init(make_schema())
+      local a = config.materialize()
+      local b = config.materialize()
+      a.provider = "mutated"
+      assert.equals("anthropic", b.provider)
+    end)
+
+    it("includes DISCOVER-cached fields after resolution", function()
+      local registry = {}
+      local schema = s.object({
+        extensions = s.object({
+          known = s.string("x"),
+          [symbols.DISCOVER] = function(key)
+            return registry[key]
+          end,
+        }),
+      })
+      config.init(schema)
+
+      -- Register and write through a discover-backed key
+      registry.custom = s.object({ value = s.optional(s.string()) })
+      config.writer(nil, L.SETUP).extensions.custom.value = "y"
+
+      local result = config.materialize()
+      assert.equals("x", result.extensions.known)
+      assert.equals("y", result.extensions.custom.value)
+    end)
+
+    it("resolves lists correctly", function()
+      config.init(make_schema())
+      config.writer(nil, L.SETUP).tools.auto_approve:append("bash")
+      local result = config.materialize()
+      assert.are.same({ "$default", "bash" }, result.tools.auto_approve)
+    end)
+  end)
 end)

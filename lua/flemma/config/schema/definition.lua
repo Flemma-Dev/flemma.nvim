@@ -162,11 +162,7 @@ return s.object({
     timeout = s.integer(600),
     connect_timeout = s.integer(10),
     cache_retention = s.enum({ "short", "long", "none" }, "short"),
-    thinking = s.union(
-      s.enum({ "minimal", "low", "medium", "high", "max" }, "high"),
-      s.number(),
-      s.literal(false)
-    ),
+    thinking = s.union(s.enum({ "minimal", "low", "medium", "high", "max" }, "high"), s.number(), s.literal(false)),
     -- Built-in provider parameter schemas (statically referenced)
     anthropic = AnthropicParametersSchema,
     openai = OpenAIParametersSchema,
