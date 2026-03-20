@@ -156,6 +156,8 @@ When you resolve a non-obvious issue — something that required real investigat
 
 - **Tool header backtick format is critical.** The parser relies on exact backtick wrapping in ``**Tool Use:** `name` (`id`)`` and `` **Tool Result:** `id` `` headers. Missing or misplaced backticks will cause parsing failures.
 
+- **Lua `a and b or c` ternary fails when `b` is falsy.** `true and false or x` evaluates to `x`, not `false`. Always use explicit `if/else` when the "true" branch value could be `false` or `nil`. This bit a dual-call convention closure (`maybe_item ~= nil and maybe_item or self_or_item`) where `maybe_item` was legitimately `false`.
+
 ## Session Closure Checklist
 
 - Run `flemma-fmt` to reformat the entire codebase.

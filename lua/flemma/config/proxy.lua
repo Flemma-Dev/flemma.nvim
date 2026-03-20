@@ -5,6 +5,8 @@
 ---   Read proxy  (`read_proxy`):  resolve config values through all store layers.
 ---   Write proxy (`write_proxy`): record ops to a specific layer with schema validation.
 ---   List proxy:                  returned by write proxy for list fields; exposes mutation ops.
+---   Hybrid proxy:                write proxy for ObjectNodes with :allow_list(); supports
+---                                both sub-key navigation and list ops (append/remove/prepend).
 ---   Frozen lens (`lens`):        read-only proxy rooted at a config sub-path.
 ---
 --- This is an internal module. The public API lives in flemma.config.
@@ -49,38 +51,64 @@ end
 ---@field _layer integer Target layer for write ops
 ---@field _bufnr integer? Buffer number
 ---@field _item_schema flemma.config.schema.Node Schema for each list item
+---@field _coerce_fn? fun(value: any, ctx: flemma.config.CoerceContext?): any Per-item coerce function
 local ListProxy = {}
 ListProxy.__index = ListProxy
 
---- Validate an item and record an append op.
+--- Coerce an item and record one or more ops of the given type.
+--- If coerce expands a single item into a table, each expanded item becomes
+--- a separate op (e.g., remove("$default") → remove("bash") + remove("ls")).
+--- Validates each expanded item against the item schema (except for remove).
+---@param self flemma.config.ListProxy
+---@param op "append"|"remove"|"prepend"
+---@param item any
+---@param skip_validation? boolean True for remove (no-op if absent)
+local function record_list_op(self, op, item, skip_validation)
+  if self._coerce_fn then
+    item = self._coerce_fn(item, store.make_coerce_context())
+  end
+  if type(item) == "table" then
+    for _, expanded in ipairs(item) do
+      if not skip_validation then
+        local ok, err = self._item_schema:validate_value(expanded)
+        if not ok then
+          error(string.format("config list %s error at '%s': %s", op, self._path, err or "invalid"))
+        end
+      end
+      store.record(self._layer, self._bufnr, op, self._path, expanded)
+    end
+  else
+    if not skip_validation then
+      local ok, err = self._item_schema:validate_value(item)
+      if not ok then
+        error(string.format("config list %s error at '%s': %s", op, self._path, err or "invalid"))
+      end
+    end
+    store.record(self._layer, self._bufnr, op, self._path, item)
+  end
+end
+
+--- Coerce, validate, and record an append op.
 ---@param item any
 ---@return flemma.config.ListProxy self
 function ListProxy:append(item)
-  local ok, err = self._item_schema:validate_value(item)
-  if not ok then
-    error(string.format("config list append error at '%s': %s", self._path, err or "invalid"))
-  end
-  store.record(self._layer, self._bufnr, "append", self._path, item)
+  record_list_op(self, "append", item)
   return self
 end
 
---- Record a remove op (no-op if item is absent; no item validation needed).
+--- Coerce and record a remove op (no item validation — no-op if absent).
 ---@param item any
 ---@return flemma.config.ListProxy self
 function ListProxy:remove(item)
-  store.record(self._layer, self._bufnr, "remove", self._path, item)
+  record_list_op(self, "remove", item, true)
   return self
 end
 
---- Validate an item and record a prepend op.
+--- Coerce, validate, and record a prepend op.
 ---@param item any
 ---@return flemma.config.ListProxy self
 function ListProxy:prepend(item)
-  local ok, err = self._item_schema:validate_value(item)
-  if not ok then
-    error(string.format("config list prepend error at '%s': %s", self._path, err or "invalid"))
-  end
-  store.record(self._layer, self._bufnr, "prepend", self._path, item)
+  record_list_op(self, "prepend", item)
   return self
 end
 
@@ -103,13 +131,15 @@ end
 ---@param layer integer
 ---@param bufnr integer?
 ---@param item_schema flemma.config.schema.Node
+---@param coerce_fn? fun(value: any, ctx: flemma.config.CoerceContext?): any
 ---@return flemma.config.ListProxy
-local function make_list_proxy(path, layer, bufnr, item_schema)
+local function make_list_proxy(path, layer, bufnr, item_schema, coerce_fn)
   return setmetatable({
     _path = path,
     _layer = layer,
     _bufnr = bufnr,
     _item_schema = item_schema,
+    _coerce_fn = coerce_fn,
   }, ListProxy)
 end
 
@@ -117,10 +147,57 @@ end
 -- Read / Write Proxy factory
 -- ---------------------------------------------------------------------------
 
+--- Known list method names. Hybrid proxies expose these as bound methods
+--- when the key is not a schema field or alias.
+---@type table<string, boolean>
+local LIST_METHODS = { append = true, remove = true, prepend = true }
+
+--- Check whether a value is a write proxy or ListProxy returned from an
+--- operator chain. Such values are sentinels — the ops were already recorded
+--- by the operator, so assignment back to the parent proxy is a no-op.
+---@param value any
+---@return boolean
+local function is_op_chain_sentinel(value)
+  local mt = getmetatable(value)
+  if mt == nil then
+    return false
+  end
+  -- ListProxy from pure list fields
+  if mt == ListProxy then
+    return true
+  end
+  -- Write proxy returned from hybrid operator chains (__add/__sub/__pow)
+  if mt._is_write_proxy then
+    return true
+  end
+  return false
+end
+
+--- Validate each item in a list table against the given item schema.
+--- Returns true on success, false + error on the first invalid item.
+---@param items any[] Sequential table of items
+---@param item_schema flemma.config.schema.Node Schema for each item
+---@param path string Canonical path (for error messages)
+---@return boolean ok
+---@return string? err
+local function validate_list_items(items, item_schema, path)
+  for i, item in ipairs(items) do
+    local ok, err = item_schema:validate_value(item)
+    if not ok then
+      return false, string.format("config list set error at '%s' item[%d]: %s", path, i, err or "invalid")
+    end
+  end
+  return true
+end
+
 --- Internal factory: create a read or write proxy.
 ---
 --- `layer = nil`  → read-only proxy; any write attempt errors.
 --- `layer = <n>`  → write proxy; records ops to that layer with schema validation.
+---
+--- For ObjectNodes with `:allow_list()`, write proxies become hybrid: they support
+--- both sub-key navigation (object behavior) and list ops (append/remove/prepend +
+--- operators). List set is triggered by assigning a sequential table.
 ---
 --- The `base_path` and `current_schema` describe the proxy's root in the config tree.
 --- The root-level proxy has `base_path = ""` and `current_schema = root_schema`.
@@ -133,10 +210,14 @@ end
 local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
   local proxy = {}
 
+  local unwrapped_current = nav.unwrap_optional(current_schema)
+  local is_hybrid = layer ~= nil and unwrapped_current:has_list_part()
+
   local mt = {
+    -- Used by is_op_chain_sentinel to detect operator chain returns.
+    _is_write_proxy = (layer ~= nil),
+
     __index = function(_, key)
-      -- symbols.CLEAR: clear all ops on the target layer and return self.
-      -- Only valid on write proxies — calling clear on a read proxy is a bug.
       if key == symbols.CLEAR then
         assert(layer ~= nil, "symbols.CLEAR called on a read-only proxy")
         return function()
@@ -145,19 +226,33 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
         end
       end
 
-      -- Only string keys are valid config paths. Non-string keys (symbols,
-      -- numeric indices, etc.) have no meaning in the config schema.
       if type(key) ~= "string" then
         return nil
       end
 
-      -- Resolve alias and compute the full canonical path from config root.
       local obj_node = nav.unwrap_optional(current_schema)
       local canonical = canonical_path_for(obj_node, base_path, key)
 
-      -- Navigate the root schema to the canonical path to determine the node type.
       local leaf = nav.navigate_schema(root_schema, canonical)
       if leaf == nil then
+        if is_hybrid and LIST_METHODS[key] then
+          -- is_hybrid guarantees layer ~= nil.
+          local write_layer = layer --[[@as integer]]
+          local item_schema = unwrapped_current:get_list_item_schema() --[[@as flemma.config.schema.Node]]
+          local coerce_fn = unwrapped_current:has_coerce() and unwrapped_current:get_coerce() or nil
+          local list_proxy = make_list_proxy(base_path, write_layer, bufnr, item_schema, coerce_fn)
+          local skip_validation = (key == "remove")
+          return function(self_or_item, maybe_item)
+            local item
+            if maybe_item ~= nil then
+              item = maybe_item
+            else
+              item = self_or_item
+            end
+            record_list_op(list_proxy, key, item, skip_validation)
+            return proxy
+          end
+        end
         error(string.format("config: unknown key '%s'", canonical))
       end
 
@@ -168,9 +263,11 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
 
       -- List field on a write proxy → return a ListProxy for mutation ops.
       -- get_item_schema() is non-nil when is_list() is true (ListNode guarantees this).
+      -- Pass the leaf's coerce function so list ops expand per-item at write time.
       if leaf:is_list() and layer ~= nil then
         local item_schema = leaf:get_item_schema() --[[@as flemma.config.schema.Node]]
-        return make_list_proxy(canonical, layer, bufnr, item_schema)
+        local coerce_fn = leaf:has_coerce() and leaf:get_coerce() or nil
+        return make_list_proxy(canonical, layer, bufnr, item_schema, coerce_fn)
       end
 
       -- Leaf scalar (or list on a read proxy) → resolve from store.
@@ -196,10 +293,10 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
         error(string.format("config: unknown key '%s'", canonical))
       end
 
-      -- Operator chains (+ - ^) already recorded their ops via the ListProxy and
-      -- return the proxy itself. When assigned back (e.g. `w.f = w.f + item`),
-      -- the ListProxy value is a sentinel: the ops are done, nothing to record.
-      if getmetatable(value) == ListProxy then
+      -- Operator chains (+ - ^) already recorded their ops via the ListProxy
+      -- or hybrid proxy and return the proxy itself. When assigned back
+      -- (e.g. `w.f = w.f + item`), the value is a sentinel: ops are done.
+      if is_op_chain_sentinel(value) then
         return
       end
 
@@ -209,12 +306,47 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
       -- Context enables coerce functions to resolve deferred references (e.g.,
       -- preset names) by reading other config values from the store.
       local ctx = store.make_coerce_context()
-      value = leaf:apply_coerce(value, ctx)
+      local unwrapped_leaf = nav.unwrap_optional(leaf)
 
-      -- Object nodes: if coerce produced a table, recursively set each sub-field
-      -- via a sub-proxy (which handles per-field validation and aliases). If the
-      -- value is NOT a table after coerce, it's a genuine type error.
+      -- List-typed fields with coerce: expand per-item so that preset references
+      -- like "$default" are resolved into individual tool names at write time.
+      -- This applies to pure ListNodes and hybrid ObjectNodes with allow_list().
+      local is_list_set = false
+      if leaf:has_coerce() and type(value) == "table" then
+        if unwrapped_leaf:is_list() or unwrapped_leaf:has_list_part() then
+          local expanded = {}
+          for _, item in ipairs(value) do
+            local coerced = leaf:apply_coerce(item, ctx)
+            if type(coerced) == "table" then
+              vim.list_extend(expanded, coerced)
+            else
+              table.insert(expanded, coerced)
+            end
+          end
+          value = expanded
+          is_list_set = true
+        end
+      end
+      if not is_list_set then
+        value = leaf:apply_coerce(value, ctx)
+      end
+
+      -- Object nodes: handle allow_list (hybrid) and plain object assignment.
       if leaf:is_object() then
+        -- Hybrid objects with allow_list: sequential table → list set.
+        -- Non-sequential tables fall through to normal object behavior.
+        if unwrapped_leaf:has_list_part() and type(value) == "table" and vim.islist(value) then
+          local list_item_schema = unwrapped_leaf:get_list_item_schema() --[[@as flemma.config.schema.Node]]
+          local ok, err = validate_list_items(value, list_item_schema, canonical)
+          if not ok then
+            error(err)
+          end
+          store.record(layer, bufnr, "set", canonical, value)
+          return
+        end
+
+        -- Normal object assignment: recursively set each sub-field via a
+        -- sub-proxy (which handles per-field validation and aliases).
         if type(value) == "table" then
           local sub_proxy = make_proxy(root_schema, bufnr, layer, canonical, leaf)
           for k, v in pairs(value) do
@@ -240,6 +372,30 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
       store.record(layer, bufnr, "set", canonical, value)
     end,
   }
+
+  -- Hybrid: operator overloads route through record_list_op for coerce support.
+  -- is_hybrid guarantees layer ~= nil; cast once for all closures.
+  if is_hybrid then
+    local write_layer = layer --[[@as integer]]
+    local item_schema = unwrapped_current:get_list_item_schema() --[[@as flemma.config.schema.Node]]
+    local coerce_fn = unwrapped_current:has_coerce() and unwrapped_current:get_coerce() or nil
+    local list_proxy = make_list_proxy(base_path, write_layer, bufnr, item_schema, coerce_fn)
+
+    mt.__add = function(_, item)
+      record_list_op(list_proxy, "append", item)
+      return proxy
+    end
+
+    mt.__sub = function(_, item)
+      record_list_op(list_proxy, "remove", item, true)
+      return proxy
+    end
+
+    mt.__pow = function(_, item)
+      record_list_op(list_proxy, "prepend", item)
+      return proxy
+    end
+  end
 
   return setmetatable(proxy, mt)
 end

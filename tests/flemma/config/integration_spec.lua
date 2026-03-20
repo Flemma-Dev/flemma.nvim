@@ -890,4 +890,75 @@ describe("flemma.config — integration", function()
       assert.are.same({ "bash", "grep" }, config.get().tools.auto_approve)
     end)
   end)
+
+  -- ---------------------------------------------------------------------------
+  -- Coerce expansion + frontmatter remove across layers
+  -- ---------------------------------------------------------------------------
+
+  describe("coerce expansion + frontmatter remove", function()
+    -- Simulates tools.auto_approve with $preset expansion:
+    -- $default expands to { "bash", "ls" }, "search" is a plain tool name.
+    -- Frontmatter :remove("$default") expands at write time to
+    -- remove("bash") + remove("ls"), leaving only "search".
+    local function make_coerce_schema()
+      local presets = {
+        ["$default"] = { "bash", "ls" },
+      }
+      local coerce_fn = function(value, ctx)
+        if not ctx then
+          return value
+        end
+        if type(value) == "string" and vim.startswith(value, "$") then
+          return presets[value] or value
+        end
+        return value
+      end
+      return s.object({
+        items = s.list(s.string(), { "$default", "search" }):coerce(coerce_fn),
+      })
+    end
+
+    it("finalize expands $default in defaults layer", function()
+      local schema = make_coerce_schema()
+      config.init(schema)
+      config.finalize(L.DEFAULTS)
+      -- After finalize, "$default" in L10 should be expanded to "bash", "ls"
+      assert.are.same({ "bash", "ls", "search" }, config.get().items)
+    end)
+
+    it("frontmatter remove of $default expands at write time, no second finalize needed", function()
+      local schema = make_coerce_schema()
+      config.init(schema)
+      -- Boot: finalize expands L10 "$default" → ["bash", "ls", "search"]
+      config.finalize(L.DEFAULTS)
+      assert.are.same({ "bash", "ls", "search" }, config.get().items)
+
+      -- Frontmatter: remove("$default") coerces at write time → remove("bash") + remove("ls")
+      config.writer(1, L.FRONTMATTER).items:remove("$default")
+      -- No second finalize — per-op coerce expanded the remove immediately
+      assert.are.same({ "search" }, config.get(1).items)
+    end)
+
+    it("frontmatter remove does not affect buffers without the remove", function()
+      local schema = make_coerce_schema()
+      config.init(schema)
+      config.finalize(L.DEFAULTS)
+
+      config.writer(1, L.FRONTMATTER).items:remove("$default")
+      -- Buffer 1: $default removed, only "search" remains
+      assert.are.same({ "search" }, config.get(1).items)
+      -- Buffer 2 (no frontmatter): full expanded list
+      assert.are.same({ "bash", "ls", "search" }, config.get(2).items)
+    end)
+
+    it("frontmatter list set expands per-item at write time", function()
+      local schema = make_coerce_schema()
+      config.init(schema)
+      config.finalize(L.DEFAULTS)
+
+      -- Assign a list with a $preset reference — expanded at write time
+      config.writer(1, L.FRONTMATTER).items = { "$default" }
+      assert.are.same({ "bash", "ls" }, config.get(1).items)
+    end)
+  end)
 end)

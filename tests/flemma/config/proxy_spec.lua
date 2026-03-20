@@ -335,6 +335,15 @@ describe("flemma.config.proxy", function()
       assert.are.same({ "bash" }, store.resolve("tools.auto_approve", nil))
     end)
 
+    it("remove sole item yields an empty list", function()
+      local schema = make_test_schema()
+      store.init(schema)
+      store.record(L.DEFAULTS, nil, "set", "tools.auto_approve", { "$default" })
+      local w = proxy.write_proxy(schema, nil, L.SETUP)
+      w.tools.auto_approve:remove("$default")
+      assert.are.same({}, store.resolve("tools.auto_approve", nil))
+    end)
+
     it("prepend records a prepend op", function()
       local schema = make_test_schema()
       store.init(schema)
@@ -812,6 +821,280 @@ describe("flemma.config.proxy", function()
       local w = proxy.write_proxy(schema, nil, L.SETUP)
       w.feature = nil
       assert.is_false(coerce_called)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- Hybrid proxy: ObjectNode with :allow_list() on write proxy
+  -- ---------------------------------------------------------------------------
+
+  describe("hybrid proxy — ObjectNode with allow_list", function()
+    -- Schema: tools is an object with sub-fields AND accepts list ops on its path.
+    local function make_hybrid_schema()
+      return s.object({
+        tools = s.object({
+          auto_approve = s.list(s.string(), {}),
+          timeout = s.integer(120000),
+          [symbols.ALIASES] = {
+            approve = "auto_approve",
+          },
+        }):allow_list(s.string()),
+      })
+    end
+
+    describe("list set via assignment", function()
+      it("assigns a sequential table as a list set op", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        w.tools = { "bash", "grep" }
+        assert.are.same({ "bash", "grep" }, store.resolve("tools", nil))
+      end)
+
+      it("assigns an empty list", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        store.record(L.DEFAULTS, nil, "set", "tools", { "bash", "grep", "find" })
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        w.tools = {}
+        assert.are.same({}, store.resolve("tools", nil))
+      end)
+
+      it("validates list items against the item schema", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        assert.has_error(function()
+          w.tools = { "bash", 42 }
+        end)
+      end)
+    end)
+
+    describe("object sub-key assignment via table", function()
+      it("non-list table walks into sub-keys (object behavior)", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        w.tools = { timeout = 300 }
+        assert.equals(300, store.resolve("tools.timeout", nil))
+      end)
+
+      it("table with alias key resolves alias", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        w.tools = { approve = { "bash" } }
+        assert.are.same({ "bash" }, store.resolve("tools.auto_approve", nil))
+      end)
+    end)
+
+    describe("list methods on sub-proxy", function()
+      it("append records an append op at the object path", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        store.record(L.DEFAULTS, nil, "set", "tools", { "bash" })
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        w.tools:append("grep")
+        assert.are.same({ "bash", "grep" }, store.resolve("tools", nil))
+      end)
+
+      it("remove records a remove op at the object path", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        store.record(L.DEFAULTS, nil, "set", "tools", { "bash", "grep" })
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        w.tools:remove("bash")
+        assert.are.same({ "grep" }, store.resolve("tools", nil))
+      end)
+
+      it("prepend records a prepend op at the object path", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        store.record(L.DEFAULTS, nil, "set", "tools", { "bash" })
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        w.tools:prepend("find")
+        assert.are.same({ "find", "bash" }, store.resolve("tools", nil))
+      end)
+
+      it("append validates items against the list item schema", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        assert.has_error(function()
+          w.tools:append(42)
+        end)
+      end)
+
+      it("prepend validates items against the list item schema", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        assert.has_error(function()
+          w.tools:prepend(false)
+        end)
+      end)
+
+      it("remove does not validate items (no-op if absent)", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        assert.has_no.errors(function()
+          w.tools:remove("nonexistent")
+        end)
+      end)
+
+      it("method chaining: append then remove", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        store.record(L.DEFAULTS, nil, "set", "tools", { "bash", "grep" })
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        w.tools:append("find"):remove("bash")
+        assert.are.same({ "grep", "find" }, store.resolve("tools", nil))
+      end)
+    end)
+
+    describe("operators", function()
+      it("+ operator appends", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        store.record(L.DEFAULTS, nil, "set", "tools", { "bash" })
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        w.tools = w.tools + "grep"
+        assert.are.same({ "bash", "grep" }, store.resolve("tools", nil))
+      end)
+
+      it("- operator removes", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        store.record(L.DEFAULTS, nil, "set", "tools", { "bash", "grep" })
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        w.tools = w.tools - "bash"
+        assert.are.same({ "grep" }, store.resolve("tools", nil))
+      end)
+
+      it("^ operator prepends", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        store.record(L.DEFAULTS, nil, "set", "tools", { "bash" })
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        w.tools = w.tools ^ "find"
+        assert.are.same({ "find", "bash" }, store.resolve("tools", nil))
+      end)
+
+      it("operator chaining: + then + then -", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        store.record(L.DEFAULTS, nil, "set", "tools", { "bash" })
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        w.tools = w.tools + "grep" + "find" - "bash"
+        assert.are.same({ "grep", "find" }, store.resolve("tools", nil))
+      end)
+
+      it("+ operator validates items against item schema", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        assert.has_error(function()
+          w.tools = w.tools + 42
+        end)
+      end)
+    end)
+
+    describe("object navigation coexists with list ops", function()
+      it("sub-key read via dot navigation works", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        store.record(L.SETUP, nil, "set", "tools.timeout", 300)
+        local r = proxy.read_proxy(schema, nil)
+        assert.equals(300, r.tools.timeout)
+      end)
+
+      it("sub-key write via dot navigation works", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        w.tools.timeout = 500
+        assert.equals(500, store.resolve("tools.timeout", nil))
+      end)
+
+      it("nested list proxy (auto_approve) works through hybrid parent", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        store.record(L.DEFAULTS, nil, "set", "tools.auto_approve", { "$default" })
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        w.tools.auto_approve:append("bash")
+        assert.are.same({ "$default", "bash" }, store.resolve("tools.auto_approve", nil))
+      end)
+
+      it("list method then sub-key navigation via chaining", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        store.record(L.DEFAULTS, nil, "set", "tools", { "bash" })
+        local w = proxy.write_proxy(schema, nil, L.SETUP)
+        local returned = w.tools:append("grep")
+        -- Returned proxy should support sub-key navigation
+        returned.timeout = 300
+        assert.are.same({ "bash", "grep" }, store.resolve("tools", nil))
+        assert.equals(300, store.resolve("tools.timeout", nil))
+      end)
+
+      it("schema field names take priority over list method names", function()
+        -- If the object has a field called "append", it should be treated
+        -- as a schema field, not a list method.
+        local schema = s.object({
+          items = s.object({
+            append = s.string("default"),
+          }):allow_list(s.string()),
+        })
+        store.init(schema)
+        store.record(L.DEFAULTS, nil, "set", "items.append", "default")
+        local r = proxy.read_proxy(schema, nil)
+        assert.equals("default", r.items.append)
+      end)
+    end)
+
+    describe("read proxy behavior with allow_list", function()
+      it("sub-key navigation works on read proxy", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        store.record(L.SETUP, nil, "set", "tools.timeout", 300)
+        local cfg = proxy.read_proxy(schema, nil)
+        assert.equals(300, cfg.tools.timeout)
+      end)
+
+      it("list methods are not available on read proxy", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        local cfg = proxy.read_proxy(schema, nil)
+        -- "append" is not a schema field, so it should error on read proxy
+        assert.has_error(function()
+          local _ = cfg.tools.append
+        end)
+      end)
+
+      it("operators are not available on read proxy", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        local cfg = proxy.read_proxy(schema, nil)
+        -- __add is not set on read proxies; should error
+        assert.has_error(function()
+          local _ = cfg.tools + "bash"
+        end)
+      end)
+    end)
+
+    describe("buffer isolation", function()
+      it("frontmatter list ops are per-buffer", function()
+        local schema = make_hybrid_schema()
+        store.init(schema)
+        store.record(L.DEFAULTS, nil, "set", "tools", { "bash", "grep" })
+        local w1 = proxy.write_proxy(schema, 1, L.FRONTMATTER)
+        local w2 = proxy.write_proxy(schema, 2, L.FRONTMATTER)
+        w1.tools = { "bash" }
+        w2.tools:remove("bash")
+        assert.are.same({ "bash" }, store.resolve("tools", 1))
+        assert.are.same({ "grep" }, store.resolve("tools", 2))
+      end)
     end)
   end)
 end)

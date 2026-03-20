@@ -178,7 +178,7 @@ return s.object({
     [symbols.ALIASES] = {
       approve = "auto_approve",
     },
-  }),
+  }):allow_list(s.string()),
 
   templating = s.object({
     modules = s.list(s.loadable(), {}),
