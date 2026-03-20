@@ -49,11 +49,9 @@ end
 ---@param opts flemma.opt.FrontmatterOpts|nil
 ---@return { merged: table<string, any>, frontmatter_overrides: table<string, any>|nil, resolved_max_tokens: integer|nil }
 local function collect_parameters(config, opts)
-  -- Use the provider instance's actual parameters when available (includes switch overrides).
-  -- Fall back to re-deriving from global config when no provider is initialized.
-  local provider_instance = state.get_provider()
-  local base_merged = provider_instance and provider_instance._base_parameters
-    or config_manager.merge_parameters(config.parameters or {}, config.provider)
+  -- Flatten parameters from the materialized config. This reads from the
+  -- facade-resolved state, which includes all layers (DEFAULTS + SETUP + RUNTIME).
+  local base_merged = config_manager.flatten_provider_params(config.provider, config)
 
   -- Resolve max_tokens on a copy to show the resolved integer alongside the original
   local resolved_max_tokens = nil

@@ -102,7 +102,7 @@ local sink = require("flemma.sink")
 
 ---@class flemma.provider.ProviderState
 
---- Flattened per-provider parameters (result of config_manager.merge_parameters on flemma.config.Parameters).
+--- Flattened per-provider parameters (result of config_manager.flatten_provider_params).
 --- Provider-specific sub-tables (e.g. `vertex`, `openai`) are merged to top level.
 ---@class flemma.provider.Parameters
 ---@field model string Model name (always present after initialization)

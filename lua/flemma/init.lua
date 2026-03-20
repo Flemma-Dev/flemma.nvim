@@ -15,7 +15,6 @@ local keymaps = require("flemma.keymaps")
 local highlight = require("flemma.highlight")
 local provider_registry = require("flemma.provider.registry")
 local loader = require("flemma.loader")
-local config_manager = require("flemma.core.config.manager")
 local notifications = require("flemma.notifications")
 local personalities = require("flemma.personalities")
 local secrets = require("flemma.secrets")
@@ -138,13 +137,17 @@ M.setup = function(user_opts)
 
   -- Initialize provider based on the resolved config. Pass SETUP layer so the
   -- validated provider/model go to the same layer as user opts (not RUNTIME).
+  -- Only pass the preset's extra parameters as explicit overrides — the user's
+  -- setup parameters are already in L20 from config_facade.apply() above.
   if resolved_preset then
-    -- Merge preset parameters on top of config parameters (same pattern as switch_provider)
-    local merged_params =
-      config_manager.merge_parameters(config.parameters, resolved_preset.provider, resolved_preset.parameters)
-    core.initialize_provider(config.provider, config.model, merged_params, config_facade.LAYERS.SETUP)
+    core.initialize_provider(
+      resolved_preset.provider or config.provider,
+      resolved_preset.model or config.model,
+      resolved_preset.parameters or {},
+      config_facade.LAYERS.SETUP
+    )
   else
-    core.initialize_provider(config.provider, config.model, config.parameters, config_facade.LAYERS.SETUP)
+    core.initialize_provider(config.provider, config.model, {}, config_facade.LAYERS.SETUP)
   end
 
   -- Phase 5: Remaining setup

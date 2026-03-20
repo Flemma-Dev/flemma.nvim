@@ -4,24 +4,19 @@
 local M = {}
 
 local config_facade = require("flemma.config")
+local nav = require("flemma.config.schema.navigation")
 local log = require("flemma.logging")
 local state = require("flemma.state")
 local registry = require("flemma.provider.registry")
+local schema_definition = require("flemma.config.schema.definition")
 
 local FALLBACK_MAX_TOKENS = 4000
 local MIN_MAX_TOKENS = 1024
 
----Check if a parameter key is a general parameter applicable to all providers
----@param key string
----@return boolean
-local function is_general_parameter(key)
-  return key == "max_tokens"
-    or key == "temperature"
-    or key == "timeout"
-    or key == "connect_timeout"
-    or key == "cache_retention"
-    or key == "thinking"
-end
+--- The parameters schema node, used to distinguish static (general) fields
+--- from DISCOVER-resolved (provider-specific) fields.
+---@type flemma.config.schema.Node
+local parameters_schema = nav.unwrap_optional(schema_definition):get_child_schema("parameters") --[[@as flemma.config.schema.Node]]
 
 --------------------------------------------------------------------------------
 -- Validation functions (merged from core/validation.lua)
@@ -180,65 +175,46 @@ end
 -- Configuration management
 --------------------------------------------------------------------------------
 
----Merges parameters for a provider, handling general and provider-specific parameters
----Priority (lowest to highest):
----  1. Registered default_parameters from provider registry
----  2. General params from base_params (max_tokens, temperature, etc.)
----  3. Provider-specific overrides from base_params[provider_name] or explicit overrides
----@param base_params table<string, any>
----@param provider_name string
----@param provider_overrides? table<string, any>
----@return table<string, any> merged
-function M.merge_parameters(base_params, provider_name, provider_overrides)
-  local merged_params = {}
-  base_params = base_params or {}
-  -- Merge provider sub-table from base_params with explicit overrides (explicit wins).
-  -- Previously, explicit overrides replaced the sub-table entirely, silently dropping
-  -- keys like project_id when switching providers via presets.
-  local provider_sub = type(base_params[provider_name]) == "table" and base_params[provider_name] or {}
-  if provider_overrides then
-    local merged_overrides = {}
-    for k, v in pairs(provider_sub) do
-      merged_overrides[k] = v
-    end
-    for k, v in pairs(provider_overrides) do
-      merged_overrides[k] = v
-    end
-    provider_overrides = merged_overrides
-  else
-    provider_overrides = provider_sub
-  end
-
-  -- 1. Start with registered default parameters (lowest priority)
-  local registered_defaults = registry.get_default_parameters(provider_name)
-  if registered_defaults then
-    for k, v in pairs(registered_defaults) do
-      merged_params[k] = v
+---Flatten provider parameters from a materialized config into a single table.
+---Copies general parameters from `config.parameters`, overlays provider-specific
+---parameters from `config.parameters[provider_name]`, and adds `model`.
+---This replaces merge_parameters — the facade's layer resolution handles merging;
+---this function only flattens the namespaced schema structure for provider.new().
+---@param provider_name string Resolved provider name
+---@param config table Materialized config from config_facade.materialize()
+---@return table<string, any> flat Flattened parameter table for provider.new()
+function M.flatten_provider_params(provider_name, config)
+  local flat = {}
+  local params = config.parameters or {}
+  -- Copy general parameters (non-table scalar values)
+  for k, v in pairs(params) do
+    if type(v) ~= "table" then
+      flat[k] = v
     end
   end
-
-  -- 2. Copy all non-provider-specific keys from the base parameters
-  for k, v in pairs(base_params) do
-    -- Only copy if it's not a provider-specific table or if it's a general parameter
-    if type(v) ~= "table" or is_general_parameter(k) then
-      merged_params[k] = v
+  -- Overlay provider-specific parameters (highest specificity wins)
+  local specific = params[provider_name]
+  if type(specific) == "table" then
+    for k, v in pairs(specific) do
+      flat[k] = v
     end
   end
-
-  -- 3. Merge the provider-specific overrides, potentially overwriting general keys
-  for k, v in pairs(provider_overrides) do
-    merged_params[k] = v
-  end
-
-  return merged_params
+  flat.model = config.model
+  return flat
 end
 
----Prepares a complete configuration for a provider
+---Validate provider and model, write explicit parameters to the facade,
+---and return a provider-ready configuration with flattened parameters.
+---
+---Parameters are written to the facade at the correct namespaced paths:
+---general params (max_tokens, thinking, etc.) go to `parameters.<key>`,
+---provider-specific params go to `parameters.<provider>.<key>`.
 ---@param provider_name string
 ---@param model_name? string
----@param parameters? table<string, any>
+---@param explicit_params? table<string, any> Only the user's explicit overrides
+---@param layer? integer Facade layer to write to (default: RUNTIME)
 ---@return { provider: string, model: string, parameters: table<string, any> }|nil config, string|nil err
-function M.prepare_config(provider_name, model_name, parameters)
+function M.prepare_config(provider_name, model_name, explicit_params, layer)
   -- Validate provider
   local valid, err = M.validate_provider(provider_name)
   if not valid then
@@ -256,15 +232,18 @@ function M.prepare_config(provider_name, model_name, parameters)
     return nil, model_err
   end
 
-  -- Merge parameters
-  local merged_params = M.merge_parameters(parameters or {}, resolved_provider)
-  merged_params.model = validated_model
+  -- Write to the facade: provider, model, and explicit parameters
+  M.apply_config(resolved_provider, validated_model, explicit_params, layer)
+
+  -- Read back from the materialized facade state and flatten for provider.new()
+  local resolved_config = state.get_config()
+  local flat_params = M.flatten_provider_params(resolved_provider, resolved_config)
 
   -- Resolve percentage-based or over-limit max_tokens before validation
-  M.resolve_max_tokens(resolved_provider, validated_model, merged_params)
+  M.resolve_max_tokens(resolved_provider, validated_model, flat_params)
 
   -- Validate parameters (shows warnings but doesn't fail)
-  M.validate_parameters(resolved_provider, validated_model, merged_params)
+  M.validate_parameters(resolved_provider, validated_model, flat_params)
 
   -- Log the final configuration
   log.debug(
@@ -273,46 +252,67 @@ function M.prepare_config(provider_name, model_name, parameters)
       .. " with model "
       .. log.inspect(validated_model)
       .. " and parameters: "
-      .. log.inspect(merged_params)
+      .. log.inspect(flat_params)
   )
 
   return {
     provider = resolved_provider,
     model = validated_model,
-    parameters = merged_params,
+    parameters = flat_params,
   }, nil
 end
 
----Applies a configuration to the global state via the config facade.
----Writes the validated provider/model to the given facade layer, then
----re-materializes the full config into state for legacy consumers.
----@param config { provider: string, model: string, parameters: table<string, any> }
+---Write provider, model, and explicit parameters to the facade layer.
+---General parameters are written to `parameters.<key>`, provider-specific
+---parameters to `parameters.<provider>.<key>`. Re-materializes the full
+---config into state for legacy consumers.
+---@param provider_name string Resolved provider name
+---@param model_name? string Validated model name
+---@param explicit_params? table<string, any> User's explicit parameter overrides
 ---@param layer? integer Facade layer to write to (default: RUNTIME)
-function M.apply_config(config, layer)
+function M.apply_config(provider_name, model_name, explicit_params, layer)
   layer = layer or config_facade.LAYERS.RUNTIME
   local w = config_facade.writer(nil, layer)
-  w.provider = config.provider
-  if config.model then
-    w.model = config.model
+  w.provider = provider_name
+  if model_name then
+    w.model = model_name
   end
+
+  -- Write each explicit parameter to the correct namespaced path.
+  -- Static fields on the parameters schema (max_tokens, thinking, etc.) are
+  -- general params; everything else is provider-specific via DISCOVER.
+  if explicit_params then
+    for k, v in pairs(explicit_params) do
+      if k ~= "model" then
+        if parameters_schema:has_field(k) then
+          w.parameters[k] = v
+        else
+          w.parameters[provider_name][k] = v
+        end
+      end
+    end
+  end
+
   state.set_config(config_facade.materialize())
 
   log.debug(
     "apply_config(): Applied config - provider: "
-      .. log.inspect(config.provider)
+      .. log.inspect(provider_name)
       .. ", model: "
-      .. log.inspect(config.model)
+      .. log.inspect(model_name)
       .. " (layer: "
       .. tostring(layer)
       .. ")"
   )
 end
 
----Check if a parameter key is a general parameter applicable to all providers
+---Check if a parameter key is a general parameter applicable to all providers.
+---A key is "general" if it is a static field on the parameters schema object
+---(as opposed to a provider-specific sub-object resolved via DISCOVER).
 ---@param key string
 ---@return boolean
 function M.is_general_parameter(key)
-  return is_general_parameter(key)
+  return parameters_schema:has_field(key)
 end
 
 return M

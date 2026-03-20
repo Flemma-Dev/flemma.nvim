@@ -39,24 +39,23 @@ local DEFAULT_MAX_CONCURRENT = 2
 -- For testing purposes
 local last_request_body_for_testing = nil
 
----Initialize or switch provider based on configuration
+---Initialize or switch provider based on configuration.
+---Validates provider/model, writes explicit parameters to the facade layer,
+---then creates a provider instance with flattened params from the store.
 ---@param provider_name string
 ---@param model_name? string
----@param parameters? table<string, any>
+---@param explicit_params? table<string, any> Only the user's explicit overrides
 ---@param layer? integer Facade layer for apply_config (default: RUNTIME)
 ---@return flemma.provider.Base|nil
-local function initialize_provider(provider_name, model_name, parameters, layer)
-  -- Prepare configuration using the centralized config manager
-  local provider_config, err = config_manager.prepare_config(provider_name, model_name, parameters)
+local function initialize_provider(provider_name, model_name, explicit_params, layer)
+  -- Validate, write to facade, and flatten params for provider.new()
+  local provider_config, err = config_manager.prepare_config(provider_name, model_name, explicit_params, layer)
   if not provider_config then
     vim.notify(err --[[@as string]], vim.log.levels.ERROR)
     return nil
   end
 
-  -- Apply the configuration to global state via the facade
-  config_manager.apply_config(provider_config, layer)
-
-  -- Create a fresh provider instance with the merged parameters
+  -- Create a fresh provider instance with the flattened parameters
   local provider_module = registry.get(provider_config.provider)
   if not provider_module then
     local err_msg = "initialize_provider(): Invalid provider after validation: " .. tostring(provider_config.provider)
@@ -75,11 +74,11 @@ end
 ---Initialize provider for initial setup (exposed version)
 ---@param provider_name string
 ---@param model_name? string
----@param parameters? table<string, any>
+---@param explicit_params? table<string, any> Only the user's explicit overrides
 ---@param layer? integer Facade layer for apply_config (default: RUNTIME)
 ---@return flemma.provider.Base|nil
-function M.initialize_provider(provider_name, model_name, parameters, layer)
-  return initialize_provider(provider_name, model_name, parameters, layer)
+function M.initialize_provider(provider_name, model_name, explicit_params, layer)
+  return initialize_provider(provider_name, model_name, explicit_params, layer)
 end
 
 ---Switch to a different provider or model
@@ -102,22 +101,18 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
     return
   end
 
-  -- Ensure parameters is a table if nil
-  parameters = parameters or {}
-
-  -- Merge parameters using centralized logic
-  local config = state.get_config()
-  local merged_params = config_manager.merge_parameters(config.parameters, provider_name, parameters)
-
-  -- Initialize the new provider. apply_config writes to the facade's RUNTIME
-  -- layer and re-materializes into state BEFORE we know if provider.new()
-  -- succeeds. On failure, the facade retains the new provider/model ops —
-  -- reverting would require transaction semantics on the store, which is
-  -- overkill for this narrow failure path (provider validated but module
-  -- load fails). The provider instance rollback below is sufficient.
+  -- Pass explicit parameters directly — the facade handles merging via
+  -- layer resolution (DEFAULTS + SETUP + RUNTIME). No pre-merge needed.
+  --
+  -- apply_config writes to the facade's RUNTIME layer and re-materializes
+  -- into state BEFORE we know if provider.new() succeeds. On failure, the
+  -- facade retains the new provider/model ops — reverting would require
+  -- transaction semantics on the store, which is overkill for this narrow
+  -- failure path (provider validated but module load fails). The provider
+  -- instance rollback below is sufficient.
   local prev_provider = state.get_provider()
   state.set_provider(nil)
-  local new_provider = initialize_provider(provider_name, model_name, merged_params)
+  local new_provider = initialize_provider(provider_name, model_name, parameters or {})
 
   if not new_provider then
     state.set_provider(prev_provider)

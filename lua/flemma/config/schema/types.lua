@@ -99,6 +99,14 @@ function Node:has_discover()
   return false
 end
 
+--- Whether this node has a statically defined field (not DISCOVER-resolved).
+--- Base implementation returns false; ObjectNode overrides.
+---@param _key string
+---@return boolean
+function Node:has_field(_key)
+  return false
+end
+
 --- Iterate over all known fields (static + DISCOVER-cached) as (key, schema) pairs.
 --- Base implementation returns an empty iterator; ObjectNode overrides.
 --- Used by the facade's materialize() to walk the schema tree.
@@ -455,6 +463,13 @@ end
 ---@return boolean
 function ObjectNode:has_discover()
   return self._discover ~= nil
+end
+
+--- Whether this object has a statically defined field (not DISCOVER-resolved).
+---@param key string
+---@return boolean
+function ObjectNode:has_field(key)
+  return self._fields[key] ~= nil
 end
 
 --- Iterate over all known fields: static fields first, then DISCOVER-cached entries.

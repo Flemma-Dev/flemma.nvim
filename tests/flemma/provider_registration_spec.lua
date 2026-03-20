@@ -275,76 +275,113 @@ describe("provider registration", function()
   end)
 end)
 
-describe("merge_parameters with registered defaults", function()
-  it("uses registered defaults as fallback", function()
-    local merged = config_manager.merge_parameters({}, "anthropic")
-    -- thinking_budget is a registered default (nil value)
-    assert.is_nil(merged.thinking_budget)
+describe("flatten_provider_params with facade", function()
+  local config_facade = require("flemma.config")
+  local schema_definition = require("flemma.config.schema.definition")
+
+  before_each(function()
+    -- Reset facade and registries for clean state
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.provider.registry"] = nil
+    package.loaded["flemma.core.config.manager"] = nil
+    config_facade = require("flemma.config")
+    registry = require("flemma.provider.registry")
+    config_manager = require("flemma.core.config.manager")
+
+    config_facade.init(schema_definition)
+    registry.setup()
   end)
 
-  it("general base params override registered defaults", function()
-    local merged = config_manager.merge_parameters({ max_tokens = 8000, cache_retention = "long" }, "anthropic")
-    assert.are.equal(8000, merged.max_tokens)
-    assert.are.equal("long", merged.cache_retention)
+  it("schema defaults provide base parameter values", function()
+    local config = config_facade.materialize()
+    local flat = config_manager.flatten_provider_params("anthropic", config)
+    -- Schema defaults should be present
+    assert.are.equal("50%", flat.max_tokens)
+    assert.are.equal(0.7, flat.temperature)
+    assert.are.equal(600, flat.timeout)
+    assert.are.equal("short", flat.cache_retention)
   end)
 
-  it("provider-specific overrides take highest priority", function()
-    local merged =
-      config_manager.merge_parameters({ anthropic = { cache_retention = "long", thinking_budget = 4096 } }, "anthropic")
-    assert.are.equal("long", merged.cache_retention)
-    assert.are.equal(4096, merged.thinking_budget)
+  it("general setup params override defaults", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, {
+      parameters = { max_tokens = 8000, cache_retention = "long" },
+    })
+    local config = config_facade.materialize()
+    local flat = config_manager.flatten_provider_params("anthropic", config)
+    assert.are.equal(8000, flat.max_tokens)
+    assert.are.equal("long", flat.cache_retention)
   end)
 
-  it("explicit provider_overrides argument takes highest priority", function()
-    local merged = config_manager.merge_parameters(
-      { cache_retention = "short", anthropic = { cache_retention = "none" } },
-      "anthropic",
-      { cache_retention = "long" }
-    )
-    assert.are.equal("long", merged.cache_retention)
+  it("provider-specific setup params appear in flattened output", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, {
+      parameters = { anthropic = { thinking_budget = 4096 } },
+    })
+    local config = config_facade.materialize()
+    local flat = config_manager.flatten_provider_params("anthropic", config)
+    assert.are.equal(4096, flat.thinking_budget)
+  end)
+
+  it("provider-specific values override general values with same key", function()
+    -- The openai schema has reasoning_summary defaulting to "auto"
+    local config = config_facade.materialize()
+    local flat = config_manager.flatten_provider_params("openai", config)
+    assert.are.equal("auto", flat.reasoning_summary)
   end)
 
   it("cache_retention flows as general parameter to any provider", function()
-    local merged = config_manager.merge_parameters({ cache_retention = "long" }, "openai")
-    assert.are.equal("long", merged.cache_retention)
+    config_facade.apply(config_facade.LAYERS.SETUP, {
+      parameters = { cache_retention = "long" },
+    })
+    local config = config_facade.materialize()
+    local flat = config_manager.flatten_provider_params("openai", config)
+    assert.are.equal("long", flat.cache_retention)
   end)
 
-  it("includes openai registered defaults when no user params given", function()
-    local merged = config_manager.merge_parameters({}, "openai")
-    assert.are.equal("auto", merged.reasoning_summary)
+  it("runtime layer overrides setup layer", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, {
+      parameters = { cache_retention = "short" },
+    })
+    config_facade.apply(config_facade.LAYERS.RUNTIME, {
+      parameters = { cache_retention = "long" },
+    })
+    local config = config_facade.materialize()
+    local flat = config_manager.flatten_provider_params("anthropic", config)
+    assert.are.equal("long", flat.cache_retention)
   end)
 
-  it("explicit provider_overrides merges with provider sub-table", function()
-    -- Simulates: user config has vertex.project_id, preset provides only location
-    local merged = config_manager.merge_parameters(
-      { vertex = { project_id = "my-project", location = "us-central1" } },
-      "vertex",
-      { location = "europe-west1" }
-    )
-    -- Explicit override wins for location
-    assert.are.equal("europe-west1", merged.location)
-    -- project_id from sub-table survives (not dropped by the override)
-    assert.are.equal("my-project", merged.project_id)
+  it("vertex provider-specific params from setup survive runtime switch", function()
+    -- Simulates: user config has vertex.project_id, then :Flemma switch vertex location=europe-west1
+    config_facade.apply(config_facade.LAYERS.SETUP, {
+      parameters = { vertex = { project_id = "my-project", location = "us-central1" } },
+    })
+    -- Runtime overrides just location
+    config_facade.apply(config_facade.LAYERS.RUNTIME, {
+      parameters = { vertex = { location = "europe-west1" } },
+    })
+    local config = config_facade.materialize()
+    local flat = config_manager.flatten_provider_params("vertex", config)
+    assert.are.equal("europe-west1", flat.location)
+    assert.are.equal("my-project", flat.project_id)
   end)
 
-  it("empty explicit overrides preserve provider sub-table", function()
-    -- Simulates: :Flemma switch vertex (no extra params)
-    local merged = config_manager.merge_parameters(
-      { vertex = { project_id = "my-project", location = "us-central1" } },
-      "vertex",
-      {}
-    )
-    assert.are.equal("my-project", merged.project_id)
-    assert.are.equal("us-central1", merged.location)
+  it("runtime provider-specific overrides win over setup on conflict", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, {
+      parameters = { vertex = { project_id = "old-project", location = "us-central1" } },
+    })
+    config_facade.apply(config_facade.LAYERS.RUNTIME, {
+      parameters = { vertex = { project_id = "new-project" } },
+    })
+    local config = config_facade.materialize()
+    local flat = config_manager.flatten_provider_params("vertex", config)
+    assert.are.equal("new-project", flat.project_id)
+    assert.are.equal("us-central1", flat.location)
   end)
 
-  it("explicit overrides win over sub-table on conflict", function()
-    local merged = config_manager.merge_parameters(
-      { vertex = { project_id = "old-project", location = "us-central1" } },
-      "vertex",
-      { project_id = "new-project" }
-    )
-    assert.are.equal("new-project", merged.project_id)
-    assert.are.equal("us-central1", merged.location)
+  it("model is included from top-level config", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, { model = "claude-sonnet-4-5" })
+    local config = config_facade.materialize()
+    local flat = config_manager.flatten_provider_params("anthropic", config)
+    assert.are.equal("claude-sonnet-4-5", flat.model)
   end)
 end)
