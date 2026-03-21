@@ -343,7 +343,7 @@ end
 ---@param highlight? string Override highlight group (for timeout warnings)
 local function show_progress_float(bufnr, parent_winid, progress_text, spinner_char, highlight)
   local buffer_state = state.get_buffer_state(bufnr)
-  local progress_config = config_facade.get(bufnr).progress
+  local progress_config = config_facade.get().progress
   local win_width = vim.api.nvim_win_get_width(parent_winid)
   local win_height = vim.api.nvim_win_get_height(parent_winid)
   local gutter_width = get_gutter_width(parent_winid)
