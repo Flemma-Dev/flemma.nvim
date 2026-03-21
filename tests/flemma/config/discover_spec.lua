@@ -38,7 +38,7 @@ describe("flemma.config DISCOVER resolution", function()
           end,
         }),
       })
-      store.init(schema)
+      store.init()
       local w = proxy.write_proxy(schema, nil, L.SETUP)
       w.parameters.custom_provider = "value"
       assert.equals("custom_provider", called_with)
@@ -55,7 +55,7 @@ describe("flemma.config DISCOVER resolution", function()
           end,
         }),
       })
-      store.init(schema)
+      store.init()
       local w = proxy.write_proxy(schema, nil, L.SETUP)
       w.parameters.timeout = 600
       assert.is_false(called)
@@ -80,7 +80,7 @@ describe("flemma.config DISCOVER resolution", function()
           end,
         }),
       })
-      store.init(schema)
+      store.init()
       local w = proxy.write_proxy(schema, nil, L.SETUP)
       w.parameters.dynamic = "first"
       w.parameters.dynamic = "second"
@@ -100,7 +100,7 @@ describe("flemma.config DISCOVER resolution", function()
           end,
         }),
       })
-      store.init(schema)
+      store.init()
       -- Each failed lookup re-invokes the callback
       local cfg = proxy.read_proxy(schema, nil)
       pcall(function()
@@ -127,7 +127,7 @@ describe("flemma.config DISCOVER resolution", function()
           end,
         }),
       })
-      store.init(schema)
+      store.init()
       local w = proxy.write_proxy(schema, nil, L.SETUP)
       w.tools.bash.cwd = "/tmp"
       w.tools.grep.cwd = "/home"
@@ -152,7 +152,7 @@ describe("flemma.config DISCOVER resolution", function()
           end,
         }),
       })
-      store.init(schema)
+      store.init()
       local cfg = proxy.read_proxy(schema, nil)
       assert.has_error(function()
         local _ = cfg.parameters.totally_unknown
@@ -167,7 +167,7 @@ describe("flemma.config DISCOVER resolution", function()
           end,
         }),
       })
-      store.init(schema)
+      store.init()
       local w = proxy.write_proxy(schema, nil, L.SETUP)
       assert.has_error(function()
         w.parameters.totally_unknown = "value"
@@ -193,12 +193,12 @@ describe("flemma.config DISCOVER resolution", function()
           end,
         }),
       })
-      store.init(schema)
+      store.init()
       local w = proxy.write_proxy(schema, nil, L.SETUP)
       assert.has_no.error(function()
         w.parameters.anthropic.thinking_budget = 4096
       end)
-      assert.equals(4096, store.resolve("parameters.anthropic.thinking_budget", nil))
+      assert.equals(4096, store.resolve("parameters.anthropic.thinking_budget", nil, { is_list = false }))
     end)
 
     it("rejects invalid values for the discovered schema type", function()
@@ -214,7 +214,7 @@ describe("flemma.config DISCOVER resolution", function()
           end,
         }),
       })
-      store.init(schema)
+      store.init()
       local w = proxy.write_proxy(schema, nil, L.SETUP)
       assert.has_error(function()
         w.parameters.anthropic.thinking_budget = "not-an-integer"
@@ -232,7 +232,7 @@ describe("flemma.config DISCOVER resolution", function()
           end,
         }),
       })
-      store.init(schema)
+      store.init()
       local w = proxy.write_proxy(schema, nil, L.SETUP)
       assert.has_no.error(function()
         w.parameters.custom = nil
@@ -267,7 +267,7 @@ describe("flemma.config DISCOVER resolution", function()
           end,
         }),
       })
-      store.init(schema)
+      store.init()
 
       -- Write provider-specific params
       local w = proxy.write_proxy(schema, nil, L.SETUP)
@@ -288,7 +288,7 @@ describe("flemma.config DISCOVER resolution", function()
           end,
         }),
       })
-      store.init(schema)
+      store.init()
       local w = proxy.write_proxy(schema, nil, L.SETUP)
       assert.has_error(function()
         w.parameters.nonexistent_provider = "value"
@@ -314,7 +314,7 @@ describe("flemma.config DISCOVER resolution", function()
           end,
         }),
       })
-      store.init(schema)
+      store.init()
 
       local w = proxy.write_proxy(schema, nil, L.SETUP)
       w.tools.bash.shell = "/bin/zsh"
@@ -336,24 +336,12 @@ describe("flemma.config DISCOVER resolution", function()
       -- does not materialize them. Defaults are materialized into L10 by
       -- facade.register_module_defaults() at registration time — not lazily
       -- when the schema is first accessed.
-      local schema = s.object({
-        tools = s.object({
-          [symbols.DISCOVER] = function(key)
-            if key == "bash" then
-              return s.object({
-                shell = s.optional(s.string("/bin/bash")),
-              })
-            end
-            return nil
-          end,
-        }),
-      })
-      store.init(schema)
+      store.init()
 
       -- No ops recorded for tools.bash.shell — the store has no defaults.
       -- facade.register_module_defaults() is responsible for materializing
       -- discovered schema defaults into L10 at registration time.
-      assert.is_nil(store.resolve("tools.bash.shell", nil))
+      assert.is_nil(store.resolve("tools.bash.shell", nil, { is_list = false }))
     end)
   end)
 
@@ -373,7 +361,7 @@ describe("flemma.config DISCOVER resolution", function()
           end,
         }),
       })
-      store.init(schema)
+      store.init()
       local w = proxy.write_proxy(schema, nil, L.SETUP)
       w.parameters.timeout = 600
       -- DISCOVER should NOT have been called — timeout is a real field
@@ -394,12 +382,12 @@ describe("flemma.config DISCOVER resolution", function()
           return s.optional(s.string())
         end,
       })
-      store.init(schema)
+      store.init()
       local w = proxy.write_proxy(schema, nil, L.SETUP)
       w.timeout = 600
       -- Alias resolved to parameters.timeout; DISCOVER not needed at root
       assert.is_false(discover_called)
-      assert.equals(600, store.resolve("parameters.timeout", nil))
+      assert.equals(600, store.resolve("parameters.timeout", nil, { is_list = false }))
     end)
   end)
 
@@ -421,7 +409,7 @@ describe("flemma.config DISCOVER resolution", function()
           end,
         }),
       })
-      store.init(schema)
+      store.init()
       store.record(L.SETUP, nil, "set", "parameters.anthropic.thinking_budget", 4096)
       store.record(L.FRONTMATTER, 1, "set", "parameters.anthropic.thinking_budget", 8192)
 

@@ -23,6 +23,27 @@ M.LAYERS = store.LAYERS
 local root_schema = nil
 
 -- ---------------------------------------------------------------------------
+-- Internal: schema helpers
+-- ---------------------------------------------------------------------------
+
+--- Return true when the given canonical path refers to a list field.
+--- Recognises standalone ListNodes, OptionalNode(ListNode), ObjectNodes with
+--- :allow_list(), and UnionNodes with a list branch.
+--- Uses unwrap_leaf = true so OptionalNode delegates correctly to its inner node.
+---@param path string Dot-delimited canonical path
+---@return boolean
+local function is_list_path(path)
+  if not root_schema then
+    return false
+  end
+  local node = nav.navigate_schema(root_schema, path, { unwrap_leaf = true })
+  if not node then
+    return false
+  end
+  return node:is_list() or node:has_list_part()
+end
+
+-- ---------------------------------------------------------------------------
 -- Internal: path helpers
 -- ---------------------------------------------------------------------------
 
@@ -167,7 +188,7 @@ local function materialize_resolved(schema, base_path, bufnr)
     -- nil-checking config.parameters). Matches vim.tbl_deep_extend behavior.
     return result
   else
-    return store.resolve(base_path, bufnr)
+    return store.resolve(base_path, bufnr, { is_list = is_list_path(base_path) })
   end
 end
 
@@ -181,7 +202,7 @@ end
 ---@param schema flemma.config.schema.Node Root schema node
 function M.init(schema)
   root_schema = schema
-  store.init(schema)
+  store.init()
   local defaults = schema:materialize()
   if defaults then
     -- Defaults come from the schema itself — failure here is a schema bug.
@@ -347,7 +368,7 @@ end
 ---@return { value: any, layer: string? }
 function M.inspect(bufnr, path)
   assert(root_schema, "config.init() must be called before inspect()")
-  local value, source = store.resolve_with_source(path, bufnr)
+  local value, source = store.resolve_with_source(path, bufnr, { is_list = is_list_path(path) })
   return { value = value, layer = source }
 end
 
@@ -379,7 +400,7 @@ local function dump_resolved_walk(schema, base_path, bufnr, depth, out)
       dump_resolved_walk(entry.child, child_path, bufnr, base_path == "" and depth or depth + 1, out)
     end
   else
-    local value, source = store.resolve_with_source(base_path, bufnr)
+    local value, source = store.resolve_with_source(base_path, bufnr, { is_list = is_list_path(base_path) })
     if value ~= nil then
       table.insert(out, { path = base_path, value = value, source = source, depth = depth, is_object = false })
     end
@@ -451,7 +472,8 @@ local function coerce_walk(schema, base_path, ctx, bufnr)
 
   if unwrapped:has_coerce() then
     local coerce_fn = unwrapped:get_coerce() --[[@as fun(value: any, ctx: flemma.config.CoerceContext?): any]]
-    store.transform_ops(base_path, coerce_fn, ctx, bufnr)
+    local is_list = unwrapped:is_list() or unwrapped:has_list_part()
+    store.transform_ops(base_path, coerce_fn, ctx, bufnr, { is_list = is_list })
   end
 
   if unwrapped:is_object() then
@@ -483,7 +505,7 @@ function M.finalize(layer, deferred)
   end
 
   -- Re-run coerce transforms with populated ctx
-  local ctx = store.make_coerce_context()
+  local ctx = store.make_coerce_context(nil, is_list_path)
   coerce_walk(root_schema, "", ctx)
 
   return failures
@@ -515,7 +537,7 @@ end
 function M.coerce_frontmatter(bufnr)
   assert(root_schema, "config.init() must be called before coerce_frontmatter()")
   assert(bufnr ~= nil, "bufnr is required for coerce_frontmatter()")
-  local ctx = store.make_coerce_context(bufnr)
+  local ctx = store.make_coerce_context(bufnr, is_list_path)
   coerce_walk(root_schema, "", ctx, bufnr)
 end
 

@@ -10,8 +10,6 @@
 ---@class flemma.config.store
 local M = {}
 
-local nav = require("flemma.config.schema.navigation")
-
 --- Layer priority constants.
 ---@type { DEFAULTS: integer, SETUP: integer, RUNTIME: integer, FRONTMATTER: integer }
 M.LAYERS = {
@@ -37,9 +35,6 @@ local GLOBAL_LAYER_NUMS = { M.LAYERS.DEFAULTS, M.LAYERS.SETUP, M.LAYERS.RUNTIME 
 -- Private state (module-level singleton, reset by init())
 -- ---------------------------------------------------------------------------
 
----@type flemma.config.schema.Node?
-local schema_root = nil
-
 --- Per-layer operations log for global layers.
 --- Each entry: { op: string, path: string, value: any }
 ---@type table<integer, table[]>
@@ -55,41 +50,13 @@ local global_ops = {
 local buffer_ops = {}
 
 -- ---------------------------------------------------------------------------
--- Schema navigation
--- ---------------------------------------------------------------------------
-
---- Return true if the given canonical path refers to a list field in the schema.
---- Recognizes both standalone ListNodes and ObjectNodes with :allow_list().
---- Uses unwrap_leaf = true so the returned node's is_list() reflects the concrete type.
----@param path string Dot-delimited canonical path
----@return boolean
-local function is_list_path(path)
-  if not schema_root then
-    return false
-  end
-  local node = nav.navigate_schema(schema_root, path, { unwrap_leaf = true })
-  if not node then
-    return false
-  end
-  if node:is_list() then
-    return true
-  end
-  -- ObjectNode with :allow_list() also supports list ops on its own path
-  if node:has_list_part() then
-    return true
-  end
-  return false
-end
-
--- ---------------------------------------------------------------------------
 -- Initialization
 -- ---------------------------------------------------------------------------
 
---- Initialize (or reset) the store with a root schema node.
+--- Initialize (or reset) the store. Clears all layer ops.
 --- Must be called before recording or resolving operations.
----@param root_schema flemma.config.schema.Node Root schema node for the config tree
-function M.init(root_schema)
-  schema_root = root_schema
+--- The store is schema-free: callers pass is_list explicitly to resolve/transform.
+function M.init()
   global_ops = {
     [M.LAYERS.DEFAULTS] = {},
     [M.LAYERS.SETUP] = {},
@@ -262,13 +229,16 @@ end
 -- ---------------------------------------------------------------------------
 
 --- Resolve the value at the given canonical path for the given buffer.
---- Uses scalar resolution (top-down) for non-list paths and list resolution
---- (bottom-up accumulation) for list paths.
+--- Uses list resolution (bottom-up accumulation) when opts.is_list is true,
+--- scalar resolution (top-down, first set wins) otherwise.
+--- The caller is responsible for determining is_list from the schema.
 ---@param path string Dot-delimited canonical path
 ---@param bufnr integer? Buffer number for per-buffer resolution; nil for global-only
+---@param opts? { is_list: boolean } Resolution options; is_list defaults to false
 ---@return any
-function M.resolve(path, bufnr)
-  if is_list_path(path) then
+function M.resolve(path, bufnr, opts)
+  local is_list = opts ~= nil and opts.is_list == true
+  if is_list then
     local value = resolve_list(path, bufnr)
     return value
   else
@@ -280,11 +250,14 @@ end
 --- Resolve the value and its source layer indicator at the given canonical path.
 --- Source is a layer indicator string: "D", "S", "R", "F" for single-layer
 --- resolution, or "X+Y" for list paths with ops across multiple layers.
+--- The caller is responsible for determining is_list from the schema.
 ---@param path string Dot-delimited canonical path
 ---@param bufnr integer? Buffer number; nil for global-only resolution
+---@param opts? { is_list: boolean } Resolution options; is_list defaults to false
 ---@return any value, string? source
-function M.resolve_with_source(path, bufnr)
-  if is_list_path(path) then
+function M.resolve_with_source(path, bufnr, opts)
+  local is_list = opts ~= nil and opts.is_list == true
+  if is_list then
     return resolve_list(path, bufnr)
   else
     return resolve_scalar(path, bufnr)
@@ -325,11 +298,11 @@ end
 ---@param fn fun(value: any, ctx: any): any Coerce transform function
 ---@param ctx any Coerce context passed through to fn
 ---@param bufnr integer? When non-nil, only transform that buffer's frontmatter ops; when nil, transform all buffers
-function M.transform_ops(path, fn, ctx, bufnr)
-  -- Determine whether this path is a list using the schema. This drives
-  -- how set ops are handled: list paths do per-item transformation (each
-  -- element passed to fn independently); scalar paths pass the whole value.
-  local path_is_list = is_list_path(path)
+---@param opts? { is_list: boolean } Transform options; is_list defaults to false
+function M.transform_ops(path, fn, ctx, bufnr, opts)
+  -- is_list drives how set ops are handled: list paths do per-item transformation
+  -- (each element passed to fn independently); scalar paths pass the whole value.
+  local path_is_list = opts ~= nil and opts.is_list == true
 
   local all_ops = {}
   for _, num in ipairs(GLOBAL_LAYER_NUMS) do
@@ -460,15 +433,19 @@ end
 
 --- Build a coerce context for value transformers.
 --- When bufnr is provided, resolution includes that buffer's frontmatter layer.
+--- is_list_fn is called per path to determine list vs scalar resolution semantics;
+--- when nil, all paths resolve as scalar (safe for contexts without schema access).
 --- Used by the write proxy (at write time), finalize (at setup time), and
 --- coerce_frontmatter (per-buffer, after frontmatter evaluation).
 ---@param bufnr integer? Buffer number for per-buffer resolution; nil for global-only
+---@param is_list_fn? fun(path: string): boolean Per-path list classifier from the schema
 ---@return flemma.config.CoerceContext
-function M.make_coerce_context(bufnr)
+function M.make_coerce_context(bufnr, is_list_fn)
   ---@type flemma.config.CoerceContext
   return {
     get = function(path)
-      return M.resolve(path, bufnr)
+      local is_list = is_list_fn and is_list_fn(path) or false
+      return M.resolve(path, bufnr, { is_list = is_list })
     end,
   }
 end

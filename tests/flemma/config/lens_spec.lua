@@ -63,7 +63,7 @@ describe("flemma.config.proxy — lenses", function()
   describe("single-path lens", function()
     it("reads a scalar relative to the lens root", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       store.record(L.SETUP, nil, "set", "parameters.timeout", 600)
       local lens = proxy.lens(schema, nil, "parameters")
       assert.equals(600, lens.timeout)
@@ -71,7 +71,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("reads multiple fields from the same lens", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       store.record(L.SETUP, nil, "set", "parameters.timeout", 600)
       store.record(L.SETUP, nil, "set", "parameters.thinking", "high")
       local lens = proxy.lens(schema, nil, "parameters")
@@ -81,7 +81,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("returns nil for unset optional fields", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       local lens = proxy.lens(schema, nil, "parameters")
       assert.is_nil(lens.timeout)
       assert.is_nil(lens.thinking)
@@ -89,7 +89,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("resolves a list field through a lens", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       store.record(L.DEFAULTS, nil, "set", "tools.auto_approve", { "bash", "grep" })
       local lens = proxy.lens(schema, nil, "tools")
       assert.are.same({ "bash", "grep" }, lens.auto_approve)
@@ -97,7 +97,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("navigates into nested objects through a lens", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       store.record(L.SETUP, nil, "set", "parameters.anthropic.thinking_budget", 4096)
       local lens = proxy.lens(schema, nil, "parameters")
       assert.equals(4096, lens.anthropic.thinking_budget)
@@ -105,7 +105,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("resolves through buffer layer when bufnr is provided", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       store.record(L.SETUP, nil, "set", "parameters.timeout", 600)
       store.record(L.FRONTMATTER, 2, "set", "parameters.timeout", 1200)
       local lens = proxy.lens(schema, 2, "parameters")
@@ -114,7 +114,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("buffer layer does not affect a lens with different bufnr", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       store.record(L.SETUP, nil, "set", "parameters.timeout", 600)
       store.record(L.FRONTMATTER, 2, "set", "parameters.timeout", 1200)
       local lens = proxy.lens(schema, 3, "parameters")
@@ -123,7 +123,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("errors on any write attempt", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       local lens = proxy.lens(schema, nil, "parameters")
       assert.has_error(function()
         lens.timeout = 999
@@ -132,7 +132,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("errors for an invalid lens path", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       assert.has_error(function()
         proxy.lens(schema, nil, "nonexistent.path")
       end)
@@ -140,7 +140,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("resolves aliases within a single-path lens", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       store.record(L.SETUP, nil, "set", "tools.auto_approve", { "bash" })
       local lens = proxy.lens(schema, nil, "tools")
       -- "approve" is an alias for "auto_approve" within tools
@@ -155,7 +155,7 @@ describe("flemma.config.proxy — lenses", function()
   describe("composed lens — multi-path resolution", function()
     it("returns value from the most specific path", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       store.record(L.SETUP, nil, "set", "parameters.anthropic.thinking_budget", 4096)
       local lens = proxy.lens(schema, nil, {
         "parameters.anthropic",
@@ -166,7 +166,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("falls back to general path when specific has no value", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       store.record(L.SETUP, nil, "set", "parameters.thinking", "high")
       local lens = proxy.lens(schema, nil, {
         "parameters.anthropic",
@@ -178,7 +178,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("returns nil when no path resolves a value", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       local lens = proxy.lens(schema, nil, {
         "parameters.anthropic",
         "parameters",
@@ -188,7 +188,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("path-first priority: specific path at lower layer beats general at higher layer", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       -- timeout exists on both parameters.anthropic and parameters
       store.record(L.SETUP, nil, "set", "parameters.anthropic.timeout", 1200)
       store.record(L.RUNTIME, nil, "set", "parameters.timeout", 600)
@@ -203,7 +203,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("same path at higher layer beats same path at lower layer", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       store.record(L.SETUP, nil, "set", "parameters.timeout", 600)
       store.record(L.RUNTIME, nil, "set", "parameters.timeout", 1200)
       local lens = proxy.lens(schema, nil, {
@@ -216,7 +216,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("errors on any write attempt", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       local lens = proxy.lens(schema, nil, {
         "parameters.anthropic",
         "parameters",
@@ -228,7 +228,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("errors at construction for an invalid path", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       assert.has_error(function()
         proxy.lens(schema, nil, {
           "parameters.anthropic",
@@ -239,7 +239,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("resolves through buffer layer", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       store.record(L.SETUP, nil, "set", "parameters.timeout", 600)
       store.record(L.FRONTMATTER, 5, "set", "parameters.anthropic.timeout", 9999)
       local lens = proxy.lens(schema, 5, {
@@ -251,7 +251,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("works with three paths in priority order", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       -- Only the middle path has a value for "timeout"
       store.record(L.SETUP, nil, "set", "parameters.openai.timeout", 3000)
       local lens = proxy.lens(schema, nil, {
@@ -264,7 +264,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("skips paths where the key does not exist in schema", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       -- "reasoning" only exists on openai, not on anthropic or parameters
       store.record(L.SETUP, nil, "set", "parameters.openai.reasoning", "auto")
       local lens = proxy.lens(schema, nil, {
@@ -277,7 +277,7 @@ describe("flemma.config.proxy — lenses", function()
 
     it("independent lenses do not share state", function()
       local schema = make_schema()
-      store.init(schema)
+      store.init()
       store.record(L.SETUP, nil, "set", "parameters.anthropic.thinking_budget", 4096)
       store.record(L.SETUP, nil, "set", "parameters.openai.reasoning", "auto")
 

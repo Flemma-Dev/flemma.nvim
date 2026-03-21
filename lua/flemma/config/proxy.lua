@@ -17,6 +17,21 @@ local nav = require("flemma.config.schema.navigation")
 local store = require("flemma.config.store")
 local symbols = require("flemma.symbols")
 
+--- Build an is_list classifier function for the given root schema.
+--- Returns true when the path refers to a list-capable field (ListNode,
+--- OptionalNode(ListNode), ObjectNode with allow_list, or UnionNode with list branch).
+---@param root_schema flemma.config.schema.Node
+---@return fun(path: string): boolean
+local function make_is_list_fn(root_schema)
+  return function(path)
+    local node = nav.navigate_schema(root_schema, path, { unwrap_leaf = true })
+    if not node then
+      return false
+    end
+    return node:is_list() or node:has_list_part()
+  end
+end
+
 --- Append a key or sub-path to a base path.
 ---@param base string Empty string for root, or dot-delimited base path
 ---@param key string Key or dot-delimited sub-path to append
@@ -52,6 +67,7 @@ end
 ---@field _bufnr integer? Buffer number
 ---@field _item_schema flemma.config.schema.Node Schema for each list item
 ---@field _coerce_fn? fun(value: any, ctx: flemma.config.CoerceContext?): any Per-item coerce function
+---@field _root_schema flemma.config.schema.Node Root schema for coerce context list classification
 local ListProxy = {}
 ListProxy.__index = ListProxy
 
@@ -67,7 +83,7 @@ ListProxy.__index = ListProxy
 ---@param skip_validation? boolean True for remove (no-op if absent)
 local function record_list_op(self, op, item, skip_validation)
   if self._coerce_fn then
-    item = self._coerce_fn(item, store.make_coerce_context())
+    item = self._coerce_fn(item, store.make_coerce_context(self._bufnr, make_is_list_fn(self._root_schema)))
   end
   if type(item) == "table" then
     for _, expanded in ipairs(item) do
@@ -134,14 +150,16 @@ end
 ---@param bufnr integer?
 ---@param item_schema flemma.config.schema.Node
 ---@param coerce_fn? fun(value: any, ctx: flemma.config.CoerceContext?): any
+---@param root_schema flemma.config.schema.Node
 ---@return flemma.config.ListProxy
-local function make_list_proxy(path, layer, bufnr, item_schema, coerce_fn)
+local function make_list_proxy(path, layer, bufnr, item_schema, coerce_fn, root_schema)
   return setmetatable({
     _path = path,
     _layer = layer,
     _bufnr = bufnr,
     _item_schema = item_schema,
     _coerce_fn = coerce_fn,
+    _root_schema = root_schema,
   }, ListProxy)
 end
 
@@ -242,7 +260,7 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
           local write_layer = layer --[[@as integer]]
           local item_schema = unwrapped_current:get_list_item_schema() --[[@as flemma.config.schema.Node]]
           local coerce_fn = unwrapped_current:has_coerce() and unwrapped_current:get_coerce() or nil
-          local list_proxy = make_list_proxy(base_path, write_layer, bufnr, item_schema, coerce_fn)
+          local list_proxy = make_list_proxy(base_path, write_layer, bufnr, item_schema, coerce_fn, root_schema)
           local skip_validation = (key == "remove")
           return function(self_or_item, maybe_item)
             local item
@@ -270,11 +288,12 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
       local item_schema = leaf:get_item_schema()
       if item_schema and layer ~= nil then
         local coerce_fn = leaf:has_coerce() and leaf:get_coerce() or nil
-        return make_list_proxy(canonical, layer, bufnr, item_schema, coerce_fn)
+        return make_list_proxy(canonical, layer, bufnr, item_schema, coerce_fn, root_schema)
       end
 
       -- Leaf scalar (or list on a read proxy) → resolve from store.
-      return store.resolve(canonical, bufnr)
+      local is_list = leaf:is_list() or leaf:has_list_part()
+      return store.resolve(canonical, bufnr, { is_list = is_list })
     end,
 
     __newindex = function(_, key, value)
@@ -308,7 +327,7 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
       -- value (e.g., boolean) into a table suitable for object field assignment.
       -- Context enables coerce functions to resolve deferred references (e.g.,
       -- preset names) by reading other config values from the store.
-      local ctx = store.make_coerce_context()
+      local ctx = store.make_coerce_context(bufnr, make_is_list_fn(root_schema))
       local unwrapped_leaf = nav.unwrap_optional(leaf)
 
       -- List-typed fields with coerce: expand per-item so that preset references
@@ -382,7 +401,7 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
     local write_layer = layer --[[@as integer]]
     local item_schema = unwrapped_current:get_list_item_schema() --[[@as flemma.config.schema.Node]]
     local coerce_fn = unwrapped_current:has_coerce() and unwrapped_current:get_coerce() or nil
-    local list_proxy = make_list_proxy(base_path, write_layer, bufnr, item_schema, coerce_fn)
+    local list_proxy = make_list_proxy(base_path, write_layer, bufnr, item_schema, coerce_fn, root_schema)
 
     mt.__add = function(_, item)
       record_list_op(list_proxy, "append", item)
@@ -470,7 +489,8 @@ function M.lens(root_schema, bufnr, paths)
             if leaf:is_object() then
               table.insert(object_paths, canonical)
             else
-              local value = store.resolve(canonical, bufnr)
+              local is_list = leaf:is_list() or leaf:has_list_part()
+              local value = store.resolve(canonical, bufnr, { is_list = is_list })
               if value ~= nil then
                 return value
               end
