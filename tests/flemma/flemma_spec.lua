@@ -33,7 +33,7 @@ describe("flemma.setup with preset model", function()
 
   it("preset parameters merge with config parameters", function()
     local flemma = require("flemma")
-    local config_manager = require("flemma.core.config.manager")
+    local normalize = require("flemma.provider.normalize")
     flemma.setup({
       model = "$test",
       parameters = {
@@ -47,7 +47,7 @@ describe("flemma.setup with preset model", function()
     local config = config_facade.materialize()
     assert.are.equal("vertex", config.provider)
     -- Verify merged flat params (general + provider-specific)
-    local flat = config_manager.flatten_provider_params(config.provider, config)
+    local flat = normalize.flatten_parameters(config.provider, config)
     assert.are.equal("europe-west1", flat.location)
     assert.are.equal("my-project", flat.project_id)
   end)

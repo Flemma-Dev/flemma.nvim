@@ -4,7 +4,7 @@
 --- format string trigger data lookups.  Variables are cached per render cycle.
 local lualine_component = require("lualine.component")
 local config_facade = require("flemma.config")
-local config_manager = require("flemma.core.config.manager")
+local normalize = require("flemma.provider.normalize")
 local registry = require("flemma.provider.registry")
 local format = require("flemma.utilities.format")
 local session = require("flemma.session")
@@ -51,13 +51,12 @@ local function resolve_thinking(config)
   end
 
   -- Flatten provider-specific + general params for resolve_thinking()
-  local params = config_manager.flatten_provider_params(config.provider, config)
+  local params = normalize.flatten_parameters(config.provider, config)
   if not params then
     return ""
   end
 
-  local base = require("flemma.provider.base")
-  local thinking = base.resolve_thinking(params --[[@as flemma.provider.Parameters]], capabilities)
+  local thinking = normalize.resolve_thinking(params --[[@as flemma.provider.Parameters]], capabilities)
   if not thinking.enabled then
     return ""
   end
@@ -166,7 +165,7 @@ function flemma_component:update_status()
   end
 
   -- materialize(bufnr) returns a plain table with per-buffer resolution —
-  -- required because flatten_provider_params uses pairs() and make_resolvers
+  -- required because flatten_parameters uses pairs() and make_resolvers
   -- accesses dynamic keys. bufnr ensures frontmatter overrides are visible.
   local bufnr = vim.api.nvim_get_current_buf()
   local config = config_facade.materialize(bufnr)

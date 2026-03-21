@@ -8,7 +8,7 @@ local loader = require("flemma.loader")
 local log = require("flemma.logging")
 local secrets = require("flemma.secrets")
 local state = require("flemma.state")
-local config_manager = require("flemma.core.config.manager")
+local normalize = require("flemma.provider.normalize")
 local buffer_utils = require("flemma.utilities.buffer")
 local editing = require("flemma.buffer.editing")
 local writequeue = require("flemma.buffer.writequeue")
@@ -41,6 +41,55 @@ local DEFAULT_MAX_CONCURRENT = 2
 -- For testing purposes
 local last_request_body_for_testing = nil
 
+local nav = require("flemma.config.schema.navigation")
+local schema_definition = require("flemma.config.schema.definition")
+
+--- The parameters schema node, used to distinguish static (general) fields
+--- from DISCOVER-resolved (provider-specific) fields.
+---@type flemma.config.schema.Node
+local parameters_schema = nav.unwrap_optional(schema_definition):get_child_schema("parameters") --[[@as flemma.config.schema.Node]]
+
+---Write provider, model, and explicit parameters to the facade layer.
+---General parameters are written to `parameters.<key>`, provider-specific
+---parameters to `parameters.<provider>.<key>`.
+---@param provider_name string Resolved provider name
+---@param model_name? string Validated model name
+---@param explicit_params? table<string, any> User's explicit parameter overrides
+---@param layer? integer Facade layer to write to (default: RUNTIME)
+local function apply_config(provider_name, model_name, explicit_params, layer)
+  layer = layer or config_facade.LAYERS.RUNTIME
+  local w = config_facade.writer(nil, layer)
+  w.provider = provider_name
+  if model_name then
+    w.model = model_name
+  end
+
+  -- Write each explicit parameter to the correct namespaced path.
+  -- Static fields on the parameters schema (max_tokens, thinking, etc.) are
+  -- general params; everything else is provider-specific via DISCOVER.
+  if explicit_params then
+    for k, v in pairs(explicit_params) do
+      if k ~= "model" then
+        if parameters_schema:has_field(k) then
+          w.parameters[k] = v
+        else
+          w.parameters[provider_name][k] = v
+        end
+      end
+    end
+  end
+
+  log.debug(
+    "apply_config(): Applied config - provider: "
+      .. log.inspect(provider_name)
+      .. ", model: "
+      .. log.inspect(model_name)
+      .. " (layer: "
+      .. tostring(layer)
+      .. ")"
+  )
+end
+
 ---Validate provider/model and write configuration to the facade layer.
 ---Providers are request-scoped — no global instance is created here.
 ---@param provider_name string
@@ -49,11 +98,56 @@ local last_request_body_for_testing = nil
 ---@param layer? integer Facade layer for apply_config (default: RUNTIME)
 ---@return boolean success
 local function initialize_provider(provider_name, model_name, explicit_params, layer)
-  local _, err = config_manager.prepare_config(provider_name, model_name, explicit_params, layer)
-  if err then
+  -- Validate provider
+  if not registry.has(provider_name) then
+    local err = string.format(
+      "Flemma: Unknown provider '%s'. Supported providers are: %s",
+      tostring(provider_name),
+      table.concat(registry.supported_providers(), ", ")
+    )
+    log.error("initialize_provider(): " .. err)
     vim.notify(err, vim.log.levels.ERROR)
     return false
   end
+
+  -- Resolve provider alias (e.g., 'claude' -> 'anthropic')
+  local resolved_provider = registry.resolve(provider_name)
+
+  -- Validate and get appropriate model
+  local validated_model = registry.get_appropriate_model(model_name, resolved_provider)
+  if validated_model ~= model_name and model_name ~= nil then
+    vim.notify(
+      string.format(
+        "Flemma: Model '%s' is not valid for provider '%s'. Using default: '%s'.",
+        tostring(model_name),
+        tostring(resolved_provider),
+        tostring(validated_model)
+      ),
+      vim.log.levels.WARN
+    )
+  end
+
+  -- Write to facade
+  apply_config(resolved_provider, validated_model, explicit_params, layer)
+
+  -- Validate provider-specific parameters (shows warnings, doesn't fail)
+  if validated_model then
+    local resolved_config = config_facade.materialize()
+    local flat_params = normalize.flatten_parameters(resolved_provider, resolved_config)
+    normalize.resolve_max_tokens(resolved_provider, validated_model, flat_params)
+    local provider_module_path = registry.get(resolved_provider)
+    if provider_module_path then
+      local provider_module = loader.load(provider_module_path)
+      provider_module.validate_parameters(validated_model, flat_params)
+    end
+  end
+
+  log.debug(
+    "initialize_provider(): Prepared config for provider "
+      .. log.inspect(resolved_provider)
+      .. " with model "
+      .. log.inspect(validated_model)
+  )
   return true
 end
 
@@ -743,8 +837,8 @@ function M.send_to_provider(opts)
     local effective_bufnr = prompt.bufnr
     local cfg = config_facade.materialize(effective_bufnr)
     local provider_key = cfg.provider
-    local flat_params = config_manager.flatten_provider_params(provider_key, cfg)
-    config_manager.resolve_max_tokens(provider_key, cfg.model, flat_params)
+    local flat_params = normalize.flatten_parameters(provider_key, cfg)
+    normalize.resolve_max_tokens(provider_key, cfg.model, flat_params)
 
     local provider_module_path = registry.get(provider_key)
     if not provider_module_path then

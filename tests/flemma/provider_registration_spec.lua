@@ -1,5 +1,5 @@
 local registry = require("flemma.provider.registry")
-local config_manager = require("flemma.core.config.manager")
+local normalize = require("flemma.provider.normalize")
 
 describe("provider registration", function()
   -- Save original state and restore after each test
@@ -113,40 +113,6 @@ describe("provider registration", function()
 
     it("returns the default for a registered built-in provider", function()
       assert.are.equal("claude-sonnet-4-6", registry.get_model("anthropic"))
-    end)
-  end)
-
-  describe("get_default_parameters()", function()
-    it("returns registered default parameters", function()
-      local defaults = registry.get_default_parameters("anthropic")
-      assert.is_not_nil(defaults)
-      -- cache_retention is now a global parameter, not a provider default
-      assert.is_nil(defaults.cache_retention)
-    end)
-
-    it("returns registered default parameters for openai", function()
-      local defaults = registry.get_default_parameters("openai")
-      assert.is_not_nil(defaults)
-      -- cache_retention is now a global parameter, not a provider default
-      assert.is_nil(defaults.cache_retention)
-      assert.are.equal("auto", defaults.reasoning_summary)
-    end)
-
-    it("returns custom provider defaults", function()
-      registry.register("custom", {
-        module = "flemma.provider.providers.openai",
-        capabilities = {
-          supports_reasoning = false,
-          supports_thinking_budget = false,
-          outputs_thinking = false,
-        },
-        display_name = "Custom",
-        default_parameters = { api_base = "http://localhost:11434" },
-      })
-
-      local defaults = registry.get_default_parameters("custom")
-      assert.is_not_nil(defaults)
-      assert.are.equal("http://localhost:11434", defaults.api_base)
     end)
   end)
 
@@ -275,7 +241,7 @@ describe("provider registration", function()
   end)
 end)
 
-describe("flatten_provider_params with facade", function()
+describe("flatten_parameters with facade", function()
   local config_facade = require("flemma.config")
   local schema_definition = require("flemma.config.schema.definition")
 
@@ -284,10 +250,10 @@ describe("flatten_provider_params with facade", function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.provider.registry"] = nil
-    package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
     config_facade = require("flemma.config")
     registry = require("flemma.provider.registry")
-    config_manager = require("flemma.core.config.manager")
+    normalize = require("flemma.provider.normalize")
 
     config_facade.init(schema_definition)
     registry.setup()
@@ -295,7 +261,7 @@ describe("flatten_provider_params with facade", function()
 
   it("schema defaults provide base parameter values", function()
     local config = config_facade.materialize()
-    local flat = config_manager.flatten_provider_params("anthropic", config)
+    local flat = normalize.flatten_parameters("anthropic", config)
     -- Schema defaults should be present
     assert.are.equal("50%", flat.max_tokens)
     assert.are.equal(0.7, flat.temperature)
@@ -308,7 +274,7 @@ describe("flatten_provider_params with facade", function()
       parameters = { max_tokens = 8000, cache_retention = "long" },
     })
     local config = config_facade.materialize()
-    local flat = config_manager.flatten_provider_params("anthropic", config)
+    local flat = normalize.flatten_parameters("anthropic", config)
     assert.are.equal(8000, flat.max_tokens)
     assert.are.equal("long", flat.cache_retention)
   end)
@@ -318,14 +284,14 @@ describe("flatten_provider_params with facade", function()
       parameters = { anthropic = { thinking_budget = 4096 } },
     })
     local config = config_facade.materialize()
-    local flat = config_manager.flatten_provider_params("anthropic", config)
+    local flat = normalize.flatten_parameters("anthropic", config)
     assert.are.equal(4096, flat.thinking_budget)
   end)
 
   it("provider-specific values override general values with same key", function()
     -- The openai schema has reasoning_summary defaulting to "auto"
     local config = config_facade.materialize()
-    local flat = config_manager.flatten_provider_params("openai", config)
+    local flat = normalize.flatten_parameters("openai", config)
     assert.are.equal("auto", flat.reasoning_summary)
   end)
 
@@ -334,7 +300,7 @@ describe("flatten_provider_params with facade", function()
       parameters = { cache_retention = "long" },
     })
     local config = config_facade.materialize()
-    local flat = config_manager.flatten_provider_params("openai", config)
+    local flat = normalize.flatten_parameters("openai", config)
     assert.are.equal("long", flat.cache_retention)
   end)
 
@@ -346,7 +312,7 @@ describe("flatten_provider_params with facade", function()
       parameters = { cache_retention = "long" },
     })
     local config = config_facade.materialize()
-    local flat = config_manager.flatten_provider_params("anthropic", config)
+    local flat = normalize.flatten_parameters("anthropic", config)
     assert.are.equal("long", flat.cache_retention)
   end)
 
@@ -360,7 +326,7 @@ describe("flatten_provider_params with facade", function()
       parameters = { vertex = { location = "europe-west1" } },
     })
     local config = config_facade.materialize()
-    local flat = config_manager.flatten_provider_params("vertex", config)
+    local flat = normalize.flatten_parameters("vertex", config)
     assert.are.equal("europe-west1", flat.location)
     assert.are.equal("my-project", flat.project_id)
   end)
@@ -373,7 +339,7 @@ describe("flatten_provider_params with facade", function()
       parameters = { vertex = { project_id = "new-project" } },
     })
     local config = config_facade.materialize()
-    local flat = config_manager.flatten_provider_params("vertex", config)
+    local flat = normalize.flatten_parameters("vertex", config)
     assert.are.equal("new-project", flat.project_id)
     assert.are.equal("us-central1", flat.location)
   end)
@@ -381,7 +347,7 @@ describe("flatten_provider_params with facade", function()
   it("model is included from top-level config", function()
     config_facade.apply(config_facade.LAYERS.SETUP, { model = "claude-sonnet-4-5" })
     local config = config_facade.materialize()
-    local flat = config_manager.flatten_provider_params("anthropic", config)
+    local flat = normalize.flatten_parameters("anthropic", config)
     assert.are.equal("claude-sonnet-4-5", flat.model)
   end)
 end)

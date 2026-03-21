@@ -34,8 +34,6 @@ describe("Anthropic Provider", function()
 
   describe("try_import_from_buffer", function()
     it("should import Claude Workbench JavaScript code to chat format", function()
-      local provider = anthropic.new({ model = "claude-sonnet-4-5" })
-
       -- JavaScript code from Claude Workbench
       local input_lines = {
         'import Anthropic from "@anthropic-ai/sdk";',
@@ -88,7 +86,7 @@ describe("Anthropic Provider", function()
         "@System:\nBe brief!\n\n@You:\nHello, World!\n\n@Assistant:\nHello! Nice to meet you! How are you doing today?\n\n@You:\nFin."
 
       -- Call the import function
-      local result = provider:try_import_from_buffer(input_lines)
+      local result = anthropic.try_import_from_buffer(input_lines)
 
       -- Verify the result
       assert.is_not_nil(result, "Import should return chat content")
@@ -96,21 +94,17 @@ describe("Anthropic Provider", function()
     end)
 
     it("should return nil when no Anthropic API call is found", function()
-      local provider = anthropic.new({ model = "claude-sonnet-4-5" })
-
       local input_lines = {
         'console.log("Hello World");',
         "const x = 42;",
       }
 
-      local result = provider:try_import_from_buffer(input_lines)
+      local result = anthropic.try_import_from_buffer(input_lines)
 
       assert.is_nil(result, "Should return nil when no API call found")
     end)
 
     it("should handle malformed JSON gracefully", function()
-      local provider = anthropic.new({ model = "claude-sonnet-4-5" })
-
       local input_lines = {
         "const msg = await anthropic.messages.create({",
         '  model: "claude-sonnet-4-5",',
@@ -119,14 +113,12 @@ describe("Anthropic Provider", function()
         "});",
       }
 
-      local result = provider:try_import_from_buffer(input_lines)
+      local result = anthropic.try_import_from_buffer(input_lines)
 
       assert.is_nil(result, "Should return nil when JSON is malformed")
     end)
 
     it("should handle messages with string content format", function()
-      local provider = anthropic.new({ model = "claude-sonnet-4-5" })
-
       local input_lines = {
         "const msg = await anthropic.messages.create({",
         '  model: "claude-sonnet-4-5",',
@@ -142,7 +134,7 @@ describe("Anthropic Provider", function()
 
       local expected_chat = "@System:\nYou are helpful\n\n@You:\nSimple string message"
 
-      local result = provider:try_import_from_buffer(input_lines)
+      local result = anthropic.try_import_from_buffer(input_lines)
 
       assert.is_not_nil(result)
       assert.are.equal(expected_chat, result)

@@ -4,6 +4,7 @@ local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local models = require("flemma.models")
+local normalize = require("flemma.provider.normalize")
 local s = require("flemma.config.schema")
 local sink = require("flemma.sink")
 local tools_module = require("flemma.tools")
@@ -39,9 +40,6 @@ M.metadata = {
     supports_thinking_budget = false,
     outputs_thinking = true,
     output_has_thoughts = true,
-  },
-  default_parameters = {
-    reasoning_summary = "auto",
   },
   config_schema = s.object({
     reasoning_summary = s.optional(s.string("auto")),
@@ -302,7 +300,7 @@ function M.build_request(self, prompt, context)
 
   -- Add reasoning configuration using unified resolution
   local model_info = provider_registry.get_model_info("openai", self.parameters.model)
-  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
+  local thinking = normalize.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
 
   if thinking.enabled and thinking.effort then
     -- effort is already mapped to provider API value by resolve_thinking via thinking_effort_map

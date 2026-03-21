@@ -2522,7 +2522,7 @@ describe("advance_phase2 current_request guard", function()
   it("does not execute approved tools when current_request is set", function()
     -- Clear core module so it picks up the same state module as the test
     package.loaded["flemma.core"] = nil
-    package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
 
     local st = require("flemma.state")
 

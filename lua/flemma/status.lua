@@ -4,7 +4,7 @@
 local M = {}
 
 local config_facade = require("flemma.config")
-local config_manager = require("flemma.core.config.manager")
+local normalize = require("flemma.provider.normalize")
 local autopilot = require("flemma.autopilot")
 local sandbox = require("flemma.sandbox")
 local str = require("flemma.utilities.string")
@@ -23,8 +23,8 @@ local MARKER_SANDBOX = "⊡"
 
 ---@class flemma.status.Data
 ---@field provider { name: string, model: string|nil, initialized: boolean, model_info: flemma.models.ModelInfo|nil }
----@field parameters { merged: table<string, any>, frontmatter_overrides: table<string, any>|nil, resolved_max_tokens: integer|nil }
----@field autopilot { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, frontmatter_override: boolean|nil }
+---@field parameters { merged: table<string, any>, resolved_max_tokens: integer|nil }
+---@field autopilot { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer }
 ---@field sandbox { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil, policy: flemma.config.SandboxPolicy }
 ---@field tools { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer, max_concurrent_frontmatter: integer|nil }
 ---@field approval { source: string|nil, approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil }
@@ -43,63 +43,24 @@ local function collect_provider(config)
   }
 end
 
----Collect parameters section data, including frontmatter overrides if present
+---Collect parameters section data
 ---@param config flemma.Config
----@param opts table|nil
----@return { merged: table<string, any>, frontmatter_overrides: table<string, any>|nil, resolved_max_tokens: integer|nil }
-local function collect_parameters(config, opts)
+---@return { merged: table<string, any>, resolved_max_tokens: integer|nil }
+local function collect_parameters(config)
   -- Flatten parameters from the materialized config. This reads from the
-  -- facade-resolved state, which includes all layers (DEFAULTS + SETUP + RUNTIME).
-  local base_merged = config_manager.flatten_provider_params(config.provider, config)
+  -- facade-resolved state, which includes all layers (DEFAULTS + SETUP + RUNTIME + FRONTMATTER).
+  local base_merged = normalize.flatten_parameters(config.provider, config)
 
   -- Resolve max_tokens on a copy to show the resolved integer alongside the original
   local resolved_max_tokens = nil
   if type(base_merged.max_tokens) == "string" then
     local resolve_copy = { max_tokens = base_merged.max_tokens }
-    config_manager.resolve_max_tokens(config.provider, config.model or "", resolve_copy)
+    normalize.resolve_max_tokens(config.provider, config.model or "", resolve_copy)
     resolved_max_tokens = resolve_copy.max_tokens
-  end
-
-  -- If we have frontmatter opts with parameter overrides, compute the diff
-  -- by overlaying frontmatter values on top of base_merged (not the global config)
-  -- so switch overrides don't produce spurious diffs.
-  local frontmatter_overrides = nil
-  if opts then
-    local merged_with_frontmatter = {}
-    for k, v in pairs(base_merged) do
-      merged_with_frontmatter[k] = v
-    end
-
-    -- Apply general frontmatter parameter overrides
-    if opts.parameters then
-      for k, v in pairs(opts.parameters) do
-        merged_with_frontmatter[k] = v
-      end
-    end
-
-    -- Apply provider-specific frontmatter overrides
-    local provider_overrides = opts[config.provider]
-    if type(provider_overrides) == "table" then
-      for k, v in pairs(provider_overrides) do
-        merged_with_frontmatter[k] = v
-      end
-    end
-
-    -- Diff the two to find overridden keys
-    local overrides = {}
-    for key, value in pairs(merged_with_frontmatter) do
-      if base_merged[key] == nil or base_merged[key] ~= value then
-        overrides[key] = value
-      end
-    end
-    if next(overrides) then
-      frontmatter_overrides = overrides
-    end
   end
 
   return {
     merged = base_merged,
-    frontmatter_overrides = frontmatter_overrides,
     resolved_max_tokens = resolved_max_tokens,
   }
 end
@@ -107,9 +68,8 @@ end
 ---Collect autopilot section data
 ---@param bufnr integer
 ---@param config flemma.Config
----@param opts table|nil
----@return { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, frontmatter_override: boolean|nil }
-local function collect_autopilot(bufnr, config, opts)
+---@return { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer }
+local function collect_autopilot(bufnr, config)
   local autopilot_config = config.tools and config.tools.autopilot
   local max_turns = (autopilot_config and autopilot_config.max_turns) or 100
 
@@ -117,17 +77,11 @@ local function collect_autopilot(bufnr, config, opts)
   local config_enabled = autopilot_config and (autopilot_config.enabled == nil or autopilot_config.enabled == true)
     or false
 
-  local frontmatter_override = nil
-  if opts and opts.autopilot ~= nil then
-    frontmatter_override = opts.autopilot
-  end
-
   return {
     enabled = autopilot.is_enabled(bufnr),
     config_enabled = config_enabled,
     buffer_state = autopilot.get_state(bufnr),
     max_turns = max_turns,
-    frontmatter_override = frontmatter_override,
   }
 end
 
@@ -420,42 +374,14 @@ function M.format(data, verbose)
     if key == "max_tokens" and data.parameters.resolved_max_tokens then
       resolved_suffix = " → " .. tostring(data.parameters.resolved_max_tokens)
     end
-    if data.parameters.frontmatter_overrides and data.parameters.frontmatter_overrides[key] ~= nil then
-      add(
-        "  "
-          .. key
-          .. ": ~~"
-          .. format_value(value)
-          .. resolved_suffix
-          .. "~~ "
-          .. format_value(data.parameters.frontmatter_overrides[key])
-          .. " "
-          .. MARKER_FRONTMATTER
-      )
-    else
-      add("  " .. key .. ": " .. format_value(value) .. resolved_suffix)
-    end
+    add("  " .. key .. ": " .. format_value(value) .. resolved_suffix)
   end
   add("")
 
   -- Autopilot section
   add("Autopilot")
   local autopilot_status = data.autopilot.enabled and "enabled" or "disabled"
-  if data.autopilot.frontmatter_override ~= nil then
-    local config_status = data.autopilot.config_enabled and "enabled" or "disabled"
-    add(
-      "  status: ~~"
-        .. config_status
-        .. "~~ "
-        .. autopilot_status
-        .. " ("
-        .. data.autopilot.buffer_state
-        .. ") "
-        .. MARKER_FRONTMATTER
-    )
-  else
-    add("  status: " .. autopilot_status .. " (" .. data.autopilot.buffer_state .. ")")
-  end
+  add("  status: " .. autopilot_status .. " (" .. data.autopilot.buffer_state .. ")")
   add("  max_turns: " .. tostring(data.autopilot.max_turns))
   add("")
 
@@ -544,9 +470,7 @@ function M.format(data, verbose)
   end
 
   -- Legend (only if annotation markers were used)
-  local has_frontmatter_marker = data.parameters.frontmatter_overrides
-    or data.autopilot.frontmatter_override ~= nil
-    or data.tools.frontmatter_items
+  local has_frontmatter_marker = data.tools.frontmatter_items
     or data.tools.max_concurrent_frontmatter ~= nil
     or data.approval.frontmatter_items
   local has_sandbox_marker = data.approval.sandbox_items ~= nil
@@ -609,8 +533,8 @@ function M.collect(bufnr)
 
   return {
     provider = collect_provider(config),
-    parameters = collect_parameters(config, opts),
-    autopilot = collect_autopilot(bufnr, config, opts),
+    parameters = collect_parameters(config),
+    autopilot = collect_autopilot(bufnr, config),
     sandbox = collect_sandbox(bufnr, opts),
     tools = tools_data,
     approval = collect_approval(config, opts, tools_data.enabled, bufnr),

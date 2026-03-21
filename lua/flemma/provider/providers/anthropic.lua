@@ -3,6 +3,7 @@
 local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local normalize = require("flemma.provider.normalize")
 local s = require("flemma.config.schema")
 local sink = require("flemma.sink")
 local tools_module = require("flemma.tools")
@@ -24,9 +25,6 @@ M.metadata = {
     outputs_thinking = true,
     output_has_thoughts = true,
     min_thinking_budget = 1024,
-  },
-  default_parameters = {
-    thinking_budget = nil,
   },
   config_schema = s.object({
     thinking_budget = s.optional(s.integer()),
@@ -295,7 +293,7 @@ function M.build_request(self, prompt, _context)
 
   -- Add thinking configuration using unified resolution
   local model_info = provider_registry.get_model_info("anthropic", self.parameters.model)
-  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
+  local thinking = normalize.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
 
   if thinking.enabled then
     local is_adaptive = model_info and model_info.supports_adaptive_thinking
@@ -675,7 +673,9 @@ local function import_generate_chat(data)
 end
 
 -- Try to import from buffer lines (Claude Workbench format)
-function M.try_import_from_buffer(self, lines)
+---@param lines string[]
+---@return string|nil
+function M.try_import_from_buffer(lines)
   -- Extract and prepare content
   local content = import_extract_content(lines)
   if #content == 0 then

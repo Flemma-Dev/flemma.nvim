@@ -213,8 +213,7 @@ local function setup_commands()
       local bufnr = vim.api.nvim_get_current_buf()
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
-      -- try_import_from_buffer is an instance method signature but doesn't use self
-      local chat_content = provider_module.try_import_from_buffer(provider_module, lines)
+      local chat_content = provider_module.try_import_from_buffer(lines)
       if chat_content then
         vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.split(chat_content, "\n", {}))
         vim.bo[bufnr].filetype = "chat"

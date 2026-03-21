@@ -11,7 +11,7 @@ describe("flemma.status", function()
     package.loaded["flemma.tools.registry"] = nil
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
-    package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.tools.presets"] = nil
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
@@ -434,13 +434,12 @@ describe("flemma.status", function()
       assert.truthy(text:find("thinking_budgets"), "expected thinking_budgets in verbose dump")
     end)
 
-    it("shows frontmatter override annotations", function()
+    it("shows frontmatter override annotations for tools", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
         parameters = {
           merged = { max_tokens = 8192, thinking = "low" },
-          frontmatter_overrides = { thinking = "low" },
         },
         autopilot = {
           enabled = false,
@@ -456,7 +455,7 @@ describe("flemma.status", function()
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
         },
-        tools = { enabled = {}, disabled = {} },
+        tools = { enabled = { "bash" }, disabled = {}, frontmatter_items = { bash = true } },
         approval = {
           approved = {},
           denied = {},

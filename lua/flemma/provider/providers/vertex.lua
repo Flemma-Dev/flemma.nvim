@@ -3,6 +3,7 @@
 local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local normalize = require("flemma.provider.normalize")
 local s = require("flemma.config.schema")
 local sink = require("flemma.sink")
 local tools_module = require("flemma.tools")
@@ -32,11 +33,6 @@ M.metadata = {
     outputs_thinking = true,
     output_has_thoughts = false,
     min_thinking_budget = 1,
-  },
-  default_parameters = {
-    project_id = nil,
-    location = "global",
-    thinking_budget = nil,
   },
   config_schema = s.object({
     project_id = s.optional(s.string()),
@@ -293,7 +289,7 @@ function M.build_request(self, prompt, _context)
 
   -- Add thinking configuration using unified resolution
   local model_info = provider_registry.get_model_info("vertex", self.parameters.model)
-  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
+  local thinking = normalize.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
 
   if thinking.enabled then
     local thinking_config = { includeThoughts = true }

@@ -691,7 +691,7 @@ describe("Anthropic Streaming Tool Use Response (integration)", function()
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
-    package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
     package.loaded["flemma.provider.providers.anthropic"] = nil
     package.loaded["flemma.provider.providers.openai"] = nil
@@ -1056,7 +1056,7 @@ describe("OpenAI Streaming Tool Use Response (integration)", function()
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
-    package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
     package.loaded["flemma.provider.providers.anthropic"] = nil
     package.loaded["flemma.provider.providers.openai"] = nil
@@ -1430,7 +1430,7 @@ describe("Vertex AI Streaming Function Call Response (integration)", function()
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
-    package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
     package.loaded["flemma.provider.providers.anthropic"] = nil
     package.loaded["flemma.provider.providers.openai"] = nil

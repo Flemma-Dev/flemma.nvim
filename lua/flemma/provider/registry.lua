@@ -27,21 +27,18 @@ local registry_utils = require("flemma.registry")
 ---@field module string
 ---@field capabilities flemma.provider.Capabilities
 ---@field display_name string
----@field default_parameters? table<string, any>
 ---@field config_schema? flemma.config.schema.ObjectNode Provider-specific config schema for DISCOVER resolution
 
 ---@class flemma.provider.Metadata
 ---@field name string Provider identifier (e.g., "anthropic")
 ---@field display_name string Human-readable name
 ---@field capabilities flemma.provider.Capabilities
----@field default_parameters? table<string, any> Provider-specific param defaults
 ---@field config_schema? flemma.config.schema.ObjectNode Provider-specific config schema for DISCOVER resolution
 
 ---@class flemma.provider.RegistrationEntry
 ---@field module string Lua module path
 ---@field capabilities flemma.provider.Capabilities
 ---@field display_name string
----@field default_parameters? table<string, any> Provider-specific param defaults
 ---@field config_schema? flemma.config.schema.ObjectNode Provider-specific config schema
 ---@field default_model? string Default model name
 ---@field models? table<string, flemma.models.ModelInfo> Model definitions with pricing
@@ -105,7 +102,6 @@ function M.register(source, entry)
       module = source,
       capabilities = mod.metadata.capabilities,
       display_name = mod.metadata.display_name,
-      default_parameters = mod.metadata.default_parameters,
       config_schema = mod.metadata.config_schema,
     }
   end
@@ -121,7 +117,6 @@ function M.register(source, entry)
     module = definition.module,
     capabilities = capabilities,
     display_name = definition.display_name,
-    default_parameters = definition.default_parameters,
     config_schema = definition.config_schema,
   }
 
@@ -255,15 +250,6 @@ function M.get_display_name(provider_name)
   local resolved = M.resolve(provider_name)
   local provider = providers[resolved]
   return provider and provider.display_name or nil
-end
-
----Get provider default parameters
----@param provider_name string The provider identifier
----@return table<string, any>|nil default_parameters Provider default parameters, or nil if not found
-function M.get_default_parameters(provider_name)
-  local resolved = M.resolve(provider_name)
-  local provider = providers[resolved]
-  return provider and provider.default_parameters or nil
 end
 
 ---Get provider config schema for DISCOVER resolution

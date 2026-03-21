@@ -72,7 +72,7 @@ All `require()` calls go at the top of the file, before any function definition.
 
 - `vim.notify()` for user-facing errors and warnings
 - `log` module for debug/trace logging
-- Return tuples `value, err` for operational results (e.g., `config_manager.prepare_config()`)
+- Return tuples `value, err` for operational results (e.g., `secrets.resolve()`)
 - Never `error()` for recoverable situations
 
 ## Buffer Format Reference

@@ -46,8 +46,8 @@ Methods are grouped into three categories:
     Auto-destroys sinks in `_response_buffer.extra`.
   - `extract_json_response_error(self, data)` — custom error extraction
     from JSON responses.
-  - `try_import_from_buffer(self, lines)` — import conversations from
-    external formats.
+  - `try_import_from_buffer(lines)` — import conversations from
+    external formats (static, no instance state).
   - `is_context_overflow(self, message)` — detect context window overflow
     from error messages.
   - `is_auth_error(self, message)` — detect authentication failures
@@ -102,7 +102,7 @@ local sink = require("flemma.sink")
 
 ---@class flemma.provider.ProviderState
 
---- Flattened per-provider parameters (result of config_manager.flatten_provider_params).
+--- Flattened per-provider parameters (result of normalize.flatten_parameters).
 --- Provider-specific sub-tables (e.g. `vertex`, `openai`) are merged to top level.
 ---@class flemma.provider.Parameters
 ---@field model string Model name (always present after initialization)
@@ -390,11 +390,10 @@ end
 
 --- Try to import conversation from buffer lines in an external format.
 --- Override to support importing from provider-specific formats (e.g. Anthropic
---- JSON exports).
----@param self flemma.provider.Base
+--- JSON exports). This is a static function — no instance state needed.
 ---@param lines string[]
 ---@return string|nil
-function M.try_import_from_buffer(self, lines)
+function M.try_import_from_buffer(lines)
   return nil
 end
 
@@ -831,159 +830,6 @@ function M._inject_orphan_results(self, pending, format_fn)
     )
   end
   return results
-end
-
--- ============================================================================
--- Shared parameter resolution helpers
--- ============================================================================
-
----@class flemma.provider.ThinkingResolution
----@field enabled boolean Whether thinking/reasoning is active
----@field budget? integer Token budget for budget-based providers (Anthropic, Vertex)
----@field effort? string Effort level for effort-based providers (OpenAI): "minimal"|"low"|"medium"|"high"|"max"
----@field level? string Display level: "minimal"|"low"|"medium"|"high"|"max" (always set when enabled)
-
---- Map a numeric budget to the closest named effort level
----@param budget number
----@return string effort "minimal"|"low"|"medium"|"high"|"max"
-local function budget_to_effort(budget)
-  if budget <= 256 then
-    return "minimal"
-  elseif budget <= 4096 then
-    return "low"
-  elseif budget <= 12288 then
-    return "medium"
-  elseif budget <= 24576 then
-    return "high"
-  else
-    return "max"
-  end
-end
-
---- Map a named effort level to a thinking budget, using per-model data when available
----@param level string "minimal"|"low"|"medium"|"high"|"max"
----@param model_info? flemma.models.ModelInfo
----@return integer budget
-local function effort_to_budget(level, model_info)
-  if model_info and model_info.thinking_budgets then
-    ---@cast model_info -nil
-    local budgets = model_info.thinking_budgets --[[@as table<string, integer>]]
-    if level == "max" then
-      if model_info.max_thinking_budget then
-        return model_info.max_thinking_budget
-      end
-      return budgets.high or 32768
-    end
-    local model_budget = budgets[level]
-    if model_budget then
-      return model_budget
-    end
-  end
-  -- Hardcoded fallback (current behavior)
-  if level == "minimal" then
-    return 128
-  elseif level == "low" then
-    return 2048
-  elseif level == "medium" then
-    return 8192
-  elseif level == "high" then
-    return 16384
-  else -- "max"
-    return 32768
-  end
-end
-
---- Map an effort level through model_info.thinking_effort_map if available
----@param effort string The canonical Flemma effort level
----@param model_info? flemma.models.ModelInfo
----@return string mapped_effort The provider-specific API value
-local function map_effort(effort, model_info)
-  if model_info and model_info.thinking_effort_map then
-    return model_info.thinking_effort_map[effort] or effort
-  end
-  return effort
-end
-
---- Resolve the unified `thinking` parameter into provider-appropriate values.
----
---- Priority: provider-specific param > thinking > provider defaults.
---- For budget-based providers (Anthropic, Vertex), resolves to a token budget.
---- For effort-based providers (OpenAI), resolves to an effort level string.
----
----@param params flemma.provider.Parameters The parameter proxy
----@param caps flemma.provider.Capabilities The provider's capabilities
----@param model_info? flemma.models.ModelInfo Per-model metadata for budget/clamping
----@return flemma.provider.ThinkingResolution
-function M.resolve_thinking(params, caps, model_info)
-  -- For budget-based providers (Anthropic, Vertex)
-  if caps.supports_thinking_budget then
-    local min = (model_info and model_info.min_thinking_budget) or caps.min_thinking_budget or 1
-    local max = model_info and model_info.max_thinking_budget
-
-    -- Priority: provider-specific thinking_budget > unified thinking
-    local raw_budget = params.thinking_budget
-    if raw_budget ~= nil then
-      if type(raw_budget) == "number" and raw_budget > 0 then
-        local budget = math.max(math.floor(raw_budget), min)
-        if max then
-          budget = math.min(budget, max)
-        end
-        return { enabled = true, budget = budget, level = budget_to_effort(budget) }
-      else
-        return { enabled = false }
-      end
-    end
-
-    -- Fall back to unified `thinking` parameter
-    local thinking = params.thinking
-    if thinking == nil or thinking == false or thinking == 0 then
-      return { enabled = false }
-    end
-    if type(thinking) == "string" then
-      local budget = math.max(effort_to_budget(thinking, model_info), min)
-      if max then
-        budget = math.min(budget, max)
-      end
-      return { enabled = true, budget = budget, level = budget_to_effort(budget) }
-    end
-    if type(thinking) == "number" and thinking > 0 then
-      local budget = math.max(math.floor(thinking), min)
-      if max then
-        budget = math.min(budget, max)
-      end
-      return { enabled = true, budget = budget, level = budget_to_effort(budget) }
-    end
-    return { enabled = false }
-  end
-
-  -- For effort-based providers (OpenAI)
-  if caps.supports_reasoning then
-    -- Priority: provider-specific reasoning > unified thinking
-    local raw_reasoning = params.reasoning
-    if raw_reasoning ~= nil and raw_reasoning ~= "" then
-      local mapped = map_effort(raw_reasoning, model_info)
-      return { enabled = true, effort = mapped, level = raw_reasoning }
-    end
-
-    -- Fall back to unified `thinking` parameter
-    local thinking = params.thinking
-    if thinking == nil or thinking == false or thinking == 0 then
-      return { enabled = false }
-    end
-    if type(thinking) == "string" then
-      local mapped = map_effort(thinking, model_info)
-      return { enabled = true, effort = mapped, level = thinking }
-    end
-    if type(thinking) == "number" and thinking > 0 then
-      local canonical = budget_to_effort(thinking)
-      local mapped = map_effort(canonical, model_info)
-      return { enabled = true, effort = mapped, level = canonical }
-    end
-    return { enabled = false }
-  end
-
-  -- Provider supports neither
-  return { enabled = false }
 end
 
 return M
