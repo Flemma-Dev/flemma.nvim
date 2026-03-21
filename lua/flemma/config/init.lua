@@ -351,6 +351,41 @@ function M.inspect(bufnr, path)
   return { value = value, layer = source }
 end
 
+--- Walk the schema tree and resolve every leaf path from the store,
+--- returning a flat list of entries with path, value, source, and depth.
+--- ObjectNodes are recursed into; all other nodes produce leaf entries.
+---@param schema flemma.config.schema.Node Schema node to walk
+---@param base_path string Dot-delimited path prefix (empty for root)
+---@param bufnr integer? Buffer number for per-buffer resolution
+---@param depth integer Current nesting depth
+---@param out { path: string, value: any, source: string?, depth: integer, is_object: boolean }[] Accumulator
+local function dump_resolved_walk(schema, base_path, bufnr, depth, out)
+  local unwrapped = nav.unwrap_optional(schema)
+  if unwrapped:is_object() then
+    if base_path ~= "" then
+      table.insert(out, { path = base_path, value = nil, source = nil, depth = depth, is_object = true })
+    end
+    -- Sort keys for deterministic output (all_known_fields uses pairs())
+    local sorted = {}
+    for k, child in unwrapped:all_known_fields() do
+      table.insert(sorted, { k = k, child = child })
+    end
+    table.sort(sorted, function(a, b)
+      return a.k < b.k
+    end)
+    for _, entry in ipairs(sorted) do
+      local child_path = base_path == "" and entry.k or (base_path .. "." .. entry.k)
+      -- Root children stay at depth 0; nested children indent
+      dump_resolved_walk(entry.child, child_path, bufnr, base_path == "" and depth or depth + 1, out)
+    end
+  else
+    local value, source = store.resolve_with_source(base_path, bufnr)
+    if value ~= nil then
+      table.insert(out, { path = base_path, value = value, source = source, depth = depth, is_object = false })
+    end
+  end
+end
+
 --- Return a deep copy of raw operations for the given layer.
 ---@param layer integer
 ---@param bufnr? integer Required for FRONTMATTER
@@ -381,6 +416,18 @@ end
 ---@return boolean
 function M.layer_has_op(layer, bufnr, op, path, value)
   return store.layer_has_op(layer, bufnr, op, path, value)
+end
+
+--- Return the full resolved config tree with source annotations.
+--- Each entry has path, value, source layer indicator, depth, and whether
+--- it is an object header (intermediate node).
+---@param bufnr? integer Buffer number for per-buffer resolution
+---@return { path: string, value: any, source: string?, depth: integer, is_object: boolean }[]
+function M.dump_resolved(bufnr)
+  assert(root_schema, "config.init() must be called before dump_resolved()")
+  local out = {}
+  dump_resolved_walk(root_schema, "", bufnr, 0, out)
+  return out
 end
 
 -- ---------------------------------------------------------------------------

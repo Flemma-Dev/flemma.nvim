@@ -24,7 +24,7 @@ describe("flemma.status", function()
     status = require("flemma.status")
   end)
 
-  ---Apply config through the config facade and sync to state.
+  ---Apply config through the config facade.
   ---Resets the store and applies opts to SETUP.
   ---@param opts table
   local function apply_test_config(opts)
@@ -206,9 +206,85 @@ describe("flemma.status", function()
 
       local data = status.collect(0)
       assert.is_table(data.parameters.merged)
-      -- The merged parameters should at least contain the general params
       assert.equals(4000, data.parameters.merged.max_tokens)
       assert.equals(0.5, data.parameters.merged.temperature)
+    end)
+
+    it("includes layer sources for provider and model", function()
+      apply_test_config({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5-20250929",
+        parameters = {},
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect(0)
+      assert.equals("S", data.provider.source)
+      assert.equals("S", data.provider.model_source)
+    end)
+
+    it("includes layer sources for parameters", function()
+      apply_test_config({
+        provider = "anthropic",
+        parameters = { max_tokens = 4000 },
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect(0)
+      assert.is_table(data.parameters.sources)
+      assert.equals("S", data.parameters.sources.max_tokens)
+    end)
+
+    it("reports parameter source as D for schema defaults", function()
+      -- Don't set provider explicitly — let it fall through to schema default
+      apply_test_config({
+        parameters = {},
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect(0)
+      -- provider has a schema default ("anthropic") → source is D
+      assert.equals("D", data.provider.source)
+    end)
+
+    it("reports tools source from config store when tools are registered", function()
+      apply_test_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      -- Register a tool so the tools list has ops in the store
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("read", {
+        name = "read",
+        description = "Read tool",
+        input_schema = { type = "object" },
+      })
+      -- Record a default so the tools list has an op in the store
+      local config_facade = require("flemma.config")
+      config_facade.record_default("append", "tools", "read")
+
+      local data = status.collect(0)
+      assert.is_string(data.tools.source)
+    end)
+
+    it("reports nil tools source when no tools list ops exist", function()
+      apply_test_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect(0)
+      -- No tools registered → no list ops on "tools" path → source is nil
+      assert.is_nil(data.tools.source)
     end)
   end)
 
@@ -243,12 +319,102 @@ describe("flemma.status", function()
     end)
   end)
 
+  describe("collect_verbose", function()
+    it("includes introspection data", function()
+      apply_test_config({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5-20250929",
+        parameters = { max_tokens = 8192 },
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect_verbose(0)
+      assert.is_table(data.introspection)
+      assert.is_table(data.introspection.layer_ops)
+      assert.is_table(data.introspection.resolved)
+    end)
+
+    it("layer_ops contains all four layers", function()
+      apply_test_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect_verbose(0)
+      local labels = {}
+      for _, layer in ipairs(data.introspection.layer_ops) do
+        labels[layer.label] = true
+      end
+      assert.is_true(labels["D"])
+      assert.is_true(labels["S"])
+      assert.is_true(labels["R"])
+      assert.is_true(labels["F"])
+    end)
+
+    it("setup layer ops reflect applied config", function()
+      apply_test_config({
+        provider = "anthropic",
+        parameters = { max_tokens = 8192 },
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect_verbose(0)
+      local setup_layer
+      for _, layer in ipairs(data.introspection.layer_ops) do
+        if layer.label == "S" then
+          setup_layer = layer
+          break
+        end
+      end
+      assert.is_not_nil(setup_layer)
+      assert.is_true(#setup_layer.ops > 0)
+
+      -- Find the max_tokens op
+      local found = false
+      for _, op_entry in ipairs(setup_layer.ops) do
+        if op_entry.path == "parameters.max_tokens" and op_entry.value == 8192 then
+          found = true
+          break
+        end
+      end
+      assert.is_true(found, "expected max_tokens set op in setup layer")
+    end)
+
+    it("resolved tree contains entries with source annotations", function()
+      apply_test_config({
+        provider = "anthropic",
+        parameters = { max_tokens = 8192 },
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect_verbose(0)
+      assert.is_true(#data.introspection.resolved > 0)
+
+      -- Find the provider entry
+      local found = false
+      for _, entry in ipairs(data.introspection.resolved) do
+        if entry.path == "provider" then
+          assert.equals("anthropic", entry.value)
+          assert.equals("S", entry.source)
+          found = true
+          break
+        end
+      end
+      assert.is_true(found, "expected provider in resolved tree")
+    end)
+  end)
+
   describe("format", function()
     it("returns lines with section headers", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
-        parameters = { merged = { max_tokens = 8192, temperature = 0.7 } },
+        parameters = { merged = { max_tokens = 8192, temperature = 0.7 }, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -280,19 +446,14 @@ describe("flemma.status", function()
       assert.truthy(text:find("Approval"), "expected Approval header")
     end)
 
-    it("includes full config dump when verbose is true", function()
-      apply_test_config({
-        provider = "anthropic",
-        model = "claude-sonnet-4-5-20250929",
-        parameters = { max_tokens = 8192 },
-        tools = { autopilot = { enabled = false, max_turns = 100 } },
-        sandbox = { enabled = false, backend = "auto" },
-      })
-
+    it("shows layer source indicators on parameter values", function()
       ---@type flemma.status.Data
       local data = {
-        provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
-        parameters = { merged = { max_tokens = 8192 } },
+        provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true, source = "S" },
+        parameters = {
+          merged = { max_tokens = 8192, thinking = "high" },
+          sources = { max_tokens = "D", thinking = "F" },
+        },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -302,19 +463,59 @@ describe("flemma.status", function()
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
         },
-        tools = { enabled = { "bash" }, disabled = {} },
-        approval = {
-          approved = {},
-          denied = {},
-          pending = { "bash" },
-          require_approval_disabled = false,
-        },
+        tools = { enabled = {}, disabled = {} },
+        approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
         buffer = { is_chat = false, bufnr = 0 },
       }
 
+      local lines = status.format(data, false)
+      local text = table.concat(lines, "\n")
+      -- Parameters should show layer indicators
+      assert.truthy(text:find("max_tokens.*D"), "expected D source on max_tokens")
+      assert.truthy(text:find("thinking.*F"), "expected F source on thinking")
+    end)
+
+    it("shows layer source indicator on provider", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "claude-haiku", initialized = true, source = "R", model_source = "R" },
+        parameters = { merged = {}, sources = {} },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
+        },
+        tools = { enabled = {}, disabled = {} },
+        approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local lines = status.format(data, false)
+      local text = table.concat(lines, "\n")
+      assert.truthy(text:find("name:.*anthropic.*R"), "expected R source on provider name")
+      assert.truthy(text:find("model:.*claude%-haiku.*R"), "expected R source on model")
+    end)
+
+    it("includes verbose layer ops and resolved tree", function()
+      apply_test_config({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5-20250929",
+        parameters = { max_tokens = 8192 },
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect_verbose(0)
       local lines = status.format(data, true)
       local text = table.concat(lines, "\n")
-      assert.truthy(text:find("Config %(full%)"), "expected Config (full) header")
+      assert.truthy(text:find("Layer Ops"), "expected Layer Ops header")
+      assert.truthy(text:find("%[D%].*defaults"), "expected defaults layer")
+      assert.truthy(text:find("%[S%].*setup"), "expected setup layer")
+      assert.truthy(text:find("Resolved Config Tree"), "expected Resolved Config Tree header")
     end)
 
     it("shows compact model metadata when model_info is present", function()
@@ -334,7 +535,7 @@ describe("flemma.status", function()
             min_cache_tokens = 2048,
           },
         },
-        parameters = { merged = { max_tokens = 8192 } },
+        parameters = { merged = { max_tokens = 8192 }, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -365,7 +566,7 @@ describe("flemma.status", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-unknown-99", initialized = true },
-        parameters = { merged = {} },
+        parameters = { merged = {}, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -396,35 +597,16 @@ describe("flemma.status", function()
         sandbox = { enabled = false, backend = "auto" },
       })
 
-      ---@type flemma.status.Data
-      local data = {
-        provider = {
-          name = "anthropic",
-          model = "claude-sonnet-4-6",
-          initialized = true,
-          model_info = {
-            pricing = { input = 3.0, output = 15.0, cache_read = 0.30, cache_write = 3.75 },
-            max_input_tokens = 200000,
-            max_output_tokens = 64000,
-            thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
-            min_thinking_budget = 1024,
-            max_thinking_budget = 16384,
-            min_cache_tokens = 2048,
-          },
-        },
-        parameters = { merged = {} },
-        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
-        sandbox = {
-          enabled = false,
-          config_enabled = false,
-          backend = "bwrap",
-          backend_mode = "auto",
-          backend_available = true,
-          policy = { rw_paths = {}, network = true, allow_privileged = false },
-        },
-        tools = { enabled = {}, disabled = {} },
-        approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
-        buffer = { is_chat = false, bufnr = 0 },
+      local data = status.collect_verbose(0)
+      -- Inject model_info for the test
+      data.provider.model_info = {
+        pricing = { input = 3.0, output = 15.0, cache_read = 0.30, cache_write = 3.75 },
+        max_input_tokens = 200000,
+        max_output_tokens = 64000,
+        thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+        min_thinking_budget = 1024,
+        max_thinking_budget = 16384,
+        min_cache_tokens = 2048,
       }
 
       local lines = status.format(data, true)
@@ -440,6 +622,7 @@ describe("flemma.status", function()
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
         parameters = {
           merged = { max_tokens = 8192, thinking = "low" },
+          sources = {},
         },
         autopilot = {
           enabled = false,
@@ -474,7 +657,7 @@ describe("flemma.status", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
-        parameters = { merged = {} },
+        parameters = { merged = {}, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -507,7 +690,7 @@ describe("flemma.status", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
-        parameters = { merged = {} },
+        parameters = { merged = {}, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -539,7 +722,7 @@ describe("flemma.status", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
-        parameters = { merged = {} },
+        parameters = { merged = {}, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = true,
@@ -571,7 +754,7 @@ describe("flemma.status", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
-        parameters = { merged = {} },
+        parameters = { merged = {}, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -600,7 +783,7 @@ describe("flemma.status", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
-        parameters = { merged = {} },
+        parameters = { merged = {}, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -630,7 +813,7 @@ describe("flemma.status", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
-        parameters = { merged = {} },
+        parameters = { merged = {}, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -659,7 +842,7 @@ describe("flemma.status", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
-        parameters = { merged = {} },
+        parameters = { merged = {}, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -839,7 +1022,7 @@ describe("flemma.status", function()
       assert.is_true(data.approval.require_approval_disabled)
     end)
 
-    it("reports no frontmatter_items when opts is nil", function()
+    it("reports no frontmatter_items when frontmatter layer is empty", function()
       setup_config({
         provider = "anthropic",
         parameters = {},

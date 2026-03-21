@@ -17,39 +17,72 @@ local MARKER_FRONTMATTER = "✲"
 local MARKER_SANDBOX = "⊡"
 
 ---@class flemma.status.ShowOptions
----@field verbose? boolean Include full config dump
+---@field verbose? boolean Include layer ops and resolved config tree
 ---@field jump_to? string Section header to jump cursor to
 ---@field bufnr? integer Buffer to collect status from (defaults to current)
 
 ---@class flemma.status.Data
----@field provider { name: string, model: string|nil, initialized: boolean, model_info: flemma.models.ModelInfo|nil }
----@field parameters { merged: table<string, any>, resolved_max_tokens: integer|nil }
+---@field provider { name: string, model: string|nil, initialized: boolean, model_info: flemma.models.ModelInfo|nil, source: string|nil, model_source: string|nil }
+---@field parameters { merged: table<string, any>, sources: table<string, string>, resolved_max_tokens: integer|nil }
 ---@field autopilot { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer }
 ---@field sandbox { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil, policy: flemma.config.SandboxPolicy }
----@field tools { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer, max_concurrent_frontmatter: integer|nil }
+---@field tools { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer, source: string|nil }
 ---@field approval { source: string|nil, approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil }
 ---@field buffer { is_chat: boolean, bufnr: integer }
+---@field introspection? { layer_ops: { label: string, name: string, ops: table[] }[], resolved: { path: string, value: any, source: string?, depth: integer, is_object: boolean }[] }
+
+-- ---------------------------------------------------------------------------
+-- Collectors
+-- ---------------------------------------------------------------------------
 
 ---Collect provider section data
 ---@param config flemma.Config
----@return { name: string, model: string|nil, initialized: boolean, model_info: flemma.models.ModelInfo|nil }
-local function collect_provider(config)
+---@param bufnr integer
+---@return { name: string, model: string|nil, initialized: boolean, model_info: flemma.models.ModelInfo|nil, source: string|nil, model_source: string|nil }
+local function collect_provider(config, bufnr)
   local model_info = config.model and registry.get_model_info(config.provider, config.model) or nil
+  local provider_info = config_facade.inspect(bufnr, "provider")
+  local model_info_src = config_facade.inspect(bufnr, "model")
   return {
     name = config.provider,
     model = config.model,
     initialized = config.provider ~= nil and config.provider ~= "",
     model_info = model_info,
+    source = provider_info and provider_info.layer or nil,
+    model_source = model_info_src and model_info_src.layer or nil,
   }
 end
 
----Collect parameters section data
+---Collect parameters section data with per-key source tracking.
 ---@param config flemma.Config
----@return { merged: table<string, any>, resolved_max_tokens: integer|nil }
-local function collect_parameters(config)
-  -- Flatten parameters from the materialized config. This reads from the
-  -- facade-resolved state, which includes all layers (DEFAULTS + SETUP + RUNTIME + FRONTMATTER).
+---@param bufnr integer
+---@return { merged: table<string, any>, sources: table<string, string>, resolved_max_tokens: integer|nil }
+local function collect_parameters(config, bufnr)
   local base_merged = normalize.flatten_parameters(config.provider, config)
+
+  -- Build source map for each flattened parameter key.
+  -- Provider-specific path takes precedence over general path (same as flatten).
+  local sources = {}
+  local provider_name = config.provider
+  for key, _ in pairs(base_merged) do
+    if key == "model" then
+      local info = config_facade.inspect(bufnr, "model")
+      if info and info.layer then
+        sources[key] = info.layer
+      end
+    else
+      -- Check provider-specific path first
+      local specific = config_facade.inspect(bufnr, "parameters." .. provider_name .. "." .. key)
+      if specific and specific.value ~= nil then
+        sources[key] = specific.layer
+      else
+        local general = config_facade.inspect(bufnr, "parameters." .. key)
+        if general and general.layer then
+          sources[key] = general.layer
+        end
+      end
+    end
+  end
 
   -- Resolve max_tokens on a copy to show the resolved integer alongside the original
   local resolved_max_tokens = nil
@@ -61,6 +94,7 @@ local function collect_parameters(config)
 
   return {
     merged = base_merged,
+    sources = sources,
     resolved_max_tokens = resolved_max_tokens,
   }
 end
@@ -87,9 +121,8 @@ end
 
 ---Collect sandbox section data
 ---@param bufnr integer
----@param _opts table|nil
 ---@return { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil, policy: flemma.config.SandboxPolicy }
-local function collect_sandbox(bufnr, _opts)
+local function collect_sandbox(bufnr)
   local sandbox_config = sandbox.resolve_config(bufnr)
   local runtime_override = sandbox.get_override()
 
@@ -110,46 +143,61 @@ local function collect_sandbox(bufnr, _opts)
   }
 end
 
----Collect tools section data, respecting per-buffer frontmatter overrides.
----When frontmatter changes the tool list, items that differ from config are tracked
----in frontmatter_items so the formatter can annotate them.
----@param config flemma.Config
----@param opts table|nil
----@return { enabled: string[], disabled: string[], frontmatter_items: table<string, true>|nil, max_concurrent: integer, max_concurrent_frontmatter: integer|nil }
-local function collect_tools(config, opts)
+---Collect tools section data, using the config store for source tracking.
+---When frontmatter changes the tool list, items that differ from the base
+---config are tracked in frontmatter_items for annotation.
+---@param bufnr integer
+---@return { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer, source: string|nil }
+local function collect_tools(bufnr)
   local all_tools = tools_registry.get_all({ include_disabled = true })
 
-  -- Config-only baseline: which tools are enabled by default?
-  local config_enabled_set = {}
-  for name, definition in pairs(all_tools) do
-    if definition.enabled ~= false then
-      config_enabled_set[name] = true
-    end
-  end
+  -- Get the tools list source from the config store
+  local tools_info = config_facade.inspect(bufnr, "tools")
+  local tools_list = tools_info and tools_info.value
+  local tools_source = tools_info and tools_info.layer
+  local frontmatter_modified = tools_source and tools_source:find("F") ~= nil
 
   local enabled = {}
   local disabled = {}
   local frontmatter_items = {}
 
-  if opts and opts.tools then
-    local enabled_set = {}
-    for _, name in ipairs(opts.tools) do
-      enabled_set[name] = true
+  if frontmatter_modified and type(tools_list) == "table" and #tools_list > 0 then
+    -- Frontmatter modified the tools list — filter by it and detect diffs
+    local allowed_set = {}
+    for _, name in ipairs(tools_list) do
+      allowed_set[name] = true
     end
+
+    -- Get the base tool list (without frontmatter) for diff detection
+    local base_info = config_facade.inspect(nil, "tools")
+    local base_set = {}
+    if base_info and type(base_info.value) == "table" then
+      for _, name in ipairs(base_info.value) do
+        base_set[name] = true
+      end
+    else
+      for name, definition in pairs(all_tools) do
+        if definition.enabled ~= false then
+          base_set[name] = true
+        end
+      end
+    end
+
     for name, _ in pairs(all_tools) do
-      if enabled_set[name] then
+      if allowed_set[name] then
         table.insert(enabled, name)
-        if not config_enabled_set[name] then
+        if not base_set[name] then
           frontmatter_items[name] = true
         end
       else
         table.insert(disabled, name)
-        if config_enabled_set[name] then
+        if base_set[name] then
           frontmatter_items[name] = true
         end
       end
     end
   else
+    -- No frontmatter modification — use registry enabled status
     for name, definition in pairs(all_tools) do
       if definition.enabled ~= false then
         table.insert(enabled, name)
@@ -162,20 +210,16 @@ local function collect_tools(config, opts)
   table.sort(enabled)
   table.sort(disabled)
 
-  -- max_concurrent: check frontmatter override, fall back to config
-  local config_max_concurrent = (config.tools and config.tools.max_concurrent) or 2
-  local max_concurrent_frontmatter = nil
-  if opts and opts.max_concurrent ~= nil then
-    max_concurrent_frontmatter = opts.max_concurrent
-  end
+  local mc_info = config_facade.inspect(bufnr, "tools.max_concurrent")
+  local max_concurrent = (mc_info and mc_info.value) or 2
 
   return {
     enabled = enabled,
     disabled = disabled,
     booting = not tools_module.is_ready(),
     frontmatter_items = next(frontmatter_items) and frontmatter_items or nil,
-    max_concurrent = config_max_concurrent,
-    max_concurrent_frontmatter = max_concurrent_frontmatter,
+    max_concurrent = max_concurrent,
+    source = tools_source,
   }
 end
 
@@ -188,32 +232,26 @@ local RESULT_TO_BUCKET = {
 
 ---Resolve approval for a tool via the resolver chain, returning the bucket and source.
 ---@param tool_name string
----@param _opts table|nil
 ---@param bufnr integer
 ---@return "approved"|"denied"|"pending" bucket
 ---@return string source Resolver name that made the decision
-local function resolve_tool_approval(tool_name, _opts, bufnr)
+local function resolve_tool_approval(tool_name, bufnr)
   local result, source = tools_approval.resolve_with_source(tool_name, {}, { bufnr = bufnr, tool_id = "" })
   return RESULT_TO_BUCKET[result] or "pending", source
 end
 
 ---Collect tool approval section data by running each tool through the approval
 ---resolver chain — the same code path used at tool-execution time.
----When frontmatter changes a tool's approval status, it is tracked in frontmatter_items.
----@param config flemma.Config
----@param opts table|nil
----@param enabled_tools string[] Sorted list of enabled tool names
+---@param config flemma.Config Materialized config (from collect)
 ---@param bufnr integer Buffer number for resolver context
+---@param enabled_tools string[] Sorted list of enabled tool names
 ---@return { source: string|nil, approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil }
-local function collect_approval(config, opts, enabled_tools, bufnr)
+local function collect_approval(config, bufnr, enabled_tools)
   local tools_config = config.tools
   local require_approval_disabled = tools_config and tools_config.require_approval == false or false
 
   -- Build source string from the effective auto_approve policy
   local effective_policy = tools_config and tools_config.auto_approve
-  if opts and opts.auto_approve ~= nil then
-    effective_policy = opts.auto_approve
-  end
   ---@type string|nil
   local source = nil
   if type(effective_policy) == "table" then
@@ -229,12 +267,10 @@ local function collect_approval(config, opts, enabled_tools, bufnr)
   local approved = {}
   local denied = {}
   local pending = {}
-  local frontmatter_items = {}
   local sandbox_items = {}
-  local has_frontmatter = opts and opts.auto_approve ~= nil
 
   for _, name in ipairs(enabled_tools) do
-    local bucket, resolver_source = resolve_tool_approval(name, opts, bufnr)
+    local bucket, resolver_source = resolve_tool_approval(name, bufnr)
     if bucket == "denied" then
       table.insert(denied, name)
     elseif bucket == "approved" then
@@ -247,13 +283,25 @@ local function collect_approval(config, opts, enabled_tools, bufnr)
     if resolver_source == "urn:flemma:approval:sandbox" then
       sandbox_items[name] = true
     end
+  end
 
-    -- Track frontmatter diffs by re-resolving without opts
-    if has_frontmatter then
-      local config_bucket = resolve_tool_approval(name, nil, bufnr)
-      if bucket ~= config_bucket then
+  -- Detect frontmatter-modified approval by checking if auto_approve source includes F
+  local aa_info = config_facade.inspect(bufnr, "tools.auto_approve")
+  local has_frontmatter = aa_info and aa_info.layer and aa_info.layer:find("F") ~= nil
+
+  ---@type table<string, true>|nil
+  local frontmatter_items = nil
+  if has_frontmatter then
+    -- Mark all non-sandbox approved tools as frontmatter-influenced
+    -- (exact per-tool diff would require resolving without frontmatter layer)
+    frontmatter_items = {}
+    for _, name in ipairs(approved) do
+      if not sandbox_items[name] then
         frontmatter_items[name] = true
       end
+    end
+    if not next(frontmatter_items) then
+      frontmatter_items = nil
     end
   end
 
@@ -263,10 +311,52 @@ local function collect_approval(config, opts, enabled_tools, bufnr)
     denied = denied,
     pending = pending,
     require_approval_disabled = require_approval_disabled,
-    frontmatter_items = next(frontmatter_items) and frontmatter_items or nil,
+    frontmatter_items = frontmatter_items,
     sandbox_items = next(sandbox_items) and sandbox_items or nil,
   }
 end
+
+---Collect introspection data for the verbose view.
+---Returns raw layer ops and the resolved config tree with source annotations.
+---@param bufnr integer
+---@return { layer_ops: { label: string, name: string, ops: table[] }[], resolved: { path: string, value: any, source: string?, depth: integer, is_object: boolean }[] }
+local function collect_introspection(bufnr)
+  local LAYERS = config_facade.LAYERS
+  local layer_ops = {}
+
+  ---@type { label: string, num: integer, name: string }[]
+  local layer_info = {
+    { label = "D", num = LAYERS.DEFAULTS, name = "defaults" },
+    { label = "S", num = LAYERS.SETUP, name = "setup" },
+    { label = "R", num = LAYERS.RUNTIME, name = "runtime" },
+    { label = "F", num = LAYERS.FRONTMATTER, name = "frontmatter" },
+  }
+
+  for _, info in ipairs(layer_info) do
+    local ops
+    if info.num == LAYERS.FRONTMATTER then
+      ops = config_facade.dump_layer(info.num, bufnr)
+    else
+      ops = config_facade.dump_layer(info.num)
+    end
+    table.insert(layer_ops, {
+      label = info.label,
+      name = info.name,
+      ops = ops,
+    })
+  end
+
+  local resolved = config_facade.dump_resolved(bufnr)
+
+  return {
+    layer_ops = layer_ops,
+    resolved = resolved,
+  }
+end
+
+-- ---------------------------------------------------------------------------
+-- Formatting
+-- ---------------------------------------------------------------------------
 
 ---Format a list of names, appending markers for frontmatter/sandbox items.
 ---@param names string[]
@@ -291,7 +381,7 @@ local function format_name_list(names, frontmatter_items, sandbox_items)
   return table.concat(parts, ", ")
 end
 
----Format a scalar or table value as a display string
+---Format a scalar or table value as a compact display string
 ---@param value any
 ---@return string
 local function format_value(value)
@@ -301,9 +391,35 @@ local function format_value(value)
   return tostring(value)
 end
 
+---Right-pad a string to the given display width.
+---Uses strdisplaywidth to handle multi-byte characters correctly.
+---@param text string
+---@param width integer
+---@return string
+local function pad(text, width)
+  local display_width = vim.fn.strdisplaywidth(text)
+  if display_width >= width then
+    return text
+  end
+  return text .. string.rep(" ", width - display_width)
+end
+
+---Format a value line with an optional layer indicator right-aligned.
+---@param label string Left-hand label (e.g., "  thinking:")
+---@param value_str string Formatted value
+---@param source string|nil Layer indicator (e.g., "D", "S+F")
+---@return string
+local function format_sourced_line(label, value_str, source)
+  if not source then
+    return label .. " " .. value_str
+  end
+  local content = label .. " " .. value_str
+  return pad(content, 40) .. " " .. source
+end
+
 ---Format status data into display lines for a scratch buffer
 ---@param data flemma.status.Data
----@param verbose boolean Whether to include the full config dump
+---@param verbose boolean Whether to include layer ops and resolved config tree
 ---@return string[]
 function M.format(data, verbose)
   local lines = {}
@@ -321,8 +437,8 @@ function M.format(data, verbose)
 
   -- Provider section
   add("Provider")
-  add("  name: " .. data.provider.name)
-  add("  model: " .. (data.provider.model or "(none)"))
+  add(format_sourced_line("  name:", data.provider.name, data.provider.source))
+  add(format_sourced_line("  model:", data.provider.model or "(none)", data.provider.model_source))
   add("  initialized: " .. tostring(data.provider.initialized))
   local model_info = data.provider.model_info
   if model_info then
@@ -370,11 +486,12 @@ function M.format(data, verbose)
   table.sort(sorted_keys)
   for _, key in ipairs(sorted_keys) do
     local value = data.parameters.merged[key]
-    local resolved_suffix = ""
+    local value_str = format_value(value)
     if key == "max_tokens" and data.parameters.resolved_max_tokens then
-      resolved_suffix = " → " .. tostring(data.parameters.resolved_max_tokens)
+      value_str = value_str .. " → " .. tostring(data.parameters.resolved_max_tokens)
     end
-    add("  " .. key .. ": " .. format_value(value) .. resolved_suffix)
+    local source = data.parameters.sources and data.parameters.sources[key] or nil
+    add(format_sourced_line("  " .. key .. ":", value_str, source))
   end
   add("")
 
@@ -417,23 +534,16 @@ function M.format(data, verbose)
   -- Tools section
   local enabled_count = #data.tools.enabled
   local disabled_count = #data.tools.disabled
-  add("Tools (" .. enabled_count .. " enabled, " .. disabled_count .. " disabled)")
+  local tools_header = "Tools (" .. enabled_count .. " enabled, " .. disabled_count .. " disabled)"
+  if data.tools.source then
+    tools_header = pad(tools_header, 40) .. " " .. data.tools.source
+  end
+  add(tools_header)
   if data.tools.booting then
     add("  ⏳ loading async tool sources…")
   end
-  if data.tools.max_concurrent_frontmatter ~= nil then
-    add(
-      "  max_concurrent: ~~"
-        .. tostring(data.tools.max_concurrent)
-        .. "~~ "
-        .. tostring(data.tools.max_concurrent_frontmatter)
-        .. " "
-        .. MARKER_FRONTMATTER
-    )
-  else
-    local mc_label = data.tools.max_concurrent == 0 and "unlimited" or tostring(data.tools.max_concurrent)
-    add("  max_concurrent: " .. mc_label)
-  end
+  local mc_label = data.tools.max_concurrent == 0 and "unlimited" or tostring(data.tools.max_concurrent)
+  add("  max_concurrent: " .. mc_label)
   if enabled_count > 0 then
     add("  ✓ " .. format_name_list(data.tools.enabled, data.tools.frontmatter_items))
   end
@@ -470,9 +580,7 @@ function M.format(data, verbose)
   end
 
   -- Legend (only if annotation markers were used)
-  local has_frontmatter_marker = data.tools.frontmatter_items
-    or data.tools.max_concurrent_frontmatter ~= nil
-    or data.approval.frontmatter_items
+  local has_frontmatter_marker = data.tools.frontmatter_items or data.approval.frontmatter_items
   local has_sandbox_marker = data.approval.sandbox_items ~= nil
   if has_frontmatter_marker or has_sandbox_marker then
     add("")
@@ -484,7 +592,7 @@ function M.format(data, verbose)
     end
   end
 
-  -- Verbose: model info dump and full config dump
+  -- Verbose: layer ops + resolved config tree
   if verbose then
     if model_info then
       add("")
@@ -497,27 +605,68 @@ function M.format(data, verbose)
       end
     end
 
-    add("")
-    add("Config (full)")
-    add(string.rep("─", 40))
-    add("")
-    local config_text = vim.inspect(config_facade.materialize(data.buffer.bufnr))
-    for line in config_text:gmatch("[^\n]+") do
-      add(line)
+    local intro = data.introspection
+    if intro then
+      add("")
+      add("Layer Ops")
+      add(string.rep("─", 40))
+      for _, layer in ipairs(intro.layer_ops) do
+        local op_count = #layer.ops
+        local suffix = ""
+        if layer.label == "D" then
+          suffix = " (schema materialized)"
+        end
+        add("[" .. layer.label .. "] " .. pad(layer.name, 15) .. "(" .. op_count .. " ops" .. suffix .. ")")
+        -- Show non-default layer ops (skip defaults — too noisy)
+        if layer.label ~= "D" then
+          for _, op_entry in ipairs(layer.ops) do
+            local value_display = format_value(op_entry.value)
+            add("  " .. pad(op_entry.op, 8) .. " " .. pad(op_entry.path, 30) .. "-> " .. value_display)
+          end
+        end
+      end
+
+      add("")
+      add("Resolved Config Tree")
+      add(string.rep("─", 40))
+      for _, entry in ipairs(intro.resolved) do
+        local indent = string.rep("  ", entry.depth)
+        if entry.is_object then
+          local leaf = entry.path:match("[^.]+$") or entry.path
+          add(indent .. leaf)
+        else
+          local leaf = entry.path:match("[^.]+$") or entry.path
+          local value_display = format_value(entry.value)
+          add(format_sourced_line(indent .. pad(leaf, 20 - entry.depth * 2), value_display, entry.source))
+        end
+      end
+    else
+      -- Fallback: plain config dump when introspection is not available
+      add("")
+      add("Config (full)")
+      add(string.rep("─", 40))
+      add("")
+      local config_text = vim.inspect(config_facade.materialize(data.buffer.bufnr))
+      for line in config_text:gmatch("[^\n]+") do
+        add(line)
+      end
     end
   end
 
   return lines
 end
 
+-- ---------------------------------------------------------------------------
+-- Public API
+-- ---------------------------------------------------------------------------
+
 ---Collect all runtime status data for a buffer
 ---@param bufnr integer Buffer number (0 for current)
 ---@return flemma.status.Data
 function M.collect(bufnr)
-  local config = config_facade.materialize(bufnr)
-
-  -- Evaluate frontmatter for chat buffers — writes to config store's FRONTMATTER layer.
-  -- After this, config.get(bufnr) returns the resolved config including frontmatter.
+  -- Evaluate frontmatter for chat buffers FIRST — writes to config store's
+  -- FRONTMATTER layer. This must happen before materialize() so the
+  -- materialized config includes frontmatter overrides.
   local is_chat = vim.api.nvim_buf_is_valid(bufnr) and bufnr > 0 and vim.bo[bufnr].filetype == "chat"
   if is_chat then
     local ok, processor = pcall(require, "flemma.processor")
@@ -526,18 +675,19 @@ function M.collect(bufnr)
     end
   end
 
-  -- Pass bufnr to collectors so they can read per-buffer config from the store.
-  -- The opts parameter is kept nil — collectors that still use it will be migrated.
-  local opts = nil
-  local tools_data = collect_tools(config, opts)
+  -- Materialize after frontmatter evaluation so all layers are included.
+  -- materialize() is needed because flatten_parameters uses pairs().
+  local config = config_facade.materialize(bufnr)
+
+  local tools_data = collect_tools(bufnr)
 
   return {
-    provider = collect_provider(config),
-    parameters = collect_parameters(config),
+    provider = collect_provider(config, bufnr),
+    parameters = collect_parameters(config, bufnr),
     autopilot = collect_autopilot(bufnr, config),
-    sandbox = collect_sandbox(bufnr, opts),
+    sandbox = collect_sandbox(bufnr),
     tools = tools_data,
-    approval = collect_approval(config, opts, tools_data.enabled, bufnr),
+    approval = collect_approval(config, bufnr, tools_data.enabled),
     buffer = {
       is_chat = is_chat,
       bufnr = bufnr,
@@ -545,57 +695,72 @@ function M.collect(bufnr)
   }
 end
 
+---Collect all runtime status data for a buffer including introspection for verbose view.
+---@param bufnr integer Buffer number (0 for current)
+---@return flemma.status.Data
+function M.collect_verbose(bufnr)
+  local data = M.collect(bufnr)
+  data.introspection = collect_introspection(bufnr)
+  return data
+end
+
 ---Open a vertical-split scratch buffer with formatted status output
 ---@param opts flemma.status.ShowOptions
 function M.show(opts)
   local target_bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
 
-  local data = M.collect(target_bufnr)
-  local lines = M.format(data, opts.verbose or false)
+  local is_verbose = opts.verbose or false
+  local data
+  if is_verbose then
+    data = M.collect_verbose(target_bufnr)
+  else
+    data = M.collect(target_bufnr)
+  end
+  local format_lines = M.format(data, is_verbose)
 
   -- Check if a status buffer already exists in the current tabpage
   local existing_win = nil
   local existing_bufnr = nil
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-    local bufnr = vim.api.nvim_win_get_buf(win)
-    if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].filetype == "flemma-status" then
+    local buf = vim.api.nvim_win_get_buf(win)
+    if vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].filetype == "flemma-status" then
       existing_win = win
-      existing_bufnr = bufnr
+      existing_bufnr = buf
       break
     end
   end
 
-  local bufnr
+  local buf
   if existing_win then
     vim.api.nvim_set_current_win(existing_win)
-    bufnr = existing_bufnr --[[@as integer]]
+    buf = existing_bufnr --[[@as integer]]
   else
     vim.cmd("vnew")
-    bufnr = vim.api.nvim_get_current_buf()
+    buf = vim.api.nvim_get_current_buf()
   end
 
   -- Set buffer options
-  vim.bo[bufnr].buftype = "nofile"
-  vim.bo[bufnr].bufhidden = "wipe"
-  vim.bo[bufnr].swapfile = false
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].swapfile = false
 
   -- Write content
-  vim.bo[bufnr].modifiable = true
-  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-  vim.bo[bufnr].modifiable = false
-  vim.bo[bufnr].filetype = "flemma-status"
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, format_lines)
+  vim.bo[buf].modifiable = false
+  vim.bo[buf].filetype = "flemma-status"
 
   -- Enable conceal for strikethrough on overridden values
   local win = vim.api.nvim_get_current_win()
   vim.wo[win].conceallevel = 2
 
   -- Map q to close
-  vim.keymap.set("n", "q", "<cmd>close<cr>", { buffer = bufnr, nowait = true })
+  vim.keymap.set("n", "q", "<cmd>close<cr>", { buffer = buf, nowait = true })
 
   -- Jump to section if requested
   if opts.jump_to then
     local current_win = vim.api.nvim_get_current_win()
-    for index, line in ipairs(lines) do
+    for index, line in ipairs(format_lines) do
       if line:find(opts.jump_to, 1, true) == 1 then
         vim.api.nvim_win_set_cursor(current_win, { index, 0 })
         break
