@@ -351,3 +351,78 @@ describe("flatten_parameters with facade", function()
     assert.are.equal("claude-sonnet-4-5", flat.model)
   end)
 end)
+
+describe("resolve_preset", function()
+  local config_facade = require("flemma.config")
+  local schema_definition = require("flemma.config.schema.definition")
+
+  before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.provider.registry"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
+    package.loaded["flemma.presets"] = nil
+    config_facade = require("flemma.config")
+    registry = require("flemma.provider.registry")
+    normalize = require("flemma.provider.normalize")
+
+    config_facade.init(schema_definition)
+    registry.setup()
+  end)
+
+  it("returns config unchanged when model is not a preset reference", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, { model = "claude-sonnet-4-5" })
+    local config = config_facade.materialize()
+    local resolved = normalize.resolve_preset(config)
+    assert.equals("claude-sonnet-4-5", resolved.model)
+    assert.equals("anthropic", resolved.provider)
+  end)
+
+  it("returns config unchanged when model is nil", function()
+    local config = config_facade.materialize()
+    local resolved = normalize.resolve_preset(config)
+    assert.is_nil(resolved.model)
+  end)
+
+  it("resolves preset reference to concrete provider and model", function()
+    local presets_mod = require("flemma.presets")
+    presets_mod.refresh({
+      ["$haiku"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514" },
+    })
+    config_facade.apply(config_facade.LAYERS.SETUP, { model = "$haiku" })
+    local config = config_facade.materialize()
+    local resolved = normalize.resolve_preset(config)
+    assert.equals("anthropic", resolved.provider)
+    assert.equals("claude-haiku-4-5-20250514", resolved.model)
+  end)
+
+  it("merges preset parameters into config", function()
+    local presets_mod = require("flemma.presets")
+    presets_mod.refresh({
+      ["$fast"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514", thinking = "low" },
+    })
+    config_facade.apply(config_facade.LAYERS.SETUP, { model = "$fast" })
+    local config = config_facade.materialize()
+    local resolved = normalize.resolve_preset(config)
+    assert.equals("claude-haiku-4-5-20250514", resolved.model)
+    assert.equals("low", resolved.parameters.thinking)
+  end)
+
+  it("does not mutate the original config table", function()
+    local presets_mod = require("flemma.presets")
+    presets_mod.refresh({
+      ["$haiku"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514" },
+    })
+    config_facade.apply(config_facade.LAYERS.SETUP, { model = "$haiku" })
+    local config = config_facade.materialize()
+    normalize.resolve_preset(config)
+    assert.equals("$haiku", config.model)
+  end)
+
+  it("returns config unchanged when preset is not found", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, { model = "$nonexistent" })
+    local config = config_facade.materialize()
+    local resolved = normalize.resolve_preset(config)
+    assert.equals("$nonexistent", resolved.model)
+  end)
+end)

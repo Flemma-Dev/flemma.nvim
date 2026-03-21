@@ -835,7 +835,7 @@ function M.send_to_provider(opts)
   local current_provider
   do
     local effective_bufnr = prompt.bufnr
-    local cfg = config_facade.materialize(effective_bufnr)
+    local cfg = normalize.resolve_preset(config_facade.materialize(effective_bufnr))
     local provider_key = cfg.provider
     local flat_params = normalize.flatten_parameters(provider_key, cfg)
     normalize.resolve_max_tokens(provider_key, cfg.model, flat_params)

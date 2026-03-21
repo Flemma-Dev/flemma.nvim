@@ -677,7 +677,8 @@ function M.collect(bufnr)
 
   -- Materialize after frontmatter evaluation so all layers are included.
   -- materialize() is needed because flatten_parameters uses pairs().
-  local config = config_facade.materialize(bufnr)
+  -- resolve_preset() expands $-prefixed model references to concrete values.
+  local config = normalize.resolve_preset(config_facade.materialize(bufnr))
 
   local tools_data = collect_tools(bufnr)
 

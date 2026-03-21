@@ -200,7 +200,7 @@ return s.object({
     modules = s.list(s.loadable(), {}),
   }),
 
-  presets = s.map(s.string(), s.object({}):passthrough(), {}),
+  presets = s.map(s.string(), s.union(s.string(), s.object({}):passthrough()), {}),
 
   text_object = s.union(s.string("m"), s.literal(false)),
 

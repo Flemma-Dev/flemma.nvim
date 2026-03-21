@@ -5,10 +5,39 @@
 local M = {}
 
 local log = require("flemma.logging")
+local presets = require("flemma.presets")
 local registry = require("flemma.provider.registry")
 
 local FALLBACK_MAX_TOKENS = 4000
 local MIN_MAX_TOKENS = 1024
+
+-- ============================================================================
+-- resolve_preset
+-- ============================================================================
+
+---Resolve a model preset reference in a materialized config.
+---If config.model starts with "$", looks up the preset and returns a modified
+---copy with the resolved provider, model, and merged parameters. Returns the
+---original config unmodified when no preset reference is found or lookup fails.
+---@param config table Materialized config (NOT mutated)
+---@return table config Resolved config (may be a shallow copy)
+function M.resolve_preset(config)
+  if type(config.model) ~= "string" or not vim.startswith(config.model, "$") then
+    return config
+  end
+  local preset = presets.get(config.model)
+  if not preset then
+    return config
+  end
+  config = vim.tbl_deep_extend("force", config, {
+    provider = preset.provider,
+    model = preset.model,
+  })
+  if preset.parameters and next(preset.parameters) then
+    config.parameters = vim.tbl_deep_extend("force", config.parameters or {}, preset.parameters)
+  end
+  return config
+end
 
 -- ============================================================================
 -- flatten_parameters

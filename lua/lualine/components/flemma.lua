@@ -168,7 +168,7 @@ function flemma_component:update_status()
   -- required because flatten_parameters uses pairs() and make_resolvers
   -- accesses dynamic keys. bufnr ensures frontmatter overrides are visible.
   local bufnr = vim.api.nvim_get_current_buf()
-  local config = config_facade.materialize(bufnr)
+  local config = normalize.resolve_preset(config_facade.materialize(bufnr))
   if not config or not config.model or config.model == "" then
     return ""
   end

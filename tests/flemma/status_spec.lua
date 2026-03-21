@@ -69,6 +69,22 @@ describe("flemma.status", function()
       assert.is_true(data.provider.initialized)
     end)
 
+    it("resolves model preset reference to actual provider and model", function()
+      local presets_mod = require("flemma.presets")
+      presets_mod.refresh({
+        ["$haiku"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514" },
+      })
+      apply_test_config({
+        provider = "anthropic",
+        model = "$haiku",
+        sandbox = { enabled = false },
+      })
+
+      local data = status.collect(0)
+      assert.equals("anthropic", data.provider.name)
+      assert.equals("claude-haiku-4-5-20250514", data.provider.model)
+    end)
+
     it("separates tools into enabled and disabled lists", function()
       apply_test_config({
         provider = "anthropic",

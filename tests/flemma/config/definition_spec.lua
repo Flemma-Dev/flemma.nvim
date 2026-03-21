@@ -1084,4 +1084,45 @@ describe("config.schema.definition", function()
       assert.is_false(config_facade.get().tools.require_approval)
     end)
   end)
+
+  describe("presets map", function()
+    it("accepts table-valued preset definitions", function()
+      local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
+        presets = {
+          ["$haiku"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514" },
+        },
+      })
+      assert.is_nil(err)
+      assert.is_true(ok)
+      local cfg = config_facade.materialize()
+      assert.equals("anthropic", cfg.presets["$haiku"].provider)
+      assert.equals("claude-haiku-4-5-20250514", cfg.presets["$haiku"].model)
+    end)
+
+    it("accepts string-valued preset definitions", function()
+      local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
+        presets = {
+          ["$haiku"] = "anthropic claude-haiku-4-5-20250514",
+        },
+      })
+      assert.is_nil(err)
+      assert.is_true(ok)
+      local cfg = config_facade.materialize()
+      assert.equals("anthropic claude-haiku-4-5-20250514", cfg.presets["$haiku"])
+    end)
+
+    it("accepts mixed string and table preset definitions", function()
+      local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
+        presets = {
+          ["$fast"] = "anthropic claude-haiku-4-5-20250514 thinking=disabled",
+          ["$smart"] = { provider = "anthropic", model = "claude-sonnet-4-20250514" },
+        },
+      })
+      assert.is_nil(err)
+      assert.is_true(ok)
+      local cfg = config_facade.materialize()
+      assert.is_string(cfg.presets["$fast"])
+      assert.is_table(cfg.presets["$smart"])
+    end)
+  end)
 end)
