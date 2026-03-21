@@ -314,8 +314,10 @@ function M.setup()
         return nil
       end
 
-      -- Respect frontmatter exclusions: if frontmatter explicitly removed this
-      -- tool from auto_approve, don't override that decision via sandbox.
+      -- Respect frontmatter exclusions. We must check the operation log, not the
+      -- resolved list: a tool absent from the materialized list may simply have
+      -- never been added — that's different from the user actively removing it.
+      -- layer_has_op answers the intent question; the resolved value cannot.
       if
         bufnr
         and config_facade.layer_has_op(
@@ -329,8 +331,11 @@ function M.setup()
         return nil
       end
 
-      -- An explicit (assigned) policy in frontmatter is a complete specification
-      -- — don't grant additional approvals beyond what the assignment lists.
+      -- A `set` op in frontmatter means the user specified the complete approval
+      -- policy for this buffer — sandbox must not grant additional approvals.
+      -- We check the op log because `set` and `append` can produce identical
+      -- resolved lists; only the operation distinguishes full ownership from
+      -- an incremental tweak.
       if bufnr and config_facade.layer_has_set(config_facade.LAYERS.FRONTMATTER, bufnr, "tools.auto_approve") then
         return nil
       end
