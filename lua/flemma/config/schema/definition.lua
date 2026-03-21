@@ -170,7 +170,6 @@ return s.object({
       s.string(),
       s.object({
         approve = s.optional(s.list(s.string())),
-        deny = s.optional(s.list(s.string())),
       }),
       {}
     ),

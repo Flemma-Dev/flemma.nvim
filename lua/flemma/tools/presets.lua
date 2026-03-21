@@ -1,5 +1,5 @@
 --- Tool approval preset registry
---- Manages named approval presets (static approve/deny tool lists) that can be
+--- Manages named approval presets (static approve tool lists) that can be
 --- referenced by $name in auto_approve configuration. Ships built-in presets;
 --- users can override or add their own.
 ---@class flemma.tools.Presets
@@ -9,7 +9,6 @@ local log = require("flemma.logging")
 
 ---@class flemma.tools.PresetDefinition
 ---@field approve? string[] Tool names to auto-approve
----@field deny? string[] Tool names to deny (overrides approve from other presets)
 
 ---@type table<string, flemma.tools.PresetDefinition>
 local BUILTIN = {
@@ -41,10 +40,6 @@ local function validate(name, definition)
   end
   if definition.approve ~= nil and type(definition.approve) ~= "table" then
     warn(("Preset '%s' ignored — 'approve' must be a string[], got %s"):format(name, type(definition.approve)))
-    return false
-  end
-  if definition.deny ~= nil and type(definition.deny) ~= "table" then
-    warn(("Preset '%s' ignored — 'deny' must be a string[], got %s"):format(name, type(definition.deny)))
     return false
   end
   return true

@@ -2620,10 +2620,6 @@ describe("Approval Preset Expansion", function()
     assert.equals("require_approval", approval.resolve("write", {}, { bufnr = 1, tool_id = "t3" }))
   end)
 
-  it("deny in preset overrides approve from other preset", function()
-    pending("config overhaul: preset denial tracking lost by coerce expansion")
-  end)
-
   it("unknown preset name is silently ignored", function()
     set_config_and_setup({ tools = { auto_approve = { "$nonexistent", "read" } } })
     assert.equals("approve", approval.resolve("read", {}, { bufnr = 1, tool_id = "t1" }))
@@ -2856,10 +2852,6 @@ describe("Sandbox auto-approval resolver", function()
     })
     local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
     assert.equals("approve", result)
-  end)
-
-  it("config preset deny overrides sandbox resolver", function()
-    pending("config overhaul: preset denial tracking lost by coerce expansion")
   end)
 
   it("still auto-approves $default tools (read, write, edit) regardless of sandbox", function()

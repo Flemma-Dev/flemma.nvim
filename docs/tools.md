@@ -100,22 +100,17 @@ Presets are named collections of tool approval rules referenced with a `$` prefi
 ```lua
 tools = {
   presets = {
-    ["$yolo"]    = { approve = { "bash", "read", "write", "edit" } },
-    ["$no-bash"] = { deny = { "bash" } },
+    ["$yolo"] = { approve = { "bash", "read", "write", "edit" } },
   },
-  auto_approve = { "$yolo", "$no-bash" },
+  auto_approve = { "$yolo" },
 }
 ```
 
-Each preset is a table with optional `approve` and `deny` arrays:
-
-- **`approve`** – tool names to auto-approve.
-- **`deny`** – tool names to deny outright (an error result is injected).
+Each preset is a table with an `approve` array — the tool names to auto-approve.
 
 **Composition rules:**
 
-- **Union.** When multiple presets appear in `auto_approve`, their `approve` and `deny` sets are merged.
-- **Deny wins.** If a tool appears in both `approve` (from one preset) and `deny` (from another), the tool is denied. This lets you layer a restrictive preset on top of a permissive one.
+- **Union.** When multiple presets appear in `auto_approve`, their `approve` sets are merged.
 - **Plain tool names** mix freely with presets: `{ "$default", "calculator" }` approves everything in `$default` plus `calculator`.
 
 ### Per-buffer approval
