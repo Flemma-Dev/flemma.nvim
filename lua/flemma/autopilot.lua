@@ -34,7 +34,7 @@ end
 ---@param bufnr integer
 ---@return boolean
 function M.is_enabled(bufnr)
-  local cfg = config_facade.materialize(bufnr)
+  local cfg = config_facade.get(bufnr)
   return cfg.tools.autopilot.enabled == true
 end
 
@@ -114,7 +114,7 @@ function M.on_response_complete(bufnr)
   local bs = get_state(bufnr)
   bs.iteration = bs.iteration + 1
 
-  local cfg = config_facade.materialize(bufnr)
+  local cfg = config_facade.get(bufnr)
   local max_turns = cfg.tools.autopilot.max_turns
 
   if bs.iteration > max_turns then

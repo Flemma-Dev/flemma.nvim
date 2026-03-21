@@ -298,29 +298,22 @@ function M.build_request(self, prompt, _context)
   if thinking.enabled then
     local is_adaptive = model_info and model_info.supports_adaptive_thinking
 
-    if is_adaptive and model_info and model_info.thinking_effort_map then
-      ---@cast model_info -nil
-      -- 4.6 adaptive thinking: resolve canonical level directly from params
-      -- (the budget path's level loses "max" → "high" via budget_to_effort roundtrip)
-      local canonical_level = thinking.level
-      if type(self.parameters.thinking) == "string" then
-        canonical_level = self.parameters.thinking
-      end
-      local effort = model_info.thinking_effort_map[canonical_level] or "high"
+    if is_adaptive then
+      -- 4.6+ adaptive thinking: effort from resolve_thinking's mapped_effort
+      local effort = thinking.mapped_effort or "high"
       request_body.thinking = { type = "adaptive" }
       request_body.output_config = { effort = effort }
       log.debug("anthropic.build_request: Adaptive thinking enabled with effort: " .. effort)
-    elseif model_info and model_info.thinking_effort_map and thinking.budget then
-      ---@cast model_info -nil
+    elseif thinking.budget and thinking.mapped_effort then
       -- Opus 4.5: budget-based thinking with effort parameter alongside
-      local canonical_level = thinking.level
-      if type(self.parameters.thinking) == "string" then
-        canonical_level = self.parameters.thinking
-      end
-      local effort = model_info.thinking_effort_map[canonical_level] or "high"
       request_body.thinking = { type = "enabled", budget_tokens = thinking.budget }
-      request_body.output_config = { effort = effort }
-      log.debug("anthropic.build_request: Budget thinking with effort: " .. effort .. ", budget: " .. thinking.budget)
+      request_body.output_config = { effort = thinking.mapped_effort }
+      log.debug(
+        "anthropic.build_request: Budget thinking with effort: "
+          .. thinking.mapped_effort
+          .. ", budget: "
+          .. thinking.budget
+      )
     elseif thinking.budget then
       local budget = thinking.budget
       local max_tokens = self.parameters.max_tokens

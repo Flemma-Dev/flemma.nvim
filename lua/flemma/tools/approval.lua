@@ -253,23 +253,21 @@ end
 ---Converts `config.tools.auto_approve` and `config.tools.require_approval` into
 ---resolver chain entries. Called during plugin setup after config is stored in state.
 function M.setup()
-  local config = config_facade.materialize()
+  local config = config_facade.get()
   local tools_config = config.tools
 
-  local auto_approve = tools_config and tools_config.auto_approve
-  if auto_approve ~= nil then
-    if type(auto_approve) == "string" and loader.is_module_path(auto_approve) then
-      -- Single module path: validate now, load lazily on first resolve.
-      -- This path is NOT unified — module resolvers are setup-time only.
-      local module_resolve = build_module_resolver(auto_approve)
-      register_entry(auto_approve, {
-        priority = 100,
-        description = "Built-in resolver from module " .. auto_approve,
-        resolve = function(tool_name, input, context)
-          return module_resolve(tool_name, input, context)
-        end,
-      })
-    end
+  -- Module-path auto_approve: user set auto_approve to a single module path string.
+  -- Schema default is a list, so this only fires for explicit string values.
+  local auto_approve = tools_config.auto_approve
+  if type(auto_approve) == "string" and loader.is_module_path(auto_approve) then
+    local module_resolve = build_module_resolver(auto_approve)
+    register_entry(auto_approve, {
+      priority = 100,
+      description = "Built-in resolver from module " .. auto_approve,
+      resolve = function(tool_name, input, context)
+        return module_resolve(tool_name, input, context)
+      end,
+    })
   end
 
   -- Unified auto_approve resolver: reads the resolved auto_approve from the
@@ -302,13 +300,8 @@ function M.setup()
     resolve = function(tool_name, _input, context)
       local bufnr = context.bufnr
 
-      -- Config-level guards (cheapest checks first)
-      if not tools_config or tools_config.auto_approve_sandboxed == false then
-        return nil
-      end
-      -- Only activate when auto_approve is configured — don't make exceptions
-      -- when the user hasn't opted into any auto-approval
-      if not tools_config.auto_approve then
+      -- Config-level guard: user explicitly disabled sandbox auto-approval
+      if tools_config.auto_approve_sandboxed == false then
         return nil
       end
 
@@ -356,7 +349,7 @@ function M.setup()
     end,
   })
 
-  local require_approval = tools_config and tools_config.require_approval
+  local require_approval = tools_config.require_approval
   if require_approval == false then
     register_entry("urn:flemma:approval:catch-all", {
       priority = 0,

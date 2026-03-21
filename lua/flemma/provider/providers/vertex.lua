@@ -294,13 +294,10 @@ function M.build_request(self, prompt, _context)
   if thinking.enabled then
     local thinking_config = { includeThoughts = true }
 
-    if model_info and model_info.thinking_effort_map then
-      -- Gemini 3+ models: map canonical level to provider API value via model metadata
-      local mapped = model_info.thinking_effort_map[thinking.level]
-      if mapped then
-        thinking_config.thinkingLevel = mapped
-        log.debug("build_request: Vertex AI thinkingConfig included with thinkingLevel: " .. mapped)
-      end
+    if thinking.mapped_effort then
+      -- Gemini 3+ models: effort from resolve_thinking's mapped_effort
+      thinking_config.thinkingLevel = thinking.mapped_effort
+      log.debug("build_request: Vertex AI thinkingConfig included with thinkingLevel: " .. thinking.mapped_effort)
     elseif thinking.budget then
       -- Gemini 2.5 and earlier: use thinkingBudget (numeric token count)
       thinking_config.thinkingBudget = thinking.budget

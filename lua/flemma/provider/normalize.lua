@@ -119,7 +119,8 @@ end
 ---@field enabled boolean Whether thinking/reasoning is active
 ---@field budget? integer Token budget for budget-based providers (Anthropic, Vertex)
 ---@field effort? string Effort level for effort-based providers (OpenAI): "minimal"|"low"|"medium"|"high"|"max"
----@field level? string Display level: "minimal"|"low"|"medium"|"high"|"max" (always set when enabled)
+---@field level? string Canonical Flemma level: "minimal"|"low"|"medium"|"high"|"max" (always set when enabled)
+---@field mapped_effort? string Provider-specific API value from thinking_effort_map (nil when model has no map)
 
 --- Map a numeric budget to the closest named effort level
 ---@param budget number
@@ -171,15 +172,26 @@ local function effort_to_budget(level, model_info)
   end
 end
 
---- Map an effort level through model_info.thinking_effort_map if available
+--- Map an effort level through model_info.thinking_effort_map, returning nil
+--- when the model has no effort map. Providers use this to decide whether to
+--- use effort-based or budget-based API parameters.
+---@param level string The canonical Flemma effort level
+---@param model_info? flemma.models.ModelInfo
+---@return string|nil mapped Provider API value, or nil when no map exists
+local function map_effort_from_model(level, model_info)
+  if not model_info or not model_info.thinking_effort_map then
+    return nil
+  end
+  return model_info.thinking_effort_map[level]
+end
+
+--- Map an effort level through model_info.thinking_effort_map if available.
+--- Falls back to the input level when no map exists.
 ---@param effort string The canonical Flemma effort level
 ---@param model_info? flemma.models.ModelInfo
 ---@return string mapped_effort The provider-specific API value
 local function map_effort(effort, model_info)
-  if model_info and model_info.thinking_effort_map then
-    return model_info.thinking_effort_map[effort] or effort
-  end
-  return effort
+  return map_effort_from_model(effort, model_info) or effort
 end
 
 --- Resolve the unified `thinking` parameter into provider-appropriate values.
@@ -206,7 +218,13 @@ function M.resolve_thinking(params, caps, model_info)
         if max then
           budget = math.min(budget, max)
         end
-        return { enabled = true, budget = budget, level = budget_to_effort(budget) }
+        local level = budget_to_effort(budget)
+        return {
+          enabled = true,
+          budget = budget,
+          level = level,
+          mapped_effort = map_effort_from_model(level, model_info),
+        }
       else
         return { enabled = false }
       end
@@ -222,14 +240,23 @@ function M.resolve_thinking(params, caps, model_info)
       if max then
         budget = math.min(budget, max)
       end
-      return { enabled = true, budget = budget, level = budget_to_effort(budget) }
+      -- Preserve the original string as level (avoid budget_to_effort roundtrip
+      -- which loses precision, e.g., "max" → budget 24576 → "high").
+      return {
+        enabled = true,
+        budget = budget,
+        level = thinking,
+        mapped_effort = map_effort_from_model(thinking, model_info),
+      }
     end
     if type(thinking) == "number" and thinking > 0 then
       local budget = math.max(math.floor(thinking), min)
       if max then
         budget = math.min(budget, max)
       end
-      return { enabled = true, budget = budget, level = budget_to_effort(budget) }
+      local level = budget_to_effort(budget)
+      local mapped_effort = map_effort_from_model(level, model_info)
+      return { enabled = true, budget = budget, level = level, mapped_effort = mapped_effort }
     end
     return { enabled = false }
   end

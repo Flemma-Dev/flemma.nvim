@@ -63,11 +63,11 @@ describe("normalize.resolve_thinking", function()
       assert.are.equal("low", result.level)
     end)
 
-    it("thinking='minimal' clamps to min 1024", function()
+    it("thinking='minimal' clamps to min 1024 but preserves level", function()
       local result = normalize.resolve_thinking({ thinking = "minimal" }, caps)
       assert.is_true(result.enabled)
       assert.are.equal(1024, result.budget)
-      assert.are.equal("low", result.level)
+      assert.are.equal("minimal", result.level)
     end)
 
     it("thinking=500 clamps to min 1024", function()
@@ -371,6 +371,78 @@ describe("normalize.resolve_thinking", function()
       local result = normalize.resolve_thinking({ thinking_budget = 99999 }, caps, model_info)
       assert.is_true(result.enabled)
       assert.are.equal(24576, result.budget)
+    end)
+  end)
+
+  describe("mapped_effort for budget-based providers", function()
+    local caps = {
+      supports_thinking_budget = true,
+      supports_reasoning = false,
+      outputs_thinking = true,
+      output_has_thoughts = true,
+      min_thinking_budget = 1024,
+    }
+
+    it("is nil when model has no effort map", function()
+      local result = normalize.resolve_thinking({ thinking = "high" }, caps)
+      assert.is_true(result.enabled)
+      assert.is_nil(result.mapped_effort)
+    end)
+
+    it("maps string level through effort map", function()
+      local model_info = {
+        thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" },
+      }
+      local result = normalize.resolve_thinking({ thinking = "high" }, caps, model_info)
+      assert.is_true(result.enabled)
+      assert.are.equal("high", result.mapped_effort)
+      assert.are.equal("high", result.level)
+    end)
+
+    it("preserves level when budget is clamped (no roundtrip bug)", function()
+      local model_info = {
+        thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" },
+        max_thinking_budget = 20000,
+      }
+      -- "max" → budget clamped to 20000 → budget_to_effort would return "high"
+      -- but level should still be "max" (user's intent)
+      local result = normalize.resolve_thinking({ thinking = "max" }, caps, model_info)
+      assert.is_true(result.enabled)
+      assert.are.equal("max", result.level)
+      assert.are.equal("max", result.mapped_effort)
+    end)
+
+    it("maps numeric input through budget_to_effort then effort map", function()
+      local model_info = {
+        thinking_effort_map = { minimal = "LOW", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
+      }
+      -- 5000 → budget_to_effort → "medium" → effort_map → "MEDIUM"
+      local result = normalize.resolve_thinking({ thinking = 5000 }, caps, model_info)
+      assert.is_true(result.enabled)
+      assert.are.equal("MEDIUM", result.mapped_effort)
+      assert.are.equal("medium", result.level)
+    end)
+
+    it("maps thinking_budget through effort map", function()
+      local model_info = {
+        thinking_effort_map = { minimal = "LOW", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
+      }
+      -- 16384 → budget_to_effort → "high" → effort_map → "HIGH"
+      local result = normalize.resolve_thinking({ thinking_budget = 16384 }, caps, model_info)
+      assert.is_true(result.enabled)
+      assert.are.equal("HIGH", result.mapped_effort)
+      assert.are.equal("high", result.level)
+    end)
+
+    it("is nil when effort map does not contain the level", function()
+      local model_info = {
+        thinking_effort_map = { low = "low", medium = "medium", high = "high" },
+      }
+      -- "minimal" not in map → mapped_effort is nil
+      local result = normalize.resolve_thinking({ thinking = "minimal" }, caps, model_info)
+      assert.is_true(result.enabled)
+      assert.is_nil(result.mapped_effort)
+      assert.are.equal("minimal", result.level)
     end)
   end)
 
