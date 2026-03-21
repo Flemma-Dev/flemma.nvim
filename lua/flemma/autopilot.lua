@@ -45,7 +45,6 @@ end
 function M.set_enabled(enabled)
   local w = config_facade.writer(nil, config_facade.LAYERS.RUNTIME)
   w.tools.autopilot.enabled = enabled
-  state.set_config(config_facade.materialize())
   log.debug("autopilot: set_enabled(" .. tostring(enabled) .. ")")
 end
 

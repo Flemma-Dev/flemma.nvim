@@ -6,7 +6,6 @@ local M = {}
 local config_facade = require("flemma.config")
 local nav = require("flemma.config.schema.navigation")
 local log = require("flemma.logging")
-local state = require("flemma.state")
 local registry = require("flemma.provider.registry")
 local schema_definition = require("flemma.config.schema.definition")
 
@@ -236,7 +235,7 @@ function M.prepare_config(provider_name, model_name, explicit_params, layer)
   M.apply_config(resolved_provider, validated_model, explicit_params, layer)
 
   -- Read back from the materialized facade state and flatten for provider.new()
-  local resolved_config = state.get_config()
+  local resolved_config = config_facade.materialize()
   local flat_params = M.flatten_provider_params(resolved_provider, resolved_config)
 
   -- Resolve percentage-based or over-limit max_tokens before validation
@@ -292,8 +291,6 @@ function M.apply_config(provider_name, model_name, explicit_params, layer)
       end
     end
   end
-
-  state.set_config(config_facade.materialize())
 
   log.debug(
     "apply_config(): Applied config - provider: "

@@ -1,4 +1,5 @@
 local state = require("flemma.state")
+local config_facade = require("flemma.config")
 
 describe("flemma.setup with preset model", function()
   local notifications = {}
@@ -27,7 +28,7 @@ describe("flemma.setup with preset model", function()
       },
     })
 
-    local config = state.get_config()
+    local config = config_facade.materialize()
     assert.are.equal("openai", config.provider)
     assert.are.equal("gpt-4o", config.model)
   end)
@@ -60,7 +61,7 @@ describe("flemma.setup with preset model", function()
       },
     })
 
-    local config = state.get_config()
+    local config = config_facade.materialize()
     assert.are.equal("openai", config.provider)
     assert.are.equal("gpt-4o", config.model)
   end)
@@ -122,7 +123,7 @@ describe("flemma.setup", function()
       },
     })
 
-    local config = state.get_config()
+    local config = config_facade.materialize()
 
     -- Check that user-provided values are set
     assert.are.equal("openai", config.provider)
@@ -143,7 +144,7 @@ describe("flemma.setup", function()
       },
     })
 
-    local config = state.get_config()
+    local config = config_facade.materialize()
 
     -- Check that user-provided nested value is set
     assert.are.equal(true, config.editing.auto_write)

@@ -1,13 +1,18 @@
 --- Unit tests for flemma.secrets.context
 
 local context
-local state
+local config_facade
 
 describe("flemma.secrets.context", function()
   before_each(function()
     package.loaded["flemma.secrets.context"] = nil
-    package.loaded["flemma.state"] = nil
-    state = require("flemma.state")
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema.definition"] = nil
+    config_facade = require("flemma.config")
+    local schema = require("flemma.config.schema.definition")
+    config_facade.init(schema)
     context = require("flemma.secrets.context")
   end)
 
@@ -18,28 +23,29 @@ describe("flemma.secrets.context", function()
       assert.is_function(ctx.get_config)
     end)
 
-    it("get_config returns nil when no secrets config exists", function()
-      state.set_config({})
-      local ctx = context.new("gcloud")
-      assert.is_nil(ctx:get_config())
-    end)
-
     it("get_config returns nil when resolver subtable is absent", function()
-      state.set_config({ secrets = {} })
-      local ctx = context.new("gcloud")
+      -- "nonexistent" has no schema entry, so it resolves to nil
+      local ctx = context.new("nonexistent")
       assert.is_nil(ctx:get_config())
     end)
 
     it("get_config returns the resolver subtable", function()
-      state.set_config({ secrets = { gcloud = { path = "/nix/store/gcloud" } } })
+      config_facade.apply(config_facade.LAYERS.SETUP, { secrets = { gcloud = { path = "/nix/store/gcloud" } } })
       local ctx = context.new("gcloud")
       local cfg = ctx:get_config()
       assert.is_not_nil(cfg)
       assert.equals("/nix/store/gcloud", cfg.path)
     end)
 
+    it("get_config returns schema defaults when no user config applied", function()
+      local ctx = context.new("gcloud")
+      local cfg = ctx:get_config()
+      assert.is_not_nil(cfg)
+      assert.equals("gcloud", cfg.path)
+    end)
+
     it("get_config returns a deep copy (mutations do not affect state)", function()
-      state.set_config({ secrets = { gcloud = { path = "gcloud" } } })
+      config_facade.apply(config_facade.LAYERS.SETUP, { secrets = { gcloud = { path = "gcloud" } } })
       local ctx = context.new("gcloud")
       local cfg = ctx:get_config()
       cfg.path = "mutated"
@@ -48,16 +54,11 @@ describe("flemma.secrets.context", function()
     end)
 
     it("different resolver names return independent configs", function()
-      state.set_config({
-        secrets = {
-          gcloud = { path = "/path/to/gcloud" },
-          other = { foo = "bar" },
-        },
-      })
+      config_facade.apply(config_facade.LAYERS.SETUP, { secrets = { gcloud = { path = "/path/to/gcloud" } } })
       local gcloud_ctx = context.new("gcloud")
-      local other_ctx = context.new("other")
+      local nonexistent_ctx = context.new("nonexistent")
       assert.equals("/path/to/gcloud", gcloud_ctx:get_config().path)
-      assert.equals("bar", other_ctx:get_config().foo)
+      assert.is_nil(nonexistent_ctx:get_config())
     end)
 
     it("get_diagnostics returns empty table by default", function()

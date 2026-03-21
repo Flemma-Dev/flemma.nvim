@@ -11,7 +11,6 @@ local loader = require("flemma.loader")
 local log = require("flemma.logging")
 local registry_utils = require("flemma.registry")
 local sandbox = require("flemma.sandbox")
-local state = require("flemma.state")
 local tools_registry = require("flemma.tools.registry")
 
 ---@alias flemma.tools.ApprovalResult "approve"|"require_approval"|"deny"
@@ -254,7 +253,7 @@ end
 ---Converts `config.tools.auto_approve` and `config.tools.require_approval` into
 ---resolver chain entries. Called during plugin setup after config is stored in state.
 function M.setup()
-  local config = state.get_config()
+  local config = config_facade.materialize()
   local tools_config = config.tools
 
   local auto_approve = tools_config and tools_config.auto_approve

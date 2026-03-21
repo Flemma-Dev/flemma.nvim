@@ -3,6 +3,7 @@
 local M = {}
 
 local bar = require("flemma.bar")
+local config_facade = require("flemma.config")
 local state = require("flemma.state")
 local usage = require("flemma.usage")
 
@@ -96,7 +97,7 @@ end
 --- Get notification config from state
 ---@return flemma.config.Notifications
 local function get_config()
-  return state.get_config().notifications
+  return config_facade.get().notifications
 end
 
 --- Check whether the gutter is wide enough to hold the prefix icon

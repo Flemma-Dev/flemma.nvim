@@ -8,7 +8,6 @@ local bwrap = require("flemma.sandbox.backends.bwrap")
 local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
 local registry_utils = require("flemma.registry")
-local state = require("flemma.state")
 local variables = require("flemma.utilities.variables")
 
 -- ---------------------------------------------------------------------------
@@ -311,7 +310,7 @@ function M.setup()
   end
 
   -- Validate module-path backend early (fail fast at startup)
-  local config = state.get_config()
+  local config = config_facade.get()
   if config.sandbox and config.sandbox.backend and loader.is_module_path(config.sandbox.backend) then
     loader.assert_exists(config.sandbox.backend)
   end

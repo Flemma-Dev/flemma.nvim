@@ -327,9 +327,7 @@ end
 --- Materialize the current resolved config into a plain Lua table.
 --- Walks the schema tree (static fields + DISCOVER-cached fields) and resolves
 --- every path from the store. Returns a deep copy safe for external mutation.
----
---- Used as a bridge: feeds the old state.get_config() system from the new store
---- during the transition period.
+--- Use when consumers need `pairs()`, `vim.deepcopy()`, or plain table semantics.
 ---@param bufnr? integer Buffer number for per-buffer resolution
 ---@return table
 function M.materialize(bufnr)

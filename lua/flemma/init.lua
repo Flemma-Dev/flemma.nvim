@@ -6,7 +6,6 @@ local M = {}
 local config_facade = require("flemma.config")
 local schema_definition = require("flemma.config.schema.definition")
 local log = require("flemma.logging")
-local state = require("flemma.state")
 local core = require("flemma.core")
 local presets = require("flemma.presets")
 local ui = require("flemma.ui")
@@ -57,7 +56,6 @@ M.setup = function(user_opts)
   -- Early materialize for consumers during module registration. DISCOVER
   -- defaults aren't in L10 yet — those arrive as each module registers.
   local config = config_facade.materialize()
-  state.set_config(config)
 
   -- Hydrate preset definitions for fast lookup
   presets.refresh(config.presets)
@@ -122,7 +120,6 @@ M.setup = function(user_opts)
   -- opts, and coerced values are now resolved. This is the authoritative
   -- config for provider init.
   config = config_facade.materialize()
-  state.set_config(config)
 
   -- Phase 4: Provider initialization (needs complete config)
 
@@ -242,21 +239,21 @@ end
 ---Get the current model name
 ---@return string|nil
 function M.get_current_model_name()
-  local current_config = state.get_config()
-  if current_config and current_config.model then
-    return current_config.model
+  local current_config = config_facade.get()
+  if not current_config or not current_config.model or current_config.model == "" then
+    return nil
   end
-  return nil -- Or an empty string, depending on desired behavior for uninitialized model
+  return current_config.model
 end
 
 ---Get the current provider name
 ---@return string|nil
 function M.get_current_provider_name()
-  local current_config = state.get_config()
-  if current_config and current_config.provider then
-    return current_config.provider
+  local current_config = config_facade.get()
+  if not current_config or not current_config.provider or current_config.provider == "" then
+    return nil
   end
-  return nil
+  return current_config.provider
 end
 
 return M

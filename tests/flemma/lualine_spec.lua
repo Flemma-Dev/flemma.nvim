@@ -159,10 +159,9 @@ describe("Lualine component", function()
   end)
 
   it("should return an empty string if model is not set", function()
-    -- Arrange: set model to nil via config
-    local state = require("flemma.state")
-    local config = state.get_config()
-    config.model = nil
+    -- Arrange: override model to nil at runtime layer (setup sets a default model)
+    local store = require("flemma.config.store")
+    store.record(require("flemma.config").LAYERS.RUNTIME, nil, "set", "model", nil)
 
     -- Act
     local status = flemma_component:update_status()
@@ -173,11 +172,10 @@ describe("Lualine component", function()
 
   describe("custom format strings", function()
     it("should use provider:model format when configured", function()
-      -- Arrange: switch first, then set format (switch_provider re-materializes state)
+      -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
-      local state = require("flemma.state")
-      local config = state.get_config()
-      config.statusline.format = "#{provider}:#{model}"
+      local config_facade = require("flemma.config")
+      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{provider}:#{model}" } })
 
       -- Act
       local status = flemma_component:update_status()
@@ -189,9 +187,8 @@ describe("Lualine component", function()
     it("should handle conditionals in custom format", function()
       -- Arrange: switch first, then set format (switch_provider re-materializes state)
       core.switch_provider("openai", "o3", { reasoning = "high", temperature = 1 })
-      local state = require("flemma.state")
-      local config = state.get_config()
-      config.statusline.format = "#{model}#{?#{thinking}, [#{thinking}],}"
+      local config_facade = require("flemma.config")
+      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{model}#{?#{thinking}, [#{thinking}],}" } })
 
       -- Act
       local status = flemma_component:update_status()
@@ -202,9 +199,8 @@ describe("Lualine component", function()
 
     it("should collapse conditional when thinking is off", function()
       -- Arrange
-      local state = require("flemma.state")
-      local config = state.get_config()
-      config.statusline.format = "#{model}#{?#{thinking}, [#{thinking}],}"
+      local config_facade = require("flemma.config")
+      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{model}#{?#{thinking}, [#{thinking}],}" } })
       core.switch_provider("openai", "gpt-4o", {})
 
       -- Act
@@ -215,11 +211,10 @@ describe("Lualine component", function()
     end)
 
     it("should support provider-conditional format", function()
-      -- Arrange: switch first, then set format (switch_provider re-materializes state)
+      -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
-      local state = require("flemma.state")
-      local config = state.get_config()
-      config.statusline.format = "#{?#{==:#{provider},anthropic},A,O}: #{model}"
+      local config_facade = require("flemma.config")
+      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{?#{==:#{provider},anthropic},A,O}: #{model}" } })
 
       -- Act
       local status = flemma_component:update_status()
@@ -231,11 +226,10 @@ describe("Lualine component", function()
 
   describe("session variables", function()
     it("should display session cost when format includes #{session.cost}", function()
-      -- Arrange: switch first, then set format (switch_provider re-materializes state)
+      -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
-      local state = require("flemma.state")
-      local config = state.get_config()
-      config.statusline.format = "#{model} #{?#{session.cost},#{session.cost},}"
+      local config_facade = require("flemma.config")
+      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{model} #{?#{session.cost},#{session.cost},}" } })
 
       -- Add a request to the session
       local s = require("flemma.session").get()
@@ -257,11 +251,10 @@ describe("Lualine component", function()
     end)
 
     it("should display request count", function()
-      -- Arrange: switch first, then set format (switch_provider re-materializes state)
+      -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
-      local state = require("flemma.state")
-      local config = state.get_config()
-      config.statusline.format = "#{model} (#{session.requests})"
+      local config_facade = require("flemma.config")
+      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{model} (#{session.requests})" } })
 
       local s = require("flemma.session").get()
       s:reset()
@@ -292,9 +285,8 @@ describe("Lualine component", function()
     it("should hide session variables when no requests exist", function()
       -- Arrange: switch first, then set format (switch_provider re-materializes state)
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
-      local state = require("flemma.state")
-      local config = state.get_config()
-      config.statusline.format = "#{model}#{?#{session.cost}, #{session.cost},}"
+      local config_facade = require("flemma.config")
+      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{model}#{?#{session.cost}, #{session.cost},}" } })
 
       local s = require("flemma.session").get()
       s:reset()
@@ -307,11 +299,13 @@ describe("Lualine component", function()
     end)
 
     it("should format tokens compactly", function()
-      -- Arrange: switch first, then set format (switch_provider re-materializes state)
+      -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
-      local state = require("flemma.state")
-      local config = state.get_config()
-      config.statusline.format = "↑#{session.tokens.input} ↓#{session.tokens.output}"
+      local config_facade = require("flemma.config")
+      config_facade.apply(
+        config_facade.LAYERS.RUNTIME,
+        { statusline = { format = "↑#{session.tokens.input} ↓#{session.tokens.output}" } }
+      )
 
       local s = require("flemma.session").get()
       s:reset()
@@ -334,9 +328,8 @@ describe("Lualine component", function()
     it("should display last request cost", function()
       -- Arrange: switch first, then set format (switch_provider re-materializes state)
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
-      local state = require("flemma.state")
-      local config = state.get_config()
-      config.statusline.format = "#{model} last:#{last.cost}"
+      local config_facade = require("flemma.config")
+      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{model} last:#{last.cost}" } })
 
       local s = require("flemma.session").get()
       s:reset()
@@ -389,9 +382,8 @@ describe("Lualine component", function()
     it("should prefer lualine options format over flemma config format", function()
       -- Arrange: conflicting formats — lualine option should win
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
-      local state = require("flemma.state")
-      local config = state.get_config()
-      config.statusline.format = "config:#{model}"
+      local config_facade = require("flemma.config")
+      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "config:#{model}" } })
       flemma_component.options = { format = "options:#{model}" }
 
       -- Act
@@ -405,9 +397,8 @@ describe("Lualine component", function()
   describe("booting variable", function()
     it("should be truthy while async tool sources are pending", function()
       -- Arrange
-      local state = require("flemma.state")
-      local config = state.get_config()
-      config.statusline.format = "#{?#{booting},booting,ready}"
+      local config_facade = require("flemma.config")
+      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{?#{booting},booting,ready}" } })
 
       local tools = require("flemma.tools")
       tools.clear()
@@ -456,9 +447,8 @@ describe("Lualine component", function()
 
     it("should be falsy once all async tool sources resolve", function()
       -- Arrange
-      local state = require("flemma.state")
-      local config = state.get_config()
-      config.statusline.format = "#{?#{booting},booting,ready}"
+      local config_facade = require("flemma.config")
+      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{?#{booting},booting,ready}" } })
 
       local tools = require("flemma.tools")
       tools.clear()

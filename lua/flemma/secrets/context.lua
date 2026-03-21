@@ -1,9 +1,9 @@
 ---@class flemma.secrets.context
 --- Per-resolver config context. Implements flemma.config.ConfigAware by reading
---- state.get_config().secrets[resolver_name] and returning a deep copy.
+--- the config facade's secrets[resolver_name] and returning a deep copy.
 local M = {}
 
-local state = require("flemma.state")
+local config_facade = require("flemma.config")
 
 ---@class flemma.secrets.Context : flemma.config.ConfigAware<table>
 ---@field diagnostic fun(self: flemma.secrets.Context, message: string)
@@ -25,7 +25,7 @@ function M.new(resolver_name)
 
   ---@return table|nil
   function ctx:get_config()
-    local cfg = state.get_config().secrets
+    local cfg = config_facade.materialize().secrets
     if not cfg then
       return nil
     end

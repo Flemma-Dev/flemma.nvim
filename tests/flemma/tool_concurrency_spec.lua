@@ -14,8 +14,14 @@ package.loaded["flemma.bridge"] = nil
 package.loaded["flemma.provider.registry"] = nil
 package.loaded["flemma.models"] = nil
 package.loaded["flemma.autopilot"] = nil
+package.loaded["flemma.config"] = nil
+package.loaded["flemma.config.store"] = nil
+package.loaded["flemma.config.proxy"] = nil
+package.loaded["flemma.config.schema.definition"] = nil
 
 local stub = require("luassert.stub")
+local config_facade = require("flemma.config")
+local schema = require("flemma.config.schema.definition")
 local state = require("flemma.state")
 local executor = require("flemma.tools.executor")
 local tool_context = require("flemma.tools.context")
@@ -72,7 +78,7 @@ end
 describe("Tool concurrency count_running", function()
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
+    config_facade.init(schema)
   end)
 
   it("returns 0 when no tools are executing", function()
@@ -121,7 +127,8 @@ describe("Tool concurrency gating in Phase 2", function()
   before_each(function()
     core = require("flemma.core")
     register_calculator()
-    state.set_config({
+    config_facade.init(schema)
+    config_facade.apply(config_facade.LAYERS.SETUP, {
       parameters = { thinking = false },
       tools = {
         max_concurrent = 2,
@@ -132,7 +139,7 @@ describe("Tool concurrency gating in Phase 2", function()
 
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
+    config_facade.init(schema)
   end)
 
   it("skips approved tools when running count reaches max_concurrent", function()
@@ -211,8 +218,7 @@ describe("Tool concurrency gating in Phase 2", function()
 
   it("executes all approved tools when max_concurrent=0 (unlimited)", function()
     -- Override config to unlimited
-    local config = state.get_config()
-    config.tools.max_concurrent = 0
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { max_concurrent = 0 } })
 
     -- Pre-populate 5 running tools — with unlimited, this shouldn't block anything
     local bufnr = create_buffer({

@@ -121,7 +121,7 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
     return nil
   end
 
-  local updated_config = state.get_config()
+  local updated_config = config_facade.get(bufnr)
 
   -- Force the new provider to clear its API key cache
   new_provider:reset({ invalidate_all_secrets = true })
@@ -282,7 +282,7 @@ local function advance_phase2(opts)
 
   -- Process approved → execute tool
   local approved = tool_blocks["approved"] or {}
-  local config = state.get_config()
+  local config = config_facade.get(bufnr)
   local max_concurrent = (config.tools and config.tools.max_concurrent) or DEFAULT_MAX_CONCURRENT
   local executed_count = 0
   local throttled = false
@@ -774,7 +774,7 @@ function M.send_to_provider(opts)
       -- Frontmatter contributed to parameters — materialize the difference.
       -- For now, use the full per-buffer materialized parameters as overrides.
       local per_buffer = config_facade.materialize(prompt.bufnr)
-      local global = state.get_config()
+      local global = config_facade.materialize()
       local provider_key = global.provider
       merged_overrides = {}
       -- General parameter overrides (frontmatter set parameters.X)
@@ -801,8 +801,8 @@ function M.send_to_provider(opts)
     end
   end
   if merged_overrides and merged_overrides.max_tokens ~= nil then
-    local config = state.get_config()
-    config_manager.resolve_max_tokens(config.provider, config.model, merged_overrides)
+    local cfg = config_facade.get(bufnr)
+    config_manager.resolve_max_tokens(cfg.provider, cfg.model, merged_overrides)
   end
   current_provider:set_parameter_overrides(merged_overrides)
 
@@ -820,7 +820,7 @@ function M.send_to_provider(opts)
     if not fixture_path then
       local api_key, api_key_diagnostics = current_provider:get_api_key()
       if not api_key then
-        local msg = "No API key available for provider '" .. state.get_config().provider .. "'."
+        local msg = "No API key available for provider '" .. config_facade.get(bufnr).provider .. "'."
         if api_key_diagnostics then
           for _, d in ipairs(api_key_diagnostics) do
             msg = msg .. "\n  [" .. d.resolver .. "] " .. d.message
@@ -859,7 +859,7 @@ function M.send_to_provider(opts)
   -- Log the request details (using the provider's stored model)
   log.debug(
     "send_to_provider(): Sending request for provider "
-      .. log.inspect(state.get_config().provider)
+      .. log.inspect(config_facade.get(bufnr).provider)
       .. " with model "
       .. log.inspect(current_provider.parameters.model)
   )
@@ -874,7 +874,7 @@ function M.send_to_provider(opts)
 
   -- Reset in-flight usage tracking for this buffer
   -- Include the provider's output_has_thoughts flag so usage.lua can display correctly
-  local provider_capabilities = registry.get_capabilities(state.get_config().provider)
+  local provider_capabilities = registry.get_capabilities(config_facade.get(bufnr).provider)
   buffer_state.inflight_usage = {
     input_tokens = 0,
     output_tokens = 0,
@@ -942,7 +942,7 @@ function M.send_to_provider(opts)
 
     on_response_complete = function()
       vim.schedule(function()
-        local config = state.get_config()
+        local config = config_facade.get(bufnr)
 
         -- Get tokens from in-flight usage
         local input_tokens = buffer_state.inflight_usage.input_tokens or 0
@@ -1297,7 +1297,7 @@ function M.send_to_provider(opts)
     end,
     on_raw_json = function(raw_json_str)
       -- Store for diagnostics — will be compared after response completes
-      local cfg = state.get_config()
+      local cfg = config_facade.get(bufnr)
       if cfg.diagnostics and cfg.diagnostics.enabled then
         buffer_state._diagnostics_raw_json = raw_json_str
       end

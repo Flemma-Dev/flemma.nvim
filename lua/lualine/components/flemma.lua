@@ -3,6 +3,7 @@
 --- Uses lazy-evaluated variable resolvers — only variables referenced by the
 --- format string trigger data lookups.  Variables are cached per render cycle.
 local lualine_component = require("lualine.component")
+local config_facade = require("flemma.config")
 local state = require("flemma.state")
 local registry = require("flemma.provider.registry")
 local format = require("flemma.utilities.format")
@@ -165,7 +166,7 @@ function flemma_component:update_status()
     return ""
   end
 
-  local config = state.get_config()
+  local config = config_facade.get()
   if not config or not config.model or config.model == "" then
     return ""
   end

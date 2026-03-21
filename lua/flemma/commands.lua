@@ -405,23 +405,15 @@ local function setup_commands()
       },
       enable = {
         action = function()
-          local config = require("flemma.state").get_config()
-          if not config.diagnostics then
-            config.diagnostics = { enabled = true }
-          else
-            config.diagnostics.enabled = true
-          end
+          local w = require("flemma.config").writer(nil, require("flemma.config").LAYERS.RUNTIME)
+          w.diagnostics.enabled = true
           vim.notify("Flemma: Diagnostics enabled", vim.log.levels.INFO)
         end,
       },
       disable = {
         action = function()
-          local config = require("flemma.state").get_config()
-          if not config.diagnostics then
-            config.diagnostics = { enabled = false }
-          else
-            config.diagnostics.enabled = false
-          end
+          local w = require("flemma.config").writer(nil, require("flemma.config").LAYERS.RUNTIME)
+          w.diagnostics.enabled = false
           vim.notify("Flemma: Diagnostics disabled", vim.log.levels.INFO)
         end,
       },

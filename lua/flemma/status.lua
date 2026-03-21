@@ -3,6 +3,7 @@
 ---@class flemma.Status
 local M = {}
 
+local config_facade = require("flemma.config")
 local state = require("flemma.state")
 local config_manager = require("flemma.core.config.manager")
 local autopilot = require("flemma.autopilot")
@@ -578,7 +579,7 @@ function M.format(data, verbose)
     add("Config (full)")
     add(string.rep("─", 40))
     add("")
-    local config_text = vim.inspect(state.get_config())
+    local config_text = vim.inspect(config_facade.materialize(data.buffer.bufnr))
     for line in config_text:gmatch("[^\n]+") do
       add(line)
     end
@@ -591,7 +592,7 @@ end
 ---@param bufnr integer Buffer number (0 for current)
 ---@return flemma.status.Data
 function M.collect(bufnr)
-  local config = state.get_config()
+  local config = config_facade.materialize(bufnr)
 
   -- Evaluate frontmatter for chat buffers — writes to config store's FRONTMATTER layer.
   -- After this, config.get(bufnr) returns the resolved config including frontmatter.

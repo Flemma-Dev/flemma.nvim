@@ -1,7 +1,7 @@
 --- EmmyLua type definitions for Flemma configuration.
 ---
 --- These types describe the shape of the materialized configuration returned by
---- `state.get_config()` and used for type-checking throughout the codebase.
+--- `config.materialize()` and used for type-checking throughout the codebase.
 ---
 --- Tool-specific and provider-specific config types live with their respective
 --- modules (e.g., `tools/definitions/bash.lua` defines its own schema). They are

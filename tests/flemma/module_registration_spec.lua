@@ -128,7 +128,6 @@ end)
 
 describe("approval module resolution", function()
   local approval
-  local state = require("flemma.state")
   local config_facade = require("flemma.config")
   local schema = require("flemma.config.schema.definition")
 
@@ -156,12 +155,6 @@ describe("approval module resolution", function()
       }
     end
 
-    state.set_config({
-      tools = {
-        auto_approve = "test.fixture.approval",
-        require_approval = true,
-      },
-    })
     config_facade.apply(config_facade.LAYERS.SETUP, {
       tools = {
         auto_approve = "test.fixture.approval",

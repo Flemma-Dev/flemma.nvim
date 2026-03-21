@@ -8,7 +8,6 @@ local hooks = require("flemma.hooks")
 local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
 local registry = require("flemma.tools.registry")
-local state = require("flemma.state")
 
 local BUILTIN_TOOLS = {
   "flemma.tools.definitions.bash",
@@ -89,7 +88,7 @@ function M.register_async(resolve_fn, opts)
   end
 
   -- Set up timeout
-  local resolved_config = state.get_config()
+  local resolved_config = config_facade.get()
   local timeout_s = opts.timeout
     or (resolved_config and resolved_config.tools and resolved_config.tools.default_timeout)
     or 30
@@ -178,7 +177,7 @@ function M.setup()
     M.register(module_name)
   end
 
-  local resolved_config = state.get_config()
+  local resolved_config = config_facade.get()
   if resolved_config.tools and resolved_config.tools.modules then
     for _, module_path in ipairs(resolved_config.tools.modules) do
       M.register_module(module_path)
@@ -213,7 +212,7 @@ function M.get_all(opts)
   ensure_modules_loaded()
   opts = opts or {}
   if not opts.config then
-    opts.config = state.get_config()
+    opts.config = config_facade.materialize()
   end
   return registry.get_all(opts)
 end

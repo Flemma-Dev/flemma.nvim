@@ -139,7 +139,7 @@ describe("preprocessor.syntax", function()
       local rewriter = preprocessor.create_rewriter("no-syntax")
       preprocessor.register(rewriter)
 
-      local config = require("flemma.state").get_config()
+      local config = require("flemma.config").materialize()
       local set_highlight_called = false
       syntax.apply(config, function()
         set_highlight_called = true
@@ -168,7 +168,7 @@ describe("preprocessor.syntax", function()
       vim.cmd("runtime! syntax/chat.vim")
 
       local highlight_calls = {}
-      syntax.apply(require("flemma.state").get_config(), function(group, value)
+      syntax.apply(require("flemma.config").materialize(), function(group, value)
         table.insert(highlight_calls, { group = group, value = value })
       end)
 

@@ -24,7 +24,6 @@ local injector = require("flemma.tools.injector")
 local parser = require("flemma.parser")
 local processor = require("flemma.processor")
 local schema = require("flemma.config.schema.definition")
-local state = require("flemma.state")
 
 --- Helper: get pending non-error tool blocks awaiting execution
 ---@param bufnr integer
@@ -57,10 +56,8 @@ local function get_lines(bufnr)
   return vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 end
 
---- Helper: init config facade, apply setup opts, finalize (coerce), sync state,
+--- Helper: init config facade, apply setup opts, finalize (coerce),
 --- then clear + setup approval resolvers.
---- Mirrors the real plugin flow: facade is the source of truth, state gets
---- a materialized snapshot, then approval.setup() reads from state.
 --- @param opts table
 local function set_config_and_setup(opts)
   config_facade.init(schema)
@@ -69,7 +66,6 @@ local function set_config_and_setup(opts)
   end
   require("flemma.tools.presets").setup(nil)
   config_facade.finalize(config_facade.LAYERS.SETUP)
-  state.set_config(config_facade.materialize())
   approval.clear()
   approval.setup()
 end
@@ -2534,7 +2530,6 @@ describe("advance_phase2 current_request guard", function()
     config_facade.init(schema)
     config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = false } } })
     config_facade.finalize(config_facade.LAYERS.SETUP)
-    st.set_config(config_facade.materialize())
 
     local bufnr = create_buffer({
       "@Assistant:",
@@ -2606,7 +2601,6 @@ describe("Approval Preset Expansion", function()
     config_facade.apply(config_facade.LAYERS.SETUP, { tools = { auto_approve = { "$default", "$extra" } } })
     require("flemma.tools.presets").setup({ ["$extra"] = { approve = { "bash" } } })
     config_facade.finalize(config_facade.LAYERS.SETUP)
-    state.set_config(config_facade.materialize())
     approval.clear()
     approval.setup()
     assert.equals("approve", approval.resolve("read", {}, { bufnr = 1, tool_id = "t1" }))
@@ -2720,7 +2714,6 @@ describe("Sandbox auto-approval resolver", function()
     config_facade.apply(config_facade.LAYERS.SETUP, opts)
     require("flemma.tools.presets").setup(nil)
     config_facade.finalize(config_facade.LAYERS.SETUP)
-    state.set_config(config_facade.materialize())
     approval.clear()
     approval.setup()
   end

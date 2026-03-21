@@ -41,7 +41,7 @@ describe(":Flemma send command", function()
 
     -- Arrange: Register a dummy fixture to prevent actual network calls.
     -- The content of the fixture DOES matter, as it's processed by the provider.
-    local config = state.get_config()
+    local config = require("flemma.config").materialize()
     local default_anthropic_model = registry.get_model("anthropic")
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
 
@@ -88,7 +88,7 @@ describe(":Flemma send command", function()
     local captured_request_body = core._get_last_request_body()
     assert.is_not_nil(captured_request_body, "request_body was not captured")
 
-    local config = state.get_config()
+    local config = require("flemma.config").materialize()
 
     assert.equals("o3", captured_request_body.model)
     assert.is_not_nil(captured_request_body.input, "Should use input field (Responses API)")
@@ -392,7 +392,7 @@ describe(":Flemma send command", function()
 
     -- Assert: Model fell back to the provider default
     local default_openai_model = registry.get_model("openai")
-    local cfg = state.get_config()
+    local cfg = require("flemma.config").materialize()
     assert.equals(default_openai_model, cfg.model, "Should fall back to provider default model")
 
     -- Cleanup

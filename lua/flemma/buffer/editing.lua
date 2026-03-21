@@ -4,7 +4,7 @@
 local M = {}
 
 local bridge = require("flemma.bridge")
-local state = require("flemma.state")
+local config_facade = require("flemma.config")
 local ui = require("flemma.ui")
 
 ---Auto-write buffer if configured and modified.
@@ -15,7 +15,7 @@ function M.auto_write(bufnr)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return
   end
-  local config = state.get_config()
+  local config = config_facade.get(bufnr)
   if config.editing and config.editing.auto_write and vim.bo[bufnr].modified then
     ui.buffer_cmd(bufnr, "silent! write")
   end
@@ -29,7 +29,7 @@ function M.auto_prompt(bufnr)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return
   end
-  local config = state.get_config()
+  local config = config_facade.get(bufnr)
   if not (config.editing and config.editing.auto_prompt) then
     return
   end

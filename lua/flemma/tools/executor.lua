@@ -6,6 +6,7 @@ local M = {}
 local registry = require("flemma.tools.registry")
 local injector = require("flemma.tools.injector")
 local editing = require("flemma.buffer.editing")
+local config_facade = require("flemma.config")
 local state = require("flemma.state")
 local log = require("flemma.logging")
 local autopilot = require("flemma.autopilot")
@@ -172,7 +173,7 @@ local function do_completion(bufnr, tool_id, result, opts)
 
   -- Move cursor based on config (skip when autopilot is armed — it owns cursor positioning)
   if ok and autopilot.get_state(bufnr) ~= "armed" then
-    local config = state.get_config()
+    local config = config_facade.get(bufnr)
     local cursor_mode = config.tools and config.tools.cursor_after_result or "result"
     if cursor_mode ~= "stay" then
       move_cursor_after_result(bufnr, tool_id, cursor_mode)
@@ -262,11 +263,11 @@ function M.build_execution_context(params)
   ---Returns config.tools[tool_name] via vim.deepcopy, or nil if no subtree exists.
   ---@return table|nil
   function context:get_config()
-    local tool_config = state.get_config()
-    if not tool_config.tools then
+    local cfg = config_facade.materialize(bufnr)
+    if not cfg.tools then
       return nil
     end
-    local subtree = tool_config.tools[tool_name]
+    local subtree = cfg.tools[tool_name]
     if subtree == nil then
       return nil
     end
@@ -388,7 +389,7 @@ function M.execute(bufnr, context)
   end
 
   -- Show execution indicator
-  local config = state.get_config()
+  local config = config_facade.materialize(bufnr)
   if not config.tools or config.tools.show_spinner ~= false then
     ui.show_tool_indicator(bufnr, tool_id, header_line)
   end

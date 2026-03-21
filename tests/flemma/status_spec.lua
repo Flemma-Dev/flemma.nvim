@@ -19,21 +19,20 @@ describe("flemma.status", function()
     package.loaded["flemma.config.schema.definition"] = nil
     -- Initialize config facade with schema defaults so sandbox/autopilot
     -- modules get a valid facade reference when re-required by status.lua
-    local cf = require("flemma.config")
-    cf.init(require("flemma.config.schema.definition"))
+    local config_facade = require("flemma.config")
+    config_facade.init(require("flemma.config.schema.definition"))
     status = require("flemma.status")
   end)
 
   ---Apply config through the config facade and sync to state.
-  ---Resets the store, applies opts to SETUP, then materializes into state.
+  ---Resets the store and applies opts to SETUP.
   ---@param opts table
   local function apply_test_config(opts)
-    local cf = require("flemma.config")
-    cf.init(require("flemma.config.schema.definition"))
+    local config_facade = require("flemma.config")
+    config_facade.init(require("flemma.config.schema.definition"))
     if opts and next(opts) then
-      cf.apply(cf.LAYERS.SETUP, opts)
+      config_facade.apply(config_facade.LAYERS.SETUP, opts)
     end
-    require("flemma.state").set_config(cf.materialize())
   end
 
   describe("collect", function()
@@ -696,16 +695,14 @@ describe("flemma.status", function()
     end)
 
     ---Set config through the facade and initialize the approval resolver chain.
-    ---Mirrors the real plugin flow: facade → finalize → materialize → state.
     ---@param config table
     local function setup_config(config)
-      local cf = require("flemma.config")
-      cf.init(require("flemma.config.schema.definition"))
+      local config_facade = require("flemma.config")
+      config_facade.init(require("flemma.config.schema.definition"))
       if config and next(config) then
-        cf.apply(cf.LAYERS.SETUP, config)
+        config_facade.apply(config_facade.LAYERS.SETUP, config)
       end
-      cf.finalize(cf.LAYERS.SETUP)
-      require("flemma.state").set_config(cf.materialize())
+      config_facade.finalize(config_facade.LAYERS.SETUP)
       require("flemma.tools.approval").clear()
       require("flemma.tools.approval").setup()
     end
