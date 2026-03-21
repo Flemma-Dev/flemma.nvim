@@ -709,6 +709,16 @@ end
 function M.show(opts)
   local target_bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
 
+  -- When the current buffer is the status window itself (e.g. re-running
+  -- :Flemma status while the cursor is already in the status split), retrieve
+  -- the original chat buffer that was recorded when the window was opened.
+  if vim.api.nvim_buf_is_valid(target_bufnr) and vim.bo[target_bufnr].filetype == "flemma-status" then
+    local source = vim.b[target_bufnr].flemma_source_bufnr
+    if source and vim.api.nvim_buf_is_valid(source) then
+      target_bufnr = source
+    end
+  end
+
   local is_verbose = opts.verbose or false
   local data
   if is_verbose then
@@ -743,6 +753,7 @@ function M.show(opts)
   vim.bo[buf].buftype = "nofile"
   vim.bo[buf].bufhidden = "wipe"
   vim.bo[buf].swapfile = false
+  vim.b[buf].flemma_source_bufnr = target_bufnr
 
   -- Write content
   vim.bo[buf].modifiable = true
