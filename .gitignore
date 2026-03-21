@@ -33,6 +33,5 @@ node_modules/
 /refs
 
 /.claude/agents
-/.claude/skills
 /.claude/worktrees
 /.worktrees/
