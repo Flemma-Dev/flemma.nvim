@@ -10,7 +10,6 @@ local sandbox = require("flemma.sandbox")
 local str = require("flemma.utilities.string")
 local tools_module = require("flemma.tools")
 local tools_approval = require("flemma.tools.approval")
-local tools_registry = require("flemma.tools.registry")
 local registry = require("flemma.provider.registry")
 
 local MARKER_FRONTMATTER = "✲"
@@ -149,7 +148,7 @@ end
 ---@param bufnr integer
 ---@return { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer, source: string|nil }
 local function collect_tools(bufnr)
-  local all_tools = tools_registry.get_all({ include_disabled = true })
+  local all_tools = tools_module.get_all({ include_disabled = true })
 
   -- Get the tools list source from the config store
   local tools_info = config_facade.inspect(bufnr, "tools")

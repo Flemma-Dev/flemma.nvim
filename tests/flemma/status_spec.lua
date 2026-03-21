@@ -290,6 +290,36 @@ describe("flemma.status", function()
       assert.is_string(data.tools.source)
     end)
 
+    it("includes tools from lazily-loaded modules", function()
+      apply_test_config({
+        provider = "anthropic",
+        parameters = {},
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      -- Register a tool module lazily (adds to pending_modules, not loaded yet).
+      -- collect_tools must trigger ensure_modules_loaded() to pick them up.
+      local tools_mod = require("flemma.tools")
+      tools_mod.register_module("extras.flemma.tools.calculator")
+
+      local data = status.collect(0)
+
+      local found_calculator = false
+      local found_calculator_async = false
+      for _, name in ipairs(data.tools.enabled) do
+        if name == "calculator" then
+          found_calculator = true
+        end
+      end
+      for _, name in ipairs(data.tools.disabled) do
+        if name == "calculator_async" then
+          found_calculator_async = true
+        end
+      end
+      assert.is_true(found_calculator, "calculator should appear after lazy module loading")
+      assert.is_true(found_calculator_async, "calculator_async (enabled=false) should appear in disabled")
+    end)
+
     it("reports nil tools source when no tools list ops exist", function()
       apply_test_config({
         provider = "anthropic",
