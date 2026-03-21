@@ -639,7 +639,7 @@ describe("sandbox policy layer", function()
     end)
 
     it("invalidates cache when backends config changes", function()
-      pending("config overhaul: requires backend config_schema for DISCOVER to write backends config")
+      local s = require("flemma.config.schema")
       sandbox.clear()
       local call_count = 0
       sandbox.register("counting", {
@@ -651,6 +651,7 @@ describe("sandbox policy layer", function()
           return inner, nil
         end,
         priority = 50,
+        config_schema = s.object({ path = s.optional(s.string()) }),
       })
       apply_sandbox({
         enabled = true,

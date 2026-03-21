@@ -1,6 +1,6 @@
 --- Test file for Anthropic provider functionality
 
--- Ensure tools module loads fresh
+-- Ensure tools and config modules load fresh
 package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.registry"] = nil
@@ -10,6 +10,13 @@ package.loaded["flemma.tools.definitions.read"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
 package.loaded["flemma.tools.definitions.write"] = nil
 package.loaded["flemma.provider.providers.anthropic"] = nil
+package.loaded["flemma.config"] = nil
+package.loaded["flemma.config.store"] = nil
+package.loaded["flemma.config.proxy"] = nil
+package.loaded["flemma.config.schema.definition"] = nil
+
+-- Initialize config facade so tools.setup() can register defaults
+require("flemma.config").init(require("flemma.config.schema.definition"))
 
 describe("Anthropic Provider", function()
   local anthropic = require("flemma.provider.providers.anthropic")
@@ -233,11 +240,11 @@ describe("Anthropic Provider", function()
     end)
 
     it("no crash when no tools present with caching enabled", function()
+      tools.clear()
       local p = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 100, cache_retention = "short" })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
         system = "Be helpful",
-        opts = { tools = {} },
       }
       local req = p:build_request(prompt)
       assert.is_nil(req.tools)

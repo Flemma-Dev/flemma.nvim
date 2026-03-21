@@ -6,20 +6,39 @@ describe("flemma.status", function()
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.tools.approval"] = nil
+    package.loaded["flemma.tools.executor"] = nil
     package.loaded["flemma.autopilot"] = nil
     package.loaded["flemma.tools.registry"] = nil
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
     package.loaded["flemma.core.config.manager"] = nil
     package.loaded["flemma.tools.presets"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema.definition"] = nil
+    -- Initialize config facade with schema defaults so sandbox/autopilot
+    -- modules get a valid facade reference when re-required by status.lua
+    local cf = require("flemma.config")
+    cf.init(require("flemma.config.schema.definition"))
     status = require("flemma.status")
   end)
 
+  ---Apply config through the config facade and sync to state.
+  ---Resets the store, applies opts to SETUP, then materializes into state.
+  ---@param opts table
+  local function apply_test_config(opts)
+    local cf = require("flemma.config")
+    cf.init(require("flemma.config.schema.definition"))
+    if opts and next(opts) then
+      cf.apply(cf.LAYERS.SETUP, opts)
+    end
+    require("flemma.state").set_config(cf.materialize())
+  end
+
   describe("collect", function()
     it("returns a table with all expected sections", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         model = "claude-sonnet-4-5-20250929",
         parameters = { max_tokens = 8192, temperature = 0.7 },
@@ -39,25 +58,21 @@ describe("flemma.status", function()
     end)
 
     it("reports provider as not initialized when no provider instance exists", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         model = "claude-sonnet-4-5-20250929",
         parameters = {},
         tools = { autopilot = { enabled = false, max_turns = 100 } },
         sandbox = { enabled = false, backend = "auto" },
       })
-      state.set_provider(nil)
+      require("flemma.state").set_provider(nil)
 
       local data = status.collect(0)
       assert.is_false(data.provider.initialized)
     end)
 
     it("separates tools into enabled and disabled lists", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         parameters = {},
         tools = { autopilot = { enabled = false, max_turns = 100 } },
@@ -90,9 +105,7 @@ describe("flemma.status", function()
     end)
 
     it("includes buffer info", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         parameters = {},
         tools = { autopilot = { enabled = false, max_turns = 100 } },
@@ -106,9 +119,7 @@ describe("flemma.status", function()
     end)
 
     it("includes booting state when async tool sources are pending", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         parameters = {},
         tools = { autopilot = { enabled = false, max_turns = 100 } },
@@ -130,9 +141,7 @@ describe("flemma.status", function()
     end)
 
     it("reports booting as false when all tool sources are ready", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         parameters = {},
         tools = { autopilot = { enabled = false, max_turns = 100 } },
@@ -144,9 +153,7 @@ describe("flemma.status", function()
     end)
 
     it("reports autopilot state", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         parameters = {},
         tools = { autopilot = { enabled = true, max_turns = 75 } },
@@ -159,9 +166,7 @@ describe("flemma.status", function()
     end)
 
     it("reports sandbox info from config", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         parameters = {},
         tools = { autopilot = { enabled = false, max_turns = 100 } },
@@ -175,9 +180,7 @@ describe("flemma.status", function()
     end)
 
     it("detects sandbox runtime override", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         parameters = {},
         tools = { autopilot = { enabled = false, max_turns = 100 } },
@@ -196,9 +199,7 @@ describe("flemma.status", function()
     end)
 
     it("returns merged parameters", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         parameters = { max_tokens = 4000, temperature = 0.5 },
         tools = { autopilot = { enabled = false, max_turns = 100 } },
@@ -215,9 +216,7 @@ describe("flemma.status", function()
 
   describe("collect — model_info", function()
     it("includes model_info for known models", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         model = "claude-sonnet-4-6",
         parameters = {},
@@ -233,9 +232,7 @@ describe("flemma.status", function()
     end)
 
     it("returns nil model_info for unknown models", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         model = "claude-unknown-99",
         parameters = {},
@@ -286,9 +283,7 @@ describe("flemma.status", function()
     end)
 
     it("includes full config dump when verbose is true", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         model = "claude-sonnet-4-5-20250929",
         parameters = { max_tokens = 8192 },
@@ -395,9 +390,7 @@ describe("flemma.status", function()
     end)
 
     it("shows full model_info dump in verbose mode", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         model = "claude-sonnet-4-6",
         parameters = {},
@@ -702,13 +695,18 @@ describe("flemma.status", function()
       require("flemma.tools.presets").setup()
     end)
 
-    ---Set config and initialize the approval resolver chain.
-    ---Must be called before status.collect() in every approval test.
+    ---Set config through the facade and initialize the approval resolver chain.
+    ---Mirrors the real plugin flow: facade → finalize → materialize → state.
     ---@param config table
     local function setup_config(config)
-      local st = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      st.set_config(config)
+      local cf = require("flemma.config")
+      cf.init(require("flemma.config.schema.definition"))
+      if config and next(config) then
+        cf.apply(cf.LAYERS.SETUP, config)
+      end
+      cf.finalize(cf.LAYERS.SETUP)
+      require("flemma.state").set_config(cf.materialize())
+      require("flemma.tools.approval").clear()
       require("flemma.tools.approval").setup()
     end
 
@@ -742,13 +740,14 @@ describe("flemma.status", function()
       })
 
       local data = status.collect(0)
-      assert.equals("$default", data.approval.source)
+      -- After finalize, $default is expanded to tool names
+      assert.equals("read, write, edit", data.approval.source)
       assert.are.same({ "edit", "read" }, data.approval.approved)
       assert.are.same({ "bash" }, data.approval.pending)
       assert.are.same({}, data.approval.denied)
     end)
 
-    it("returns nil source when no auto_approve is configured", function()
+    it("uses schema default auto_approve when none explicitly configured", function()
       setup_config({
         provider = "anthropic",
         parameters = {},
@@ -765,9 +764,10 @@ describe("flemma.status", function()
       })
 
       local data = status.collect(0)
-      assert.is_nil(data.approval.source)
-      assert.are.same({}, data.approval.approved)
-      assert.are.same({ "read" }, data.approval.pending)
+      -- auto_approve always has a schema default ({ "$default" } → expanded)
+      assert.equals("read, write, edit", data.approval.source)
+      assert.are.same({ "read" }, data.approval.approved)
+      assert.are.same({}, data.approval.pending)
     end)
 
     it("builds source from multiple policy entries", function()
@@ -795,7 +795,8 @@ describe("flemma.status", function()
       })
 
       local data = status.collect(0)
-      assert.equals("$default, bash", data.approval.source)
+      -- After finalize, $default expands to tool names; bash is appended
+      assert.equals("read, write, edit, bash", data.approval.source)
       assert.are.same({ "bash", "read" }, data.approval.approved)
     end)
 
@@ -934,7 +935,9 @@ describe("flemma.status", function()
       assert.is_nil(data.approval.sandbox_items)
     end)
 
-    it("does not promote sandbox-capable tools when no auto_approve is configured", function()
+    it("promotes sandbox-capable tools with default auto_approve when sandbox is active", function()
+      -- In the new config system, auto_approve always has a schema default
+      -- ({ "$default" }), so sandbox promotion activates with defaults.
       setup_config({
         provider = "anthropic",
         parameters = {},
@@ -961,9 +964,11 @@ describe("flemma.status", function()
       })
 
       local data = status.collect(0)
-      assert.are.same({}, data.approval.approved)
-      assert.are.same({ "bash" }, data.approval.pending)
-      assert.is_nil(data.approval.sandbox_items)
+      -- auto_approve defaults to { "$default" } → sandbox resolver activates
+      assert.are.same({ "bash" }, data.approval.approved)
+      assert.are.same({}, data.approval.pending)
+      assert.is_not_nil(data.approval.sandbox_items)
+      assert.is_true(data.approval.sandbox_items.bash)
 
       sandbox_mod.validate_backend = original_validate
     end)
@@ -971,9 +976,7 @@ describe("flemma.status", function()
 
   describe("show", function()
     before_each(function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         model = "claude-sonnet-4-5-20250929",
         parameters = { max_tokens = 8192 },
