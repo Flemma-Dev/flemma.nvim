@@ -196,6 +196,108 @@ describe("approval module resolution", function()
   end)
 end)
 
+describe("approval module resolution with string[]", function()
+  local approval
+  local config_facade = require("flemma.config")
+  local schema = require("flemma.config.schema.definition")
+
+  before_each(function()
+    package.loaded["flemma.tools.approval"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema.definition"] = nil
+    approval = require("flemma.tools.approval")
+    config_facade = require("flemma.config")
+    schema = require("flemma.config.schema.definition")
+    config_facade.init(schema)
+
+    package.preload["test.fixture.approval"] = function()
+      return {
+        resolve = function(tool_name)
+          if tool_name == "bash" then
+            return "deny"
+          end
+          return nil
+        end,
+      }
+    end
+
+    package.preload["test.fixture.approval2"] = function()
+      return {
+        resolve = function(tool_name)
+          if tool_name == "read_file" then
+            return "approve"
+          end
+          return nil
+        end,
+      }
+    end
+  end)
+
+  after_each(function()
+    approval.clear()
+    package.preload["test.fixture.approval"] = nil
+    package.loaded["test.fixture.approval"] = nil
+    package.preload["test.fixture.approval2"] = nil
+    package.loaded["test.fixture.approval2"] = nil
+  end)
+
+  it("loads multiple module resolvers from string[]", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, {
+      tools = {
+        auto_approve = { "test.fixture.approval", "test.fixture.approval2" },
+        require_approval = true,
+      },
+    })
+    approval.clear()
+    approval.setup()
+
+    local result = approval.resolve("bash", {}, { bufnr = 0, tool_id = "test" })
+    assert.equals("deny", result)
+
+    result = approval.resolve("read_file", {}, { bufnr = 0, tool_id = "test" })
+    assert.equals("approve", result)
+  end)
+
+  it("mixes module paths and plain tool names in string[]", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, {
+      tools = {
+        auto_approve = { "test.fixture.approval", "calculator" },
+        require_approval = true,
+      },
+    })
+    approval.clear()
+    approval.setup()
+
+    -- Module resolver handles bash
+    local result = approval.resolve("bash", {}, { bufnr = 0, tool_id = "test" })
+    assert.equals("deny", result)
+
+    -- Plain tool name match
+    result = approval.resolve("calculator", {}, { bufnr = 0, tool_id = "test" })
+    assert.equals("approve", result)
+
+    -- Neither module nor tool name list handles this
+    result = approval.resolve("unknown", {}, { bufnr = 0, tool_id = "test" })
+    assert.equals("require_approval", result)
+  end)
+
+  it("passes through when no module handles the tool", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, {
+      tools = {
+        auto_approve = { "test.fixture.approval", "test.fixture.approval2" },
+        require_approval = true,
+      },
+    })
+    approval.clear()
+    approval.setup()
+
+    local result = approval.resolve("unknown_tool", {}, { bufnr = 0, tool_id = "test" })
+    assert.equals("require_approval", result)
+  end)
+end)
+
 describe("sandbox module resolution", function()
   local sandbox
 

@@ -177,6 +177,34 @@ function M.resolve_with_source(tool_name, input, context)
   return "require_approval", "default"
 end
 
+---Build a lazy-loading resolve function for a single module path.
+---Validates existence eagerly but defers require() until first call.
+---@param module_path string Dot-notation Lua module path
+---@return fun(tool_name: string, input: table, context: flemma.config.AutoApproveContext): flemma.tools.ApprovalResult|nil
+local function build_module_resolver(module_path)
+  loader.assert_exists(module_path)
+  ---@type { resolve: fun(tool_name: string, input: table, context: flemma.config.AutoApproveContext): flemma.tools.ApprovalResult|nil }|nil
+  local loaded_resolver = nil
+  return function(tool_name, input, context)
+    if not loaded_resolver then
+      local mod = loader.load(module_path)
+      if type(mod.resolve) == "function" then
+        loaded_resolver = mod
+      elseif type(mod) == "function" then
+        loaded_resolver = { resolve = mod }
+      else
+        log.warn("approval: module '" .. module_path .. "' does not export 'resolve' function")
+        loaded_resolver = {
+          resolve = function()
+            return nil
+          end,
+        }
+      end
+    end
+    return loaded_resolver.resolve(tool_name, input, context)
+  end
+end
+
 ---Resolve an auto_approve policy (string[] or function) against a tool call.
 ---The string[] path does a simple membership check — presets are already expanded
 ---by the config store's coerce function.
@@ -191,7 +219,17 @@ local function resolve_auto_approve_policy(policy, tool_name, input, context, er
     for _, entry in
       ipairs(policy --[[@as string[] ]])
     do
-      if entry == tool_name then
+      if loader.is_module_path(entry) then
+        local ok, resolver = pcall(build_module_resolver, entry)
+        if ok then
+          local result = resolver(tool_name, input, context)
+          if result ~= nil then
+            return result
+          end
+        else
+          log.warn("approval: failed to load module resolver '" .. entry .. "': " .. tostring(resolver))
+        end
+      elseif entry == tool_name then
         return "approve"
       end
     end
@@ -219,34 +257,6 @@ local function resolve_auto_approve_policy(policy, tool_name, input, context, er
   end
 
   return nil
-end
-
----Build a lazy-loading resolve function for a single module path.
----Validates existence eagerly but defers require() until first call.
----@param module_path string Dot-notation Lua module path
----@return fun(tool_name: string, input: table, context: flemma.config.AutoApproveContext): flemma.tools.ApprovalResult|nil
-local function build_module_resolver(module_path)
-  loader.assert_exists(module_path)
-  ---@type { resolve: fun(tool_name: string, input: table, context: flemma.config.AutoApproveContext): flemma.tools.ApprovalResult|nil }|nil
-  local loaded_resolver = nil
-  return function(tool_name, input, context)
-    if not loaded_resolver then
-      local mod = loader.load(module_path)
-      if type(mod.resolve) == "function" then
-        loaded_resolver = mod
-      elseif type(mod) == "function" then
-        loaded_resolver = { resolve = mod }
-      else
-        log.warn("approval: module '" .. module_path .. "' does not export 'resolve' function")
-        loaded_resolver = {
-          resolve = function()
-            return nil
-          end,
-        }
-      end
-    end
-    return loaded_resolver.resolve(tool_name, input, context)
-  end
 end
 
 ---Register built-in resolvers derived from the user's config.
