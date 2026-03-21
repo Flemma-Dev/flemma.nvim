@@ -324,7 +324,8 @@ end
 ---@param path string Dot-delimited canonical path
 ---@param fn fun(value: any, ctx: any): any Coerce transform function
 ---@param ctx any Coerce context passed through to fn
-function M.transform_ops(path, fn, ctx)
+---@param bufnr integer? When non-nil, only transform that buffer's frontmatter ops; when nil, transform all buffers
+function M.transform_ops(path, fn, ctx, bufnr)
   -- Determine whether this path is a list using the schema. This drives
   -- how set ops are handled: list paths do per-item transformation (each
   -- element passed to fn independently); scalar paths pass the whole value.
@@ -334,8 +335,12 @@ function M.transform_ops(path, fn, ctx)
   for _, num in ipairs(GLOBAL_LAYER_NUMS) do
     table.insert(all_ops, global_ops[num] or {})
   end
-  for _, buf_ops in pairs(buffer_ops) do
-    table.insert(all_ops, buf_ops)
+  if bufnr ~= nil then
+    table.insert(all_ops, buffer_ops[bufnr] or {})
+  else
+    for _, buf_ops in pairs(buffer_ops) do
+      table.insert(all_ops, buf_ops)
+    end
   end
 
   for _, ops_array in ipairs(all_ops) do
@@ -454,14 +459,16 @@ end
 -- ---------------------------------------------------------------------------
 
 --- Build a coerce context for value transformers.
---- Provides read access to the resolved config (global layers only — no bufnr).
---- Used by both the write proxy (at write time) and finalize (at setup time).
+--- When bufnr is provided, resolution includes that buffer's frontmatter layer.
+--- Used by the write proxy (at write time), finalize (at setup time), and
+--- coerce_frontmatter (per-buffer, after frontmatter evaluation).
+---@param bufnr integer? Buffer number for per-buffer resolution; nil for global-only
 ---@return flemma.config.CoerceContext
-function M.make_coerce_context()
+function M.make_coerce_context(bufnr)
   ---@type flemma.config.CoerceContext
   return {
     get = function(path)
-      return M.resolve(path, nil)
+      return M.resolve(path, bufnr)
     end,
   }
 end

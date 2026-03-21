@@ -35,7 +35,7 @@ function M.parse(code, context, bufnr)
 
   -- Run coerce transforms on frontmatter ops (e.g., $preset expansion)
   if bufnr then
-    config.coerce_frontmatter()
+    config.coerce_frontmatter(bufnr)
   end
 
   return user_globals

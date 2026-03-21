@@ -389,26 +389,30 @@ end
 -- Finalization
 -- ---------------------------------------------------------------------------
 
---- Walk the schema tree and re-run coerce transforms on all ops in all layers.
---- For each node with a coerce function, every op on that path across all layers
---- is transformed with a populated ctx. When the hook returns a table for a
---- non-set list op (append/remove/prepend), the single op is expanded into
---- multiple ops.
+--- Walk the schema tree and re-run coerce transforms on ops in the store.
+--- For each node with a coerce function, matching ops are transformed with
+--- a populated ctx. When the hook returns a table for a non-set list op
+--- (append/remove/prepend), the single op is expanded into multiple ops.
+---
+--- When bufnr is provided, only that buffer's frontmatter ops are transformed
+--- (used by coerce_frontmatter). When nil, all buffers are transformed (used
+--- by finalize at setup time).
 ---@param schema flemma.config.schema.Node Schema node to walk
 ---@param base_path string Current dot-delimited path
 ---@param ctx flemma.config.CoerceContext
-local function coerce_walk(schema, base_path, ctx)
+---@param bufnr integer? Scope transforms to this buffer's frontmatter; nil for all
+local function coerce_walk(schema, base_path, ctx, bufnr)
   local unwrapped = nav.unwrap_optional(schema)
 
   if unwrapped:has_coerce() then
     local coerce_fn = unwrapped:get_coerce() --[[@as fun(value: any, ctx: flemma.config.CoerceContext?): any]]
-    store.transform_ops(base_path, coerce_fn, ctx)
+    store.transform_ops(base_path, coerce_fn, ctx, bufnr)
   end
 
   if unwrapped:is_object() then
     for k, child in unwrapped:all_known_fields() do
       local child_path = base_path == "" and k or (base_path .. "." .. k)
-      coerce_walk(child, child_path, ctx)
+      coerce_walk(child, child_path, ctx, bufnr)
     end
   end
 end
@@ -457,13 +461,17 @@ function M.prepare_frontmatter(bufnr)
   return proxy.write_proxy(root_schema, bufnr, M.LAYERS.FRONTMATTER)
 end
 
---- Run coerce transforms on all ops (including the frontmatter layer).
+--- Run coerce transforms on the given buffer's frontmatter ops.
 --- Called after frontmatter execution to expand coerce-dependent values
 --- (e.g., $preset references in auto_approve) written during evaluation.
-function M.coerce_frontmatter()
+--- Only transforms the specified buffer's frontmatter layer — other buffers
+--- are not touched.
+---@param bufnr integer Buffer number whose frontmatter ops to coerce
+function M.coerce_frontmatter(bufnr)
   assert(root_schema, "config.init() must be called before coerce_frontmatter()")
-  local ctx = store.make_coerce_context()
-  coerce_walk(root_schema, "", ctx)
+  assert(bufnr ~= nil, "bufnr is required for coerce_frontmatter()")
+  local ctx = store.make_coerce_context(bufnr)
+  coerce_walk(root_schema, "", ctx, bufnr)
 end
 
 return M

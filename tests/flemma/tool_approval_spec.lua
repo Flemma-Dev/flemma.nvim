@@ -79,7 +79,7 @@ end
 --- @param bufnr integer
 local function evaluate_frontmatter(bufnr)
   processor.evaluate_buffer_frontmatter(bufnr)
-  config_facade.coerce_frontmatter()
+  config_facade.coerce_frontmatter(bufnr)
 end
 
 -- ============================================================================
