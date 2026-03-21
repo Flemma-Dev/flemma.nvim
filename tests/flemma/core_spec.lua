@@ -327,9 +327,10 @@ describe(":Flemma send command", function()
   end)
 
   it("errors and does not switch when an unknown provider is requested", function()
-    -- Arrange: Ensure we start from a valid, known provider (default is Anthropic)
-    local original_provider = flemma.get_current_provider_name()
-    assert.is_not_nil(original_provider, "Original provider should be set")
+    local config_facade = require("flemma.config")
+
+    -- Arrange: capture provider before the failed switch
+    local original_provider = config_facade.get().provider
 
     -- Arrange: Stub notifications to capture the error
     local notify_spy = stub(vim, "notify")
@@ -346,8 +347,7 @@ describe(":Flemma send command", function()
     assert.is_nil(result, "switch should return nil for unknown provider")
 
     -- Assert: Provider should remain unchanged
-    local current_provider = flemma.get_current_provider_name()
-    assert.equals(original_provider, current_provider, "Provider should remain unchanged on invalid switch")
+    assert.equals(original_provider, config_facade.get().provider, "Provider should remain unchanged on invalid switch")
 
     -- Assert: An error notification was emitted
     local last_call = notify_spy.calls[#notify_spy.calls]

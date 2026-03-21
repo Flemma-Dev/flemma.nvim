@@ -236,24 +236,4 @@ M.setup = function(user_opts)
   end
 end
 
----Get the current model name
----@return string|nil
-function M.get_current_model_name()
-  local current_config = config_facade.get()
-  if not current_config or not current_config.model or current_config.model == "" then
-    return nil
-  end
-  return current_config.model
-end
-
----Get the current provider name
----@return string|nil
-function M.get_current_provider_name()
-  local current_config = config_facade.get()
-  if not current_config or not current_config.provider or current_config.provider == "" then
-    return nil
-  end
-  return current_config.provider
-end
-
 return M
