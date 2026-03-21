@@ -25,10 +25,11 @@ Methods are grouped into three categories:
   - `_is_error_response(self, data)` — detect provider-specific error shapes
     (default: `data.error ~= nil`).
 
-  Required, call super — provider MUST override and invoke the base
-  ------------------------------------------------------------------
-  - `new(opts)` — constructor; must call `base.new(opts)` and
-    `base._init_provider(M, provider)`, then call `provider:reset()`.
+  Required — provider MUST implement
+  -----------------------------------
+  - `new(params)` — constructor; creates the instance with plain
+    `self.parameters` table, sets metatable chain, and calls `self:reset()`.
+    See concrete providers for the pattern.
   - `get_credential(self)` — return a `flemma.secrets.Credential` table
     describing what this provider needs (kind, service, description, etc.).
     `get_api_key()` in base calls this, then resolves via `secrets.resolve()`.
@@ -39,7 +40,6 @@ Methods are grouped into three categories:
   Virtual — sensible default provided, override only if needed
   -------------------------------------------------------------
   - `get_endpoint(self)` — return the API URL (default: `self.endpoint`).
-  - `prepare_prompt(self, messages)` — legacy prompt normalization.
   - `validate_parameters(model_name, parameters)` — parameter validation
     (warnings, not failures).
   - `finalize_response(self, exit_code, callbacks)` — post-request cleanup.
@@ -128,8 +128,6 @@ local sink = require("flemma.sink")
 ---@field get_api_key fun(self): string|nil, flemma.secrets.ResolverDiagnostic[]|nil Resolve credentials via secrets module
 ---@field _response_buffer? flemma.provider.ResponseBuffer
 ---@field _response_headers? table<string, string[]>
----@field _base_parameters table<string, any> Underlying parameter table (without per-request overrides), for iteration
----@field set_parameter_overrides fun(self, overrides: table<string, any>|nil)
 local M = {}
 
 ---@class flemma.provider.HistoryMessage
@@ -247,52 +245,18 @@ function M._process_data(self, data, parsed, callbacks)
 end
 
 -- ============================================================================
--- Required, call super — providers MUST override and invoke the base
+-- Required — providers MUST implement new(params) with this pattern:
+--
+--   function M.new(params)
+--     local self = setmetatable({
+--       parameters = params or {},
+--       state = {},
+--       endpoint = "...",
+--     }, { __index = setmetatable(M, { __index = base }) })
+--     self:reset()
+--     return self
+--   end
 -- ============================================================================
-
---- Constructor. Providers must call `base.new(opts)` to get the base instance,
---- then set their own metatable and provider-specific fields.
----@param opts flemma.provider.Parameters|nil
----@return flemma.provider.Base
-function M.new(opts)
-  local base_params = opts or {}
-  local overrides = nil
-
-  local params_proxy = setmetatable({}, {
-    __index = function(_, k)
-      if overrides and overrides[k] ~= nil then
-        return overrides[k]
-      end
-      return base_params[k]
-    end,
-    __newindex = function(_, k, v)
-      base_params[k] = v
-    end,
-  })
-
-  local provider = setmetatable({
-    parameters = params_proxy,
-    _base_parameters = base_params,
-    state = {},
-  }, { __index = M })
-
-  --- Set per-request parameter overrides (from frontmatter).
-  --- Each call replaces any previous overrides; pass nil to clear.
-  ---@param new_overrides table<string, any>|nil
-  function provider.set_parameter_overrides(_, new_overrides)
-    overrides = new_overrides
-  end
-
-  return provider
-end
-
---- Set up the standard metatable chain for a provider instance.
---- Call this in provider constructors after base.new() and before reset().
----@param provider_module table The provider module table (M)
----@param provider flemma.provider.Base The provider instance from base.new()
-function M._init_provider(provider_module, provider)
-  setmetatable(provider, { __index = setmetatable(provider_module, { __index = M }) })
-end
 
 --- Destroy all sink objects in a response buffer's extra table.
 --- Finds values with a :destroy() method via duck typing.
@@ -355,43 +319,6 @@ end
 ---@return string[]
 function M.get_trailing_keys(self)
   return {}
-end
-
---- Legacy prompt normalization from raw messages.
---- Normalizes messages into a provider-agnostic Prompt structure with canonical
---- roles ('user' and 'assistant'). Used only by tests; production code uses
---- the pipeline instead.
----@param messages { type: string, content: string }[] The raw messages to prepare
----@return flemma.provider.Prompt prompt The prepared prompt with history and system (canonical roles)
-function M.prepare_prompt(self, messages)
-  local history = {}
-  local system = nil
-
-  -- Extract system message (last wins policy)
-  for _, msg in ipairs(messages) do
-    if msg.type == "System" then
-      system = vim.trim(msg.content or "")
-    end
-  end
-
-  -- Add user and assistant messages with canonical roles
-  for _, msg in ipairs(messages) do
-    local role = nil
-    if msg.type == "You" then
-      role = "user"
-    elseif msg.type == "Assistant" then
-      role = "assistant"
-    end
-
-    if role then
-      table.insert(history, {
-        role = role,
-        content = vim.trim(msg.content or ""),
-      })
-    end
-  end
-
-  return { history = history, system = system }
 end
 
 --- Validate provider-specific parameters.

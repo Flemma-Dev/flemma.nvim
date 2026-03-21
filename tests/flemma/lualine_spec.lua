@@ -188,7 +188,10 @@ describe("Lualine component", function()
       -- Arrange: switch first, then set format (switch_provider re-materializes state)
       core.switch_provider("openai", "o3", { reasoning = "high", temperature = 1 })
       local config_facade = require("flemma.config")
-      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{model}#{?#{thinking}, [#{thinking}],}" } })
+      config_facade.apply(
+        config_facade.LAYERS.RUNTIME,
+        { statusline = { format = "#{model}#{?#{thinking}, [#{thinking}],}" } }
+      )
 
       -- Act
       local status = flemma_component:update_status()
@@ -200,7 +203,10 @@ describe("Lualine component", function()
     it("should collapse conditional when thinking is off", function()
       -- Arrange
       local config_facade = require("flemma.config")
-      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{model}#{?#{thinking}, [#{thinking}],}" } })
+      config_facade.apply(
+        config_facade.LAYERS.RUNTIME,
+        { statusline = { format = "#{model}#{?#{thinking}, [#{thinking}],}" } }
+      )
       core.switch_provider("openai", "gpt-4o", {})
 
       -- Act
@@ -214,7 +220,10 @@ describe("Lualine component", function()
       -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       local config_facade = require("flemma.config")
-      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{?#{==:#{provider},anthropic},A,O}: #{model}" } })
+      config_facade.apply(
+        config_facade.LAYERS.RUNTIME,
+        { statusline = { format = "#{?#{==:#{provider},anthropic},A,O}: #{model}" } }
+      )
 
       -- Act
       local status = flemma_component:update_status()
@@ -229,7 +238,10 @@ describe("Lualine component", function()
       -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       local config_facade = require("flemma.config")
-      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{model} #{?#{session.cost},#{session.cost},}" } })
+      config_facade.apply(
+        config_facade.LAYERS.RUNTIME,
+        { statusline = { format = "#{model} #{?#{session.cost},#{session.cost},}" } }
+      )
 
       -- Add a request to the session
       local s = require("flemma.session").get()
@@ -286,7 +298,10 @@ describe("Lualine component", function()
       -- Arrange: switch first, then set format (switch_provider re-materializes state)
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       local config_facade = require("flemma.config")
-      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{model}#{?#{session.cost}, #{session.cost},}" } })
+      config_facade.apply(
+        config_facade.LAYERS.RUNTIME,
+        { statusline = { format = "#{model}#{?#{session.cost}, #{session.cost},}" } }
+      )
 
       local s = require("flemma.session").get()
       s:reset()
@@ -461,57 +476,35 @@ describe("Lualine component", function()
     end)
   end)
 
-  describe("frontmatter overrides", function()
-    local state = require("flemma.state")
-
-    it("should reflect reasoning override from frontmatter", function()
+  describe("parameter changes via switch reflect in display", function()
+    it("should reflect reasoning level from config facade", function()
       -- Start with base config: default thinking="high" applies
       core.switch_provider("openai", "o3", { temperature = 1 })
       assert.are.equal("o3 (high)", flemma_component:update_status())
 
-      -- Simulate frontmatter override lowering reasoning
-      local provider = state.get_provider()
-      provider:set_parameter_overrides({ reasoning = "low" })
-
-      -- Lualine should now show the overridden reasoning level
+      -- Switch again with different reasoning level — writes to RUNTIME layer
+      core.switch_provider("openai", "o3", { reasoning = "low", temperature = 1 })
       assert.are.equal("o3 (low)", flemma_component:update_status())
     end)
 
-    it("should reflect thinking_budget override from frontmatter", function()
+    it("should reflect thinking_budget changes from config facade", function()
       -- Start with base config: default thinking="high" → budget 32768 → "high"
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       assert.are.equal("claude-sonnet-4-5 (high)", flemma_component:update_status())
 
-      -- Simulate frontmatter override lowering budget
-      local provider = state.get_provider()
-      provider:set_parameter_overrides({ thinking_budget = 2048 })
-
-      -- Lualine should now show the overridden thinking level (2048 maps to "low")
+      -- Switch with explicit thinking_budget — writes to RUNTIME layer
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking_budget = 2048 })
       assert.are.equal("claude-sonnet-4-5 (low)", flemma_component:update_status())
     end)
 
-    it("should let frontmatter override win over base config", function()
+    it("should reflect changed reasoning level via switch", function()
       -- Start with base reasoning = "low"
       core.switch_provider("openai", "o3", { reasoning = "low", temperature = 1 })
       assert.are.equal("o3 (low)", flemma_component:update_status())
 
-      -- Frontmatter sets reasoning = "high"
-      local provider = state.get_provider()
-      provider:set_parameter_overrides({ reasoning = "high" })
-
+      -- Switch with "high" reasoning
+      core.switch_provider("openai", "o3", { reasoning = "high", temperature = 1 })
       assert.are.equal("o3 (high)", flemma_component:update_status())
-    end)
-
-    it("should revert to base config when overrides are cleared", function()
-      core.switch_provider("openai", "o3", { reasoning = "low", temperature = 1 })
-      local provider = state.get_provider()
-
-      -- Set then clear overrides
-      provider:set_parameter_overrides({ reasoning = "high" })
-      assert.are.equal("o3 (high)", flemma_component:update_status())
-
-      provider:set_parameter_overrides(nil)
-      assert.are.equal("o3 (low)", flemma_component:update_status())
     end)
   end)
 end)

@@ -49,19 +49,16 @@ M.metadata = {
   }),
 }
 
----@param merged_config flemma.provider.Parameters
+---@param params flemma.provider.Parameters
 ---@return flemma.provider.OpenAI
-function M.new(merged_config)
-  local provider = base.new(merged_config) -- Pass the already merged config to base
-
-  -- OpenAI Responses API endpoint
-  provider.endpoint = "https://api.openai.com/v1/responses"
-
-  -- Set metatable BEFORE reset so M.reset (not base.reset) initializes provider-specific state
-  base._init_provider(M, provider)
-  provider:reset()
-
-  return provider --[[@as flemma.provider.OpenAI]]
+function M.new(params)
+  local self = setmetatable({
+    parameters = params or {},
+    state = {},
+    endpoint = "https://api.openai.com/v1/responses",
+  }, { __index = setmetatable(M, { __index = base }) })
+  self:reset()
+  return self --[[@as flemma.provider.OpenAI]]
 end
 
 ---@param self flemma.provider.OpenAI

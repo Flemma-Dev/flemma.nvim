@@ -99,8 +99,13 @@ describe("provider module resolution", function()
           output_has_thoughts = false,
         },
       }
-      function P.new(opts)
-        return base.new(opts)
+      function P.new(params)
+        local self = setmetatable({
+          parameters = params or {},
+          state = {},
+        }, { __index = setmetatable(P, { __index = base }) })
+        self:reset()
+        return self
       end
       function P.build_request()
         return {}

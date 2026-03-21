@@ -56,7 +56,7 @@ describe("flemma.status", function()
       assert.is_table(data.tools)
     end)
 
-    it("reports provider as not initialized when no provider instance exists", function()
+    it("reports provider as initialized when config has a provider set", function()
       apply_test_config({
         provider = "anthropic",
         model = "claude-sonnet-4-5-20250929",
@@ -64,10 +64,9 @@ describe("flemma.status", function()
         tools = { autopilot = { enabled = false, max_turns = 100 } },
         sandbox = { enabled = false, backend = "auto" },
       })
-      require("flemma.state").set_provider(nil)
 
       local data = status.collect(0)
-      assert.is_false(data.provider.initialized)
+      assert.is_true(data.provider.initialized)
     end)
 
     it("separates tools into enabled and disabled lists", function()

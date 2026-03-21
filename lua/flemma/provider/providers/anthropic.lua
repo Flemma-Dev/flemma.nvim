@@ -33,20 +33,17 @@ M.metadata = {
   }),
 }
 
----@param merged_config flemma.provider.Parameters
+---@param params flemma.provider.Parameters
 ---@return flemma.provider.Anthropic
-function M.new(merged_config)
-  local provider = base.new(merged_config) -- Pass the already merged config to base
-
-  -- Anthropic-specific state (endpoint, version)
-  provider.endpoint = "https://api.anthropic.com/v1/messages"
-  provider.api_version = "2023-06-01"
-
-  -- Set metatable BEFORE reset so M.reset (not base.reset) initializes provider-specific state
-  base._init_provider(M, provider)
-  provider:reset()
-
-  return provider --[[@as flemma.provider.Anthropic]]
+function M.new(params)
+  local self = setmetatable({
+    parameters = params or {},
+    state = {},
+    endpoint = "https://api.anthropic.com/v1/messages",
+    api_version = "2023-06-01",
+  }, { __index = setmetatable(M, { __index = base }) })
+  self:reset()
+  return self --[[@as flemma.provider.Anthropic]]
 end
 
 ---@param self flemma.provider.Anthropic

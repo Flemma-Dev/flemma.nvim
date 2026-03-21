@@ -1,7 +1,6 @@
 --- Tests for editing.auto_prompt
 
 local editing = require("flemma.buffer.editing")
-local state = require("flemma.state")
 
 describe("editing.auto_prompt", function()
   local bufnr
@@ -15,7 +14,6 @@ describe("editing.auto_prompt", function()
     if vim.api.nvim_buf_is_valid(bufnr) then
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end
-    state.set_provider(nil)
   end)
 
   it("prepends @You: and empty line to an empty buffer", function()

@@ -148,7 +148,7 @@ When you resolve a non-obvious issue — something that required real investigat
 
 - **Stale `vim-pack-dir` copy shadows working-directory changes.** When running headless Neovim, always use `set rtp^=...` (prepend) not `set rtp+=...` (append) — a packaged copy in `vim-pack-dir` takes priority otherwise. Verify with `debug.getinfo(require('flemma.ui').some_fn, 'S').source`.
 
-- **Provider `new()` metatable ordering.** `base.new()` sets `__index = base`, so calling `provider:reset()` before the provider-specific `setmetatable` call will invoke `base.reset()` instead of the provider's `M.reset()`. Always set the provider metatable BEFORE calling `reset()`.
+- **Provider `new()` metatable chain.** Each provider owns its constructor with the full metatable chain set in the `setmetatable` literal before `self:reset()`. This makes metatable ordering bugs structurally impossible — the chain `self → M → base` is established atomically.
 
 - **LuaJIT `tostring` for integer-valued floats.** `tostring(5.0)` returns `"5"` not `"5.0"` in LuaJIT. Account for this in assertions and string formatting involving numeric results.
 

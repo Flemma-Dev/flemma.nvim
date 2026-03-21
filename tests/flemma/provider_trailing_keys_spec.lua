@@ -15,7 +15,10 @@ describe("provider.get_trailing_keys", function()
     end)
 
     it("returns an empty table by default", function()
-      local provider = base.new()
+      local provider = setmetatable({
+        parameters = {},
+        state = {},
+      }, { __index = base })
       local keys = provider:get_trailing_keys()
       assert.are.same({}, keys)
     end)

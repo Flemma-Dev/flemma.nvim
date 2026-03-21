@@ -57,24 +57,16 @@ local function _validate_config(self)
   -- NOTE: Location has a default, and model is handled by provider_config, so only project_id is strictly required here.
 end
 
----@param provider_config flemma.provider.Parameters
+---@param params flemma.provider.Parameters
 ---@return flemma.provider.Vertex
-function M.new(provider_config)
-  local provider = base.new(provider_config) -- Pass the flattened config to base
-
-  -- Vertex AI-specific state is accessed via self.parameters
-  -- self.parameters.project_id is required
-  -- self.parameters.location has a default
-  -- self.parameters.model is set via base.new
-
-  -- Set the API version
-  provider.api_version = "v1beta1" -- v1beta1 supports parametersJsonSchema for full JSON Schema compatibility
-
-  -- Set metatable BEFORE reset so M.reset (not base.reset) initializes provider-specific state
-  base._init_provider(M, provider)
-  provider:reset()
-
-  return provider --[[@as flemma.provider.Vertex]]
+function M.new(params)
+  local self = setmetatable({
+    parameters = params or {},
+    state = {},
+    api_version = "v1beta1", -- v1beta1 supports parametersJsonSchema for full JSON Schema compatibility
+  }, { __index = setmetatable(M, { __index = base }) })
+  self:reset()
+  return self --[[@as flemma.provider.Vertex]]
 end
 
 ---@param self flemma.provider.Vertex

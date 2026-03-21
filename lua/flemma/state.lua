@@ -58,9 +58,6 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field rewriter_diagnostics? flemma.preprocessor.RewriterDiagnostic[] Diagnostics from the last preprocessor run
 ---@field _pending_confirmation? flemma.preprocessor.Confirmation In-flight confirmation awaiting user response
 
----@type flemma.provider.Base|nil
-local provider = nil
-
 ---@type table<integer, flemma.state.BufferState>
 local buffer_states = {}
 
@@ -73,18 +70,6 @@ local cleanup_hooks = {}
 ---@param fn fun(bufnr: integer) Cleanup function
 function M.register_cleanup(name, fn)
   cleanup_hooks[name] = fn
-end
-
----Set the active provider instance
----@param p flemma.provider.Base|nil
-function M.set_provider(p)
-  provider = p
-end
-
----Get the active provider instance
----@return flemma.provider.Base|nil
-function M.get_provider()
-  return provider
 end
 
 ---Get the global session (tracks all requests across buffers)

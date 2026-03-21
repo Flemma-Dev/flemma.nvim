@@ -2,6 +2,34 @@
 describe("OpenAI Provider", function()
   local openai = require("flemma.provider.providers.openai")
 
+  --- Build a Prompt table from legacy message format (replaces deleted base.prepare_prompt)
+  ---@param messages { type: string, content: string }[]
+  ---@return flemma.provider.Prompt
+  local function make_prompt(messages)
+    local history = {}
+    local system = nil
+    for _, msg in ipairs(messages) do
+      if msg.type == "System" then
+        system = vim.trim(msg.content or "")
+      end
+    end
+    for _, msg in ipairs(messages) do
+      local role = nil
+      if msg.type == "You" then
+        role = "user"
+      elseif msg.type == "Assistant" then
+        role = "assistant"
+      end
+      if role then
+        table.insert(history, {
+          role = role,
+          parts = { { kind = "text", text = vim.trim(msg.content or "") } },
+        })
+      end
+    end
+    return { history = history, system = system }
+  end
+
   after_each(function()
     -- Clean up any buffers created during the test
     vim.cmd("silent! %bdelete!")
@@ -29,7 +57,7 @@ describe("OpenAI Provider", function()
           { type = "You", content = "Hello" },
         }
 
-        local prompt = provider:prepare_prompt(messages)
+        local prompt = make_prompt(messages)
         local request_body = provider:build_request(prompt)
 
         -- Verify max_output_tokens is used (not max_tokens or max_completion_tokens)
@@ -64,7 +92,7 @@ describe("OpenAI Provider", function()
         { type = "You", content = "Hello" },
       }
 
-      local prompt = provider:prepare_prompt(messages)
+      local prompt = make_prompt(messages)
       local request_body = provider:build_request(prompt)
 
       assert.is_not_nil(request_body.input, "Should use input field")
@@ -82,7 +110,7 @@ describe("OpenAI Provider", function()
         { type = "You", content = "Hello" },
       }
 
-      local prompt = provider:prepare_prompt(messages)
+      local prompt = make_prompt(messages)
       local request_body = provider:build_request(prompt)
 
       assert.equals(false, request_body.store, "Should set store = false for privacy")
@@ -99,7 +127,7 @@ describe("OpenAI Provider", function()
         { type = "You", content = "Solve this problem" },
       }
 
-      local prompt = provider:prepare_prompt(messages)
+      local prompt = make_prompt(messages)
       local request_body = provider:build_request(prompt)
 
       assert.equals(4000, request_body.max_output_tokens)
@@ -124,7 +152,7 @@ describe("OpenAI Provider", function()
         { type = "You", content = "Hello" },
       }
 
-      local prompt = provider:prepare_prompt(messages)
+      local prompt = make_prompt(messages)
       local request_body = provider:build_request(prompt)
 
       assert.is_not_nil(request_body.reasoning)
@@ -142,7 +170,7 @@ describe("OpenAI Provider", function()
         { type = "You", content = "Hello" },
       }
 
-      local prompt = provider:prepare_prompt(messages)
+      local prompt = make_prompt(messages)
       local request_body = provider:build_request(prompt)
 
       assert.is_not_nil(request_body.reasoning)
@@ -160,7 +188,7 @@ describe("OpenAI Provider", function()
         { type = "You", content = "Hello" },
       }
 
-      local prompt = provider:prepare_prompt(messages)
+      local prompt = make_prompt(messages)
       local request_body = provider:build_request(prompt)
 
       assert.is_not_nil(request_body.reasoning)
@@ -179,7 +207,7 @@ describe("OpenAI Provider", function()
         { type = "You", content = "Hello" },
       }
 
-      local prompt = provider:prepare_prompt(messages)
+      local prompt = make_prompt(messages)
       local request_body = provider:build_request(prompt)
 
       assert.equals("detailed", request_body.reasoning.summary)
@@ -198,7 +226,7 @@ describe("OpenAI Provider", function()
         { type = "You", content = "Solve this problem" },
       }
 
-      local prompt = provider_reasoning:prepare_prompt(messages)
+      local prompt = make_prompt(messages)
       local request_body = provider_reasoning:build_request(prompt)
       assert.equals("developer", request_body.input[1].role, "Should use developer role with reasoning")
 
@@ -209,7 +237,7 @@ describe("OpenAI Provider", function()
         temperature = 0.5,
       })
 
-      prompt = provider_no_reasoning:prepare_prompt(messages)
+      prompt = make_prompt(messages)
       request_body = provider_no_reasoning:build_request(prompt)
       assert.equals("developer", request_body.input[1].role, "Should use developer role without reasoning")
     end)
@@ -225,7 +253,7 @@ describe("OpenAI Provider", function()
         { type = "You", content = "Hello" },
       }
 
-      local prompt = provider:prepare_prompt(messages)
+      local prompt = make_prompt(messages)
       local request_body = provider:build_request(prompt)
 
       assert.equals(1000, request_body.max_output_tokens)
@@ -585,7 +613,7 @@ describe("OpenAI Provider", function()
       }
 
       local context = ctx.from_file("tests/fixtures/doc.chat")
-      local prompt = provider:prepare_prompt(messages)
+      local prompt = make_prompt(messages)
       local request_body = provider:build_request(prompt, context)
 
       assert.equals("tests/fixtures/doc.chat", request_body.prompt_cache_key)
@@ -605,7 +633,7 @@ describe("OpenAI Provider", function()
       }
 
       local context = ctx.from_file("tests/fixtures/doc.chat")
-      local prompt = provider:prepare_prompt(messages)
+      local prompt = make_prompt(messages)
       local request_body = provider:build_request(prompt, context)
 
       assert.equals("tests/fixtures/doc.chat", request_body.prompt_cache_key)
@@ -625,7 +653,7 @@ describe("OpenAI Provider", function()
       }
 
       local context = ctx.from_file("tests/fixtures/doc.chat")
-      local prompt = provider:prepare_prompt(messages)
+      local prompt = make_prompt(messages)
       local request_body = provider:build_request(prompt, context)
 
       assert.is_nil(request_body.prompt_cache_key)
@@ -645,7 +673,7 @@ describe("OpenAI Provider", function()
 
       -- Create context with empty filename (simulates unsaved buffer)
       local context = ctx.from_file("")
-      local prompt = provider:prepare_prompt(messages)
+      local prompt = make_prompt(messages)
       local request_body = provider:build_request(prompt, context)
 
       assert.is_nil(request_body.prompt_cache_key)

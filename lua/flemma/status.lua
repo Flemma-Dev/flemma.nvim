@@ -4,7 +4,6 @@
 local M = {}
 
 local config_facade = require("flemma.config")
-local state = require("flemma.state")
 local config_manager = require("flemma.core.config.manager")
 local autopilot = require("flemma.autopilot")
 local sandbox = require("flemma.sandbox")
@@ -35,12 +34,11 @@ local MARKER_SANDBOX = "⊡"
 ---@param config flemma.Config
 ---@return { name: string, model: string|nil, initialized: boolean, model_info: flemma.models.ModelInfo|nil }
 local function collect_provider(config)
-  local provider_instance = state.get_provider()
   local model_info = config.model and registry.get_model_info(config.provider, config.model) or nil
   return {
     name = config.provider,
     model = config.model,
-    initialized = provider_instance ~= nil,
+    initialized = config.provider ~= nil and config.provider ~= "",
     model_info = model_info,
   }
 end

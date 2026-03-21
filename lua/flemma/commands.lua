@@ -197,9 +197,15 @@ local function setup_commands()
 
   command_tree.children.import = {
     action = function()
-      local provider = require("flemma.state").get_provider()
+      local cfg = require("flemma.config").get()
+      local provider_module_path = require("flemma.provider.registry").get(cfg.provider)
+      if not provider_module_path then
+        vim.notify("Flemma import: No provider configured", vim.log.levels.ERROR)
+        return
+      end
 
-      if not provider or not provider.try_import_from_buffer then
+      local provider_module = require("flemma.loader").load(provider_module_path)
+      if not provider_module or not provider_module.try_import_from_buffer then
         vim.notify("Flemma import: Current provider does not support importing", vim.log.levels.ERROR)
         return
       end
@@ -207,7 +213,8 @@ local function setup_commands()
       local bufnr = vim.api.nvim_get_current_buf()
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
-      local chat_content = provider:try_import_from_buffer(lines)
+      -- try_import_from_buffer is an instance method signature but doesn't use self
+      local chat_content = provider_module.try_import_from_buffer(provider_module, lines)
       if chat_content then
         vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.split(chat_content, "\n", {}))
         vim.bo[bufnr].filetype = "chat"

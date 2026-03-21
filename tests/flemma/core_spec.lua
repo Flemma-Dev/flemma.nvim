@@ -366,8 +366,8 @@ describe(":Flemma send command", function()
     -- Act: Attempt to switch to an invalid model on a valid provider
     local result = core.switch_provider("openai", "gpt-6", {})
 
-    -- Assert: switch returns a provider instance
-    assert.is_not_nil(result, "switch should succeed when provider is valid, even if model is invalid")
+    -- Assert: switch succeeds (returns true)
+    assert.is_truthy(result, "switch should succeed when provider is valid, even if model is invalid")
 
     -- Wait for notify to capture calls
     vim.wait(50, function()
@@ -397,5 +397,38 @@ describe(":Flemma send command", function()
 
     -- Cleanup
     notify_spy:revert()
+  end)
+
+  it("frontmatter can override provider and model for a single buffer", function()
+    -- Arrange: Verify the default provider is NOT OpenAI (what frontmatter will override to)
+    local default_config = require("flemma.config").materialize()
+    assert.is_not.equals("openai", default_config.provider, "Test assumes default is not OpenAI")
+
+    client.register_fixture("api%.openai%.com", "tests/fixtures/openai_hello_success_stream.txt")
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "```lua",
+      'flemma.opt.provider = "openai"',
+      'flemma.opt.model = "o3"',
+      "```",
+      "@You:",
+      "Hello from OpenAI via frontmatter",
+    })
+
+    -- Act: Send — frontmatter should override provider to OpenAI
+    vim.cmd("Flemma send")
+
+    -- Assert: Request body uses OpenAI format (input field, not messages)
+    local captured = core._get_last_request_body()
+    assert.is_not_nil(captured, "request_body should be captured")
+    assert.equals("o3", captured.model)
+    assert.is_not_nil(captured.input, "Should use OpenAI Responses API 'input' field")
+    assert.is_nil(captured.messages, "Should NOT use Anthropic 'messages' field")
+
+    -- Assert: Global config still points to the original provider (frontmatter is per-buffer)
+    local global_after = require("flemma.config").materialize()
+    assert.equals(default_config.provider, global_after.provider)
   end)
 end)
