@@ -99,21 +99,6 @@ local function read_file(path, opts)
   return data, nil
 end
 
---- Propagate an error from pcall: re-throw structured error tables as-is, wrap others with context.
----
---- Structured errors (tables with a `type` field) come from include() and other subsystems
---- that produce typed diagnostics. Re-throwing preserves the diagnostic type so the
---- processor can format them properly (e.g., "file" errors vs "expression" errors).
----@param err any Error value from pcall
----@param format string Format string for wrapping non-structured errors
----@param ... any Additional format arguments
-local function propagate_error(err, format, ...)
-  if type(err) == "table" and err.type then
-    error(err)
-  end
-  error(string.format(format, ...))
-end
-
 --- Build the include() closure for a given environment.
 --- The include_stack is threaded through closures — not stored on the env.
 ---@param env flemma.templating.eval.Environment The environment where include() will be installed
@@ -210,14 +195,13 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
     -- Text mode: circular detection applies (text includes recurse)
     for _, path_in_stack in ipairs(include_stack) do
       if path_in_stack == target_path then
-        error(
-          string.format(
-            "Circular include for '%s' (requested by '%s'). Include stack: %s",
-            target_path,
-            env.__filename or "N/A",
-            table.concat(include_stack, " -> ")
-          )
-        )
+        error({
+          type = "file",
+          filename = target_path,
+          raw = relative_path,
+          error = string.format("Circular include detected (requested by '%s')", env.__filename or "N/A"),
+          include_stack = { unpack(include_stack) },
+        })
       end
     end
 
@@ -291,7 +275,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
     -- to chunk-level failures, which the compiler records as severity "error".
     for _, diag in ipairs(compile_diagnostics) do
       if diag.severity == "error" then
-        error(diag.error or "Unknown template error")
+        error(diag)
       end
     end
 
@@ -367,12 +351,15 @@ function M.execute_frontmatter(code, env_param)
 
   local chunk, load_err = load(code, "frontmatter", "t", env)
   if not chunk then
-    error(string.format("Load error in frontmatter of '%s': %s", (env.__filename or "N/A"), load_err))
+    error({ type = "frontmatter", error = load_err })
   end
 
   local ok, exec_err = pcall(chunk)
   if not ok then
-    propagate_error(exec_err, "Execution error in frontmatter of '%s': %s", (env.__filename or "N/A"), exec_err)
+    if type(exec_err) == "table" and exec_err.type then
+      error(exec_err)
+    end
+    error({ type = "frontmatter", error = tostring(exec_err) })
   end
 
   -- Collect only new keys that weren't in initial environment
@@ -411,13 +398,10 @@ function M.eval_expression(expr, env)
 
   local ok, eval_result = pcall(chunk)
   if not ok then
-    propagate_error(
-      eval_result,
-      "Evaluation error in '%s' for expression '{{%s}}': %s",
-      (env.__filename or "N/A"),
-      expr,
-      eval_result
-    )
+    if type(eval_result) == "table" and eval_result.type then
+      error(eval_result)
+    end
+    error({ type = "expression", error = tostring(eval_result) })
   end
 
   return eval_result
