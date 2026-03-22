@@ -147,6 +147,20 @@ Do not invoke `nvim` directly with Plenary commands. Only `make qa` is wired cor
 
 Never pipe it through `grep`/`tail`/`head`. It's silent on success and self-explanatory on failure.
 
+### `__pairs` Guard Is Ineffective Under LuaJIT
+
+Config proxies define `__pairs` that errors to prevent accidental iteration on proxy objects. But Neovim uses LuaJIT (Lua 5.1 semantics), which ignores `__pairs`. Calling `pairs()` on a proxy silently returns an empty iterator instead of erroring. **Always use `config.materialize()` when you need `pairs()`, dynamic key access, `vim.deepcopy()`, or `vim.inspect()`.**
+
+### `get()` vs `materialize()` Decision Tree
+
+| Need | Use |
+|------|-----|
+| Static key reads (`cfg.provider`, `cfg.tools.timeout`) | `config.get(bufnr)` |
+| `pairs()` iteration | `config.materialize(bufnr)` |
+| Dynamic key access (`t[variable]`) | `config.materialize(bufnr)` |
+| `vim.deepcopy()` / `vim.inspect()` | `config.materialize(bufnr)` |
+| User-provided callbacks receiving config | `config.materialize(bufnr)` |
+
 ## Provider Parameter Resolution
 
 Providers use composed lenses for parameter resolution:

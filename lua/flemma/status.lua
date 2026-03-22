@@ -6,6 +6,7 @@ local M = {}
 local config_facade = require("flemma.config")
 local normalize = require("flemma.provider.normalize")
 local autopilot = require("flemma.autopilot")
+local processor = require("flemma.processor")
 local sandbox = require("flemma.sandbox")
 local str = require("flemma.utilities.string")
 local tools_module = require("flemma.tools")
@@ -1550,10 +1551,7 @@ function M.collect(bufnr)
   -- materialized config includes frontmatter overrides.
   local is_chat = vim.api.nvim_buf_is_valid(bufnr) and bufnr > 0 and vim.bo[bufnr].filetype == "chat"
   if is_chat then
-    local ok, processor = pcall(require, "flemma.processor")
-    if ok then
-      processor.evaluate_buffer_frontmatter(bufnr)
-    end
+    processor.evaluate_buffer_frontmatter(bufnr)
   end
 
   -- Materialize after frontmatter evaluation so all layers are included.

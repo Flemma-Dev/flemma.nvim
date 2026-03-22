@@ -447,7 +447,10 @@ function M.make_coerce_context(bufnr, is_list_fn)
   ---@type flemma.config.CoerceContext
   return {
     get = function(path)
-      local is_list = is_list_fn and is_list_fn(path) or false
+      local is_list = false
+      if is_list_fn then
+        is_list = is_list_fn(path)
+      end
       return M.resolve(path, bufnr, { is_list = is_list })
     end,
   }

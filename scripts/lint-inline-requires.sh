@@ -44,7 +44,7 @@ for file in $(find lua/flemma -name '*.lua' -type f | sort); do
 
     echo "  $file:$abs_line: $(echo "$content" | sed 's/^[[:space:]]*//')"
     violations=$((violations + 1))
-  done < <(tail -n +"$first_fn" "$file" | grep -n 'require("flemma\.' || true)
+  done < <(tail -n +"$first_fn" "$file" | grep -n -E 'require\(?"flemma\.' || true)
 done
 
 if [ "$violations" -gt 0 ]; then
