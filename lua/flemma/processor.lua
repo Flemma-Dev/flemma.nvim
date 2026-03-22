@@ -8,6 +8,7 @@ local codeblock_parsers = require("flemma.codeblock.parsers")
 local log = require("flemma.logging")
 local parser = require("flemma.parser")
 local state = require("flemma.state")
+local diagnostic_format = require("flemma.utilities.diagnostic")
 local symbols = require("flemma.symbols")
 
 ---@class flemma.Processor
@@ -68,8 +69,7 @@ end
 
 ---@class flemma.processor.EvaluatedFrontmatter
 ---@field context flemma.Context Evaluated context with user variables set
----@field diagnostics flemma.ast.Diagnostic[] Frontmatter-specific diagnostics
----@field validation_failures flemma.config.ValidationFailure[] Schema validation failures from finalize
+---@field diagnostics flemma.ast.Diagnostic[] Frontmatter-specific diagnostics (includes converted validation failures)
 ---@field frontmatter_code? string Raw frontmatter code that was evaluated (nil when no frontmatter)
 
 ---Evaluate frontmatter and return the resulting context (with user variables set).
@@ -79,13 +79,11 @@ end
 ---@param base_context flemma.Context|nil
 ---@param bufnr? integer Buffer number for config store writes
 ---@return flemma.Context context
----@return flemma.ast.Diagnostic[] diagnostics Frontmatter-specific diagnostics
----@return flemma.config.ValidationFailure[] validation_failures Schema validation failures
+---@return flemma.ast.Diagnostic[] diagnostics Frontmatter-specific diagnostics (includes converted validation failures)
 ---@return string? frontmatter_code Raw frontmatter code that was evaluated
 local function evaluate_frontmatter_internal(doc, base_context, bufnr)
   local context = ctxutil.clone(base_context)
   local diagnostics = {}
-  local validation_failures = {}
   local frontmatter_code = nil
 
   -- Clear the frontmatter layer before evaluation so previous ops don't persist
@@ -113,8 +111,14 @@ local function evaluate_frontmatter_internal(doc, base_context, bufnr)
             source_file = context:get_filename() or "N/A",
           })
         end
-        if fm_validation_failures then
-          validation_failures = fm_validation_failures
+        -- Convert validation failures into diagnostics at the boundary —
+        -- enriched with position/source_file from the frontmatter AST node.
+        local fm_defaults = {
+          position = fm.position,
+          source_file = context:get_filename() or "N/A",
+        }
+        for _, failure in ipairs(fm_validation_failures or {}) do
+          table.insert(diagnostics, diagnostic_format.from_validation_failure(failure, fm_defaults))
         end
       else
         table.insert(
@@ -141,7 +145,7 @@ local function evaluate_frontmatter_internal(doc, base_context, bufnr)
     end
   end
 
-  return context, diagnostics, validation_failures, frontmatter_code
+  return context, diagnostics, frontmatter_code
 end
 
 ---Evaluate frontmatter from a parsed document.
@@ -152,12 +156,10 @@ end
 ---@param bufnr? integer Buffer number for config store writes
 ---@return flemma.processor.EvaluatedFrontmatter
 function M.evaluate_frontmatter(doc, base_context, bufnr)
-  local context, diagnostics, validation_failures, frontmatter_code =
-    evaluate_frontmatter_internal(doc, base_context, bufnr)
+  local context, diagnostics, frontmatter_code = evaluate_frontmatter_internal(doc, base_context, bufnr)
   return {
     context = context,
     diagnostics = diagnostics,
-    validation_failures = validation_failures,
     frontmatter_code = frontmatter_code,
   }
 end
@@ -206,10 +208,13 @@ function M.evaluate_frontmatter_if_changed(bufnr)
 
   local result = M.evaluate_buffer_frontmatter(bufnr)
 
-  -- Check for evaluation errors (syntax errors, runtime errors)
+  -- Check for evaluation errors (syntax errors, runtime errors).
+  -- Skip validation failures (d.validation) — those are post-execution schema
+  -- checks, not broken frontmatter code. A mid-edit typo in a config value
+  -- shouldn't rollback the entire L40 state.
   local has_errors = false
   for _, diagnostic in ipairs(result.diagnostics) do
-    if diagnostic.severity == "error" then
+    if diagnostic.severity == "error" and not diagnostic.validation then
       has_errors = true
       break
     end
@@ -238,37 +243,24 @@ end
 ---@return flemma.processor.EvaluatedResult
 function M.evaluate(doc, base_context, opts)
   opts = opts or {}
-  local context, fm_diagnostics, validation_failures
+  local context, fm_diagnostics
   if opts.evaluated_frontmatter then
     context = opts.evaluated_frontmatter.context
     fm_diagnostics = opts.evaluated_frontmatter.diagnostics
-    validation_failures = opts.evaluated_frontmatter.validation_failures
   else
     context, fm_diagnostics = evaluate_frontmatter_internal(doc, base_context, opts.bufnr)
-    validation_failures = {}
   end
 
   -- Merge parser errors with frontmatter diagnostics (shallow copy to avoid
-  -- mutating doc.errors, which persists in the AST snapshot across requests)
+  -- mutating doc.errors, which persists in the AST snapshot across requests).
+  -- Validation failures are already converted to diagnostics inside
+  -- evaluate_frontmatter_internal(), so no separate normalization needed.
   local diagnostics = {}
   for _, d in ipairs(doc.errors or {}) do
     table.insert(diagnostics, d)
   end
   for _, d in ipairs(fm_diagnostics) do
     table.insert(diagnostics, d)
-  end
-  -- Normalize validation failures into diagnostic shape so they render
-  -- through the same formatter as other diagnostics
-  for _, failure in ipairs(validation_failures or {}) do
-    local message = failure.message
-    if failure.path then
-      message = failure.path .. ": " .. message
-    end
-    table.insert(diagnostics, {
-      type = "config",
-      severity = "warning",
-      error = message,
-    })
   end
 
   -- 2) Evaluate messages

@@ -1637,25 +1637,13 @@ function M.collect(bufnr)
   if is_chat then
     local fm_result = processor.evaluate_buffer_frontmatter(bufnr)
     state.get_buffer_state(bufnr).frontmatter_eval_code = fm_result.frontmatter_code
-    -- Collect parse/runtime errors
+    -- Collect diagnostics (validation failures are already converted inside
+    -- evaluate_frontmatter_internal, no separate normalization needed)
     for _, diagnostic in ipairs(fm_result.diagnostics) do
       if diagnostic.severity == "error" or diagnostic.severity == "warning" then
         collected_diagnostics = collected_diagnostics or {}
         table.insert(collected_diagnostics, diagnostic)
       end
-    end
-    -- Normalize schema validation failures into Diagnostic shape
-    for _, failure in ipairs(fm_result.validation_failures) do
-      collected_diagnostics = collected_diagnostics or {}
-      local message = failure.message
-      if failure.path then
-        message = failure.path .. ": " .. message
-      end
-      table.insert(collected_diagnostics, {
-        type = "config",
-        severity = "warning",
-        error = message,
-      })
     end
   end
 

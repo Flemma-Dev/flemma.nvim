@@ -114,6 +114,27 @@ function M.format_include_stack(d)
   return lines
 end
 
+---Convert a ValidationFailure into a Diagnostic.
+---Marks the result with `validation = true` so passive evaluation
+---(evaluate_frontmatter_if_changed) can distinguish post-execution schema
+---failures from code-execution errors when deciding whether to rollback.
+---@param failure flemma.config.ValidationFailure
+---@param defaults? { position?: flemma.ast.Position, source_file?: string }
+---@return flemma.ast.Diagnostic
+function M.from_validation_failure(failure, defaults)
+  local message = failure.message
+  if failure.path then
+    message = failure.path .. ": " .. message
+  end
+  ---@type flemma.ast.Diagnostic
+  local d = { type = "config", severity = "error", error = message, validation = true }
+  if defaults then
+    d.position = defaults.position
+    d.source_file = defaults.source_file
+  end
+  return d
+end
+
 ---Sort diagnostics: errors first, then warnings.
 ---Returns a new table (does not mutate the input).
 ---@param diagnostics flemma.ast.Diagnostic[]

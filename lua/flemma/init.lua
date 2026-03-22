@@ -23,6 +23,7 @@ local preprocessor = require("flemma.preprocessor")
 local templating = require("flemma.templating")
 local tools_presets = require("flemma.tools.presets")
 local tools_approval = require("flemma.tools.approval")
+local diagnostic_format = require("flemma.utilities.diagnostic")
 local cursor = require("flemma.cursor")
 local sandbox = require("flemma.sandbox")
 local lsp = require("flemma.lsp")
@@ -123,14 +124,11 @@ M.setup = function(user_opts)
   if #validation_failures > 0 then
     local messages = {}
     for _, failure in ipairs(validation_failures) do
-      local message = failure.message
-      if failure.path then
-        message = failure.path .. ": " .. message
-      end
-      table.insert(messages, message)
+      local d = diagnostic_format.from_validation_failure(failure)
+      table.insert(messages, d.error)
     end
     vim.schedule(function()
-      vim.notify("Flemma: " .. table.concat(messages, "; "), vim.log.levels.WARN)
+      vim.notify("Flemma: " .. table.concat(messages, "; "), vim.log.levels.ERROR)
     end)
   end
   if failures then

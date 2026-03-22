@@ -521,7 +521,6 @@ describe("JSON frontmatter E2E", function()
     local result = processor.evaluate_buffer_frontmatter(bufnr)
 
     assert.are.same({}, result.diagnostics)
-    assert.are.same({}, result.validation_failures)
     assert.are.equal(0.2, config.get(bufnr).parameters.temperature)
   end)
 
@@ -617,10 +616,11 @@ describe("JSON frontmatter E2E", function()
 
     local result = processor.evaluate_buffer_frontmatter(bufnr)
 
-    -- Should produce validation failures, not crash
-    assert.are.same({}, result.diagnostics)
-    assert.is_true(#result.validation_failures > 0)
-    assert.is_truthy(result.validation_failures[1].message:find("unknown config key"))
+    -- Should produce diagnostics for unknown keys, not crash
+    assert.is_true(#result.diagnostics > 0)
+    assert.are.equal("config", result.diagnostics[1].type)
+    assert.are.equal("error", result.diagnostics[1].severity)
+    assert.is_truthy(result.diagnostics[1].error:find("unknown config key"))
   end)
 
   it("autopilot disable: JSON frontmatter disables autopilot for buffer", function()
@@ -671,7 +671,6 @@ describe("JSON frontmatter E2E", function()
     local result = processor.evaluate_buffer_frontmatter(bufnr)
 
     assert.are.same({}, result.diagnostics)
-    assert.are.same({}, result.validation_failures)
     assert.is_false(config.get(bufnr).tools.autopilot.enabled)
   end)
 end)
