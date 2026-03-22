@@ -90,7 +90,7 @@ local function record_list_op(self, op, item, skip_validation)
       if not skip_validation then
         local ok, err = self._item_schema:validate_value(expanded)
         if not ok then
-          error(string.format("config list %s error at '%s': %s", op, self._path, err or "invalid"))
+          error({ type = "config", error = string.format("list %s error at '%s': %s", op, self._path, err or "invalid") })
         end
       end
       store.record(self._layer, self._bufnr, op, self._path, expanded)
@@ -99,7 +99,7 @@ local function record_list_op(self, op, item, skip_validation)
     if not skip_validation then
       local ok, err = self._item_schema:validate_value(item)
       if not ok then
-        error(string.format("config list %s error at '%s': %s", op, self._path, err or "invalid"))
+        error({ type = "config", error = string.format("list %s error at '%s': %s", op, self._path, err or "invalid") })
       end
     end
     store.record(self._layer, self._bufnr, op, self._path, item)
@@ -273,7 +273,7 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
             return proxy
           end
         end
-        error(string.format("config: unknown key '%s'", canonical))
+        error({ type = "config", error = string.format("unknown key '%s'", canonical) })
       end
 
       -- ObjectNode → return a sub-proxy for further navigation.
@@ -298,11 +298,11 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
 
     __newindex = function(_, key, value)
       if layer == nil then
-        error(string.format("config: write not permitted on read-only proxy (attempted key '%s')", tostring(key)))
+        error({ type = "config", error = string.format("write not permitted on read-only proxy (attempted key '%s')", tostring(key)) })
       end
 
       if type(key) ~= "string" then
-        error(string.format("config: non-string key '%s' is not a valid config path", tostring(key)))
+        error({ type = "config", error = string.format("non-string key '%s' is not a valid config path", tostring(key)) })
       end
 
       -- Alias resolution (same logic as __index).
@@ -312,7 +312,7 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
       -- Navigate schema to the target field.
       local leaf = nav.navigate_schema(root_schema, canonical)
       if leaf == nil then
-        error(string.format("config: unknown key '%s'", canonical))
+        error({ type = "config", error = string.format("unknown key '%s'", canonical) })
       end
 
       -- Operator chains (+ - ^) already recorded their ops via the ListProxy
@@ -361,7 +361,7 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
           local list_item_schema = unwrapped_leaf:get_list_item_schema() --[[@as flemma.config.schema.Node]]
           local ok, err = validate_list_items(value, list_item_schema, canonical)
           if not ok then
-            error(err)
+            error({ type = "config", error = err })
           end
           store.record(layer, bufnr, "set", canonical, value)
           return
@@ -376,18 +376,19 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
           end
           return
         end
-        error(
-          string.format(
-            "config: cannot assign to object field '%s' — navigate into the field and write individual keys",
+        error({
+          type = "config",
+          error = string.format(
+            "cannot assign to object field '%s' -- navigate into the field and write individual keys",
             canonical
-          )
-        )
+          ),
+        })
       end
 
       -- Validate the coerced value against the schema.
       local ok, err = leaf:validate_value(value)
       if not ok then
-        error(string.format("config write error at '%s': %s", canonical, err or "invalid"))
+        error({ type = "config", error = string.format("write error at '%s': %s", canonical, err or "invalid") })
       end
 
       -- Record the set op on the target layer.
@@ -396,7 +397,7 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
     -- Guard against accidental pairs() on proxies (use materialize() instead).
     -- Effective in Lua 5.2+ runtimes; harmless no-op under LuaJIT 5.1 semantics.
     __pairs = function()
-      error("config: use config.materialize() instead of pairs() on a config proxy")
+      error({ type = "config", error = "use config.materialize() instead of pairs() on a config proxy" })
     end,
   }
 
