@@ -137,7 +137,7 @@ Fixed parser edge case with nested thinking blocks
 - **After committing a user-facing change, always write a changeset file** (see above). Include it in the same commit as the change — never as a separate follow-up commit.
 - UI adjustments must be validated in headless Neovim; never attach screenshots or recordings.
 - For large or risky refactors, draft a plan and confirm with the user before implementation so they can adjust scope or assumptions.
-- **Never commit plan or design documents** (`docs/plans/`). Plans are working artifacts for the current session — they live on disk but stay out of version control.
+- **Never commit plan or design documents** (`docs/plans/`, `docs/superpowers/`). Plans are working artifacts for the current session — they live on disk but stay out of version control.
 
 ## Keeping This File Current
 

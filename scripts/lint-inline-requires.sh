@@ -51,7 +51,6 @@ if [ "$violations" -gt 0 ]; then
   echo ""
   echo "ERROR: Found $violations inline require(\"flemma.*\") call(s)."
   echo "Move them to the top of the file, before any function definitions."
-  echo "See docs/plans/2026-03-08-top-level-requires-design.md for exceptions."
   exit 1
 fi
 
