@@ -13,7 +13,7 @@ function M.parse(code, _context)
   local ok, result = pcall(json.decode, code)
 
   if not ok then
-    error(string.format("JSON parse error: %s", result))
+    error({ type = "frontmatter", error = string.format("JSON parse error: %s", result) })
   end
 
   return result
