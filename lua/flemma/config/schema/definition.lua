@@ -194,7 +194,18 @@ return s.object({
     [symbols.ALIASES] = {
       approve = "auto_approve",
     },
-  }):allow_list(s.string()),
+  }):allow_list(s.string():validate(function(name)
+    local tool_registry = require("flemma.tools.registry")
+    if not tool_registry.has(name) then
+      local suggestion = tool_registry.closest_match(name)
+      local message = ("Unknown tool '%s'"):format(name)
+      if suggestion then
+        message = message .. (" -- did you mean '%s'?"):format(suggestion)
+      end
+      return false, message
+    end
+    return true
+  end)),
 
   templating = s.object({
     modules = s.list(s.loadable(), {}),

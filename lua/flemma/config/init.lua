@@ -483,8 +483,8 @@ end
 --- (append/remove/prepend), the single op is expanded into multiple ops.
 ---
 --- When bufnr is provided, only that buffer's frontmatter ops are transformed
---- (used by coerce_frontmatter). When nil, all buffers are transformed (used
---- by finalize at setup time).
+--- (used by finalize with bufnr for frontmatter). When nil, all buffers are
+--- transformed (used by finalize at setup time).
 ---@param schema flemma.config.schema.Node Schema node to walk
 ---@param base_path string Current dot-delimited path
 ---@param ctx flemma.config.CoerceContext
@@ -506,18 +506,105 @@ local function coerce_walk(schema, base_path, ctx, bufnr)
   end
 end
 
---- Finalize the config system after setup is complete.
---- Applies deferred writes, then re-runs coerce transforms on all stored ops
---- with a populated context. Call once at the end of setup(), after module
---- registration.
+-- ---------------------------------------------------------------------------
+-- Deferred validation
+-- ---------------------------------------------------------------------------
+
+--- A single deferred validation failure, passed to the reporter callback.
+---@class flemma.config.ValidationFailure
+---@field path string Dot-delimited config path
+---@field value any The value that failed validation
+---@field message string Human-readable error description
+
+--- Reporter callback that receives all deferred validation failures.
+--- The reporter decides severity (error, warn, drop) — validators are pure predicates.
+---@alias flemma.config.ValidationReporter fun(failures: flemma.config.ValidationFailure[])
+
+--- Find the deferred validator for a given op path.
+--- For scalar paths, returns the node's own validator.
+--- For list-capable paths, returns the item schema's validator.
+---@param path string Dot-delimited canonical path
+---@return (fun(value: any, ctx: flemma.config.CoerceContext): boolean, string?)?
+local function find_validator_for_path(path)
+  ---@cast root_schema flemma.config.schema.Node
+  local node = nav.navigate_schema(root_schema, path, { unwrap_leaf = true })
+  if not node then
+    return nil
+  end
+  -- Direct validator on the node itself (scalar fields)
+  if node:has_deferred_validator() then
+    return node:get_deferred_validator()
+  end
+  -- List item validator (ObjectNode with allow_list, or ListNode)
+  local item_schema = nil
+  if node:has_list_part() then
+    item_schema = node:get_list_item_schema()
+  elseif node:is_list() then
+    item_schema = node:get_item_schema()
+  end
+  if item_schema then
+    local item_unwrapped = nav.unwrap_optional(item_schema)
+    if item_unwrapped:has_deferred_validator() then
+      return item_unwrapped:get_deferred_validator()
+    end
+  end
+  return nil
+end
+
+--- Validate all ops in a layer by running deferred validators on each op value.
+--- Validates what the user actually wrote (including removes), not the resolved state.
+---@param layer integer Layer to validate
+---@param ctx flemma.config.CoerceContext
+---@param bufnr integer? Buffer number (required for FRONTMATTER)
+---@param failures flemma.config.ValidationFailure[] Accumulator
+local function validate_ops(layer, ctx, bufnr, failures)
+  local ops = store.dump_layer(layer, bufnr)
+  for _, entry in ipairs(ops) do
+    local validator = find_validator_for_path(entry.path)
+    if validator then
+      -- For set ops with a table value, validate each item individually
+      if entry.op == "set" and type(entry.value) == "table" then
+        for _, item in ipairs(entry.value) do
+          local ok, message = validator(item, ctx)
+          if not ok then
+            table.insert(failures, {
+              path = entry.path,
+              value = item,
+              message = message or ("validation failed for '%s'"):format(tostring(item)),
+            })
+          end
+        end
+      else
+        local ok, message = validator(entry.value, ctx)
+        if not ok then
+          table.insert(failures, {
+            path = entry.path,
+            value = entry.value,
+            message = message or ("validation failed for '%s'"):format(tostring(entry.value)),
+          })
+        end
+      end
+    end
+  end
+end
+
+--- Finalize a config layer: replay deferred writes, re-run coerce transforms,
+--- and run deferred semantic validators.
 ---
---- Coerce functions that depend on ctx (e.g., preset expansion) received nil
---- ctx during initial writes via config.apply(). Finalize re-runs them with
---- a real ctx so deferred references are expanded retroactively.
----@param layer integer Target layer for deferred replay
+--- For setup (L20): call once after module registration. Deferred DISCOVER
+--- writes are replayed and coerce transforms re-run with a populated ctx.
+---
+--- For frontmatter (L40): call after frontmatter code executes. Coerce
+--- transforms expand preset references; validators catch typos.
+---
+--- When bufnr is provided, coerce and validation are scoped to that buffer's
+--- ops. When nil, all ops across all buffers are processed.
+---@param layer integer Target layer
 ---@param deferred? table[] Deferred writes from apply() pass 1
+---@param reporter? flemma.config.ValidationReporter Callback for deferred validation failures
+---@param bufnr? integer Buffer scope for coerce/validation; nil for global
 ---@return { path: string, error: string }[]? failures Deferred entries that failed, or nil
-function M.finalize(layer, deferred)
+function M.finalize(layer, deferred, reporter, bufnr)
   assert(root_schema, "config.init() must be called before finalize()")
 
   -- Pass 2: replay deferred writes (DISCOVER should resolve now)
@@ -527,8 +614,17 @@ function M.finalize(layer, deferred)
   end
 
   -- Re-run coerce transforms with populated ctx
-  local ctx = store.make_coerce_context(nil, is_list_path)
-  coerce_walk(root_schema, "", ctx)
+  local ctx = store.make_coerce_context(bufnr, is_list_path)
+  coerce_walk(root_schema, "", ctx, bufnr)
+
+  -- Run deferred semantic validators (post-coerce)
+  if reporter then
+    local validation_failures = {} ---@type flemma.config.ValidationFailure[]
+    validate_ops(layer, ctx, bufnr, validation_failures)
+    if #validation_failures > 0 then
+      reporter(validation_failures)
+    end
+  end
 
   return failures
 end
@@ -540,7 +636,7 @@ end
 --- Prepare the frontmatter layer for evaluation.
 --- Clears the buffer's L40 ops and returns a write proxy that frontmatter
 --- code can use as `flemma.opt`. After frontmatter execution, call
---- `coerce_frontmatter(bufnr)` to expand coerce transforms on the new ops.
+--- `finalize(FRONTMATTER, nil, reporter, bufnr)` to run coerce + validation.
 ---@param bufnr integer Buffer number
 ---@return table writer Write proxy for the frontmatter layer
 function M.prepare_frontmatter(bufnr)
@@ -548,19 +644,6 @@ function M.prepare_frontmatter(bufnr)
   assert(bufnr ~= nil, "bufnr is required for prepare_frontmatter()")
   store.clear(M.LAYERS.FRONTMATTER, bufnr)
   return proxy.write_proxy(root_schema, bufnr, M.LAYERS.FRONTMATTER)
-end
-
---- Run coerce transforms on the given buffer's frontmatter ops.
---- Called after frontmatter execution to expand coerce-dependent values
---- (e.g., $preset references in auto_approve) written during evaluation.
---- Only transforms the specified buffer's frontmatter layer — other buffers
---- are not touched.
----@param bufnr integer Buffer number whose frontmatter ops to coerce
-function M.coerce_frontmatter(bufnr)
-  assert(root_schema, "config.init() must be called before coerce_frontmatter()")
-  assert(bufnr ~= nil, "bufnr is required for coerce_frontmatter()")
-  local ctx = store.make_coerce_context(bufnr, is_list_path)
-  coerce_walk(root_schema, "", ctx, bufnr)
 end
 
 --- Release a buffer's frontmatter operations from memory.

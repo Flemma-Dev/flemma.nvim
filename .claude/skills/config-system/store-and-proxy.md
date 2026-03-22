@@ -142,15 +142,15 @@ params.thinking_budget     -- checks anthropic-specific first (all layers),
 -- Boot
 config.init(schema)                           -- reset store, materialize L10 defaults
 config.apply(layer, opts, { defer_discover = true })  -- bulk write from plain table
-config.finalize(layer, deferred?)             -- replay deferred + re-run coerce
+config.finalize(layer, deferred?, reporter?, bufnr?)  -- replay deferred + coerce + validate
 
 -- Frontmatter cycle
-config.prepare_frontmatter(bufnr)             -- clear L40, return write proxy
-config.coerce_frontmatter(bufnr)              -- run coerce on L40 ops
+config.prepare_frontmatter(bufnr)                      -- clear L40, return write proxy
+config.finalize(FRONTMATTER, nil, reporter, bufnr)     -- coerce + validate L40 ops
 
 -- Registration
 config.register_module_defaults(parent, name, schema)  -- materialize discovered defaults into L10
 config.record_default(op, path, value)                  -- single op on L10
 ```
 
-`prepare_frontmatter` + user code writes + `coerce_frontmatter` is the complete frontmatter evaluation cycle. The facade clears L40 before each evaluation — frontmatter is rebuilt from scratch every time.
+`prepare_frontmatter` + user code writes + `finalize(FRONTMATTER, nil, reporter, bufnr)` is the complete frontmatter evaluation cycle. The facade clears L40 before each evaluation — frontmatter is rebuilt from scratch every time.

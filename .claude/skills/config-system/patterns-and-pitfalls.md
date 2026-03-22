@@ -180,6 +180,6 @@ Path-first priority means provider-specific params in SETUP beat general params 
 
 1. `config.prepare_frontmatter(bufnr)` — clears L40, returns write proxy
 2. Frontmatter code executes with `flemma.opt = writer`
-3. `config.coerce_frontmatter(bufnr)` — runs coerce on L40 ops
+3. `config.finalize(FRONTMATTER, nil, reporter, bufnr)` — runs coerce + deferred validation on L40 ops
 
 Between evaluations, L40 retains its state. The layer is only rebuilt on explicit evaluation (before send, before status display).

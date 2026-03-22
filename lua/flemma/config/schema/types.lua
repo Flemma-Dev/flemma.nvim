@@ -24,6 +24,7 @@ local loader = require("flemma.loader")
 ---@field _description? string Human-readable description for EmmyLua generation
 ---@field _type_as? string Override generated type annotation
 ---@field _coerce? fun(value: any, ctx: flemma.config.CoerceContext?): any Value transformer (runs before validation on writes; finalize() re-runs with ctx)
+---@field _deferred_validator? fun(value: any, ctx: flemma.config.CoerceContext): boolean, string? Semantic validator deferred to finalize (runs after coerce, on resolved values)
 local Node = {}
 Node.__index = Node
 
@@ -77,6 +78,30 @@ end
 ---@return (fun(value: any, ctx: flemma.config.CoerceContext?): any)?
 function Node:get_coerce()
   return self._coerce
+end
+
+--- Attach a deferred semantic validator.
+--- Unlike validate_value() (structural, runs at write time), deferred validators
+--- run at finalize() time when the full runtime state is available (e.g., tool
+--- registry populated, presets resolved). The validator is a pure predicate —
+--- severity is the reporter's decision, not the validator's.
+---@param fn fun(value: any, ctx: flemma.config.CoerceContext): boolean, string? Receives the resolved value + context, returns ok + optional error message
+---@return flemma.config.schema.Node self
+function Node:validate(fn)
+  self._deferred_validator = fn
+  return self
+end
+
+--- Whether this node has a deferred semantic validator.
+---@return boolean
+function Node:has_deferred_validator()
+  return self._deferred_validator ~= nil
+end
+
+--- Return the deferred validator function, or nil if none.
+---@return (fun(value: any, ctx: flemma.config.CoerceContext): boolean, string?)?
+function Node:get_deferred_validator()
+  return self._deferred_validator
 end
 
 --- Whether this node has a meaningful default value to materialize.
@@ -758,6 +783,18 @@ end
 ---@return (fun(value: any, ctx: flemma.config.CoerceContext?): any)?
 function OptionalNode:get_coerce()
   return self._inner:get_coerce()
+end
+
+--- Delegate deferred validator detection to the inner schema.
+---@return boolean
+function OptionalNode:has_deferred_validator()
+  return self._inner:has_deferred_validator()
+end
+
+--- Delegate deferred validator retrieval to the inner schema.
+---@return (fun(value: any, ctx: flemma.config.CoerceContext): boolean, string?)?
+function OptionalNode:get_deferred_validator()
+  return self._inner:get_deferred_validator()
 end
 
 ---@param value any

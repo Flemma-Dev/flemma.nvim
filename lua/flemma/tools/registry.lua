@@ -63,6 +63,7 @@ local M = {}
 ---@field error? string Error message (when success=false)
 
 local registry_utils = require("flemma.registry")
+local string_utils = require("flemma.utilities.string")
 
 ---@type table<string, flemma.tools.ToolDefinition>
 local tools = {}
@@ -89,6 +90,15 @@ M.define = M.register
 ---@return boolean
 function M.has(name)
   return tools[name] ~= nil
+end
+
+--- Find the closest registered tool name to the given input.
+--- Uses Levenshtein distance for fuzzy matching.
+---@param name string The tool name to match against
+---@param max_distance? integer Maximum edit distance (default: 3)
+---@return string|nil closest The closest tool name, or nil if none is close enough
+function M.closest_match(name, max_distance)
+  return string_utils.closest_match(name, tools, max_distance)
 end
 
 ---Get a tool definition by name

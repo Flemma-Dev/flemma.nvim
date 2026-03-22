@@ -447,8 +447,8 @@ end
 --- When bufnr is provided, resolution includes that buffer's frontmatter layer.
 --- is_list_fn is called per path to determine list vs scalar resolution semantics;
 --- when nil, all paths resolve as scalar (safe for contexts without schema access).
---- Used by the write proxy (at write time), finalize (at setup time), and
---- coerce_frontmatter (per-buffer, after frontmatter evaluation).
+--- Used by the write proxy (at write time) and finalize (at setup time for
+--- global ops, with bufnr for per-buffer frontmatter ops).
 ---@param bufnr integer? Buffer number for per-buffer resolution; nil for global-only
 ---@param is_list_fn? fun(path: string): boolean Per-path list classifier from the schema
 ---@return flemma.config.CoerceContext

@@ -33,9 +33,13 @@ function M.parse(code, context, bufnr)
   -- Safety net: ensure flemma doesn't leak to returned globals
   user_globals.flemma = nil
 
-  -- Run coerce transforms on frontmatter ops (e.g., $preset expansion)
+  -- Finalize frontmatter: coerce transforms + deferred semantic validation
   if bufnr then
-    config.coerce_frontmatter(bufnr)
+    config.finalize(config.LAYERS.FRONTMATTER, nil, function(validation_failures)
+      for _, failure in ipairs(validation_failures) do
+        vim.notify("Flemma frontmatter: " .. failure.message, vim.log.levels.WARN)
+      end
+    end, bufnr)
   end
 
   return user_globals
