@@ -98,6 +98,9 @@ end
 -- ---------------------------------------------------------------------------
 
 --- Return all ops in an ops array that match the given path, in order.
+--- NOTE: This is a linear scan over all ops. At typical Flemma config sizes
+--- (tens of ops per layer) this is fine. If profiling shows resolution on a
+--- hot path, consider indexing ops by path (ops_by_path[path]) for O(1) lookup.
 ---@param ops_array table[]
 ---@param path string
 ---@return table[]

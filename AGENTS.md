@@ -24,12 +24,13 @@ These are counter-default behaviors — violating them breaks the build or intro
 
 Explore `lua/flemma/` to understand the codebase — module files are named descriptively and each has a `---@class` annotation explaining its role. Key structural landmarks:
 
-- `init.lua` — setup entry point; `config.lua` — defaults and type definitions (`flemma.Config.Opts`, `flemma.Config`)
+- `init.lua` — setup entry point; `config/` — layered config system (see below)
+- `config/init.lua` — public facade (`get`, `materialize`, `apply`, `writer`, `inspect`); `config/store.lua` — layer store (DEFAULTS→SETUP→RUNTIME→FRONTMATTER); `config/proxy.lua` — read/write proxy metatables; `config/schema/` — schema DSL, node types, definition, navigation; `config/types.lua` — EmmyLua type definitions
 - `parser.lua` / `ast.lua` — AST-based buffer parsing (heart of the stateless design)
-- `provider/base.lua` — provider contract (metatable inheritance); `provider/providers/{anthropic,openai,vertex}.lua` — implementations
+- `provider/base.lua` — provider contract (metatable inheritance); `provider/normalize.lua` — parameter normalization (flatten, max_tokens, thinking, preset resolution); `provider/providers/{anthropic,openai,vertex}.lua` — implementations (request-scoped, no global instance)
 - `tools/` — tool registry (`get_all()` filters by `enabled`), executor, injector, approval, and built-in definitions in `tools/definitions/`
 - `utilities/` — stateless shared infrastructure: `json.lua`, `roles.lua`, `modeline.lua`, `truncate.lua`, `display.lua`, `folding.lua`, `buffer.lua`, `bash/`
-- `core.lua` — main orchestration; `state.lua` — ephemeral per-buffer state; `config.lua` — `vim.tbl_deep_extend` merge, `state.get_config()` for runtime access
+- `core.lua` — main orchestration (provider construction inline per-request); `state.lua` — ephemeral per-buffer state (no config or provider — those live in the config facade)
 - Production file names prefer single words; multi-word descriptive names use snake_case (`secret_tool.lua`, `coding_assistant.lua`), while established domain concepts are concatenated (`writequeue.lua`, `textobject.lua`). Test files use `_spec.lua` suffix.
 - Tests live in `tests/flemma/*_spec.lua` with fixtures in `tests/fixtures/`.
 

@@ -29,14 +29,14 @@ function M.resolve_preset(config)
   if not preset then
     return config
   end
-  config = vim.tbl_deep_extend("force", config, {
+  local resolved = vim.tbl_deep_extend("force", config, {
     provider = preset.provider,
     model = preset.model,
   })
   if preset.parameters and next(preset.parameters) then
-    config.parameters = vim.tbl_deep_extend("force", config.parameters or {}, preset.parameters)
+    resolved.parameters = vim.tbl_deep_extend("force", resolved.parameters or {}, preset.parameters)
   end
-  return config
+  return resolved
 end
 
 -- ============================================================================

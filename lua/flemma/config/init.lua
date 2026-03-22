@@ -9,7 +9,7 @@
 ---   config.init(schema)
 ---   config.apply(config.LAYERS.SETUP, user_opts)
 ---   local cfg = config.get(bufnr)
----@class flemma.config.Facade
+---@class flemma.config
 local M = {}
 
 local nav = require("flemma.config.schema.navigation")
@@ -274,7 +274,7 @@ function M.register_module_defaults(parent_path, name, config_schema)
   local ctx = { schema = root_schema, layer = M.LAYERS.DEFAULTS, bufnr = nil, deferred = nil }
   local ok, err = apply_recursive(ctx, base_path, defaults)
   if not ok then
-    error("config.register_module_defaults: failed for " .. base_path .. ": " .. err)
+    vim.notify("Flemma: register_module_defaults failed for " .. base_path .. ": " .. err, vim.log.levels.WARN)
   end
 end
 

@@ -494,6 +494,11 @@ function ObjectNode:has_default()
   return false
 end
 
+--- Materialize static field defaults only. DISCOVER-resolved schemas are NOT
+--- included here — their defaults are materialized separately via
+--- `config.register_module_defaults()` after module registration. The runtime
+--- `config.materialize(bufnr)` path uses `all_known_fields()` (which includes
+--- both static and DISCOVER-cached fields) so resolved config is always complete.
 ---@return table<string, any>?
 function ObjectNode:materialize()
   local result = {}
