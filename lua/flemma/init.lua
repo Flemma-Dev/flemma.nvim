@@ -50,7 +50,10 @@ M.setup = function(user_opts)
   config_facade.init(schema_definition)
   local _, apply_errors, deferred = config_facade.apply(config_facade.LAYERS.SETUP, user_opts, { defer_discover = true })
   if apply_errors then
-    vim.notify("Flemma: " .. table.concat(apply_errors, "; "), vim.log.levels.WARN)
+    local msg = "Flemma: " .. table.concat(apply_errors, "; ")
+    vim.schedule(function()
+      vim.notify(msg, vim.log.levels.WARN)
+    end)
   end
 
   -- Early materialize for consumers during module registration. DISCOVER
@@ -113,7 +116,10 @@ M.setup = function(user_opts)
     for _, f in ipairs(failures) do
       table.insert(paths, f.path)
     end
-    vim.notify("Flemma: unknown config keys: " .. table.concat(paths, ", "), vim.log.levels.WARN)
+    local msg = "Flemma: unknown config keys: " .. table.concat(paths, ", ")
+    vim.schedule(function()
+      vim.notify(msg, vim.log.levels.WARN)
+    end)
   end
 
   -- Re-materialize with complete config: DISCOVER defaults, deferred user
@@ -126,7 +132,9 @@ M.setup = function(user_opts)
   -- Resolve preset reference in model field (e.g., model = "$gemini-3-pro")
   local resolved_preset, preset_error = presets.resolve_default(config.model, user_opts.provider)
   if preset_error then
-    vim.notify(preset_error, vim.log.levels.ERROR)
+    vim.schedule(function()
+      vim.notify(preset_error, vim.log.levels.ERROR)
+    end)
     return
   end
   if resolved_preset then

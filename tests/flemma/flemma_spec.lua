@@ -76,6 +76,8 @@ describe("flemma.setup with preset model", function()
         ["$test"] = { provider = "openai", model = "gpt-4o" },
       },
     })
+    -- Flush vim.schedule callbacks from setup()
+    vim.wait(10, function() return false end)
 
     -- Should have an error notification about the conflict
     local found_error = false
@@ -92,6 +94,8 @@ describe("flemma.setup with preset model", function()
     flemma.setup({
       model = "$nonexistent",
     })
+    -- Flush vim.schedule callbacks from setup()
+    vim.wait(10, function() return false end)
 
     -- Should have an error notification
     local found_error = false
