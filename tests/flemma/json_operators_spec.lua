@@ -17,7 +17,12 @@ local function test_schema()
       auto_approve = s.list(s.string(), {}),
       autopilot = s.object({
         enabled = s.boolean(true),
-      }),
+      }):coerce(function(value)
+        if type(value) == "boolean" then
+          return { enabled = value }
+        end
+        return value
+      end),
     }):allow_list(s.string()),
     tags = s.list(s.string(), {}),
   })
@@ -127,6 +132,24 @@ describe("config.apply_operators", function()
 
       assert.are.same({}, failures)
       assert.are.same({ "a", "b" }, store.resolve("tags", bufnr, { is_list = true }))
+    end)
+  end)
+
+  -- =========================================================================
+  -- Coerce on object nodes (e.g., autopilot: false → { enabled: false })
+  -- =========================================================================
+
+  describe("coerce on object nodes", function()
+    it("coerces a boolean to an object via the node's coerce function", function()
+      local bufnr = 1
+      store.clear(config.LAYERS.FRONTMATTER, bufnr)
+
+      local failures = config.apply_operators(config.LAYERS.FRONTMATTER, bufnr, {
+        tools = { autopilot = false },
+      })
+
+      assert.are.same({}, failures)
+      assert.is_false(store.resolve("tools.autopilot.enabled", bufnr))
     end)
   end)
 
@@ -631,5 +654,24 @@ describe("JSON frontmatter E2E", function()
 
     assert.is_false(autopilot.is_enabled(bufnr))
     client.clear_fixtures()
+  end)
+
+  it("coerce shorthand: autopilot: false is coerced to { enabled: false }", function()
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "```json",
+      '{ "flemma": { "tools": { "autopilot": false } } }',
+      "```",
+      "",
+      "@You:",
+      "Hello",
+    })
+
+    local result = processor.evaluate_buffer_frontmatter(bufnr)
+
+    assert.are.same({}, result.diagnostics)
+    assert.are.same({}, result.validation_failures)
+    assert.is_false(config.get(bufnr).tools.autopilot.enabled)
   end)
 end)

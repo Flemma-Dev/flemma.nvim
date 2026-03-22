@@ -70,8 +70,16 @@ local function walk(schema, path, value, layer, bufnr, failures)
 
   local unwrapped = nav.unwrap_optional(node)
 
-  -- Non-table value: scalar set
+  -- Non-table value: try coerce for object nodes (e.g., autopilot: false →
+  -- { enabled = false }), then fall through to scalar set.
   if type(value) ~= "table" then
+    if unwrapped:is_object() and unwrapped:has_coerce() then
+      local coerced = unwrapped:apply_coerce(value)
+      if type(coerced) == "table" then
+        walk(schema, path, coerced, layer, bufnr, failures)
+        return
+      end
+    end
     local ok, err = node:validate_value(value)
     if not ok then
       table.insert(failures, { path = path, value = value, message = err or "invalid" })
