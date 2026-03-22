@@ -104,7 +104,7 @@ describe("provider module resolution", function()
           parameters = params or {},
           state = {},
         }, { __index = setmetatable(P, { __index = base }) })
-        self:reset()
+        self:_new_response_buffer()
         return self
       end
       function P.build_request()

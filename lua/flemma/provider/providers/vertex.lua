@@ -61,21 +61,12 @@ function M.new(params)
     state = {},
     api_version = "v1beta1", -- v1beta1 supports parametersJsonSchema for full JSON Schema compatibility
   }, { __index = setmetatable(M, { __index = base }) })
-  self:reset()
-  return self --[[@as flemma.provider.Vertex]]
-end
-
----@param self flemma.provider.Vertex
-function M.reset(self)
-  -- Full reset (base auto-destroys sinks in extra)
-  base.reset(self)
-  -- Add Vertex-specific extension
+  self:_new_response_buffer()
   self._response_buffer.extra.thinking_sink = sink.create({
     name = "vertex/thinking",
   })
-  -- Track thought signature for state preservation (used with thinking mode + function calls)
   self._response_buffer.extra.thought_signature = nil
-  log.debug("vertex.reset(): Reset Vertex AI provider state")
+  return self --[[@as flemma.provider.Vertex]]
 end
 
 ---@param self flemma.provider.Vertex

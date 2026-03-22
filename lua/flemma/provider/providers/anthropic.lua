@@ -40,15 +40,7 @@ function M.new(params)
     endpoint = "https://api.anthropic.com/v1/messages",
     api_version = "2023-06-01",
   }, { __index = setmetatable(M, { __index = base }) })
-  self:reset()
-  return self --[[@as flemma.provider.Anthropic]]
-end
-
----@param self flemma.provider.Anthropic
-function M.reset(self)
-  -- base.reset auto-destroys sinks in extra via duck typing
-  base.reset(self)
-
+  self:_new_response_buffer()
   self._response_buffer.extra.thinking_sink = sink.create({
     name = "anthropic/thinking",
   })
@@ -59,7 +51,7 @@ function M.reset(self)
   self._response_buffer.extra.tool_input_sink = sink.create({
     name = "anthropic/tool-input",
   })
-  log.debug("anthropic.reset(): Reset Anthropic provider state")
+  return self --[[@as flemma.provider.Anthropic]]
 end
 
 ---@param _self flemma.provider.Anthropic

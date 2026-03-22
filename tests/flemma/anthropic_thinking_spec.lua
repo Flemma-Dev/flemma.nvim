@@ -462,29 +462,4 @@ describe("Anthropic Provider Extended Thinking", function()
       end
     end)
   end)
-
-  describe("reset", function()
-    it("should reset thinking accumulation state", function()
-      local provider = anthropic.new({
-        model = "claude-sonnet-4-5-20250929",
-        thinking_budget = 2048,
-        max_tokens = 4000,
-      })
-
-      -- Manually set some state
-      provider._response_buffer.extra.thinking_sink:write("some thinking")
-      provider._response_buffer.extra.accumulated_signature = "some-sig"
-      provider._response_buffer.extra.redacted_thinking_blocks = { "data1" }
-      provider._response_buffer.extra.current_block_type = "thinking"
-
-      -- Reset
-      provider:reset()
-
-      -- State should be cleared
-      assert.are.equal("", provider._response_buffer.extra.thinking_sink:read())
-      assert.are.equal("", provider._response_buffer.extra.accumulated_signature)
-      assert.are.same({}, provider._response_buffer.extra.redacted_thinking_blocks)
-      assert.is_nil(provider._response_buffer.extra.current_block_type)
-    end)
-  end)
 end)

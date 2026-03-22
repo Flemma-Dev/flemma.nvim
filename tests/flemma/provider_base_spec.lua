@@ -18,7 +18,7 @@ describe("flemma.provider.base", function()
       state = {},
       metadata = { name = "test", display_name = "Test" },
     }, { __index = base })
-    provider:reset()
+    provider:_new_response_buffer()
     return provider
   end
 
@@ -253,19 +253,6 @@ describe("flemma.provider.base", function()
       assert.equals(2, #results)
       assert.equals("id1", results[1].id)
       assert.equals("id2", results[2].id)
-    end)
-  end)
-
-  describe("auto-sink-destroy in reset", function()
-    it("destroys sinks in _response_buffer.extra on reset", function()
-      local provider = make_provider()
-      local sink = require("flemma.sink")
-      local test_sink = sink.create({ name = "test/sink" })
-      provider._response_buffer.extra.test_sink = test_sink
-      -- Should not error — auto-destroys the sink
-      provider:reset()
-      -- After reset, extra should be empty (fresh buffer)
-      assert.is_nil(provider._response_buffer.extra.test_sink)
     end)
   end)
 

@@ -55,20 +55,13 @@ function M.new(params)
     state = {},
     endpoint = "https://api.openai.com/v1/responses",
   }, { __index = setmetatable(M, { __index = base }) })
-  self:reset()
-  return self --[[@as flemma.provider.OpenAI]]
-end
-
----@param self flemma.provider.OpenAI
-function M.reset(self)
-  base.reset(self)
-
+  self:_new_response_buffer()
   self._response_buffer.extra.tool_calls = {}
   self._response_buffer.extra.reasoning_sink = sink.create({
     name = "openai/reasoning",
   })
   self._response_buffer.extra.reasoning_item = nil
-  log.debug("openai.reset(): Reset OpenAI provider state")
+  return self --[[@as flemma.provider.OpenAI]]
 end
 
 ---@param _self flemma.provider.OpenAI

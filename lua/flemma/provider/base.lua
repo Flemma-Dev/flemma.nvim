@@ -28,14 +28,12 @@ Methods are grouped into three categories:
   Required — provider MUST implement
   -----------------------------------
   - `new(params)` — constructor; creates the instance with plain
-    `self.parameters` table, sets metatable chain, and calls `self:reset()`.
-    See concrete providers for the pattern.
+    `self.parameters` table, sets metatable chain, calls
+    `self:_new_response_buffer()`, and performs any provider-specific
+    response buffer setup. See concrete providers for the pattern.
   - `get_credential(self)` — return a `flemma.secrets.Credential` table
     describing what this provider needs (kind, service, description, etc.).
     `get_api_key()` in base calls this, then resolves via `secrets.resolve()`.
-  - `reset(self)` — call `base.reset(self)` plus any provider-specific
-    state initialization. Sinks in `_response_buffer.extra` are
-    auto-destroyed by base.
 
   Virtual — sensible default provided, override only if needed
   -------------------------------------------------------------
@@ -139,8 +137,6 @@ local M = {}
 ---@field system string|nil The system instruction, if any
 ---@field bufnr? integer Buffer number for per-buffer config resolution
 ---@field pending_tool_calls flemma.pipeline.UnresolvedTool[]|nil Tool calls without matching results
-
----@class flemma.provider.ResetOpts
 
 ---@class flemma.provider.SSELine
 ---@field type "data"|"event"|"done"
@@ -252,7 +248,8 @@ end
 --       state = {},
 --       endpoint = "...",
 --     }, { __index = setmetatable(M, { __index = base }) })
---     self:reset()
+--     self:_new_response_buffer()
+--     -- Provider-specific response buffer setup here
 --     return self
 --   end
 -- ============================================================================
@@ -269,22 +266,6 @@ local function destroy_sinks(response_buffer)
       value:destroy()
     end
   end
-end
-
---- Reset provider state before a new request.
---- Providers must call `base.reset(self)` plus any provider-specific state initialization.
---- Sinks in `_response_buffer.extra` are auto-destroyed on full reset.
----@param self flemma.provider.Base
-function M.reset(self)
-  -- Destroy provider-specific sinks in extra
-  destroy_sinks(self._response_buffer)
-  -- Destroy previous response buffer sink if it exists
-  if self._response_buffer and self._response_buffer.lines_sink then
-    self._response_buffer.lines_sink:destroy()
-  end
-  -- Full reset: create response buffer for all providers
-  self:_new_response_buffer()
-  self._response_headers = nil
 end
 
 -- ============================================================================

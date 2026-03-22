@@ -613,24 +613,6 @@ describe("Vertex AI Provider", function()
     end)
   end)
 
-  describe("reset", function()
-    it("should perform full reset", function()
-      local provider = vertex.new({
-        model = "gemini-2.5-pro",
-        project_id = "test-project",
-        location = "us-central1",
-      })
-
-      local original_buffer = provider._response_buffer
-
-      -- Full reset creates a new response buffer
-      provider:reset()
-      assert.is_not.equals(original_buffer, provider._response_buffer)
-      assert.is_not_nil(provider._response_buffer.extra.thinking_sink)
-      assert.equals("", provider._response_buffer.extra.thinking_sink:read())
-    end)
-  end)
-
   describe("extract_json_response_error", function()
     it("should handle non-array object format with status", function()
       local provider = vertex.new({

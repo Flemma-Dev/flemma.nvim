@@ -1344,9 +1344,6 @@ function M.send_to_provider(opts)
     finalize_response_fn = function(exit_code, cb)
       return current_provider:finalize_response(exit_code, cb)
     end,
-    reset_fn = function()
-      return current_provider:reset()
-    end,
     on_response_headers_fn = function(response_headers)
       current_provider:set_response_headers(response_headers)
     end,
