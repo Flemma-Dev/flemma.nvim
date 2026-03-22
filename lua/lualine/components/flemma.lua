@@ -19,7 +19,9 @@ function flemma_component:init(options)
   lualine_component.init(self, options)
 
   vim.api.nvim_create_autocmd("User", {
+    group = vim.api.nvim_create_augroup("FlemmaLualineIntegration", { clear = true }),
     pattern = "FlemmaBootComplete",
+    once = true,
     callback = function()
       local ok, lualine = pcall(require, "lualine")
       if ok then
