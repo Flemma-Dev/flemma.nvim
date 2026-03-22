@@ -67,9 +67,15 @@ function M.migrate_buffer(bufnr)
   -- auto_write if enabled
   local config = config_facade.get(bufnr)
   if config.editing and config.editing.auto_write and vim.bo[bufnr].modified then
-    local ui_ok, ui = pcall(require, "flemma.ui")
+    local ui_ok, ui_mod = pcall(require, "flemma.ui")
     if ui_ok then
-      ui.buffer_cmd(bufnr, "silent! write")
+      local ok, err = pcall(ui_mod.buffer_cmd, bufnr, "silent! write!")
+      if not ok then
+        local log_ok, log_mod = pcall(require, "flemma.logging")
+        if log_ok then
+          log_mod.warn("migrate_buffer: auto_write failed: " .. tostring(err))
+        end
+      end
     end
   end
 end
