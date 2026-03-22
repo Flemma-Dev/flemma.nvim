@@ -426,6 +426,10 @@ local function advance_phase2(opts)
     -- Pending blocks remain — move cursor to the first one so the user can act
     local first = pending_blocks[1]
     cursor.request_move(bufnr, { line = first.tool_result.start_line, reason = "phase2/pending-block" })
+    -- Force UI update so tool preview virt_lines appear immediately.
+    -- When all tools need approval (none approved), no executor.execute runs,
+    -- so the update_ui call inside executor is never reached.
+    ui.update_ui(bufnr)
     if opts.on_request_complete then
       opts.on_request_complete()
     end
