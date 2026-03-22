@@ -299,6 +299,9 @@ end
 ---Register built-in sandbox backends.
 ---Called during plugin setup in init.lua.
 function M.setup()
+  -- Clear auto-detection cache so re-setup starts clean
+  detection_cache = nil
+
   if not M.get("bwrap") then
     M.register("bwrap", {
       available = bwrap.available,
