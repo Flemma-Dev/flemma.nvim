@@ -71,11 +71,20 @@ function M.object(fields)
   return types.ObjectNode.new(fields)
 end
 
---- Wraps a schema node to make nil a valid value.
+--- Wraps a schema node to make nil a valid value (field can be absent).
+--- In JSON Schema: the field is omitted from `required`.
 ---@param inner_schema flemma.config.schema.Node
 ---@return flemma.config.schema.OptionalNode
 function M.optional(inner_schema)
   return types.OptionalNode.new(inner_schema)
+end
+
+--- Wraps a schema node to allow null values (field must be present, value can be null).
+--- In JSON Schema: the field stays in `required`, and `type` includes "null".
+---@param inner_schema flemma.config.schema.Node
+---@return flemma.config.schema.NullableNode
+function M.nullable(inner_schema)
+  return types.NullableNode.new(inner_schema)
 end
 
 --- Union schema node that accepts values matching any branch (first match wins).

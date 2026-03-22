@@ -124,9 +124,10 @@ describe("Built-in Tool Strict Mode Schemas", function()
     for name, definition in pairs(all) do
       count = count + 1
       assert.equals(true, definition.strict, "Tool '" .. name .. "' should have strict=true")
+      local json_schema = tools.to_json_schema(definition)
       assert.equals(
         false,
-        definition.input_schema.additionalProperties,
+        json_schema.additionalProperties,
         "Tool '" .. name .. "' input_schema should have additionalProperties=false"
       )
     end
@@ -139,16 +140,18 @@ describe("Built-in Tool Strict Mode Schemas", function()
     -- Check bash tool: timeout should be nullable and required
     local bash = all.bash
     assert.is_not_nil(bash, "bash tool should exist")
-    assert.same({ "number", "null" }, bash.input_schema.properties.timeout.type)
-    assert.truthy(vim.tbl_contains(bash.input_schema.required, "timeout"), "bash.timeout should be in required")
+    local bash_schema = tools.to_json_schema(bash)
+    assert.same({ "number", "null" }, bash_schema.properties.timeout.type)
+    assert.truthy(vim.tbl_contains(bash_schema.required, "timeout"), "bash.timeout should be in required")
 
     -- Check read tool: offset and limit should be nullable and required
     local read = all.read
     assert.is_not_nil(read, "read tool should exist")
-    assert.same({ "number", "null" }, read.input_schema.properties.offset.type)
-    assert.same({ "number", "null" }, read.input_schema.properties.limit.type)
-    assert.truthy(vim.tbl_contains(read.input_schema.required, "offset"), "read.offset should be in required")
-    assert.truthy(vim.tbl_contains(read.input_schema.required, "limit"), "read.limit should be in required")
+    local read_schema = tools.to_json_schema(read)
+    assert.same({ "number", "null" }, read_schema.properties.offset.type)
+    assert.same({ "number", "null" }, read_schema.properties.limit.type)
+    assert.truthy(vim.tbl_contains(read_schema.required, "offset"), "read.offset should be in required")
+    assert.truthy(vim.tbl_contains(read_schema.required, "limit"), "read.limit should be in required")
   end)
 end)
 

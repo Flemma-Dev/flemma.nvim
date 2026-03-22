@@ -129,33 +129,14 @@ M.definitions = {
       .. "Supports regex patterns. "
       .. "When using grep -E fallback, \\d, \\w, \\s are automatically translated to POSIX equivalents.",
     strict = true,
-    input_schema = {
-      type = "object",
-      properties = {
-        label = {
-          type = "string",
-          description = "A short human-readable label for this operation (e.g., 'searching for TODO comments')",
-        },
-        pattern = {
-          type = "string",
-          description = "Regular expression pattern to search for",
-        },
-        path = {
-          type = { "string", "null" },
-          description = "Directory to search in (default: working directory)",
-        },
-        glob = {
-          type = { "string", "null" },
-          description = "File glob filter (e.g., '*.lua', '*.{ts,tsx}')",
-        },
-        limit = {
-          type = { "number", "null" },
-          description = "Maximum number of matches (default: " .. DEFAULT_LIMIT .. ")",
-        },
-      },
-      required = { "label", "pattern", "path", "glob", "limit" },
-      additionalProperties = false,
-    },
+    input_schema = s.object({
+      label = s.string()
+        :describe("A short human-readable label for this operation (e.g., 'searching for TODO comments')"),
+      pattern = s.string():describe("Regular expression pattern to search for"),
+      path = s.string():nullable():describe("Directory to search in (default: working directory)"),
+      glob = s.string():nullable():describe("File glob filter (e.g., '*.lua', '*.{ts,tsx}')"),
+      limit = s.number():nullable():describe("Maximum number of matches (default: " .. DEFAULT_LIMIT .. ")"),
+    }):strict(),
     personalities = {
       ["coding-assistant"] = {
         snippet = "Search file contents for patterns using ripgrep or grep",

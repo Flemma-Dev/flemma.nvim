@@ -209,6 +209,38 @@ function Node:validate_value(_value)
   return true
 end
 
+--- Serialize this schema node to a JSON Schema table.
+--- Each concrete node type overrides this with its own serialization.
+---@return table
+function Node:to_json_schema()
+  error("Schema node does not support JSON Schema serialization")
+end
+
+--- Whether this node represents an optional field (field can be absent).
+--- Used by ObjectNode:to_json_schema() to compute the `required` array.
+---@return boolean
+function Node:is_optional()
+  return false
+end
+
+-- ---------------------------------------------------------------------------
+-- JSON Schema helpers
+-- ---------------------------------------------------------------------------
+
+--- Add description and default to a JSON Schema table when present.
+---@param result table The JSON Schema table being built
+---@param node flemma.config.schema.Node The source schema node
+---@return table result The same table, mutated in place
+local function add_common_json_schema_fields(result, node)
+  if node._description then
+    result.description = node._description
+  end
+  if node:has_default() then
+    result.default = node:materialize()
+  end
+  return result
+end
+
 -- ---------------------------------------------------------------------------
 -- ScalarNode base (string, number, boolean)
 -- ---------------------------------------------------------------------------
@@ -259,6 +291,11 @@ function StringNode.new(default)
   return node
 end
 
+---@return table
+function StringNode:to_json_schema()
+  return add_common_json_schema_fields({ type = "string" }, self)
+end
+
 -- ---------------------------------------------------------------------------
 -- NumberNode (any number, including floats)
 -- ---------------------------------------------------------------------------
@@ -277,6 +314,11 @@ function NumberNode.new(default)
   return node
 end
 
+---@return table
+function NumberNode:to_json_schema()
+  return add_common_json_schema_fields({ type = "number" }, self)
+end
+
 -- ---------------------------------------------------------------------------
 -- BooleanNode
 -- ---------------------------------------------------------------------------
@@ -293,6 +335,11 @@ function BooleanNode.new(default)
   node._lua_type = "boolean"
   node._default = default
   return node
+end
+
+---@return table
+function BooleanNode:to_json_schema()
+  return add_common_json_schema_fields({ type = "boolean" }, self)
 end
 
 -- ---------------------------------------------------------------------------
@@ -322,6 +369,11 @@ function IntegerNode.new(default)
   node._lua_type = "number"
   node._default = default
   return node
+end
+
+---@return table
+function IntegerNode:to_json_schema()
+  return add_common_json_schema_fields({ type = "integer" }, self)
 end
 
 -- ---------------------------------------------------------------------------
@@ -367,6 +419,12 @@ function EnumNode.new(values, default)
   node._values = values
   node._default = default
   return node
+end
+
+---@return table
+function EnumNode:to_json_schema()
+  local result = { type = "string", enum = vim.deepcopy(self._values) }
+  return add_common_json_schema_fields(result, self)
 end
 
 -- ---------------------------------------------------------------------------
@@ -435,6 +493,15 @@ function ListNode.new(item_schema, default)
   return node
 end
 
+---@return table
+function ListNode:to_json_schema()
+  local result = {
+    type = "array",
+    items = self._item_schema:to_json_schema(),
+  }
+  return add_common_json_schema_fields(result, self)
+end
+
 -- ---------------------------------------------------------------------------
 -- MapNode
 -- ---------------------------------------------------------------------------
@@ -488,6 +555,15 @@ function MapNode.new(key_schema, value_schema, default)
   node._value_schema = value_schema
   node._default = default
   return node
+end
+
+---@return table
+function MapNode:to_json_schema()
+  local result = {
+    type = "object",
+    additionalProperties = self._value_schema:to_json_schema(),
+  }
+  return add_common_json_schema_fields(result, self)
 end
 
 -- ---------------------------------------------------------------------------
@@ -699,6 +775,47 @@ function ObjectNode.new(fields)
   return node
 end
 
+--- Serialize this object schema to a JSON Schema table.
+--- Fields wrapped in OptionalNode are omitted from `required`.
+--- Symbol keys (ALIASES, DISCOVER) are ignored.
+--- Properties and required are sorted alphabetically for determinism.
+---@return table
+function ObjectNode:to_json_schema()
+  local properties = {}
+  local required = {}
+
+  -- Sort field names alphabetically for deterministic output
+  local field_names = {}
+  for name, _ in pairs(self._fields) do
+    table.insert(field_names, name)
+  end
+  table.sort(field_names)
+
+  for _, name in ipairs(field_names) do
+    local field_schema = self._fields[name]
+    if field_schema:is_optional() then
+      -- Unwrap OptionalNode — the property type is the inner schema,
+      -- and the field is excluded from the required array
+      properties[name] = field_schema:get_inner_schema():to_json_schema()
+    else
+      properties[name] = field_schema:to_json_schema()
+      table.insert(required, name)
+    end
+  end
+
+  local result = {
+    type = "object",
+    properties = properties,
+  }
+  if #required > 0 then
+    result.required = required
+  end
+  if self._strict then
+    result.additionalProperties = false
+  end
+  return add_common_json_schema_fields(result, self)
+end
+
 -- ---------------------------------------------------------------------------
 -- OptionalNode
 -- ---------------------------------------------------------------------------
@@ -814,6 +931,168 @@ function OptionalNode.new(inner_schema)
   return node
 end
 
+--- Serialize the inner schema to JSON Schema.
+--- The "optional" aspect is expressed by the parent ObjectNode omitting
+--- this field from its `required` array — not in the type itself.
+---@return table
+function OptionalNode:to_json_schema()
+  local result = self._inner:to_json_schema()
+  if self._description then
+    result.description = self._description
+  end
+  return result
+end
+
+---@return boolean
+function OptionalNode:is_optional()
+  return true
+end
+
+-- ---------------------------------------------------------------------------
+-- NullableNode
+-- ---------------------------------------------------------------------------
+
+--- Nullable wrapper: the value must match the inner schema OR be null/nil.
+--- Unlike OptionalNode (which controls whether a field can be absent),
+--- NullableNode means the field is present but its value can be null.
+--- In JSON Schema: the field appears in `required`, and `type` includes "null".
+---@class flemma.config.schema.NullableNode : flemma.config.schema.Node
+---@field _inner flemma.config.schema.Node The wrapped schema (null is also valid)
+local NullableNode = setmetatable({}, { __index = Node })
+NullableNode.__index = NullableNode
+
+---@return boolean
+function NullableNode:has_default()
+  return self._inner:has_default()
+end
+
+---@return any
+function NullableNode:materialize()
+  return self._inner:materialize()
+end
+
+---@return boolean
+function NullableNode:is_list()
+  return self._inner:is_list()
+end
+
+---@return boolean
+function NullableNode:is_object()
+  return self._inner:is_object()
+end
+
+---@return boolean
+function NullableNode:has_list_part()
+  return self._inner:has_list_part()
+end
+
+---@return flemma.config.schema.Node?
+function NullableNode:get_list_item_schema()
+  return self._inner:get_list_item_schema()
+end
+
+--- Delegate item schema lookup to inner node.
+---@return flemma.config.schema.Node?
+function NullableNode:get_item_schema()
+  return self._inner:get_item_schema()
+end
+
+---@return boolean
+function NullableNode:has_discover()
+  return self._inner:has_discover()
+end
+
+---@return fun(t: table<string, flemma.config.schema.Node>, k?: string): string, flemma.config.schema.Node
+---@return table<string, flemma.config.schema.Node>
+function NullableNode:all_known_fields()
+  return self._inner:all_known_fields()
+end
+
+---@return flemma.config.schema.Node
+function NullableNode:get_inner_schema()
+  return self._inner
+end
+
+--- Delegate coerce to the inner schema. Nil values bypass coercion.
+---@param value any
+---@param ctx flemma.config.CoerceContext?
+---@return any
+function NullableNode:apply_coerce(value, ctx)
+  if value == nil then
+    return nil
+  end
+  return self._inner:apply_coerce(value, ctx)
+end
+
+---@return boolean
+function NullableNode:has_coerce()
+  return self._inner:has_coerce()
+end
+
+---@return (fun(value: any, ctx: flemma.config.CoerceContext?): any)?
+function NullableNode:get_coerce()
+  return self._inner:get_coerce()
+end
+
+---@return boolean
+function NullableNode:has_deferred_validator()
+  return self._inner:has_deferred_validator()
+end
+
+---@return (fun(value: any, ctx: flemma.config.CoerceContext): boolean, string?)?
+function NullableNode:get_deferred_validator()
+  return self._inner:get_deferred_validator()
+end
+
+---@param value any
+---@return boolean, string?
+function NullableNode:validate_value(value)
+  if value == nil then
+    return true
+  end
+  return self._inner:validate_value(value)
+end
+
+--- Serialize to JSON Schema with "null" added to the type.
+--- For simple types (string, number, etc.), produces `type: ["string", "null"]`.
+--- For complex types (anyOf, etc.), wraps in `anyOf: [inner, {type: "null"}]`.
+---@return table
+function NullableNode:to_json_schema()
+  local inner_schema = self._inner:to_json_schema()
+  if inner_schema.type then
+    if type(inner_schema.type) == "string" then
+      inner_schema.type = { inner_schema.type, "null" }
+    elseif type(inner_schema.type) == "table" then
+      local has_null = false
+      for _, t in ipairs(inner_schema.type) do
+        if t == "null" then
+          has_null = true
+          break
+        end
+      end
+      if not has_null then
+        table.insert(inner_schema.type, "null")
+      end
+    end
+  else
+    inner_schema = {
+      anyOf = { inner_schema, { type = "null" } },
+    }
+  end
+  if self._description then
+    inner_schema.description = self._description
+  end
+  return inner_schema
+end
+
+---@param inner_schema flemma.config.schema.Node
+---@return flemma.config.schema.NullableNode
+function NullableNode.new(inner_schema)
+  local node = setmetatable({}, NullableNode)
+  node._inner = inner_schema
+  return node
+end
+
 -- ---------------------------------------------------------------------------
 -- UnionNode
 -- ---------------------------------------------------------------------------
@@ -910,6 +1189,16 @@ function UnionNode.new(branches)
   return node
 end
 
+---@return table
+function UnionNode:to_json_schema()
+  local any_of = {}
+  for _, branch in ipairs(self._branches) do
+    table.insert(any_of, branch:to_json_schema())
+  end
+  local result = { anyOf = any_of }
+  return add_common_json_schema_fields(result, self)
+end
+
 -- ---------------------------------------------------------------------------
 -- LoadableNode
 -- ---------------------------------------------------------------------------
@@ -941,6 +1230,12 @@ function LoadableNode.new(default)
   return node
 end
 
+--- Loadable paths are strings in JSON Schema context.
+---@return table
+function LoadableNode:to_json_schema()
+  return add_common_json_schema_fields({ type = "string" }, self)
+end
+
 -- ---------------------------------------------------------------------------
 -- FuncNode
 -- ---------------------------------------------------------------------------
@@ -961,6 +1256,12 @@ end
 ---@return flemma.config.schema.FuncNode
 function FuncNode.new()
   return setmetatable({}, FuncNode)
+end
+
+--- Lua functions have no JSON Schema representation.
+---@return table
+function FuncNode:to_json_schema()
+  error("FuncNode cannot be serialized to JSON Schema (Lua functions have no JSON representation)")
 end
 
 -- ---------------------------------------------------------------------------
@@ -1009,6 +1310,49 @@ function LiteralNode.new(value, opts)
   return node
 end
 
+---@return table
+function LiteralNode:to_json_schema()
+  local result = {}
+  local value = self._value
+  if value == nil then
+    result.type = "null"
+  elseif type(value) == "string" then
+    result.type = "string"
+    result.const = value
+  elseif type(value) == "number" then
+    if value == math.floor(value) then
+      result.type = "integer"
+    else
+      result.type = "number"
+    end
+    result.const = value
+  elseif type(value) == "boolean" then
+    result.type = "boolean"
+    result.const = value
+  else
+    result.const = value
+  end
+  return add_common_json_schema_fields(result, self)
+end
+
+-- ---------------------------------------------------------------------------
+-- Cross-type chainable modifiers
+-- ---------------------------------------------------------------------------
+
+--- Wrap this node in an OptionalNode (field can be absent).
+--- Returns a new OptionalNode, not self — the chain continues on the wrapper.
+---@return flemma.config.schema.OptionalNode
+function Node:optional()
+  return OptionalNode.new(self)
+end
+
+--- Wrap this node in a NullableNode (value can be null).
+--- Returns a new NullableNode, not self — the chain continues on the wrapper.
+---@return flemma.config.schema.NullableNode
+function Node:nullable()
+  return NullableNode.new(self)
+end
+
 -- ---------------------------------------------------------------------------
 -- Exports
 -- ---------------------------------------------------------------------------
@@ -1028,5 +1372,6 @@ M.UnionNode = UnionNode
 M.LoadableNode = LoadableNode
 M.FuncNode = FuncNode
 M.LiteralNode = LiteralNode
+M.NullableNode = NullableNode
 
 return M

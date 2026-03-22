@@ -313,7 +313,7 @@ function M.build_request(self, prompt, _context)
     table.insert(function_declarations, {
       name = definition.name,
       description = tools_module.build_description(definition),
-      parametersJsonSchema = definition.input_schema,
+      parametersJsonSchema = tools_module.to_json_schema(definition),
     })
   end
 

@@ -103,29 +103,12 @@ M.definitions = {
       .. DEFAULT_LIMIT
       .. ").",
     strict = true,
-    input_schema = {
-      type = "object",
-      properties = {
-        label = {
-          type = "string",
-          description = "A short human-readable label for this operation (e.g., 'listing project root')",
-        },
-        path = {
-          type = "string",
-          description = "Directory path to list (relative or absolute)",
-        },
-        max_depth = {
-          type = { "number", "null" },
-          description = "Maximum recursion depth (default: 1, max: 10)",
-        },
-        limit = {
-          type = { "number", "null" },
-          description = "Maximum number of entries (default: 500)",
-        },
-      },
-      required = { "label", "path", "max_depth", "limit" },
-      additionalProperties = false,
-    },
+    input_schema = s.object({
+      label = s.string():describe("A short human-readable label for this operation (e.g., 'listing project root')"),
+      path = s.string():describe("Directory path to list (relative or absolute)"),
+      max_depth = s.number():nullable():describe("Maximum recursion depth (default: 1, max: 10)"),
+      limit = s.number():nullable():describe("Maximum number of entries (default: 500)"),
+    }):strict(),
     personalities = {
       ["coding-assistant"] = {
         snippet = "List directory contents with optional depth and entry limit",

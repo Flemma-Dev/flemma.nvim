@@ -972,4 +972,448 @@ describe("flemma.config.schema", function()
       assert.equals("default", node:materialize().name)
     end)
   end)
+
+  -- ---------------------------------------------------------------------------
+  -- s.nullable()
+  -- ---------------------------------------------------------------------------
+
+  describe("s.nullable()", function()
+    it("nil is valid", function()
+      assert.is_true(s.nullable(s.string()):validate_value(nil))
+    end)
+
+    it("inner type is also valid", function()
+      assert.is_true(s.nullable(s.string()):validate_value("hello"))
+    end)
+
+    it("other types are rejected", function()
+      local ok, err = s.nullable(s.string()):validate_value(42)
+      assert.is_false(ok)
+      assert.matches("string", err)
+    end)
+
+    it("has_default() delegates to inner", function()
+      assert.is_false(s.nullable(s.string()):has_default())
+      assert.is_true(s.nullable(s.string("hi")):has_default())
+    end)
+
+    it("materialize() delegates to inner", function()
+      assert.equals("hi", s.nullable(s.string("hi")):materialize())
+      assert.is_nil(s.nullable(s.string()):materialize())
+    end)
+
+    it("is_list() delegates to inner", function()
+      assert.is_true(s.nullable(s.list(s.string(), {})):is_list())
+      assert.is_false(s.nullable(s.string()):is_list())
+    end)
+
+    it("get_inner_schema() returns inner node", function()
+      local inner = s.string()
+      assert.equals(inner, s.nullable(inner):get_inner_schema())
+    end)
+
+    it("is_optional() returns false (nullable is not optional)", function()
+      assert.is_false(s.nullable(s.string()):is_optional())
+    end)
+
+    it("apply_coerce bypasses nil", function()
+      local inner = s.string():coerce(function(_v, _ctx)
+        return "coerced"
+      end)
+      local n = s.nullable(inner)
+      assert.is_nil(n:apply_coerce(nil, nil))
+      assert.equals("coerced", n:apply_coerce("x", nil))
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- :optional() / :nullable() chainable modifiers
+  -- ---------------------------------------------------------------------------
+
+  describe("chainable modifiers", function()
+    it(":optional() returns an OptionalNode", function()
+      local node = s.string():optional()
+      assert.is_true(node:is_optional())
+      assert.is_true(node:validate_value(nil))
+      assert.is_true(node:validate_value("hello"))
+    end)
+
+    it(":nullable() returns a NullableNode", function()
+      local node = s.string():nullable()
+      assert.is_false(node:is_optional())
+      assert.is_true(node:validate_value(nil))
+      assert.is_true(node:validate_value("hello"))
+    end)
+
+    it(":describe() works on wrapper nodes", function()
+      local opt = s.string():optional():describe("opt desc")
+      assert.equals("opt desc", opt._description)
+
+      local nul = s.string():nullable():describe("nul desc")
+      assert.equals("nul desc", nul._description)
+    end)
+
+    it("chaining :nullable():optional() composes correctly", function()
+      local node = s.number():nullable():optional()
+      assert.is_true(node:is_optional())
+      assert.is_true(node:validate_value(nil))
+      assert.is_true(node:validate_value(42))
+    end)
+
+    it("chaining :optional():nullable() composes correctly", function()
+      local node = s.number():optional():nullable()
+      assert.is_false(node:is_optional())
+      assert.is_true(node:validate_value(nil))
+      assert.is_true(node:validate_value(42))
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- to_json_schema() — scalar types
+  -- ---------------------------------------------------------------------------
+
+  describe("to_json_schema() — scalars", function()
+    it("s.string() → { type = 'string' }", function()
+      assert.same({ type = "string" }, s.string():to_json_schema())
+    end)
+
+    it("s.string() with default", function()
+      assert.same({ type = "string", default = "hello" }, s.string("hello"):to_json_schema())
+    end)
+
+    it("s.string():describe()", function()
+      local result = s.string():describe("A name"):to_json_schema()
+      assert.same({ type = "string", description = "A name" }, result)
+    end)
+
+    it("s.number() → { type = 'number' }", function()
+      assert.same({ type = "number" }, s.number():to_json_schema())
+    end)
+
+    it("s.number() with default", function()
+      assert.same({ type = "number", default = 0.7 }, s.number(0.7):to_json_schema())
+    end)
+
+    it("s.boolean() → { type = 'boolean' }", function()
+      assert.same({ type = "boolean" }, s.boolean():to_json_schema())
+    end)
+
+    it("s.boolean(false) emits default", function()
+      assert.same({ type = "boolean", default = false }, s.boolean(false):to_json_schema())
+    end)
+
+    it("s.integer() → { type = 'integer' }", function()
+      assert.same({ type = "integer" }, s.integer():to_json_schema())
+    end)
+
+    it("s.integer() with default", function()
+      assert.same({ type = "integer", default = 8192 }, s.integer(8192):to_json_schema())
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- to_json_schema() — enum
+  -- ---------------------------------------------------------------------------
+
+  describe("to_json_schema() — enum", function()
+    it("basic enum", function()
+      local result = s.enum({ "low", "medium", "high" }):to_json_schema()
+      assert.same({ type = "string", enum = { "low", "medium", "high" } }, result)
+    end)
+
+    it("enum with default", function()
+      local result = s.enum({ "a", "b" }, "a"):to_json_schema()
+      assert.same({ type = "string", enum = { "a", "b" }, default = "a" }, result)
+    end)
+
+    it("enum with description", function()
+      local result = s.enum({ "x", "y" }):describe("Pick one"):to_json_schema()
+      assert.equals("Pick one", result.description)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- to_json_schema() — list
+  -- ---------------------------------------------------------------------------
+
+  describe("to_json_schema() — list", function()
+    it("s.list(s.string())", function()
+      local result = s.list(s.string()):to_json_schema()
+      assert.same({ type = "array", items = { type = "string" } }, result)
+    end)
+
+    it("nested list with description", function()
+      local result = s.list(s.integer()):describe("Numbers"):to_json_schema()
+      assert.same({
+        type = "array",
+        items = { type = "integer" },
+        description = "Numbers",
+      }, result)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- to_json_schema() — map
+  -- ---------------------------------------------------------------------------
+
+  describe("to_json_schema() — map", function()
+    it("s.map(s.string(), s.string())", function()
+      local result = s.map(s.string(), s.string()):to_json_schema()
+      assert.same({
+        type = "object",
+        additionalProperties = { type = "string" },
+      }, result)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- to_json_schema() — object
+  -- ---------------------------------------------------------------------------
+
+  describe("to_json_schema() — object", function()
+    it("simple strict object", function()
+      local result = s.object({
+        name = s.string(),
+        count = s.integer(),
+      }):to_json_schema()
+      assert.equals("object", result.type)
+      assert.same({ type = "string" }, result.properties.name)
+      assert.same({ type = "integer" }, result.properties.count)
+      assert.same({ "count", "name" }, result.required)
+      assert.equals(false, result.additionalProperties)
+    end)
+
+    it("object with optional field excluded from required", function()
+      local result = s.object({
+        label = s.string(),
+        hint = s.optional(s.string()),
+      }):to_json_schema()
+      assert.same({ "label" }, result.required)
+      assert.same({ type = "string" }, result.properties.hint)
+    end)
+
+    it("object with nullable field stays in required", function()
+      local result = s.object({
+        label = s.string(),
+        timeout = s.nullable(s.number()),
+      }):to_json_schema()
+      assert.same({ "label", "timeout" }, result.required)
+      assert.same({ type = { "number", "null" } }, result.properties.timeout)
+    end)
+
+    it("passthrough object omits additionalProperties", function()
+      local result = s.object({}):passthrough():to_json_schema()
+      assert.is_nil(result.additionalProperties)
+    end)
+
+    it("empty object has no required array", function()
+      local result = s.object({}):to_json_schema()
+      assert.is_nil(result.required)
+    end)
+
+    it("nested object", function()
+      local result = s.object({
+        params = s.object({
+          timeout = s.integer(600),
+        }),
+      }):to_json_schema()
+      assert.equals("object", result.properties.params.type)
+      assert.same({ type = "integer", default = 600 }, result.properties.params.properties.timeout)
+    end)
+
+    it("object with optional(nullable()) — not required, type includes null", function()
+      local result = s.object({
+        value = s.optional(s.nullable(s.number())),
+      }):to_json_schema()
+      assert.is_nil(result.required)
+      assert.same({ type = { "number", "null" } }, result.properties.value)
+    end)
+
+    it("object with description", function()
+      local result = s.object({}):describe("A container"):to_json_schema()
+      assert.equals("A container", result.description)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- to_json_schema() — nullable
+  -- ---------------------------------------------------------------------------
+
+  describe("to_json_schema() — nullable", function()
+    it("s.nullable(s.number()) → type = {'number', 'null'}", function()
+      local result = s.nullable(s.number()):to_json_schema()
+      assert.same({ type = { "number", "null" } }, result)
+    end)
+
+    it("s.nullable(s.string()) → type = {'string', 'null'}", function()
+      local result = s.nullable(s.string()):to_json_schema()
+      assert.same({ type = { "string", "null" } }, result)
+    end)
+
+    it("nullable preserves inner description", function()
+      local result = s.nullable(s.number():describe("A timeout")):to_json_schema()
+      assert.same({ type = { "number", "null" }, description = "A timeout" }, result)
+    end)
+
+    it("nullable with own description overrides inner", function()
+      local result = s.nullable(s.number():describe("inner")):describe("outer"):to_json_schema()
+      assert.equals("outer", result.description)
+    end)
+
+    it("nullable with default", function()
+      local result = s.nullable(s.number(30)):to_json_schema()
+      assert.same({ type = { "number", "null" }, default = 30 }, result)
+    end)
+
+    it("double nullable does not duplicate 'null'", function()
+      local result = s.nullable(s.nullable(s.number())):to_json_schema()
+      local null_count = 0
+      for _, t in ipairs(result.type) do
+        if t == "null" then
+          null_count = null_count + 1
+        end
+      end
+      assert.equals(1, null_count)
+    end)
+
+    it("nullable union uses anyOf with null branch", function()
+      local result = s.nullable(s.union(s.string(), s.integer())):to_json_schema()
+      assert.is_not_nil(result.anyOf)
+      assert.equals(2, #result.anyOf)
+      assert.equals("null", result.anyOf[2].type)
+    end)
+
+    it(":nullable() chainable modifier", function()
+      local result = s.number():nullable():to_json_schema()
+      assert.same({ type = { "number", "null" } }, result)
+    end)
+
+    it(":nullable():describe() applies description", function()
+      local result = s.number():nullable():describe("Timeout"):to_json_schema()
+      assert.same({ type = { "number", "null" }, description = "Timeout" }, result)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- to_json_schema() — optional
+  -- ---------------------------------------------------------------------------
+
+  describe("to_json_schema() — optional", function()
+    it("delegates to inner schema", function()
+      local result = s.optional(s.string()):to_json_schema()
+      assert.same({ type = "string" }, result)
+    end)
+
+    it("wrapper description overrides inner", function()
+      local result = s.optional(s.string():describe("inner")):describe("outer"):to_json_schema()
+      assert.equals("outer", result.description)
+    end)
+
+    it(":optional() chainable modifier", function()
+      local result = s.string():optional():to_json_schema()
+      assert.same({ type = "string" }, result)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- to_json_schema() — union
+  -- ---------------------------------------------------------------------------
+
+  describe("to_json_schema() — union", function()
+    it("produces anyOf", function()
+      local result = s.union(s.string(), s.integer()):to_json_schema()
+      assert.same({
+        anyOf = {
+          { type = "string" },
+          { type = "integer" },
+        },
+      }, result)
+    end)
+
+    it("union with description", function()
+      local result = s.union(s.string(), s.number()):describe("A value"):to_json_schema()
+      assert.equals("A value", result.description)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- to_json_schema() — loadable
+  -- ---------------------------------------------------------------------------
+
+  describe("to_json_schema() — loadable", function()
+    it("serializes as string", function()
+      assert.same({ type = "string" }, s.loadable():to_json_schema())
+    end)
+
+    it("loadable with default", function()
+      assert.same({ type = "string", default = "my.module" }, s.loadable("my.module"):to_json_schema())
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- to_json_schema() — func
+  -- ---------------------------------------------------------------------------
+
+  describe("to_json_schema() — func", function()
+    it("errors on serialization", function()
+      assert.has_error(function()
+        s.func():to_json_schema()
+      end)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- to_json_schema() — literal
+  -- ---------------------------------------------------------------------------
+
+  describe("to_json_schema() — literal", function()
+    it("string literal", function()
+      local result = s.literal("sentinel"):to_json_schema()
+      assert.same({ type = "string", const = "sentinel", default = "sentinel" }, result)
+    end)
+
+    it("boolean literal", function()
+      local result = s.literal(false):to_json_schema()
+      assert.same({ type = "boolean", const = false, default = false }, result)
+    end)
+
+    it("integer literal", function()
+      local result = s.literal(42):to_json_schema()
+      assert.same({ type = "integer", const = 42, default = 42 }, result)
+    end)
+
+    it("nil literal", function()
+      local result = s.literal(nil):to_json_schema()
+      assert.same({ type = "null", default = nil }, result)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- to_json_schema() — real-world tool schema pattern
+  -- ---------------------------------------------------------------------------
+
+  describe("to_json_schema() — tool schema pattern", function()
+    it("produces correct bash-tool-style schema", function()
+      local schema = s.object({
+        label = s.string():describe("A short human-readable label for this operation"),
+        command = s.string():describe("The bash command to execute"),
+        timeout = s.number():nullable():describe("Timeout in seconds (default: 30)"),
+      }):strict()
+
+      local result = schema:to_json_schema()
+
+      assert.equals("object", result.type)
+      assert.same(
+        { type = "string", description = "A short human-readable label for this operation" },
+        result.properties.label
+      )
+      assert.same({ type = "string", description = "The bash command to execute" }, result.properties.command)
+      assert.same({
+        type = { "number", "null" },
+        description = "Timeout in seconds (default: 30)",
+      }, result.properties.timeout)
+      assert.same({ "command", "label", "timeout" }, result.required)
+      assert.equals(false, result.additionalProperties)
+    end)
+  end)
 end)

@@ -204,6 +204,19 @@ function M.build_description(tool)
   return desc
 end
 
+--- Serialize a tool definition's input_schema to a plain JSON Schema table.
+--- If input_schema is a schema DSL node (has `to_json_schema()`), serialize it.
+--- If it's already a plain table, pass it through unchanged.
+---@param definition flemma.tools.ToolDefinition
+---@return flemma.tools.JSONSchema
+function M.to_json_schema(definition)
+  local schema = definition.input_schema
+  if type(schema.to_json_schema) == "function" then
+    return schema:to_json_schema()
+  end
+  return schema --[[@as flemma.tools.JSONSchema]]
+end
+
 ---Get all registered tools (excludes disabled tools by default).
 ---Loads any pending third-party modules before returning.
 ---@param opts? { include_disabled?: boolean, config?: flemma.Config }

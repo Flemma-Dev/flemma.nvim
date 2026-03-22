@@ -268,7 +268,7 @@ function M.build_request(self, prompt, context)
       type = "function",
       name = definition.name,
       description = tools_module.build_description(definition),
-      parameters = definition.input_schema,
+      parameters = tools_module.to_json_schema(definition),
     }
     if definition.strict == true then
       tool_entry.strict = true

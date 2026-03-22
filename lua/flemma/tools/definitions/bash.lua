@@ -32,25 +32,11 @@ M.definitions = {
       .. "If truncated, full output is saved to a temp file. "
       .. "Optionally provide a timeout in seconds.",
     strict = true,
-    input_schema = {
-      type = "object",
-      properties = {
-        label = {
-          type = "string",
-          description = "A short human-readable label for this operation (e.g., 'running tests')",
-        },
-        command = {
-          type = "string",
-          description = "The bash command to execute",
-        },
-        timeout = {
-          type = { "number", "null" },
-          description = "Timeout in seconds (default: 30)",
-        },
-      },
-      required = { "label", "command", "timeout" },
-      additionalProperties = false,
-    },
+    input_schema = s.object({
+      label = s.string():describe("A short human-readable label for this operation (e.g., 'running tests')"),
+      command = s.string():describe("The bash command to execute"),
+      timeout = s.number():nullable():describe("Timeout in seconds (default: 30)"),
+    }):strict(),
     personalities = {
       ["coding-assistant"] = {
         snippet = "Execute shell commands in the user's project directory",

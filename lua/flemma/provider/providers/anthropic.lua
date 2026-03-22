@@ -240,7 +240,7 @@ function M.build_request(self, prompt, _context)
     table.insert(tools_array, {
       name = def.name,
       description = tools_module.build_description(def),
-      input_schema = def.input_schema,
+      input_schema = tools_module.to_json_schema(def),
     })
   end
 

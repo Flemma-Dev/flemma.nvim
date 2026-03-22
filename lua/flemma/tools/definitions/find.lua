@@ -152,29 +152,12 @@ M.definitions = {
       .. "KB. "
       .. "Returns sorted relative paths, one per line.",
     strict = true,
-    input_schema = {
-      type = "object",
-      properties = {
-        label = {
-          type = "string",
-          description = "A short human-readable label for this operation (e.g., 'finding test files')",
-        },
-        pattern = {
-          type = "string",
-          description = "Glob pattern to search for (e.g., '*.lua', 'src/**/*.tsx')",
-        },
-        path = {
-          type = { "string", "null" },
-          description = "Directory to search in (default: working directory)",
-        },
-        limit = {
-          type = { "number", "null" },
-          description = "Maximum number of results (default: " .. DEFAULT_RESULT_LIMIT .. ")",
-        },
-      },
-      required = { "label", "pattern", "path", "limit" },
-      additionalProperties = false,
-    },
+    input_schema = s.object({
+      label = s.string():describe("A short human-readable label for this operation (e.g., 'finding test files')"),
+      pattern = s.string():describe("Glob pattern to search for (e.g., '*.lua', 'src/**/*.tsx')"),
+      path = s.string():nullable():describe("Directory to search in (default: working directory)"),
+      limit = s.number():nullable():describe("Maximum number of results (default: " .. DEFAULT_RESULT_LIMIT .. ")"),
+    }):strict(),
     personalities = {
       ["coding-assistant"] = {
         snippet = "Find files matching a glob pattern in the project",

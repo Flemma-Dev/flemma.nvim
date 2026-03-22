@@ -46,7 +46,7 @@ local M = {}
 ---@field name string Tool name (must match registry key)
 ---@field description string Human-readable description
 ---@field strict? boolean Enable strict schema enforcement (OpenAI only; requires additionalProperties=false on input_schema)
----@field input_schema flemma.tools.JSONSchema JSON Schema for the tool input
+---@field input_schema flemma.tools.JSONSchema|flemma.config.schema.Node JSON Schema table or schema DSL node (serialized via to_json_schema())
 ---@field output_schema? flemma.tools.JSONSchema JSON Schema for the tool output (used in description)
 ---@field async? boolean True if execute takes a callback (default false)
 ---@field enabled? boolean|fun(config: flemma.Config): boolean Set to false to exclude from API requests by default (still executable, can be enabled via flemma.opt.tools). When a function, evaluated at query time with the resolved config.
