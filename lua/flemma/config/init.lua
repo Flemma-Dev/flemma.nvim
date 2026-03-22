@@ -153,7 +153,10 @@ local function apply_recursive(ctx, path, value)
         for i, item in ipairs(value) do
           local ok, err = list_item_schema:validate_value(item)
           if not ok then
-            return report_error(ctx, string.format("config.apply: list item[%d] at '%s': %s", i, path, err or "invalid"))
+            return report_error(
+              ctx,
+              string.format("config.apply: list item[%d] at '%s': %s", i, path, err or "invalid")
+            )
           end
         end
       end

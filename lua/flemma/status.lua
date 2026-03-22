@@ -65,9 +65,9 @@ local OP_HL = {
 ---@class flemma.status.Data
 ---@field provider { name: string, model: string|nil, initialized: boolean, model_info: flemma.models.ModelInfo|nil, source: string|nil, model_source: string|nil }
 ---@field parameters { merged: table<string, any>, sources: table<string, string>, resolved_max_tokens: integer|nil }
----@field autopilot { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer }
----@field sandbox { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil, policy: flemma.config.SandboxPolicy }
----@field tools { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer, source: string|nil }
+---@field autopilot { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, sources: table<string, string> }
+---@field sandbox { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil, policy: flemma.config.SandboxPolicy, sources: table<string, string> }
+---@field tools { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer }
 ---@field approval { approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil }
 ---@field buffer { is_chat: boolean, bufnr: integer }
 ---@field introspection? { layer_ops: { label: string, name: string, ops: table[] }[], resolved: { path: string, value: any, source: string?, depth: integer, is_object: boolean }[] }
@@ -148,7 +148,7 @@ end
 ---Collect autopilot section data
 ---@param bufnr integer
 ---@param config flemma.Config
----@return { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer }
+---@return { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, sources: table<string, string> }
 local function collect_autopilot(bufnr, config)
   local autopilot_config = config.tools and config.tools.autopilot
   local max_turns = (autopilot_config and autopilot_config.max_turns) or 100
@@ -157,17 +157,28 @@ local function collect_autopilot(bufnr, config)
   local config_enabled = autopilot_config and (autopilot_config.enabled == nil or autopilot_config.enabled == true)
     or false
 
+  local sources = {}
+  local enabled_info = config_facade.inspect(bufnr, "tools.autopilot.enabled")
+  if enabled_info and enabled_info.layer then
+    sources.status = enabled_info.layer
+  end
+  local turns_info = config_facade.inspect(bufnr, "tools.autopilot.max_turns")
+  if turns_info and turns_info.layer then
+    sources.max_turns = turns_info.layer
+  end
+
   return {
     enabled = autopilot.is_enabled(bufnr),
     config_enabled = config_enabled,
     buffer_state = autopilot.get_state(bufnr),
     max_turns = max_turns,
+    sources = sources,
   }
 end
 
 ---Collect sandbox section data
 ---@param bufnr integer
----@return { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil, policy: flemma.config.SandboxPolicy }
+---@return { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil, policy: flemma.config.SandboxPolicy, sources: table<string, string> }
 local function collect_sandbox(bufnr)
   local sandbox_config = sandbox.resolve_config(bufnr)
   local runtime_override = sandbox.get_override()
@@ -176,6 +187,24 @@ local function collect_sandbox(bufnr)
   local backend_available, validate_error = sandbox.validate_backend(bufnr)
 
   local policy = sandbox.get_policy(bufnr)
+
+  local sources = {}
+  local enabled_info = config_facade.inspect(bufnr, "sandbox.enabled")
+  if enabled_info and enabled_info.layer then
+    sources.config_setting = enabled_info.layer
+  end
+  local backend_info = config_facade.inspect(bufnr, "sandbox.backend")
+  if backend_info and backend_info.layer then
+    sources.backend = backend_info.layer
+  end
+  local network_info = config_facade.inspect(bufnr, "sandbox.policy.network")
+  if network_info and network_info.layer then
+    sources.network = network_info.layer
+  end
+  local priv_info = config_facade.inspect(bufnr, "sandbox.policy.allow_privileged")
+  if priv_info and priv_info.layer then
+    sources.privileged = priv_info.layer
+  end
 
   return {
     enabled = sandbox.is_enabled(bufnr),
@@ -186,6 +215,7 @@ local function collect_sandbox(bufnr)
     backend_available = backend_available,
     backend_error = backend_error or validate_error,
     policy = policy,
+    sources = sources,
   }
 end
 
@@ -193,7 +223,7 @@ end
 ---When frontmatter changes the tool list, items that differ from the base
 ---config are tracked in frontmatter_items for annotation.
 ---@param bufnr integer
----@return { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer, source: string|nil }
+---@return { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer }
 local function collect_tools(bufnr)
   local all_tools = tools_module.get_all({ include_disabled = true })
 
@@ -265,7 +295,6 @@ local function collect_tools(bufnr)
     booting = not tools_module.is_ready(),
     frontmatter_items = next(frontmatter_items) and frontmatter_items or nil,
     max_concurrent = max_concurrent,
-    source = tools_source,
   }
 end
 
@@ -591,7 +620,7 @@ end
 ---@param source string|nil
 ---@return [string, string][]|nil
 local function source_virt_text(source)
-  if not source then
+  if not source or source == "D" then
     return nil
   end
   local chunks = {}
@@ -857,8 +886,8 @@ local function format_autopilot_section(b, data, is_last)
 
   ---@type flemma.status.KVItem[]
   local items = {
-    { key = "status", value = status_str, value_hl = status_hl },
-    { key = "max_turns", value = tostring(ap.max_turns) },
+    { key = "status", value = status_str, value_hl = status_hl, source = ap.sources.status },
+    { key = "max_turns", value = tostring(ap.max_turns), source = ap.sources.max_turns },
   }
 
   format_kv_section(b, "Autopilot", items, is_last)
@@ -896,6 +925,12 @@ local function format_sandbox_section(b, data, is_last)
     sb.config_enabled and "enabled" or "disabled",
     sb.config_enabled and "FlemmaStatusEnabled" or "FlemmaStatusDisabled"
   )
+  if sb.sources.config_setting then
+    local vt = source_virt_text(sb.sources.config_setting)
+    if vt then
+      b:virt(vt)
+    end
+  end
   b:nl()
 
   -- runtime override (optional)
@@ -922,6 +957,12 @@ local function format_sandbox_section(b, data, is_last)
   b:put(pad("backend", KEY_W), "FlemmaStatusKey")
   b:put(" ")
   b:put(backend_text)
+  if sb.sources.backend then
+    local vt = source_virt_text(sb.sources.backend)
+    if vt then
+      b:virt(vt)
+    end
+  end
   b:nl()
 
   b:leaf(not has_error)
@@ -946,6 +987,12 @@ local function format_sandbox_section(b, data, is_last)
   b:put(" ")
   local net_str = sb.policy.network == false and "blocked" or "allowed"
   b:put(net_str, sb.policy.network == false and "FlemmaStatusDisabled" or "FlemmaStatusEnabled")
+  if sb.sources.network then
+    local vt = source_virt_text(sb.sources.network)
+    if vt then
+      b:virt(vt)
+    end
+  end
   b:nl()
 
   -- privileged
@@ -955,6 +1002,12 @@ local function format_sandbox_section(b, data, is_last)
   b:put(" ")
   local priv_str = sb.policy.allow_privileged == true and "allowed" or "dropped"
   b:put(priv_str, sb.policy.allow_privileged == true and "FlemmaStatusDisabled" or "FlemmaStatusEnabled")
+  if sb.sources.privileged then
+    local vt = source_virt_text(sb.sources.privileged)
+    if vt then
+      b:virt(vt)
+    end
+  end
   b:nl()
 
   -- rw_paths
@@ -988,12 +1041,6 @@ local function format_tools_section(b, data, is_last)
   b:put("Tools", "FlemmaStatusSection")
   b:put("  ")
   b:put(summary, "FlemmaStatusSummary")
-  if t.source then
-    local vt = source_virt_text(t.source)
-    if vt then
-      b:virt(vt)
-    end
-  end
   b:nl()
 
   -- booting indicator
@@ -1447,7 +1494,8 @@ local function format_legend(b, data)
   local has_source = data.provider.source
     or data.provider.model_source
     or (data.parameters.sources and next(data.parameters.sources))
-    or data.tools.source
+    or (data.autopilot.sources and next(data.autopilot.sources))
+    or (data.sandbox.sources and next(data.sandbox.sources))
     or data.tools.frontmatter_items
     or data.approval.frontmatter_items
   local has_sandbox = data.approval.sandbox_items ~= nil
@@ -1456,8 +1504,6 @@ local function format_legend(b, data)
     return
   end
 
-  b:put(SOURCE_ICON.D, SOURCE_HL.D)
-  b:put(" default  ", "FlemmaStatusLegend")
   b:put(SOURCE_ICON.S, SOURCE_HL.S)
   b:put(" setup  ", "FlemmaStatusLegend")
   b:put(SOURCE_ICON.F, SOURCE_HL.F)

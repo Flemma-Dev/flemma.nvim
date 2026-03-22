@@ -5,7 +5,7 @@ local ICON_BASE = 0x1F170
 local function icon(ch)
   return vim.fn.nr2char(ICON_BASE + string.byte(ch) - string.byte("A"))
 end
-local ICON_D = icon("D")
+local ICON_S = icon("S")
 local ICON_F = icon("F")
 local ICON_R = icon("R")
 
@@ -307,30 +307,6 @@ describe("flemma.status", function()
       assert.equals("D", data.provider.source)
     end)
 
-    it("reports tools source from config store when tools are registered", function()
-      apply_test_config({
-        provider = "anthropic",
-        parameters = {},
-        tools = { autopilot = { enabled = false, max_turns = 100 } },
-        sandbox = { enabled = false, backend = "auto" },
-      })
-
-      -- Register a tool so the tools list has ops in the store
-      local tools_registry = require("flemma.tools.registry")
-      tools_registry.clear()
-      tools_registry.register("read", {
-        name = "read",
-        description = "Read tool",
-        input_schema = { type = "object" },
-      })
-      -- Record a default so the tools list has an op in the store
-      local config_facade = require("flemma.config")
-      config_facade.record_default("append", "tools", "read")
-
-      local data = status.collect(0)
-      assert.is_string(data.tools.source)
-    end)
-
     it("includes tools from lazily-loaded modules", function()
       apply_test_config({
         provider = "anthropic",
@@ -502,7 +478,7 @@ describe("flemma.status", function()
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
         parameters = { merged = { max_tokens = 8192, temperature = 0.7 }, sources = {} },
-        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, sources = {} },
         sandbox = {
           enabled = false,
           config_enabled = false,
@@ -510,6 +486,7 @@ describe("flemma.status", function()
           backend_mode = "auto",
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
         },
         tools = { enabled = { "bash", "read_file" }, disabled = {} },
         approval = {
@@ -541,7 +518,7 @@ describe("flemma.status", function()
       local data = {
         provider = { name = "anthropic", model = "test", initialized = true },
         parameters = { merged = {}, sources = {} },
-        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, sources = {} },
         sandbox = {
           enabled = false,
           config_enabled = false,
@@ -549,6 +526,7 @@ describe("flemma.status", function()
           backend_mode = "auto",
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
         },
         tools = { enabled = {}, disabled = {} },
         approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
@@ -568,9 +546,9 @@ describe("flemma.status", function()
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true, source = "S" },
         parameters = {
           merged = { max_tokens = 8192, thinking = "high" },
-          sources = { max_tokens = "D", thinking = "F" },
+          sources = { max_tokens = "S", thinking = "F" },
         },
-        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, sources = {} },
         sandbox = {
           enabled = false,
           config_enabled = false,
@@ -578,6 +556,7 @@ describe("flemma.status", function()
           backend_mode = "auto",
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
         },
         tools = { enabled = {}, disabled = {} },
         approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
@@ -585,7 +564,7 @@ describe("flemma.status", function()
       }
 
       local result = status.format(data, false)
-      assert.is_true(has_virt_icon(result, "max_tokens", ICON_D), "expected D source on max_tokens")
+      assert.is_true(has_virt_icon(result, "max_tokens", ICON_S), "expected S source on max_tokens")
       assert.is_true(has_virt_icon(result, "thinking", ICON_F), "expected F source on thinking")
     end)
 
@@ -594,7 +573,7 @@ describe("flemma.status", function()
       local data = {
         provider = { name = "anthropic", model = "claude-haiku", initialized = true, source = "R", model_source = "R" },
         parameters = { merged = {}, sources = {} },
-        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, sources = {} },
         sandbox = {
           enabled = false,
           config_enabled = false,
@@ -602,6 +581,7 @@ describe("flemma.status", function()
           backend_mode = "auto",
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
         },
         tools = { enabled = {}, disabled = {} },
         approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
@@ -649,7 +629,7 @@ describe("flemma.status", function()
           },
         },
         parameters = { merged = { max_tokens = 8192 }, sources = {} },
-        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, sources = {} },
         sandbox = {
           enabled = false,
           config_enabled = false,
@@ -657,6 +637,7 @@ describe("flemma.status", function()
           backend_mode = "auto",
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
         },
         tools = { enabled = {}, disabled = {} },
         approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
@@ -680,7 +661,7 @@ describe("flemma.status", function()
       local data = {
         provider = { name = "anthropic", model = "claude-unknown-99", initialized = true },
         parameters = { merged = {}, sources = {} },
-        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, sources = {} },
         sandbox = {
           enabled = false,
           config_enabled = false,
@@ -688,6 +669,7 @@ describe("flemma.status", function()
           backend_mode = "auto",
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
         },
         tools = { enabled = {}, disabled = {} },
         approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
@@ -741,6 +723,7 @@ describe("flemma.status", function()
           config_enabled = true,
           buffer_state = "idle",
           max_turns = 100,
+          sources = {},
         },
         sandbox = {
           enabled = false,
@@ -749,6 +732,7 @@ describe("flemma.status", function()
           backend_mode = "auto",
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
         },
         tools = { enabled = { "bash" }, disabled = {}, frontmatter_items = { bash = true } },
         approval = {
@@ -769,7 +753,7 @@ describe("flemma.status", function()
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
         parameters = { merged = {}, sources = {} },
-        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, sources = {} },
         sandbox = {
           enabled = false,
           config_enabled = false,
@@ -777,6 +761,7 @@ describe("flemma.status", function()
           backend_mode = "auto",
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
         },
         tools = { enabled = { "bash", "read_file" }, disabled = { "execute_command" } },
         approval = {
@@ -802,7 +787,7 @@ describe("flemma.status", function()
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
         parameters = { merged = {}, sources = {} },
-        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, sources = {} },
         sandbox = {
           enabled = false,
           config_enabled = false,
@@ -810,6 +795,7 @@ describe("flemma.status", function()
           backend_mode = "auto",
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
         },
         tools = { enabled = { "bash", "edit", "read", "write" }, disabled = {} },
         approval = {
@@ -835,7 +821,7 @@ describe("flemma.status", function()
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
         parameters = { merged = {}, sources = {} },
-        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, sources = {} },
         sandbox = {
           enabled = true,
           config_enabled = true,
@@ -843,6 +829,7 @@ describe("flemma.status", function()
           backend_mode = "auto",
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
         },
         tools = { enabled = { "bash", "edit", "read", "write" }, disabled = {} },
         approval = {
@@ -870,7 +857,7 @@ describe("flemma.status", function()
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
         parameters = { merged = {}, sources = {} },
-        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, sources = {} },
         sandbox = {
           enabled = false,
           config_enabled = false,
@@ -878,6 +865,7 @@ describe("flemma.status", function()
           backend_mode = "auto",
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
         },
         tools = { enabled = { "bash", "read" }, disabled = {} },
         approval = {
@@ -899,7 +887,7 @@ describe("flemma.status", function()
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
         parameters = { merged = {}, sources = {} },
-        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, sources = {} },
         sandbox = {
           enabled = false,
           config_enabled = false,
@@ -907,6 +895,7 @@ describe("flemma.status", function()
           backend_mode = "auto",
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
         },
         tools = { enabled = { "bash", "read" }, disabled = {}, booting = true },
         approval = {
@@ -929,7 +918,7 @@ describe("flemma.status", function()
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
         parameters = { merged = {}, sources = {} },
-        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, sources = {} },
         sandbox = {
           enabled = false,
           config_enabled = false,
@@ -937,6 +926,7 @@ describe("flemma.status", function()
           backend_mode = "auto",
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
         },
         tools = { enabled = { "bash", "read" }, disabled = {}, booting = false },
         approval = {
@@ -958,7 +948,7 @@ describe("flemma.status", function()
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
         parameters = { merged = {}, sources = {} },
-        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, sources = {} },
         sandbox = {
           enabled = false,
           config_enabled = false,
@@ -966,6 +956,7 @@ describe("flemma.status", function()
           backend_mode = "auto",
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
         },
         tools = { enabled = { "bash", "read" }, disabled = {} },
         approval = {
@@ -989,7 +980,7 @@ describe("flemma.status", function()
       local data = {
         provider = { name = "anthropic", model = "test", initialized = true },
         parameters = { merged = {}, sources = {} },
-        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, sources = {} },
         sandbox = {
           enabled = false,
           config_enabled = false,
@@ -997,6 +988,7 @@ describe("flemma.status", function()
           backend_mode = "auto",
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
         },
         tools = { enabled = {}, disabled = {} },
         approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
