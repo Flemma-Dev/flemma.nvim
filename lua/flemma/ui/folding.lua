@@ -4,6 +4,7 @@
 ---@class flemma.ui.Folding
 local M = {}
 
+local config_facade = require("flemma.config")
 local state = require("flemma.state")
 local log = require("flemma.logging")
 local loader = require("flemma.loader")
@@ -384,7 +385,7 @@ function M.get_fold_text()
 
     -- When rulers are enabled, match the unfolded visual: ─ Role content (N lines)
     -- Otherwise fall back to the standard @Role: prefix
-    local ruler_config = state.get_config().ruler
+    local ruler_config = config_facade.get().ruler
     local use_ruler_prefix = ruler_config and ruler_config.enabled ~= false
 
     ---@type {[1]:string, [2]:string}[]
@@ -444,7 +445,7 @@ function M.setup_folding(bufnr)
   vim.wo[winid].foldmethod = "expr"
   vim.wo[winid].foldexpr = 'v:lua.require("flemma.ui.folding").get_fold_level(v:lnum)'
   vim.wo[winid].foldtext = 'v:lua.require("flemma.ui.folding").get_fold_text()'
-  vim.wo[winid].foldlevel = state.get_config().editing.foldlevel
+  vim.wo[winid].foldlevel = config_facade.get().editing.foldlevel
 end
 
 ---Force Neovim to re-evaluate all fold levels for a buffer.
@@ -526,7 +527,7 @@ function M.fold_completed_blocks(bufnr)
     return
   end
 
-  local current_config = state.get_config()
+  local current_config = config_facade.get(bufnr)
   local auto_close_config = current_config.editing and current_config.editing.auto_close or {}
 
   if not buffer_state.auto_closed_folds then

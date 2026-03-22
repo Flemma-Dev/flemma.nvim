@@ -5,12 +5,12 @@ package.loaded["flemma.autopilot"] = nil
 package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.context"] = nil
 package.loaded["flemma.tools.injector"] = nil
-package.loaded["flemma.state"] = nil
 package.loaded["flemma.parser"] = nil
 
 local autopilot = require("flemma.autopilot")
 local context = require("flemma.tools.context")
-local state = require("flemma.state")
+local config_facade = require("flemma.config")
+local config_schema = require("flemma.config.schema.definition")
 local parser = require("flemma.parser")
 
 --- Helper: get pending non-error, empty tool blocks awaiting execution.
@@ -44,40 +44,52 @@ end
 -- ============================================================================
 
 describe("Autopilot State Machine", function()
+  before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema.definition"] = nil
+    package.loaded["flemma.autopilot"] = nil
+    config_facade = require("flemma.config")
+    config_schema = require("flemma.config.schema.definition")
+    autopilot = require("flemma.autopilot")
+    config_facade.init(config_schema)
+  end)
+
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
   end)
 
   describe("is_enabled", function()
     it("returns true when autopilot is true in config", function()
       local bufnr = create_buffer({ "@You:", "test" })
-      state.set_config({ tools = { autopilot = { enabled = true } } })
+      config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
       assert.is_true(autopilot.is_enabled(bufnr))
     end)
 
     it("returns false when autopilot is false in config", function()
       local bufnr = create_buffer({ "@You:", "test" })
-      state.set_config({ tools = { autopilot = { enabled = false } } })
+      config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = false } } })
       assert.is_false(autopilot.is_enabled(bufnr))
     end)
 
-    it("returns false when autopilot group is absent", function()
+    it("returns true by default (schema default is enabled)", function()
       local bufnr = create_buffer({ "@You:", "test" })
-      state.set_config({ tools = {} })
-      assert.is_false(autopilot.is_enabled(bufnr))
+      -- No SETUP apply — defaults from schema have autopilot.enabled = true
+      assert.is_true(autopilot.is_enabled(bufnr))
     end)
 
     it("returns true when enabled field is absent (defaults to true)", function()
       local bufnr = create_buffer({ "@You:", "test" })
-      state.set_config({ tools = { autopilot = {} } })
+      -- Only set an unrelated field — autopilot.enabled defaults to true
+      config_facade.apply(config_facade.LAYERS.SETUP, { tools = { max_concurrent = 3 } })
       assert.is_true(autopilot.is_enabled(bufnr))
     end)
 
-    it("returns false when tools config is missing", function()
+    it("returns true with empty setup (schema defaults)", function()
       local bufnr = create_buffer({ "@You:", "test" })
-      state.set_config({})
-      assert.is_false(autopilot.is_enabled(bufnr))
+      -- Empty setup — schema defaults have autopilot.enabled = true
+      assert.is_true(autopilot.is_enabled(bufnr))
     end)
   end)
 
@@ -127,17 +139,23 @@ end)
 -- for full-chain coverage via register_fixture + Flemma send.
 describe("Autopilot on_response_complete", function()
   before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema.definition"] = nil
     package.loaded["flemma.autopilot"] = nil
+    config_facade = require("flemma.config")
+    config_schema = require("flemma.config.schema.definition")
     autopilot = require("flemma.autopilot")
+    config_facade.init(config_schema)
   end)
 
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
   end)
 
   it("arms when last assistant message has tool_use", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run the calculator",
@@ -160,7 +178,7 @@ describe("Autopilot on_response_complete", function()
   end)
 
   it("stays idle when last assistant message has no tool_use", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Hello",
@@ -178,7 +196,7 @@ describe("Autopilot on_response_complete", function()
   end)
 
   it("does nothing when autopilot is disabled", function()
-    state.set_config({ tools = { autopilot = { enabled = false } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = false } } })
     local bufnr = create_buffer({
       "@You:",
       "Run",
@@ -204,7 +222,7 @@ describe("Autopilot on_response_complete", function()
   -- In production, each call is preceded by new assistant content. This
   -- tests the iteration counter logic, not the full response cycle.
   it("increments iteration counter", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run",
@@ -232,7 +250,7 @@ describe("Autopilot on_response_complete", function()
 
   -- NOTE: Same caveat as above — static buffer, counter-only test.
   it("stops after exceeding max_turns", function()
-    state.set_config({ tools = { autopilot = { enabled = true, max_turns = 2 } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true, max_turns = 2 } } })
     local bufnr = create_buffer({
       "@You:",
       "Run",
@@ -263,7 +281,7 @@ describe("Autopilot on_response_complete", function()
 
   -- NOTE: Tests disarm's effect on iteration counter with static buffer.
   it("disarm resets iteration counter", function()
-    state.set_config({ tools = { autopilot = { enabled = true, max_turns = 2 } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true, max_turns = 2 } } })
     local bufnr = create_buffer({
       "@You:",
       "Run",
@@ -297,17 +315,23 @@ end)
 
 describe("Autopilot on_tools_complete", function()
   before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema.definition"] = nil
     package.loaded["flemma.autopilot"] = nil
+    config_facade = require("flemma.config")
+    config_schema = require("flemma.config.schema.definition")
     autopilot = require("flemma.autopilot")
+    config_facade.init(config_schema)
   end)
 
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
   end)
 
   it("sets sending when no pending or awaiting remain", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run the calculator",
@@ -335,7 +359,7 @@ describe("Autopilot on_tools_complete", function()
   end)
 
   it("pauses when flemma:tool status=pending blocks remain", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run the calculator",
@@ -362,7 +386,7 @@ describe("Autopilot on_tools_complete", function()
   end)
 
   it("schedules send when flemma:tool status=approved blocks remain", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run the calculator",
@@ -389,7 +413,7 @@ describe("Autopilot on_tools_complete", function()
   end)
 
   it("no-ops when not in armed state", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run",
@@ -417,7 +441,7 @@ describe("Autopilot on_tools_complete", function()
   end)
 
   it("waits when unprocessed tool_use blocks remain", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run both",
@@ -459,7 +483,6 @@ end)
 describe("Autopilot conflict detection", function()
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
   end)
 
   it("parser sets content on flemma:tool with user-edited content", function()
@@ -577,17 +600,23 @@ end)
 
 describe("Autopilot all-denied edge case", function()
   before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema.definition"] = nil
     package.loaded["flemma.autopilot"] = nil
+    config_facade = require("flemma.config")
+    config_schema = require("flemma.config.schema.definition")
     autopilot = require("flemma.autopilot")
+    config_facade.init(config_schema)
   end)
 
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
   end)
 
   it("on_tools_complete continues after all tools denied (results injected, no pending)", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     -- Simulate buffer state after all tools were denied: tool_results are present
     -- with error content, no flemma:tool markers
     local bufnr = create_buffer({
@@ -624,19 +653,25 @@ end)
 
 describe("Autopilot on_tools_complete ignored when not armed", function()
   before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema.definition"] = nil
     package.loaded["flemma.autopilot"] = nil
+    config_facade = require("flemma.config")
+    config_schema = require("flemma.config.schema.definition")
     autopilot = require("flemma.autopilot")
+    config_facade.init(config_schema)
   end)
 
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
   end)
 
   it("on_tools_complete does not advance from paused state", function()
     -- Regression: if autopilot is paused (e.g., pending tools shown to user)
     -- and a tool completion fires, it should not advance the state.
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run",
@@ -715,7 +750,7 @@ describe("Autopilot on_tools_complete ignored when not armed", function()
   it("on_tools_complete advances from armed state after re-arm", function()
     -- Regression: after pausing on pending, user interacts (e.g., Alt+Enter),
     -- which re-arms autopilot. Now on_tools_complete should advance.
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run",
@@ -759,17 +794,23 @@ describe("Autopilot all-sync tool completion", function()
   -- (all sync completed), it schedules on_tools_complete manually.
 
   before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema.definition"] = nil
     package.loaded["flemma.autopilot"] = nil
+    config_facade = require("flemma.config")
+    config_schema = require("flemma.config.schema.definition")
     autopilot = require("flemma.autopilot")
+    config_facade.init(config_schema)
   end)
 
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
   end)
 
   it("on_tools_complete called before arm is ignored", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run",
@@ -824,7 +865,7 @@ describe("Autopilot integration", function()
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
-    package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
     package.loaded["flemma.models"] = nil
     package.loaded["flemma.autopilot"] = nil
@@ -842,7 +883,6 @@ describe("Autopilot integration", function()
   after_each(function()
     client.clear_fixtures()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
   end)
 
   it("arms autopilot when LLM response contains tool_use via full chain", function()
@@ -906,7 +946,7 @@ describe("Autopilot race condition: sync + async tool dispatch", function()
     package.loaded["flemma.tools.approval"] = nil
     package.loaded["flemma.tools.executor"] = nil
     package.loaded["flemma.core"] = nil
-    package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
     package.loaded["flemma.models"] = nil
     package.loaded["flemma.autopilot"] = nil
@@ -933,7 +973,6 @@ describe("Autopilot race condition: sync + async tool dispatch", function()
     vim.notify = orig_notify
     client.clear_fixtures()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
   end)
 
   it("does not double-execute when a sync tool completes before an async tool", function()

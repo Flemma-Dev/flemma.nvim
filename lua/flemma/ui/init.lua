@@ -3,9 +3,9 @@
 ---@class flemma.UI
 local M = {}
 
+local config_facade = require("flemma.config")
 local log = require("flemma.logging")
 local state = require("flemma.state")
-local config = require("flemma.config")
 local buffer_utils = require("flemma.utilities.buffer")
 local preview = require("flemma.ui.preview")
 local folding = require("flemma.ui.folding")
@@ -110,7 +110,7 @@ function M.add_rulers(bufnr, doc)
   -- Clear existing extmarks
   vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
-  local current_config = state.get_config()
+  local current_config = config_facade.get(bufnr)
   local ruler_config = current_config.ruler
   if ruler_config.enabled == false then
     return
@@ -228,7 +228,7 @@ end
 ---@param highlight? string Override highlight group (for timeout warnings)
 ---@return {[1]:string, [2]:string}[]
 local function build_progress_virt_text(progress_text, bufnr, highlight)
-  local current_config = state.get_config()
+  local current_config = config_facade.get(bufnr)
   local ruler_config = current_config.ruler
   local rulers_enabled = ruler_config and ruler_config.enabled ~= false
 
@@ -283,7 +283,7 @@ end
 ---@param row integer Row offset from window top
 ---@param spinner_char string Current spinner character
 local function update_progress_gutter_icon(buffer_state, parent_winid, gutter_width, row, spinner_char)
-  local progress_config = state.get_config().progress
+  local progress_config = config_facade.get().progress
 
   -- Build icon text: spinner right-aligned in the gutter with a trailing space
   local icon_text = string.rep(" ", math.max(0, gutter_width - SPINNER_PREFIX_DISPLAY_WIDTH)) .. spinner_char .. " "
@@ -343,7 +343,7 @@ end
 ---@param highlight? string Override highlight group (for timeout warnings)
 local function show_progress_float(bufnr, parent_winid, progress_text, spinner_char, highlight)
   local buffer_state = state.get_buffer_state(bufnr)
-  local progress_config = state.get_config().progress
+  local progress_config = config_facade.get().progress
   local win_width = vim.api.nvim_win_get_width(parent_winid)
   local win_height = vim.api.nvim_win_get_height(parent_winid)
   local gutter_width = get_gutter_width(parent_winid)
@@ -665,7 +665,7 @@ end
 ---@param end_line integer
 ---@param role string
 function M.place_signs(bufnr, start_line, end_line, role)
-  local current_config = state.get_config()
+  local current_config = config_facade.get(bufnr)
   if not current_config.signs.enabled then
     return
   end
@@ -693,7 +693,7 @@ end
 ---@param bufnr integer
 ---@param doc flemma.ast.DocumentNode
 function M.apply_line_highlights(bufnr, doc)
-  local current_config = state.get_config()
+  local current_config = config_facade.get(bufnr)
   if not current_config.line_highlights or not current_config.line_highlights.enabled then
     return
   end
@@ -878,7 +878,8 @@ end
 local function apply_chat_buffer_settings(bufnr)
   folding.setup_folding(bufnr)
 
-  if config.editing.disable_textwidth then
+  local current = config_facade.get(bufnr)
+  if current and current.editing and current.editing.disable_textwidth then
     vim.bo[bufnr].textwidth = 0
   end
 
@@ -932,7 +933,8 @@ function M.setup_chat_filetype_autocmds()
   })
 
   -- Handle updatetime management for chat buffers
-  if config.editing.manage_updatetime then
+  local editing_config = config_facade.get()
+  if editing_config and editing_config.editing and editing_config.editing.manage_updatetime then
     vim.api.nvim_create_autocmd("BufEnter", {
       group = augroup,
       pattern = "*.chat",
@@ -995,7 +997,7 @@ function M.setup_chat_filetype_autocmds()
   end
 
   -- CursorLine overlay: swap line highlight to blended CursorLine variant under cursor
-  local current_config = state.get_config()
+  local current_config = config_facade.get()
   if current_config.line_highlights and current_config.line_highlights.enabled then
     vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
       group = augroup,
@@ -1107,7 +1109,7 @@ function M.update_ui(bufnr)
   end
 
   -- Bail if config is not fully initialized (e.g. in test environments)
-  local current_config = state.get_config()
+  local current_config = config_facade.get(bufnr)
   if not current_config.ruler or not current_config.signs then
     return
   end

@@ -39,6 +39,9 @@ local M = {}
 
 ---@alias flemma.tools.ToolPreview string | flemma.StructuredToolPreview
 
+---@class flemma.tools.ToolMetadata
+---@field config_schema? flemma.config.schema.ObjectNode Schema for tool-specific configuration (used by DISCOVER resolution)
+
 ---@class flemma.tools.ToolDefinition
 ---@field name string Tool name (must match registry key)
 ---@field description string Human-readable description
@@ -52,6 +55,7 @@ local M = {}
 ---@field capabilities? string[] Declarative capability tags (e.g., "can_auto_approve_if_sandboxed") queried by resolvers and policies
 ---@field format_preview? fun(input: table<string, any>, max_length: integer): flemma.tools.ToolPreview Custom preview body generator. Returns a plain string (backward-compatible) or a StructuredToolPreview {label?, detail?}. When a string is returned, label is never auto-promoted. When StructuredToolPreview is returned, label is shown italic and detail is shown dimmer in fold text.
 ---@field personalities? table<string, table<string, string|string[]>> Personality-scoped parts keyed by personality name, then by part name
+---@field metadata? flemma.tools.ToolMetadata Tool metadata including config schema for DISCOVER resolution
 
 ---@class flemma.tools.ExecutionResult
 ---@field success boolean Whether execution succeeded

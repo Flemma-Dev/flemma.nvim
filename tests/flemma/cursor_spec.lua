@@ -5,10 +5,16 @@ describe("cursor engine", function()
   before_each(function()
     package.loaded["flemma.cursor"] = nil
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema.definition"] = nil
     cursor = require("flemma.cursor")
     state_module = require("flemma.state")
-    -- Minimal config to avoid nil errors
-    state_module.set_config({
+    -- Initialize config facade with defaults
+    local config_facade = require("flemma.config")
+    config_facade.init(require("flemma.config.schema.definition"))
+    config_facade.apply(config_facade.LAYERS.SETUP, {
       editing = { manage_updatetime = true },
     })
   end)

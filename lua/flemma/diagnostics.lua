@@ -96,10 +96,10 @@ local function encode_sorted(value, depth)
   local value_type = type(value)
 
   if value_type == "string" then
-    return vim.json.encode(value)
+    return json.encode(value)
   elseif value_type == "number" then
-    -- Use vim.json.encode for consistent number formatting
-    return vim.json.encode(value)
+    -- Use json.encode for consistent number formatting
+    return json.encode(value)
   elseif value_type == "boolean" then
     return value and "true" or "false"
   elseif value_type == "nil" then
@@ -129,7 +129,7 @@ local function encode_sorted(value, depth)
       table.sort(keys)
       local items = {}
       for _, k in ipairs(keys) do
-        local encoded_key = vim.json.encode(k)
+        local encoded_key = json.encode(k)
         local encoded_value = encode_sorted(value[k], depth + 1)
         table.insert(items, INDENT:rep(depth + 1) .. encoded_key .. ": " .. encoded_value)
       end

@@ -3,10 +3,12 @@
 ---@class flemma.Core
 local M = {}
 
+local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
 local log = require("flemma.logging")
+local secrets = require("flemma.secrets")
 local state = require("flemma.state")
-local config_manager = require("flemma.core.config.manager")
+local normalize = require("flemma.provider.normalize")
 local buffer_utils = require("flemma.utilities.buffer")
 local editing = require("flemma.buffer.editing")
 local writequeue = require("flemma.buffer.writequeue")
@@ -39,93 +41,159 @@ local DEFAULT_MAX_CONCURRENT = 2
 -- For testing purposes
 local last_request_body_for_testing = nil
 
----Initialize or switch provider based on configuration
+local nav = require("flemma.config.schema.navigation")
+local schema_definition = require("flemma.config.schema.definition")
+
+--- The parameters schema node, used to distinguish static (general) fields
+--- from DISCOVER-resolved (provider-specific) fields.
+---@type flemma.config.schema.Node
+local parameters_schema = nav.unwrap_optional(schema_definition):get_child_schema("parameters") --[[@as flemma.config.schema.Node]]
+
+---Write provider, model, and explicit parameters to the facade layer.
+---General parameters are written to `parameters.<key>`, provider-specific
+---parameters to `parameters.<provider>.<key>`.
+---@param provider_name string Resolved provider name
+---@param model_name? string Validated model name
+---@param explicit_params? table<string, any> User's explicit parameter overrides
+---@param layer? integer Facade layer to write to (default: RUNTIME)
+local function apply_config(provider_name, model_name, explicit_params, layer)
+  layer = layer or config_facade.LAYERS.RUNTIME
+  local w = config_facade.writer(nil, layer)
+  w.provider = provider_name
+  if model_name then
+    w.model = model_name
+  end
+
+  -- Write each explicit parameter to the correct namespaced path.
+  -- Static fields on the parameters schema (max_tokens, thinking, etc.) are
+  -- general params; everything else is provider-specific via DISCOVER.
+  if explicit_params then
+    for k, v in pairs(explicit_params) do
+      if k ~= "model" then
+        if parameters_schema:has_field(k) then
+          w.parameters[k] = v
+        else
+          w.parameters[provider_name][k] = v
+        end
+      end
+    end
+  end
+
+  log.debug(
+    "apply_config(): Applied config - provider: "
+      .. log.inspect(provider_name)
+      .. ", model: "
+      .. log.inspect(model_name)
+      .. " (layer: "
+      .. tostring(layer)
+      .. ")"
+  )
+end
+
+---Validate provider/model and write configuration to the facade layer.
+---Providers are request-scoped — no global instance is created here.
 ---@param provider_name string
 ---@param model_name? string
----@param parameters? table<string, any>
----@return flemma.provider.Base|nil
-local function initialize_provider(provider_name, model_name, parameters)
-  -- Prepare configuration using the centralized config manager
-  local provider_config, err = config_manager.prepare_config(provider_name, model_name, parameters)
-  if not provider_config then
-    vim.notify(err --[[@as string]], vim.log.levels.ERROR)
-    return nil
+---@param explicit_params? table<string, any> Only the user's explicit overrides
+---@param layer? integer Facade layer for apply_config (default: RUNTIME)
+---@return boolean success
+local function initialize_provider(provider_name, model_name, explicit_params, layer)
+  -- Validate provider
+  if not registry.has(provider_name) then
+    local err = string.format(
+      "Flemma: Unknown provider '%s'. Supported providers are: %s",
+      tostring(provider_name),
+      table.concat(registry.supported_providers(), ", ")
+    )
+    log.error("initialize_provider(): " .. err)
+    vim.notify(err, vim.log.levels.ERROR)
+    return false
   end
 
-  -- Apply the configuration to global state
-  config_manager.apply_config(provider_config)
+  -- Resolve provider alias (e.g., 'claude' -> 'anthropic')
+  local resolved_provider = registry.resolve(provider_name)
 
-  -- Create a fresh provider instance with the merged parameters
-  local provider_module = registry.get(provider_config.provider)
-  if not provider_module then
-    local err_msg = "initialize_provider(): Invalid provider after validation: " .. tostring(provider_config.provider)
-    log.error(err_msg)
-    return nil
+  -- Validate and get appropriate model
+  local validated_model = registry.get_appropriate_model(model_name, resolved_provider)
+  if validated_model ~= model_name and model_name ~= nil then
+    vim.notify(
+      string.format(
+        "Flemma: Model '%s' is not valid for provider '%s'. Using default: '%s'.",
+        tostring(model_name),
+        tostring(resolved_provider),
+        tostring(validated_model)
+      ),
+      vim.log.levels.WARN
+    )
   end
 
-  local new_provider = loader.load(provider_module).new(provider_config.parameters)
+  -- Write to facade
+  apply_config(resolved_provider, validated_model, explicit_params, layer)
 
-  -- Update the global provider reference
-  state.set_provider(new_provider)
+  -- Validate provider-specific parameters (shows warnings, doesn't fail)
+  if validated_model then
+    local resolved_config = config_facade.materialize()
+    local flat_params = normalize.flatten_parameters(resolved_provider, resolved_config)
+    normalize.resolve_max_tokens(resolved_provider, validated_model, flat_params)
+    local provider_module_path = registry.get(resolved_provider)
+    if provider_module_path then
+      local provider_module = loader.load(provider_module_path)
+      provider_module.validate_parameters(validated_model, flat_params)
+    end
+  end
 
-  return new_provider
+  log.debug(
+    "initialize_provider(): Prepared config for provider "
+      .. log.inspect(resolved_provider)
+      .. " with model "
+      .. log.inspect(validated_model)
+  )
+  return true
 end
 
 ---Initialize provider for initial setup (exposed version)
 ---@param provider_name string
 ---@param model_name? string
----@param parameters? table<string, any>
----@return flemma.provider.Base|nil
-function M.initialize_provider(provider_name, model_name, parameters)
-  return initialize_provider(provider_name, model_name, parameters)
+---@param explicit_params? table<string, any> Only the user's explicit overrides
+---@param layer? integer Facade layer for apply_config (default: RUNTIME)
+---@return boolean success
+function M.initialize_provider(provider_name, model_name, explicit_params, layer)
+  return initialize_provider(provider_name, model_name, explicit_params, layer)
 end
 
----Switch to a different provider or model
+---Switch to a different provider or model.
+---Writes to the config facade RUNTIME layer. Providers are request-scoped —
+---no global instance is created or stored.
 ---@param provider_name string
 ---@param model_name? string
 ---@param parameters? table<string, any>
 ---@param opts? { bufnr: integer }
----@return flemma.provider.Base|nil
+---@return true|nil success True on success, nil on failure
 function M.switch_provider(provider_name, model_name, parameters, opts)
   if not provider_name then
     vim.notify("Flemma: Provider name is required", vim.log.levels.ERROR)
     return
   end
 
-  -- Check for ongoing requests
   local bufnr = (opts and opts.bufnr) or vim.api.nvim_get_current_buf()
   local buffer_state = state.get_buffer_state(bufnr)
-  if buffer_state.current_request then
-    vim.notify("Flemma: Cannot switch providers while a request is in progress.", vim.log.levels.WARN)
-    return
-  end
 
-  -- Ensure parameters is a table if nil
-  parameters = parameters or {}
-
-  -- Merge parameters using centralized logic
-  local config = state.get_config()
-  local merged_params = config_manager.merge_parameters(config.parameters, provider_name, parameters)
-
-  -- Initialize the new provider using the centralized approach
-  -- but do not commit the global config until validation succeeds.
-  local prev_provider = state.get_provider()
-  state.set_provider(nil) -- Clear the current provider
-  local new_provider = initialize_provider(provider_name, model_name, merged_params)
-
-  if not new_provider then
-    -- Restore previous provider and keep existing config unchanged.
-    state.set_provider(prev_provider)
+  -- No mid-request guard needed: providers are request-scoped, so switching
+  -- only affects the config facade. In-flight requests captured their own
+  -- provider instance and are unaffected.
+  --
+  -- Note: prepare_config() validates before writing, so the facade is only
+  -- mutated for valid providers. No rollback mechanism — if this fails, the
+  -- facade retains its previous state from the last successful write.
+  if not initialize_provider(provider_name, model_name, parameters or {}) then
     log.warn("switch_provider(): Aborting switch due to invalid provider: " .. log.inspect(provider_name))
     return nil
   end
 
-  -- Commit the new configuration now that initialization succeeded.
-  -- The config has already been updated by initialize_provider via config_manager.apply_config
-  local updated_config = state.get_config()
+  local updated_config = config_facade.get(bufnr)
 
-  -- Force the new provider to clear its API key cache
-  new_provider:reset({ invalidate_all_secrets = true })
+  -- Invalidate cached API keys — credentials don't carry across providers
+  secrets.invalidate_all()
 
   -- Clear diagnostics request history — cache state doesn't carry across providers,
   -- so comparing requests from different providers would produce spurious warnings.
@@ -145,7 +213,7 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
     log.debug("switch_provider(): Lualine not found or refresh function unavailable.")
   end
 
-  return new_provider
+  return true
 end
 
 ---Cancel ongoing request if any
@@ -222,7 +290,7 @@ end
 
 ---Phase 2 (Execute): Process flemma:tool blocks by status.
 ---Called from Phase 1 via vim.schedule (undo boundary) or directly when Phase 1 has nothing.
----@param opts { on_request_complete?: fun(), bufnr: integer, evaluated_frontmatter?: flemma.processor.EvaluatedFrontmatter, frontmatter_opts?: flemma.opt.FrontmatterOpts, user_initiated?: boolean }
+---@param opts { on_request_complete?: fun(), bufnr: integer, evaluated_frontmatter?: flemma.processor.EvaluatedFrontmatter, user_initiated?: boolean }
 local function advance_phase2(opts)
   local bufnr = opts.bufnr
   if not vim.api.nvim_buf_is_valid(bufnr) then
@@ -281,15 +349,10 @@ local function advance_phase2(opts)
     })
   end
 
-  -- Process approved → execute tool (pass pre-evaluated opts to avoid re-evaluating frontmatter)
+  -- Process approved → execute tool
   local approved = tool_blocks["approved"] or {}
-  local config = state.get_config()
-  local max_concurrent
-  if opts.frontmatter_opts and opts.frontmatter_opts.max_concurrent ~= nil then
-    max_concurrent = opts.frontmatter_opts.max_concurrent
-  else
-    max_concurrent = (config.tools and config.tools.max_concurrent) or DEFAULT_MAX_CONCURRENT
-  end
+  local config = config_facade.get(bufnr)
+  local max_concurrent = (config.tools and config.tools.max_concurrent) or DEFAULT_MAX_CONCURRENT
   local executed_count = 0
   local throttled = false
 
@@ -298,7 +361,7 @@ local function advance_phase2(opts)
       throttled = true
       break
     end
-    local ok, err = executor.execute(bufnr, ctx, opts.frontmatter_opts)
+    local ok, err = executor.execute(bufnr, ctx)
     if not ok then
       vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
     else
@@ -424,11 +487,9 @@ function M.send_or_execute(opts)
   -- Store rewriter diagnostics for diagnostic rendering in send_to_provider
   buffer_state.rewriter_diagnostics = rewriter_diagnostics
   local context = context_module.from_buffer(bufnr)
-  local evaluated_frontmatter = processor.evaluate_frontmatter(doc, context)
-  local frontmatter_opts = evaluated_frontmatter.context:get_opts()
-
-  -- Set per-buffer autopilot override unconditionally (nil clears a previous override)
-  buffer_state.autopilot_override = frontmatter_opts and frontmatter_opts.autopilot
+  -- Evaluate frontmatter — writes config ops to the store's FRONTMATTER layer.
+  -- After this call, config.get(bufnr) returns the resolved config including frontmatter.
+  local evaluated_frontmatter = processor.evaluate_frontmatter(doc, context, bufnr)
 
   -- Phase 1: Categorize — find tool_use blocks without matching tool_result
   local pending = tool_context.resolve_all_pending(bufnr)
@@ -454,11 +515,7 @@ function M.send_or_execute(opts)
 
     -- Normal tools: run through approval flow
     for _, ctx in ipairs(normal_pending) do
-      local decision = tool_approval.resolve(
-        ctx.tool_name,
-        ctx.input,
-        { bufnr = bufnr, tool_id = ctx.tool_id, opts = frontmatter_opts }
-      )
+      local decision = tool_approval.resolve(ctx.tool_name, ctx.input, { bufnr = bufnr, tool_id = ctx.tool_id })
 
       ---@type flemma.ast.ToolStatus
       local status
@@ -490,7 +547,6 @@ function M.send_or_execute(opts)
       on_request_complete = opts.on_request_complete,
       bufnr = bufnr,
       evaluated_frontmatter = evaluated_frontmatter,
-      frontmatter_opts = frontmatter_opts,
       user_initiated = opts.user_initiated,
     }
     writequeue.schedule(bufnr, function()
@@ -505,7 +561,6 @@ function M.send_or_execute(opts)
     on_request_complete = opts.on_request_complete,
     bufnr = bufnr,
     evaluated_frontmatter = evaluated_frontmatter,
-    frontmatter_opts = frontmatter_opts,
     user_initiated = opts.user_initiated,
   })
 end
@@ -564,10 +619,9 @@ function M.send_to_provider(opts)
     return
   end
 
-  -- Get current provider
-  local current_provider = state.get_provider()
-  if not current_provider then
-    log.error("send_to_provider(): No provider available")
+  -- Verify a provider is configured (instance is created later, after frontmatter evaluation)
+  if not config_facade.get(bufnr).provider then
+    log.error("send_to_provider(): No provider configured")
     vim.notify("Flemma: No provider configured. Use :Flemma switch to select one.", vim.log.levels.ERROR)
     state.unlock_buffer(bufnr)
     return
@@ -775,31 +829,26 @@ function M.send_to_provider(opts)
   log.debug("send_to_provider(): Prompt history for provider: " .. log.inspect(prompt.history))
   log.debug("send_to_provider(): System instruction: " .. log.inspect(prompt.system))
 
-  -- Apply frontmatter parameter overrides so that get_endpoint / get_api_key see them.
-  -- Merge general parameters (flemma.opt.cache_retention) with provider-specific ones
-  -- (flemma.opt.anthropic.thinking_budget). Provider-specific wins on conflict.
-  local provider_key = state.get_config().provider
-  local general_overrides = prompt.opts and prompt.opts.parameters
-  local provider_specific_overrides = prompt.opts and prompt.opts[provider_key]
-  local merged_overrides = nil
-  if general_overrides or provider_specific_overrides then
-    merged_overrides = {}
-    if general_overrides then
-      for k, v in pairs(general_overrides) do
-        merged_overrides[k] = v
-      end
+  -- Create a request-scoped provider with per-buffer params (includes frontmatter layer).
+  -- The provider lives only for this request — captured in closures, GC'd after completion.
+  ---@type flemma.provider.Base
+  local current_provider
+  do
+    local effective_bufnr = prompt.bufnr
+    local cfg = normalize.resolve_preset(config_facade.materialize(effective_bufnr))
+    local provider_key = cfg.provider
+    local flat_params = normalize.flatten_parameters(provider_key, cfg)
+    normalize.resolve_max_tokens(provider_key, cfg.model, flat_params)
+
+    local provider_module_path = registry.get(provider_key)
+    if not provider_module_path then
+      log.error("send_to_provider(): Unknown provider: " .. tostring(provider_key))
+      vim.notify("Flemma: Unknown provider '" .. tostring(provider_key) .. "'.", vim.log.levels.ERROR)
+      state.unlock_buffer(bufnr)
+      return
     end
-    if provider_specific_overrides then
-      for k, v in pairs(provider_specific_overrides) do
-        merged_overrides[k] = v
-      end
-    end
+    current_provider = loader.load(provider_module_path).new(flat_params)
   end
-  if merged_overrides and merged_overrides.max_tokens ~= nil then
-    local config = state.get_config()
-    config_manager.resolve_max_tokens(config.provider, config.model, merged_overrides)
-  end
-  current_provider:set_parameter_overrides(merged_overrides)
 
   -- Validate provider (endpoint, API key, headers) and build request body.
   -- Wrapped in pcall so any provider error unlocks the buffer cleanly.
@@ -815,7 +864,7 @@ function M.send_to_provider(opts)
     if not fixture_path then
       local api_key, api_key_diagnostics = current_provider:get_api_key()
       if not api_key then
-        local msg = "No API key available for provider '" .. state.get_config().provider .. "'."
+        local msg = "No API key available for provider '" .. config_facade.get(bufnr).provider .. "'."
         if api_key_diagnostics then
           for _, d in ipairs(api_key_diagnostics) do
             msg = msg .. "\n  [" .. d.resolver .. "] " .. d.message
@@ -854,7 +903,7 @@ function M.send_to_provider(opts)
   -- Log the request details (using the provider's stored model)
   log.debug(
     "send_to_provider(): Sending request for provider "
-      .. log.inspect(state.get_config().provider)
+      .. log.inspect(config_facade.get(bufnr).provider)
       .. " with model "
       .. log.inspect(current_provider.parameters.model)
   )
@@ -869,7 +918,7 @@ function M.send_to_provider(opts)
 
   -- Reset in-flight usage tracking for this buffer
   -- Include the provider's output_has_thoughts flag so usage.lua can display correctly
-  local provider_capabilities = registry.get_capabilities(state.get_config().provider)
+  local provider_capabilities = registry.get_capabilities(config_facade.get(bufnr).provider)
   buffer_state.inflight_usage = {
     input_tokens = 0,
     output_tokens = 0,
@@ -937,7 +986,7 @@ function M.send_to_provider(opts)
 
     on_response_complete = function()
       vim.schedule(function()
-        local config = state.get_config()
+        local config = config_facade.get(bufnr)
 
         -- Get tokens from in-flight usage
         local input_tokens = buffer_state.inflight_usage.input_tokens or 0
@@ -1292,7 +1341,7 @@ function M.send_to_provider(opts)
     end,
     on_raw_json = function(raw_json_str)
       -- Store for diagnostics — will be compared after response completes
-      local cfg = state.get_config()
+      local cfg = config_facade.get(bufnr)
       if cfg.diagnostics and cfg.diagnostics.enabled then
         buffer_state._diagnostics_raw_json = raw_json_str
       end

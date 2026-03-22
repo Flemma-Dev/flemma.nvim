@@ -24,12 +24,13 @@ These are counter-default behaviors — violating them breaks the build or intro
 
 Explore `lua/flemma/` to understand the codebase — module files are named descriptively and each has a `---@class` annotation explaining its role. Key structural landmarks:
 
-- `init.lua` — setup entry point; `config.lua` — defaults and type definitions (`flemma.Config.Opts`, `flemma.Config`)
+- `init.lua` — setup entry point; `config/` — layered config system (see below)
+- `config/init.lua` — public facade (`get`, `materialize`, `apply`, `writer`, `inspect`); `config/store.lua` — layer store (DEFAULTS→SETUP→RUNTIME→FRONTMATTER); `config/proxy.lua` — read/write proxy metatables; `config/schema/` — schema DSL, node types, definition, navigation; `config/types.lua` — EmmyLua type definitions
 - `parser.lua` / `ast.lua` — AST-based buffer parsing (heart of the stateless design)
-- `provider/base.lua` — provider contract (metatable inheritance); `provider/providers/{anthropic,openai,vertex}.lua` — implementations
+- `provider/base.lua` — provider contract (metatable inheritance); `provider/normalize.lua` — parameter normalization (flatten, max_tokens, thinking, preset resolution); `provider/providers/{anthropic,openai,vertex}.lua` — implementations (request-scoped, no global instance)
 - `tools/` — tool registry (`get_all()` filters by `enabled`), executor, injector, approval, and built-in definitions in `tools/definitions/`
 - `utilities/` — stateless shared infrastructure: `json.lua`, `roles.lua`, `modeline.lua`, `truncate.lua`, `display.lua`, `folding.lua`, `buffer.lua`, `bash/`
-- `core.lua` — main orchestration; `state.lua` — ephemeral per-buffer state; `config.lua` — `vim.tbl_deep_extend` merge, `state.get_config()` for runtime access
+- `core.lua` — main orchestration (provider construction inline per-request); `state.lua` — ephemeral per-buffer state (no config or provider — those live in the config facade)
 - Production file names prefer single words; multi-word descriptive names use snake_case (`secret_tool.lua`, `coding_assistant.lua`), while established domain concepts are concatenated (`writequeue.lua`, `textobject.lua`). Test files use `_spec.lua` suffix.
 - Tests live in `tests/flemma/*_spec.lua` with fixtures in `tests/fixtures/`.
 
@@ -72,7 +73,7 @@ All `require()` calls go at the top of the file, before any function definition.
 
 - `vim.notify()` for user-facing errors and warnings
 - `log` module for debug/trace logging
-- Return tuples `value, err` for operational results (e.g., `config_manager.prepare_config()`)
+- Return tuples `value, err` for operational results (e.g., `secrets.resolve()`)
 - Never `error()` for recoverable situations
 
 ## Buffer Format Reference
@@ -148,13 +149,15 @@ When you resolve a non-obvious issue — something that required real investigat
 
 - **Stale `vim-pack-dir` copy shadows working-directory changes.** When running headless Neovim, always use `set rtp^=...` (prepend) not `set rtp+=...` (append) — a packaged copy in `vim-pack-dir` takes priority otherwise. Verify with `debug.getinfo(require('flemma.ui').some_fn, 'S').source`.
 
-- **Provider `new()` metatable ordering.** `base.new()` sets `__index = base`, so calling `provider:reset()` before the provider-specific `setmetatable` call will invoke `base.reset()` instead of the provider's `M.reset()`. Always set the provider metatable BEFORE calling `reset()`.
+- **Provider `new()` metatable chain.** Each provider owns its constructor with the full metatable chain set in the `setmetatable` literal before `self:reset()`. This makes metatable ordering bugs structurally impossible — the chain `self → M → base` is established atomically.
 
 - **LuaJIT `tostring` for integer-valued floats.** `tostring(5.0)` returns `"5"` not `"5.0"` in LuaJIT. Account for this in assertions and string formatting involving numeric results.
 
 - **Registry iteration is non-deterministic.** The tools registry is a table keyed by name; `pairs()` does not guarantee order. When building tool arrays for API requests, sort by name for deterministic prompt caching. In tests, use `find_*_tool()` helpers rather than index-based lookups.
 
 - **Tool header backtick format is critical.** The parser relies on exact backtick wrapping in ``**Tool Use:** `name` (`id`)`` and `` **Tool Result:** `id` `` headers. Missing or misplaced backticks will cause parsing failures.
+
+- **Lua `a and b or c` ternary fails when `b` is falsy.** `true and false or x` evaluates to `x`, not `false`. Always use explicit `if/else` when the "true" branch value could be `false` or `nil`. This bit a dual-call convention closure (`maybe_item ~= nil and maybe_item or self_or_item`) where `maybe_item` was legitimately `false`.
 
 ## Session Closure Checklist
 

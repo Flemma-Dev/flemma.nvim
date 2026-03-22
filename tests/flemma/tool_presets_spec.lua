@@ -19,7 +19,6 @@ describe("flemma.tools.presets", function()
       presets.setup(nil)
       local preset = presets.get("$readonly")
       assert.are.same({ "read" }, preset.approve)
-      assert.is_nil(preset.deny)
     end)
 
     it("built-in $default approves read, write, edit", function()
@@ -28,7 +27,6 @@ describe("flemma.tools.presets", function()
       local approve = vim.deepcopy(preset.approve)
       table.sort(approve)
       assert.are.same({ "edit", "read", "write" }, approve)
-      assert.is_nil(preset.deny)
     end)
 
     it("user presets override built-ins by name", function()
@@ -38,7 +36,7 @@ describe("flemma.tools.presets", function()
     end)
 
     it("user presets are added alongside built-ins", function()
-      presets.setup({ ["$yolo"] = { approve = { "bash" }, deny = { "write" } } })
+      presets.setup({ ["$yolo"] = { approve = { "bash" } } })
       assert.is_not_nil(presets.get("$yolo"))
       assert.is_not_nil(presets.get("$default"))
       assert.is_not_nil(presets.get("$readonly"))
@@ -71,17 +69,10 @@ describe("flemma.tools.presets", function()
       assert.is_true(warned)
     end)
 
-    it("warns on non-table deny field", function()
-      local warned = false
-      local orig_notify = vim.notify
-      vim.notify = function(msg)
-        if msg:match("deny") then
-          warned = true
-        end
-      end
-      presets.setup({ ["$bad"] = { deny = "bash" } })
-      vim.notify = orig_notify
-      assert.is_true(warned)
+    it("ignores unknown fields on preset definitions", function()
+      presets.setup({ ["$custom"] = { approve = { "bash" }, deny = { "write" } } })
+      local preset = presets.get("$custom")
+      assert.are.same({ "bash" }, preset.approve)
     end)
   end)
 

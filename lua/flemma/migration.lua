@@ -1,6 +1,8 @@
 ---@class flemma.migration
 local M = {}
 
+local config_facade = require("flemma.config")
+
 local ROLES = { System = true, You = true, Assistant = true }
 
 --- Check if a line array contains old-format role markers (inline content).
@@ -63,14 +65,11 @@ function M.migrate_buffer(bufnr)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, new_lines)
 
   -- auto_write if enabled
-  local ok, state = pcall(require, "flemma.state")
-  if ok then
-    local config = state.get_config()
-    if config.editing and config.editing.auto_write and vim.bo[bufnr].modified then
-      local ui_ok, ui = pcall(require, "flemma.ui")
-      if ui_ok then
-        ui.buffer_cmd(bufnr, "silent! write")
-      end
+  local config = config_facade.get(bufnr)
+  if config.editing and config.editing.auto_write and vim.bo[bufnr].modified then
+    local ui_ok, ui = pcall(require, "flemma.ui")
+    if ui_ok then
+      ui.buffer_cmd(bufnr, "silent! write")
     end
   end
 end

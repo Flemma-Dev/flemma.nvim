@@ -338,7 +338,8 @@ describe("Anthropic Provider Extended Thinking", function()
       local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat")
       local prompt = pipeline.run(
         parser.parse_lines(lines),
-        ctx.from_file("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat")
+        ctx.from_file("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat"),
+        { bufnr = 0 }
       )
       local req = provider:build_request(prompt, {})
 
@@ -382,7 +383,8 @@ describe("Anthropic Provider Extended Thinking", function()
       local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat")
       local prompt = pipeline.run(
         parser.parse_lines(lines),
-        ctx.from_file("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat")
+        ctx.from_file("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat"),
+        { bufnr = 0 }
       )
       local req = provider:build_request(prompt, {})
 

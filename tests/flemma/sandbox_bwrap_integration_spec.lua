@@ -40,7 +40,7 @@ local function sandbox_config(rw_paths, overrides)
 end
 
 --- Execute a command through our bash tool with a given sandbox config.
---- This is the real code path: state.set_config → tool.execute(input, ctx, cb).
+--- This is the real code path: config facade → sandbox.resolve_config → tool.execute.
 --- Validates that our bash.lua reads the sandbox config and wraps correctly.
 ---@param command string
 ---@param sbx_config table sandbox config
@@ -48,23 +48,20 @@ end
 ---@return flemma.tools.ExecutionResult
 local function execute_bash_tool(command, sbx_config, opts)
   opts = opts or {}
-  local state = require("flemma.state")
+  local config_facade = require("flemma.config")
+  local config_schema = require("flemma.config.schema.definition")
   local registry = require("flemma.tools.registry")
   local executor = require("flemma.tools.executor")
 
   local bufnr = opts.bufnr or vim.api.nvim_create_buf(false, true)
 
-  local full_config = vim.tbl_deep_extend("force", {
-    sandbox = sbx_config,
-    tools = {
-      require_approval = false,
-      default_timeout = 30,
-      show_spinner = true,
-      bash = {},
-      autopilot = { enabled = false, max_turns = 10 },
-    },
-  }, opts.extra_config or {})
-  state.set_config(full_config)
+  -- Initialize config facade fresh for each call (init resets the store)
+  config_facade.init(config_schema)
+  local apply_config = { sandbox = sbx_config }
+  if opts.extra_config then
+    apply_config = vim.tbl_deep_extend("force", apply_config, opts.extra_config)
+  end
+  config_facade.apply(config_facade.LAYERS.SETUP, apply_config)
 
   local tool = registry.get("bash")
   assert.is_not_nil(tool, "bash tool must be registered")
@@ -75,7 +72,7 @@ local function execute_bash_tool(command, sbx_config, opts)
   local ctx = executor.build_execution_context({
     bufnr = bufnr,
     cwd = vim.fn.getcwd(),
-    timeout = full_config.tools.default_timeout or 30,
+    timeout = 30,
     tool_name = "bash",
   })
 
@@ -454,19 +451,14 @@ describe("sandbox process lifecycle through bash tool", function()
       return
     end
 
-    local state = require("flemma.state")
+    local config_facade = require("flemma.config")
+    local config_schema = require("flemma.config.schema.definition")
     local registry = require("flemma.tools.registry")
     local executor = require("flemma.tools.executor")
 
-    state.set_config({
+    config_facade.init(config_schema)
+    config_facade.apply(config_facade.LAYERS.SETUP, {
       sandbox = sandbox_config({}),
-      tools = {
-        require_approval = false,
-        default_timeout = 300,
-        show_spinner = true,
-        bash = {},
-        autopilot = { enabled = false, max_turns = 10 },
-      },
     })
 
     local bufnr = vim.api.nvim_create_buf(false, true)

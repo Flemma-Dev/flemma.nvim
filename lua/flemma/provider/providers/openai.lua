@@ -4,6 +4,8 @@ local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local models = require("flemma.models")
+local normalize = require("flemma.provider.normalize")
+local s = require("flemma.config.schema")
 local sink = require("flemma.sink")
 local tools_module = require("flemma.tools")
 local provider_registry = require("flemma.provider.registry")
@@ -39,24 +41,22 @@ M.metadata = {
     outputs_thinking = true,
     output_has_thoughts = true,
   },
-  default_parameters = {
-    reasoning_summary = "auto",
-  },
+  config_schema = s.object({
+    reasoning_summary = s.optional(s.string("auto")),
+    reasoning = s.optional(s.string()),
+  }),
 }
 
----@param merged_config flemma.provider.Parameters
+---@param params flemma.provider.Parameters
 ---@return flemma.provider.OpenAI
-function M.new(merged_config)
-  local provider = base.new(merged_config) -- Pass the already merged config to base
-
-  -- OpenAI Responses API endpoint
-  provider.endpoint = "https://api.openai.com/v1/responses"
-
-  -- Set metatable BEFORE reset so M.reset (not base.reset) initializes provider-specific state
-  base._init_provider(M, provider)
-  provider:reset()
-
-  return provider --[[@as flemma.provider.OpenAI]]
+function M.new(params)
+  local self = setmetatable({
+    parameters = params or {},
+    state = {},
+    endpoint = "https://api.openai.com/v1/responses",
+  }, { __index = setmetatable(M, { __index = base }) })
+  self:reset()
+  return self --[[@as flemma.provider.OpenAI]]
 end
 
 ---@param self flemma.provider.OpenAI
@@ -267,7 +267,7 @@ function M.build_request(self, prompt, context)
   end
 
   -- Build tools array from registry (OpenAI format, filtered by per-buffer opts if present)
-  local sorted_tools = tools_module.get_sorted_for_prompt(prompt.opts)
+  local sorted_tools = tools_module.get_sorted_for_prompt(prompt.bufnr)
   local tools_array = {}
 
   for _, definition in ipairs(sorted_tools) do
@@ -300,7 +300,7 @@ function M.build_request(self, prompt, context)
 
   -- Add reasoning configuration using unified resolution
   local model_info = provider_registry.get_model_info("openai", self.parameters.model)
-  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
+  local thinking = normalize.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
 
   if thinking.enabled and thinking.effort then
     -- effort is already mapped to provider API value by resolve_thinking via thinking_effort_map

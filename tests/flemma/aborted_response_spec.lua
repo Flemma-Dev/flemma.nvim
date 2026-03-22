@@ -319,7 +319,7 @@ describe("Aborted response handling", function()
         ABORT_COMMENT,
       })
       local base_context = ctx.from_file("/tmp/test.chat")
-      local prompt = pipeline.run(doc, base_context)
+      local prompt = pipeline.run(doc, base_context, { bufnr = 0 })
 
       -- Both text-only assistant messages should retain abort marker
       for _, idx in ipairs({ 1, 3 }) do
@@ -343,7 +343,7 @@ describe("Aborted response handling", function()
         ABORT_COMMENT,
       })
       local base_context = ctx.from_file("/tmp/test.chat")
-      local prompt = pipeline.run(doc, base_context)
+      local prompt = pipeline.run(doc, base_context, { bufnr = 0 })
 
       local assistant = prompt.history[1]
       assert.equals("assistant", assistant.role)
@@ -369,7 +369,7 @@ describe("Aborted response handling", function()
         ABORT_COMMENT,
       })
       local base_context = ctx.from_file("/tmp/test.chat")
-      local prompt = pipeline.run(doc, base_context)
+      local prompt = pipeline.run(doc, base_context, { bufnr = 0 })
 
       -- Both text-only assistant messages should retain abort marker
       for _, idx in ipairs({ 1, 3 }) do
@@ -404,7 +404,7 @@ describe("Aborted response handling", function()
         "```",
       })
       local base_context = ctx.from_file("/tmp/test.chat")
-      local prompt = pipeline.run(doc, base_context)
+      local prompt = pipeline.run(doc, base_context, { bufnr = 0 })
 
       -- Assistant message has tool_use → abort marker must be stripped
       local assistant = prompt.history[1]

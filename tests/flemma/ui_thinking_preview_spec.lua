@@ -7,7 +7,7 @@ describe("thinking preview with leading whitespace content", function()
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
-    package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
     package.loaded["flemma.models"] = nil
 

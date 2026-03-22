@@ -5,7 +5,9 @@
 set -euo pipefail
 
 # Files with intentional lazy loading (require at point of use)
-LAZY_LOAD_FILES="lua/flemma/commands.lua"
+# definition.lua: DISCOVER callbacks lazy-require tools/provider/sandbox registries
+#                 to avoid coupling the schema definition to heavy modules at load time
+LAZY_LOAD_FILES="lua/flemma/commands.lua lua/flemma/config/schema/definition.lua"
 
 violations=0
 
@@ -42,7 +44,7 @@ for file in $(find lua/flemma -name '*.lua' -type f | sort); do
 
     echo "  $file:$abs_line: $(echo "$content" | sed 's/^[[:space:]]*//')"
     violations=$((violations + 1))
-  done < <(tail -n +"$first_fn" "$file" | grep -n 'require("flemma\.' || true)
+  done < <(tail -n +"$first_fn" "$file" | grep -n -E 'require\(?"flemma\.' || true)
 done
 
 if [ "$violations" -gt 0 ]; then

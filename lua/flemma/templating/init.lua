@@ -4,8 +4,8 @@
 ---@class flemma.Templating
 local M = {}
 
+local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
-local state = require("flemma.state")
 local symbols = require("flemma.symbols")
 
 ---@class flemma.templating.Populator
@@ -163,7 +163,6 @@ function M.from_context(ctx, bufnr)
     env.__dirname = nil
   end
 
-  env[symbols.FRONTMATTER_OPTS] = ctx and type(ctx.get_opts) == "function" and ctx:get_opts() or nil
   env[symbols.BUFFER_NUMBER] = bufnr
   env[symbols.DIAGNOSTICS] = {}
 
@@ -181,7 +180,7 @@ function M.setup()
     local mod = loader.load(module_path)
     M.register(mod.name, mod)
   end
-  local resolved_config = state.get_config()
+  local resolved_config = config_facade.get()
   if resolved_config.templating and resolved_config.templating.modules then
     for _, module_path in ipairs(resolved_config.templating.modules) do
       M.register_module(module_path)

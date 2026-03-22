@@ -30,7 +30,7 @@ require("flemma").setup({
     require_approval = true,                 -- When false, auto-approves all tools
     auto_approve = { "$default" },           -- $default approves read, write, edit
     auto_approve_sandboxed = true,           -- Auto-approve sandboxed tools (set false to require manual approval)
-    presets = {},                            -- User-defined presets: ["$name"] = { approve = {}, deny = {} }
+    presets = {},                            -- User-defined presets: ["$name"] = { approve = {} }
     max_concurrent = 2,                      -- Max tools executing simultaneously per buffer (0 = unlimited)
     default_timeout = 30,                    -- Async tool timeout (seconds)
     show_spinner = true,                     -- Animated spinner during execution

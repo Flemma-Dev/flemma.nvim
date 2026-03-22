@@ -482,7 +482,7 @@ describe("flemma.templating.eval", function()
         "Hello {{ mane }}!",
       }
       local context = ctx.from_file("test.chat")
-      local prompt, evaluated = pipeline.run(parser.parse_lines(lines), context)
+      local prompt, evaluated = pipeline.run(parser.parse_lines(lines), context, { bufnr = 0 })
 
       -- Expression degrades to raw text in the output
       local user_msg = prompt.history[1]

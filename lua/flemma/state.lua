@@ -38,7 +38,6 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field progress_float_bufnr integer|nil Buffer ID for the off-screen progress float
 ---@field progress_gutter_icon_winid integer|nil Window ID for the progress gutter icon float
 ---@field progress_gutter_icon_bufnr integer|nil Buffer ID for the progress gutter icon float
----@field autopilot_override? boolean Per-buffer autopilot override (set from frontmatter, nil = use global config)
 ---@field auto_closed_folds? table<string, boolean>
 ---@field pending_folds? table<string, boolean> Fold IDs that were attempted but failed to close (eligible for retry)
 ---@field fold_completed_tick? integer Last changedtick processed by fold_completed_blocks (prevents redundant folding)
@@ -59,11 +58,6 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field rewriter_diagnostics? flemma.preprocessor.RewriterDiagnostic[] Diagnostics from the last preprocessor run
 ---@field _pending_confirmation? flemma.preprocessor.Confirmation In-flight confirmation awaiting user response
 
----@diagnostic disable-next-line: missing-fields
-local config = {} ---@type flemma.Config
----@type flemma.provider.Base|nil
-local provider = nil
-
 ---@type table<integer, flemma.state.BufferState>
 local buffer_states = {}
 
@@ -76,30 +70,6 @@ local cleanup_hooks = {}
 ---@param fn fun(bufnr: integer) Cleanup function
 function M.register_cleanup(name, fn)
   cleanup_hooks[name] = fn
-end
-
----Set the global plugin configuration
----@param conf flemma.Config
-function M.set_config(conf)
-  config = conf
-end
-
----Get the global plugin configuration
----@return flemma.Config
-function M.get_config()
-  return config
-end
-
----Set the active provider instance
----@param p flemma.provider.Base|nil
-function M.set_provider(p)
-  provider = p
-end
-
----Get the active provider instance
----@return flemma.provider.Base|nil
-function M.get_provider()
-  return provider
 end
 
 ---Get the global session (tracks all requests across buffers)

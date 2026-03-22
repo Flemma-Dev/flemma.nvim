@@ -6,6 +6,7 @@
 ---@field _build_command fun(backend: "fd"|"git"|"find", pattern: string, search_path: string, exclude: string[]): string[] Build command array for the given backend (exposed for testing)
 local M = {}
 
+local s = require("flemma.config.schema")
 local truncate = require("flemma.utilities.truncate")
 local sink_module = require("flemma.sink")
 
@@ -130,6 +131,14 @@ end
 M.definitions = {
   {
     name = "find",
+    metadata = {
+      config_schema = s.object({
+        cwd = s.optional(s.string("urn:flemma:buffer:path")),
+        exclude = s.optional(
+          s.list(s.string(), { ".git", "node_modules", "__pycache__", ".venv", "target", "dist", "build", "vendor" })
+        ),
+      }),
+    },
     enabled = function(config)
       return config and config.experimental and config.experimental.tools or false
     end,

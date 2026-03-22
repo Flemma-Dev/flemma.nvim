@@ -6,6 +6,7 @@ local M = {}
 
 -- Module-level require for description constants only (evaluated at load time).
 -- Runtime code inside execute() must use ctx.truncate instead.
+local s = require("flemma.config.schema")
 local truncate = require("flemma.utilities.truncate")
 
 ---Maximum recursion depth allowed
@@ -82,6 +83,11 @@ end
 M.definitions = {
   {
     name = "ls",
+    metadata = {
+      config_schema = s.object({
+        cwd = s.optional(s.string("urn:flemma:buffer:path")),
+      }),
+    },
     enabled = function(config)
       return config and config.experimental and config.experimental.tools or false
     end,

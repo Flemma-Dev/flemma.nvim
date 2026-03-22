@@ -1,25 +1,84 @@
 local status
 
+--- Same base as status.lua ICON_LETTER_BASE.
+local ICON_BASE = 0x1F170
+local function icon(ch)
+  return vim.fn.nr2char(ICON_BASE + string.byte(ch) - string.byte("A"))
+end
+local ICON_D = icon("D")
+local ICON_F = icon("F")
+local ICON_R = icon("R")
+
+---Find virtual text chunks on the first line matching a pattern.
+---@param result flemma.status.FormatResult
+---@param line_pattern string Lua pattern to match against line text
+---@return [string, string][]|nil chunks
+local function find_virt_on(result, line_pattern)
+  for _, vt in ipairs(result.virt_texts) do
+    local line_text = result.lines[vt[1] + 1]
+    if line_text and line_text:find(line_pattern) then
+      return vt[2]
+    end
+  end
+  return nil
+end
+
+---Check if any virtual text chunk on lines matching pattern contains the given text.
+---@param result flemma.status.FormatResult
+---@param line_pattern string Lua pattern
+---@param icon_text string Exact text to find in a chunk
+---@return boolean
+local function has_virt_icon(result, line_pattern, icon_text)
+  local chunks = find_virt_on(result, line_pattern)
+  if not chunks then
+    return false
+  end
+  for _, chunk in ipairs(chunks) do
+    if chunk[1]:find(icon_text, 1, true) then
+      return true
+    end
+  end
+  return false
+end
+
 describe("flemma.status", function()
   before_each(function()
     package.loaded["flemma.status"] = nil
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.tools.approval"] = nil
+    package.loaded["flemma.tools.executor"] = nil
     package.loaded["flemma.autopilot"] = nil
     package.loaded["flemma.tools.registry"] = nil
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
-    package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.tools.presets"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema.definition"] = nil
+    -- Initialize config facade with schema defaults so sandbox/autopilot
+    -- modules get a valid facade reference when re-required by status.lua
+    local config_facade = require("flemma.config")
+    config_facade.init(require("flemma.config.schema.definition"))
     status = require("flemma.status")
   end)
 
+  ---Apply config through the config facade.
+  ---Resets the store and applies opts to SETUP.
+  ---@param opts table
+  local function apply_test_config(opts)
+    local config_facade = require("flemma.config")
+    config_facade.init(require("flemma.config.schema.definition"))
+    if opts and next(opts) then
+      config_facade.apply(config_facade.LAYERS.SETUP, opts)
+    end
+  end
+
   describe("collect", function()
     it("returns a table with all expected sections", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         model = "claude-sonnet-4-5-20250929",
         parameters = { max_tokens = 8192, temperature = 0.7 },
@@ -38,26 +97,37 @@ describe("flemma.status", function()
       assert.is_table(data.tools)
     end)
 
-    it("reports provider as not initialized when no provider instance exists", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+    it("reports provider as initialized when config has a provider set", function()
+      apply_test_config({
         provider = "anthropic",
         model = "claude-sonnet-4-5-20250929",
         parameters = {},
         tools = { autopilot = { enabled = false, max_turns = 100 } },
         sandbox = { enabled = false, backend = "auto" },
       })
-      state.set_provider(nil)
 
       local data = status.collect(0)
-      assert.is_false(data.provider.initialized)
+      assert.is_true(data.provider.initialized)
+    end)
+
+    it("resolves model preset reference to actual provider and model", function()
+      local presets_mod = require("flemma.presets")
+      presets_mod.refresh({
+        ["$haiku"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514" },
+      })
+      apply_test_config({
+        provider = "anthropic",
+        model = "$haiku",
+        sandbox = { enabled = false },
+      })
+
+      local data = status.collect(0)
+      assert.equals("anthropic", data.provider.name)
+      assert.equals("claude-haiku-4-5-20250514", data.provider.model)
     end)
 
     it("separates tools into enabled and disabled lists", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         parameters = {},
         tools = { autopilot = { enabled = false, max_turns = 100 } },
@@ -90,9 +160,7 @@ describe("flemma.status", function()
     end)
 
     it("includes buffer info", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         parameters = {},
         tools = { autopilot = { enabled = false, max_turns = 100 } },
@@ -106,9 +174,7 @@ describe("flemma.status", function()
     end)
 
     it("includes booting state when async tool sources are pending", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         parameters = {},
         tools = { autopilot = { enabled = false, max_turns = 100 } },
@@ -130,9 +196,7 @@ describe("flemma.status", function()
     end)
 
     it("reports booting as false when all tool sources are ready", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         parameters = {},
         tools = { autopilot = { enabled = false, max_turns = 100 } },
@@ -144,9 +208,7 @@ describe("flemma.status", function()
     end)
 
     it("reports autopilot state", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         parameters = {},
         tools = { autopilot = { enabled = true, max_turns = 75 } },
@@ -159,9 +221,7 @@ describe("flemma.status", function()
     end)
 
     it("reports sandbox info from config", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         parameters = {},
         tools = { autopilot = { enabled = false, max_turns = 100 } },
@@ -175,9 +235,7 @@ describe("flemma.status", function()
     end)
 
     it("detects sandbox runtime override", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         parameters = {},
         tools = { autopilot = { enabled = false, max_turns = 100 } },
@@ -196,9 +254,7 @@ describe("flemma.status", function()
     end)
 
     it("returns merged parameters", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         parameters = { max_tokens = 4000, temperature = 0.5 },
         tools = { autopilot = { enabled = false, max_turns = 100 } },
@@ -207,17 +263,121 @@ describe("flemma.status", function()
 
       local data = status.collect(0)
       assert.is_table(data.parameters.merged)
-      -- The merged parameters should at least contain the general params
       assert.equals(4000, data.parameters.merged.max_tokens)
       assert.equals(0.5, data.parameters.merged.temperature)
+    end)
+
+    it("includes layer sources for provider and model", function()
+      apply_test_config({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5-20250929",
+        parameters = {},
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect(0)
+      assert.equals("S", data.provider.source)
+      assert.equals("S", data.provider.model_source)
+    end)
+
+    it("includes layer sources for parameters", function()
+      apply_test_config({
+        provider = "anthropic",
+        parameters = { max_tokens = 4000 },
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect(0)
+      assert.is_table(data.parameters.sources)
+      assert.equals("S", data.parameters.sources.max_tokens)
+    end)
+
+    it("reports parameter source as D for schema defaults", function()
+      -- Don't set provider explicitly — let it fall through to schema default
+      apply_test_config({
+        parameters = {},
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect(0)
+      -- provider has a schema default ("anthropic") → source is D
+      assert.equals("D", data.provider.source)
+    end)
+
+    it("reports tools source from config store when tools are registered", function()
+      apply_test_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      -- Register a tool so the tools list has ops in the store
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("read", {
+        name = "read",
+        description = "Read tool",
+        input_schema = { type = "object" },
+      })
+      -- Record a default so the tools list has an op in the store
+      local config_facade = require("flemma.config")
+      config_facade.record_default("append", "tools", "read")
+
+      local data = status.collect(0)
+      assert.is_string(data.tools.source)
+    end)
+
+    it("includes tools from lazily-loaded modules", function()
+      apply_test_config({
+        provider = "anthropic",
+        parameters = {},
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      -- Register a tool module lazily (adds to pending_modules, not loaded yet).
+      -- collect_tools must trigger ensure_modules_loaded() to pick them up.
+      local tools_mod = require("flemma.tools")
+      tools_mod.register_module("extras.flemma.tools.calculator")
+
+      local data = status.collect(0)
+
+      local found_calculator = false
+      local found_calculator_async = false
+      for _, name in ipairs(data.tools.enabled) do
+        if name == "calculator" then
+          found_calculator = true
+        end
+      end
+      for _, name in ipairs(data.tools.disabled) do
+        if name == "calculator_async" then
+          found_calculator_async = true
+        end
+      end
+      assert.is_true(found_calculator, "calculator should appear after lazy module loading")
+      assert.is_true(found_calculator_async, "calculator_async (enabled=false) should appear in disabled")
+    end)
+
+    it("reports nil tools source when no tools list ops exist", function()
+      apply_test_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect(0)
+      -- No tools registered → no list ops on "tools" path → source is nil
+      assert.is_nil(data.tools.source)
     end)
   end)
 
   describe("collect — model_info", function()
     it("includes model_info for known models", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         model = "claude-sonnet-4-6",
         parameters = {},
@@ -233,9 +393,7 @@ describe("flemma.status", function()
     end)
 
     it("returns nil model_info for unknown models", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         model = "claude-unknown-99",
         parameters = {},
@@ -248,12 +406,102 @@ describe("flemma.status", function()
     end)
   end)
 
+  describe("collect_verbose", function()
+    it("includes introspection data", function()
+      apply_test_config({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5-20250929",
+        parameters = { max_tokens = 8192 },
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect_verbose(0)
+      assert.is_table(data.introspection)
+      assert.is_table(data.introspection.layer_ops)
+      assert.is_table(data.introspection.resolved)
+    end)
+
+    it("layer_ops contains all four layers", function()
+      apply_test_config({
+        provider = "anthropic",
+        parameters = {},
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect_verbose(0)
+      local labels = {}
+      for _, layer in ipairs(data.introspection.layer_ops) do
+        labels[layer.label] = true
+      end
+      assert.is_true(labels["D"])
+      assert.is_true(labels["S"])
+      assert.is_true(labels["R"])
+      assert.is_true(labels["F"])
+    end)
+
+    it("setup layer ops reflect applied config", function()
+      apply_test_config({
+        provider = "anthropic",
+        parameters = { max_tokens = 8192 },
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect_verbose(0)
+      local setup_layer
+      for _, layer in ipairs(data.introspection.layer_ops) do
+        if layer.label == "S" then
+          setup_layer = layer
+          break
+        end
+      end
+      assert.is_not_nil(setup_layer)
+      assert.is_true(#setup_layer.ops > 0)
+
+      -- Find the max_tokens op
+      local found = false
+      for _, op_entry in ipairs(setup_layer.ops) do
+        if op_entry.path == "parameters.max_tokens" and op_entry.value == 8192 then
+          found = true
+          break
+        end
+      end
+      assert.is_true(found, "expected max_tokens set op in setup layer")
+    end)
+
+    it("resolved tree contains entries with source annotations", function()
+      apply_test_config({
+        provider = "anthropic",
+        parameters = { max_tokens = 8192 },
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect_verbose(0)
+      assert.is_true(#data.introspection.resolved > 0)
+
+      -- Find the provider entry
+      local found = false
+      for _, entry in ipairs(data.introspection.resolved) do
+        if entry.path == "provider" then
+          assert.equals("anthropic", entry.value)
+          assert.equals("S", entry.source)
+          found = true
+          break
+        end
+      end
+      assert.is_true(found, "expected provider in resolved tree")
+    end)
+  end)
+
   describe("format", function()
-    it("returns lines with section headers", function()
+    it("returns a FormatResult with lines, extmarks, and virt_texts", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
-        parameters = { merged = { max_tokens = 8192, temperature = 0.7 } },
+        parameters = { merged = { max_tokens = 8192, temperature = 0.7 }, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -273,10 +521,13 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      assert.is_table(lines)
+      local result = status.format(data, false)
+      assert.is_table(result)
+      assert.is_table(result.lines)
+      assert.is_table(result.extmarks)
+      assert.is_table(result.virt_texts)
 
-      local text = table.concat(lines, "\n")
+      local text = table.concat(result.lines, "\n")
       assert.truthy(text:find("Provider"), "expected Provider header")
       assert.truthy(text:find("Parameters"), "expected Parameters header")
       assert.truthy(text:find("Autopilot"), "expected Autopilot header")
@@ -285,21 +536,11 @@ describe("flemma.status", function()
       assert.truthy(text:find("Approval"), "expected Approval header")
     end)
 
-    it("includes full config dump when verbose is true", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
-        provider = "anthropic",
-        model = "claude-sonnet-4-5-20250929",
-        parameters = { max_tokens = 8192 },
-        tools = { autopilot = { enabled = false, max_turns = 100 } },
-        sandbox = { enabled = false, backend = "auto" },
-      })
-
+    it("uses box-drawing tree structure", function()
       ---@type flemma.status.Data
       local data = {
-        provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
-        parameters = { merged = { max_tokens = 8192 } },
+        provider = { name = "anthropic", model = "test", initialized = true },
+        parameters = { merged = {}, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -309,19 +550,85 @@ describe("flemma.status", function()
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
         },
-        tools = { enabled = { "bash" }, disabled = {} },
-        approval = {
-          approved = {},
-          denied = {},
-          pending = { "bash" },
-          require_approval_disabled = false,
-        },
+        tools = { enabled = {}, disabled = {} },
+        approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, true)
-      local text = table.concat(lines, "\n")
-      assert.truthy(text:find("Config %(full%)"), "expected Config (full) header")
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
+      assert.truthy(text:find("├─"), "expected branch characters")
+      assert.truthy(text:find("└─"), "expected last-branch characters")
+      assert.truthy(text:find("│"), "expected continuation characters")
+    end)
+
+    it("shows layer source indicators as virtual text on parameter values", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true, source = "S" },
+        parameters = {
+          merged = { max_tokens = 8192, thinking = "high" },
+          sources = { max_tokens = "D", thinking = "F" },
+        },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
+        },
+        tools = { enabled = {}, disabled = {} },
+        approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local result = status.format(data, false)
+      assert.is_true(has_virt_icon(result, "max_tokens", ICON_D), "expected D source on max_tokens")
+      assert.is_true(has_virt_icon(result, "thinking", ICON_F), "expected F source on thinking")
+    end)
+
+    it("shows layer source indicator on provider", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "claude-haiku", initialized = true, source = "R", model_source = "R" },
+        parameters = { merged = {}, sources = {} },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
+        },
+        tools = { enabled = {}, disabled = {} },
+        approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local result = status.format(data, false)
+      assert.is_true(has_virt_icon(result, "name.*anthropic", ICON_R), "expected R source on provider name")
+      assert.is_true(has_virt_icon(result, "model.*claude%-haiku", ICON_R), "expected R source on model")
+    end)
+
+    it("includes verbose layer ops and resolved tree", function()
+      apply_test_config({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5-20250929",
+        parameters = { max_tokens = 8192 },
+        tools = { autopilot = { enabled = false, max_turns = 100 } },
+        sandbox = { enabled = false, backend = "auto" },
+      })
+
+      local data = status.collect_verbose(0)
+      local result = status.format(data, true)
+      local text = table.concat(result.lines, "\n")
+      assert.truthy(text:find("Layer Ops"), "expected Layer Ops header")
+      assert.truthy(text:find("defaults"), "expected defaults layer")
+      assert.truthy(text:find("setup"), "expected setup layer")
+      assert.truthy(text:find("Resolved Config"), "expected Resolved Config header")
     end)
 
     it("shows compact model metadata when model_info is present", function()
@@ -341,7 +648,7 @@ describe("flemma.status", function()
             min_cache_tokens = 2048,
           },
         },
-        parameters = { merged = { max_tokens = 8192 } },
+        parameters = { merged = { max_tokens = 8192 }, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -356,15 +663,15 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
-      assert.truthy(text:find("context:"), "expected context line")
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
+      assert.truthy(text:find("context"), "expected context line")
       assert.truthy(text:find("200K"), "expected 200K input tokens")
       assert.truthy(text:find("64K"), "expected 64K output tokens")
-      assert.truthy(text:find("pricing:"), "expected pricing line")
+      assert.truthy(text:find("pricing"), "expected pricing line")
       assert.truthy(text:find("%$3.00"), "expected input price")
       assert.truthy(text:find("%$15.00"), "expected output price")
-      assert.truthy(text:find("thinking:"), "expected thinking line")
+      assert.truthy(text:find("thinking"), "expected thinking line")
       assert.truthy(text:find("1024"), "expected min thinking budget")
     end)
 
@@ -372,7 +679,7 @@ describe("flemma.status", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-unknown-99", initialized = true },
-        parameters = { merged = {} },
+        parameters = { merged = {}, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -387,17 +694,14 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
-      assert.falsy(text:find("context:"), "expected no context line")
-      assert.falsy(text:find("pricing:"), "expected no pricing line")
-      assert.falsy(text:find("thinking:"), "expected no thinking line")
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
+      assert.falsy(text:find("context"), "expected no context line")
+      assert.falsy(text:find("pricing"), "expected no pricing line")
     end)
 
-    it("shows full model_info dump in verbose mode", function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+    it("shows full model_info as tree in verbose mode", function()
+      apply_test_config({
         provider = "anthropic",
         model = "claude-sonnet-4-6",
         parameters = {},
@@ -405,51 +709,32 @@ describe("flemma.status", function()
         sandbox = { enabled = false, backend = "auto" },
       })
 
-      ---@type flemma.status.Data
-      local data = {
-        provider = {
-          name = "anthropic",
-          model = "claude-sonnet-4-6",
-          initialized = true,
-          model_info = {
-            pricing = { input = 3.0, output = 15.0, cache_read = 0.30, cache_write = 3.75 },
-            max_input_tokens = 200000,
-            max_output_tokens = 64000,
-            thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
-            min_thinking_budget = 1024,
-            max_thinking_budget = 16384,
-            min_cache_tokens = 2048,
-          },
-        },
-        parameters = { merged = {} },
-        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
-        sandbox = {
-          enabled = false,
-          config_enabled = false,
-          backend = "bwrap",
-          backend_mode = "auto",
-          backend_available = true,
-          policy = { rw_paths = {}, network = true, allow_privileged = false },
-        },
-        tools = { enabled = {}, disabled = {} },
-        approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
-        buffer = { is_chat = false, bufnr = 0 },
+      local data = status.collect_verbose(0)
+      -- Inject model_info for the test
+      data.provider.model_info = {
+        pricing = { input = 3.0, output = 15.0, cache_read = 0.30, cache_write = 3.75 },
+        max_input_tokens = 200000,
+        max_output_tokens = 64000,
+        thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+        min_thinking_budget = 1024,
+        max_thinking_budget = 16384,
+        min_cache_tokens = 2048,
       }
 
-      local lines = status.format(data, true)
-      local text = table.concat(lines, "\n")
+      local result = status.format(data, true)
+      local text = table.concat(result.lines, "\n")
       assert.truthy(text:find("Model Info"), "expected Model Info header in verbose")
-      assert.truthy(text:find("min_cache_tokens"), "expected min_cache_tokens in verbose dump")
-      assert.truthy(text:find("thinking_budgets"), "expected thinking_budgets in verbose dump")
+      assert.truthy(text:find("min_cache_tokens"), "expected min_cache_tokens in verbose tree")
+      assert.truthy(text:find("thinking_budgets"), "expected thinking_budgets in verbose tree")
     end)
 
-    it("shows frontmatter override annotations", function()
+    it("shows frontmatter override annotations for tools as virtual text", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
         parameters = {
           merged = { max_tokens = 8192, thinking = "low" },
-          frontmatter_overrides = { thinking = "low" },
+          sources = {},
         },
         autopilot = {
           enabled = false,
@@ -465,7 +750,7 @@ describe("flemma.status", function()
           backend_available = true,
           policy = { rw_paths = {}, network = true, allow_privileged = false },
         },
-        tools = { enabled = {}, disabled = {} },
+        tools = { enabled = { "bash" }, disabled = {}, frontmatter_items = { bash = true } },
         approval = {
           approved = {},
           denied = {},
@@ -475,16 +760,15 @@ describe("flemma.status", function()
         buffer = { is_chat = true, bufnr = 1 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
-      assert.truthy(text:find("✲"), "expected frontmatter marker")
+      local result = status.format(data, false)
+      assert.is_true(has_virt_icon(result, "bash", ICON_F), "expected F frontmatter marker on bash")
     end)
 
-    it("shows tools summary", function()
+    it("shows tools in tree structure", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
-        parameters = { merged = {} },
+        parameters = { merged = {}, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -504,10 +788,10 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
-      assert.truthy(text:find("✓"), "expected enabled tool marker")
-      assert.truthy(text:find("✗"), "expected disabled tool marker")
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
+      assert.truthy(text:find("enabled"), "expected enabled group")
+      assert.truthy(text:find("disabled"), "expected disabled group")
       assert.truthy(text:find("bash"), "expected bash tool name")
       assert.truthy(text:find("read_file"), "expected read_file tool name")
       assert.truthy(text:find("execute_command"), "expected execute_command tool name")
@@ -517,7 +801,7 @@ describe("flemma.status", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
-        parameters = { merged = {} },
+        parameters = { merged = {}, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -538,18 +822,20 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
-      assert.truthy(text:find("Approval %($default%)"), "expected Approval header with source")
-      assert.truthy(text:find("auto%-approve: edit, read, write"), "expected auto-approved tools")
-      assert.truthy(text:find("require approval: bash"), "expected pending tools")
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
+      assert.truthy(text:find("Approval.*$default"), "expected Approval header with source")
+      assert.truthy(text:find("auto%-approve"), "expected auto-approve group")
+      assert.truthy(text:find("require approval"), "expected pending group")
+      assert.truthy(text:find("edit"), "expected edit in approved")
+      assert.truthy(text:find("bash"), "expected bash in pending")
     end)
 
-    it("shows sandbox marker on sandbox-promoted tools", function()
+    it("shows sandbox marker as virtual text on sandbox-promoted tools", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
-        parameters = { merged = {} },
+        parameters = { merged = {}, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = true,
@@ -571,17 +857,21 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
-      assert.truthy(text:find("bash ⊡"), "expected sandbox marker on bash")
-      assert.truthy(text:find("⊡ auto%-approved via sandbox"), "expected sandbox legend")
+      local result = status.format(data, false)
+      -- Sandbox marker appears as virtual text
+      assert.is_true(has_virt_icon(result, "bash", "⊡"), "expected ⊡ sandbox marker on bash")
+
+      -- Legend should mention sandbox
+      local text = table.concat(result.lines, "\n")
+      assert.truthy(text:find("⊡"), "expected sandbox icon in legend")
+      assert.truthy(text:find("sandbox"), "expected sandbox label in legend")
     end)
 
     it("shows require_approval = false override", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
-        parameters = { merged = {} },
+        parameters = { merged = {}, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -601,8 +891,8 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
       assert.truthy(text:find("all tools auto%-approved"), "expected catch-all message")
     end)
 
@@ -610,7 +900,7 @@ describe("flemma.status", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
-        parameters = { merged = {} },
+        parameters = { merged = {}, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -630,8 +920,8 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
       assert.truthy(text:find("⏳"), "expected booting indicator")
       assert.truthy(text:find("loading async tool sources"), "expected booting message")
     end)
@@ -640,7 +930,7 @@ describe("flemma.status", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
-        parameters = { merged = {} },
+        parameters = { merged = {}, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -660,8 +950,8 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
       assert.falsy(text:find("⏳"), "expected no booting indicator")
     end)
 
@@ -669,7 +959,7 @@ describe("flemma.status", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
-        parameters = { merged = {} },
+        parameters = { merged = {}, sources = {} },
         autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
         sandbox = {
           enabled = false,
@@ -690,10 +980,44 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
-      assert.truthy(text:find("Approval %($yolo, $no%-bash%)"), "expected Approval header with source")
-      assert.truthy(text:find("deny: bash"), "expected denied tools")
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
+      assert.truthy(text:find("Approval.*$yolo"), "expected Approval header with source")
+      assert.truthy(text:find("deny"), "expected deny group")
+      assert.truthy(text:find("bash"), "expected bash in denied")
+    end)
+
+    it("includes extmarks for inline highlighting", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "test", initialized = true },
+        parameters = { merged = {}, sources = {} },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
+        },
+        tools = { enabled = {}, disabled = {} },
+        approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local result = status.format(data, false)
+      assert.is_true(#result.extmarks > 0, "expected extmarks for highlighting")
+
+      -- Check that the title line has a FlemmaStatusTitle extmark
+      local found_title = false
+      for _, em in ipairs(result.extmarks) do
+        if em[1] == 0 and em[4] == "FlemmaStatusTitle" then
+          found_title = true
+          break
+        end
+      end
+      assert.is_true(found_title, "expected FlemmaStatusTitle extmark on line 0")
     end)
   end)
 
@@ -702,13 +1026,16 @@ describe("flemma.status", function()
       require("flemma.tools.presets").setup()
     end)
 
-    ---Set config and initialize the approval resolver chain.
-    ---Must be called before status.collect() in every approval test.
+    ---Set config through the facade and initialize the approval resolver chain.
     ---@param config table
     local function setup_config(config)
-      local st = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      st.set_config(config)
+      local config_facade = require("flemma.config")
+      config_facade.init(require("flemma.config.schema.definition"))
+      if config and next(config) then
+        config_facade.apply(config_facade.LAYERS.SETUP, config)
+      end
+      config_facade.finalize(config_facade.LAYERS.SETUP)
+      require("flemma.tools.approval").clear()
       require("flemma.tools.approval").setup()
     end
 
@@ -723,32 +1050,33 @@ describe("flemma.status", function()
         sandbox = { enabled = false, backend = "auto" },
       })
 
-      local registry = require("flemma.tools.registry")
-      registry.clear()
-      registry.register("read", {
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
       })
-      registry.register("bash", {
+      tools_registry.register("bash", {
         name = "bash",
         description = "Bash tool",
         input_schema = { type = "object" },
       })
-      registry.register("edit", {
+      tools_registry.register("edit", {
         name = "edit",
         description = "Edit tool",
         input_schema = { type = "object" },
       })
 
       local data = status.collect(0)
-      assert.equals("$default", data.approval.source)
+      -- After finalize, $default is expanded to tool names
+      assert.equals("read, write, edit", data.approval.source)
       assert.are.same({ "edit", "read" }, data.approval.approved)
       assert.are.same({ "bash" }, data.approval.pending)
       assert.are.same({}, data.approval.denied)
     end)
 
-    it("returns nil source when no auto_approve is configured", function()
+    it("uses schema default auto_approve when none explicitly configured", function()
       setup_config({
         provider = "anthropic",
         parameters = {},
@@ -756,18 +1084,19 @@ describe("flemma.status", function()
         sandbox = { enabled = false, backend = "auto" },
       })
 
-      local registry = require("flemma.tools.registry")
-      registry.clear()
-      registry.register("read", {
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
       })
 
       local data = status.collect(0)
-      assert.is_nil(data.approval.source)
-      assert.are.same({}, data.approval.approved)
-      assert.are.same({ "read" }, data.approval.pending)
+      -- auto_approve always has a schema default ({ "$default" } → expanded)
+      assert.equals("read, write, edit", data.approval.source)
+      assert.are.same({ "read" }, data.approval.approved)
+      assert.are.same({}, data.approval.pending)
     end)
 
     it("builds source from multiple policy entries", function()
@@ -781,21 +1110,22 @@ describe("flemma.status", function()
         sandbox = { enabled = false, backend = "auto" },
       })
 
-      local registry = require("flemma.tools.registry")
-      registry.clear()
-      registry.register("bash", {
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("bash", {
         name = "bash",
         description = "Bash tool",
         input_schema = { type = "object" },
       })
-      registry.register("read", {
+      tools_registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
       })
 
       local data = status.collect(0)
-      assert.equals("$default, bash", data.approval.source)
+      -- After finalize, $default expands to tool names; bash is appended
+      assert.equals("read, write, edit, bash", data.approval.source)
       assert.are.same({ "bash", "read" }, data.approval.approved)
     end)
 
@@ -812,9 +1142,9 @@ describe("flemma.status", function()
         sandbox = { enabled = false, backend = "auto" },
       })
 
-      local registry = require("flemma.tools.registry")
-      registry.clear()
-      registry.register("read", {
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
@@ -843,7 +1173,7 @@ describe("flemma.status", function()
       assert.is_true(data.approval.require_approval_disabled)
     end)
 
-    it("reports no frontmatter_items when opts is nil", function()
+    it("reports no frontmatter_items when frontmatter layer is empty", function()
       setup_config({
         provider = "anthropic",
         parameters = {},
@@ -854,9 +1184,9 @@ describe("flemma.status", function()
         sandbox = { enabled = false, backend = "auto" },
       })
 
-      local registry = require("flemma.tools.registry")
-      registry.clear()
-      registry.register("read", {
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
@@ -885,14 +1215,14 @@ describe("flemma.status", function()
         return true, nil
       end
 
-      local registry = require("flemma.tools.registry")
-      registry.clear()
-      registry.register("read", {
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
       })
-      registry.register("bash", {
+      tools_registry.register("bash", {
         name = "bash",
         description = "Bash tool",
         capabilities = { "can_auto_approve_if_sandboxed" },
@@ -919,9 +1249,9 @@ describe("flemma.status", function()
         sandbox = { enabled = false, backend = "auto" },
       })
 
-      local registry = require("flemma.tools.registry")
-      registry.clear()
-      registry.register("bash", {
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("bash", {
         name = "bash",
         description = "Bash tool",
         capabilities = { "can_auto_approve_if_sandboxed" },
@@ -934,7 +1264,9 @@ describe("flemma.status", function()
       assert.is_nil(data.approval.sandbox_items)
     end)
 
-    it("does not promote sandbox-capable tools when no auto_approve is configured", function()
+    it("promotes sandbox-capable tools with default auto_approve when sandbox is active", function()
+      -- In the new config system, auto_approve always has a schema default
+      -- ({ "$default" }), so sandbox promotion activates with defaults.
       setup_config({
         provider = "anthropic",
         parameters = {},
@@ -951,9 +1283,9 @@ describe("flemma.status", function()
         return true, nil
       end
 
-      local registry = require("flemma.tools.registry")
-      registry.clear()
-      registry.register("bash", {
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("bash", {
         name = "bash",
         description = "Bash tool",
         capabilities = { "can_auto_approve_if_sandboxed" },
@@ -961,9 +1293,11 @@ describe("flemma.status", function()
       })
 
       local data = status.collect(0)
-      assert.are.same({}, data.approval.approved)
-      assert.are.same({ "bash" }, data.approval.pending)
-      assert.is_nil(data.approval.sandbox_items)
+      -- auto_approve defaults to { "$default" } → sandbox resolver activates
+      assert.are.same({ "bash" }, data.approval.approved)
+      assert.are.same({}, data.approval.pending)
+      assert.is_not_nil(data.approval.sandbox_items)
+      assert.is_true(data.approval.sandbox_items.bash)
 
       sandbox_mod.validate_backend = original_validate
     end)
@@ -971,9 +1305,7 @@ describe("flemma.status", function()
 
   describe("show", function()
     before_each(function()
-      local state = require("flemma.state")
-      ---@diagnostic disable-next-line: missing-fields
-      state.set_config({
+      apply_test_config({
         provider = "anthropic",
         model = "claude-sonnet-4-5-20250929",
         parameters = { max_tokens = 8192 },
@@ -1032,6 +1364,18 @@ describe("flemma.status", function()
       assert.equals(first_buf, second_buf)
 
       vim.api.nvim_win_close(second_win, true)
+    end)
+
+    it("applies extmarks to the buffer", function()
+      status.show({})
+      local new_win = vim.api.nvim_get_current_win()
+      local bufnr = vim.api.nvim_win_get_buf(new_win)
+
+      local ns = vim.api.nvim_create_namespace("flemma_status")
+      local marks = vim.api.nvim_buf_get_extmarks(bufnr, ns, 0, -1, {})
+      assert.is_true(#marks > 0, "expected extmarks in status buffer")
+
+      vim.api.nvim_win_close(new_win, true)
     end)
   end)
 end)

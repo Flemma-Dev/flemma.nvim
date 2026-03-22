@@ -5,9 +5,9 @@
 local M = {}
 
 local bwrap = require("flemma.sandbox.backends.bwrap")
+local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
 local registry_utils = require("flemma.registry")
-local state = require("flemma.state")
 local variables = require("flemma.utilities.variables")
 
 -- ---------------------------------------------------------------------------
@@ -20,6 +20,7 @@ local variables = require("flemma.utilities.variables")
 ---@field wrap fun(policy: flemma.config.SandboxPolicy, backend_config: table, inner_cmd: string[]): string[]|nil, string|nil
 ---@field priority? integer Higher values are preferred during auto-detection (default: 50)
 ---@field description? string Human-readable description
+---@field config_schema? flemma.config.schema.ObjectNode Schema for backend-specific configuration (used by DISCOVER resolution)
 
 --- Internal registry entry (name added by register())
 ---@class flemma.sandbox.BackendEntry
@@ -28,6 +29,7 @@ local variables = require("flemma.utilities.variables")
 ---@field wrap fun(policy: flemma.config.SandboxPolicy, backend_config: table, inner_cmd: string[]): string[]|nil, string|nil
 ---@field priority integer Higher values are preferred during auto-detection
 ---@field description? string Human-readable description
+---@field config_schema? flemma.config.schema.ObjectNode Schema for backend-specific configuration
 
 local DEFAULT_PRIORITY = 50
 
@@ -73,9 +75,15 @@ function M.register(name, definition)
     wrap = definition.wrap,
     priority = definition.priority or DEFAULT_PRIORITY,
     description = definition.description,
+    config_schema = definition.config_schema,
   })
   registry_sorted = false
   registry_generation = registry_generation + 1
+
+  -- Materialize config_schema defaults into the DEFAULTS layer
+  if definition.config_schema then
+    config_facade.register_module_defaults("sandbox.backends", name, definition.config_schema)
+  end
 end
 
 ---Unregister a backend by name.
@@ -136,6 +144,17 @@ function M.count()
   return #backends
 end
 
+---Get a backend's config schema for DISCOVER resolution.
+---@param name string The backend name
+---@return flemma.config.schema.ObjectNode|nil config_schema Backend config schema, or nil if not found
+function M.get_config_schema(name)
+  local entry = M.get(name)
+  if not entry then
+    return nil
+  end
+  return entry.config_schema
+end
+
 ---Register a sandbox backend from a module path.
 ---Validates existence immediately, loads and registers immediately.
 ---@param module_path string Lua module path (must contain a dot)
@@ -153,7 +172,15 @@ function M.register_module(module_path)
   end
   -- Derive backend name from module metadata or last path segment
   local name = mod.name or module_path:match("([^.]+)$")
-  M.register(name, mod)
+  ---@type flemma.sandbox.BackendDefinition
+  local definition = {
+    available = mod.available,
+    wrap = mod.wrap,
+    priority = mod.priority,
+    description = mod.description,
+    config_schema = mod.metadata and mod.metadata.config_schema,
+  }
+  M.register(name, definition)
 end
 
 -- ---------------------------------------------------------------------------
@@ -278,11 +305,12 @@ function M.setup()
       wrap = bwrap.wrap,
       priority = 100,
       description = "Bubblewrap (Linux)",
+      config_schema = bwrap.metadata.config_schema,
     })
   end
 
   -- Validate module-path backend early (fail fast at startup)
-  local config = state.get_config()
+  local config = config_facade.get()
   if config.sandbox and config.sandbox.backend and loader.is_module_path(config.sandbox.backend) then
     loader.assert_exists(config.sandbox.backend)
   end
@@ -347,16 +375,16 @@ end
 -- Public API
 -- ---------------------------------------------------------------------------
 
---- Resolve the effective sandbox config (global + per-buffer overrides + runtime override)
----@param opts? flemma.opt.FrontmatterOpts
+--- Resolve the effective sandbox config from the config store.
+--- Reads the resolved sandbox config (all layers merged, including frontmatter
+--- when bufnr is provided). Runtime override wins over everything.
+---@param bufnr? integer Buffer number for per-buffer resolution
 ---@return flemma.config.SandboxConfig
-function M.resolve_config(opts)
-  local config = state.get_config()
-  local base = vim.deepcopy(config.sandbox or {})
-
-  if opts and opts.sandbox then
-    base = vim.tbl_deep_extend("force", base, opts.sandbox)
-  end
+function M.resolve_config(bufnr)
+  -- Use materialize() to get a plain mutable table. The read proxy from
+  -- config_facade.get() is frozen — vim.deepcopy triggers __newindex errors.
+  local materialized = config_facade.materialize(bufnr)
+  local base = materialized.sandbox or {}
 
   -- Runtime override wins over everything
   if runtime_override ~= nil then
@@ -367,28 +395,27 @@ function M.resolve_config(opts)
 end
 
 --- Is sandboxing currently enabled?
----@param opts? flemma.opt.FrontmatterOpts
+---@param bufnr? integer Buffer number for per-buffer resolution
 ---@return boolean
-function M.is_enabled(opts)
-  return M.resolve_config(opts).enabled == true
+function M.is_enabled(bufnr)
+  return M.resolve_config(bufnr).enabled == true
 end
 
 --- Get the resolved policy (with path variables expanded)
 ---@param bufnr integer
----@param opts? flemma.opt.FrontmatterOpts
 ---@return flemma.config.SandboxPolicy
-function M.get_policy(bufnr, opts)
-  local cfg = M.resolve_config(opts)
+function M.get_policy(bufnr)
+  local cfg = M.resolve_config(bufnr)
   return resolve_policy(cfg.policy or {}, bufnr)
 end
 
 --- Validate that a suitable backend is available.
 --- When backend is "auto", tries to detect one. When explicit, checks that specific backend.
 --- Returns true immediately when sandboxing is disabled.
----@param opts? flemma.opt.FrontmatterOpts
+---@param bufnr? integer Buffer number for per-buffer resolution
 ---@return boolean ok, string|nil error
-function M.validate_backend(opts)
-  local cfg = M.resolve_config(opts)
+function M.validate_backend(bufnr)
+  local cfg = M.resolve_config(bufnr)
   if not cfg.enabled then
     return true, nil
   end
@@ -408,10 +435,9 @@ end
 --- (a backend may be registered later, at which point wrapping activates).
 ---@param inner_cmd string[]
 ---@param bufnr integer
----@param opts? flemma.opt.FrontmatterOpts
 ---@return string[]|nil wrapped_cmd, string|nil error
-function M.wrap_command(inner_cmd, bufnr, opts)
-  local cfg = M.resolve_config(opts)
+function M.wrap_command(inner_cmd, bufnr)
+  local cfg = M.resolve_config(bufnr)
   if not cfg.enabled then
     return inner_cmd, nil
   end
@@ -436,10 +462,9 @@ end
 --- For use by Lua-level tools (read/write/edit) in a future phase.
 ---@param path string
 ---@param bufnr integer
----@param opts? flemma.opt.FrontmatterOpts
 ---@return boolean
-function M.is_path_writable(path, bufnr, opts)
-  local cfg = M.resolve_config(opts)
+function M.is_path_writable(path, bufnr)
+  local cfg = M.resolve_config(bufnr)
   if not cfg.enabled then
     return true
   end
@@ -457,10 +482,10 @@ function M.is_path_writable(path, bufnr, opts)
 end
 
 --- Detect the best available backend (public API for status/commands).
----@param opts? flemma.opt.FrontmatterOpts
+---@param bufnr? integer Buffer number for per-buffer resolution
 ---@return string|nil backend_name, string|nil diagnostic
-function M.detect_available_backend(opts)
-  local cfg = M.resolve_config(opts)
+function M.detect_available_backend(bufnr)
+  local cfg = M.resolve_config(bufnr)
   return detect_backend(cfg.backends or {})
 end
 

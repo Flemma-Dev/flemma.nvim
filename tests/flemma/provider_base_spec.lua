@@ -13,9 +13,12 @@ describe("flemma.provider.base", function()
   --- Create a base provider with metadata for testing
   ---@return flemma.provider.Base
   local function make_provider()
-    local provider = base.new({ model = "test" })
+    local provider = setmetatable({
+      parameters = { model = "test" },
+      state = {},
+      metadata = { name = "test", display_name = "Test" },
+    }, { __index = base })
     provider:reset()
-    provider.metadata = { name = "test", display_name = "Test" }
     return provider
   end
 

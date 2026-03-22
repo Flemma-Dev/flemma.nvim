@@ -3,6 +3,8 @@
 local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local normalize = require("flemma.provider.normalize")
+local s = require("flemma.config.schema")
 local sink = require("flemma.sink")
 local tools_module = require("flemma.tools")
 local provider_registry = require("flemma.provider.registry")
@@ -32,11 +34,11 @@ M.metadata = {
     output_has_thoughts = false,
     min_thinking_budget = 1,
   },
-  default_parameters = {
-    project_id = nil,
-    location = "global",
-    thinking_budget = nil,
-  },
+  config_schema = s.object({
+    project_id = s.optional(s.string()),
+    location = s.optional(s.string("global")),
+    thinking_budget = s.optional(s.integer()),
+  }),
 }
 
 ---@param self flemma.provider.Vertex
@@ -51,24 +53,16 @@ local function _validate_config(self)
   -- NOTE: Location has a default, and model is handled by provider_config, so only project_id is strictly required here.
 end
 
----@param provider_config flemma.provider.Parameters
+---@param params flemma.provider.Parameters
 ---@return flemma.provider.Vertex
-function M.new(provider_config)
-  local provider = base.new(provider_config) -- Pass the flattened config to base
-
-  -- Vertex AI-specific state is accessed via self.parameters
-  -- self.parameters.project_id is required
-  -- self.parameters.location has a default
-  -- self.parameters.model is set via base.new
-
-  -- Set the API version
-  provider.api_version = "v1beta1" -- v1beta1 supports parametersJsonSchema for full JSON Schema compatibility
-
-  -- Set metatable BEFORE reset so M.reset (not base.reset) initializes provider-specific state
-  base._init_provider(M, provider)
-  provider:reset()
-
-  return provider --[[@as flemma.provider.Vertex]]
+function M.new(params)
+  local self = setmetatable({
+    parameters = params or {},
+    state = {},
+    api_version = "v1beta1", -- v1beta1 supports parametersJsonSchema for full JSON Schema compatibility
+  }, { __index = setmetatable(M, { __index = base }) })
+  self:reset()
+  return self --[[@as flemma.provider.Vertex]]
 end
 
 ---@param self flemma.provider.Vertex
@@ -295,18 +289,15 @@ function M.build_request(self, prompt, _context)
 
   -- Add thinking configuration using unified resolution
   local model_info = provider_registry.get_model_info("vertex", self.parameters.model)
-  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
+  local thinking = normalize.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
 
   if thinking.enabled then
     local thinking_config = { includeThoughts = true }
 
-    if model_info and model_info.thinking_effort_map then
-      -- Gemini 3+ models: map canonical level to provider API value via model metadata
-      local mapped = model_info.thinking_effort_map[thinking.level]
-      if mapped then
-        thinking_config.thinkingLevel = mapped
-        log.debug("build_request: Vertex AI thinkingConfig included with thinkingLevel: " .. mapped)
-      end
+    if thinking.mapped_effort then
+      -- Gemini 3+ models: effort from resolve_thinking's mapped_effort
+      thinking_config.thinkingLevel = thinking.mapped_effort
+      log.debug("build_request: Vertex AI thinkingConfig included with thinkingLevel: " .. thinking.mapped_effort)
     elseif thinking.budget then
       -- Gemini 2.5 and earlier: use thinkingBudget (numeric token count)
       thinking_config.thinkingBudget = thinking.budget
@@ -329,7 +320,7 @@ function M.build_request(self, prompt, _context)
   end
 
   -- Build tools array from registry (Vertex AI format, filtered by per-buffer opts if present)
-  local sorted_tools = tools_module.get_sorted_for_prompt(prompt.opts)
+  local sorted_tools = tools_module.get_sorted_for_prompt(prompt.bufnr)
   local function_declarations = {}
 
   for _, definition in ipairs(sorted_tools) do

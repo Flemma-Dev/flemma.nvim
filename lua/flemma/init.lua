@@ -3,9 +3,9 @@
 ---@class flemma.Plugin
 local M = {}
 
-local plugin_config = require("flemma.config")
+local config_facade = require("flemma.config")
+local schema_definition = require("flemma.config.schema.definition")
 local log = require("flemma.logging")
-local state = require("flemma.state")
 local core = require("flemma.core")
 local presets = require("flemma.presets")
 local ui = require("flemma.ui")
@@ -14,7 +14,6 @@ local keymaps = require("flemma.keymaps")
 local highlight = require("flemma.highlight")
 local provider_registry = require("flemma.provider.registry")
 local loader = require("flemma.loader")
-local config_manager = require("flemma.core.config.manager")
 local notifications = require("flemma.notifications")
 local personalities = require("flemma.personalities")
 local secrets = require("flemma.secrets")
@@ -26,9 +25,6 @@ local tools_approval = require("flemma.tools.approval")
 local cursor = require("flemma.cursor")
 local sandbox = require("flemma.sandbox")
 local lsp = require("flemma.lsp")
-
--- Module configuration (will hold merged user opts and defaults)
-local config = {}
 
 ---Setup function to initialize the plugin
 ---@param user_opts? flemma.Config.Opts User configuration overrides (merged with defaults)
@@ -46,27 +42,41 @@ M.setup = function(user_opts)
     return
   end
 
-  -- Merge user config with defaults from the config module
   user_opts = user_opts or {}
-  config = vim.tbl_deep_extend("force", {}, plugin_config, user_opts)
 
-  -- Store config in state module
-  state.set_config(config)
+  -- Phase 1: Config foundation
+  -- Schema defaults (L10) + user opts (L20). DISCOVER-backed keys
+  -- (tool/provider/sandbox-specific config) are deferred until modules register.
+  config_facade.init(schema_definition)
+  local _, apply_errors, deferred = config_facade.apply(config_facade.LAYERS.SETUP, user_opts, { defer_discover = true })
+  if apply_errors then
+    local msg = "Flemma: " .. table.concat(apply_errors, "; ")
+    vim.schedule(function()
+      vim.notify(msg, vim.log.levels.WARN)
+    end)
+  end
+
+  -- Early materialize for consumers during module registration. DISCOVER
+  -- defaults aren't in L10 yet — those arrive as each module registers.
+  local config = config_facade.materialize()
 
   -- Hydrate preset definitions for fast lookup
   presets.refresh(config.presets)
 
   -- Configure logging based on user settings
   log.configure({
-    enabled = state.get_config().logging.enabled,
-    path = state.get_config().logging.path,
-    level = state.get_config().logging.level,
+    enabled = config.logging.enabled,
+    path = config.logging.path,
+    level = config.logging.level,
   })
 
   -- Associate .chat files with the markdown treesitter parser
   vim.treesitter.language.register("markdown", { "chat" })
 
   log.info("setup(): Flemma starting...")
+
+  -- Phase 2: Module registration (populates DISCOVER caches)
+  -- These must run before the deferred apply so DISCOVER callbacks resolve.
 
   -- Initialize secrets module with built-in resolvers
   secrets.setup()
@@ -78,33 +88,80 @@ M.setup = function(user_opts)
   if loader.is_module_path(config.provider) then
     loader.assert_exists(config.provider)
     provider_registry.register(config.provider)
-    -- Update config.provider to the registered name (from metadata.name)
+    -- Write the resolved name to the SETUP layer so re-materialize picks it up.
     local mod = loader.load(config.provider)
+    local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
+    w.provider = mod.metadata.name
     config.provider = mod.metadata.name
-    state.set_config(config)
   end
+
+  -- Initialize tool registry with built-in tools
+  tools.setup()
+
+  -- Register built-in sandbox backends and validate availability
+  sandbox.setup()
+
+  -- Initialize tool approval presets before finalize so that the auto_approve
+  -- coerce function can expand $preset references during the coerce pass.
+  -- Read presets config from the store — L20 has the user's setup values.
+  local presets_cfg = config_facade.get()
+  tools_presets.setup(presets_cfg.tools and presets_cfg.tools.presets)
+
+  -- Phase 3: Finalize — replay deferred DISCOVER writes + run coerce transforms
+  -- Deferred user opts (e.g., parameters.vertex, tools.bash) now resolve.
+  -- Coerce transforms re-run with populated ctx (preset expansion, etc.).
+  local failures = config_facade.finalize(config_facade.LAYERS.SETUP, deferred)
+  if failures then
+    local paths = {}
+    for _, f in ipairs(failures) do
+      table.insert(paths, f.path)
+    end
+    local msg = "Flemma: unknown config keys: " .. table.concat(paths, ", ")
+    vim.schedule(function()
+      vim.notify(msg, vim.log.levels.WARN)
+    end)
+  end
+
+  -- Re-materialize with complete config: DISCOVER defaults, deferred user
+  -- opts, and coerced values are now resolved. This is the authoritative
+  -- config for provider init.
+  config = config_facade.materialize()
+
+  -- Phase 4: Provider initialization (needs complete config)
 
   -- Resolve preset reference in model field (e.g., model = "$gemini-3-pro")
   local resolved_preset, preset_error = presets.resolve_default(config.model, user_opts.provider)
   if preset_error then
-    vim.notify(preset_error, vim.log.levels.ERROR)
+    vim.schedule(function()
+      vim.notify(preset_error, vim.log.levels.ERROR)
+    end)
     return
   end
   if resolved_preset then
+    -- Write resolved preset values to the SETUP layer.
+    local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
+    w.provider = resolved_preset.provider
+    w.model = resolved_preset.model
     config.provider = resolved_preset.provider
     config.model = resolved_preset.model
   end
 
-  -- Initialize provider based on the merged config
-  local current_config = state.get_config()
+  -- Initialize provider based on the resolved config. Pass SETUP layer so the
+  -- validated provider/model go to the same layer as user opts (not RUNTIME).
+  -- Only pass the preset's extra parameters as explicit overrides — the user's
+  -- setup parameters are already in L20 from config_facade.apply() above.
   if resolved_preset then
-    -- Merge preset parameters on top of config parameters (same pattern as switch_provider)
-    local merged_params =
-      config_manager.merge_parameters(current_config.parameters, resolved_preset.provider, resolved_preset.parameters)
-    core.initialize_provider(current_config.provider, current_config.model, merged_params)
+    core.initialize_provider(
+      resolved_preset.provider or config.provider,
+      resolved_preset.model or config.model,
+      resolved_preset.parameters or {},
+      config_facade.LAYERS.SETUP
+    )
   else
-    core.initialize_provider(current_config.provider, current_config.model, current_config.parameters)
+    core.initialize_provider(config.provider, config.model, {}, config_facade.LAYERS.SETUP)
   end
+
+  -- Phase 5: Remaining setup
 
   -- Set up filetype detection for .chat files
   vim.filetype.add({
@@ -140,23 +197,15 @@ M.setup = function(user_opts)
   -- Initialize templating registry with built-in populators
   templating.setup()
 
-  -- Initialize tool registry with built-in tools
-  tools.setup()
-
   -- Initialize preprocessor with built-in rewriters and post-parse hook
   preprocessor.setup()
 
   -- Initialize personality registry with built-in personalities
   personalities.setup()
 
-  -- Initialize tool approval presets (built-ins + user-defined)
-  tools_presets.setup(config.tools and config.tools.presets)
-
   -- Initialize approval resolver chain from config
+  -- (tools_presets.setup() already called before finalize in Phase 2)
   tools_approval.setup()
-
-  -- Register built-in sandbox backends and validate availability
-  sandbox.setup()
 
   -- Set up experimental LSP if enabled
   if config.experimental and config.experimental.lsp then
@@ -193,26 +242,6 @@ M.setup = function(user_opts)
       })
     end
   end
-end
-
----Get the current model name
----@return string|nil
-function M.get_current_model_name()
-  local current_config = state.get_config()
-  if current_config and current_config.model then
-    return current_config.model
-  end
-  return nil -- Or an empty string, depending on desired behavior for uninitialized model
-end
-
----Get the current provider name
----@return string|nil
-function M.get_current_provider_name()
-  local current_config = state.get_config()
-  if current_config and current_config.provider then
-    return current_config.provider
-  end
-  return nil
 end
 
 return M

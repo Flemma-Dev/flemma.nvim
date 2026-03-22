@@ -1,6 +1,6 @@
 --- Test file for Anthropic provider functionality
 
--- Ensure tools module loads fresh
+-- Ensure tools and config modules load fresh
 package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.registry"] = nil
@@ -10,6 +10,13 @@ package.loaded["flemma.tools.definitions.read"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
 package.loaded["flemma.tools.definitions.write"] = nil
 package.loaded["flemma.provider.providers.anthropic"] = nil
+package.loaded["flemma.config"] = nil
+package.loaded["flemma.config.store"] = nil
+package.loaded["flemma.config.proxy"] = nil
+package.loaded["flemma.config.schema.definition"] = nil
+
+-- Initialize config facade so tools.setup() can register defaults
+require("flemma.config").init(require("flemma.config.schema.definition"))
 
 describe("Anthropic Provider", function()
   local anthropic = require("flemma.provider.providers.anthropic")
@@ -27,8 +34,6 @@ describe("Anthropic Provider", function()
 
   describe("try_import_from_buffer", function()
     it("should import Claude Workbench JavaScript code to chat format", function()
-      local provider = anthropic.new({ model = "claude-sonnet-4-5" })
-
       -- JavaScript code from Claude Workbench
       local input_lines = {
         'import Anthropic from "@anthropic-ai/sdk";',
@@ -81,7 +86,7 @@ describe("Anthropic Provider", function()
         "@System:\nBe brief!\n\n@You:\nHello, World!\n\n@Assistant:\nHello! Nice to meet you! How are you doing today?\n\n@You:\nFin."
 
       -- Call the import function
-      local result = provider:try_import_from_buffer(input_lines)
+      local result = anthropic.try_import_from_buffer(input_lines)
 
       -- Verify the result
       assert.is_not_nil(result, "Import should return chat content")
@@ -89,21 +94,17 @@ describe("Anthropic Provider", function()
     end)
 
     it("should return nil when no Anthropic API call is found", function()
-      local provider = anthropic.new({ model = "claude-sonnet-4-5" })
-
       local input_lines = {
         'console.log("Hello World");',
         "const x = 42;",
       }
 
-      local result = provider:try_import_from_buffer(input_lines)
+      local result = anthropic.try_import_from_buffer(input_lines)
 
       assert.is_nil(result, "Should return nil when no API call found")
     end)
 
     it("should handle malformed JSON gracefully", function()
-      local provider = anthropic.new({ model = "claude-sonnet-4-5" })
-
       local input_lines = {
         "const msg = await anthropic.messages.create({",
         '  model: "claude-sonnet-4-5",',
@@ -112,14 +113,12 @@ describe("Anthropic Provider", function()
         "});",
       }
 
-      local result = provider:try_import_from_buffer(input_lines)
+      local result = anthropic.try_import_from_buffer(input_lines)
 
       assert.is_nil(result, "Should return nil when JSON is malformed")
     end)
 
     it("should handle messages with string content format", function()
-      local provider = anthropic.new({ model = "claude-sonnet-4-5" })
-
       local input_lines = {
         "const msg = await anthropic.messages.create({",
         '  model: "claude-sonnet-4-5",',
@@ -135,7 +134,7 @@ describe("Anthropic Provider", function()
 
       local expected_chat = "@System:\nYou are helpful\n\n@You:\nSimple string message"
 
-      local result = provider:try_import_from_buffer(input_lines)
+      local result = anthropic.try_import_from_buffer(input_lines)
 
       assert.is_not_nil(result)
       assert.are.equal(expected_chat, result)
@@ -233,11 +232,11 @@ describe("Anthropic Provider", function()
     end)
 
     it("no crash when no tools present with caching enabled", function()
+      tools.clear()
       local p = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 100, cache_retention = "short" })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
         system = "Be helpful",
-        opts = { tools = {} },
       }
       local req = p:build_request(prompt)
       assert.is_nil(req.tools)
@@ -247,9 +246,13 @@ describe("Anthropic Provider", function()
       assert.are.same({ type = "ephemeral" }, req.cache_control)
     end)
 
-    it("per-buffer thinking_budget override does not mutate self.parameters", function()
-      local p = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 4000, cache_retention = "short" })
-      p:set_parameter_overrides({ thinking_budget = 2048 })
+    it("thinking_budget in params produces thinking config in request", function()
+      local p = anthropic.new({
+        model = "claude-sonnet-4-20250514",
+        max_tokens = 4000,
+        cache_retention = "short",
+        thinking_budget = 2048,
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
         system = nil,
@@ -257,14 +260,14 @@ describe("Anthropic Provider", function()
       local req = p:build_request(prompt)
       assert.is_not_nil(req.thinking)
       assert.are.equal(2048, req.thinking.budget_tokens)
-      -- Original parameters untouched: clear overrides, then check base
-      p:set_parameter_overrides(nil)
-      assert.is_nil(p.parameters.thinking_budget)
     end)
 
-    it("per-buffer cache_retention=none override disables caching", function()
-      local p = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 100, cache_retention = "short" })
-      p:set_parameter_overrides({ cache_retention = "none" })
+    it("cache_retention=none disables caching", function()
+      local p = anthropic.new({
+        model = "claude-sonnet-4-20250514",
+        max_tokens = 100,
+        cache_retention = "none",
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
         system = "Be helpful",
