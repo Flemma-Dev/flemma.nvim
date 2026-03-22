@@ -3,6 +3,8 @@
 ---@class flemma.Commands
 local M = {}
 
+local string_utils = require("flemma.utilities.string")
+
 ---@class flemma.commands.ActionContext
 ---@field extra_args string[]
 ---@field fargs string[]
@@ -672,6 +674,10 @@ local function setup_commands()
       return names
     end
 
+    if prefix then
+      prefix = prefix:gsub(":+$", "")
+    end
+
     for name, child in pairs(node.children) do
       table.insert(names, prefix and (prefix .. ":" .. name) or name)
       if child.aliases then
@@ -696,7 +702,12 @@ local function setup_commands()
     local command_token = fargs[1]
     local node = resolve_command(command_token)
     if not node then
-      vim.notify(("Flemma: Unknown command '%s'"):format(command_token), vim.log.levels.ERROR)
+      local suggestion = string_utils.closest_match(command_token, available_commands)
+      local message = ("Flemma: Unknown command '%s'"):format(command_token)
+      if suggestion then
+        message = message .. (". Did you mean '%s'?"):format(suggestion)
+      end
+      vim.notify(message, vim.log.levels.ERROR)
       return
     end
 
