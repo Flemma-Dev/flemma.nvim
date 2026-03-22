@@ -68,7 +68,7 @@ local OP_HL = {
 ---@field autopilot { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer }
 ---@field sandbox { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil, policy: flemma.config.SandboxPolicy }
 ---@field tools { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer, source: string|nil }
----@field approval { source: string|nil, approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil }
+---@field approval { approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil }
 ---@field buffer { is_chat: boolean, bufnr: integer }
 ---@field introspection? { layer_ops: { label: string, name: string, ops: table[] }[], resolved: { path: string, value: any, source: string?, depth: integer, is_object: boolean }[] }
 
@@ -291,23 +291,10 @@ end
 ---@param config flemma.Config Materialized config (from collect)
 ---@param bufnr integer Buffer number for resolver context
 ---@param enabled_tools string[] Sorted list of enabled tool names
----@return { source: string|nil, approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil }
+---@return { approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil }
 local function collect_approval(config, bufnr, enabled_tools)
   local tools_config = config.tools
   local require_approval_disabled = tools_config and tools_config.require_approval == false or false
-
-  -- Build source string from the effective auto_approve policy
-  local effective_policy = tools_config and tools_config.auto_approve
-  ---@type string|nil
-  local source = nil
-  if type(effective_policy) == "table" then
-    source = table.concat(effective_policy --[[@as string[] ]], ", ")
-    if source == "" then
-      source = nil
-    end
-  elseif type(effective_policy) == "function" then
-    source = "(function)"
-  end
 
   -- Classify each tool through the resolver chain
   local approved = {}
@@ -331,34 +318,47 @@ local function collect_approval(config, bufnr, enabled_tools)
     end
   end
 
-  -- Detect frontmatter-modified approval by checking if auto_approve source includes F
-  local aa_info = config_facade.inspect(bufnr, "tools.auto_approve")
-  local has_frontmatter = aa_info and aa_info.layer and aa_info.layer:find("F") ~= nil
-
-  ---@type table<string, true>|nil
-  local frontmatter_items = nil
-  if has_frontmatter then
-    -- Mark all non-sandbox approved tools as frontmatter-influenced
-    -- (exact per-tool diff would require resolving without frontmatter layer)
-    frontmatter_items = {}
+  -- Per-tool frontmatter attribution: only mark tools that frontmatter
+  -- actually contributed. A "set" op means frontmatter owns the entire list;
+  -- otherwise check individual "append"/"prepend" ops per tool.
+  local fm_layer = config_facade.LAYERS.FRONTMATTER
+  local frontmatter_items = {}
+  if config_facade.layer_has_set(fm_layer, bufnr, "tools.auto_approve") then
+    -- Frontmatter replaced the entire list — all approved tools are frontmatter-determined
     for _, name in ipairs(approved) do
       if not sandbox_items[name] then
         frontmatter_items[name] = true
       end
     end
-    if not next(frontmatter_items) then
-      frontmatter_items = nil
+  else
+    for _, name in ipairs(approved) do
+      if
+        config_facade.layer_has_op(fm_layer, bufnr, "append", "tools.auto_approve", name)
+        or config_facade.layer_has_op(fm_layer, bufnr, "prepend", "tools.auto_approve", name)
+      then
+        frontmatter_items[name] = true
+      end
     end
   end
 
+  ---@type table<string, true>|nil
+  local frontmatter_result = nil
+  if next(frontmatter_items) then
+    frontmatter_result = frontmatter_items
+  end
+  ---@type table<string, true>|nil
+  local sandbox_result = nil
+  if next(sandbox_items) then
+    sandbox_result = sandbox_items
+  end
+
   return {
-    source = source,
     approved = approved,
     denied = denied,
     pending = pending,
     require_approval_disabled = require_approval_disabled,
-    frontmatter_items = frontmatter_items,
-    sandbox_items = next(sandbox_items) and sandbox_items or nil,
+    frontmatter_items = frontmatter_result,
+    sandbox_items = sandbox_result,
   }
 end
 
@@ -1061,10 +1061,6 @@ local function format_approval_section(b, data, is_last)
 
   b:branch(is_last)
   b:put("Approval", "FlemmaStatusSection")
-  if ap.source then
-    b:put(" ")
-    b:put("(" .. ap.source .. ")", "FlemmaStatusParen")
-  end
   b:nl()
 
   if ap.require_approval_disabled then

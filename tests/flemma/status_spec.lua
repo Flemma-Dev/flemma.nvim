@@ -813,7 +813,6 @@ describe("flemma.status", function()
         },
         tools = { enabled = { "bash", "edit", "read", "write" }, disabled = {} },
         approval = {
-          source = "$default",
           approved = { "edit", "read", "write" },
           denied = {},
           pending = { "bash" },
@@ -824,7 +823,7 @@ describe("flemma.status", function()
 
       local result = status.format(data, false)
       local text = table.concat(result.lines, "\n")
-      assert.truthy(text:find("Approval.*$default"), "expected Approval header with source")
+      assert.truthy(text:find("Approval"), "expected Approval header")
       assert.truthy(text:find("auto%-approve"), "expected auto-approve group")
       assert.truthy(text:find("require approval"), "expected pending group")
       assert.truthy(text:find("edit"), "expected edit in approved")
@@ -847,7 +846,6 @@ describe("flemma.status", function()
         },
         tools = { enabled = { "bash", "edit", "read", "write" }, disabled = {} },
         approval = {
-          source = "$default",
           approved = { "bash", "edit", "read", "write" },
           denied = {},
           pending = {},
@@ -971,7 +969,6 @@ describe("flemma.status", function()
         },
         tools = { enabled = { "bash", "read" }, disabled = {} },
         approval = {
-          source = "$yolo, $no-bash",
           approved = { "read" },
           denied = { "bash" },
           pending = {},
@@ -982,7 +979,7 @@ describe("flemma.status", function()
 
       local result = status.format(data, false)
       local text = table.concat(result.lines, "\n")
-      assert.truthy(text:find("Approval.*$yolo"), "expected Approval header with source")
+      assert.truthy(text:find("Approval"), "expected Approval header")
       assert.truthy(text:find("deny"), "expected deny group")
       assert.truthy(text:find("bash"), "expected bash in denied")
     end)
@@ -1069,8 +1066,6 @@ describe("flemma.status", function()
       })
 
       local data = status.collect(0)
-      -- After finalize, $default is expanded to tool names
-      assert.equals("read, write, edit", data.approval.source)
       assert.are.same({ "edit", "read" }, data.approval.approved)
       assert.are.same({ "bash" }, data.approval.pending)
       assert.are.same({}, data.approval.denied)
@@ -1093,8 +1088,6 @@ describe("flemma.status", function()
       })
 
       local data = status.collect(0)
-      -- auto_approve always has a schema default ({ "$default" } → expanded)
-      assert.equals("read, write, edit", data.approval.source)
       assert.are.same({ "read" }, data.approval.approved)
       assert.are.same({}, data.approval.pending)
     end)
@@ -1124,8 +1117,6 @@ describe("flemma.status", function()
       })
 
       local data = status.collect(0)
-      -- After finalize, $default expands to tool names; bash is appended
-      assert.equals("read, write, edit, bash", data.approval.source)
       assert.are.same({ "bash", "read" }, data.approval.approved)
     end)
 
@@ -1151,7 +1142,6 @@ describe("flemma.status", function()
       })
 
       local data = status.collect(0)
-      assert.equals("(function)", data.approval.source)
       -- Function policies resolve at runtime — tools show as approved when the
       -- resolver chain evaluates them (the function returns true for all tools)
       assert.are.same({ "read" }, data.approval.approved)
