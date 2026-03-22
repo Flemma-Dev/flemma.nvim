@@ -386,6 +386,25 @@ Three additional built-in tools (`grep`, `find`, `ls`) are available for codebas
 
 Each tool has an optional config section under `tools` (`tools.grep`, `tools.find`, `tools.ls`) for working directory and exclude patterns.
 
+### Config aliases
+
+Flemma defines top-level aliases for frequently used nested options. These work in both `setup()` config and `flemma.opt` frontmatter overrides:
+
+| Alias         | Expands to               |
+| ------------- | ------------------------ |
+| `thinking`    | `parameters.thinking`    |
+| `temperature` | `parameters.temperature` |
+| `max_tokens`  | `parameters.max_tokens`  |
+| `timeout`     | `parameters.timeout`     |
+
+Under `tools`, an additional alias is available:
+
+| Alias     | Expands to     |
+| --------- | -------------- |
+| `approve` | `auto_approve` |
+
+This is why `flemma.opt.thinking = "medium"` works in frontmatter — it writes to `parameters.thinking` through the alias. Both the alias and the full path are equivalent; use whichever you prefer.
+
 ### Per-buffer overrides
 
 Beyond global configuration, individual buffers can override parameters, tool selection, approval policies, and sandbox settings through `flemma.opt` in Lua frontmatter. See [docs/templates.md](templates.md#per-buffer-overrides-with-flemmaopt) for the full reference.

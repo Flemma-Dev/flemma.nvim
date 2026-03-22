@@ -74,15 +74,15 @@ flemma.opt.vertex.thinking_budget = 4096
 ````lua
 ```lua
 -- Replace the tool list entirely
-flemma.opt.tools:set({ "calculator", "read" })
+flemma.opt.tools:set({ "bash", "read" })
 
 -- Add or remove individual tools
-flemma.opt.tools:append("bash")
+flemma.opt.tools:append("grep")
 flemma.opt.tools:remove("write")
-flemma.opt.tools:prepend("calculator")
+flemma.opt.tools:prepend("bash")
 
 -- Operator shorthand: + (append), - (remove), ^ (prepend)
-flemma.opt.tools = flemma.opt.tools + "bash" - "write" ^ "calculator"
+flemma.opt.tools = flemma.opt.tools + "grep" - "write" ^ "bash"
 ```
 ````
 
@@ -94,7 +94,7 @@ flemma.opt.tools = flemma.opt.tools + "bash" - "write" ^ "calculator"
 flemma.opt.tools.auto_approve = { "$readonly" }
 
 -- List form: auto-approve these tools, require approval for the rest
-flemma.opt.tools.auto_approve = { "calculator", "read" }
+flemma.opt.tools.auto_approve = { "bash", "read" }
 
 -- ListOption operations: modify the default policy incrementally
 flemma.opt.tools.auto_approve = { "$default" }
@@ -106,7 +106,7 @@ flemma.opt.tools.auto_approve = flemma.opt.tools.auto_approve + "bash" - "write"
 
 -- Function form: full control over the decision
 flemma.opt.tools.auto_approve = function(tool_name, input, context)
-  if tool_name == "calculator" then return true end
+  if tool_name == "grep" then return true end
   return nil  -- defer to global config
 end
 ```
@@ -122,7 +122,7 @@ flemma.opt.tools.autopilot = false  -- manual three-phase Ctrl-] for this buffer
 ```
 ````
 
-If you misspell a tool name, Flemma suggests the closest match: `"flemma.opt: unknown value 'calulator'. Did you mean 'calculator'?"`.
+If you misspell a tool name, Flemma suggests the closest match: `"flemma.opt: unknown value 'raed'. Did you mean 'read'?"`.
 
 Only options you actually touch appear in the resolved overrides – unmodified settings fall through to your global config. See [docs/tools.md](tools.md) for more on tool approval and the resolver API.
 
@@ -135,7 +135,7 @@ JSON frontmatter blocks can override Flemma configuration through a `flemma` key
 | `$set`     | Replace the value (same as no operator) | `"tools": { "$set": ["bash", "read"] }` |
 | `$append`  | Add item(s) to a list                   | `"tools": { "$append": "bash" }`        |
 | `$remove`  | Remove item(s) from a list              | `"tools": { "$remove": "write" }`       |
-| `$prepend` | Prepend item(s) to a list               | `"tools": { "$prepend": "calculator" }` |
+| `$prepend` | Prepend item(s) to a list               | `"tools": { "$prepend": "bash" }`       |
 
 Operators accept both single values and arrays: `"$append": ["bash", "grep"]`.
 

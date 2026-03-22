@@ -73,11 +73,11 @@ Disable approval entirely with `tools.require_approval = false` – this registe
 ```lua
 tools = {
   -- Preset references and tool names can be mixed freely
-  auto_approve = { "$readonly", "calculator" },
+  auto_approve = { "$readonly", "bash" },
 
   -- Function form for full control
   auto_approve = function(tool_name, input, ctx)
-    if tool_name == "calculator" then return true end
+    if tool_name == "grep" then return true end
     if tool_name == "bash" and input.command:match("rm %-rf") then return "deny" end
     return false  -- require approval
   end,
@@ -111,7 +111,7 @@ Each preset is a table with an `approve` array — the tool names to auto-approv
 **Composition rules:**
 
 - **Union.** When multiple presets appear in `auto_approve`, their `approve` sets are merged.
-- **Plain tool names** mix freely with presets: `{ "$default", "calculator" }` approves everything in `$default` plus `calculator`.
+- **Plain tool names** mix freely with presets: `{ "$default", "bash" }` approves everything in `$default` plus `bash`.
 
 ### Per-buffer approval
 
@@ -123,14 +123,14 @@ Override approval on a per-buffer basis using `flemma.opt.tools.auto_approve` in
 flemma.opt.tools.auto_approve = { "$readonly" }
 
 -- List form: auto-approve these tools in this buffer
-flemma.opt.tools.auto_approve = { "calculator", "read" }
+flemma.opt.tools.auto_approve = { "bash", "read" }
 
 -- Mix presets and tool names
 flemma.opt.tools.auto_approve = { "$default", "bash" }
 
 -- Function form: full control per-buffer
 flemma.opt.tools.auto_approve = function(tool_name, input, ctx)
-  if tool_name == "calculator" then return true end
+  if tool_name == "grep" then return true end
   return nil  -- pass to next resolver
 end
 ```
@@ -352,8 +352,8 @@ Control which tools are available per-buffer using `flemma.opt` in Lua frontmatt
 ````lua
 ```lua
 flemma.opt.tools = {"bash", "read"}             -- only these tools
-flemma.opt.tools:remove("calculator")           -- remove from defaults
-flemma.opt.tools:append("calculator_async")     -- add a tool
+flemma.opt.tools:remove("write")               -- remove from defaults
+flemma.opt.tools:append("grep")                -- add a tool
 flemma.opt.tools = flemma.opt.tools + "read"    -- operator overloads work too
 ```
 ````
@@ -682,7 +682,7 @@ approval.register("my_plugin:security_policy", {
 
 The `resolve` function receives:
 
-- **`tool_name`** (`string`) – the name of the tool being called (e.g., `"bash"`, `"calculator"`).
+- **`tool_name`** (`string`) – the name of the tool being called (e.g., `"bash"`, `"read"`).
 - **`input`** (`table`) – the tool call's input arguments.
 - **`context`** (`table`) – contains `bufnr` (buffer number) and `tool_id` (unique ID for this tool call).
 
