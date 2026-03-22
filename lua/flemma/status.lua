@@ -1718,18 +1718,22 @@ function M.show(opts)
   end
 
   local buf
+  local win
   if existing_win then
     vim.api.nvim_set_current_win(existing_win)
     buf = existing_bufnr --[[@as integer]]
+    win = existing_win
   else
     vim.cmd("vnew")
     buf = vim.api.nvim_get_current_buf()
+    win = vim.api.nvim_get_current_win()
   end
 
-  -- Set buffer options
+  -- Set buffer and window options
   vim.bo[buf].buftype = "nofile"
   vim.bo[buf].bufhidden = "wipe"
   vim.bo[buf].swapfile = false
+  vim.wo[win].wrap = false
   vim.api.nvim_buf_set_name(buf, "flemma://status")
   vim.b[buf].flemma_source_bufnr = target_bufnr
 
