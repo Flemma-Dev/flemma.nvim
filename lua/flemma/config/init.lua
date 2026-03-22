@@ -13,6 +13,7 @@
 local M = {}
 
 local nav = require("flemma.config.schema.navigation")
+local operators = require("flemma.config.operators")
 local proxy = require("flemma.config.proxy")
 local store = require("flemma.config.store")
 
@@ -322,6 +323,18 @@ function M.apply_deferred(layer, deferred)
     return failures
   end
   return nil
+end
+
+--- Apply a table with MongoDB-style operators to the config store.
+--- Delegates to flemma.config.operators for the schema-guided walk.
+---@param layer integer Target layer (e.g., M.LAYERS.FRONTMATTER)
+---@param bufnr integer? Buffer number (required for FRONTMATTER)
+---@param data table The operator-annotated config table (contents of the "flemma" key)
+---@return flemma.config.ValidationFailure[] failures Validation/application errors (empty when none)
+function M.apply_operators(layer, bufnr, data)
+  assert(root_schema, "config.init() must be called before apply_operators()")
+  ---@cast root_schema flemma.config.schema.Node
+  return operators.apply(root_schema, layer, bufnr, data)
 end
 
 -- ---------------------------------------------------------------------------
