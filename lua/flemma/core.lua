@@ -216,14 +216,7 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
   end
   vim.notify(message, vim.log.levels.INFO)
 
-  -- Refresh lualine if available to update the model component
-  local lualine_ok, lualine = pcall(require, "lualine")
-  if lualine_ok and lualine.refresh then
-    lualine.refresh()
-    log.debug("switch_provider(): Lualine refreshed.")
-  else
-    log.debug("switch_provider(): Lualine not found or refresh function unavailable.")
-  end
+  hooks.dispatch("config:updated")
 
   return true
 end

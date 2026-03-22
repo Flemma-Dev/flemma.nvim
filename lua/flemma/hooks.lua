@@ -20,6 +20,7 @@ local log = require("flemma.logging")
 ---| "boot:complete"
 ---| "sink:created"
 ---| "sink:destroyed"
+---| "config:updated"
 
 ---@class flemma.hooks.RequestSendingData
 ---@field bufnr integer
@@ -48,6 +49,8 @@ local log = require("flemma.logging")
 ---@class flemma.hooks.SinkDestroyedData
 ---@field bufnr integer
 ---@field name string
+
+---@class flemma.hooks.ConfigUpdatedData -- no fields; hook carries no payload
 
 local PREFIX = "Flemma"
 
@@ -87,6 +90,7 @@ end
 ---@overload fun(name: "boot:complete", data?: flemma.hooks.BootCompleteData)
 ---@overload fun(name: "sink:created", data: flemma.hooks.SinkCreatedData)
 ---@overload fun(name: "sink:destroyed", data: flemma.hooks.SinkDestroyedData)
+---@overload fun(name: "config:updated", data?: flemma.hooks.ConfigUpdatedData)
 ---@param name flemma.hooks.Name Hook name in "domain:action" format
 ---@param data? table Payload passed to autocmd handlers via ev.data
 function M.dispatch(name, data)

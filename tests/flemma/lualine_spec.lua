@@ -460,6 +460,35 @@ describe("Lualine component", function()
       package.loaded["lualine"] = nil
     end)
 
+    it("should refresh lualine on FlemmaConfigUpdated", function()
+      -- Arrange: track lualine.refresh() calls
+      local refresh_count = 0
+      package.loaded["lualine"] = {
+        refresh = function()
+          refresh_count = refresh_count + 1
+        end,
+      }
+
+      -- Re-require component so init() picks up the mock
+      package.loaded["lualine.components.flemma"] = nil
+      flemma_component = require("lualine.components.flemma")
+
+      -- Simulate init() being called (lualine calls this on component creation)
+      if flemma_component.init then
+        flemma_component:init({})
+      end
+
+      -- Act: emit the autocmd twice (not once-only like BootComplete)
+      vim.api.nvim_exec_autocmds("User", { pattern = "FlemmaConfigUpdated" })
+      vim.api.nvim_exec_autocmds("User", { pattern = "FlemmaConfigUpdated" })
+
+      -- Assert
+      assert.are.equal(2, refresh_count)
+
+      -- Cleanup
+      package.loaded["lualine"] = nil
+    end)
+
     it("should be falsy once all async tool sources resolve", function()
       -- Arrange
       local config_facade = require("flemma.config")

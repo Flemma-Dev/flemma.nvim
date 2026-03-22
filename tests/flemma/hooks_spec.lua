@@ -45,6 +45,7 @@ describe("flemma.hooks", function()
       assert.equals("FlemmaBootComplete", hooks._name_to_pattern("boot:complete"))
       assert.equals("FlemmaSinkCreated", hooks._name_to_pattern("sink:created"))
       assert.equals("FlemmaToolFinished", hooks._name_to_pattern("tool:finished"))
+      assert.equals("FlemmaConfigUpdated", hooks._name_to_pattern("config:updated"))
     end)
   end)
 

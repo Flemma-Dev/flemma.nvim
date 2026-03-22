@@ -18,16 +18,26 @@ local flemma_component = lualine_component:extend()
 function flemma_component:init(options)
   lualine_component.init(self, options)
 
+  local group = vim.api.nvim_create_augroup("FlemmaLualineIntegration", { clear = true })
+
+  local function refresh_lualine()
+    local ok, lualine = pcall(require, "lualine")
+    if ok then
+      lualine.refresh()
+    end
+  end
+
   vim.api.nvim_create_autocmd("User", {
-    group = vim.api.nvim_create_augroup("FlemmaLualineIntegration", { clear = true }),
+    group = group,
     pattern = "FlemmaBootComplete",
     once = true,
-    callback = function()
-      local ok, lualine = pcall(require, "lualine")
-      if ok then
-        lualine.refresh()
-      end
-    end,
+    callback = refresh_lualine,
+  })
+
+  vim.api.nvim_create_autocmd("User", {
+    group = group,
+    pattern = "FlemmaConfigUpdated",
+    callback = refresh_lualine,
   })
 end
 
