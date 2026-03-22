@@ -1647,10 +1647,14 @@ function M.collect(bufnr)
     -- Normalize schema validation failures into Diagnostic shape
     for _, failure in ipairs(fm_result.validation_failures) do
       collected_diagnostics = collected_diagnostics or {}
+      local message = failure.message
+      if failure.path then
+        message = failure.path .. ": " .. message
+      end
       table.insert(collected_diagnostics, {
         type = "config",
         severity = "warning",
-        error = failure.message,
+        error = message,
       })
     end
   end

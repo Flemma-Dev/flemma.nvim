@@ -64,7 +64,7 @@ local function walk(schema, path, value, layer, bufnr, failures)
   end
 
   if not node then
-    table.insert(failures, { path = path, value = value, message = string.format("unknown config key '%s'", path) })
+    table.insert(failures, { path = path, value = value, message = "unknown config key" })
     return
   end
 
@@ -111,7 +111,7 @@ local function walk(schema, path, value, layer, bufnr, failures)
       table.insert(failures, {
         path = path,
         value = value,
-        message = string.format("'%s' does not accept array values", path),
+        message = "does not accept array values",
       })
     end
     return

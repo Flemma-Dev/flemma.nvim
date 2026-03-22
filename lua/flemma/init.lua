@@ -123,7 +123,11 @@ M.setup = function(user_opts)
   if #validation_failures > 0 then
     local messages = {}
     for _, failure in ipairs(validation_failures) do
-      table.insert(messages, failure.message)
+      local message = failure.message
+      if failure.path then
+        message = failure.path .. ": " .. message
+      end
+      table.insert(messages, message)
     end
     vim.schedule(function()
       vim.notify("Flemma: " .. table.concat(messages, "; "), vim.log.levels.WARN)

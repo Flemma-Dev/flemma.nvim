@@ -503,11 +503,8 @@ function M.send_or_execute(opts)
   -- After this call, config.get(bufnr) returns the resolved config including frontmatter.
   local evaluated_frontmatter = processor.evaluate_frontmatter(doc, context, bufnr)
   buffer_state.frontmatter_eval_code = evaluated_frontmatter.frontmatter_code
-  if #evaluated_frontmatter.validation_failures > 0 then
-    for _, failure in ipairs(evaluated_frontmatter.validation_failures) do
-      vim.notify("Flemma frontmatter: " .. failure.message, vim.log.levels.WARN)
-    end
-  end
+  -- Validation failures are merged into diagnostics below for unified rendering
+  -- (they flow through the same vim.notify formatter as other diagnostics).
 
   -- Phase 1: Categorize — find tool_use blocks without matching tool_result
   local pending = tool_context.resolve_all_pending(bufnr)
@@ -665,9 +662,8 @@ function M.send_to_provider(opts)
   log.debug("send_to_provider(): Processed messages count: " .. #prompt.history)
 
   -- Merge rewriter diagnostics from interactive preprocessor pass
-  local rewriter_diags = buffer_state.rewriter_diagnostics or {}
   local diagnostics = evaluated.diagnostics or {}
-  for _, d in ipairs(rewriter_diags) do
+  for _, d in ipairs(buffer_state.rewriter_diagnostics or {}) do
     table.insert(diagnostics, d)
   end
 

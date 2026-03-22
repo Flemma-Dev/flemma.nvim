@@ -238,12 +238,14 @@ end
 ---@return flemma.processor.EvaluatedResult
 function M.evaluate(doc, base_context, opts)
   opts = opts or {}
-  local context, fm_diagnostics
+  local context, fm_diagnostics, validation_failures
   if opts.evaluated_frontmatter then
     context = opts.evaluated_frontmatter.context
     fm_diagnostics = opts.evaluated_frontmatter.diagnostics
+    validation_failures = opts.evaluated_frontmatter.validation_failures
   else
-    context, fm_diagnostics = evaluate_frontmatter_internal(doc, base_context, opts.bufnr) -- validation_failures unused here
+    context, fm_diagnostics = evaluate_frontmatter_internal(doc, base_context, opts.bufnr)
+    validation_failures = {}
   end
 
   -- Merge parser errors with frontmatter diagnostics (shallow copy to avoid
@@ -254,6 +256,19 @@ function M.evaluate(doc, base_context, opts)
   end
   for _, d in ipairs(fm_diagnostics) do
     table.insert(diagnostics, d)
+  end
+  -- Normalize validation failures into diagnostic shape so they render
+  -- through the same formatter as other diagnostics
+  for _, failure in ipairs(validation_failures or {}) do
+    local message = failure.message
+    if failure.path then
+      message = failure.path .. ": " .. message
+    end
+    table.insert(diagnostics, {
+      type = "config",
+      severity = "warning",
+      error = message,
+    })
   end
 
   -- 2) Evaluate messages
