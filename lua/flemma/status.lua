@@ -64,7 +64,7 @@ local OP_HL = {
 
 ---@class flemma.status.Data
 ---@field provider { name: string, model: string|nil, initialized: boolean, model_info: flemma.models.ModelInfo|nil, source: string|nil, model_source: string|nil }
----@field parameters { merged: table<string, any>, sources: table<string, string>, resolved_max_tokens: integer|nil }
+---@field parameters { merged: table<string, any>, sources: table<string, string>, resolved_max_tokens: integer|nil, resolved_thinking: string|nil }
 ---@field autopilot { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, sources: table<string, string> }
 ---@field sandbox { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil, policy: flemma.config.SandboxPolicy, sources: table<string, string> }
 ---@field tools { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer }
@@ -102,7 +102,7 @@ end
 ---Collect parameters section data with per-key source tracking.
 ---@param config flemma.Config
 ---@param bufnr integer
----@return { merged: table<string, any>, sources: table<string, string>, resolved_max_tokens: integer|nil }
+---@return { merged: table<string, any>, sources: table<string, string>, resolved_max_tokens: integer|nil, resolved_thinking: string|nil }
 local function collect_parameters(config, bufnr)
   local base_merged = normalize.flatten_parameters(config.provider, config)
 
@@ -138,10 +138,31 @@ local function collect_parameters(config, bufnr)
     resolved_max_tokens = resolve_copy.max_tokens
   end
 
+  -- Resolve thinking to show the provider-facing value alongside the config value
+  ---@type string|nil
+  local resolved_thinking = nil
+  if base_merged.thinking ~= nil then
+    local caps = registry.get_capabilities(config.provider)
+    local model_info = config.model and registry.get_model_info(config.provider, config.model) or nil
+    if caps then
+      local resolution = normalize.resolve_thinking(base_merged, caps, model_info)
+      if resolution.enabled then
+        if resolution.budget then
+          resolved_thinking = tostring(resolution.budget) .. " tokens"
+        elseif resolution.effort then
+          resolved_thinking = resolution.effort
+        end
+      else
+        resolved_thinking = "disabled"
+      end
+    end
+  end
+
   return {
     merged = base_merged,
     sources = sources,
     resolved_max_tokens = resolved_max_tokens,
+    resolved_thinking = resolved_thinking,
   }
 end
 
@@ -826,19 +847,6 @@ local function format_provider_section(b, data, is_last)
       end
       table.insert(items, { key = "pricing", value = price_str })
     end
-
-    if mi.thinking_budgets then
-      local min_t = mi.min_thinking_budget
-      local max_t = mi.max_thinking_budget
-      if min_t and max_t then
-        table.insert(
-          items,
-          { key = "thinking", value = tostring(min_t) .. "–" .. tostring(max_t) .. " budget range" }
-        )
-      end
-    elseif mi.supports_reasoning_effort then
-      table.insert(items, { key = "thinking", value = "reasoning_effort (provider-managed)" })
-    end
   end
 
   format_kv_section(b, "Provider", items, is_last)
@@ -861,6 +869,10 @@ local function format_parameters_section(b, data, is_last)
     local value_str = format_value(value)
     if key == "max_tokens" and data.parameters.resolved_max_tokens then
       value_str = value_str .. " → " .. tostring(data.parameters.resolved_max_tokens)
+    elseif key == "thinking" and data.parameters.resolved_thinking then
+      if data.parameters.resolved_thinking ~= value_str then
+        value_str = value_str .. " → " .. data.parameters.resolved_thinking
+      end
     end
     local source = data.parameters.sources and data.parameters.sources[key] or nil
     ---@type fun(b: flemma.status.Builder)|nil

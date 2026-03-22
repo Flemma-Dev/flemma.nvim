@@ -652,8 +652,7 @@ describe("flemma.status", function()
       assert.truthy(text:find("pricing"), "expected pricing line")
       assert.truthy(text:find("%$3.00"), "expected input price")
       assert.truthy(text:find("%$15.00"), "expected output price")
-      assert.truthy(text:find("thinking"), "expected thinking line")
-      assert.truthy(text:find("1024"), "expected min thinking budget")
+      -- Thinking is shown in Parameters (with resolved value), not Model Info
     end)
 
     it("omits model metadata lines when model_info is nil", function()
