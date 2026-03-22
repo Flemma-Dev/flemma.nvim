@@ -185,27 +185,16 @@ When a tool call is pending approval, its `flemma:tool` placeholder block is emp
 For example, a pending `read` tool might show:
 
 ```
-read: src/config.lua  +0,50  # reading config
+read: checking config — src/config.lua  +0,50
 ```
 
 And a pending `bash` tool:
 
 ```
-bash: $ make test  # running tests
-```
-
-Previews are non-editable virtual text (extmarks) that disappear once the tool executes and its result replaces the placeholder. They adapt to the editor's text area width, truncating with `…` when necessary.
-
-### Structured previews: label and detail
-
-Tool previews use a two-part structure: a **label** (the LLM's stated intent, shown italic) and a **detail** (the raw technical summary, shown dimmer). They are separated by an em-dash (`—`):
-
-```
 bash: running tests — $ make test
-read: checking config — src/config.lua  +0,50
 ```
 
-When the available width is limited, detail is truncated first (with `…`), preserving the human-readable label.
+Each preview has two parts: a **label** (the LLM's stated intent, shown italic) and a **detail** (the raw technical summary, shown dimmer), separated by an em-dash (`—`). When the available width is limited, detail is truncated first (with `…`), preserving the human-readable label. Previews are non-editable virtual text (extmarks) that disappear once the tool executes and its result replaces the placeholder.
 
 ### Built-in preview formatters
 
