@@ -674,7 +674,7 @@ function M.send_to_provider(opts)
   if #diagnostics > 0 then
     local has_errors = false
     local by_type =
-      { frontmatter = {}, expression = {}, template = {}, file = {}, tool_result = {}, tool_use = {}, rewriter = {} }
+      { frontmatter = {}, config = {}, expression = {}, template = {}, file = {}, tool_result = {}, tool_use = {}, rewriter = {} }
 
     for _, diag in ipairs(diagnostics) do
       if diag.severity == "error" then
@@ -720,6 +720,20 @@ function M.send_to_provider(opts)
           table.insert(diagnostic_lines, string.format("  [%s] %s", loc, d.error))
         elseif i == max_per_type + 1 then
           table.insert(diagnostic_lines, string.format("  …and %d more", #by_type.frontmatter - max_per_type))
+          break
+        end
+      end
+    end
+
+    -- Format config errors (frontmatter config writes that failed validation)
+    if #by_type.config > 0 then
+      table.insert(diagnostic_lines, "Config errors:")
+      for i, d in ipairs(by_type.config) do
+        if i <= max_per_type then
+          local loc = format_path(d.source_file) .. format_position(d.position)
+          table.insert(diagnostic_lines, string.format("  [%s] %s", loc, d.error))
+        elseif i == max_per_type + 1 then
+          table.insert(diagnostic_lines, string.format("  …and %d more", #by_type.config - max_per_type))
           break
         end
       end
