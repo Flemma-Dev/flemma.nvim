@@ -201,7 +201,8 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
   -- Evaluate frontmatter so L40 is populated before comparing. Without this,
   -- buffers that haven't sent yet would have empty L40 and the override check
   -- would silently miss frontmatter provider overrides.
-  processor.evaluate_buffer_frontmatter(bufnr)
+  local fm_result = processor.evaluate_buffer_frontmatter(bufnr)
+  buffer_state.frontmatter_eval_code = fm_result.frontmatter_code
 
   -- Notify the user. Compare global config (D+S+R) with buffer config (D+S+R+F)
   -- to detect frontmatter overrides that take precedence over the switch.
@@ -500,6 +501,12 @@ function M.send_or_execute(opts)
   -- Evaluate frontmatter — writes config ops to the store's FRONTMATTER layer.
   -- After this call, config.get(bufnr) returns the resolved config including frontmatter.
   local evaluated_frontmatter = processor.evaluate_frontmatter(doc, context, bufnr)
+  buffer_state.frontmatter_eval_code = evaluated_frontmatter.frontmatter_code
+  if #evaluated_frontmatter.validation_failures > 0 then
+    for _, failure in ipairs(evaluated_frontmatter.validation_failures) do
+      vim.notify("Flemma frontmatter: " .. failure.message, vim.log.levels.WARN)
+    end
+  end
 
   -- Phase 1: Categorize — find tool_use blocks without matching tool_result
   local pending = tool_context.resolve_all_pending(bufnr)

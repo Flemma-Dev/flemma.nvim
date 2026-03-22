@@ -119,7 +119,8 @@ M.setup = function(user_opts)
   -- Phase 3: Finalize — replay deferred DISCOVER writes + run coerce transforms
   -- Deferred user opts (e.g., parameters.vertex, tools.bash) now resolve.
   -- Coerce transforms re-run with populated ctx (preset expansion, etc.).
-  local failures = config_facade.finalize(config_facade.LAYERS.SETUP, deferred, function(validation_failures)
+  local failures, validation_failures = config_facade.finalize(config_facade.LAYERS.SETUP, deferred)
+  if #validation_failures > 0 then
     local messages = {}
     for _, failure in ipairs(validation_failures) do
       table.insert(messages, failure.message)
@@ -127,7 +128,7 @@ M.setup = function(user_opts)
     vim.schedule(function()
       vim.notify("Flemma: " .. table.concat(messages, "; "), vim.log.levels.WARN)
     end)
-  end)
+  end
   if failures then
     local paths = {}
     for _, f in ipairs(failures) do

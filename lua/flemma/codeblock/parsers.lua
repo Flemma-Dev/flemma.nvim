@@ -11,7 +11,7 @@ local PARSER_MODULES = {
   json = "flemma.codeblock.parsers.json",
 }
 
----@type table<string, fun(code: string, context?: table<string, any>): any>
+---@type table<string, fun(code: string, context?: table<string, any>, bufnr?: integer): any, flemma.config.ValidationFailure[]?>
 local parsers = {}
 
 ---Register a parser for a specific language
@@ -63,7 +63,7 @@ function M.unregister(language)
 end
 
 ---Get all registered parsers (eagerly loads lazy modules).
----@return table<string, fun(code: string, context?: table<string, any>): any>
+---@return table<string, fun(code: string, context?: table<string, any>, bufnr?: integer): any, flemma.config.ValidationFailure[]?>
 function M.get_all()
   for lang, module_path in pairs(PARSER_MODULES) do
     if not parsers[lang] then

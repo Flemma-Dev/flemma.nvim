@@ -15,6 +15,7 @@ local templating = require("flemma.templating")
 ---@param context? flemma.Context Optional context with __filename, etc.
 ---@param bufnr? integer Buffer number for config store writes
 ---@return table<string, any> variables Table of global variables defined in the code
+---@return flemma.config.ValidationFailure[]? validation_failures Schema validation failures (nil when no bufnr)
 function M.parse(code, context, bufnr)
   local env = templating.from_context(context)
 
@@ -35,11 +36,8 @@ function M.parse(code, context, bufnr)
 
   -- Finalize frontmatter: coerce transforms + deferred semantic validation
   if bufnr then
-    config.finalize(config.LAYERS.FRONTMATTER, nil, function(validation_failures)
-      for _, failure in ipairs(validation_failures) do
-        vim.notify("Flemma frontmatter: " .. failure.message, vim.log.levels.WARN)
-      end
-    end, bufnr)
+    local _, validation_failures = config.finalize(config.LAYERS.FRONTMATTER, nil, bufnr)
+    return user_globals, validation_failures
   end
 
   return user_globals

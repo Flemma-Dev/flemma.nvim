@@ -516,10 +516,6 @@ end
 ---@field value any The value that failed validation
 ---@field message string Human-readable error description
 
---- Reporter callback that receives all deferred validation failures.
---- The reporter decides severity (error, warn, drop) — validators are pure predicates.
----@alias flemma.config.ValidationReporter fun(failures: flemma.config.ValidationFailure[])
-
 --- Find the deferred validator for a given op path.
 --- For scalar paths, returns the node's own validator.
 --- For list-capable paths, returns the item schema's validator.
@@ -601,16 +597,16 @@ end
 --- ops. When nil, all ops across all buffers are processed.
 ---@param layer integer Target layer
 ---@param deferred? table[] Deferred writes from apply() pass 1
----@param reporter? flemma.config.ValidationReporter Callback for deferred validation failures
 ---@param bufnr? integer Buffer scope for coerce/validation; nil for global
----@return { path: string, error: string }[]? failures Deferred entries that failed, or nil
-function M.finalize(layer, deferred, reporter, bufnr)
+---@return { path: string, error: string }[]? deferred_failures Deferred entries that failed, or nil
+---@return flemma.config.ValidationFailure[] validation_failures Semantic validation failures (empty when none)
+function M.finalize(layer, deferred, bufnr)
   assert(root_schema, "config.init() must be called before finalize()")
 
   -- Pass 2: replay deferred writes (DISCOVER should resolve now)
-  local failures = nil
+  local deferred_failures = nil
   if deferred and #deferred > 0 then
-    failures = M.apply_deferred(layer, deferred)
+    deferred_failures = M.apply_deferred(layer, deferred)
   end
 
   -- Re-run coerce transforms with populated ctx
@@ -618,15 +614,10 @@ function M.finalize(layer, deferred, reporter, bufnr)
   coerce_walk(root_schema, "", ctx, bufnr)
 
   -- Run deferred semantic validators (post-coerce)
-  if reporter then
-    local validation_failures = {} ---@type flemma.config.ValidationFailure[]
-    validate_ops(layer, ctx, bufnr, validation_failures)
-    if #validation_failures > 0 then
-      reporter(validation_failures)
-    end
-  end
+  local validation_failures = {} ---@type flemma.config.ValidationFailure[]
+  validate_ops(layer, ctx, bufnr, validation_failures)
 
-  return failures
+  return deferred_failures, validation_failures
 end
 
 -- ---------------------------------------------------------------------------
@@ -636,7 +627,7 @@ end
 --- Prepare the frontmatter layer for evaluation.
 --- Clears the buffer's L40 ops and returns a write proxy that frontmatter
 --- code can use as `flemma.opt`. After frontmatter execution, call
---- `finalize(FRONTMATTER, nil, reporter, bufnr)` to run coerce + validation.
+--- `finalize(FRONTMATTER, nil, bufnr)` to run coerce + validation.
 ---@param bufnr integer Buffer number
 ---@return table writer Write proxy for the frontmatter layer
 function M.prepare_frontmatter(bufnr)

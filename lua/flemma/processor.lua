@@ -1,11 +1,13 @@
 local compiler = require("flemma.templating.compiler")
 local config = require("flemma.config")
+local config_store = require("flemma.config.store")
 local ctxutil = require("flemma.context")
 local eval = require("flemma.templating.eval")
 local templating = require("flemma.templating")
 local codeblock_parsers = require("flemma.codeblock.parsers")
 local log = require("flemma.logging")
 local parser = require("flemma.parser")
+local state = require("flemma.state")
 local symbols = require("flemma.symbols")
 
 ---@class flemma.Processor
@@ -67,6 +69,8 @@ end
 ---@class flemma.processor.EvaluatedFrontmatter
 ---@field context flemma.Context Evaluated context with user variables set
 ---@field diagnostics flemma.ast.Diagnostic[] Frontmatter-specific diagnostics
+---@field validation_failures flemma.config.ValidationFailure[] Schema validation failures from finalize
+---@field frontmatter_code? string Raw frontmatter code that was evaluated (nil when no frontmatter)
 
 ---Evaluate frontmatter and return the resulting context (with user variables set).
 ---When bufnr is provided, frontmatter writes go directly to the config store's
@@ -76,9 +80,13 @@ end
 ---@param bufnr? integer Buffer number for config store writes
 ---@return flemma.Context context
 ---@return flemma.ast.Diagnostic[] diagnostics Frontmatter-specific diagnostics
+---@return flemma.config.ValidationFailure[] validation_failures Schema validation failures
+---@return string? frontmatter_code Raw frontmatter code that was evaluated
 local function evaluate_frontmatter_internal(doc, base_context, bufnr)
   local context = ctxutil.clone(base_context)
   local diagnostics = {}
+  local validation_failures = {}
+  local frontmatter_code = nil
 
   -- Clear the frontmatter layer before evaluation so previous ops don't persist
   if bufnr then
@@ -87,10 +95,11 @@ local function evaluate_frontmatter_internal(doc, base_context, bufnr)
 
   if doc.frontmatter then
     local fm = doc.frontmatter ---@cast fm -nil
+    frontmatter_code = fm.code
     local fm_parser = codeblock_parsers.get(fm.language)
 
     if fm_parser then
-      local ok, result = pcall(fm_parser, fm.code, context, bufnr)
+      local ok, result, fm_validation_failures = pcall(fm_parser, fm.code, context, bufnr)
       if ok then
         if type(result) == "table" then
           context = ctxutil.extend(context, result)
@@ -103,6 +112,9 @@ local function evaluate_frontmatter_internal(doc, base_context, bufnr)
             position = fm.position,
             source_file = context:get_filename() or "N/A",
           })
+        end
+        if fm_validation_failures then
+          validation_failures = fm_validation_failures
         end
       else
         table.insert(
@@ -129,7 +141,7 @@ local function evaluate_frontmatter_internal(doc, base_context, bufnr)
     end
   end
 
-  return context, diagnostics
+  return context, diagnostics, validation_failures, frontmatter_code
 end
 
 ---Evaluate frontmatter from a parsed document.
@@ -140,8 +152,14 @@ end
 ---@param bufnr? integer Buffer number for config store writes
 ---@return flemma.processor.EvaluatedFrontmatter
 function M.evaluate_frontmatter(doc, base_context, bufnr)
-  local context, diagnostics = evaluate_frontmatter_internal(doc, base_context, bufnr)
-  return { context = context, diagnostics = diagnostics }
+  local context, diagnostics, validation_failures, frontmatter_code =
+    evaluate_frontmatter_internal(doc, base_context, bufnr)
+  return {
+    context = context,
+    diagnostics = diagnostics,
+    validation_failures = validation_failures,
+    frontmatter_code = frontmatter_code,
+  }
 end
 
 ---Convenience: parse buffer + evaluate frontmatter in one call.
@@ -151,6 +169,59 @@ end
 function M.evaluate_buffer_frontmatter(bufnr)
   local doc = parser.get_parsed_document(bufnr)
   return M.evaluate_frontmatter(doc, ctxutil.from_buffer(bufnr), bufnr)
+end
+
+---Evaluate frontmatter if the code has changed since the last evaluation.
+---Designed for passive triggers (InsertLeave, TextChanged) — swallows diagnostics
+---and validation failures silently. On error, restores the previous L40 state
+---so the last successful parse remains active.
+---@param bufnr integer
+function M.evaluate_frontmatter_if_changed(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+
+  -- Skip if buffer is locked (request in flight owns L40)
+  if buffer_state.locked then
+    return
+  end
+
+  local doc = parser.get_parsed_document(bufnr)
+
+  if not doc.frontmatter then
+    -- Frontmatter was removed — clear L40 if it was previously populated
+    if buffer_state.frontmatter_eval_code ~= nil then
+      config.prepare_frontmatter(bufnr)
+      buffer_state.frontmatter_eval_code = nil
+    end
+    return
+  end
+
+  -- Skip if frontmatter code hasn't changed since last evaluation
+  if doc.frontmatter.code == buffer_state.frontmatter_eval_code then
+    return
+  end
+
+  -- Snapshot L40 before evaluation — if frontmatter has errors we restore
+  -- the last good state so a mid-edit typo doesn't wipe the config.
+  local snapshot = config_store.snapshot_buffer(bufnr)
+
+  local result = M.evaluate_buffer_frontmatter(bufnr)
+
+  -- Check for evaluation errors (syntax errors, runtime errors)
+  local has_errors = false
+  for _, diagnostic in ipairs(result.diagnostics) do
+    if diagnostic.severity == "error" then
+      has_errors = true
+      break
+    end
+  end
+
+  if has_errors then
+    -- Restore previous L40 — keep the last successfully parsed config
+    config_store.restore_buffer(bufnr, snapshot)
+    return
+  end
+
+  buffer_state.frontmatter_eval_code = result.frontmatter_code
 end
 
 --- Evaluate a document AST.
@@ -172,7 +243,7 @@ function M.evaluate(doc, base_context, opts)
     context = opts.evaluated_frontmatter.context
     fm_diagnostics = opts.evaluated_frontmatter.diagnostics
   else
-    context, fm_diagnostics = evaluate_frontmatter_internal(doc, base_context, opts.bufnr)
+    context, fm_diagnostics = evaluate_frontmatter_internal(doc, base_context, opts.bufnr) -- validation_failures unused here
   end
 
   -- Merge parser errors with frontmatter diagnostics

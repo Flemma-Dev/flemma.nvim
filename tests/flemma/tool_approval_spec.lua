@@ -75,7 +75,7 @@ end
 --- @param bufnr integer
 local function evaluate_frontmatter(bufnr)
   processor.evaluate_buffer_frontmatter(bufnr)
-  config_facade.finalize(config_facade.LAYERS.FRONTMATTER, nil, nil, bufnr)
+  config_facade.finalize(config_facade.LAYERS.FRONTMATTER, nil, bufnr)
 end
 
 -- ============================================================================

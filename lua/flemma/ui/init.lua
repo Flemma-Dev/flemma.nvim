@@ -13,6 +13,7 @@ local roles = require("flemma.utilities.roles")
 local bridge = require("flemma.bridge")
 local migration = require("flemma.migration")
 local parser = require("flemma.parser")
+local processor = require("flemma.processor")
 local cursor = require("flemma.cursor")
 local writequeue = require("flemma.buffer.writequeue")
 local str = require("flemma.utilities.string")
@@ -1445,6 +1446,19 @@ function M.setup()
       end
       bridge.update_ui(ev.buf)
       buffer_state.ui_update_tick = tick
+    end,
+  })
+
+  -- Passively evaluate frontmatter when buffer content changes so integrations
+  -- (e.g., lualine) see up-to-date config values without waiting for a request send.
+  -- Gated inside evaluate_frontmatter_if_changed: no-op unless the frontmatter code
+  -- actually changed, and skipped when buffer is locked (request in flight).
+  -- BufEnter covers switching to a buffer whose frontmatter hasn't been evaluated yet.
+  vim.api.nvim_create_autocmd({ "InsertLeave", "TextChanged", "BufEnter" }, {
+    group = augroup,
+    pattern = "*.chat",
+    callback = function(ev)
+      processor.evaluate_frontmatter_if_changed(ev.buf)
     end,
   })
 

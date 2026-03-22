@@ -106,11 +106,11 @@ describe("flemma.config — deferred validation", function()
   end)
 
   -- ---------------------------------------------------------------------------
-  -- finalize() with reporter
+  -- finalize() returns validation_failures
   -- ---------------------------------------------------------------------------
 
-  describe("finalize() with reporter", function()
-    it("calls reporter when deferred validation fails", function()
+  describe("finalize() returns validation_failures", function()
+    it("returns failures when deferred validation fails", function()
       local schema = s.object({
         name = s.string("default"):validate(function(value)
           if value == "bad" then
@@ -122,19 +122,15 @@ describe("flemma.config — deferred validation", function()
       config.init(schema)
       config.apply(L.SETUP, { name = "bad" })
 
-      local captured = nil
-      config.finalize(L.SETUP, nil, function(failures)
-        captured = failures
-      end)
+      local _, validation_failures = config.finalize(L.SETUP, nil)
 
-      assert.is_not_nil(captured)
-      assert.equals(1, #captured)
-      assert.equals("name", captured[1].path)
-      assert.equals("bad", captured[1].value)
-      assert.equals("name is bad", captured[1].message)
+      assert.equals(1, #validation_failures)
+      assert.equals("name", validation_failures[1].path)
+      assert.equals("bad", validation_failures[1].value)
+      assert.equals("name is bad", validation_failures[1].message)
     end)
 
-    it("does not call reporter when all values pass", function()
+    it("returns empty table when all values pass", function()
       local schema = s.object({
         name = s.string("default"):validate(function()
           return true
@@ -143,15 +139,12 @@ describe("flemma.config — deferred validation", function()
       config.init(schema)
       config.apply(L.SETUP, { name = "good" })
 
-      local called = false
-      config.finalize(L.SETUP, nil, function()
-        called = true
-      end)
+      local _, validation_failures = config.finalize(L.SETUP, nil)
 
-      assert.is_false(called)
+      assert.equals(0, #validation_failures)
     end)
 
-    it("is backward compatible when reporter is nil", function()
+    it("works when no deferred is provided", function()
       local schema = s.object({
         name = s.string("default"):validate(function()
           return false, "always fails"
@@ -160,8 +153,9 @@ describe("flemma.config — deferred validation", function()
       config.init(schema)
       config.apply(L.SETUP, { name = "test" })
 
-      -- No reporter — should not error
-      config.finalize(L.SETUP, nil)
+      -- Should not error
+      local _, validation_failures = config.finalize(L.SETUP, nil)
+      assert.equals(1, #validation_failures)
     end)
 
     it("collects multiple failures across fields", function()
@@ -182,15 +176,11 @@ describe("flemma.config — deferred validation", function()
       config.init(schema)
       config.apply(L.SETUP, { alpha = "bad_a", beta = "bad_b" })
 
-      local captured = nil
-      config.finalize(L.SETUP, nil, function(failures)
-        captured = failures
-      end)
+      local _, validation_failures = config.finalize(L.SETUP, nil)
 
-      assert.is_not_nil(captured)
-      assert.equals(2, #captured)
+      assert.equals(2, #validation_failures)
       local messages = {}
-      for _, f in ipairs(captured) do
+      for _, f in ipairs(validation_failures) do
         messages[f.path] = f.message
       end
       assert.equals("alpha is bad", messages.alpha)
@@ -206,13 +196,10 @@ describe("flemma.config — deferred validation", function()
       config.init(schema)
       config.apply(L.SETUP, { name = "test" })
 
-      local captured = nil
-      config.finalize(L.SETUP, nil, function(failures)
-        captured = failures
-      end)
+      local _, validation_failures = config.finalize(L.SETUP, nil)
 
-      assert.is_not_nil(captured)
-      assert.matches("validation failed", captured[1].message)
+      assert.equals(1, #validation_failures)
+      assert.matches("validation failed", validation_failures[1].message)
     end)
   end)
 
@@ -242,16 +229,12 @@ describe("flemma.config — deferred validation", function()
       store.record(L.SETUP, nil, "append", "items", "nope")
       store.record(L.SETUP, nil, "append", "items", "beta")
 
-      local captured = nil
-      config.finalize(L.SETUP, nil, function(failures)
-        captured = failures
-      end)
+      local _, validation_failures = config.finalize(L.SETUP, nil)
 
-      assert.is_not_nil(captured)
-      assert.equals(1, #captured)
-      assert.equals("items", captured[1].path)
-      assert.equals("nope", captured[1].value)
-      assert.matches("unknown item 'nope'", captured[1].message)
+      assert.equals(1, #validation_failures)
+      assert.equals("items", validation_failures[1].path)
+      assert.equals("nope", validation_failures[1].value)
+      assert.matches("unknown item 'nope'", validation_failures[1].message)
     end)
 
     it("passes when all list items are valid", function()
@@ -272,12 +255,9 @@ describe("flemma.config — deferred validation", function()
       store.record(L.SETUP, nil, "append", "items", "alpha")
       store.record(L.SETUP, nil, "append", "items", "beta")
 
-      local called = false
-      config.finalize(L.SETUP, nil, function()
-        called = true
-      end)
+      local _, validation_failures = config.finalize(L.SETUP, nil)
 
-      assert.is_false(called)
+      assert.equals(0, #validation_failures)
     end)
 
     it("validates remove ops (catches typos in tool removal)", function()
@@ -302,16 +282,12 @@ describe("flemma.config — deferred validation", function()
       -- Frontmatter removes a typo'd name
       store.record(L.FRONTMATTER, 1, "remove", "items", "alph")
 
-      local captured = nil
-      config.finalize(L.FRONTMATTER, nil, function(failures)
-        captured = failures
-      end, 1)
+      local _, validation_failures = config.finalize(L.FRONTMATTER, nil, 1)
 
-      assert.is_not_nil(captured)
-      assert.equals(1, #captured)
-      assert.equals("items", captured[1].path)
-      assert.equals("alph", captured[1].value)
-      assert.matches("unknown item 'alph'", captured[1].message)
+      assert.equals(1, #validation_failures)
+      assert.equals("items", validation_failures[1].path)
+      assert.equals("alph", validation_failures[1].value)
+      assert.matches("unknown item 'alph'", validation_failures[1].message)
     end)
 
     it("validates items in a plain ListNode", function()
@@ -329,15 +305,11 @@ describe("flemma.config — deferred validation", function()
       config.init(schema)
       config.apply(L.SETUP, { tags = { "good", "invalid", "fine" } })
 
-      local captured = nil
-      config.finalize(L.SETUP, nil, function(failures)
-        captured = failures
-      end)
+      local _, validation_failures = config.finalize(L.SETUP, nil)
 
-      assert.is_not_nil(captured)
-      assert.equals(1, #captured)
-      assert.equals("tags", captured[1].path)
-      assert.equals("invalid", captured[1].value)
+      assert.equals(1, #validation_failures)
+      assert.equals("tags", validation_failures[1].path)
+      assert.equals("invalid", validation_failures[1].value)
     end)
   end)
 
@@ -346,7 +318,7 @@ describe("flemma.config — deferred validation", function()
   -- ---------------------------------------------------------------------------
 
   describe("finalize() with bufnr", function()
-    it("calls reporter with failures for buffer-scoped validation", function()
+    it("returns failures for buffer-scoped validation", function()
       local schema = s.object({
         items = s.object({
           [symbols.DISCOVER] = function()
@@ -365,17 +337,13 @@ describe("flemma.config — deferred validation", function()
       store.record(L.FRONTMATTER, bufnr, "append", "items", "good")
       store.record(L.FRONTMATTER, bufnr, "append", "items", "bad")
 
-      local captured = nil
-      config.finalize(L.FRONTMATTER, nil, function(failures)
-        captured = failures
-      end, bufnr)
+      local _, validation_failures = config.finalize(L.FRONTMATTER, nil, bufnr)
 
-      assert.is_not_nil(captured)
-      assert.equals(1, #captured)
-      assert.equals("bad", captured[1].value)
+      assert.equals(1, #validation_failures)
+      assert.equals("bad", validation_failures[1].value)
     end)
 
-    it("does not call reporter when all frontmatter values are valid", function()
+    it("returns empty table when all frontmatter values are valid", function()
       local schema = s.object({
         name = s.string("default"):validate(function()
           return true
@@ -384,12 +352,9 @@ describe("flemma.config — deferred validation", function()
       config.init(schema)
       store.record(L.FRONTMATTER, 1, "set", "name", "good")
 
-      local called = false
-      config.finalize(L.FRONTMATTER, nil, function()
-        called = true
-      end, 1)
+      local _, validation_failures = config.finalize(L.FRONTMATTER, nil, 1)
 
-      assert.is_false(called)
+      assert.equals(0, #validation_failures)
     end)
   end)
 
@@ -416,7 +381,7 @@ describe("flemma.config — deferred validation", function()
       config.init(schema)
       config.apply(L.SETUP, { mode = "shorthand" })
 
-      config.finalize(L.SETUP, nil, function() end)
+      config.finalize(L.SETUP, nil)
 
       assert.equals("expanded_form", validated_value)
     end)
@@ -506,41 +471,30 @@ describe("flemma.config — deferred validation", function()
     it("reports typo with did-you-mean suggestion", function()
       store.record(L.FRONTMATTER, 1, "remove", "tools", "bsh")
 
-      local captured = nil
-      config.finalize(L.FRONTMATTER, nil, function(failures)
-        captured = failures
-      end, 1)
+      local _, validation_failures = config.finalize(L.FRONTMATTER, nil, 1)
 
-      assert.is_not_nil(captured)
-      assert.equals(1, #captured)
-      assert.matches("Unknown tool 'bsh'", captured[1].message)
-      assert.matches("did you mean 'bash'", captured[1].message)
+      assert.equals(1, #validation_failures)
+      assert.matches("Unknown tool 'bsh'", validation_failures[1].message)
+      assert.matches("did you mean 'bash'", validation_failures[1].message)
     end)
 
     it("reports typo without suggestion when too distant", function()
       store.record(L.FRONTMATTER, 1, "append", "tools", "xyzzy")
 
-      local captured = nil
-      config.finalize(L.FRONTMATTER, nil, function(failures)
-        captured = failures
-      end, 1)
+      local _, validation_failures = config.finalize(L.FRONTMATTER, nil, 1)
 
-      assert.is_not_nil(captured)
-      assert.equals(1, #captured)
-      assert.matches("Unknown tool 'xyzzy'", captured[1].message)
-      assert.not_matches("did you mean", captured[1].message)
+      assert.equals(1, #validation_failures)
+      assert.matches("Unknown tool 'xyzzy'", validation_failures[1].message)
+      assert.not_matches("did you mean", validation_failures[1].message)
     end)
 
     it("passes for valid registered tool names", function()
       store.record(L.FRONTMATTER, 1, "append", "tools", "bash")
       store.record(L.FRONTMATTER, 1, "append", "tools", "read")
 
-      local called = false
-      config.finalize(L.FRONTMATTER, nil, function()
-        called = true
-      end, 1)
+      local _, validation_failures = config.finalize(L.FRONTMATTER, nil, 1)
 
-      assert.is_false(called)
+      assert.equals(0, #validation_failures)
     end)
   end)
 end)

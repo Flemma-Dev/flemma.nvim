@@ -285,6 +285,32 @@ function M.clear(layer, bufnr)
   end
 end
 
+--- Snapshot a buffer's frontmatter operations.
+--- Returns the current ops table (or nil if none). Used to restore L40 if
+--- frontmatter evaluation fails in the passive path.
+---@param bufnr integer Buffer number
+---@return table[]? ops Shallow copy of the ops list, or nil if no ops recorded
+function M.snapshot_buffer(bufnr)
+  local ops = buffer_ops[bufnr]
+  if not ops then
+    return nil
+  end
+  -- Shallow copy: individual op entries are never mutated after recording
+  local copy = {}
+  for i, op in ipairs(ops) do
+    copy[i] = op
+  end
+  return copy
+end
+
+--- Restore a buffer's frontmatter operations from a snapshot.
+--- Replaces the current L40 ops with the provided snapshot.
+---@param bufnr integer Buffer number
+---@param ops table[]? Snapshot from snapshot_buffer (nil clears the buffer)
+function M.restore_buffer(bufnr, ops)
+  buffer_ops[bufnr] = ops
+end
+
 --- Remove a buffer's frontmatter operations entirely.
 --- Unlike clear() which resets to an empty table, this releases the entry
 --- from memory. Used during buffer cleanup to prevent orphaned entries from
