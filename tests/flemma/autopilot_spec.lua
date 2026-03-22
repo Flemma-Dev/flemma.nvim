@@ -1047,4 +1047,77 @@ describe("Autopilot race condition: sync + async tool dispatch", function()
       return false
     end)
   end)
+
+  -- Regression test for: "Cannot send while tool execution is in progress."
+  -- The race: on_response_complete arms autopilot, Phase 2's for-loop dispatches
+  -- a sync tool that completes inline, on_tools_complete fires (state is "armed"),
+  -- finds the async tool's approved block, and schedules send_or_execute. After the
+  -- for-loop dispatches the async tool and strips its fence, the stale
+  -- send_or_execute falls through to send_to_provider — which finds the async tool
+  -- still executing and emits the "Cannot send" warning.
+  it("does not send_to_provider while async tool is executing after sync tool completes", function()
+    -- Sync tool: completes inline during Phase 2 for loop.
+    tools_registry.register("test_sync", {
+      name = "test_sync",
+      description = "Sync test tool for send-while-executing race test",
+      input_schema = { type = "object", properties = { value = { type = "string" } } },
+      execute = function(input)
+        return { success = true, output = input.value or "sync_ok" }
+      end,
+    })
+
+    -- Async tool: holds its callback so it stays in pending_executions.
+    local async_callbacks = {}
+    tools_registry.register("test_async", {
+      name = "test_async",
+      description = "Async test tool for send-while-executing race test",
+      async = true,
+      input_schema = { type = "object", properties = { value = { type = "string" } } },
+      execute = function(_input, _context, callback)
+        table.insert(async_callbacks, callback)
+      end,
+    })
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Do two things" })
+
+    -- Same fixture: two tool_use blocks — test_sync then test_async.
+    client.register_fixture(
+      "api%.anthropic%.com",
+      "tests/fixtures/tool_calling/anthropic_multi_tool_race_streaming.txt"
+    )
+
+    local send_errors = {}
+    vim.notify = function(msg, level, ...)
+      if type(msg) == "string" and msg:match("Cannot send while tool execution is in progress") then
+        table.insert(send_errors, msg)
+      end
+      return orig_notify(msg, level, ...)
+    end
+
+    vim.cmd("Flemma send")
+
+    -- Wait until the async tool has been dispatched (callback captured).
+    local dispatched = vim.wait(3000, function()
+      return #async_callbacks > 0
+    end)
+    assert.is_true(dispatched, "Async tool was not dispatched within 3s")
+
+    -- Pump the event loop: lets the stale on_tools_complete → send_or_execute
+    -- callback fire. Before the fix, this triggers the "Cannot send" warning.
+    vim.wait(500, function()
+      return false
+    end)
+
+    assert.equals(0, #send_errors, "Race condition: " .. (send_errors[1] or "none"))
+
+    -- Resolve the async tool so executor cleanup runs cleanly.
+    for _, cb in ipairs(async_callbacks) do
+      cb({ success = true, output = "async_ok" })
+    end
+    vim.wait(200, function()
+      return false
+    end)
+  end)
 end)

@@ -13,6 +13,15 @@ local tool_context = require("flemma.tools.context")
 
 ---@alias flemma.autopilot.State "idle"|"armed"|"sending"|"paused"
 
+---Check whether tool executions are currently in progress for a buffer.
+---Reads directly from state to avoid circular dependency with executor module.
+---@param bufnr integer
+---@return boolean
+local function has_executing_tools(bufnr)
+  local pending = state.get_buffer_state(bufnr).pending_executions
+  return pending ~= nil and next(pending) ~= nil
+end
+
 ---@class flemma.autopilot.BufferState
 ---@field state flemma.autopilot.State
 ---@field iteration integer
@@ -195,6 +204,13 @@ function M.on_tools_complete(bufnr)
       if state.get_buffer_state(bufnr).current_request then
         return
       end
+      -- Guard: Phase 2 may have dispatched new tools between scheduling and
+      -- execution (sync tool completes during for-loop → on_tools_complete fires
+      -- while later tools are still being dispatched). Bail and let the new
+      -- tools' completion re-trigger on_tools_complete.
+      if has_executing_tools(bufnr) then
+        return
+      end
       bridge.send_or_execute({ bufnr = bufnr })
     end)
     return
@@ -209,6 +225,10 @@ function M.on_tools_complete(bufnr)
       return
     end
     if state.get_buffer_state(bufnr).current_request then
+      return
+    end
+    -- Guard: same Phase 2 dispatch race as above.
+    if has_executing_tools(bufnr) then
       return
     end
     bridge.send_or_execute({ bufnr = bufnr })
