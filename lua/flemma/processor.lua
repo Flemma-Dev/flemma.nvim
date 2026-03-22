@@ -246,8 +246,12 @@ function M.evaluate(doc, base_context, opts)
     context, fm_diagnostics = evaluate_frontmatter_internal(doc, base_context, opts.bufnr) -- validation_failures unused here
   end
 
-  -- Merge parser errors with frontmatter diagnostics
-  local diagnostics = doc.errors or {}
+  -- Merge parser errors with frontmatter diagnostics (shallow copy to avoid
+  -- mutating doc.errors, which persists in the AST snapshot across requests)
+  local diagnostics = {}
+  for _, d in ipairs(doc.errors or {}) do
+    table.insert(diagnostics, d)
+  end
   for _, d in ipairs(fm_diagnostics) do
     table.insert(diagnostics, d)
   end
