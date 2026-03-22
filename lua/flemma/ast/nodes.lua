@@ -75,6 +75,8 @@ local M = {}
 ---@field raw? string
 ---@field message_role? string
 ---@field source_file? string
+---@field rewriter_name? string
+---@field include_stack? string[]
 
 ---@class flemma.ast.GenericTextPart
 ---@field kind "text"

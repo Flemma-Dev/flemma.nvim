@@ -673,39 +673,30 @@ function M.send_to_provider(opts)
   -- Display diagnostics to user if any
   if #diagnostics > 0 then
     local has_errors = false
-    local by_type = {
-      frontmatter = {},
-      config = {},
-      expression = {},
-      template = {},
-      file = {},
-      tool_result = {},
-      tool_use = {},
-      rewriter = {},
-    }
-
     for _, diag in ipairs(diagnostics) do
       if diag.severity == "error" then
         has_errors = true
+        break
       end
-      local type_bucket = by_type[diag.type] or {}
-      table.insert(type_bucket, diag)
-      by_type[diag.type] = type_bucket
     end
 
     local diagnostic_lines = {}
-    local max_per_type = 5
+    local MAX_DIAGNOSTICS = 10
+
+    local ICON_ERROR = "✗"
+    local ICON_WARN = "⚠"
 
     ---@param path string|nil
     ---@return string
     local function format_path(path)
       if not path or path == "N/A" then
-        return "N/A"
+        return ""
       end
-      -- Resolve to relative path from cwd for shorter display
       return vim.fn.fnamemodify(path, ":.")
     end
 
+    ---@param pos flemma.ast.Position|nil
+    ---@return string
     local function format_position(pos)
       if not pos then
         return ""
@@ -719,138 +710,100 @@ function M.send_to_provider(opts)
       return ""
     end
 
-    -- Format frontmatter errors
-    if #by_type.frontmatter > 0 then
-      table.insert(diagnostic_lines, "Frontmatter errors:")
-      for i, d in ipairs(by_type.frontmatter) do
-        if i <= max_per_type then
-          local loc = format_path(d.source_file) .. format_position(d.position)
-          table.insert(diagnostic_lines, string.format("  [%s] %s", loc, d.error))
-        elseif i == max_per_type + 1 then
-          table.insert(diagnostic_lines, string.format("  …and %d more", #by_type.frontmatter - max_per_type))
-          break
-        end
+    ---Build the location line for a diagnostic (second line, indented).
+    ---Returns nil if there's nothing meaningful to show.
+    ---@param d flemma.ast.Diagnostic
+    ---@return string|nil
+    local function format_location(d)
+      local parts = {}
+
+      local path = format_path(d.source_file)
+      if path ~= "" then
+        table.insert(parts, path .. format_position(d.position))
       end
+
+      -- Role context for expression diagnostics
+      if d.message_role then
+        table.insert(parts, "in @" .. d.message_role)
+      end
+
+      -- Rewriter name
+      if d.rewriter_name then
+        table.insert(parts, "[" .. d.rewriter_name .. "]")
+      end
+
+      -- Expression source
+      if d.expression then
+        table.insert(parts, "{{ " .. vim.trim(d.expression) .. " }}")
+      end
+
+      if #parts == 0 then
+        return nil
+      end
+      return "   " .. table.concat(parts, " · ")
     end
 
-    -- Format config errors (frontmatter config writes that failed validation)
-    if #by_type.config > 0 then
-      table.insert(diagnostic_lines, "Config errors:")
-      for i, d in ipairs(by_type.config) do
-        if i <= max_per_type then
-          local loc = format_path(d.source_file) .. format_position(d.position)
-          table.insert(diagnostic_lines, string.format("  [%s] %s", loc, d.error))
-        elseif i == max_per_type + 1 then
-          table.insert(diagnostic_lines, string.format("  …and %d more", #by_type.config - max_per_type))
-          break
-        end
+    -- Flatten all diagnostics into a single ordered list: errors first, then warnings.
+    local sorted = {}
+    for _, diag in ipairs(diagnostics) do
+      table.insert(sorted, diag)
+    end
+    table.sort(sorted, function(a, b)
+      if a.severity == b.severity then
+        return false
       end
+      return a.severity == "error"
+    end)
+
+    -- Render each diagnostic as icon + message, then location on next line.
+    local rendered = 0
+    for _, d in ipairs(sorted) do
+      if rendered >= MAX_DIAGNOSTICS then
+        table.insert(diagnostic_lines, string.format(" …and %d more", #sorted - MAX_DIAGNOSTICS))
+        break
+      end
+
+      -- Blank line between diagnostics for readability (but not before the first)
+      if rendered > 0 then
+        table.insert(diagnostic_lines, "")
+      end
+
+      local icon = d.severity == "error" and ICON_ERROR or ICON_WARN
+      local message = d.error or "unknown error"
+
+      -- File diagnostics: the filename IS the context, no type prefix needed
+      if d.type == "file" then
+        local ref = d.raw or d.filename
+        if ref then
+          message = ref .. ": " .. message
+        end
+      elseif d.type then
+        message = d.type .. ": " .. message
+      end
+
+      table.insert(diagnostic_lines, string.format(" %s %s", icon, message))
+
+      -- Location line
+      local loc = format_location(d)
+      if loc then
+        table.insert(diagnostic_lines, loc)
+      end
+
+      -- Include stack for file errors
+      if d.include_stack and #d.include_stack > 0 then
+        for _, stack_path in ipairs(d.include_stack) do
+          table.insert(diagnostic_lines, "   ↓ " .. format_path(stack_path))
+        end
+        table.insert(diagnostic_lines, "   → " .. (d.raw or d.filename or ""))
+      end
+
+      rendered = rendered + 1
     end
 
-    -- Format expression errors (non-fatal warnings)
-    if #by_type.expression > 0 then
-      table.insert(diagnostic_lines, "Expression evaluation errors (request will still be sent):")
-      for i, d in ipairs(by_type.expression) do
-        if i <= max_per_type then
-          local loc = format_path(d.source_file) .. format_position(d.position)
-          local role_info = d.message_role and (" in @" .. d.message_role) or ""
-          table.insert(diagnostic_lines, string.format("  [%s%s] %s", loc, role_info, d.error))
-          table.insert(diagnostic_lines, string.format("    Expression: {{ %s }}", d.expression or ""))
-        elseif i == max_per_type + 1 then
-          table.insert(diagnostic_lines, string.format("  …and %d more", #by_type.expression - max_per_type))
-          break
-        end
-      end
-    end
-
-    -- Format template errors (code block syntax/runtime errors)
-    if #by_type.template > 0 then
-      table.insert(diagnostic_lines, "Template errors:")
-      for i, d in ipairs(by_type.template) do
-        if i <= max_per_type then
-          local loc = format_path(d.source_file) .. format_position(d.position)
-          table.insert(diagnostic_lines, string.format("  [%s] %s", loc, d.error or "Unknown error"))
-        elseif i == max_per_type + 1 then
-          table.insert(diagnostic_lines, string.format("  …and %d more", #by_type.template - max_per_type))
-          break
-        end
-      end
-    end
-
-    -- Format file reference warnings
-    if #by_type.file > 0 then
-      table.insert(diagnostic_lines, "File reference errors:")
-      for i, d in ipairs(by_type.file) do
-        if i <= max_per_type then
-          local loc = format_path(d.source_file) .. format_position(d.position)
-          local ref = d.filename or d.raw or "unknown"
-          table.insert(diagnostic_lines, string.format("  [%s] %s: %s", loc, ref, d.error))
-          if d.include_stack and #d.include_stack > 0 then
-            table.insert(diagnostic_lines, "  Caused by:")
-            for _, stack_path in ipairs(d.include_stack) do
-              table.insert(diagnostic_lines, "  ↓ " .. format_path(stack_path))
-            end
-            table.insert(diagnostic_lines, "  → " .. (d.raw or d.filename))
-          end
-        elseif i == max_per_type + 1 then
-          table.insert(diagnostic_lines, string.format("  …and %d more", #by_type.file - max_per_type))
-          break
-        end
-      end
-    end
-
-    -- Format tool use/result warnings
-    local tool_diags = {}
-    for _, d in ipairs(by_type.tool_use) do
-      table.insert(tool_diags, d)
-    end
-    for _, d in ipairs(by_type.tool_result) do
-      table.insert(tool_diags, d)
-    end
-    if #tool_diags > 0 then
-      table.insert(diagnostic_lines, "Tool calling errors:")
-      for i, d in ipairs(tool_diags) do
-        if i <= max_per_type then
-          local loc = format_position(d.position)
-          table.insert(diagnostic_lines, string.format("  [%s] %s", loc, d.error))
-        elseif i == max_per_type + 1 then
-          table.insert(diagnostic_lines, string.format("  …and %d more", #tool_diags - max_per_type))
-          break
-        end
-      end
-    end
-
-    -- Format rewriter errors/warnings
-    if #by_type.rewriter > 0 then
-      table.insert(diagnostic_lines, "Rewriter errors:")
-      for i, d in ipairs(by_type.rewriter) do
-        if i <= max_per_type then
-          local loc = format_position(d.position)
-          local rw_name = d.rewriter_name and (" [" .. d.rewriter_name .. "]") or ""
-          table.insert(diagnostic_lines, string.format("  %s%s %s", loc, rw_name, d.error or "unknown"))
-        elseif i == max_per_type + 1 then
-          table.insert(diagnostic_lines, string.format("  …and %d more", #by_type.rewriter - max_per_type))
-          break
-        end
-      end
-    end
-
-    -- Generic fallback: render any custom: diagnostic type.
-    -- Diagnostics must carry a `label` field for the section heading.
-    for dtype, bucket in pairs(by_type) do
-      if dtype:sub(1, 7) == "custom:" and #bucket > 0 then
-        local short_type = dtype:sub(8) -- strip "custom:" prefix
-        local heading = string.format("[%s] %s", short_type, bucket[1].label or short_type)
-        table.insert(diagnostic_lines, heading)
-        for i, d in ipairs(bucket) do
-          if i <= max_per_type then
-            table.insert(diagnostic_lines, string.format("  %s", d.error or "unknown"))
-          elseif i == max_per_type + 1 then
-            table.insert(diagnostic_lines, string.format("  …and %d more", #bucket - max_per_type))
-            break
-          end
-        end
-      end
+    -- Footer: clarify whether the request was blocked
+    if has_errors then
+      table.insert(diagnostic_lines, "")
+      table.insert(diagnostic_lines, "Request blocked — fix errors to send.")
     end
 
     local level = has_errors and vim.log.levels.ERROR or vim.log.levels.WARN
