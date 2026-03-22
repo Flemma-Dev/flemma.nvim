@@ -27,6 +27,7 @@ local diagnostic_format = require("flemma.utilities.diagnostic")
 local cursor = require("flemma.cursor")
 local sandbox = require("flemma.sandbox")
 local lsp = require("flemma.lsp")
+local devicons_integration = require("flemma.integrations.devicons")
 
 ---Setup function to initialize the plugin
 ---@param user_opts? flemma.Config.Opts User configuration overrides (merged with defaults)
@@ -230,6 +231,13 @@ M.setup = function(user_opts)
   -- Set up experimental LSP if enabled
   if config.experimental and config.experimental.lsp then
     lsp.setup()
+  end
+
+  -- Optional integrations
+  if config.integrations.devicons.enabled then
+    devicons_integration.setup({
+      icon = config.integrations.devicons.icon,
+    })
   end
 
   -- Defer sandbox backend check until the user enters a .chat buffer.

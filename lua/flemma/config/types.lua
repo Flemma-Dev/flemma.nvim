@@ -175,6 +175,13 @@
 ---@field lsp boolean Enable in-process LSP for .chat buffers
 ---@field tools boolean Enable experimental exploration tools (grep, find, ls)
 
+---@class flemma.config.IntegrationsDevicons
+---@field enabled boolean
+---@field icon string
+
+---@class flemma.config.Integrations
+---@field devicons flemma.config.IntegrationsDevicons
+
 ---User-facing setup options — every field is optional (merged with defaults).
 ---@class flemma.Config.Opts
 ---@field defaults? { dark: { bg: string, fg: string }, light: { bg: string, fg: string } }
@@ -200,6 +207,7 @@
 ---@field sandbox? flemma.config.SandboxConfig
 ---@field diagnostics? flemma.config.Diagnostics
 ---@field experimental? flemma.config.Experimental
+---@field integrations? flemma.config.Integrations
 ---@field secrets? flemma.config.SecretsConfig
 
 ---Full resolved config (all fields present after merging with defaults).
@@ -226,4 +234,5 @@
 ---@field sandbox flemma.config.SandboxConfig
 ---@field diagnostics flemma.config.Diagnostics
 ---@field experimental flemma.config.Experimental
+---@field integrations flemma.config.Integrations
 ---@field secrets flemma.config.SecretsConfig

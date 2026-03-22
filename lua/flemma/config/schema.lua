@@ -229,6 +229,13 @@ return s.object({
     }),
   }),
 
+  integrations = s.object({
+    devicons = s.object({
+      enabled = s.boolean(true),
+      icon = s.string("\u{2234}"), -- ∴ U+2234 Therefore
+    }),
+  }),
+
   logging = s.object({
     enabled = s.boolean(false),
     path = s.string(vim.fn.stdpath("cache") .. "/flemma.log"),
