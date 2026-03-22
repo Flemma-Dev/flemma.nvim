@@ -923,7 +923,7 @@ function M.send_to_provider(opts)
     input_tokens = 0,
     output_tokens = 0,
     thoughts_tokens = 0,
-    output_has_thoughts = provider_capabilities and provider_capabilities.output_has_thoughts or false,
+    output_has_thoughts = provider_capabilities ~= nil and provider_capabilities.output_has_thoughts,
     cache_read_input_tokens = 0,
     cache_creation_input_tokens = 0,
   }
@@ -1020,7 +1020,7 @@ function M.send_to_provider(opts)
             bufnr = bufnr,
             started_at = request_started_at,
             completed_at = session_module.now(),
-            output_has_thoughts = provider_capabilities and provider_capabilities.output_has_thoughts or false,
+            output_has_thoughts = provider_capabilities ~= nil and provider_capabilities.output_has_thoughts,
             cache_read_input_tokens = buffer_state.inflight_usage.cache_read_input_tokens,
             cache_creation_input_tokens = buffer_state.inflight_usage.cache_creation_input_tokens,
             cache_read_price = pricing_info.cache_read,

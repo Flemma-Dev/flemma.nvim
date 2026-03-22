@@ -175,8 +175,8 @@ local function collect_autopilot(bufnr, config)
   local max_turns = (autopilot_config and autopilot_config.max_turns) or 100
 
   -- Base config value (ignoring frontmatter): mirrors autopilot.is_enabled() without the opts check
-  local config_enabled = autopilot_config and (autopilot_config.enabled == nil or autopilot_config.enabled == true)
-    or false
+  local config_enabled = autopilot_config ~= nil
+    and (autopilot_config.enabled == nil or autopilot_config.enabled == true)
 
   local sources = {}
   local enabled_info = config_facade.inspect(bufnr, "tools.autopilot.enabled")
@@ -344,7 +344,7 @@ end
 ---@return { approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil }
 local function collect_approval(config, bufnr, enabled_tools)
   local tools_config = config.tools
-  local require_approval_disabled = tools_config and tools_config.require_approval == false or false
+  local require_approval_disabled = tools_config ~= nil and tools_config.require_approval == false
 
   -- Classify each tool through the resolver chain
   local approved = {}

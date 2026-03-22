@@ -373,7 +373,7 @@ function M.execute(bufnr, context)
     maybe_unlock_buffer(bufnr)
     return false, "Failed to inject placeholder: " .. (inject_err or "unknown")
   end
-  pending[tool_id].placeholder_modified = (placeholder_opts and placeholder_opts.modified) or false
+  pending[tool_id].placeholder_modified = placeholder_opts ~= nil and placeholder_opts.modified
 
   -- Strip any flemma:tool status fence when the placeholder already existed.
   -- Phase 1 injects placeholders with status=approved; the executor's

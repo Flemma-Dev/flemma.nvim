@@ -492,7 +492,7 @@ function M.start_progress(bufnr, progress_opts)
 
       -- Immediately update UI and position cursor
       M.update_ui(bufnr)
-      local is_user_send = progress_opts and progress_opts.force or false
+      local is_user_send = progress_opts ~= nil and progress_opts.force
       cursor.request_move(bufnr, {
         line = vim.api.nvim_buf_line_count(bufnr),
         bottom = true,
