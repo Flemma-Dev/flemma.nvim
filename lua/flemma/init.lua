@@ -8,6 +8,7 @@ local schema_definition = require("flemma.config.schema.definition")
 local log = require("flemma.logging")
 local core = require("flemma.core")
 local presets = require("flemma.presets")
+local state = require("flemma.state")
 local ui = require("flemma.ui")
 local commands = require("flemma.commands")
 local keymaps = require("flemma.keymaps")
@@ -48,6 +49,13 @@ M.setup = function(user_opts)
   -- Schema defaults (L10) + user opts (L20). DISCOVER-backed keys
   -- (tool/provider/sandbox-specific config) are deferred until modules register.
   config_facade.init(schema_definition)
+
+  -- Register cleanup hook to release per-buffer frontmatter ops on buffer delete.
+  -- Prevents orphaned L40 entries from accumulating across long sessions.
+  state.register_cleanup("config", function(bufnr)
+    config_facade.cleanup_buffer(bufnr)
+  end)
+
   local _, apply_errors, deferred =
     config_facade.apply(config_facade.LAYERS.SETUP, user_opts, { defer_discover = true })
   if apply_errors then

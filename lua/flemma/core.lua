@@ -190,8 +190,6 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
     return nil
   end
 
-  local updated_config = config_facade.get(bufnr)
-
   -- Invalidate cached API keys — credentials don't carry across providers
   secrets.invalidate_all()
 
@@ -200,9 +198,21 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
   buffer_state.diagnostics_previous_request = nil
   buffer_state.diagnostics_current_request = nil
 
-  -- Notify the user
-  local model_info = updated_config.model and (" with model '" .. updated_config.model .. "'") or ""
-  vim.notify("Flemma: Switched to '" .. updated_config.provider .. "'" .. model_info .. ".", vim.log.levels.INFO)
+  -- Evaluate frontmatter so L40 is populated before comparing. Without this,
+  -- buffers that haven't sent yet would have empty L40 and the override check
+  -- would silently miss frontmatter provider overrides.
+  processor.evaluate_buffer_frontmatter(bufnr)
+
+  -- Notify the user. Compare global config (D+S+R) with buffer config (D+S+R+F)
+  -- to detect frontmatter overrides that take precedence over the switch.
+  local global_config = config_facade.get()
+  local buffer_config = config_facade.get(bufnr)
+  local model_info = global_config.model and (" with model '" .. global_config.model .. "'") or ""
+  local message = "Flemma: Switched to '" .. global_config.provider .. "'" .. model_info .. "."
+  if buffer_config.provider ~= global_config.provider then
+    message = message .. " This buffer uses '" .. buffer_config.provider .. "' (override)."
+  end
+  vim.notify(message, vim.log.levels.INFO)
 
   -- Refresh lualine if available to update the model component
   local lualine_ok, lualine = pcall(require, "lualine")
@@ -954,7 +964,8 @@ function M.send_to_provider(opts)
             .. "\n\nYour conversation is too long for this model."
             .. " Remove earlier messages or start a new conversation."
         elseif current_provider:is_auth_error(msg) then
-          current_provider:reset({ invalidate_all_secrets = true })
+          local cred = current_provider:get_credential()
+          secrets.invalidate(cred.kind, cred.service)
           notify_msg = notify_msg .. "\n\nAuthentication expired. Send again to generate a fresh token."
         elseif current_provider:is_rate_limit_error(msg) then
           local details = current_provider:format_rate_limit_details()

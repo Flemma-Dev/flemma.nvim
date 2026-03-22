@@ -141,7 +141,6 @@ local M = {}
 ---@field pending_tool_calls flemma.pipeline.UnresolvedTool[]|nil Tool calls without matching results
 
 ---@class flemma.provider.ResetOpts
----@field invalidate_all_secrets? boolean If true, invalidate all cached credentials only
 
 ---@class flemma.provider.SSELine
 ---@field type "data"|"event"|"done"
@@ -273,19 +272,10 @@ local function destroy_sinks(response_buffer)
 end
 
 --- Reset provider state before a new request.
---- When called without opts, performs a full reset (response buffer, etc.).
---- When called with opts, performs a selective reset (only the specified fields).
 --- Providers must call `base.reset(self)` plus any provider-specific state initialization.
 --- Sinks in `_response_buffer.extra` are auto-destroyed on full reset.
 ---@param self flemma.provider.Base
----@param opts? flemma.provider.ResetOpts
-function M.reset(self, opts)
-  if opts then
-    if opts.invalidate_all_secrets then
-      secrets.invalidate_all()
-    end
-    return
-  end
+function M.reset(self)
   -- Destroy provider-specific sinks in extra
   destroy_sinks(self._response_buffer)
   -- Destroy previous response buffer sink if it exists

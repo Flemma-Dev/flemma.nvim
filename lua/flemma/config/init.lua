@@ -563,4 +563,12 @@ function M.coerce_frontmatter(bufnr)
   coerce_walk(root_schema, "", ctx, bufnr)
 end
 
+--- Release a buffer's frontmatter operations from memory.
+--- Called during buffer cleanup to prevent orphaned entries from
+--- accumulating across long sessions with many buffers.
+---@param bufnr integer Buffer number
+function M.cleanup_buffer(bufnr)
+  store.purge_buffer(bufnr)
+end
+
 return M

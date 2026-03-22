@@ -613,44 +613,8 @@ describe("Vertex AI Provider", function()
     end)
   end)
 
-  describe("reset with opts", function()
-    it("should invalidate all secrets when opts.invalidate_all_secrets is true", function()
-      local secrets_cache = require("flemma.secrets.cache")
-      local provider = vertex.new({
-        model = "gemini-2.5-pro",
-        project_id = "test-project",
-        location = "us-central1",
-      })
-
-      -- Seed a cache entry so we can verify it gets cleared
-      secrets_cache.set(
-        "access_token:vertex",
-        { value = "ya29.fake-token" },
-        { kind = "access_token", service = "vertex" }
-      )
-
-      provider:reset({ invalidate_all_secrets = true })
-
-      assert.is_nil(secrets_cache.get("access_token:vertex"))
-    end)
-
-    it("should NOT reset the response buffer when opts.invalidate_all_secrets is true", function()
-      local provider = vertex.new({
-        model = "gemini-2.5-pro",
-        project_id = "test-project",
-        location = "us-central1",
-      })
-
-      -- Record what the response buffer looks like after construction
-      local original_buffer = provider._response_buffer
-      assert.is_not_nil(original_buffer)
-
-      -- Secrets reset should preserve the response buffer
-      provider:reset({ invalidate_all_secrets = true })
-      assert.equals(original_buffer, provider._response_buffer)
-    end)
-
-    it("should perform full reset when no opts are passed", function()
+  describe("reset", function()
+    it("should perform full reset", function()
       local provider = vertex.new({
         model = "gemini-2.5-pro",
         project_id = "test-project",

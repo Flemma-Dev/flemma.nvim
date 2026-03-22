@@ -285,6 +285,15 @@ function M.clear(layer, bufnr)
   end
 end
 
+--- Remove a buffer's frontmatter operations entirely.
+--- Unlike clear() which resets to an empty table, this releases the entry
+--- from memory. Used during buffer cleanup to prevent orphaned entries from
+--- accumulating across long sessions.
+---@param bufnr integer Buffer number
+function M.purge_buffer(bufnr)
+  buffer_ops[bufnr] = nil
+end
+
 -- ---------------------------------------------------------------------------
 -- Transform
 -- ---------------------------------------------------------------------------

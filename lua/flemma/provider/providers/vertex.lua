@@ -66,12 +66,7 @@ function M.new(params)
 end
 
 ---@param self flemma.provider.Vertex
----@param opts? flemma.provider.ResetOpts
-function M.reset(self, opts)
-  if opts then
-    base.reset(self, opts)
-    return
-  end
+function M.reset(self)
   -- Full reset (base auto-destroys sinks in extra)
   base.reset(self)
   -- Add Vertex-specific extension
