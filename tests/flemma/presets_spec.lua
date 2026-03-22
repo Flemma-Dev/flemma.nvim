@@ -265,7 +265,7 @@ describe(":Flemma switch completion ordering", function()
     reset_modules()
     package.preload["flemma.core"] = nil
     package.loaded["flemma.core"] = nil
-    require("flemma.config").init(require("flemma.config.schema.definition"))
+    require("flemma.config").init(require("flemma.config.schema"))
     stub_core = nil
   end)
 
@@ -355,7 +355,7 @@ describe(":Flemma switch with presets", function()
     reset_modules()
     package.preload["flemma.core"] = nil
     package.loaded["flemma.core"] = nil
-    require("flemma.config").init(require("flemma.config.schema.definition"))
+    require("flemma.config").init(require("flemma.config.schema"))
     stub_core = nil
   end)
 

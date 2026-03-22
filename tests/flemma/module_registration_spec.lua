@@ -134,17 +134,17 @@ end)
 describe("approval module resolution", function()
   local approval
   local config_facade = require("flemma.config")
-  local schema = require("flemma.config.schema.definition")
+  local schema = require("flemma.config.schema")
 
   before_each(function()
     package.loaded["flemma.tools.approval"] = nil
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
-    package.loaded["flemma.config.schema.definition"] = nil
+    package.loaded["flemma.config.schema"] = nil
     approval = require("flemma.tools.approval")
     config_facade = require("flemma.config")
-    schema = require("flemma.config.schema.definition")
+    schema = require("flemma.config.schema")
     config_facade.init(schema)
 
     package.preload["test.fixture.approval"] = function()
@@ -199,17 +199,17 @@ end)
 describe("approval module resolution with string[]", function()
   local approval
   local config_facade = require("flemma.config")
-  local schema = require("flemma.config.schema.definition")
+  local schema = require("flemma.config.schema")
 
   before_each(function()
     package.loaded["flemma.tools.approval"] = nil
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
-    package.loaded["flemma.config.schema.definition"] = nil
+    package.loaded["flemma.config.schema"] = nil
     approval = require("flemma.tools.approval")
     config_facade = require("flemma.config")
-    schema = require("flemma.config.schema.definition")
+    schema = require("flemma.config.schema")
     config_facade.init(schema)
 
     package.preload["test.fixture.approval"] = function()

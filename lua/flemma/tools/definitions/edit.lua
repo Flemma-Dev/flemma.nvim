@@ -2,7 +2,7 @@
 --- Find-and-replace exact text in files
 --- Ported from pi by Mario Zechner (https://github.com/badlogic/pi-mono)
 --- Original: MIT License, Copyright (c) 2025 Mario Zechner
-local s = require("flemma.config.schema")
+local s = require("flemma.schema")
 
 ---@class flemma.tools.definitions.Edit
 ---@field definitions flemma.tools.ToolDefinition[]

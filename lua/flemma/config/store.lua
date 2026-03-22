@@ -477,9 +477,9 @@ end
 --- global ops, with bufnr for per-buffer frontmatter ops).
 ---@param bufnr integer? Buffer number for per-buffer resolution; nil for global-only
 ---@param is_list_fn? fun(path: string): boolean Per-path list classifier from the schema
----@return flemma.config.CoerceContext
+---@return flemma.schema.CoerceContext
 function M.make_coerce_context(bufnr, is_list_fn)
-  ---@type flemma.config.CoerceContext
+  ---@type flemma.schema.CoerceContext
   return {
     get = function(path)
       local is_list = false

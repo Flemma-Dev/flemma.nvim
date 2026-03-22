@@ -17,11 +17,11 @@ describe("sandbox policy layer", function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
-    package.loaded["flemma.config.schema.definition"] = nil
+    package.loaded["flemma.config.schema"] = nil
     sandbox = require("flemma.sandbox")
     bwrap = require("flemma.sandbox.backends.bwrap")
     config_facade = require("flemma.config")
-    schema = require("flemma.config.schema.definition")
+    schema = require("flemma.config.schema")
 
     -- Initialize config facade with schema defaults
     config_facade.init(schema)
@@ -639,7 +639,7 @@ describe("sandbox policy layer", function()
     end)
 
     it("invalidates cache when backends config changes", function()
-      local s = require("flemma.config.schema")
+      local s = require("flemma.schema")
       sandbox.clear()
       local call_count = 0
       sandbox.register("counting", {

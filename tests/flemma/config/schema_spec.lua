@@ -1,16 +1,16 @@
 local symbols = require("flemma.symbols")
 
-describe("flemma.config.schema", function()
-  ---@type flemma.config.schema
+describe("flemma.schema", function()
+  ---@type flemma.schema
   local s
 
   before_each(function()
-    package.loaded["flemma.config.schema"] = nil
-    package.loaded["flemma.config.schema.types"] = nil
+    package.loaded["flemma.schema"] = nil
+    package.loaded["flemma.schema.types"] = nil
     -- flemma.loader is required by types.lua; clear it so preload manipulations
     -- in s.loadable() tests don't bleed across test boundaries.
     package.loaded["flemma.loader"] = nil
-    s = require("flemma.config.schema")
+    s = require("flemma.schema")
   end)
 
   -- ---------------------------------------------------------------------------
@@ -750,7 +750,7 @@ describe("flemma.config.schema", function()
     end)
 
     it("has_default() can be explicitly disabled", function()
-      local types = require("flemma.config.schema.types")
+      local types = require("flemma.schema.types")
       local node = types.LiteralNode.new(false, { as_default = false })
       assert.is_false(node:has_default())
       assert.is_true(node:validate_value(false))

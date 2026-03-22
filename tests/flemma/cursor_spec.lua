@@ -8,12 +8,12 @@ describe("cursor engine", function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
-    package.loaded["flemma.config.schema.definition"] = nil
+    package.loaded["flemma.config.schema"] = nil
     cursor = require("flemma.cursor")
     state_module = require("flemma.state")
     -- Initialize config facade with defaults
     local config_facade = require("flemma.config")
-    config_facade.init(require("flemma.config.schema.definition"))
+    config_facade.init(require("flemma.config.schema"))
     config_facade.apply(config_facade.LAYERS.SETUP, {
       editing = { manage_updatetime = true },
     })

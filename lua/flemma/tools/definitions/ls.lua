@@ -6,7 +6,7 @@ local M = {}
 
 -- Module-level require for description constants only (evaluated at load time).
 -- Runtime code inside execute() must use ctx.truncate instead.
-local s = require("flemma.config.schema")
+local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
 
 ---Maximum recursion depth allowed

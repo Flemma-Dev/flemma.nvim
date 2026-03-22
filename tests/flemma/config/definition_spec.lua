@@ -9,12 +9,12 @@ describe("config.schema.definition", function()
   local schema
 
   before_each(function()
-    package.loaded["flemma.config.schema.definition"] = nil
+    package.loaded["flemma.config.schema"] = nil
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
     config_facade = require("flemma.config")
-    schema = require("flemma.config.schema.definition")
+    schema = require("flemma.config.schema")
     config_facade.init(schema)
   end)
 
@@ -601,7 +601,7 @@ describe("config.schema.definition", function()
 
     describe("provider DISCOVER", function()
       it("resolves custom provider config schema via registry", function()
-        local s = require("flemma.config.schema")
+        local s = require("flemma.schema")
         provider_reg.register("custom", {
           module = "flemma.provider.providers.anthropic",
           capabilities = {
@@ -640,7 +640,7 @@ describe("config.schema.definition", function()
       end)
 
       it("rejects unknown field on custom provider schema", function()
-        local s = require("flemma.config.schema")
+        local s = require("flemma.schema")
         provider_reg.register("custom", {
           module = "flemma.provider.providers.anthropic",
           capabilities = {
@@ -700,7 +700,7 @@ describe("config.schema.definition", function()
       end)
 
       it("resolves custom backend config schema via registry", function()
-        local s_mod = require("flemma.config.schema")
+        local s_mod = require("flemma.schema")
         sandbox_module.register("firejail", {
           available = function()
             return true
@@ -719,7 +719,7 @@ describe("config.schema.definition", function()
       end)
 
       it("rejects unknown field on custom backend schema", function()
-        local s_mod = require("flemma.config.schema")
+        local s_mod = require("flemma.schema")
         sandbox_module.register("firejail", {
           available = function()
             return true
@@ -806,7 +806,7 @@ describe("config.schema.definition", function()
         )
         assert.is_not_nil(deferred)
 
-        local s = require("flemma.config.schema")
+        local s = require("flemma.schema")
         provider_reg.register("my_provider", {
           module = "flemma.provider.providers.anthropic",
           capabilities = {
@@ -834,7 +834,7 @@ describe("config.schema.definition", function()
         )
         assert.is_not_nil(deferred)
 
-        local s_mod = require("flemma.config.schema")
+        local s_mod = require("flemma.schema")
         sandbox_module.register("firejail", {
           available = function()
             return true

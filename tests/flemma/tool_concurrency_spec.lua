@@ -17,11 +17,11 @@ package.loaded["flemma.autopilot"] = nil
 package.loaded["flemma.config"] = nil
 package.loaded["flemma.config.store"] = nil
 package.loaded["flemma.config.proxy"] = nil
-package.loaded["flemma.config.schema.definition"] = nil
+package.loaded["flemma.config.schema"] = nil
 
 local stub = require("luassert.stub")
 local config_facade = require("flemma.config")
-local schema = require("flemma.config.schema.definition")
+local schema = require("flemma.config.schema")
 local state = require("flemma.state")
 local executor = require("flemma.tools.executor")
 local tool_context = require("flemma.tools.context")

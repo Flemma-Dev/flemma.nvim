@@ -12,7 +12,7 @@
 ---@class flemma.config
 local M = {}
 
-local nav = require("flemma.config.schema.navigation")
+local nav = require("flemma.schema.navigation")
 local operators = require("flemma.config.operators")
 local proxy = require("flemma.config.proxy")
 local store = require("flemma.config.store")
@@ -20,7 +20,7 @@ local store = require("flemma.config.store")
 --- Layer priority constants.
 M.LAYERS = store.LAYERS
 
----@type flemma.config.schema.Node?
+---@type flemma.schema.Node?
 local root_schema = nil
 
 -- ---------------------------------------------------------------------------
@@ -69,7 +69,7 @@ end
 --- Stable context threaded through apply_recursive calls.
 --- Created once per apply/init/apply_deferred invocation.
 ---@class flemma.config.ApplyContext
----@field schema flemma.config.schema.Node Root schema for navigation
+---@field schema flemma.schema.Node Root schema for navigation
 ---@field layer integer Target layer
 ---@field bufnr integer? Buffer number (required for FRONTMATTER)
 ---@field deferred table[]? Accumulator for deferred writes (nil = normal mode)
@@ -189,7 +189,7 @@ end
 
 --- Walk the schema tree and resolve every path from the store into a plain table.
 --- ObjectNodes are recursed into; all other nodes are resolved as leaf values.
----@param schema flemma.config.schema.Node Schema node to walk
+---@param schema flemma.schema.Node Schema node to walk
 ---@param base_path string Dot-delimited path prefix (empty for root)
 ---@param bufnr integer? Buffer number for per-buffer resolution
 ---@return any
@@ -220,7 +220,7 @@ end
 --- Initialize the config system with a root schema.
 --- Stores the schema reference, resets the layer store, and materializes
 --- schema defaults into the DEFAULTS layer.
----@param schema flemma.config.schema.Node Root schema node
+---@param schema flemma.schema.Node Root schema node
 function M.init(schema)
   root_schema = schema
   store.init()
@@ -285,7 +285,7 @@ end
 --- to L10.
 ---@param parent_path string Dot-delimited path to the parent object (e.g., "parameters", "tools", "sandbox.backends")
 ---@param name string Module name (the DISCOVER key, e.g., "anthropic", "bash", "bwrap")
----@param config_schema flemma.config.schema.Node Module's config schema
+---@param config_schema flemma.schema.Node Module's config schema
 function M.register_module_defaults(parent_path, name, config_schema)
   assert(root_schema, "config.init() must be called before register_module_defaults()")
   local defaults = config_schema:materialize()
@@ -333,7 +333,7 @@ end
 ---@return flemma.config.ValidationFailure[] failures Validation/application errors (empty when none)
 function M.apply_operators(layer, bufnr, data)
   assert(root_schema, "config.init() must be called before apply_operators()")
-  ---@cast root_schema flemma.config.schema.Node
+  ---@cast root_schema flemma.schema.Node
   return operators.apply(root_schema, layer, bufnr, data)
 end
 
@@ -410,7 +410,7 @@ end
 --- Walk the schema tree and resolve every leaf path from the store,
 --- returning a flat list of entries with path, value, source, and depth.
 --- ObjectNodes are recursed into; all other nodes produce leaf entries.
----@param schema flemma.config.schema.Node Schema node to walk
+---@param schema flemma.schema.Node Schema node to walk
 ---@param base_path string Dot-delimited path prefix (empty for root)
 ---@param bufnr integer? Buffer number for per-buffer resolution
 ---@param depth integer Current nesting depth
@@ -498,15 +498,15 @@ end
 --- When bufnr is provided, only that buffer's frontmatter ops are transformed
 --- (used by finalize with bufnr for frontmatter). When nil, all buffers are
 --- transformed (used by finalize at setup time).
----@param schema flemma.config.schema.Node Schema node to walk
+---@param schema flemma.schema.Node Schema node to walk
 ---@param base_path string Current dot-delimited path
----@param ctx flemma.config.CoerceContext
+---@param ctx flemma.schema.CoerceContext
 ---@param bufnr integer? Scope transforms to this buffer's frontmatter; nil for all
 local function coerce_walk(schema, base_path, ctx, bufnr)
   local unwrapped = nav.unwrap_optional(schema)
 
   if unwrapped:has_coerce() then
-    local coerce_fn = unwrapped:get_coerce() --[[@as fun(value: any, ctx: flemma.config.CoerceContext?): any]]
+    local coerce_fn = unwrapped:get_coerce() --[[@as fun(value: any, ctx: flemma.schema.CoerceContext?): any]]
     local is_list = unwrapped:is_list() or unwrapped:has_list_part()
     store.transform_ops(base_path, coerce_fn, ctx, bufnr, { is_list = is_list })
   end
@@ -533,9 +533,9 @@ end
 --- For scalar paths, returns the node's own validator.
 --- For list-capable paths, returns the item schema's validator.
 ---@param path string Dot-delimited canonical path
----@return (fun(value: any, ctx: flemma.config.CoerceContext): boolean, string?)?
+---@return (fun(value: any, ctx: flemma.schema.CoerceContext): boolean, string?)?
 local function find_validator_for_path(path)
-  ---@cast root_schema flemma.config.schema.Node
+  ---@cast root_schema flemma.schema.Node
   local node = nav.navigate_schema(root_schema, path, { unwrap_leaf = true })
   if not node then
     return nil
@@ -563,7 +563,7 @@ end
 --- Validate all ops in a layer by running deferred validators on each op value.
 --- Validates what the user actually wrote (including removes), not the resolved state.
 ---@param layer integer Layer to validate
----@param ctx flemma.config.CoerceContext
+---@param ctx flemma.schema.CoerceContext
 ---@param bufnr integer? Buffer number (required for FRONTMATTER)
 ---@param failures flemma.config.ValidationFailure[] Accumulator
 local function validate_ops(layer, ctx, bufnr, failures)

@@ -20,7 +20,7 @@ local variables = require("flemma.utilities.variables")
 ---@field wrap fun(policy: flemma.config.SandboxPolicy, backend_config: table, inner_cmd: string[]): string[]|nil, string|nil
 ---@field priority? integer Higher values are preferred during auto-detection (default: 50)
 ---@field description? string Human-readable description
----@field config_schema? flemma.config.schema.ObjectNode Schema for backend-specific configuration (used by DISCOVER resolution)
+---@field config_schema? flemma.schema.ObjectNode Schema for backend-specific configuration (used by DISCOVER resolution)
 
 --- Internal registry entry (name added by register())
 ---@class flemma.sandbox.BackendEntry
@@ -29,7 +29,7 @@ local variables = require("flemma.utilities.variables")
 ---@field wrap fun(policy: flemma.config.SandboxPolicy, backend_config: table, inner_cmd: string[]): string[]|nil, string|nil
 ---@field priority integer Higher values are preferred during auto-detection
 ---@field description? string Human-readable description
----@field config_schema? flemma.config.schema.ObjectNode Schema for backend-specific configuration
+---@field config_schema? flemma.schema.ObjectNode Schema for backend-specific configuration
 
 local DEFAULT_PRIORITY = 50
 
@@ -146,7 +146,7 @@ end
 
 ---Get a backend's config schema for DISCOVER resolution.
 ---@param name string The backend name
----@return flemma.config.schema.ObjectNode|nil config_schema Backend config schema, or nil if not found
+---@return flemma.schema.ObjectNode|nil config_schema Backend config schema, or nil if not found
 function M.get_config_schema(name)
   local entry = M.get(name)
   if not entry then

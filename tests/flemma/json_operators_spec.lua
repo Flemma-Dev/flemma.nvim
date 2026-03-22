@@ -1,10 +1,10 @@
 --- Tests for config.apply_operators (JSON frontmatter operator dispatch)
 --- and the JSON codeblock parser's config integration.
 
-local s = require("flemma.config.schema")
+local s = require("flemma.schema")
 
 --- Build a test schema with scalars, lists, objects, and hybrid nodes.
----@return flemma.config.schema.ObjectNode
+---@return flemma.schema.ObjectNode
 local function test_schema()
   return s.object({
     provider = s.string("anthropic"),

@@ -8,7 +8,7 @@
 ---@class flemma.config.operators
 local M = {}
 
-local nav = require("flemma.config.schema.navigation")
+local nav = require("flemma.schema.navigation")
 local store = require("flemma.config.store")
 
 --- Valid operator keys and their store operation names.
@@ -27,7 +27,7 @@ local OPERATORS = {
 ---@param op "append"|"remove"|"prepend" Store operation
 ---@param path string Canonical path
 ---@param value any Single item or array of items
----@param item_schema flemma.config.schema.Node? Item schema for validation
+---@param item_schema flemma.schema.Node? Item schema for validation
 ---@param failures flemma.config.ValidationFailure[] Error accumulator
 local function record_list_op(layer, bufnr, op, path, value, item_schema, failures)
   local skip_validation = (op == "remove")
@@ -49,7 +49,7 @@ end
 --- At each node, $-prefixed keys are dispatched as operations on the current
 --- schema node, while regular keys navigate into child fields. Plain values
 --- and arrays default to "set".
----@param schema flemma.config.schema.Node Root schema for navigation
+---@param schema flemma.schema.Node Root schema for navigation
 ---@param path string Current dot-delimited canonical path (empty for root)
 ---@param value any The decoded JSON value at this path
 ---@param layer integer Target layer
@@ -191,7 +191,7 @@ end
 ---
 --- Coerce transforms are NOT run here — call `finalize()` after this to apply
 --- coerce + deferred validation (matches the `config.apply()` convention).
----@param schema flemma.config.schema.Node Root schema for navigation
+---@param schema flemma.schema.Node Root schema for navigation
 ---@param layer integer Target layer (e.g., store.LAYERS.FRONTMATTER)
 ---@param bufnr integer? Buffer number (required for FRONTMATTER)
 ---@param data table The operator-annotated config table (contents of the "flemma" key)

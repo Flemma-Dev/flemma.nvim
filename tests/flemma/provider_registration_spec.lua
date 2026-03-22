@@ -243,7 +243,7 @@ end)
 
 describe("flatten_parameters with facade", function()
   local config_facade = require("flemma.config")
-  local schema_definition = require("flemma.config.schema.definition")
+  local schema_definition = require("flemma.config.schema")
 
   before_each(function()
     -- Reset facade and registries for clean state
@@ -354,7 +354,7 @@ end)
 
 describe("resolve_preset", function()
   local config_facade = require("flemma.config")
-  local schema_definition = require("flemma.config.schema.definition")
+  local schema_definition = require("flemma.config.schema")
 
   before_each(function()
     package.loaded["flemma.config"] = nil

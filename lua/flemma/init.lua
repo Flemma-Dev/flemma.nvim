@@ -4,7 +4,7 @@
 local M = {}
 
 local config_facade = require("flemma.config")
-local schema_definition = require("flemma.config.schema.definition")
+local schema_definition = require("flemma.config.schema")
 local log = require("flemma.logging")
 local core = require("flemma.core")
 local presets = require("flemma.presets")

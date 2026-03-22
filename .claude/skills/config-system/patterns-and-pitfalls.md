@@ -38,7 +38,7 @@ Runtime ops **accumulate** across commands. Later `set` on the same path overrid
 
 ## Adding a New Config Field
 
-1. Edit `lua/flemma/config/schema/definition.lua`
+1. Edit `lua/flemma/config/schema.lua`
 2. Add the field to the appropriate `s.object()`
 3. Run `make qa`
 
@@ -52,18 +52,18 @@ Every test that touches config needs this in `before_each`:
 
 ```lua
 local config_facade = require("flemma.config")
-local definition = require("flemma.config.schema.definition")
+local definition = require("flemma.config.schema")
 
 before_each(function()
   -- Clear module caches for isolation
   package.loaded["flemma.config"] = nil
   package.loaded["flemma.config.store"] = nil
   package.loaded["flemma.config.proxy"] = nil
-  package.loaded["flemma.config.schema.definition"] = nil
+  package.loaded["flemma.config.schema"] = nil
 
   -- Re-require after clearing
   config_facade = require("flemma.config")
-  definition = require("flemma.config.schema.definition")
+  definition = require("flemma.config.schema")
 
   -- Initialize with schema defaults
   config_facade.init(definition)
@@ -115,7 +115,7 @@ When re-requiring the config facade in tests, also clear store, proxy, and defin
 package.loaded["flemma.config"] = nil
 package.loaded["flemma.config.store"] = nil
 package.loaded["flemma.config.proxy"] = nil
-package.loaded["flemma.config.schema.definition"] = nil
+package.loaded["flemma.config.schema"] = nil
 ```
 
 ### Clear Executor with Sandbox

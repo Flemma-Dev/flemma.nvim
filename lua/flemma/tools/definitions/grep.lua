@@ -8,7 +8,7 @@
 local M = {}
 
 local json = require("flemma.utilities.json")
-local s = require("flemma.config.schema")
+local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
 local sink_module = require("flemma.sink")
 

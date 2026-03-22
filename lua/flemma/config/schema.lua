@@ -7,7 +7,7 @@
 --- Each module owns its own config schema (M.metadata.config_schema).
 --- Defaults from discovered schemas materialize into L10 at registration time.
 
-local s = require("flemma.config.schema")
+local s = require("flemma.schema")
 local symbols = require("flemma.symbols")
 
 -- ---------------------------------------------------------------------------
@@ -18,7 +18,7 @@ local symbols = require("flemma.symbols")
 --- String defaults produce a union with the string branch carrying the default.
 --- Table defaults produce a union with the object branch carrying the defaults.
 ---@param default? string|table<string, string>
----@return flemma.config.schema.UnionNode
+---@return flemma.schema.UnionNode
 local function highlight(default)
   if type(default) == "table" then
     return s.union(s.string(), s.object({ dark = s.string(default.dark), light = s.string(default.light) }))
@@ -32,7 +32,7 @@ end
 --- Sign role hl: boolean | string | { dark: string, light: string }
 --- true = inherit from highlights, false = disable, string/table = custom highlight.
 ---@param default boolean
----@return flemma.config.schema.UnionNode
+---@return flemma.schema.UnionNode
 local function sign_highlight(default)
   return s.union(s.boolean(default), s.string(), s.object({ dark = s.string(), light = s.string() }))
 end
@@ -41,7 +41,7 @@ end
 -- The config schema
 -- ---------------------------------------------------------------------------
 
----@type flemma.config.schema.ObjectNode
+---@type flemma.schema.ObjectNode
 return s.object({
 
   -- Fallback colors used when highlight groups don't define fg/bg

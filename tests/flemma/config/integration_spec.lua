@@ -3,7 +3,7 @@ local symbols = require("flemma.symbols")
 describe("flemma.config — integration", function()
   ---@type flemma.config.Facade
   local config
-  ---@type flemma.config.schema
+  ---@type flemma.schema
   local s
   ---@type { DEFAULTS: integer, SETUP: integer, RUNTIME: integer, FRONTMATTER: integer }
   local L
@@ -41,12 +41,12 @@ describe("flemma.config — integration", function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.proxy"] = nil
     package.loaded["flemma.config.store"] = nil
-    package.loaded["flemma.config.schema"] = nil
-    package.loaded["flemma.config.schema.types"] = nil
-    package.loaded["flemma.config.schema.navigation"] = nil
+    package.loaded["flemma.schema"] = nil
+    package.loaded["flemma.schema.types"] = nil
+    package.loaded["flemma.schema.navigation"] = nil
     package.loaded["flemma.loader"] = nil
     config = require("flemma.config")
-    s = require("flemma.config.schema")
+    s = require("flemma.schema")
     L = config.LAYERS
   end)
 

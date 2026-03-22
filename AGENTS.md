@@ -25,7 +25,8 @@ These are counter-default behaviors — violating them breaks the build or intro
 Explore `lua/flemma/` to understand the codebase — module files are named descriptively and each has a `---@class` annotation explaining its role. Key structural landmarks:
 
 - `init.lua` — setup entry point; `config/` — layered config system (see below)
-- `config/init.lua` — public facade (`get`, `materialize`, `apply`, `writer`, `inspect`); `config/store.lua` — layer store (DEFAULTS→SETUP→RUNTIME→FRONTMATTER); `config/proxy.lua` — read/write proxy metatables; `config/schema/` — schema DSL, node types, definition, navigation; `config/types.lua` — EmmyLua type definitions
+- `config/init.lua` — public facade (`get`, `materialize`, `apply`, `writer`, `inspect`); `config/store.lua` — layer store (DEFAULTS→SETUP→RUNTIME→FRONTMATTER); `config/proxy.lua` — read/write proxy metatables; `config/schema.lua` — config schema definition (defaults, DISCOVER, aliases); `config/types.lua` — EmmyLua type definitions
+- `schema/` — general-purpose schema DSL engine: `schema/init.lua` — factory functions (`s.string()`, `s.object()`, etc.); `schema/types.lua` — node type classes; `schema/navigation.lua` — schema tree traversal
 - `parser.lua` / `ast.lua` — AST-based buffer parsing (heart of the stateless design)
 - `provider/base.lua` — provider contract (metatable inheritance); `provider/normalize.lua` — parameter normalization (flatten, max_tokens, thinking, preset resolution); `provider/providers/{anthropic,openai,vertex}.lua` — implementations (request-scoped, no global instance)
 - `tools/` — tool registry (`get_all()` filters by `enabled`), executor, injector, approval, and built-in definitions in `tools/definitions/`

@@ -13,10 +13,10 @@ package.loaded["flemma.provider.providers.anthropic"] = nil
 package.loaded["flemma.config"] = nil
 package.loaded["flemma.config.store"] = nil
 package.loaded["flemma.config.proxy"] = nil
-package.loaded["flemma.config.schema.definition"] = nil
+package.loaded["flemma.config.schema"] = nil
 
 -- Initialize config facade so tools.setup() can register defaults
-require("flemma.config").init(require("flemma.config.schema.definition"))
+require("flemma.config").init(require("flemma.config.schema"))
 
 describe("Anthropic Provider", function()
   local anthropic = require("flemma.provider.providers.anthropic")

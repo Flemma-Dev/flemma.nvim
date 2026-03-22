@@ -5,9 +5,9 @@
 set -euo pipefail
 
 # Files with intentional lazy loading (require at point of use)
-# definition.lua: DISCOVER callbacks lazy-require tools/provider/sandbox registries
-#                 to avoid coupling the schema definition to heavy modules at load time
-LAZY_LOAD_FILES="lua/flemma/commands.lua lua/flemma/config/schema/definition.lua"
+# config/schema.lua: DISCOVER callbacks lazy-require tools/provider/sandbox registries
+#                    to avoid coupling the schema definition to heavy modules at load time
+LAZY_LOAD_FILES="lua/flemma/commands.lua lua/flemma/config/schema.lua"
 
 violations=0
 

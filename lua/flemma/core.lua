@@ -42,13 +42,13 @@ local DEFAULT_MAX_CONCURRENT = 2
 -- For testing purposes
 local last_request_body_for_testing = nil
 
-local nav = require("flemma.config.schema.navigation")
-local schema_definition = require("flemma.config.schema.definition")
+local nav = require("flemma.schema.navigation")
+local schema_definition = require("flemma.config.schema")
 
 --- The parameters schema node, used to distinguish static (general) fields
 --- from DISCOVER-resolved (provider-specific) fields.
----@type flemma.config.schema.Node
-local parameters_schema = nav.unwrap_optional(schema_definition):get_child_schema("parameters") --[[@as flemma.config.schema.Node]]
+---@type flemma.schema.Node
+local parameters_schema = nav.unwrap_optional(schema_definition):get_child_schema("parameters") --[[@as flemma.schema.Node]]
 
 ---Write provider, model, and explicit parameters to the facade layer.
 ---General parameters are written to `parameters.<key>`, provider-specific

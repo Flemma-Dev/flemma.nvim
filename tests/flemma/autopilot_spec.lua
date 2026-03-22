@@ -10,7 +10,7 @@ package.loaded["flemma.parser"] = nil
 local autopilot = require("flemma.autopilot")
 local context = require("flemma.tools.context")
 local config_facade = require("flemma.config")
-local config_schema = require("flemma.config.schema.definition")
+local config_schema = require("flemma.config.schema")
 local parser = require("flemma.parser")
 
 --- Helper: get pending non-error, empty tool blocks awaiting execution.
@@ -48,10 +48,10 @@ describe("Autopilot State Machine", function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
-    package.loaded["flemma.config.schema.definition"] = nil
+    package.loaded["flemma.config.schema"] = nil
     package.loaded["flemma.autopilot"] = nil
     config_facade = require("flemma.config")
-    config_schema = require("flemma.config.schema.definition")
+    config_schema = require("flemma.config.schema")
     autopilot = require("flemma.autopilot")
     config_facade.init(config_schema)
   end)
@@ -142,10 +142,10 @@ describe("Autopilot on_response_complete", function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
-    package.loaded["flemma.config.schema.definition"] = nil
+    package.loaded["flemma.config.schema"] = nil
     package.loaded["flemma.autopilot"] = nil
     config_facade = require("flemma.config")
-    config_schema = require("flemma.config.schema.definition")
+    config_schema = require("flemma.config.schema")
     autopilot = require("flemma.autopilot")
     config_facade.init(config_schema)
   end)
@@ -318,10 +318,10 @@ describe("Autopilot on_tools_complete", function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
-    package.loaded["flemma.config.schema.definition"] = nil
+    package.loaded["flemma.config.schema"] = nil
     package.loaded["flemma.autopilot"] = nil
     config_facade = require("flemma.config")
-    config_schema = require("flemma.config.schema.definition")
+    config_schema = require("flemma.config.schema")
     autopilot = require("flemma.autopilot")
     config_facade.init(config_schema)
   end)
@@ -603,10 +603,10 @@ describe("Autopilot all-denied edge case", function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
-    package.loaded["flemma.config.schema.definition"] = nil
+    package.loaded["flemma.config.schema"] = nil
     package.loaded["flemma.autopilot"] = nil
     config_facade = require("flemma.config")
-    config_schema = require("flemma.config.schema.definition")
+    config_schema = require("flemma.config.schema")
     autopilot = require("flemma.autopilot")
     config_facade.init(config_schema)
   end)
@@ -656,10 +656,10 @@ describe("Autopilot on_tools_complete ignored when not armed", function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
-    package.loaded["flemma.config.schema.definition"] = nil
+    package.loaded["flemma.config.schema"] = nil
     package.loaded["flemma.autopilot"] = nil
     config_facade = require("flemma.config")
-    config_schema = require("flemma.config.schema.definition")
+    config_schema = require("flemma.config.schema")
     autopilot = require("flemma.autopilot")
     config_facade.init(config_schema)
   end)
@@ -797,10 +797,10 @@ describe("Autopilot all-sync tool completion", function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
-    package.loaded["flemma.config.schema.definition"] = nil
+    package.loaded["flemma.config.schema"] = nil
     package.loaded["flemma.autopilot"] = nil
     config_facade = require("flemma.config")
-    config_schema = require("flemma.config.schema.definition")
+    config_schema = require("flemma.config.schema")
     autopilot = require("flemma.autopilot")
     config_facade.init(config_schema)
   end)

@@ -27,19 +27,19 @@ local registry_utils = require("flemma.registry")
 ---@field module string
 ---@field capabilities flemma.provider.Capabilities
 ---@field display_name string
----@field config_schema? flemma.config.schema.ObjectNode Provider-specific config schema for DISCOVER resolution
+---@field config_schema? flemma.schema.ObjectNode Provider-specific config schema for DISCOVER resolution
 
 ---@class flemma.provider.Metadata
 ---@field name string Provider identifier (e.g., "anthropic")
 ---@field display_name string Human-readable name
 ---@field capabilities flemma.provider.Capabilities
----@field config_schema? flemma.config.schema.ObjectNode Provider-specific config schema for DISCOVER resolution
+---@field config_schema? flemma.schema.ObjectNode Provider-specific config schema for DISCOVER resolution
 
 ---@class flemma.provider.RegistrationEntry
 ---@field module string Lua module path
 ---@field capabilities flemma.provider.Capabilities
 ---@field display_name string
----@field config_schema? flemma.config.schema.ObjectNode Provider-specific config schema
+---@field config_schema? flemma.schema.ObjectNode Provider-specific config schema
 ---@field default_model? string Default model name
 ---@field models? table<string, flemma.models.ModelInfo> Model definitions with pricing
 
@@ -254,7 +254,7 @@ end
 
 ---Get provider config schema for DISCOVER resolution
 ---@param provider_name string The provider identifier
----@return flemma.config.schema.ObjectNode|nil config_schema Provider config schema, or nil if not found
+---@return flemma.schema.ObjectNode|nil config_schema Provider config schema, or nil if not found
 function M.get_config_schema(provider_name)
   local resolved = M.resolve(provider_name)
   local provider = providers[resolved]

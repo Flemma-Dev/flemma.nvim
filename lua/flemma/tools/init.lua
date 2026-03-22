@@ -348,7 +348,7 @@ end
 
 ---Get a tool's config schema for DISCOVER resolution.
 ---@param name string The tool name
----@return flemma.config.schema.ObjectNode|nil config_schema Tool config schema, or nil if not found
+---@return flemma.schema.ObjectNode|nil config_schema Tool config schema, or nil if not found
 function M.get_config_schema(name)
   local tool = M.get(name)
   if not tool then

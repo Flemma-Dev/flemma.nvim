@@ -3,11 +3,11 @@ describe("flemma.config list operations", function()
   local proxy
   ---@type flemma.config.store
   local store
-  ---@type flemma.config.schema
+  ---@type flemma.schema
   local s
   ---@type { DEFAULTS: integer, SETUP: integer, RUNTIME: integer, FRONTMATTER: integer }
   local L
-  ---@type flemma.config.schema.Node
+  ---@type flemma.schema.Node
   local schema
 
   local function make_list_schema()
@@ -20,13 +20,13 @@ describe("flemma.config list operations", function()
   before_each(function()
     package.loaded["flemma.config.proxy"] = nil
     package.loaded["flemma.config.store"] = nil
-    package.loaded["flemma.config.schema"] = nil
-    package.loaded["flemma.config.schema.types"] = nil
-    package.loaded["flemma.config.schema.navigation"] = nil
+    package.loaded["flemma.schema"] = nil
+    package.loaded["flemma.schema.types"] = nil
+    package.loaded["flemma.schema.navigation"] = nil
     package.loaded["flemma.loader"] = nil
     proxy = require("flemma.config.proxy")
     store = require("flemma.config.store")
-    s = require("flemma.config.schema")
+    s = require("flemma.schema")
     L = store.LAYERS
     schema = make_list_schema()
   end)

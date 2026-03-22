@@ -2,7 +2,7 @@
 --- Write/create files with automatic parent directory creation
 --- Ported from pi by Mario Zechner (https://github.com/badlogic/pi-mono)
 --- Original: MIT License, Copyright (c) 2025 Mario Zechner
-local s = require("flemma.config.schema")
+local s = require("flemma.schema")
 local str = require("flemma.utilities.string")
 
 ---@class flemma.tools.definitions.Write

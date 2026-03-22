@@ -49,7 +49,7 @@ end
 local function execute_bash_tool(command, sbx_config, opts)
   opts = opts or {}
   local config_facade = require("flemma.config")
-  local config_schema = require("flemma.config.schema.definition")
+  local config_schema = require("flemma.config.schema")
   local registry = require("flemma.tools.registry")
   local executor = require("flemma.tools.executor")
 
@@ -452,7 +452,7 @@ describe("sandbox process lifecycle through bash tool", function()
     end
 
     local config_facade = require("flemma.config")
-    local config_schema = require("flemma.config.schema.definition")
+    local config_schema = require("flemma.config.schema")
     local registry = require("flemma.tools.registry")
     local executor = require("flemma.tools.executor")
 

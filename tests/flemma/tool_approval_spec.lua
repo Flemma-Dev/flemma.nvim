@@ -15,7 +15,7 @@ package.loaded["flemma.sandbox.backends.bwrap"] = nil
 package.loaded["flemma.config"] = nil
 package.loaded["flemma.config.store"] = nil
 package.loaded["flemma.config.proxy"] = nil
-package.loaded["flemma.config.schema.definition"] = nil
+package.loaded["flemma.config.schema"] = nil
 
 local approval = require("flemma.tools.approval")
 local config_facade = require("flemma.config")
@@ -23,7 +23,7 @@ local context = require("flemma.tools.context")
 local injector = require("flemma.tools.injector")
 local parser = require("flemma.parser")
 local processor = require("flemma.processor")
-local schema = require("flemma.config.schema.definition")
+local schema = require("flemma.config.schema")
 
 --- Helper: get pending non-error tool blocks awaiting execution
 ---@param bufnr integer

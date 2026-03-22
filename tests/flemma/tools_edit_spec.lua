@@ -12,7 +12,7 @@ local tools = require("flemma.tools")
 local registry = require("flemma.tools.registry")
 local executor = require("flemma.tools.executor")
 local config_facade = require("flemma.config")
-local schema = require("flemma.config.schema.definition")
+local schema = require("flemma.config.schema")
 
 describe("Edit Tool", function()
   local edit_def
@@ -238,11 +238,11 @@ describe("Edit Tool", function()
       package.loaded["flemma.config"] = nil
       package.loaded["flemma.config.store"] = nil
       package.loaded["flemma.config.proxy"] = nil
-      package.loaded["flemma.config.schema.definition"] = nil
+      package.loaded["flemma.config.schema"] = nil
       sandbox = require("flemma.sandbox")
       executor = require("flemma.tools.executor")
       config_facade = require("flemma.config")
-      schema = require("flemma.config.schema.definition")
+      schema = require("flemma.config.schema")
       config_facade.init(schema)
       sandbox.reset_enabled()
       sandbox.clear()

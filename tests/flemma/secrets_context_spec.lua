@@ -9,9 +9,9 @@ describe("flemma.secrets.context", function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
-    package.loaded["flemma.config.schema.definition"] = nil
+    package.loaded["flemma.config.schema"] = nil
     config_facade = require("flemma.config")
-    local schema = require("flemma.config.schema.definition")
+    local schema = require("flemma.config.schema")
     config_facade.init(schema)
     context = require("flemma.secrets.context")
   end)

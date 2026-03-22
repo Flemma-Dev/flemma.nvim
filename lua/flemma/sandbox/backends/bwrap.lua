@@ -3,10 +3,10 @@
 ---@class flemma.sandbox.backends.Bwrap
 local M = {}
 
-local s = require("flemma.config.schema")
+local s = require("flemma.schema")
 
 ---@class flemma.sandbox.backends.BwrapMetadata
----@field config_schema flemma.config.schema.ObjectNode
+---@field config_schema flemma.schema.ObjectNode
 M.metadata = {
   config_schema = s.object({
     path = s.string("bwrap"),

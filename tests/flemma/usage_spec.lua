@@ -8,14 +8,14 @@ describe("flemma.usage", function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
-    package.loaded["flemma.config.schema.definition"] = nil
+    package.loaded["flemma.config.schema"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.pricing"] = nil
     package.loaded["flemma.session"] = nil
     package.loaded["flemma.bar"] = nil
 
     config_facade = require("flemma.config")
-    local schema = require("flemma.config.schema.definition")
+    local schema = require("flemma.config.schema")
     config_facade.init(schema)
     config_facade.apply(config_facade.LAYERS.SETUP, {
       pricing = { enabled = true },
@@ -179,7 +179,7 @@ describe("flemma.usage", function()
     end)
 
     it("should not include costs when pricing disabled", function()
-      config_facade.init(require("flemma.config.schema.definition"))
+      config_facade.init(require("flemma.config.schema"))
       config_facade.apply(config_facade.LAYERS.SETUP, {
         pricing = { enabled = false },
       })

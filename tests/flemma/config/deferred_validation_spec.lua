@@ -3,7 +3,7 @@ local symbols = require("flemma.symbols")
 describe("flemma.config — deferred validation", function()
   ---@type flemma.config
   local config
-  ---@type flemma.config.schema
+  ---@type flemma.schema
   local s
   ---@type { DEFAULTS: integer, SETUP: integer, RUNTIME: integer, FRONTMATTER: integer }
   local L
@@ -14,12 +14,12 @@ describe("flemma.config — deferred validation", function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.proxy"] = nil
     package.loaded["flemma.config.store"] = nil
-    package.loaded["flemma.config.schema"] = nil
-    package.loaded["flemma.config.schema.types"] = nil
-    package.loaded["flemma.config.schema.navigation"] = nil
+    package.loaded["flemma.schema"] = nil
+    package.loaded["flemma.schema.types"] = nil
+    package.loaded["flemma.schema.navigation"] = nil
     package.loaded["flemma.loader"] = nil
     config = require("flemma.config")
-    s = require("flemma.config.schema")
+    s = require("flemma.schema")
     store = require("flemma.config.store")
     L = config.LAYERS
   end)
@@ -463,8 +463,8 @@ describe("flemma.config — deferred validation", function()
       })
 
       -- Use the real schema definition
-      package.loaded["flemma.config.schema.definition"] = nil
-      local schema = require("flemma.config.schema.definition")
+      package.loaded["flemma.config.schema"] = nil
+      local schema = require("flemma.config.schema")
       config.init(schema)
     end)
 

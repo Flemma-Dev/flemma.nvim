@@ -4,7 +4,7 @@
 --- dot-delimited path, unwrapping OptionalNode wrappers at intermediate steps so
 --- that optional sub-objects are navigable. Whether the final node is also unwrapped
 --- is caller-specific and controlled via `opts.unwrap_leaf`.
----@class flemma.config.schema.navigation
+---@class flemma.schema.navigation
 local M = {}
 
 local MAX_UNWRAP_DEPTH = 100
@@ -12,8 +12,8 @@ local MAX_UNWRAP_DEPTH = 100
 --- Walk a node through any OptionalNode wrappers to reach the concrete node.
 --- Errors if unwrapping exceeds MAX_UNWRAP_DEPTH, which would indicate a cycle
 --- in the schema graph (impossible with the current DSL, but guarded defensively).
----@param node flemma.config.schema.Node
----@return flemma.config.schema.Node
+---@param node flemma.schema.Node
+---@return flemma.schema.Node
 function M.unwrap_optional(node)
   local depth = 0
   local inner = node:get_inner_schema()
@@ -28,7 +28,7 @@ function M.unwrap_optional(node)
   return node
 end
 
----@class flemma.config.schema.NavigateOpts
+---@class flemma.schema.NavigateOpts
 ---@field unwrap_leaf? boolean Unwrap OptionalNode on the returned leaf node (default: false)
 
 --- Navigate the schema tree from root to the given dot-delimited path.
@@ -45,10 +45,10 @@ end
 ---   (default)                 (used by the proxy, so that optional fields
 ---                             accept nil writes via OptionalNode.validate_value)
 ---
----@param root flemma.config.schema.Node Root schema node
+---@param root flemma.schema.Node Root schema node
 ---@param path string Dot-delimited path, e.g. "tools.auto_approve"
----@param opts? flemma.config.schema.NavigateOpts
----@return flemma.config.schema.Node?
+---@param opts? flemma.schema.NavigateOpts
+---@return flemma.schema.Node?
 function M.navigate_schema(root, path, opts)
   local parts = vim.split(path, ".", { plain = true })
   local node = root

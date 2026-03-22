@@ -57,11 +57,11 @@ describe("flemma.status", function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
-    package.loaded["flemma.config.schema.definition"] = nil
+    package.loaded["flemma.config.schema"] = nil
     -- Initialize config facade with schema defaults so sandbox/autopilot
     -- modules get a valid facade reference when re-required by status.lua
     local config_facade = require("flemma.config")
-    config_facade.init(require("flemma.config.schema.definition"))
+    config_facade.init(require("flemma.config.schema"))
     status = require("flemma.status")
   end)
 
@@ -70,7 +70,7 @@ describe("flemma.status", function()
   ---@param opts table
   local function apply_test_config(opts)
     local config_facade = require("flemma.config")
-    config_facade.init(require("flemma.config.schema.definition"))
+    config_facade.init(require("flemma.config.schema"))
     if opts and next(opts) then
       config_facade.apply(config_facade.LAYERS.SETUP, opts)
     end
@@ -1018,7 +1018,7 @@ describe("flemma.status", function()
     ---@param config table
     local function setup_config(config)
       local config_facade = require("flemma.config")
-      config_facade.init(require("flemma.config.schema.definition"))
+      config_facade.init(require("flemma.config.schema"))
       if config and next(config) then
         config_facade.apply(config_facade.LAYERS.SETUP, config)
       end

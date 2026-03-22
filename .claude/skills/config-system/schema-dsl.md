@@ -1,11 +1,11 @@
 # Schema DSL Reference
 
-The schema (`lua/flemma/config/schema/definition.lua`) is the single source of truth for all configuration structure, types, defaults, and validation.
+The schema (`lua/flemma/config/schema.lua`) is the single source of truth for all configuration structure, types, defaults, and validation.
 
 ## Primitives
 
 ```lua
-local s = require("flemma.config.schema")
+local s = require("flemma.schema")
 
 -- Scalars
 s.string(default?)          -- s.string("anthropic")
@@ -148,7 +148,7 @@ Every node supports:
 ## Navigation
 
 ```lua
-local nav = require("flemma.config.schema.navigation")
+local nav = require("flemma.schema.navigation")
 
 nav.navigate_schema(root, "tools.auto_approve")                    -- leaf node (OptionalNode preserved)
 nav.navigate_schema(root, "tools.auto_approve", { unwrap_leaf = true })  -- unwrap OptionalNode

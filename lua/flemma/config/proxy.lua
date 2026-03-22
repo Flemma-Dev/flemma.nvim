@@ -13,14 +13,14 @@
 ---@class flemma.config.proxy
 local M = {}
 
-local nav = require("flemma.config.schema.navigation")
+local nav = require("flemma.schema.navigation")
 local store = require("flemma.config.store")
 local symbols = require("flemma.symbols")
 
 --- Build an is_list classifier function for the given root schema.
 --- Returns true when the path refers to a list-capable field (ListNode,
 --- OptionalNode(ListNode), ObjectNode with allow_list, or UnionNode with list branch).
----@param root_schema flemma.config.schema.Node
+---@param root_schema flemma.schema.Node
 ---@return fun(path: string): boolean
 local function make_is_list_fn(root_schema)
   return function(path)
@@ -45,7 +45,7 @@ end
 
 --- Resolve the canonical path for a key access at a given schema level and base path.
 --- Alias keys at the current schema level redirect to their canonical sub-paths.
----@param obj_node flemma.config.schema.Node Schema node at the current proxy level
+---@param obj_node flemma.schema.Node Schema node at the current proxy level
 ---@param base_path string Dot-delimited base path of the current proxy
 ---@param key string The key being accessed
 ---@return string canonical_path Full dot-delimited path from config root
@@ -65,9 +65,9 @@ end
 ---@field _path string Canonical dot-delimited path of the list field
 ---@field _layer integer Target layer for write ops
 ---@field _bufnr integer? Buffer number
----@field _item_schema flemma.config.schema.Node Schema for each list item
----@field _coerce_fn? fun(value: any, ctx: flemma.config.CoerceContext?): any Per-item coerce function
----@field _root_schema flemma.config.schema.Node Root schema for coerce context list classification
+---@field _item_schema flemma.schema.Node Schema for each list item
+---@field _coerce_fn? fun(value: any, ctx: flemma.schema.CoerceContext?): any Per-item coerce function
+---@field _root_schema flemma.schema.Node Root schema for coerce context list classification
 local ListProxy = {}
 ListProxy.__index = ListProxy
 
@@ -151,9 +151,9 @@ end
 ---@param path string
 ---@param layer integer
 ---@param bufnr integer?
----@param item_schema flemma.config.schema.Node
----@param coerce_fn? fun(value: any, ctx: flemma.config.CoerceContext?): any
----@param root_schema flemma.config.schema.Node
+---@param item_schema flemma.schema.Node
+---@param coerce_fn? fun(value: any, ctx: flemma.schema.CoerceContext?): any
+---@param root_schema flemma.schema.Node
 ---@return flemma.config.ListProxy
 local function make_list_proxy(path, layer, bufnr, item_schema, coerce_fn, root_schema)
   return setmetatable({
@@ -199,7 +199,7 @@ end
 --- Validate each item in a list table against the given item schema.
 --- Returns true on success, false + error on the first invalid item.
 ---@param items any[] Sequential table of items
----@param item_schema flemma.config.schema.Node Schema for each item
+---@param item_schema flemma.schema.Node Schema for each item
 ---@param path string Canonical path (for error messages)
 ---@return boolean ok
 ---@return string? err
@@ -224,11 +224,11 @@ end
 ---
 --- The `base_path` and `current_schema` describe the proxy's root in the config tree.
 --- The root-level proxy has `base_path = ""` and `current_schema = root_schema`.
----@param root_schema flemma.config.schema.Node Root schema for full-tree navigation
+---@param root_schema flemma.schema.Node Root schema for full-tree navigation
 ---@param bufnr integer? Buffer number used for store resolution
 ---@param layer integer? Target write layer (nil = read-only)
 ---@param base_path string Dot-delimited base path of this proxy (empty = config root)
----@param current_schema flemma.config.schema.Node Schema at base_path
+---@param current_schema flemma.schema.Node Schema at base_path
 ---@return table proxy
 local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
   local proxy = {}
@@ -261,7 +261,7 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
         if is_hybrid and LIST_METHODS[key] then
           -- is_hybrid guarantees layer ~= nil.
           local write_layer = layer --[[@as integer]]
-          local item_schema = unwrapped_current:get_list_item_schema() --[[@as flemma.config.schema.Node]]
+          local item_schema = unwrapped_current:get_list_item_schema() --[[@as flemma.schema.Node]]
           local coerce_fn = unwrapped_current:has_coerce() and unwrapped_current:get_coerce() or nil
           local list_proxy = make_list_proxy(base_path, write_layer, bufnr, item_schema, coerce_fn, root_schema)
           local skip_validation = (key == "remove")
@@ -367,7 +367,7 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
         -- Hybrid objects with allow_list: sequential table → list set.
         -- Non-sequential tables fall through to normal object behavior.
         if unwrapped_leaf:has_list_part() and type(value) == "table" and vim.islist(value) then
-          local list_item_schema = unwrapped_leaf:get_list_item_schema() --[[@as flemma.config.schema.Node]]
+          local list_item_schema = unwrapped_leaf:get_list_item_schema() --[[@as flemma.schema.Node]]
           local ok, err = validate_list_items(value, list_item_schema, canonical)
           if not ok then
             error({ type = "config", error = err })
@@ -414,7 +414,7 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
   -- is_hybrid guarantees layer ~= nil; cast once for all closures.
   if is_hybrid then
     local write_layer = layer --[[@as integer]]
-    local item_schema = unwrapped_current:get_list_item_schema() --[[@as flemma.config.schema.Node]]
+    local item_schema = unwrapped_current:get_list_item_schema() --[[@as flemma.schema.Node]]
     local coerce_fn = unwrapped_current:has_coerce() and unwrapped_current:get_coerce() or nil
     local list_proxy = make_list_proxy(base_path, write_layer, bufnr, item_schema, coerce_fn, root_schema)
 
@@ -443,7 +443,7 @@ end
 
 --- Create a read-only proxy at the config root.
 --- Reads resolve through all store layers for the given buffer.
----@param root_schema flemma.config.schema.Node
+---@param root_schema flemma.schema.Node
 ---@param bufnr integer?
 ---@return table
 function M.read_proxy(root_schema, bufnr)
@@ -453,7 +453,7 @@ end
 --- Create a write proxy at the config root targeting the given layer.
 --- Writes record ops to the specified layer with schema validation.
 --- Exposes `clear()` to reset the layer (returns self for chaining).
----@param root_schema flemma.config.schema.Node
+---@param root_schema flemma.schema.Node
 ---@param bufnr integer?
 ---@param layer integer One of store.LAYERS values
 ---@return table
@@ -467,7 +467,7 @@ end
 --- first non-nil value found. Object-typed keys return a new narrowed lens
 --- for further navigation. Aliases are resolved at each path's schema level.
 --- Writes are not permitted.
----@param root_schema flemma.config.schema.Node
+---@param root_schema flemma.schema.Node
 ---@param bufnr integer?
 ---@param paths string|string[] Single path or ordered list of paths (most specific first)
 ---@return table

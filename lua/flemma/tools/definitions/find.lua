@@ -6,7 +6,7 @@
 ---@field _build_command fun(backend: "fd"|"git"|"find", pattern: string, search_path: string, exclude: string[]): string[] Build command array for the given backend (exposed for testing)
 local M = {}
 
-local s = require("flemma.config.schema")
+local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
 local sink_module = require("flemma.sink")
 
