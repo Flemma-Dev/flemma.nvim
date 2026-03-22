@@ -1,5 +1,46 @@
 local status
 
+--- Same base as status.lua ICON_LETTER_BASE.
+local ICON_BASE = 0x1F170
+local function icon(ch)
+  return vim.fn.nr2char(ICON_BASE + string.byte(ch) - string.byte("A"))
+end
+local ICON_D = icon("D")
+local ICON_F = icon("F")
+local ICON_R = icon("R")
+
+---Find virtual text chunks on the first line matching a pattern.
+---@param result flemma.status.FormatResult
+---@param line_pattern string Lua pattern to match against line text
+---@return [string, string][]|nil chunks
+local function find_virt_on(result, line_pattern)
+  for _, vt in ipairs(result.virt_texts) do
+    local line_text = result.lines[vt[1] + 1]
+    if line_text and line_text:find(line_pattern) then
+      return vt[2]
+    end
+  end
+  return nil
+end
+
+---Check if any virtual text chunk on lines matching pattern contains the given text.
+---@param result flemma.status.FormatResult
+---@param line_pattern string Lua pattern
+---@param icon_text string Exact text to find in a chunk
+---@return boolean
+local function has_virt_icon(result, line_pattern, icon_text)
+  local chunks = find_virt_on(result, line_pattern)
+  if not chunks then
+    return false
+  end
+  for _, chunk in ipairs(chunks) do
+    if chunk[1]:find(icon_text, 1, true) then
+      return true
+    end
+  end
+  return false
+end
+
 describe("flemma.status", function()
   before_each(function()
     package.loaded["flemma.status"] = nil
@@ -456,7 +497,7 @@ describe("flemma.status", function()
   end)
 
   describe("format", function()
-    it("returns lines with section headers", function()
+    it("returns a FormatResult with lines, extmarks, and virt_texts", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
@@ -480,10 +521,13 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      assert.is_table(lines)
+      local result = status.format(data, false)
+      assert.is_table(result)
+      assert.is_table(result.lines)
+      assert.is_table(result.extmarks)
+      assert.is_table(result.virt_texts)
 
-      local text = table.concat(lines, "\n")
+      local text = table.concat(result.lines, "\n")
       assert.truthy(text:find("Provider"), "expected Provider header")
       assert.truthy(text:find("Parameters"), "expected Parameters header")
       assert.truthy(text:find("Autopilot"), "expected Autopilot header")
@@ -492,7 +536,33 @@ describe("flemma.status", function()
       assert.truthy(text:find("Approval"), "expected Approval header")
     end)
 
-    it("shows layer source indicators on parameter values", function()
+    it("uses box-drawing tree structure", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "test", initialized = true },
+        parameters = { merged = {}, sources = {} },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
+        },
+        tools = { enabled = {}, disabled = {} },
+        approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
+      assert.truthy(text:find("├─"), "expected branch characters")
+      assert.truthy(text:find("└─"), "expected last-branch characters")
+      assert.truthy(text:find("│"), "expected continuation characters")
+    end)
+
+    it("shows layer source indicators as virtual text on parameter values", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true, source = "S" },
@@ -514,11 +584,9 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
-      -- Parameters should show layer indicators
-      assert.truthy(text:find("max_tokens.*D"), "expected D source on max_tokens")
-      assert.truthy(text:find("thinking.*F"), "expected F source on thinking")
+      local result = status.format(data, false)
+      assert.is_true(has_virt_icon(result, "max_tokens", ICON_D), "expected D source on max_tokens")
+      assert.is_true(has_virt_icon(result, "thinking", ICON_F), "expected F source on thinking")
     end)
 
     it("shows layer source indicator on provider", function()
@@ -540,10 +608,9 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
-      assert.truthy(text:find("name:.*anthropic.*R"), "expected R source on provider name")
-      assert.truthy(text:find("model:.*claude%-haiku.*R"), "expected R source on model")
+      local result = status.format(data, false)
+      assert.is_true(has_virt_icon(result, "name.*anthropic", ICON_R), "expected R source on provider name")
+      assert.is_true(has_virt_icon(result, "model.*claude%-haiku", ICON_R), "expected R source on model")
     end)
 
     it("includes verbose layer ops and resolved tree", function()
@@ -556,12 +623,12 @@ describe("flemma.status", function()
       })
 
       local data = status.collect_verbose(0)
-      local lines = status.format(data, true)
-      local text = table.concat(lines, "\n")
+      local result = status.format(data, true)
+      local text = table.concat(result.lines, "\n")
       assert.truthy(text:find("Layer Ops"), "expected Layer Ops header")
-      assert.truthy(text:find("%[D%].*defaults"), "expected defaults layer")
-      assert.truthy(text:find("%[S%].*setup"), "expected setup layer")
-      assert.truthy(text:find("Resolved Config Tree"), "expected Resolved Config Tree header")
+      assert.truthy(text:find("defaults"), "expected defaults layer")
+      assert.truthy(text:find("setup"), "expected setup layer")
+      assert.truthy(text:find("Resolved Config"), "expected Resolved Config header")
     end)
 
     it("shows compact model metadata when model_info is present", function()
@@ -596,15 +663,15 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
-      assert.truthy(text:find("context:"), "expected context line")
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
+      assert.truthy(text:find("context"), "expected context line")
       assert.truthy(text:find("200K"), "expected 200K input tokens")
       assert.truthy(text:find("64K"), "expected 64K output tokens")
-      assert.truthy(text:find("pricing:"), "expected pricing line")
+      assert.truthy(text:find("pricing"), "expected pricing line")
       assert.truthy(text:find("%$3.00"), "expected input price")
       assert.truthy(text:find("%$15.00"), "expected output price")
-      assert.truthy(text:find("thinking:"), "expected thinking line")
+      assert.truthy(text:find("thinking"), "expected thinking line")
       assert.truthy(text:find("1024"), "expected min thinking budget")
     end)
 
@@ -627,14 +694,13 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
-      assert.falsy(text:find("context:"), "expected no context line")
-      assert.falsy(text:find("pricing:"), "expected no pricing line")
-      assert.falsy(text:find("thinking:"), "expected no thinking line")
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
+      assert.falsy(text:find("context"), "expected no context line")
+      assert.falsy(text:find("pricing"), "expected no pricing line")
     end)
 
-    it("shows full model_info dump in verbose mode", function()
+    it("shows full model_info as tree in verbose mode", function()
       apply_test_config({
         provider = "anthropic",
         model = "claude-sonnet-4-6",
@@ -655,14 +721,14 @@ describe("flemma.status", function()
         min_cache_tokens = 2048,
       }
 
-      local lines = status.format(data, true)
-      local text = table.concat(lines, "\n")
+      local result = status.format(data, true)
+      local text = table.concat(result.lines, "\n")
       assert.truthy(text:find("Model Info"), "expected Model Info header in verbose")
-      assert.truthy(text:find("min_cache_tokens"), "expected min_cache_tokens in verbose dump")
-      assert.truthy(text:find("thinking_budgets"), "expected thinking_budgets in verbose dump")
+      assert.truthy(text:find("min_cache_tokens"), "expected min_cache_tokens in verbose tree")
+      assert.truthy(text:find("thinking_budgets"), "expected thinking_budgets in verbose tree")
     end)
 
-    it("shows frontmatter override annotations for tools", function()
+    it("shows frontmatter override annotations for tools as virtual text", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
@@ -694,12 +760,11 @@ describe("flemma.status", function()
         buffer = { is_chat = true, bufnr = 1 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
-      assert.truthy(text:find("✲"), "expected frontmatter marker")
+      local result = status.format(data, false)
+      assert.is_true(has_virt_icon(result, "bash", ICON_F), "expected F frontmatter marker on bash")
     end)
 
-    it("shows tools summary", function()
+    it("shows tools in tree structure", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
@@ -723,10 +788,10 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
-      assert.truthy(text:find("✓"), "expected enabled tool marker")
-      assert.truthy(text:find("✗"), "expected disabled tool marker")
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
+      assert.truthy(text:find("enabled"), "expected enabled group")
+      assert.truthy(text:find("disabled"), "expected disabled group")
       assert.truthy(text:find("bash"), "expected bash tool name")
       assert.truthy(text:find("read_file"), "expected read_file tool name")
       assert.truthy(text:find("execute_command"), "expected execute_command tool name")
@@ -757,14 +822,16 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
-      assert.truthy(text:find("Approval %($default%)"), "expected Approval header with source")
-      assert.truthy(text:find("auto%-approve: edit, read, write"), "expected auto-approved tools")
-      assert.truthy(text:find("require approval: bash"), "expected pending tools")
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
+      assert.truthy(text:find("Approval.*$default"), "expected Approval header with source")
+      assert.truthy(text:find("auto%-approve"), "expected auto-approve group")
+      assert.truthy(text:find("require approval"), "expected pending group")
+      assert.truthy(text:find("edit"), "expected edit in approved")
+      assert.truthy(text:find("bash"), "expected bash in pending")
     end)
 
-    it("shows sandbox marker on sandbox-promoted tools", function()
+    it("shows sandbox marker as virtual text on sandbox-promoted tools", function()
       ---@type flemma.status.Data
       local data = {
         provider = { name = "anthropic", model = "claude-sonnet-4-5-20250929", initialized = true },
@@ -790,10 +857,14 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
-      assert.truthy(text:find("bash ⊡"), "expected sandbox marker on bash")
-      assert.truthy(text:find("⊡ auto%-approved via sandbox"), "expected sandbox legend")
+      local result = status.format(data, false)
+      -- Sandbox marker appears as virtual text
+      assert.is_true(has_virt_icon(result, "bash", "⊡"), "expected ⊡ sandbox marker on bash")
+
+      -- Legend should mention sandbox
+      local text = table.concat(result.lines, "\n")
+      assert.truthy(text:find("⊡"), "expected sandbox icon in legend")
+      assert.truthy(text:find("sandbox"), "expected sandbox label in legend")
     end)
 
     it("shows require_approval = false override", function()
@@ -820,8 +891,8 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
       assert.truthy(text:find("all tools auto%-approved"), "expected catch-all message")
     end)
 
@@ -849,8 +920,8 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
       assert.truthy(text:find("⏳"), "expected booting indicator")
       assert.truthy(text:find("loading async tool sources"), "expected booting message")
     end)
@@ -879,8 +950,8 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
       assert.falsy(text:find("⏳"), "expected no booting indicator")
     end)
 
@@ -909,10 +980,44 @@ describe("flemma.status", function()
         buffer = { is_chat = false, bufnr = 0 },
       }
 
-      local lines = status.format(data, false)
-      local text = table.concat(lines, "\n")
-      assert.truthy(text:find("Approval %($yolo, $no%-bash%)"), "expected Approval header with source")
-      assert.truthy(text:find("deny: bash"), "expected denied tools")
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
+      assert.truthy(text:find("Approval.*$yolo"), "expected Approval header with source")
+      assert.truthy(text:find("deny"), "expected deny group")
+      assert.truthy(text:find("bash"), "expected bash in denied")
+    end)
+
+    it("includes extmarks for inline highlighting", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "test", initialized = true },
+        parameters = { merged = {}, sources = {} },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100 },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
+        },
+        tools = { enabled = {}, disabled = {} },
+        approval = { approved = {}, denied = {}, pending = {}, require_approval_disabled = false },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local result = status.format(data, false)
+      assert.is_true(#result.extmarks > 0, "expected extmarks for highlighting")
+
+      -- Check that the title line has a FlemmaStatusTitle extmark
+      local found_title = false
+      for _, em in ipairs(result.extmarks) do
+        if em[1] == 0 and em[4] == "FlemmaStatusTitle" then
+          found_title = true
+          break
+        end
+      end
+      assert.is_true(found_title, "expected FlemmaStatusTitle extmark on line 0")
     end)
   end)
 
@@ -945,19 +1050,19 @@ describe("flemma.status", function()
         sandbox = { enabled = false, backend = "auto" },
       })
 
-      local registry = require("flemma.tools.registry")
-      registry.clear()
-      registry.register("read", {
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
       })
-      registry.register("bash", {
+      tools_registry.register("bash", {
         name = "bash",
         description = "Bash tool",
         input_schema = { type = "object" },
       })
-      registry.register("edit", {
+      tools_registry.register("edit", {
         name = "edit",
         description = "Edit tool",
         input_schema = { type = "object" },
@@ -979,9 +1084,9 @@ describe("flemma.status", function()
         sandbox = { enabled = false, backend = "auto" },
       })
 
-      local registry = require("flemma.tools.registry")
-      registry.clear()
-      registry.register("read", {
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
@@ -1005,14 +1110,14 @@ describe("flemma.status", function()
         sandbox = { enabled = false, backend = "auto" },
       })
 
-      local registry = require("flemma.tools.registry")
-      registry.clear()
-      registry.register("bash", {
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("bash", {
         name = "bash",
         description = "Bash tool",
         input_schema = { type = "object" },
       })
-      registry.register("read", {
+      tools_registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
@@ -1037,9 +1142,9 @@ describe("flemma.status", function()
         sandbox = { enabled = false, backend = "auto" },
       })
 
-      local registry = require("flemma.tools.registry")
-      registry.clear()
-      registry.register("read", {
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
@@ -1079,9 +1184,9 @@ describe("flemma.status", function()
         sandbox = { enabled = false, backend = "auto" },
       })
 
-      local registry = require("flemma.tools.registry")
-      registry.clear()
-      registry.register("read", {
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
@@ -1110,14 +1215,14 @@ describe("flemma.status", function()
         return true, nil
       end
 
-      local registry = require("flemma.tools.registry")
-      registry.clear()
-      registry.register("read", {
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("read", {
         name = "read",
         description = "Read tool",
         input_schema = { type = "object" },
       })
-      registry.register("bash", {
+      tools_registry.register("bash", {
         name = "bash",
         description = "Bash tool",
         capabilities = { "can_auto_approve_if_sandboxed" },
@@ -1144,9 +1249,9 @@ describe("flemma.status", function()
         sandbox = { enabled = false, backend = "auto" },
       })
 
-      local registry = require("flemma.tools.registry")
-      registry.clear()
-      registry.register("bash", {
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("bash", {
         name = "bash",
         description = "Bash tool",
         capabilities = { "can_auto_approve_if_sandboxed" },
@@ -1178,9 +1283,9 @@ describe("flemma.status", function()
         return true, nil
       end
 
-      local registry = require("flemma.tools.registry")
-      registry.clear()
-      registry.register("bash", {
+      local tools_registry = require("flemma.tools.registry")
+      tools_registry.clear()
+      tools_registry.register("bash", {
         name = "bash",
         description = "Bash tool",
         capabilities = { "can_auto_approve_if_sandboxed" },
@@ -1259,6 +1364,18 @@ describe("flemma.status", function()
       assert.equals(first_buf, second_buf)
 
       vim.api.nvim_win_close(second_win, true)
+    end)
+
+    it("applies extmarks to the buffer", function()
+      status.show({})
+      local new_win = vim.api.nvim_get_current_win()
+      local bufnr = vim.api.nvim_win_get_buf(new_win)
+
+      local ns = vim.api.nvim_create_namespace("flemma_status")
+      local marks = vim.api.nvim_buf_get_extmarks(bufnr, ns, 0, -1, {})
+      assert.is_true(#marks > 0, "expected extmarks in status buffer")
+
+      vim.api.nvim_win_close(new_win, true)
     end)
   end)
 end)
