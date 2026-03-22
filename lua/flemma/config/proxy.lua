@@ -90,7 +90,10 @@ local function record_list_op(self, op, item, skip_validation)
       if not skip_validation then
         local ok, err = self._item_schema:validate_value(expanded)
         if not ok then
-          error({ type = "config", error = string.format("list %s error at '%s': %s", op, self._path, err or "invalid") })
+          error({
+            type = "config",
+            error = string.format("list %s error at '%s': %s", op, self._path, err or "invalid"),
+          })
         end
       end
       store.record(self._layer, self._bufnr, op, self._path, expanded)
@@ -298,11 +301,17 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
 
     __newindex = function(_, key, value)
       if layer == nil then
-        error({ type = "config", error = string.format("write not permitted on read-only proxy (attempted key '%s')", tostring(key)) })
+        error({
+          type = "config",
+          error = string.format("write not permitted on read-only proxy (attempted key '%s')", tostring(key)),
+        })
       end
 
       if type(key) ~= "string" then
-        error({ type = "config", error = string.format("non-string key '%s' is not a valid config path", tostring(key)) })
+        error({
+          type = "config",
+          error = string.format("non-string key '%s' is not a valid config path", tostring(key)),
+        })
       end
 
       -- Alias resolution (same logic as __index).

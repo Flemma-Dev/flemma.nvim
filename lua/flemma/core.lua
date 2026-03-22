@@ -673,8 +673,16 @@ function M.send_to_provider(opts)
   -- Display diagnostics to user if any
   if #diagnostics > 0 then
     local has_errors = false
-    local by_type =
-      { frontmatter = {}, config = {}, expression = {}, template = {}, file = {}, tool_result = {}, tool_use = {}, rewriter = {} }
+    local by_type = {
+      frontmatter = {},
+      config = {},
+      expression = {},
+      template = {},
+      file = {},
+      tool_result = {},
+      tool_use = {},
+      rewriter = {},
+    }
 
     for _, diag in ipairs(diagnostics) do
       if diag.severity == "error" then
