@@ -48,9 +48,9 @@ M.setup = function(user_opts)
   -- Schema defaults (L10) + user opts (L20). DISCOVER-backed keys
   -- (tool/provider/sandbox-specific config) are deferred until modules register.
   config_facade.init(schema_definition)
-  local _, apply_err, deferred = config_facade.apply(config_facade.LAYERS.SETUP, user_opts, { defer_discover = true })
-  if apply_err then
-    log.warn("setup(): config validation: " .. apply_err)
+  local _, apply_errors, deferred = config_facade.apply(config_facade.LAYERS.SETUP, user_opts, { defer_discover = true })
+  if apply_errors then
+    vim.notify("Flemma: " .. table.concat(apply_errors, "; "), vim.log.levels.WARN)
   end
 
   -- Early materialize for consumers during module registration. DISCOVER

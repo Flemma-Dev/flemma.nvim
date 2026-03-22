@@ -72,6 +72,23 @@ end
 ---@field layer integer Target layer
 ---@field bufnr integer? Buffer number (required for FRONTMATTER)
 ---@field deferred table[]? Accumulator for deferred writes (nil = normal mode)
+---@field errors string[]? Accumulator for validation errors (nil = abort-on-first-error)
+
+--- Report a validation error: collect if in resilient mode, abort otherwise.
+--- In resilient mode (ctx.errors non-nil), the error is appended and the caller
+--- should continue processing siblings. In strict mode, returns nil+err for
+--- the caller to propagate upward.
+---@param ctx flemma.config.ApplyContext
+---@param msg string Error message
+---@return boolean? ok True when collected, nil when aborting
+---@return string? err Error message when aborting
+local function report_error(ctx, msg)
+  if ctx.errors then
+    table.insert(ctx.errors, msg)
+    return true
+  end
+  return nil, msg
+end
 
 --- Recursively walk a plain Lua table and record set ops on the target layer.
 --- Object nodes are walked into; lists and scalars become single set ops.
@@ -120,7 +137,7 @@ local function apply_recursive(ctx, path, value)
         return true
       end
     end
-    return nil, string.format("config.apply: unknown key '%s'", path)
+    return report_error(ctx, string.format("config.apply: unknown key '%s'", path))
   end
 
   if leaf:is_object() and type(value) == "table" then
@@ -136,7 +153,7 @@ local function apply_recursive(ctx, path, value)
         for i, item in ipairs(value) do
           local ok, err = list_item_schema:validate_value(item)
           if not ok then
-            return nil, string.format("config.apply: list item[%d] at '%s': %s", i, path, err or "invalid")
+            return report_error(ctx, string.format("config.apply: list item[%d] at '%s': %s", i, path, err or "invalid"))
           end
         end
       end
@@ -155,7 +172,7 @@ local function apply_recursive(ctx, path, value)
   else
     local valid, err = leaf:validate_value(value)
     if not valid then
-      return nil, string.format("config.apply: validation error at '%s': %s", path, err or "invalid")
+      return report_error(ctx, string.format("config.apply: validation error at '%s': %s", path, err or "invalid"))
     end
     store.record(ctx.layer, ctx.bufnr, "set", path, value)
   end
@@ -223,26 +240,28 @@ end
 --- When `apply_opts.defer_discover` is true, writes to unknown keys on
 --- objects with DISCOVER callbacks are deferred instead of failing. The
 --- returned deferred list is replayed via `apply_deferred()` after module
---- registration. Non-DISCOVER errors are still fatal in pass 1.
+--- registration. Non-DISCOVER errors are collected and returned (not fatal).
 ---@param layer integer Target layer (e.g., M.LAYERS.SETUP)
 ---@param opts table Plain Lua table of config values
 ---@param apply_opts? { defer_discover?: boolean }
----@return boolean? ok True on success, nil on failure
----@return string? err Error message on failure
+---@return boolean? ok True on success (including partial with errors), nil on hard failure
+---@return string[]? errors Validation errors (nil if none)
 ---@return table[]? deferred Deferred writes (only when defer_discover = true and items were deferred)
 function M.apply(layer, opts, apply_opts)
   assert(root_schema, "config.init() must be called before apply()")
   local defer = apply_opts and apply_opts.defer_discover
   ---@type flemma.config.ApplyContext
-  local ctx = { schema = root_schema, layer = layer, bufnr = nil, deferred = defer and {} or nil }
+  local ctx = { schema = root_schema, layer = layer, bufnr = nil, deferred = defer and {} or nil, errors = {} }
   local ok, err = apply_recursive(ctx, "", opts)
   if not ok then
-    return nil, err
+    -- Hard failure (programming error, e.g. non-table root value)
+    return nil, { err }
   end
+  local errors = #ctx.errors > 0 and ctx.errors or nil
   if ctx.deferred and #ctx.deferred > 0 then
-    return true, nil, ctx.deferred
+    return true, errors, ctx.deferred
   end
-  return true
+  return true, errors
 end
 
 --- Record a single operation on the DEFAULTS layer (L10).

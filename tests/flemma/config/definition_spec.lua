@@ -278,9 +278,10 @@ describe("config.schema.definition", function()
     end)
 
     it("rejects thinking = true (use a named level instead)", function()
-      local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, { parameters = { thinking = true } })
-      assert.is_nil(ok)
-      assert.truthy(err:find("no union branch matched"))
+      local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, { parameters = { thinking = true } })
+      assert.is_true(ok)
+      assert.is_truthy(errors)
+      assert.truthy(errors[1]:find("no union branch matched"))
     end)
 
     it("accepts thinking numeric override", function()
@@ -304,9 +305,10 @@ describe("config.schema.definition", function()
     end)
 
     it("rejects text_object = true", function()
-      local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, { text_object = true })
-      assert.is_nil(ok)
-      assert.truthy(err:find("no union branch matched"))
+      local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, { text_object = true })
+      assert.is_true(ok)
+      assert.is_truthy(errors)
+      assert.truthy(errors[1]:find("no union branch matched"))
     end)
 
     it("accepts fold_toggle = false", function()
@@ -326,9 +328,10 @@ describe("config.schema.definition", function()
     end)
 
     it("rejects unknown top-level key", function()
-      local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, { nonexistent = true })
-      assert.is_nil(ok)
-      assert.truthy(err:find("unknown key"))
+      local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, { nonexistent = true })
+      assert.is_true(ok)
+      assert.is_truthy(errors)
+      assert.truthy(errors[1]:find("unknown key"))
     end)
 
     it("accepts provider-specific parameter overrides after registration", function()
@@ -569,28 +572,30 @@ describe("config.schema.definition", function()
 
       it("rejects unknown field on discovered tool schema", function()
         tools_module.register("flemma.tools.definitions.bash")
-        local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
+        local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { bash = { nonexistent = "value" } },
         })
-        assert.is_nil(ok)
-        assert.truthy(err:find("unknown key"))
+        assert.is_true(ok)
+        assert.is_truthy(errors)
+        assert.truthy(errors[1]:find("unknown key"))
       end)
 
       it("rejects invalid type on discovered tool schema field", function()
         tools_module.register("flemma.tools.definitions.bash")
-        local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
+        local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { bash = { shell = 42 } },
         })
-        assert.is_nil(ok)
-        assert.truthy(err)
+        assert.is_true(ok)
+        assert.is_truthy(errors)
       end)
 
       it("errors for unregistered tool without defer_discover", function()
-        local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
+        local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { bash = { shell = "zsh" } },
         })
-        assert.is_nil(ok)
-        assert.truthy(err:find("unknown key"))
+        assert.is_true(ok)
+        assert.is_truthy(errors)
+        assert.truthy(errors[1]:find("unknown key"))
       end)
     end)
 
@@ -618,11 +623,12 @@ describe("config.schema.definition", function()
 
       it("built-in provider schemas require registry registration (no special treatment)", function()
         -- Without registration, DISCOVER returns nil → unknown key error
-        local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
+        local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, {
           parameters = { anthropic = { thinking_budget = 4096 } },
         })
-        assert.is_nil(ok)
-        assert.truthy(err:find("unknown key"))
+        assert.is_true(ok)
+        assert.is_truthy(errors)
+        assert.truthy(errors[1]:find("unknown key"))
       end)
 
       it("built-in provider schemas work after registration", function()
@@ -648,11 +654,12 @@ describe("config.schema.definition", function()
             api_url = s.optional(s.string()),
           }),
         })
-        local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
+        local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, {
           parameters = { custom = { nonexistent = "value" } },
         })
-        assert.is_nil(ok)
-        assert.truthy(err:find("unknown key"))
+        assert.is_true(ok)
+        assert.is_truthy(errors)
+        assert.truthy(errors[1]:find("unknown key"))
       end)
     end)
 
@@ -675,19 +682,21 @@ describe("config.schema.definition", function()
 
       it("rejects unknown field on bwrap schema", function()
         sandbox_module.setup()
-        local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
+        local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, {
           sandbox = { backends = { bwrap = { nonexistent = "value" } } },
         })
-        assert.is_nil(ok)
-        assert.truthy(err:find("unknown key"))
+        assert.is_true(ok)
+        assert.is_truthy(errors)
+        assert.truthy(errors[1]:find("unknown key"))
       end)
 
       it("errors for unregistered bwrap without defer_discover", function()
-        local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
+        local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, {
           sandbox = { backends = { bwrap = { path = "/usr/bin/bwrap" } } },
         })
-        assert.is_nil(ok)
-        assert.truthy(err:find("unknown key"))
+        assert.is_true(ok)
+        assert.is_truthy(errors)
+        assert.truthy(errors[1]:find("unknown key"))
       end)
 
       it("resolves custom backend config schema via registry", function()
@@ -722,19 +731,21 @@ describe("config.schema.definition", function()
             profile = s_mod.optional(s_mod.string()),
           }),
         })
-        local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
+        local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, {
           sandbox = { backends = { firejail = { nonexistent = "value" } } },
         })
-        assert.is_nil(ok)
-        assert.truthy(err:find("unknown key"))
+        assert.is_true(ok)
+        assert.is_truthy(errors)
+        assert.truthy(errors[1]:find("unknown key"))
       end)
 
       it("errors for unregistered backend without defer_discover", function()
-        local ok, err = config_facade.apply(config_facade.LAYERS.SETUP, {
+        local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, {
           sandbox = { backends = { nsjail = { config_path = "/etc/nsjail" } } },
         })
-        assert.is_nil(ok)
-        assert.truthy(err:find("unknown key"))
+        assert.is_true(ok)
+        assert.is_truthy(errors)
+        assert.truthy(errors[1]:find("unknown key"))
       end)
     end)
 

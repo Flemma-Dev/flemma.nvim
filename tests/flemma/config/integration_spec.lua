@@ -124,18 +124,34 @@ describe("flemma.config — integration", function()
 
     it("apply returns error for wrong type", function()
       config.init(make_schema())
-      local ok, err = config.apply(L.SETUP, { provider = 42 })
-      assert.is_nil(ok)
-      assert.is_truthy(err)
-      assert.matches("validation error", err)
+      local ok, errors = config.apply(L.SETUP, { provider = 42 })
+      assert.is_true(ok)
+      assert.is_truthy(errors)
+      assert.truthy(errors[1]:find("validation error"))
     end)
 
     it("apply returns error for unknown keys", function()
       config.init(make_schema())
-      local ok, err = config.apply(L.SETUP, { nonexistent = "value" })
-      assert.is_nil(ok)
-      assert.is_truthy(err)
-      assert.matches("unknown key", err)
+      local ok, errors = config.apply(L.SETUP, { nonexistent = "value" })
+      assert.is_true(ok)
+      assert.is_truthy(errors)
+      assert.truthy(errors[1]:find("unknown key"))
+    end)
+
+    it("apply collects errors without aborting valid sibling keys", function()
+      config.init(make_schema())
+      local ok, errors = config.apply(L.SETUP, {
+        provider = "openai",
+        nonexistent = "bad",
+        model = "gpt-4o",
+      })
+      assert.is_true(ok)
+      assert.is_truthy(errors)
+      assert.equals(1, #errors)
+      assert.truthy(errors[1]:find("unknown key"))
+      -- Valid siblings were written despite the error
+      assert.equals("openai", config.get().provider)
+      assert.equals("gpt-4o", config.get().model)
     end)
 
     it("setup values are inspectable with source 'S'", function()
@@ -529,18 +545,18 @@ describe("flemma.config — integration", function()
       assert.is_nil(deferred)
     end)
 
-    it("non-DISCOVER errors are still fatal in pass 1", function()
+    it("non-DISCOVER errors are collected in pass 1", function()
       local schema = make_discover_schema()
       config.init(schema)
 
-      -- Root object has no DISCOVER, so unknown root keys are immediate errors
-      local ok, err, deferred = config.apply(L.SETUP, {
+      -- Root object has no DISCOVER, so unknown root keys are collected as errors
+      local ok, errors, deferred = config.apply(L.SETUP, {
         completely_unknown = "value",
       }, { defer_discover = true })
 
-      assert.is_nil(ok)
-      assert.is_truthy(err)
-      assert.matches("unknown key", err)
+      assert.is_true(ok)
+      assert.is_truthy(errors)
+      assert.truthy(errors[1]:find("unknown key"))
       assert.is_nil(deferred)
     end)
 
@@ -579,18 +595,18 @@ describe("flemma.config — integration", function()
       assert.equals("known", config.get().parameters.builtin.key_a)
     end)
 
-    it("without defer_discover, unknown DISCOVER keys fail immediately", function()
+    it("without defer_discover, unknown DISCOVER keys are collected", function()
       local schema = make_discover_schema()
       config.init(schema)
 
-      -- Normal mode (no defer) — DISCOVER returns nil → error
-      local ok, err = config.apply(L.SETUP, {
+      -- Normal mode (no defer) — DISCOVER returns nil → error collected
+      local ok, errors = config.apply(L.SETUP, {
         parameters = { custom_provider = { key = "a" } },
       })
 
-      assert.is_nil(ok)
-      assert.is_truthy(err)
-      assert.matches("unknown key", err)
+      assert.is_true(ok)
+      assert.is_truthy(errors)
+      assert.truthy(errors[1]:find("unknown key"))
     end)
 
     it("alias keys at root level are not deferred", function()

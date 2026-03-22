@@ -393,6 +393,11 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
       -- Record the set op on the target layer.
       store.record(layer, bufnr, "set", canonical, value)
     end,
+    -- Guard against accidental pairs() on proxies (use materialize() instead).
+    -- Effective in Lua 5.2+ runtimes; harmless no-op under LuaJIT 5.1 semantics.
+    __pairs = function()
+      error("config: use config.materialize() instead of pairs() on a config proxy")
+    end,
   }
 
   -- Hybrid: operator overloads route through record_list_op for coerce support.
@@ -507,6 +512,9 @@ function M.lens(root_schema, bufnr, paths)
     end,
     __newindex = function(_, key, _)
       error(string.format("config: write not permitted on lens (attempted key '%s')", key))
+    end,
+    __pairs = function()
+      error("config: use config.materialize() instead of pairs() on a config lens")
     end,
   })
   return lens_proxy
