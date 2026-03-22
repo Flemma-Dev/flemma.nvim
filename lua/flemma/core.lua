@@ -18,6 +18,7 @@ local autopilot = require("flemma.autopilot")
 local bridge = require("flemma.bridge")
 local client = require("flemma.client")
 local context_module = require("flemma.context")
+local diagnostic_format = require("flemma.utilities.diagnostic")
 local diagnostics_module = require("flemma.diagnostics")
 local executor = require("flemma.tools.executor")
 local injector = require("flemma.tools.injector")
@@ -682,78 +683,7 @@ function M.send_to_provider(opts)
 
     local diagnostic_lines = {}
     local MAX_DIAGNOSTICS = 10
-
-    local ICON_ERROR = "✗"
-    local ICON_WARN = "⚠"
-
-    ---@param path string|nil
-    ---@return string
-    local function format_path(path)
-      if not path or path == "N/A" then
-        return ""
-      end
-      return vim.fn.fnamemodify(path, ":.")
-    end
-
-    ---@param pos flemma.ast.Position|nil
-    ---@return string
-    local function format_position(pos)
-      if not pos then
-        return ""
-      end
-      if pos.start_line then
-        if pos.start_col then
-          return string.format(":%d:%d", pos.start_line, pos.start_col)
-        end
-        return string.format(":%d", pos.start_line)
-      end
-      return ""
-    end
-
-    ---Build the location line for a diagnostic (second line, indented).
-    ---Returns nil if there's nothing meaningful to show.
-    ---@param d flemma.ast.Diagnostic
-    ---@return string|nil
-    local function format_location(d)
-      local parts = {}
-
-      local path = format_path(d.source_file)
-      if path ~= "" then
-        table.insert(parts, path .. format_position(d.position))
-      end
-
-      -- Role context for expression diagnostics
-      if d.message_role then
-        table.insert(parts, "in @" .. d.message_role)
-      end
-
-      -- Rewriter name
-      if d.rewriter_name then
-        table.insert(parts, "[" .. d.rewriter_name .. "]")
-      end
-
-      -- Expression source
-      if d.expression then
-        table.insert(parts, "{{ " .. vim.trim(d.expression) .. " }}")
-      end
-
-      if #parts == 0 then
-        return nil
-      end
-      return "   " .. table.concat(parts, " · ")
-    end
-
-    -- Flatten all diagnostics into a single ordered list: errors first, then warnings.
-    local sorted = {}
-    for _, diag in ipairs(diagnostics) do
-      table.insert(sorted, diag)
-    end
-    table.sort(sorted, function(a, b)
-      if a.severity == b.severity then
-        return false
-      end
-      return a.severity == "error"
-    end)
+    local sorted = diagnostic_format.sort(diagnostics)
 
     -- Render each diagnostic as icon + message, then location on next line.
     local rendered = 0
@@ -768,33 +698,15 @@ function M.send_to_provider(opts)
         table.insert(diagnostic_lines, "")
       end
 
-      local icon = d.severity == "error" and ICON_ERROR or ICON_WARN
-      local message = d.error or "unknown error"
+      table.insert(diagnostic_lines, " " .. diagnostic_format.format_message(d))
 
-      -- File diagnostics: the filename IS the context, no type prefix needed
-      if d.type == "file" then
-        local ref = d.raw or d.filename
-        if ref then
-          message = ref .. ": " .. message
-        end
-      elseif d.type then
-        message = d.type .. ": " .. message
-      end
-
-      table.insert(diagnostic_lines, string.format(" %s %s", icon, message))
-
-      -- Location line
-      local loc = format_location(d)
+      local loc = diagnostic_format.format_location(d)
       if loc then
-        table.insert(diagnostic_lines, loc)
+        table.insert(diagnostic_lines, "   " .. loc)
       end
 
-      -- Include stack for file errors
-      if d.include_stack and #d.include_stack > 0 then
-        for _, stack_path in ipairs(d.include_stack) do
-          table.insert(diagnostic_lines, "   ↓ " .. format_path(stack_path))
-        end
-        table.insert(diagnostic_lines, "   → " .. (d.raw or d.filename or ""))
+      for _, stack_line in ipairs(diagnostic_format.format_include_stack(d)) do
+        table.insert(diagnostic_lines, "   " .. stack_line)
       end
 
       rendered = rendered + 1

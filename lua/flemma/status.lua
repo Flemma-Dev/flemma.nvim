@@ -12,6 +12,7 @@ local state = require("flemma.state")
 local str = require("flemma.utilities.string")
 local tools_module = require("flemma.tools")
 local tools_approval = require("flemma.tools.approval")
+local diagnostic_format = require("flemma.utilities.diagnostic")
 local registry = require("flemma.provider.registry")
 
 local MARKER_SANDBOX = "⊡"
@@ -71,7 +72,7 @@ local OP_HL = {
 ---@field tools { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer }
 ---@field approval { approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil }
 ---@field buffer { is_chat: boolean, bufnr: integer }
----@field diagnostics? string[] Frontmatter validation failure messages
+---@field diagnostics? flemma.ast.Diagnostic[] Frontmatter validation diagnostics
 ---@field introspection? { layer_ops: { label: string, name: string, ops: table[] }[], resolved: { path: string, value: any, source: string?, depth: integer, is_object: boolean }[] }
 
 ---@class flemma.status.FormatResult
@@ -1543,11 +1544,28 @@ function M.format(data, verbose)
   b:put("Flemma Status", "FlemmaStatusTitle")
   b:nl()
 
-  -- Frontmatter validation diagnostics (rendered as DiagnosticError lines)
+  -- Frontmatter validation diagnostics
   if data.diagnostics and #data.diagnostics > 0 then
-    for _, message in ipairs(data.diagnostics) do
-      b:put("  " .. message, "DiagnosticError")
+    for i, d in ipairs(diagnostic_format.sort(data.diagnostics)) do
+      local hl = diagnostic_format.highlight(d.severity)
+      b:put("┆", "FlemmaStatusTree")
+      b:put(" " .. diagnostic_format.format_message(d), hl)
       b:nl()
+      local loc = diagnostic_format.format_location(d)
+      if loc then
+        b:put("┆", "FlemmaStatusTree")
+        b:put("   " .. loc, "Comment")
+        b:nl()
+      end
+      for _, stack_line in ipairs(diagnostic_format.format_include_stack(d)) do
+        b:put("┆", "FlemmaStatusTree")
+        b:put("   " .. stack_line, "Comment")
+        b:nl()
+      end
+      if i < #data.diagnostics then
+        b:put("┆", "FlemmaStatusTree")
+        b:nl()
+      end
     end
   end
 
@@ -1615,21 +1633,25 @@ function M.collect(bufnr)
   -- FRONTMATTER layer. This must happen before materialize() so the
   -- materialized config includes frontmatter overrides.
   local is_chat = vim.api.nvim_buf_is_valid(bufnr) and bufnr > 0 and vim.bo[bufnr].filetype == "chat"
-  local diagnostic_messages = nil
+  local collected_diagnostics = nil
   if is_chat then
     local fm_result = processor.evaluate_buffer_frontmatter(bufnr)
     state.get_buffer_state(bufnr).frontmatter_eval_code = fm_result.frontmatter_code
-    -- Collect both parse/runtime errors and schema validation failures
+    -- Collect parse/runtime errors
     for _, diagnostic in ipairs(fm_result.diagnostics) do
       if diagnostic.severity == "error" or diagnostic.severity == "warning" then
-        diagnostic_messages = diagnostic_messages or {}
-        local prefix = diagnostic.type and (diagnostic.type .. ": ") or ""
-        table.insert(diagnostic_messages, prefix .. (diagnostic.error or "unknown error"))
+        collected_diagnostics = collected_diagnostics or {}
+        table.insert(collected_diagnostics, diagnostic)
       end
     end
+    -- Normalize schema validation failures into Diagnostic shape
     for _, failure in ipairs(fm_result.validation_failures) do
-      diagnostic_messages = diagnostic_messages or {}
-      table.insert(diagnostic_messages, failure.message)
+      collected_diagnostics = collected_diagnostics or {}
+      table.insert(collected_diagnostics, {
+        type = "config",
+        severity = "warning",
+        error = failure.message,
+      })
     end
   end
 
@@ -1651,7 +1673,7 @@ function M.collect(bufnr)
       is_chat = is_chat,
       bufnr = bufnr,
     },
-    diagnostics = diagnostic_messages,
+    diagnostics = collected_diagnostics,
   }
 end
 
