@@ -21,6 +21,14 @@ notes = [[
 
 Errors (syntax problems, unknown parser) block the request and show in a detailed notification with filename and line number.
 
+### Passive evaluation
+
+Frontmatter is re-evaluated automatically whenever the buffer content changes — on `InsertLeave`, `TextChanged`, and `BufEnter`. This means integrations like lualine see up-to-date config values (model, thinking level, etc.) as you edit, without waiting for a send.
+
+If a frontmatter edit introduces an error, the last successful parse is preserved — you can experiment freely without breaking your session mid-edit. Errors surface as diagnostics on the next `:Flemma send` or in the `:Flemma status` window.
+
+Passive evaluation is skipped while a request is in flight (the active send owns the frontmatter state).
+
 ### Custom frontmatter parsers
 
 Lua and JSON parsers ship with Flemma. You can register additional parsers (e.g., YAML) with:
@@ -117,6 +125,51 @@ flemma.opt.tools.autopilot = false  -- manual three-phase Ctrl-] for this buffer
 If you misspell a tool name, Flemma suggests the closest match: `"flemma.opt: unknown value 'calulator'. Did you mean 'calculator'?"`.
 
 Only options you actually touch appear in the resolved overrides – unmodified settings fall through to your global config. See [docs/tools.md](tools.md) for more on tool approval and the resolver API.
+
+### JSON frontmatter with config operators
+
+JSON frontmatter blocks can override Flemma configuration through a `flemma` key. Plain values set the option directly; for list-type options (tools, auto_approve), MongoDB-style operators give precise control over how the list is modified:
+
+| Operator   | Effect                                  | Example                                 |
+| ---------- | --------------------------------------- | --------------------------------------- |
+| `$set`     | Replace the value (same as no operator) | `"tools": { "$set": ["bash", "read"] }` |
+| `$append`  | Add item(s) to a list                   | `"tools": { "$append": "bash" }`        |
+| `$remove`  | Remove item(s) from a list              | `"tools": { "$remove": "write" }`       |
+| `$prepend` | Prepend item(s) to a list               | `"tools": { "$prepend": "calculator" }` |
+
+Operators accept both single values and arrays: `"$append": ["bash", "grep"]`.
+
+````json
+```json
+{
+  "flemma": {
+    "provider": "openai",
+    "model": "gpt-5",
+    "parameters": {
+      "thinking": "medium",
+      "temperature": 0.3
+    },
+    "tools": {
+      "$append": "bash",
+      "auto_approve": {
+        "$append": "bash",
+        "$remove": "write"
+      }
+    }
+  },
+  "recipient": "QA team"
+}
+```
+````
+
+Regular (non-`$`) keys navigate into child objects: `"parameters": { "thinking": "medium" }` descends into the `parameters` node and sets `thinking` to `"medium"` without touching other parameters. Operators and child keys can coexist on the same node — in the example above, `"tools"` both appends `"bash"` to the tool list and navigates into `auto_approve` for further operations.
+
+Plain values and arrays without operators default to `$set`. The `flemma` key is reserved for configuration; all other top-level keys become template variables available in `{{ expressions }}`, just like Lua frontmatter.
+
+> [!NOTE]
+> JSON frontmatter operators are the equivalent of Lua frontmatter's `flemma.opt` proxy. Both write to the same per-buffer config layer. Use whichever syntax you prefer — Lua frontmatter for full programmatic control, JSON frontmatter for quick declarative overrides.
+
+Frontmatter config values are validated against the schema. Unknown keys produce an error; misspelled tool names get a "did you mean?" suggestion.
 
 ## Inline expressions
 

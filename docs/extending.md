@@ -78,7 +78,7 @@ Flemma resolves API keys and tokens through a priority-based resolver chain. The
 1. **Cache check** – if a cached credential exists and its TTL hasn't expired, return it immediately.
 2. **Resolver iteration** – try each resolver in priority order (highest first). Each resolver's `supports()` method filters by platform, credential kind, or service.
 3. **First match wins** – the first resolver that returns a value is used. The result is cached.
-4. **Fallback** – if no resolver succeeds, a warning is shown with the credential description.
+4. **Fallback** – if no resolver succeeds, a warning notification lists every resolver that was tried and why it couldn't help (e.g., "ANTHROPIC_API_KEY not set", "secret-tool not found on PATH", "gcloud: executable not found"). This diagnostic output helps pinpoint which resolver to configure.
 
 ### Environment resolver conventions
 
@@ -102,6 +102,22 @@ effective_ttl = base_ttl * ttl_scale
 ```
 
 Where `base_ttl` comes from the resolver result or credential config, and `ttl_scale` (default `1.0`) allows adjusting the refresh window (e.g., `0.8` to refresh at 80% of token lifetime). When no TTL is set, the credential caches indefinitely until manually invalidated.
+
+### Configuring resolvers
+
+Built-in resolvers can be configured through the `secrets` config namespace. Currently only the gcloud resolver has configurable options:
+
+```lua
+require("flemma").setup({
+  secrets = {
+    gcloud = {
+      path = "/usr/local/bin/gcloud",  -- override the gcloud binary path (default: "gcloud")
+    },
+  },
+})
+```
+
+This is useful on NixOS, Guix, or systems where the gcloud CLI is not on `$PATH`.
 
 ### Registering a custom resolver
 
@@ -128,8 +144,13 @@ secrets.register("my_vault", {
 
 The resolver contract:
 
-- **`supports(self, credential)`** → `boolean` – whether this resolver can attempt this credential.
-- **`resolve(self, credential)`** → `{ value: string, ttl?: integer } | nil` – the credential value, or `nil` to pass.
+- **`supports(self, credential, ctx)`** → `boolean` – whether this resolver can attempt this credential. `ctx` is a `SecretsContext` (see below).
+- **`resolve(self, credential, ctx)`** → `{ value: string, ttl?: integer } | nil` – the credential value, or `nil` to pass. `ctx` is a `SecretsContext`.
+
+Resolvers receive a `SecretsContext` that provides:
+
+- **`ctx:get_config()`** → `table|nil` – returns the resolver's config subtree from `secrets.<resolver_name>` (e.g., `secrets.gcloud` for the gcloud resolver). Returns a deep copy; modifications don't affect global config.
+- **`ctx:diagnostic(message)`** – record a diagnostic explaining why this resolver couldn't help. These are surfaced in the failure notification when all resolvers fail.
 
 ### Invalidating credentials
 
@@ -146,13 +167,14 @@ secrets.invalidate_all()                    -- clear the entire cache
 
 These extension points have full documentation in their respective pages:
 
-| Extension point     | What it does                                          | Documentation                                                                             |
-| ------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Custom tools        | Register tools the model can call                     | [docs/tools.md – Registering custom tools](tools.md#registering-custom-tools)             |
-| Async tool sources  | Resolve tool definitions from external processes/APIs | [docs/tools.md – Async tool definitions](tools.md#async-tool-definitions)                 |
-| Approval resolvers  | Priority-based chain for tool approval decisions      | [docs/tools.md – Approval resolvers](tools.md#approval-resolvers)                         |
-| Sandbox backends    | Platform-specific sandbox enforcement                 | [docs/sandbox.md – Custom backends](sandbox.md#custom-backends)                           |
-| Personalities       | Dynamic system prompt generators                      | [docs/personalities.md](personalities.md)                                                 |
-| Template populators | Custom globals for `{{ }}` and `{% %}` expressions    | [docs/templates.md – Extending the Environment](templates.md#extending-the-environment)   |
-| Frontmatter parsers | Custom frontmatter languages (e.g., YAML)             | [docs/templates.md – Custom frontmatter parsers](templates.md#custom-frontmatter-parsers) |
-| Preview formatters  | Custom tool preview rendering in pending placeholders | [docs/tools.md – Custom preview formatters](tools.md#custom-preview-formatters)           |
+| Extension point       | What it does                                          | Documentation                                                                                         |
+| --------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Custom tools          | Register tools the model can call                     | [docs/tools.md – Registering custom tools](tools.md#registering-custom-tools)                         |
+| Async tool sources    | Resolve tool definitions from external processes/APIs | [docs/tools.md – Async tool definitions](tools.md#async-tool-definitions)                             |
+| Approval resolvers    | Priority-based chain for tool approval decisions      | [docs/tools.md – Approval resolvers](tools.md#approval-resolvers)                                     |
+| Sandbox backends      | Platform-specific sandbox enforcement                 | [docs/sandbox.md – Custom backends](sandbox.md#custom-backends)                                       |
+| Personalities         | Dynamic system prompt generators                      | [docs/personalities.md](personalities.md)                                                             |
+| Template populators   | Custom globals for `{{ }}` and `{% %}` expressions    | [docs/templates.md – Extending the Environment](templates.md#extending-the-environment)               |
+| Frontmatter parsers   | Custom frontmatter languages (e.g., YAML)             | [docs/templates.md – Custom frontmatter parsers](templates.md#custom-frontmatter-parsers)             |
+| Frontmatter operators | JSON config operators (`$set`, `$append`, etc.)       | [docs/templates.md – JSON frontmatter operators](templates.md#json-frontmatter-with-config-operators) |
+| Preview formatters    | Custom tool preview rendering in pending placeholders | [docs/tools.md – Custom preview formatters](tools.md#custom-preview-formatters)                       |

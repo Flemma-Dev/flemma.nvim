@@ -196,16 +196,30 @@ bash: $ make test  # running tests
 
 Previews are non-editable virtual text (extmarks) that disappear once the tool executes and its result replaces the placeholder. They adapt to the editor's text area width, truncating with `…` when necessary.
 
+### Structured previews: label and detail
+
+Tool previews use a two-part structure: a **label** (the LLM's stated intent, shown italic) and a **detail** (the raw technical summary, shown dimmer). They are separated by an em-dash (`—`):
+
+```
+bash: running tests — $ make test
+read: checking config — src/config.lua  +0,50
+```
+
+When the available width is limited, detail is truncated first (with `…`), preserving the human-readable label.
+
 ### Built-in preview formatters
 
-Every built-in tool ships with a tailored `format_preview` function:
+Every built-in tool ships with a tailored `format_preview` function that returns structured `{ label, detail }` previews:
 
-| Tool    | Preview format                                     | Example                                     |
-| ------- | -------------------------------------------------- | ------------------------------------------- |
-| `bash`  | `$ command` with optional label                    | `bash: $ git status  # checking repo`       |
-| `read`  | Path with optional `+offset,limit` range and label | `read: config.lua  +100,50  # reading tail` |
-| `edit`  | Path with optional label                           | `edit: config.lua  # fixing typo`           |
-| `write` | Path with content size and optional label          | `write: output.txt  (2.3KB)  # saving log`  |
+| Tool    | Label source                   | Detail format                       | Example                                     |
+| ------- | ------------------------------ | ----------------------------------- | ------------------------------------------- |
+| `bash`  | LLM's intent (from the prompt) | `$ command`                         | `bash: checking repo — $ git status`        |
+| `read`  | LLM's intent                   | Path with optional `+offset,limit`  | `read: reading tail — config.lua  +100,50`  |
+| `edit`  | LLM's intent                   | Path                                | `edit: fixing typo — config.lua`            |
+| `write` | LLM's intent                   | Path with content size              | `write: saving log — output.txt  (2.3KB)`   |
+| `grep`  | LLM's intent                   | `/pattern/` with optional path/glob | `grep: finding TODOs — /TODO/  *.lua`       |
+| `find`  | LLM's intent                   | Pattern with optional search path   | `find: finding tests — *.test.lua  in src/` |
+| `ls`    | LLM's intent                   | Path with optional depth            | `ls: exploring structure — src/  depth=3`   |
 
 ### Generic fallback
 
@@ -213,7 +227,7 @@ Tools without a `format_preview` function get a generic key-value summary: `tool
 
 ### Custom preview formatters
 
-Register a `format_preview` function on your tool definition to control how it appears in pending placeholders:
+Register a `format_preview` function on your tool definition to control how it appears in pending placeholders. The function can return either a plain string (backward-compatible) or a structured `{ label?, detail? }` table:
 
 ```lua
 tools.register("my_search", {
@@ -229,23 +243,41 @@ tools.register("my_search", {
     additionalProperties = false,
   },
   format_preview = function(input, max_length)
-    -- input: the tool's input arguments table
-    -- max_length: available width after the "my_search: " prefix
-    local preview = '"' .. input.query .. '"'
-    if input.limit then
-      preview = preview .. " (limit " .. input.limit .. ")"
-    end
-    return preview
+    -- Structured return: label + detail shown as "label — detail"
+    return {
+      label = input.query,
+      detail = input.limit and ("limit " .. input.limit) or nil,
+    }
+    -- Plain string return also works (backward-compatible):
+    -- return '"' .. input.query .. '"'
   end,
   execute = function(input, context, callback) --[[ ... ]] end,
 })
 ```
 
-The function receives the input table and the available character width (the total preview width minus the `"name: "` prefix). Return a single-line string; newlines are collapsed to the `eol` character from `listchars` (or `↵` by default) and the result is truncated to fit the editor width.
+The function receives the input table and the available character width (the total preview width minus the `"name: "` prefix).
+
+**Return values:**
+
+| Return type                    | Behaviour                                                             |
+| ------------------------------ | --------------------------------------------------------------------- |
+| `string`                       | Shown as-is (backward-compatible). No label/detail separation.        |
+| `{ label?, detail? }`          | `label` is shown italic, `detail` is dimmer. Separated by an em-dash. |
+| `{ label?, detail: string[] }` | `detail` array is joined with double-space before display.            |
+
+Newlines in either field are collapsed to the `eol` character from `listchars` (or `↵` by default) and the result is truncated to fit the editor width.
 
 ### Styling
 
-Tool previews use the `FlemmaToolPreview` highlight group (default: linked to `Comment`). Customise via `highlights.tool_preview` in your config – see [docs/ui.md](ui.md#highlights-and-styles) for details.
+Tool previews use three highlight groups:
+
+| Group               | Default   | Applies to                     |
+| ------------------- | --------- | ------------------------------ |
+| `FlemmaToolPreview` | `Comment` | Entire preview line (fallback) |
+| `FlemmaToolLabel`   | italic    | Human-readable label portion   |
+| `FlemmaToolDetail`  | `Comment` | Raw technical detail portion   |
+
+Customise `FlemmaToolDetail` via `highlights.tool_detail` in your config. `FlemmaToolLabel` applies italic styling unconditionally and is not configurable through the highlights table. See [docs/ui.md](ui.md#highlights-and-styles) for details.
 
 ---
 
@@ -305,11 +337,11 @@ When using the `grep -E` fallback, Perl-style shorthand classes (`\d`, `\w`, `\s
 
 ### Preview formatters
 
-| Tool   | Preview format                                  | Example                                      |
-| ------ | ----------------------------------------------- | -------------------------------------------- |
-| `grep` | `/pattern/` with optional path, glob, and label | `grep: /TODO/  *.lua  # finding TODOs`       |
-| `find` | Pattern with optional search path and label     | `find: *.test.lua  in src/  # finding tests` |
-| `ls`   | Path with optional depth and label              | `ls: src/  depth=3  # exploring structure`   |
+| Tool   | Label source | Detail format                           | Example                                     |
+| ------ | ------------ | --------------------------------------- | ------------------------------------------- |
+| `grep` | LLM's intent | `/pattern/` with optional path and glob | `grep: finding TODOs — /TODO/  *.lua`       |
+| `find` | LLM's intent | Pattern with optional search path       | `find: finding tests — *.test.lua  in src/` |
+| `ls`   | LLM's intent | Path with optional depth                | `ls: exploring structure — src/  depth=3`   |
 
 ---
 

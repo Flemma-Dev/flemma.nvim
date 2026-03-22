@@ -11,7 +11,7 @@ require("flemma").setup({
     temperature = 0.7,
     timeout = 600,                           -- Response timeout (seconds)
     connect_timeout = 10,                    -- Connection timeout (seconds)
-    thinking = "high",                       -- "low" | "medium" | "high" | number | false
+    thinking = "high",                       -- "minimal" | "low" | "medium" | "high" | "max" | number | false
     cache_retention = "short",               -- "none" | "short" | "long"
     anthropic = {
       thinking_budget = nil,                 -- Override thinking with exact budget (>= 1024)
@@ -81,6 +81,7 @@ require("flemma").setup({
     tool_result_title = "Function",
     tool_result_error = "DiagnosticError",
     tool_preview = "Comment",
+    tool_detail = "Comment",                 -- Raw technical detail in structured tool previews
     fold_preview = "Comment",
     fold_meta = "Comment",
     busy = "DiagnosticWarn",                 -- Busy indicator icon in integrations (e.g., bufferline)
@@ -143,6 +144,11 @@ require("flemma").setup({
   },
   diagnostics = {
     enabled = false,                         -- Enable request diagnostics for debugging prompt caching issues
+  },
+  secrets = {
+    gcloud = {
+      path = "gcloud",                       -- Path to gcloud binary (override for NixOS, Guix, etc.)
+    },
   },
   sandbox = {
     enabled = true,                          -- Enable filesystem sandboxing
@@ -263,7 +269,7 @@ Toggle autopilot at runtime without changing your config:
 
 - `:Flemma autopilot:enable` – activate for the current session.
 - `:Flemma autopilot:disable` – deactivate for the current session.
-- `:Flemma autopilot:status` – print whether autopilot is currently active and the buffer's loop state.
+- `:Flemma autopilot:status` – open the status buffer and jump to the Autopilot section (shows enabled state, buffer loop state, max turns, and any frontmatter overrides).
 
 Individual buffers can override the global setting via frontmatter: `flemma.opt.tools.autopilot = false`. See [docs/templates.md](templates.md#per-buffer-overrides-with-flemmaopt) for details.
 
