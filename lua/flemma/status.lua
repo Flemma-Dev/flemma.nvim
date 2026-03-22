@@ -1623,7 +1623,8 @@ function M.collect(bufnr)
     for _, diagnostic in ipairs(fm_result.diagnostics) do
       if diagnostic.severity == "error" or diagnostic.severity == "warning" then
         diagnostic_messages = diagnostic_messages or {}
-        table.insert(diagnostic_messages, diagnostic.error or "unknown error")
+        local prefix = diagnostic.type and (diagnostic.type .. ": ") or ""
+        table.insert(diagnostic_messages, prefix .. (diagnostic.error or "unknown error"))
       end
     end
     for _, failure in ipairs(fm_result.validation_failures) do
