@@ -1,5 +1,70 @@
 # Changelog
 
+## 0.8.0
+
+### Minor Changes
+
+- 4ca6f8e: Added `editing.auto_prompt` option (default `true`) that prepends `@You:` to empty `.chat` buffers on open, giving new users a clear starting point.
+- d8a1187: Replaced the configuration system with a layered, schema-backed copy-on-write store.
+
+  The new system introduces a schema DSL for declarative config shape definition, a four-layer store (DEFAULTS, SETUP, RUNTIME, FRONTMATTER) with separate scalar (top-down first-set-wins) and list (bottom-up accumulation) resolution, read/write proxy metatables for ergonomic access, and a DISCOVER callback pattern that lets tool, provider, and sandbox modules register their own config schemas at load time without coupling the schema definition to heavy modules.
+
+  All configuration access now goes through a single public facade (`require("flemma.config")`). The legacy flat merge (`vim.tbl_deep_extend` in `config.lua`), the global config cache (`state.get_config` / `state.set_config`), and the per-buffer opt overlay (`buffer/opt.lua`) have all been removed. Frontmatter evaluation writes directly to the FRONTMATTER layer of the store, and `flemma.opt` is now a write proxy into that layer.
+
+  Providers are now request-scoped — constructed inline per `send_to_provider()` call with per-buffer parameters, captured in closures, and GC'd after the request completes. The global mutable provider instance, the parameter override diffing machinery, and `config_manager.lua` have been dissolved into `core.lua` (orchestration) and `provider/normalize.lua` (pure parameter normalization functions).
+
+  The approval system is unified into a single config resolver that reads the resolved `tools.auto_approve` from the layer store, replacing the previous two-resolver pattern (config + frontmatter at separate priorities). Preset `deny` lists have been removed — an auto-approve policy that denies is a contradiction.
+
+  `:Flemma status` now shows right-aligned layer source indicators (D/S/R/F) on provider, model, parameter, and tool lines, and a verbose view with per-layer ops and a schema-walked resolved config tree.
+
+  Test coverage includes 9 new config test suites (store, proxy, schema, definition, alias, list ops, DISCOVER, lens, integration) alongside migration of ~30 existing test files to the new facade.
+
+- 1cda981: Add deferred semantic validation to config schema nodes. Tool names in frontmatter and setup config are now validated against the tool registry at finalize time, with "did you mean?" suggestions for typos.
+- fb5f241: Added devicons integration that auto-registers a .chat file icon with nvim-web-devicons (or other compatible devicons plugins). Enabled by default — configure via `integrations.devicons.enabled` and `integrations.devicons.icon`.
+- 3fcb594: Fold previews now show tool labels (the LLM's stated intent) prominently, with raw technical detail visually subordinate.
+
+  Tool `format_preview` functions can now return `{ label?, detail? }` instead of a plain string, where `detail` may be a `string[]` (joined with double-space upstream for uniform display). Built-in tools (bash, read, write, edit, grep, find, ls) have been updated to use the structured return. String-returning `format_preview` functions are fully backward-compatible. New highlight groups `FlemmaToolLabel` (italic) and `FlemmaToolDetail` (default: Comment) style the two pieces independently. Label and detail are separated by an em-dash (`—`) in both folds and tool preview virtual lines.
+
+- 2c7661e: JSON frontmatter now supports MongoDB-style operators ($set, $append, $remove, $prepend) for config writes via the `flemma` key
+- 4248502: The lualine component now accepts a `format` option directly in the section config, which takes precedence over `statusline.format` in the Flemma config:
+
+  ```lua
+  { "flemma", format = "#{provider}:#{model}" }
+  ```
+
+- 8d5b6a6: Passively evaluate frontmatter on InsertLeave, TextChanged, and BufEnter so integrations like lualine see up-to-date config values without waiting for a request send. On error, the last successful frontmatter parse is preserved.
+
+  Refactored `config.finalize()` to return validation failures as data instead of accepting a reporter callback, making codeblock parsers pure data functions with no `vim.notify` side effects. Callers now decide when and how to surface diagnostics.
+
+  `:Flemma status` renders frontmatter diagnostics (parse errors, runtime errors, and validation failures) as DiagnosticError lines in the status buffer.
+
+- 948f341: Added `secrets.gcloud.path` config option to override the gcloud binary path, and introduced the generic `flemma.config.ConfigAware<T>` interface with `flemma.secrets.Context` for typed per-resolver config access
+- 9da24c7: Show resolved thinking value in Parameters section (e.g., "minimal → low") instead of opaque Model Info line
+- a43f5a9: Redesigned `:Flemma status` display with box-drawing tree layout and extmark-based highlighting, replacing the flat text format and vim syntax file.
+- d23d58d: Added per-item config layer source indicators to Autopilot and Sandbox status sections; removed redundant section-level source from Tools header; suppressed defaults-only (D) indicators
+- 6f486ef: Unified schema engine: schema DSL nodes can now define tool input schemas via `to_json_schema()` serialization, as an alternative to raw JSON Schema tables. Added `s.nullable()` for required-but-nullable fields, chainable `:optional()` and `:nullable()` modifiers, and converted all built-in tools to use the DSL.
+
+### Patch Changes
+
+- 68c476c: Fixed auto_write crashing when an external process modifies the .chat file on disk mid-request, which left autopilot and request state broken
+- 60b8997: Unknown commands now suggest the closest match ("Did you mean 'ast:diff'?"). Also fixed a double-colon in sub-command hints when the input has a trailing colon.
+- 37bba97: Fixed abort markers being stripped from historical assistant messages, which caused prompt-cache busting when the conversation grew
+- 2ba5d67: Fixed approval status marking all approved tools with frontmatter indicator when only some were added by frontmatter
+- e8a83b5: Fixed frontmatter marker not showing on pending/denied tools in approval status section
+- 1864552: Fixed race condition where autopilot emitted "Cannot send while tool execution is in progress" when an LLM response contained both sync and async tool_use blocks.
+- 48241a8: Fixed per-buffer config layer edge cases: frontmatter ops now release memory on buffer delete, provider switch notification detects higher-priority overrides, and secrets invalidation is scoped to user-initiated switches only
+- 2884e7a: Fixed diagnostics accumulating across repeated requests (doubling, tripling, etc.) due to mutating the AST snapshot's error list in-place.
+- 0c71954: Fixed race condition where autopilot emitted "Tool … is already executing" during heavy tool use with mixed sync/async tools in the same response.
+- 2b71602: Fixed gf and LSP goto-definition on {{ include() }} expressions — navigation now uses a path-only include that resolves file paths without compiling target content, fixing failures on files containing literal {{ }} documentation
+- 78213f6: Fixed tool preview virt_lines not appearing when autopilot pauses on pending tool approval
+- 58f6b63: Fixed blank separator line between @You: and @Assistant: not being foldable while the assistant is streaming a response
+- 6cecb3a: Fixed `:Flemma status` showing stale autopilot state on second invocation when the cursor was already in the status split
+- 670e671: Fixed truncation splitting multi-byte UTF-8 characters, which produced invalid JSON request bodies rejected by the API with "surrogates not allowed"
+- c1ed4d7: Removed vestigial `reset()` from provider lifecycle — providers are request-scoped and single-use, so initialization is inlined into `new()` and the redundant pre-request reset in client.lua is removed
+- 6667fb8: Resolver diagnostics: when credential resolution fails, every resolver now reports why it couldn't help, surfaced as indented sub-lines in the failure notification
+- 7aa1050: Improved diagnostic error messages: config proxy, eval, and JSON parser errors now use structured error tables instead of plain strings, producing cleaner user-facing output without noisy Lua source locations and redundant context wrappers.
+- 7e21ed3: Unified validation failure diagnostic output across JSON and Lua frontmatter paths
+
 ## 0.7.0
 
 ### Minor Changes
@@ -21,6 +86,7 @@
 - 80fc278: Added persistent progress indicator showing character count, elapsed time, and phase-specific animation throughout the full request lifecycle including tool use buffering. The indicator appears as a floating window at the bottom of the chat window when the progress line is off-screen, with spinner icon placed in the gutter to match notification bar layout. Configurable via `progress.highlight` and `progress.zindex`.
 - 308767b: Preprocessor rewriter modules can now declare their own Vim syntax rules and highlight groups via `get_vim_syntax(config)`, removing the need to modify the main syntax file when adding new rewriters.
 - fcbce89: Sandbox variable expansion overhaul and DNS fix:
+
   - Path variables in `rw_paths` now use `urn:flemma:cwd` and `urn:flemma:buffer:path` instead of `$CWD` and `$FLEMMA_BUFFER_PATH` (breaking change for custom configs)
   - Added `$ENV` and `${ENV:-default}` expansion with bash-style fallback syntax
   - Default `rw_paths` now includes `${TMPDIR:-/tmp}`, `${XDG_CACHE_HOME:-~/.cache}`, and `${XDG_DATA_HOME:-~/.local/share}` for package manager compatibility
@@ -384,17 +450,20 @@ This release marks a major transition for Claudius, evolving from a Claude-speci
 This version introduces significant internal refactoring and configuration changes. Please review the following and update your configuration if necessary:
 
 1.  **Configuration Option Renames:**
+
     - The `prefix_style` option within `setup({})` has been renamed to `role_style`.
       - **Migration:** Rename `prefix_style` to `role_style` in your `require("claudius").setup({...})` call.
     - The `ruler.style` option within `setup({})` has been renamed to `ruler.hl`.
       - **Migration:** Rename `ruler.style` to `ruler.hl` in your `setup({})` call.
 
 2.  **Highlight Group Renames (Affects Manual Linking Only):**
+
     - Internal syntax highlight groups used by `syntax/chat.vim` have been renamed from `Chat*` to `Claudius*` (e.g., `ChatSystem` ⇒ `ClaudiusSystem`, `ChatSystemPrefix` ⇒ `ClaudiusRoleSystem`).
     - **Migration:** This **only** affects users who were manually linking these highlight groups in their Neovim configuration (e.g., using `vim.cmd("highlight link ChatSystem MyCustomGroup")`). If you were doing this, update the source group name (e.g., `vim.cmd("highlight link ClaudiusSystem MyCustomGroup")`).
     - **Users configuring highlights _only_ via the `highlights` table in `setup()` are _not_ affected by this change.**
 
 3.  **Configuration Structure (`model`, `provider`, `parameters`):**
+
     - A new top-level `provider` option specifies the AI provider (`"claude"`, `"openai"`, `"vertex"`). It defaults to `"claude"` for backward compatibility.
     - The `model` option now defaults based on the selected `provider` if set to `nil`. If you specify a `model`, ensure it's valid for the selected provider.
     - Provider-specific parameters (currently only for Vertex AI) are now nested (e.g., `parameters = { vertex = { project_id = "..." } }`).
