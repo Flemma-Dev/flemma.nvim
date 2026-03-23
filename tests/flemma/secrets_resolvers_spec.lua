@@ -8,6 +8,18 @@ describe("flemma.secrets.resolvers.environment", function()
     environment = require("flemma.secrets.resolvers.environment")
   end)
 
+  local function make_env_ctx()
+    return {
+      get_config = function(_self)
+        return nil
+      end,
+      diagnostic = function(_self, _msg) end,
+      get_diagnostics = function(_self)
+        return {}
+      end,
+    }
+  end
+
   describe("supports", function()
     it("supports any credential kind", function()
       assert.is_true(environment:supports({ kind = "api_key", service = "test" }))
@@ -20,7 +32,7 @@ describe("flemma.secrets.resolvers.environment", function()
     it("resolves using SERVICE_KIND convention", function()
       vim.env.ANTHROPIC_API_KEY = "sk-test-123"
 
-      local result = environment:resolve({ kind = "api_key", service = "anthropic" })
+      local result = environment:resolve({ kind = "api_key", service = "anthropic" }, make_env_ctx())
 
       assert.is_not_nil(result)
       assert.equals("sk-test-123", result.value)
@@ -31,7 +43,7 @@ describe("flemma.secrets.resolvers.environment", function()
     it("returns nil when env var is not set", function()
       vim.env.NONEXISTENT_API_KEY = nil
 
-      local result = environment:resolve({ kind = "api_key", service = "nonexistent" })
+      local result = environment:resolve({ kind = "api_key", service = "nonexistent" }, make_env_ctx())
 
       assert.is_nil(result)
     end)
@@ -39,7 +51,7 @@ describe("flemma.secrets.resolvers.environment", function()
     it("returns nil for empty env var", function()
       vim.env.EMPTY_API_KEY = ""
 
-      local result = environment:resolve({ kind = "api_key", service = "empty" })
+      local result = environment:resolve({ kind = "api_key", service = "empty" }, make_env_ctx())
 
       assert.is_nil(result)
 
@@ -54,7 +66,7 @@ describe("flemma.secrets.resolvers.environment", function()
         kind = "access_token",
         service = "vertex",
         aliases = { "VERTEX_AI_ACCESS_TOKEN" },
-      })
+      }, make_env_ctx())
 
       assert.is_not_nil(result)
       assert.equals("ya29.from-alias", result.value)
@@ -70,7 +82,7 @@ describe("flemma.secrets.resolvers.environment", function()
         kind = "access_token",
         service = "vertex",
         aliases = { "VERTEX_AI_ACCESS_TOKEN" },
-      })
+      }, make_env_ctx())
 
       assert.is_not_nil(result)
       assert.equals("ya29.from-convention", result.value)
@@ -87,12 +99,63 @@ describe("flemma.secrets.resolvers.environment", function()
         kind = "api_key",
         service = "test",
         aliases = { "FIRST_ALIAS", "SECOND_ALIAS" },
-      })
+      }, make_env_ctx())
 
       assert.is_not_nil(result)
       assert.equals("from-second", result.value)
 
       vim.env.SECOND_ALIAS = nil
+    end)
+
+    it("emits diagnostic when env var is not set", function()
+      vim.env.NONEXISTENT_API_KEY = nil
+
+      local diags = {}
+      local ctx = {
+        get_config = function(_self)
+          return nil
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
+      }
+
+      environment:resolve({ kind = "api_key", service = "nonexistent" }, ctx)
+
+      assert.equals(1, #diags)
+      assert.truthy(diags[1]:match("NONEXISTENT_API_KEY"))
+      assert.truthy(diags[1]:match("not set"))
+    end)
+
+    it("includes aliases in diagnostic when tried", function()
+      vim.env.VERTEX_ACCESS_TOKEN = nil
+      vim.env.VERTEX_AI_ACCESS_TOKEN = nil
+
+      local diags = {}
+      local ctx = {
+        get_config = function(_self)
+          return nil
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
+      }
+
+      environment:resolve({
+        kind = "access_token",
+        service = "vertex",
+        aliases = { "VERTEX_AI_ACCESS_TOKEN" },
+      }, ctx)
+
+      assert.equals(1, #diags)
+      assert.truthy(diags[1]:match("VERTEX_ACCESS_TOKEN"))
+      assert.truthy(diags[1]:match("VERTEX_AI_ACCESS_TOKEN"))
     end)
   end)
 end)
@@ -105,10 +168,43 @@ describe("flemma.secrets.resolvers.secret_tool", function()
     secret_tool = require("flemma.secrets.resolvers.secret_tool")
   end)
 
+  local function make_st_ctx()
+    return {
+      get_config = function(_self)
+        return nil
+      end,
+      diagnostic = function(_self, _msg) end,
+      get_diagnostics = function(_self)
+        return {}
+      end,
+    }
+  end
+
   describe("supports", function()
     it("returns based on platform availability", function()
       local expected = vim.fn.has("linux") == 1 and vim.fn.executable("secret-tool") == 1
-      assert.equals(expected, secret_tool:supports({ kind = "api_key", service = "test" }))
+      assert.equals(expected, secret_tool:supports({ kind = "api_key", service = "test" }, make_st_ctx()))
+    end)
+
+    it("emits diagnostic when not on Linux", function()
+      local diags = {}
+      local ctx = {
+        get_config = function(_self)
+          return nil
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
+      }
+
+      if vim.fn.has("linux") ~= 1 then
+        secret_tool:supports({ kind = "api_key", service = "test" }, ctx)
+        assert.equals(1, #diags)
+        assert.truthy(diags[1]:match("requires Linux"))
+      end
     end)
   end)
 
@@ -135,7 +231,7 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         }
       end
 
-      local result = secret_tool:resolve({ kind = "api_key", service = "anthropic" })
+      local result = secret_tool:resolve({ kind = "api_key", service = "anthropic" }, make_st_ctx())
 
       assert.is_not_nil(result)
       assert.equals("sk-from-keyring", result.value)
@@ -168,7 +264,7 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         }
       end
 
-      local result = secret_tool:resolve({ kind = "api_key", service = "anthropic" })
+      local result = secret_tool:resolve({ kind = "api_key", service = "anthropic" }, make_st_ctx())
 
       assert.is_not_nil(result)
       assert.equals("sk-legacy", result.value)
@@ -187,7 +283,7 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         }
       end
 
-      local result = secret_tool:resolve({ kind = "access_token", service = "vertex" })
+      local result = secret_tool:resolve({ kind = "access_token", service = "vertex" }, make_st_ctx())
 
       assert.is_nil(result)
       -- Should only try convention (key=access_token), not legacy (key=api)
@@ -204,7 +300,7 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         }
       end
 
-      local result = secret_tool:resolve({ kind = "api_key", service = "anthropic" })
+      local result = secret_tool:resolve({ kind = "api_key", service = "anthropic" }, make_st_ctx())
       assert.is_not_nil(result)
       assert.equals("sk-from-convention", result.value)
     end)
@@ -219,7 +315,7 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         }
       end
 
-      local result = secret_tool:resolve({ kind = "api_key", service = "test" })
+      local result = secret_tool:resolve({ kind = "api_key", service = "test" }, make_st_ctx())
       assert.is_not_nil(result)
       assert.equals("sk-test-key", result.value)
     end)
@@ -234,8 +330,37 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         }
       end
 
-      local result = secret_tool:resolve({ kind = "api_key", service = "test" })
+      local result = secret_tool:resolve({ kind = "api_key", service = "test" }, make_st_ctx())
       assert.is_nil(result)
+    end)
+
+    it("emits diagnostic when lookup fails", function()
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _)
+        return {
+          wait = function()
+            return { code = 1, stdout = "" }
+          end,
+        }
+      end
+
+      local diags = {}
+      local ctx = {
+        get_config = function(_self)
+          return nil
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
+      }
+
+      secret_tool:resolve({ kind = "api_key", service = "anthropic" }, ctx)
+
+      assert.is_true(#diags > 0)
+      assert.truthy(diags[1]:match("no entry found"))
     end)
   end)
 end)
@@ -251,12 +376,82 @@ describe("flemma.secrets.resolvers.gcloud", function()
     gcloud = require("flemma.secrets.resolvers.gcloud")
   end)
 
+  --- Build a minimal mock context with an optional config subtable.
+  ---@param cfg? table
+  ---@return table
+  local function make_ctx(cfg)
+    local diags = {}
+    return {
+      get_config = function(_self)
+        return cfg
+      end,
+      diagnostic = function(_self, msg)
+        table.insert(diags, msg)
+      end,
+      get_diagnostics = function(_self)
+        return diags
+      end,
+    }
+  end
+
   describe("supports", function()
     it("only supports access_token kind", function()
       local has_gcloud = vim.fn.executable("gcloud") == 1
-      assert.equals(has_gcloud, gcloud:supports({ kind = "access_token", service = "vertex" }))
-      assert.is_false(gcloud:supports({ kind = "api_key", service = "vertex" }))
-      assert.is_false(gcloud:supports({ kind = "service_account", service = "vertex" }))
+      assert.equals(has_gcloud, gcloud:supports({ kind = "access_token", service = "vertex" }, make_ctx(nil)))
+      assert.is_false(gcloud:supports({ kind = "api_key", service = "vertex" }, make_ctx(nil)))
+      assert.is_false(gcloud:supports({ kind = "service_account", service = "vertex" }, make_ctx(nil)))
+    end)
+
+    it("uses configured path for executable check", function()
+      local ctx = make_ctx({ path = "/nonexistent/gcloud-binary" })
+      assert.is_false(gcloud:supports({ kind = "access_token", service = "vertex" }, ctx))
+    end)
+
+    it("falls back to 'gcloud' when ctx returns nil config", function()
+      local ctx = make_ctx(nil)
+      local expected = vim.fn.executable("gcloud") == 1
+      assert.equals(expected, gcloud:supports({ kind = "access_token", service = "vertex" }, ctx))
+    end)
+
+    it("emits diagnostic when executable not found", function()
+      local diags = {}
+      local ctx = {
+        get_config = function(_self)
+          return { path = "/nonexistent/gcloud" }
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
+      }
+
+      gcloud:supports({ kind = "access_token", service = "vertex" }, ctx)
+
+      assert.equals(1, #diags)
+      assert.truthy(diags[1]:match("executable not found"))
+      assert.truthy(diags[1]:match("/nonexistent/gcloud"))
+    end)
+
+    it("emits diagnostic for non-access_token kind", function()
+      local diags = {}
+      local ctx = {
+        get_config = function(_self)
+          return nil
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
+      }
+
+      gcloud:supports({ kind = "api_key", service = "vertex" }, ctx)
+
+      assert.equals(1, #diags)
+      assert.truthy(diags[1]:match("only resolves access_token"))
     end)
   end)
 
@@ -295,7 +490,7 @@ describe("flemma.secrets.resolvers.gcloud", function()
         }
       end
 
-      local result = gcloud:resolve({ kind = "access_token", service = "vertex" })
+      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, make_ctx(nil))
 
       assert.is_not_nil(result)
       assert.equals("ya29.generated-token", result.value)
@@ -320,7 +515,7 @@ describe("flemma.secrets.resolvers.gcloud", function()
         }
       end
 
-      local result = gcloud:resolve({ kind = "access_token", service = "vertex" })
+      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, make_ctx(nil))
 
       assert.is_not_nil(result)
       assert.equals("ya29.default-token", result.value)
@@ -343,7 +538,7 @@ describe("flemma.secrets.resolvers.gcloud", function()
         }
       end
 
-      local result = gcloud:resolve({ kind = "access_token", service = "vertex" })
+      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, make_ctx(nil))
       assert.is_nil(result)
     end)
 
@@ -363,8 +558,104 @@ describe("flemma.secrets.resolvers.gcloud", function()
         }
       end
 
-      local result = gcloud:resolve({ kind = "access_token", service = "vertex" })
+      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, make_ctx(nil))
       assert.is_nil(result)
+    end)
+
+    it("uses configured gcloud path in command", function()
+      local secrets_mod = require("flemma.secrets")
+      ---@diagnostic disable-next-line: duplicate-set-field
+      secrets_mod.resolve = function(_)
+        return nil
+      end
+
+      local captured_cmd
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(cmd, _)
+        captured_cmd = cmd
+        return {
+          wait = function()
+            return { code = 0, stdout = "ya29.token\n" }
+          end,
+        }
+      end
+
+      local ctx = make_ctx({ path = "/nix/store/abc123/bin/gcloud" })
+      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, ctx)
+
+      assert.is_not_nil(result)
+      assert.equals("/nix/store/abc123/bin/gcloud", captured_cmd[1])
+    end)
+
+    it("emits diagnostic when gcloud command fails", function()
+      local secrets_mod = require("flemma.secrets")
+      ---@diagnostic disable-next-line: duplicate-set-field
+      secrets_mod.resolve = function(_)
+        return nil
+      end
+
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _)
+        return {
+          wait = function()
+            return { code = 2, stdout = "", stderr = "ERROR" }
+          end,
+        }
+      end
+
+      local diags = {}
+      local ctx = {
+        get_config = function(_self)
+          return nil
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
+      }
+
+      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, ctx)
+      assert.is_nil(result)
+      assert.is_true(#diags > 0)
+      assert.truthy(diags[1]:match("auth failed"))
+      assert.truthy(diags[1]:match("exit code 2"))
+    end)
+
+    it("emits diagnostic when token is empty", function()
+      local secrets_mod = require("flemma.secrets")
+      ---@diagnostic disable-next-line: duplicate-set-field
+      secrets_mod.resolve = function(_)
+        return nil
+      end
+
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _)
+        return {
+          wait = function()
+            return { code = 0, stdout = "\n" }
+          end,
+        }
+      end
+
+      local diags = {}
+      local ctx = {
+        get_config = function(_self)
+          return nil
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
+      }
+
+      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, ctx)
+      assert.is_nil(result)
+      assert.is_true(#diags > 0)
+      assert.truthy(diags[1]:match("returned empty token"))
     end)
   end)
 end)
@@ -377,10 +668,43 @@ describe("flemma.secrets.resolvers.keychain", function()
     keychain = require("flemma.secrets.resolvers.keychain")
   end)
 
+  local function make_kc_ctx()
+    return {
+      get_config = function(_self)
+        return nil
+      end,
+      diagnostic = function(_self, _msg) end,
+      get_diagnostics = function(_self)
+        return {}
+      end,
+    }
+  end
+
   describe("supports", function()
     it("returns true only on macOS", function()
       local expected = vim.fn.has("mac") == 1
-      assert.equals(expected, keychain:supports({ kind = "api_key", service = "test" }))
+      assert.equals(expected, keychain:supports({ kind = "api_key", service = "test" }, make_kc_ctx()))
+    end)
+
+    it("emits diagnostic when not on macOS", function()
+      local diags = {}
+      local ctx = {
+        get_config = function(_self)
+          return nil
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
+      }
+
+      if vim.fn.has("mac") ~= 1 then
+        keychain:supports({ kind = "api_key", service = "test" }, ctx)
+        assert.equals(1, #diags)
+        assert.truthy(diags[1]:match("requires macOS"))
+      end
     end)
   end)
 
@@ -407,7 +731,7 @@ describe("flemma.secrets.resolvers.keychain", function()
         }
       end
 
-      local result = keychain:resolve({ kind = "api_key", service = "anthropic" })
+      local result = keychain:resolve({ kind = "api_key", service = "anthropic" }, make_kc_ctx())
 
       assert.is_not_nil(result)
       assert.equals("sk-from-keychain", result.value)
@@ -435,7 +759,7 @@ describe("flemma.secrets.resolvers.keychain", function()
         }
       end
 
-      local result = keychain:resolve({ kind = "api_key", service = "anthropic" })
+      local result = keychain:resolve({ kind = "api_key", service = "anthropic" }, make_kc_ctx())
 
       assert.is_not_nil(result)
       assert.equals("sk-legacy", result.value)
@@ -454,7 +778,7 @@ describe("flemma.secrets.resolvers.keychain", function()
         }
       end
 
-      local result = keychain:resolve({ kind = "access_token", service = "vertex" })
+      local result = keychain:resolve({ kind = "access_token", service = "vertex" }, make_kc_ctx())
 
       assert.is_nil(result)
       -- Should only try convention (-a access_token), not legacy (-a api)
@@ -471,7 +795,7 @@ describe("flemma.secrets.resolvers.keychain", function()
         }
       end
 
-      local result = keychain:resolve({ kind = "api_key", service = "test" })
+      local result = keychain:resolve({ kind = "api_key", service = "test" }, make_kc_ctx())
       assert.is_not_nil(result)
       assert.equals("sk-key", result.value)
     end)
@@ -486,8 +810,37 @@ describe("flemma.secrets.resolvers.keychain", function()
         }
       end
 
-      local result = keychain:resolve({ kind = "api_key", service = "test" })
+      local result = keychain:resolve({ kind = "api_key", service = "test" }, make_kc_ctx())
       assert.is_nil(result)
+    end)
+
+    it("emits diagnostic when lookup fails", function()
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(_, _)
+        return {
+          wait = function()
+            return { code = 44, stdout = "" }
+          end,
+        }
+      end
+
+      local diags = {}
+      local ctx = {
+        get_config = function(_self)
+          return nil
+        end,
+        diagnostic = function(_self, msg)
+          table.insert(diags, msg)
+        end,
+        get_diagnostics = function(_self)
+          return diags
+        end,
+      }
+
+      keychain:resolve({ kind = "api_key", service = "anthropic" }, ctx)
+
+      assert.is_true(#diags > 0)
+      assert.truthy(diags[1]:match("no entry found"))
     end)
   end)
 end)

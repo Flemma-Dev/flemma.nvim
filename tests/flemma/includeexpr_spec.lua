@@ -157,6 +157,69 @@ describe("Include expression navigation", function()
     assert.is_nil(result)
   end)
 
+  it("resolves include when frontmatter uses flemma.opt alongside user variables", function()
+    -- Regression: frontmatter with flemma.opt usage must not crash navigation.
+    -- The config store write proxy requires bufnr to be passed through to the
+    -- frontmatter evaluator; without it, flemma.opt is a plain {} table that
+    -- errors on nested access (e.g. flemma.opt.tools.max_concurrent).
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
+    vim.api.nvim_buf_set_name(bufnr, fixture_dir .. "test.chat")
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "```lua",
+      "flemma.opt.thinking = 'minimal'",
+      "flemma.opt.tools.max_concurrent = 1",
+      "file = './include_target.txt'",
+      "```",
+      "@System:",
+      "{{ include(file) }}",
+    })
+    -- Place cursor inside the expression
+    vim.api.nvim_win_set_cursor(0, { 7, 5 })
+
+    local result = navigation.resolve_include_path(bufnr)
+    assert.is_not_nil(result, "flemma.opt usage in frontmatter must not break include resolution")
+    assert.is_truthy(result:find("include_target.txt"))
+  end)
+
+  it("resolves include for files containing literal {{ }} documentation", function()
+    -- Regression: the real include() compiles file content as a template.
+    -- Files like README.md that document {{ }} and {% %} syntax cause compile
+    -- errors. Navigation's path-only include() must resolve the path without
+    -- touching file content.
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
+    vim.api.nvim_buf_set_name(bufnr, fixture_dir .. "test.chat")
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "```lua",
+      "doc = './doc_with_templates.txt'",
+      "```",
+      "@System:",
+      "{{ include(doc) }}",
+    })
+    vim.api.nvim_win_set_cursor(0, { 5, 5 })
+
+    local result = navigation.resolve_include_path(bufnr)
+    assert.is_not_nil(result, "include of file with literal {{ }} must resolve path without compiling content")
+    assert.is_truthy(result:find("doc_with_templates.txt"))
+  end)
+
+  it("returns nil gracefully for urn:flemma: personality includes", function()
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@System:",
+      "{{ include('urn:flemma:personality:coding-assistant') }}",
+    })
+    vim.api.nvim_win_set_cursor(0, { 2, 5 })
+
+    -- URN includes are virtual (rendered content, not a file) — no path to jump to
+    local result = navigation.resolve_include_path(bufnr)
+    assert.is_nil(result)
+  end)
+
   it("resolve_include_path_expr returns a string when cursor is on plain text", function()
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)

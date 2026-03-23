@@ -3,6 +3,8 @@
 ---@class flemma.Commands
 local M = {}
 
+local string_utils = require("flemma.utilities.string")
+
 ---@class flemma.commands.ActionContext
 ---@field extra_args string[]
 ---@field fargs string[]
@@ -197,9 +199,15 @@ local function setup_commands()
 
   command_tree.children.import = {
     action = function()
-      local provider = require("flemma.state").get_provider()
+      local cfg = require("flemma.config").get()
+      local provider_module_path = require("flemma.provider.registry").get(cfg.provider)
+      if not provider_module_path then
+        vim.notify("Flemma import: No provider configured", vim.log.levels.ERROR)
+        return
+      end
 
-      if not provider or not provider.try_import_from_buffer then
+      local provider_module = require("flemma.loader").load(provider_module_path)
+      if not provider_module or not provider_module.try_import_from_buffer then
         vim.notify("Flemma import: Current provider does not support importing", vim.log.levels.ERROR)
         return
       end
@@ -207,7 +215,7 @@ local function setup_commands()
       local bufnr = vim.api.nvim_get_current_buf()
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
-      local chat_content = provider:try_import_from_buffer(lines)
+      local chat_content = provider_module.try_import_from_buffer(lines)
       if chat_content then
         vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.split(chat_content, "\n", {}))
         vim.bo[bufnr].filetype = "chat"
@@ -405,23 +413,15 @@ local function setup_commands()
       },
       enable = {
         action = function()
-          local config = require("flemma.state").get_config()
-          if not config.diagnostics then
-            config.diagnostics = { enabled = true }
-          else
-            config.diagnostics.enabled = true
-          end
+          local w = require("flemma.config").writer(nil, require("flemma.config").LAYERS.RUNTIME)
+          w.diagnostics.enabled = true
           vim.notify("Flemma: Diagnostics enabled", vim.log.levels.INFO)
         end,
       },
       disable = {
         action = function()
-          local config = require("flemma.state").get_config()
-          if not config.diagnostics then
-            config.diagnostics = { enabled = false }
-          else
-            config.diagnostics.enabled = false
-          end
+          local w = require("flemma.config").writer(nil, require("flemma.config").LAYERS.RUNTIME)
+          w.diagnostics.enabled = false
           vim.notify("Flemma: Diagnostics disabled", vim.log.levels.INFO)
         end,
       },
@@ -674,6 +674,10 @@ local function setup_commands()
       return names
     end
 
+    if prefix then
+      prefix = prefix:gsub(":+$", "")
+    end
+
     for name, child in pairs(node.children) do
       table.insert(names, prefix and (prefix .. ":" .. name) or name)
       if child.aliases then
@@ -698,7 +702,12 @@ local function setup_commands()
     local command_token = fargs[1]
     local node = resolve_command(command_token)
     if not node then
-      vim.notify(("Flemma: Unknown command '%s'"):format(command_token), vim.log.levels.ERROR)
+      local suggestion = string_utils.closest_match(command_token, available_commands)
+      local message = ("Flemma: Unknown command '%s'"):format(command_token)
+      if suggestion then
+        message = message .. (". Did you mean '%s'?"):format(suggestion)
+      end
+      vim.notify(message, vim.log.levels.ERROR)
       return
     end
 

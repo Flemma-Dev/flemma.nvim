@@ -8,12 +8,20 @@ local M = {}
 
 -- Module-level require for description constants only (evaluated at load time).
 -- Runtime code inside execute() must use ctx.truncate instead.
+local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
 local sink_module = require("flemma.sink")
 
 M.definitions = {
   {
     name = "bash",
+    metadata = {
+      config_schema = s.object({
+        shell = s.optional(s.string()),
+        cwd = s.optional(s.string("urn:flemma:buffer:path")),
+        env = s.optional(s.map(s.string(), s.string())),
+      }),
+    },
     capabilities = { "can_auto_approve_if_sandboxed" },
     description = "Execute a bash command in the current working directory. "
       .. "Returns stdout and stderr. Output is truncated to last "
@@ -24,25 +32,11 @@ M.definitions = {
       .. "If truncated, full output is saved to a temp file. "
       .. "Optionally provide a timeout in seconds.",
     strict = true,
-    input_schema = {
-      type = "object",
-      properties = {
-        label = {
-          type = "string",
-          description = "A short human-readable label for this operation (e.g., 'running tests')",
-        },
-        command = {
-          type = "string",
-          description = "The bash command to execute",
-        },
-        timeout = {
-          type = { "number", "null" },
-          description = "Timeout in seconds (default: 30)",
-        },
-      },
-      required = { "label", "command", "timeout" },
-      additionalProperties = false,
-    },
+    input_schema = s.object({
+      label = s.string():describe("A short human-readable label for this operation (e.g., 'running tests')"),
+      command = s.string():describe("The bash command to execute"),
+      timeout = s.number():nullable():describe("Timeout in seconds (default: 30)"),
+    }):strict(),
     personalities = {
       ["coding-assistant"] = {
         snippet = "Execute shell commands in the user's project directory",
@@ -53,12 +47,12 @@ M.definitions = {
       },
     },
     async = true,
+    ---@return flemma.tools.ToolPreview
     format_preview = function(input)
-      local parts = { "$ " .. input.command }
-      if input.label then
-        table.insert(parts, "# " .. input.label)
-      end
-      return table.concat(parts, "  ")
+      return {
+        label = input.label,
+        detail = "$ " .. input.command,
+      }
     end,
     execute = function(input, ctx, callback)
       ---@cast callback -nil

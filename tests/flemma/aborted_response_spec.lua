@@ -307,7 +307,7 @@ describe("Aborted response handling", function()
   end)
 
   describe("pipeline", function()
-    it("strips abort marker from historical assistant messages", function()
+    it("preserves abort marker on all text-only assistant messages", function()
       local doc = parser.parse_lines({
         "@Assistant:",
         "First response",
@@ -319,28 +319,21 @@ describe("Aborted response handling", function()
         ABORT_COMMENT,
       })
       local base_context = ctx.from_file("/tmp/test.chat")
-      local prompt = pipeline.run(doc, base_context)
+      local prompt = pipeline.run(doc, base_context, { bufnr = 0 })
 
-      -- First assistant message (historical) should NOT have abort marker
-      local first_assistant = prompt.history[1]
-      assert.equals("assistant", first_assistant.role)
-      for _, part in ipairs(first_assistant.parts) do
-        if part.kind == "text" then
-          assert.is_not.equals(ABORT_LLM_TEXT, part.text, "Historical message should have abort marker stripped")
+      -- Both text-only assistant messages should retain abort marker
+      for _, idx in ipairs({ 1, 3 }) do
+        local assistant = prompt.history[idx]
+        assert.equals("assistant", assistant.role)
+        local found = false
+        for _, part in ipairs(assistant.parts) do
+          if part.kind == "text" and part.text == ABORT_LLM_TEXT then
+            found = true
+            break
+          end
         end
+        assert.is_true(found, "Expected abort marker preserved on assistant message at index " .. idx)
       end
-
-      -- Last assistant message (text-only) should retain abort marker as text
-      local last_assistant = prompt.history[3]
-      assert.equals("assistant", last_assistant.role)
-      local found = false
-      for _, part in ipairs(last_assistant.parts) do
-        if part.kind == "text" and part.text == ABORT_LLM_TEXT then
-          found = true
-          break
-        end
-      end
-      assert.is_true(found, "Expected abort marker preserved on last assistant message")
     end)
 
     it("preserves abort marker when only one assistant message", function()
@@ -350,7 +343,7 @@ describe("Aborted response handling", function()
         ABORT_COMMENT,
       })
       local base_context = ctx.from_file("/tmp/test.chat")
-      local prompt = pipeline.run(doc, base_context)
+      local prompt = pipeline.run(doc, base_context, { bufnr = 0 })
 
       local assistant = prompt.history[1]
       assert.equals("assistant", assistant.role)
@@ -364,7 +357,7 @@ describe("Aborted response handling", function()
       assert.is_true(found, "Expected abort marker preserved on single assistant message")
     end)
 
-    it("strips abort marker when followed by user and another assistant", function()
+    it("preserves abort marker on both assistants when followed by user and another assistant", function()
       local doc = parser.parse_lines({
         "@Assistant:",
         "First",
@@ -376,26 +369,21 @@ describe("Aborted response handling", function()
         ABORT_COMMENT,
       })
       local base_context = ctx.from_file("/tmp/test.chat")
-      local prompt = pipeline.run(doc, base_context)
+      local prompt = pipeline.run(doc, base_context, { bufnr = 0 })
 
-      -- First assistant (index 1): should be stripped
-      local first = prompt.history[1]
-      for _, part in ipairs(first.parts) do
-        if part.kind == "text" then
-          assert.is_not.equals(ABORT_LLM_TEXT, part.text, "Historical message should have abort marker stripped")
+      -- Both text-only assistant messages should retain abort marker
+      for _, idx in ipairs({ 1, 3 }) do
+        local msg = prompt.history[idx]
+        assert.equals("assistant", msg.role)
+        local found = false
+        for _, part in ipairs(msg.parts) do
+          if part.kind == "text" and part.text == ABORT_LLM_TEXT then
+            found = true
+            break
+          end
         end
+        assert.is_true(found, "Expected abort marker preserved on assistant at index " .. idx)
       end
-
-      -- Last assistant (index 3): text-only, should be preserved
-      local last = prompt.history[3]
-      local found = false
-      for _, part in ipairs(last.parts) do
-        if part.kind == "text" and part.text == ABORT_LLM_TEXT then
-          found = true
-          break
-        end
-      end
-      assert.is_true(found, "Expected abort marker on last text-only assistant")
     end)
 
     it("strips abort marker from last assistant when it contains tool_use", function()
@@ -416,7 +404,7 @@ describe("Aborted response handling", function()
         "```",
       })
       local base_context = ctx.from_file("/tmp/test.chat")
-      local prompt = pipeline.run(doc, base_context)
+      local prompt = pipeline.run(doc, base_context, { bufnr = 0 })
 
       -- Assistant message has tool_use → abort marker must be stripped
       local assistant = prompt.history[1]

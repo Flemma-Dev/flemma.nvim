@@ -8,10 +8,28 @@ local str = require("flemma.utilities.string")
 local display = require("flemma.utilities.display")
 local tools = require("flemma.tools")
 
+---Normalise a raw format_preview return to a StructuredToolPreview.
+---String returns become { detail = raw }. Table detail (string[]) is joined
+---with double-space so callers always see detail as string|nil.
+---Label is NEVER auto-promoted from input.label here — callers handle that separately.
+---@param raw flemma.tools.ToolPreview
+---@return { label?: string, detail?: string }
+local function normalize_preview(raw)
+  if type(raw) == "string" then
+    return { detail = raw }
+  end
+  local result = raw --[[@as flemma.StructuredToolPreview]]
+  if type(result.detail) == "table" then
+    result.detail = table.concat(result.detail --[[@as string[] ]], "  ")
+  end
+  return result
+end
+
 -- Constants for preview text
 local MAX_CONTENT_PREVIEW_LINES = 10
 local DEFAULT_MAX_LENGTH = 80
 local CONTENT_PREVIEW_TRUNCATION_MARKER = "…"
+local LABEL_DETAIL_SEPARATOR = " — "
 
 ---Get the available text area width for a window (total width minus signcolumn, numbercolumn, foldcolumn)
 ---Returns DEFAULT_MAX_LENGTH when the window is invalid (e.g., buffer not displayed or test environment).
@@ -138,10 +156,9 @@ function M.format_tool_preview_body(input, max_length)
   return str.truncate(body, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
 end
 
----Format a compact preview string for a tool call
----Checks the tool registry for a custom format_preview function; falls back
----to the generic key-value body. Handles name prefix, newline collapsing,
----and truncation uniformly.
+---Format a compact preview string for a tool call (used by virt-line display).
+---This is a plain-string context: no italic chunks. When both label and detail
+---are present, renders as "name: label — detail" (em dash separator).
 ---@param tool_name string
 ---@param input table<string, any>
 ---@param max_length? integer Maximum total preview length (defaults to DEFAULT_MAX_LENGTH)
@@ -154,21 +171,38 @@ function M.format_tool_preview(tool_name, input, max_length)
 
   local tool_def = tools.get(tool_name)
 
-  local body
+  local structured
   if tool_def and tool_def.format_preview then
-    body = tool_def.format_preview(input, available)
-    -- Collapse newlines for single-line display
-    body = body:gsub("\n", display.get_newline_char())
+    structured = normalize_preview(tool_def.format_preview(input, available))
+    if structured.detail then
+      structured.detail = structured.detail:gsub("\n", display.get_newline_char())
+    end
   else
     local keys = vim.tbl_keys(input)
     if #keys == 0 then
       return tool_name
     end
-    body = M.format_tool_preview_body(input, available)
+    structured = {
+      label = type(input.label) == "string" and input.label or nil,
+      detail = M.format_tool_preview_body(input, available),
+    }
+  end
+
+  -- Build body: "label — detail" or just label or just detail
+  local label = structured.label
+  local detail = structured.detail
+  local body
+  if label and detail and detail ~= "" then
+    body = label .. " — " .. detail
+  elseif label then
+    body = label
+  elseif detail and detail ~= "" then
+    body = detail
+  else
+    return tool_name
   end
 
   local preview = name_prefix .. body
-
   return str.truncate(preview, max_length, CONTENT_PREVIEW_TRUNCATION_MARKER)
 end
 
@@ -256,29 +290,38 @@ local function coalesce_segments(segments)
   return entries
 end
 
----Get the body text for a tool use (custom format_preview or generic key-value).
----Handles newline collapsing and post-hoc truncation for custom formatters.
+---Get the structured preview for a tool use (label + detail).
+---Returns a StructuredToolPreview. Truncation of detail is applied here;
+---label truncation is the caller's responsibility.
 ---@param tool_name string
 ---@param input table<string, any>
----@param available integer Available width for the body
----@return string
+---@param available integer Available width after "name: " prefix
+---@return { label?: string, detail?: string }
 function M.get_tool_use_body(tool_name, input, available)
   local tool_def = tools.get(tool_name)
 
-  local body
   if tool_def and tool_def.format_preview then
-    body = tool_def.format_preview(input, available)
-    body = body:gsub("\n", display.get_newline_char())
-  else
-    local keys = vim.tbl_keys(input)
-    if #keys == 0 then
-      return ""
+    local structured = normalize_preview(tool_def.format_preview(input, available))
+    -- Collapse newlines in detail, then truncate detail to available
+    if structured.detail then
+      structured.detail = structured.detail:gsub("\n", display.get_newline_char())
+      structured.detail = str.truncate(structured.detail, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
     end
-    body = M.format_tool_preview_body(input, available)
+    return structured
   end
 
-  -- Post-hoc truncation for custom format_preview that may ignore max_length
-  return str.truncate(body, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
+  -- Generic fallback: auto-detect input.label; use key-value body for detail
+  local keys = vim.tbl_keys(input)
+  if #keys == 0 then
+    return {}
+  end
+  local label = type(input.label) == "string" and input.label or nil
+  local detail_available = label and (available - str.strwidth(label) - 1) or available
+  if detail_available < 0 then
+    detail_available = 0
+  end
+  local detail = M.format_tool_preview_body(input, detail_available)
+  return { label = label, detail = detail ~= "" and detail or nil }
 end
 
 ---Build a composite fold preview from a message's segments in buffer order.
@@ -297,13 +340,13 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
     return {}
   end
 
-  -- Build tool name lookup only when there are tool_result entries and a doc is available
-  ---@type table<string, string>|nil
-  local tool_name_map
+  -- Build tool_use index only when there are tool_result entries and a doc is available
+  ---@type table<string, flemma.ast.ToolUseInfo>|nil
+  local tool_use_index
   if doc then
     for _, entry in ipairs(entries) do
       if entry.kind == "tool_result" then
-        tool_name_map = query.build_tool_name_map(doc)
+        tool_use_index = query.build_tool_use_index(doc)
         break
       end
     end
@@ -349,47 +392,93 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
         add_overflow(#entries - i + 1)
         break
       end
-      -- Build name + body chunks
       local name_width = str.strwidth(tool_seg.name)
-      local body = M.get_tool_use_body(tool_seg.name, tool_seg.input, width_for_tool - name_width - #": ")
-      if body ~= "" then
-        table.insert(entry_chunks, { tool_seg.name, "FlemmaToolName" })
-        table.insert(entry_chunks, { ": " .. body, "FlemmaFoldPreview" })
-        entry_width = name_width + #": " + str.strwidth(body)
-      else
-        table.insert(entry_chunks, { tool_seg.name, "FlemmaToolName" })
-        entry_width = name_width
+      local after_name = width_for_tool - name_width - #": "
+      local structured = M.get_tool_use_body(tool_seg.name, tool_seg.input, after_name)
+
+      table.insert(entry_chunks, { tool_seg.name, "FlemmaToolName" })
+      entry_width = name_width
+
+      local label = structured.label
+      local detail = structured.detail
+
+      if label or detail then
+        table.insert(entry_chunks, { ": ", "FlemmaToolName" })
+        entry_width = entry_width + #": "
+
+        local remaining = after_name
+        if label then
+          local label_text = str.truncate(label, remaining, CONTENT_PREVIEW_TRUNCATION_MARKER)
+          table.insert(entry_chunks, { label_text, "FlemmaToolLabel" })
+          entry_width = entry_width + str.strwidth(label_text)
+          remaining = remaining - str.strwidth(label_text)
+
+          local separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
+          if detail and remaining > separator_width then
+            local detail_text = str.truncate(detail, remaining - separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
+            if detail_text ~= "" then
+              table.insert(entry_chunks, { LABEL_DETAIL_SEPARATOR .. detail_text, "FlemmaToolDetail" })
+              entry_width = entry_width + separator_width + str.strwidth(detail_text)
+            end
+          end
+        else
+          -- No label: show detail only
+          local detail_text = str.truncate(detail --[[@as string]], remaining, CONTENT_PREVIEW_TRUNCATION_MARKER)
+          table.insert(entry_chunks, { detail_text, "FlemmaToolDetail" })
+          entry_width = entry_width + str.strwidth(detail_text)
+        end
       end
     elseif entry.kind == "tool_result" then
       local result_seg = entry.segment --[[@as flemma.ast.ToolResultSegment]]
-      local tool_name = (tool_name_map and tool_name_map[result_seg.tool_use_id]) or "result"
+      local tool_info = tool_use_index and tool_use_index[result_seg.tool_use_id]
+      local tool_name = tool_info and tool_info.name or "result"
+      local tool_label = tool_info and tool_info.label
       local width_for_result = available - remainder_reserve
       if width_for_result < MIN_TOOL_PREVIEW_WIDTH then
         add_overflow(#entries - i + 1)
         break
       end
-      -- Build name + separator + optional error + body chunks
       local name_result_width = str.strwidth(tool_name)
       local prefix_width = name_result_width + #": "
       if result_seg.is_error then
         prefix_width = prefix_width + #"(error) "
       end
-      local body_available = width_for_result - prefix_width
-      local body = M.format_content_preview(result_seg.content, body_available)
 
       table.insert(entry_chunks, { tool_name, "FlemmaToolName" })
       entry_width = name_result_width
 
-      if body ~= "" or result_seg.is_error then
-        table.insert(entry_chunks, { ": ", "FlemmaFoldPreview" })
-        entry_width = entry_width + #": "
-        if result_seg.is_error then
-          table.insert(entry_chunks, { "(error) ", "FlemmaToolResultError" })
-          entry_width = entry_width + #"(error) "
+      table.insert(entry_chunks, { ": ", "FlemmaFoldPreview" })
+      entry_width = entry_width + #": "
+
+      if result_seg.is_error then
+        table.insert(entry_chunks, { "(error) ", "FlemmaToolResultError" })
+        entry_width = entry_width + #"(error) "
+      end
+
+      local remaining = width_for_result - prefix_width
+
+      if tool_label then
+        local label_text = str.truncate(tool_label, remaining, CONTENT_PREVIEW_TRUNCATION_MARKER)
+        table.insert(entry_chunks, { label_text, "FlemmaToolLabel" })
+        entry_width = entry_width + str.strwidth(label_text)
+        remaining = remaining - str.strwidth(label_text)
+
+        local separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
+        if remaining > separator_width then
+          local body = M.format_content_preview(result_seg.content, remaining - separator_width)
+          if body ~= "" then
+            table.insert(entry_chunks, { LABEL_DETAIL_SEPARATOR .. body, "FlemmaToolDetail" })
+            entry_width = entry_width + separator_width + str.strwidth(body)
+          end
         end
-        if body ~= "" then
-          table.insert(entry_chunks, { body, "FlemmaFoldPreview" })
-          entry_width = entry_width + str.strwidth(body)
+      else
+        -- No label: show content only (backward-compat highlight)
+        local body = M.format_content_preview(result_seg.content, remaining)
+        if body ~= "" or result_seg.is_error then
+          if body ~= "" then
+            table.insert(entry_chunks, { body, "FlemmaFoldPreview" })
+            entry_width = entry_width + str.strwidth(body)
+          end
         end
       end
     else

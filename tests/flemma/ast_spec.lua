@@ -1,5 +1,6 @@
 local ast = require("flemma.ast")
 local ctx = require("flemma.context")
+local templating = require("flemma.templating")
 local parser = require("flemma.parser")
 local processor = require("flemma.processor")
 local pipeline = require("flemma.pipeline")
@@ -52,7 +53,7 @@ describe("AST and Context", function()
   it("creates eval environment from context", function()
     local base = ctx.from_file("/tmp/flemma.chat")
     local ext = ctx.extend(base, { foo = "bar" })
-    local env = ctx.to_eval_env(ext)
+    local env = templating.from_context(ext)
     assert.equals("/tmp/flemma.chat", env.__filename)
     assert.equals("/tmp", env.__dirname)
     assert.equals("bar", env.foo)
@@ -60,7 +61,7 @@ describe("AST and Context", function()
 
   it("sets __dirname to nil when context has no filename", function()
     local empty = ctx.clone(nil)
-    local env = ctx.to_eval_env(empty)
+    local env = templating.from_context(empty)
     assert.is_nil(env.__filename)
     assert.is_nil(env.__dirname)
   end)
@@ -739,7 +740,7 @@ describe("Pipeline Integration", function()
       "@Assistant:",
       "Hi there!",
     }
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
     assert.equals("You are helpful.", prompt.system)
     assert.equals(2, #prompt.history)
   end)
@@ -758,7 +759,7 @@ describe("Pipeline Integration", function()
     local doc = parser.parse_lines(lines)
     -- Run file-references rewriter to convert @./file -> include() expressions
     doc = run_file_refs_rewriter(doc)
-    local prompt = pipeline.run(doc, ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(doc, ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
 
     assert.is_nil(prompt.system)
     assert.equals(2, #prompt.history)
@@ -793,7 +794,7 @@ describe("Provider Integration", function()
       "@Assistant:",
       "Hi there!",
     }
-    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+    local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
     local req = provider:build_request(prompt, {})
     assert.is_not_nil(req.model)
     assert.equals("table", type(req.messages))
@@ -818,7 +819,7 @@ describe("Provider Integration", function()
     local doc = parser.parse_lines(lines)
     -- Run file-references rewriter to convert @./file -> include() expressions
     doc = run_file_refs_rewriter(doc)
-    local prompt = pipeline.run(doc, context)
+    local prompt = pipeline.run(doc, context, { bufnr = 0 })
     local req = provider:build_request(prompt, context)
     -- Responses API uses input[] instead of messages[]
     local user_items = vim.tbl_filter(function(item)
@@ -1063,7 +1064,7 @@ describe("multi-turn API content stability", function()
   ---@return table request_body
   local function build_request_from_lines(buffer_lines)
     local doc = parser.parse_lines(buffer_lines)
-    local prompt = pipeline.run(doc)
+    local prompt = pipeline.run(doc, nil, { bufnr = 0 })
     local provider = anthropic.new({ model = "claude-sonnet-4-20250514", max_tokens = 100 })
     return provider:build_request(prompt)
   end

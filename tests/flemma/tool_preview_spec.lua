@@ -155,6 +155,59 @@ describe("Tool Preview", function()
       assert.are.equal('unknown_tool: key="value"', result)
     end)
 
+    it("renders label — detail with em dash when structured preview has both fields", function()
+      local registry = require("flemma.tools.registry")
+      registry.register("emtool", {
+        name = "emtool",
+        description = "test",
+        input_schema = { type = "object", properties = {}, required = {} },
+        format_preview = function(_input)
+          return { label = "My label", detail = "my detail" }
+        end,
+      })
+      local result = ui_preview.format_tool_preview("emtool", {}, 80)
+      -- Expected: "emtool: My label — my detail"
+      assert.is_truthy(result:match("My label"), "should contain label")
+      assert.is_truthy(result:match("my detail"), "should contain detail")
+      assert.is_truthy(result:match("—"), "should contain em dash separator")
+
+      registry.unregister("emtool")
+    end)
+
+    it("renders label only when structured preview has no detail", function()
+      local registry = require("flemma.tools.registry")
+      registry.register("labeltool", {
+        name = "labeltool",
+        description = "test",
+        input_schema = { type = "object", properties = {}, required = {} },
+        format_preview = function(_input)
+          return { label = "Only label" }
+        end,
+      })
+      local result = ui_preview.format_tool_preview("labeltool", {}, 80)
+      assert.is_truthy(result:match("Only label"))
+      assert.is_falsy(result:match("—"))
+
+      registry.unregister("labeltool")
+    end)
+
+    it("renders detail only (no em dash) when structured preview has no label", function()
+      local registry = require("flemma.tools.registry")
+      registry.register("detailtool", {
+        name = "detailtool",
+        description = "test",
+        input_schema = { type = "object", properties = {}, required = {} },
+        format_preview = function(_input)
+          return { detail = "just detail" }
+        end,
+      })
+      local result = ui_preview.format_tool_preview("detailtool", {}, 80)
+      assert.is_truthy(result:match("just detail"))
+      assert.is_falsy(result:match("—"))
+
+      registry.unregister("detailtool")
+    end)
+
     it("collapses newlines in custom format_preview output", function()
       local registry = require("flemma.tools.registry")
       registry.register("newline_tool", {
@@ -447,9 +500,9 @@ describe("Tool Preview", function()
       assert.are.equal("calculator_async: 1+1", result)
     end)
 
-    it("bash shows $ command with label comment", function()
+    it("bash shows label — $ command with label", function()
       local result = ui_preview.format_tool_preview("bash", { command = "ls -la /tmp", label = "list files" })
-      assert.are.equal("bash: $ ls -la /tmp  # list files", result)
+      assert.are.equal("bash: list files — $ ls -la /tmp", result)
     end)
 
     it("bash omits label when not provided", function()
@@ -457,12 +510,12 @@ describe("Tool Preview", function()
       assert.are.equal("bash: $ echo hello", result)
     end)
 
-    it("read shows path with offset and limit", function()
+    it("read shows label — path with offset and limit", function()
       local result = ui_preview.format_tool_preview(
         "read",
         { path = "./src/main.lua", offset = 10, limit = 50, label = "read config" }
       )
-      assert.are.equal("read: ./src/main.lua  +10,50  # read config", result)
+      assert.are.equal("read: read config — ./src/main.lua  +10,50", result)
     end)
 
     it("read shows path with offset only", function()
@@ -475,17 +528,17 @@ describe("Tool Preview", function()
       assert.are.equal("read: ./src/main.lua  +0,50", result)
     end)
 
-    it("read shows plain path without offset or limit", function()
+    it("read shows label — path without offset or limit", function()
       local result = ui_preview.format_tool_preview("read", { path = "./src/main.lua", label = "check file" })
-      assert.are.equal("read: ./src/main.lua  # check file", result)
+      assert.are.equal("read: check file — ./src/main.lua", result)
     end)
 
-    it("edit shows path with label", function()
+    it("edit shows label — path with label", function()
       local result = ui_preview.format_tool_preview(
         "edit",
         { path = "./src/main.lua", oldText = "foo", newText = "bar", label = "fix typo" }
       )
-      assert.are.equal("edit: ./src/main.lua  # fix typo", result)
+      assert.are.equal("edit: fix typo — ./src/main.lua", result)
     end)
 
     it("edit shows plain path without label", function()
@@ -494,11 +547,11 @@ describe("Tool Preview", function()
       assert.are.equal("edit: ./src/main.lua", result)
     end)
 
-    it("write shows path with byte size and label", function()
+    it("write shows label — path with byte size and label", function()
       local content = string.rep("x", 1536)
       local result =
         ui_preview.format_tool_preview("write", { path = "./src/main.lua", content = content, label = "create module" })
-      assert.are.equal("write: ./src/main.lua  (1.5KB)  # create module", result)
+      assert.are.equal("write: create module — ./src/main.lua  (1.5KB)", result)
     end)
 
     it("write shows bytes for small content", function()
@@ -506,11 +559,79 @@ describe("Tool Preview", function()
       assert.are.equal("write: ./readme.txt  (5B)", result)
     end)
 
-    it("write shows label without content size when content is empty", function()
+    it("write shows label — path with size when content is empty", function()
       local result =
         ui_preview.format_tool_preview("write", { path = "./empty.txt", content = "", label = "create empty" })
-      assert.are.equal("write: ./empty.txt  (0B)  # create empty", result)
+      assert.are.equal("write: create empty — ./empty.txt  (0B)", result)
     end)
+  end)
+end)
+
+describe("get_tool_use_body structured return", function()
+  local ui_preview_mod
+  local registry
+
+  before_each(function()
+    package.loaded["flemma.ui.preview"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.registry"] = nil
+    ui_preview_mod = require("flemma.ui.preview")
+    registry = require("flemma.tools.registry")
+    registry.clear()
+  end)
+
+  after_each(function()
+    registry.clear()
+  end)
+
+  it("returns structured preview from a tool with format_preview returning StructuredToolPreview", function()
+    registry.register("mytool", {
+      name = "mytool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(_input)
+        return { label = "My label", detail = "my detail" }
+      end,
+    })
+    local result = ui_preview_mod.get_tool_use_body("mytool", {}, 80)
+    assert.are.equal("My label", result.label)
+    assert.are.equal("my detail", result.detail)
+  end)
+
+  it("returns structured preview from a tool with string-returning format_preview (no label)", function()
+    registry.register("strtool", {
+      name = "strtool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+      format_preview = function(_input)
+        return "raw string"
+      end,
+    })
+    local result = ui_preview_mod.get_tool_use_body("strtool", {}, 80)
+    assert.is_nil(result.label)
+    assert.are.equal("raw string", result.detail)
+  end)
+
+  it("auto-detects input.label for tools with no format_preview", function()
+    registry.register("notool", {
+      name = "notool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+    })
+    local result = ui_preview_mod.get_tool_use_body("notool", { label = "Auto label", key = "val" }, 80)
+    assert.are.equal("Auto label", result.label)
+    assert.is_not_nil(result.detail)
+  end)
+
+  it("returns nil label and nil detail for a tool with no format_preview and empty input", function()
+    registry.register("emptytool", {
+      name = "emptytool",
+      description = "test",
+      input_schema = { type = "object", properties = {}, required = {} },
+    })
+    local result = ui_preview_mod.get_tool_use_body("emptytool", {}, 80)
+    assert.is_nil(result.label)
+    assert.is_nil(result.detail)
   end)
 end)
 
@@ -641,14 +762,14 @@ describe("format_message_fold_preview", function()
     assert.are.equal("FlemmaToolName", name_chunk[2])
   end)
 
-  it("uses FlemmaFoldPreview for tool body in tool_use entries", function()
+  it("uses FlemmaToolDetail for tool body in tool_use entries without label", function()
     local msg = make_message("Assistant", {
       ast.tool_use("t1", "bash", { command = "ls -la" }, { start_line = 2, end_line = 5 }),
     })
     local chunks = preview.format_message_fold_preview(msg, 80, nil, "FlemmaAssistant")
     local body_chunk = find_chunk(chunks, "ls %-la")
     assert.is_not_nil(body_chunk, "Should have a chunk with the tool body")
-    assert.are.equal("FlemmaFoldPreview", body_chunk[2])
+    assert.are.equal("FlemmaToolDetail", body_chunk[2])
   end)
 
   it("joins multiple tool uses with pipe separator", function()
@@ -849,6 +970,89 @@ describe("format_message_fold_preview", function()
     local chunks = preview.format_message_fold_preview(msg, 200, nil, "FlemmaUser")
     local result = chunks_to_string(chunks)
     assert.is_truthy(result:match("{{ 2 %+ 2 }}"), "Should show expression wrapped in {{ }}")
+  end)
+
+  ---Helper: find a chunk with a specific highlight group
+  ---@param chunks {[1]:string, [2]:string}[]
+  ---@param hl string
+  ---@return string|nil
+  local function find_chunk_with_hl(chunks, hl)
+    for _, chunk in ipairs(chunks) do
+      if chunk[2] == hl then
+        return chunk[1]
+      end
+    end
+    return nil
+  end
+
+  it("tool_use entry includes FlemmaToolLabel chunk for label", function()
+    local parser_mod = require("flemma.parser")
+    local doc = parser_mod.parse_lines({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`call_001`)",
+      "```json",
+      '{"command": "ls", "label": "List files", "timeout": 30}',
+      "```",
+      "@You:",
+      "**Tool Result:** `call_001`",
+      "",
+      "```",
+      "file.txt",
+      "```",
+    })
+    local msg = doc.messages[1] -- Assistant message
+    local chunks = preview.format_message_fold_preview(msg, 120, doc)
+
+    local label_text = find_chunk_with_hl(chunks, "FlemmaToolLabel")
+    assert.is_not_nil(label_text, "should have a FlemmaToolLabel chunk")
+    assert.is_truthy(label_text:match("List files"), "label chunk should contain the label")
+  end)
+
+  it("tool_use entry includes FlemmaToolDetail chunk for detail", function()
+    local parser_mod = require("flemma.parser")
+    local doc = parser_mod.parse_lines({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`call_002`)",
+      "```json",
+      '{"command": "ls", "label": "List files", "timeout": 30}',
+      "```",
+      "@You:",
+      "**Tool Result:** `call_002`",
+      "",
+      "```",
+      "file.txt",
+      "```",
+    })
+    local msg = doc.messages[1]
+    local chunks = preview.format_message_fold_preview(msg, 120, doc)
+
+    local detail_text = find_chunk_with_hl(chunks, "FlemmaToolDetail")
+    assert.is_not_nil(detail_text, "should have a FlemmaToolDetail chunk")
+    -- Detail contains the generic key-value format (bash not registered in this test context)
+    assert.is_truthy(detail_text:match("command"), "detail chunk should contain input keys")
+  end)
+
+  it("tool_result entry includes FlemmaToolLabel chunk from paired tool_use", function()
+    local parser_mod = require("flemma.parser")
+    local doc = parser_mod.parse_lines({
+      "@Assistant:",
+      "**Tool Use:** `bash` (`call_003`)",
+      "```json",
+      '{"command": "ls", "label": "List files", "timeout": 30}',
+      "```",
+      "@You:",
+      "**Tool Result:** `call_003`",
+      "",
+      "```",
+      "file.txt",
+      "```",
+    })
+    local msg = doc.messages[2] -- You message (tool results)
+    local chunks = preview.format_message_fold_preview(msg, 120, doc)
+
+    local label_text = find_chunk_with_hl(chunks, "FlemmaToolLabel")
+    assert.is_not_nil(label_text, "tool_result fold should have FlemmaToolLabel chunk from paired tool_use")
+    assert.is_truthy(label_text:match("List files"))
   end)
 end)
 

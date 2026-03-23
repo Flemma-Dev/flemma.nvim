@@ -11,7 +11,7 @@ require("flemma").setup({
     temperature = 0.7,
     timeout = 600,                           -- Response timeout (seconds)
     connect_timeout = 10,                    -- Connection timeout (seconds)
-    thinking = "high",                       -- "low" | "medium" | "high" | number | false
+    thinking = "high",                       -- "minimal" | "low" | "medium" | "high" | "max" | number | false
     cache_retention = "short",               -- "none" | "short" | "long"
     anthropic = {
       thinking_budget = nil,                 -- Override thinking with exact budget (>= 1024)
@@ -30,7 +30,7 @@ require("flemma").setup({
     require_approval = true,                 -- When false, auto-approves all tools
     auto_approve = { "$default" },           -- $default approves read, write, edit
     auto_approve_sandboxed = true,           -- Auto-approve sandboxed tools (set false to require manual approval)
-    presets = {},                            -- User-defined presets: ["$name"] = { approve = {}, deny = {} }
+    presets = {},                            -- User-defined presets: ["$name"] = { approve = {} }
     max_concurrent = 2,                      -- Max tools executing simultaneously per buffer (0 = unlimited)
     default_timeout = 30,                    -- Async tool timeout (seconds)
     show_spinner = true,                     -- Animated spinner during execution
@@ -81,6 +81,7 @@ require("flemma").setup({
     tool_result_title = "Function",
     tool_result_error = "DiagnosticError",
     tool_preview = "Comment",
+    tool_detail = "Comment",                 -- Raw technical detail in structured tool previews
     fold_preview = "Comment",
     fold_meta = "Comment",
     busy = "DiagnosticWarn",                 -- Busy indicator icon in integrations (e.g., bufferline)
@@ -124,6 +125,7 @@ require("flemma").setup({
   },
   text_object = "m",                         -- "m" or false to disable
   editing = {
+    auto_prompt = true,                      -- Prepend @You: to empty .chat buffers on open
     disable_textwidth = true,
     auto_write = false,                      -- Write buffer after each request
     manage_updatetime = true,                -- Lower updatetime in chat buffers
@@ -142,6 +144,11 @@ require("flemma").setup({
   },
   diagnostics = {
     enabled = false,                         -- Enable request diagnostics for debugging prompt caching issues
+  },
+  secrets = {
+    gcloud = {
+      path = "gcloud",                       -- Path to gcloud binary (override for NixOS, Guix, etc.)
+    },
   },
   sandbox = {
     enabled = true,                          -- Enable filesystem sandboxing
@@ -204,6 +211,7 @@ This lets you set `thinking = "high"` as a cross-provider default and fine-tune 
 
 | Key                         | Default | Effect                                                                                                                                                                                                                |
 | --------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `editing.auto_prompt`       | `true`  | Prepend `@You:` to empty `.chat` buffers when opened, so new users have a clear starting point.                                                                                                                       |
 | `editing.disable_textwidth` | `true`  | Sets `textwidth = 0` in chat buffers to prevent hard wrapping.                                                                                                                                                        |
 | `editing.auto_write`        | `false` | When `true`, automatically writes the buffer to disk after each completed request.                                                                                                                                    |
 | `editing.manage_updatetime` | `true`  | Lowers `updatetime` to 100ms while a chat buffer is focused (enables responsive `CursorHold` events for UI updates). The original value is restored on `BufLeave`, with reference counting for multiple chat buffers. |
@@ -261,7 +269,7 @@ Toggle autopilot at runtime without changing your config:
 
 - `:Flemma autopilot:enable` – activate for the current session.
 - `:Flemma autopilot:disable` – deactivate for the current session.
-- `:Flemma autopilot:status` – print whether autopilot is currently active and the buffer's loop state.
+- `:Flemma autopilot:status` – open the status buffer and jump to the Autopilot section (shows enabled state, buffer loop state, max turns, and any frontmatter overrides).
 
 Individual buffers can override the global setting via frontmatter: `flemma.opt.tools.autopilot = false`. See [docs/templates.md](templates.md#per-buffer-overrides-with-flemmaopt) for details.
 
@@ -377,6 +385,25 @@ Three additional built-in tools (`grep`, `find`, `ls`) are available for codebas
 | `experimental.tools` | `false` | Enable `grep`, `find`, and `ls` tools. See [docs/tools.md](tools.md#experimental-exploration-tools) for the full reference. |
 
 Each tool has an optional config section under `tools` (`tools.grep`, `tools.find`, `tools.ls`) for working directory and exclude patterns.
+
+### Config aliases
+
+Flemma defines top-level aliases for frequently used nested options. These work in both `setup()` config and `flemma.opt` frontmatter overrides:
+
+| Alias         | Expands to               |
+| ------------- | ------------------------ |
+| `thinking`    | `parameters.thinking`    |
+| `temperature` | `parameters.temperature` |
+| `max_tokens`  | `parameters.max_tokens`  |
+| `timeout`     | `parameters.timeout`     |
+
+Under `tools`, an additional alias is available:
+
+| Alias     | Expands to     |
+| --------- | -------------- |
+| `approve` | `auto_approve` |
+
+This is why `flemma.opt.thinking = "medium"` works in frontmatter — it writes to `parameters.thinking` through the alias. Both the alias and the full path are equivalent; use whichever you prefer.
 
 ### Per-buffer overrides
 

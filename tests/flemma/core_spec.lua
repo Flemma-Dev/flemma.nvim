@@ -11,7 +11,7 @@ describe(":Flemma send command", function()
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
-    package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
     package.loaded["flemma.models"] = nil
 
@@ -41,7 +41,7 @@ describe(":Flemma send command", function()
 
     -- Arrange: Register a dummy fixture to prevent actual network calls.
     -- The content of the fixture DOES matter, as it's processed by the provider.
-    local config = state.get_config()
+    local config = require("flemma.config").materialize()
     local default_anthropic_model = registry.get_model("anthropic")
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
 
@@ -88,7 +88,7 @@ describe(":Flemma send command", function()
     local captured_request_body = core._get_last_request_body()
     assert.is_not_nil(captured_request_body, "request_body was not captured")
 
-    local config = state.get_config()
+    local config = require("flemma.config").materialize()
 
     assert.equals("o3", captured_request_body.model)
     assert.is_not_nil(captured_request_body.input, "Should use input field (Responses API)")
@@ -327,9 +327,10 @@ describe(":Flemma send command", function()
   end)
 
   it("errors and does not switch when an unknown provider is requested", function()
-    -- Arrange: Ensure we start from a valid, known provider (default is Anthropic)
-    local original_provider = flemma.get_current_provider_name()
-    assert.is_not_nil(original_provider, "Original provider should be set")
+    local config_facade = require("flemma.config")
+
+    -- Arrange: capture provider before the failed switch
+    local original_provider = config_facade.get().provider
 
     -- Arrange: Stub notifications to capture the error
     local notify_spy = stub(vim, "notify")
@@ -346,8 +347,7 @@ describe(":Flemma send command", function()
     assert.is_nil(result, "switch should return nil for unknown provider")
 
     -- Assert: Provider should remain unchanged
-    local current_provider = flemma.get_current_provider_name()
-    assert.equals(original_provider, current_provider, "Provider should remain unchanged on invalid switch")
+    assert.equals(original_provider, config_facade.get().provider, "Provider should remain unchanged on invalid switch")
 
     -- Assert: An error notification was emitted
     local last_call = notify_spy.calls[#notify_spy.calls]
@@ -366,8 +366,8 @@ describe(":Flemma send command", function()
     -- Act: Attempt to switch to an invalid model on a valid provider
     local result = core.switch_provider("openai", "gpt-6", {})
 
-    -- Assert: switch returns a provider instance
-    assert.is_not_nil(result, "switch should succeed when provider is valid, even if model is invalid")
+    -- Assert: switch succeeds (returns true)
+    assert.is_truthy(result, "switch should succeed when provider is valid, even if model is invalid")
 
     -- Wait for notify to capture calls
     vim.wait(50, function()
@@ -392,10 +392,43 @@ describe(":Flemma send command", function()
 
     -- Assert: Model fell back to the provider default
     local default_openai_model = registry.get_model("openai")
-    local cfg = state.get_config()
+    local cfg = require("flemma.config").materialize()
     assert.equals(default_openai_model, cfg.model, "Should fall back to provider default model")
 
     -- Cleanup
     notify_spy:revert()
+  end)
+
+  it("frontmatter can override provider and model for a single buffer", function()
+    -- Arrange: Verify the default provider is NOT OpenAI (what frontmatter will override to)
+    local default_config = require("flemma.config").materialize()
+    assert.is_not.equals("openai", default_config.provider, "Test assumes default is not OpenAI")
+
+    client.register_fixture("api%.openai%.com", "tests/fixtures/openai_hello_success_stream.txt")
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "```lua",
+      'flemma.opt.provider = "openai"',
+      'flemma.opt.model = "o3"',
+      "```",
+      "@You:",
+      "Hello from OpenAI via frontmatter",
+    })
+
+    -- Act: Send — frontmatter should override provider to OpenAI
+    vim.cmd("Flemma send")
+
+    -- Assert: Request body uses OpenAI format (input field, not messages)
+    local captured = core._get_last_request_body()
+    assert.is_not_nil(captured, "request_body should be captured")
+    assert.equals("o3", captured.model)
+    assert.is_not_nil(captured.input, "Should use OpenAI Responses API 'input' field")
+    assert.is_nil(captured.messages, "Should NOT use Anthropic 'messages' field")
+
+    -- Assert: Global config still points to the original provider (frontmatter is per-buffer)
+    local global_after = require("flemma.config").materialize()
+    assert.equals(default_config.provider, global_after.provider)
   end)
 end)

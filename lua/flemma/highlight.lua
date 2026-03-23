@@ -4,8 +4,8 @@
 local M = {}
 
 local color = require("flemma.utilities.color")
+local config_facade = require("flemma.config")
 local log = require("flemma.logging")
-local state = require("flemma.state")
 local str = require("flemma.utilities.string")
 local preprocessor_syntax = require("flemma.preprocessor.syntax")
 local roles = require("flemma.utilities.roles")
@@ -39,7 +39,7 @@ local function get_default_color(attr)
   end
 
   -- Fall back to config defaults
-  local config = state.get_config()
+  local config = config_facade.get()
   local is_dark = vim.o.background == "dark"
   local defaults = config.defaults
   if defaults then
@@ -223,7 +223,7 @@ end
 ---Creates FlemmaLine*CursorLine variants that combine role backgrounds with CursorLine styling,
 ---so the cursor line remains visible on top of role-based line highlights.
 local function setup_cursorline_highlights()
-  local current_config = state.get_config()
+  local current_config = config_facade.get()
   if not current_config.line_highlights or not current_config.line_highlights.enabled then
     return
   end
@@ -341,7 +341,7 @@ end
 
 ---Apply syntax highlighting and Tree-sitter configuration
 M.apply_syntax = function()
-  local syntax_config = state.get_config()
+  local syntax_config = config_facade.get()
 
   -- Explicitly load our syntax file
   vim.cmd("runtime! syntax/chat.vim")
@@ -409,6 +409,15 @@ M.apply_syntax = function()
   -- Set highlight for fold text segments
   set_highlight("FlemmaFoldPreview", syntax_config.highlights.fold_preview)
   set_highlight("FlemmaFoldMeta", syntax_config.highlights.fold_meta)
+
+  -- FlemmaToolLabel: italic style override for human-readable tool intent in folds.
+  -- Defined unconditionally (not config-driven) because it has no color to configure —
+  -- only italic. nvim_set_hl silently ignores style attributes when link is also set,
+  -- so this must NOT use { link = ..., italic = true }.
+  vim.api.nvim_set_hl(0, "FlemmaToolLabel", { italic = true, default = true })
+
+  -- FlemmaToolDetail: dimmer highlight for raw technical detail in folds.
+  set_highlight("FlemmaToolDetail", syntax_config.highlights.tool_detail)
 
   -- Tool execution indicator highlights
   set_highlight("FlemmaToolPending", { link = "DiagnosticInfo", default = true })
@@ -527,7 +536,7 @@ end
 
 ---Setup line highlight groups for full-line background highlighting
 local function setup_line_highlights()
-  local current_config = state.get_config()
+  local current_config = config_facade.get()
   if not current_config.line_highlights or not current_config.line_highlights.enabled then
     return
   end
@@ -544,7 +553,7 @@ end
 
 ---Setup signs for different roles
 local function setup_signs()
-  local current_config = state.get_config()
+  local current_config = config_facade.get()
   if current_config.signs.enabled then
     -- Define signs using internal keys ('user', 'system', 'assistant')
     local signs = {

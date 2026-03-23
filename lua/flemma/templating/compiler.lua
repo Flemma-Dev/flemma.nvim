@@ -389,16 +389,28 @@ function M.execute(result, env)
   -- Execute
   local ok, err = pcall(chunk)
   if not ok then
-    log.debug("compiler: runtime error in template: " .. tostring(err))
-    local err_line = parse_error_line(tostring(err))
-    local lnum = lookup_lnum(result.line_map, err_line)
-    table.insert(diagnostics, {
-      type = "template",
-      severity = "error",
-      error = tostring(err),
-      position = lnum > 0 and { start_line = lnum } or nil,
-      source_file = env.__filename or "N/A",
-    })
+    if type(err) == "table" and err.type then
+      -- Structured error (from include, config proxy, etc.): preserve as-is
+      if not err.severity then
+        err.severity = "error"
+      end
+      if not err.source_file then
+        err.source_file = env.__filename or "N/A"
+      end
+      table.insert(diagnostics, err)
+    else
+      -- Plain string error: existing handling
+      log.debug("compiler: runtime error in template: " .. tostring(err))
+      local err_line = parse_error_line(tostring(err))
+      local lnum = lookup_lnum(result.line_map, err_line)
+      table.insert(diagnostics, {
+        type = "template",
+        severity = "error",
+        error = tostring(err),
+        position = lnum > 0 and { start_line = lnum } or nil,
+        source_file = env.__filename or "N/A",
+      })
+    end
     env.__emit = nil
     env.__emit_part = nil
     env.__emit_expr_error = nil

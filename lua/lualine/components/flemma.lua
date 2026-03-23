@@ -3,7 +3,8 @@
 --- Uses lazy-evaluated variable resolvers — only variables referenced by the
 --- format string trigger data lookups.  Variables are cached per render cycle.
 local lualine_component = require("lualine.component")
-local state = require("flemma.state")
+local config_facade = require("flemma.config")
+local normalize = require("flemma.provider.normalize")
 local registry = require("flemma.provider.registry")
 local format = require("flemma.utilities.format")
 local session = require("flemma.session")
@@ -17,14 +18,26 @@ local flemma_component = lualine_component:extend()
 function flemma_component:init(options)
   lualine_component.init(self, options)
 
+  local group = vim.api.nvim_create_augroup("FlemmaLualineIntegration", { clear = true })
+
+  local function refresh_lualine()
+    local ok, lualine = pcall(require, "lualine")
+    if ok then
+      lualine.refresh()
+    end
+  end
+
   vim.api.nvim_create_autocmd("User", {
+    group = group,
     pattern = "FlemmaBootComplete",
-    callback = function()
-      local ok, lualine = pcall(require, "lualine")
-      if ok then
-        lualine.refresh()
-      end
-    end,
+    once = true,
+    callback = refresh_lualine,
+  })
+
+  vim.api.nvim_create_autocmd("User", {
+    group = group,
+    pattern = "FlemmaConfigUpdated",
+    callback = refresh_lualine,
   })
 end
 
@@ -49,15 +62,13 @@ local function resolve_thinking(config)
     end
   end
 
-  -- Read from the provider's parameter proxy (includes frontmatter overrides)
-  local provider = state.get_provider()
-  local params = provider and provider.parameters or config.parameters
+  -- Flatten provider-specific + general params for resolve_thinking()
+  local params = normalize.flatten_parameters(config.provider, config)
   if not params then
     return ""
   end
 
-  local base = require("flemma.provider.base")
-  local thinking = base.resolve_thinking(params --[[@as flemma.provider.Parameters]], capabilities)
+  local thinking = normalize.resolve_thinking(params --[[@as flemma.provider.Parameters]], capabilities)
   if not thinking.enabled then
     return ""
   end
@@ -165,12 +176,16 @@ function flemma_component:update_status()
     return ""
   end
 
-  local config = state.get_config()
+  -- materialize(bufnr) returns a plain table with per-buffer resolution —
+  -- required because flatten_parameters uses pairs() and make_resolvers
+  -- accesses dynamic keys. bufnr ensures frontmatter overrides are visible.
+  local bufnr = vim.api.nvim_get_current_buf()
+  local config = normalize.resolve_preset(config_facade.materialize(bufnr))
   if not config or not config.model or config.model == "" then
     return ""
   end
 
-  local fmt = config.statusline.format
+  local fmt = (self.options and self.options.format) or config.statusline.format
 
   return format.expand(fmt, build_vars(config))
 end

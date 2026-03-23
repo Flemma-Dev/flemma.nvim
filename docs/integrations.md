@@ -22,7 +22,15 @@ The component only renders in `chat` buffers and returns an empty string otherwi
 
 ### Format string
 
-The display format is configurable via `statusline.format` in the [configuration reference](configuration.md) using a tmux-style format syntax. The default is:
+The display format uses a tmux-style syntax and can be set in two places:
+
+- **Lualine section config** (per-component, takes precedence):
+  ```lua
+  { "flemma", format = "#{provider}:#{model}" }
+  ```
+- **Flemma config** (global default, via `statusline.format` in the [configuration reference](configuration.md))
+
+The lualine option is useful when you include the component multiple times or want to keep all display config in one place. The default format is:
 
 ```
 #{model}#{?#{thinking}, (#{thinking}),}#{?#{booting}, ⏳,}

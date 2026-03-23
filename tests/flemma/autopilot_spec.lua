@@ -5,12 +5,12 @@ package.loaded["flemma.autopilot"] = nil
 package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.context"] = nil
 package.loaded["flemma.tools.injector"] = nil
-package.loaded["flemma.state"] = nil
 package.loaded["flemma.parser"] = nil
 
 local autopilot = require("flemma.autopilot")
 local context = require("flemma.tools.context")
-local state = require("flemma.state")
+local config_facade = require("flemma.config")
+local config_schema = require("flemma.config.schema")
 local parser = require("flemma.parser")
 
 --- Helper: get pending non-error, empty tool blocks awaiting execution.
@@ -44,40 +44,52 @@ end
 -- ============================================================================
 
 describe("Autopilot State Machine", function()
+  before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
+    package.loaded["flemma.autopilot"] = nil
+    config_facade = require("flemma.config")
+    config_schema = require("flemma.config.schema")
+    autopilot = require("flemma.autopilot")
+    config_facade.init(config_schema)
+  end)
+
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
   end)
 
   describe("is_enabled", function()
     it("returns true when autopilot is true in config", function()
       local bufnr = create_buffer({ "@You:", "test" })
-      state.set_config({ tools = { autopilot = { enabled = true } } })
+      config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
       assert.is_true(autopilot.is_enabled(bufnr))
     end)
 
     it("returns false when autopilot is false in config", function()
       local bufnr = create_buffer({ "@You:", "test" })
-      state.set_config({ tools = { autopilot = { enabled = false } } })
+      config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = false } } })
       assert.is_false(autopilot.is_enabled(bufnr))
     end)
 
-    it("returns false when autopilot group is absent", function()
+    it("returns true by default (schema default is enabled)", function()
       local bufnr = create_buffer({ "@You:", "test" })
-      state.set_config({ tools = {} })
-      assert.is_false(autopilot.is_enabled(bufnr))
+      -- No SETUP apply — defaults from schema have autopilot.enabled = true
+      assert.is_true(autopilot.is_enabled(bufnr))
     end)
 
     it("returns true when enabled field is absent (defaults to true)", function()
       local bufnr = create_buffer({ "@You:", "test" })
-      state.set_config({ tools = { autopilot = {} } })
+      -- Only set an unrelated field — autopilot.enabled defaults to true
+      config_facade.apply(config_facade.LAYERS.SETUP, { tools = { max_concurrent = 3 } })
       assert.is_true(autopilot.is_enabled(bufnr))
     end)
 
-    it("returns false when tools config is missing", function()
+    it("returns true with empty setup (schema defaults)", function()
       local bufnr = create_buffer({ "@You:", "test" })
-      state.set_config({})
-      assert.is_false(autopilot.is_enabled(bufnr))
+      -- Empty setup — schema defaults have autopilot.enabled = true
+      assert.is_true(autopilot.is_enabled(bufnr))
     end)
   end)
 
@@ -127,17 +139,23 @@ end)
 -- for full-chain coverage via register_fixture + Flemma send.
 describe("Autopilot on_response_complete", function()
   before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
     package.loaded["flemma.autopilot"] = nil
+    config_facade = require("flemma.config")
+    config_schema = require("flemma.config.schema")
     autopilot = require("flemma.autopilot")
+    config_facade.init(config_schema)
   end)
 
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
   end)
 
   it("arms when last assistant message has tool_use", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run the calculator",
@@ -160,7 +178,7 @@ describe("Autopilot on_response_complete", function()
   end)
 
   it("stays idle when last assistant message has no tool_use", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Hello",
@@ -178,7 +196,7 @@ describe("Autopilot on_response_complete", function()
   end)
 
   it("does nothing when autopilot is disabled", function()
-    state.set_config({ tools = { autopilot = { enabled = false } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = false } } })
     local bufnr = create_buffer({
       "@You:",
       "Run",
@@ -204,7 +222,7 @@ describe("Autopilot on_response_complete", function()
   -- In production, each call is preceded by new assistant content. This
   -- tests the iteration counter logic, not the full response cycle.
   it("increments iteration counter", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run",
@@ -232,7 +250,7 @@ describe("Autopilot on_response_complete", function()
 
   -- NOTE: Same caveat as above — static buffer, counter-only test.
   it("stops after exceeding max_turns", function()
-    state.set_config({ tools = { autopilot = { enabled = true, max_turns = 2 } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true, max_turns = 2 } } })
     local bufnr = create_buffer({
       "@You:",
       "Run",
@@ -263,7 +281,7 @@ describe("Autopilot on_response_complete", function()
 
   -- NOTE: Tests disarm's effect on iteration counter with static buffer.
   it("disarm resets iteration counter", function()
-    state.set_config({ tools = { autopilot = { enabled = true, max_turns = 2 } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true, max_turns = 2 } } })
     local bufnr = create_buffer({
       "@You:",
       "Run",
@@ -297,17 +315,23 @@ end)
 
 describe("Autopilot on_tools_complete", function()
   before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
     package.loaded["flemma.autopilot"] = nil
+    config_facade = require("flemma.config")
+    config_schema = require("flemma.config.schema")
     autopilot = require("flemma.autopilot")
+    config_facade.init(config_schema)
   end)
 
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
   end)
 
   it("sets sending when no pending or awaiting remain", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run the calculator",
@@ -335,7 +359,7 @@ describe("Autopilot on_tools_complete", function()
   end)
 
   it("pauses when flemma:tool status=pending blocks remain", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run the calculator",
@@ -362,7 +386,7 @@ describe("Autopilot on_tools_complete", function()
   end)
 
   it("schedules send when flemma:tool status=approved blocks remain", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run the calculator",
@@ -389,7 +413,7 @@ describe("Autopilot on_tools_complete", function()
   end)
 
   it("no-ops when not in armed state", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run",
@@ -417,7 +441,7 @@ describe("Autopilot on_tools_complete", function()
   end)
 
   it("waits when unprocessed tool_use blocks remain", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run both",
@@ -459,7 +483,6 @@ end)
 describe("Autopilot conflict detection", function()
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
   end)
 
   it("parser sets content on flemma:tool with user-edited content", function()
@@ -577,17 +600,23 @@ end)
 
 describe("Autopilot all-denied edge case", function()
   before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
     package.loaded["flemma.autopilot"] = nil
+    config_facade = require("flemma.config")
+    config_schema = require("flemma.config.schema")
     autopilot = require("flemma.autopilot")
+    config_facade.init(config_schema)
   end)
 
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
   end)
 
   it("on_tools_complete continues after all tools denied (results injected, no pending)", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     -- Simulate buffer state after all tools were denied: tool_results are present
     -- with error content, no flemma:tool markers
     local bufnr = create_buffer({
@@ -624,19 +653,25 @@ end)
 
 describe("Autopilot on_tools_complete ignored when not armed", function()
   before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
     package.loaded["flemma.autopilot"] = nil
+    config_facade = require("flemma.config")
+    config_schema = require("flemma.config.schema")
     autopilot = require("flemma.autopilot")
+    config_facade.init(config_schema)
   end)
 
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
   end)
 
   it("on_tools_complete does not advance from paused state", function()
     -- Regression: if autopilot is paused (e.g., pending tools shown to user)
     -- and a tool completion fires, it should not advance the state.
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run",
@@ -715,7 +750,7 @@ describe("Autopilot on_tools_complete ignored when not armed", function()
   it("on_tools_complete advances from armed state after re-arm", function()
     -- Regression: after pausing on pending, user interacts (e.g., Alt+Enter),
     -- which re-arms autopilot. Now on_tools_complete should advance.
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run",
@@ -759,17 +794,23 @@ describe("Autopilot all-sync tool completion", function()
   -- (all sync completed), it schedules on_tools_complete manually.
 
   before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
     package.loaded["flemma.autopilot"] = nil
+    config_facade = require("flemma.config")
+    config_schema = require("flemma.config.schema")
     autopilot = require("flemma.autopilot")
+    config_facade.init(config_schema)
   end)
 
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
   end)
 
   it("on_tools_complete called before arm is ignored", function()
-    state.set_config({ tools = { autopilot = { enabled = true } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
       "Run",
@@ -824,7 +865,7 @@ describe("Autopilot integration", function()
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
-    package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
     package.loaded["flemma.models"] = nil
     package.loaded["flemma.autopilot"] = nil
@@ -842,7 +883,6 @@ describe("Autopilot integration", function()
   after_each(function()
     client.clear_fixtures()
     vim.cmd("silent! %bdelete!")
-    state.set_config({})
   end)
 
   it("arms autopilot when LLM response contains tool_use via full chain", function()
@@ -876,5 +916,208 @@ describe("Autopilot integration", function()
       ap_state == "armed" or ap_state == "paused" or ap_state == "sending",
       "Autopilot should have advanced past idle, got: " .. ap_state
     )
+  end)
+end)
+
+-- ============================================================================
+-- Race Condition: sync + async tool in the same Phase 2 batch
+-- ============================================================================
+-- When the LLM returns multiple tool_use blocks and at least one tool is sync,
+-- the sync tool completes inline during advance_phase2's for loop.
+-- Its completion calls maybe_unlock_buffer → autopilot.on_tools_complete (state
+-- is already "armed" from on_response_complete), which schedules send_or_execute.
+-- That scheduled call runs after the for loop and finds the async tool's stale
+-- flemma:tool status=approved fence (executor.execute called inject_placeholder,
+-- which returned early without modifying the buffer), triggering a duplicate
+-- executor.execute → "Tool ... is already executing" error notification.
+
+describe("Autopilot race condition: sync + async tool dispatch", function()
+  local client = require("flemma.client")
+  local flemma_mod
+  local tools_registry
+  local orig_notify
+
+  before_each(function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.commands"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.registry"] = nil
+    package.loaded["flemma.tools.approval"] = nil
+    package.loaded["flemma.tools.executor"] = nil
+    package.loaded["flemma.core"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
+    package.loaded["flemma.provider.registry"] = nil
+    package.loaded["flemma.models"] = nil
+    package.loaded["flemma.autopilot"] = nil
+
+    flemma_mod = require("flemma")
+    require("flemma.core")
+    autopilot = require("flemma.autopilot")
+    tools_registry = require("flemma.tools.registry")
+
+    -- require_approval=false registers a catch-all resolver so all tools are
+    -- auto-approved without user interaction.
+    flemma_mod.setup({
+      parameters = { thinking = false },
+      tools = {
+        autopilot = { enabled = true },
+        require_approval = false,
+      },
+    })
+
+    orig_notify = vim.notify
+  end)
+
+  after_each(function()
+    vim.notify = orig_notify
+    client.clear_fixtures()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("does not double-execute when a sync tool completes before an async tool", function()
+    -- Sync tool: completes inline during Phase 2 for loop.
+    -- This triggers maybe_unlock_buffer → on_tools_complete (state is already
+    -- "armed") → vim.schedule(send_or_execute). That scheduled SE runs after the
+    -- for loop and, before the fix, finds the async tool's stale approved fence.
+    tools_registry.register("test_sync", {
+      name = "test_sync",
+      description = "Sync test tool for race condition test",
+      input_schema = { type = "object", properties = { value = { type = "string" } } },
+      execute = function(input)
+        return { success = true, output = input.value or "sync_ok" }
+      end,
+    })
+
+    -- Async tool: holds its callback so it stays in pending_executions.
+    -- Its flemma:tool status=approved fence remains in the buffer during the
+    -- race window, which is what the stale send_or_execute incorrectly picks up.
+    local async_callbacks = {}
+    tools_registry.register("test_async", {
+      name = "test_async",
+      description = "Async test tool for race condition test",
+      async = true,
+      input_schema = { type = "object", properties = { value = { type = "string" } } },
+      execute = function(_input, _context, callback)
+        table.insert(async_callbacks, callback)
+      end,
+    })
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Do two things" })
+
+    -- Fixture: two tool_use blocks — test_sync (index 0) then test_async (index 1).
+    -- Phase 2 processes them in document order, so sync executes first.
+    client.register_fixture(
+      "api%.anthropic%.com",
+      "tests/fixtures/tool_calling/anthropic_multi_tool_race_streaming.txt"
+    )
+
+    local race_errors = {}
+    vim.notify = function(msg, level, ...)
+      if type(msg) == "string" and msg:match("already executing") then
+        table.insert(race_errors, msg)
+      end
+      return orig_notify(msg, level, ...)
+    end
+
+    vim.cmd("Flemma send")
+
+    -- Wait until the async tool has been dispatched (callback captured).
+    -- This confirms Phase 2 has completed and both tools were started.
+    local dispatched = vim.wait(3000, function()
+      return #async_callbacks > 0
+    end)
+    assert.is_true(dispatched, "Async tool was not dispatched within 3s")
+
+    -- Pump the event loop: lets any on_tools_complete → send_or_execute
+    -- callbacks fire. This is the race window.
+    vim.wait(500, function()
+      return false
+    end)
+
+    assert.equals(0, #race_errors, "Race condition: " .. (race_errors[1] or "none"))
+
+    -- Resolve the async tool so executor cleanup runs cleanly.
+    for _, cb in ipairs(async_callbacks) do
+      cb({ success = true, output = "async_ok" })
+    end
+    vim.wait(200, function()
+      return false
+    end)
+  end)
+
+  -- Regression test for: "Cannot send while tool execution is in progress."
+  -- The race: on_response_complete arms autopilot, Phase 2's for-loop dispatches
+  -- a sync tool that completes inline, on_tools_complete fires (state is "armed"),
+  -- finds the async tool's approved block, and schedules send_or_execute. After the
+  -- for-loop dispatches the async tool and strips its fence, the stale
+  -- send_or_execute falls through to send_to_provider — which finds the async tool
+  -- still executing and emits the "Cannot send" warning.
+  it("does not send_to_provider while async tool is executing after sync tool completes", function()
+    -- Sync tool: completes inline during Phase 2 for loop.
+    tools_registry.register("test_sync", {
+      name = "test_sync",
+      description = "Sync test tool for send-while-executing race test",
+      input_schema = { type = "object", properties = { value = { type = "string" } } },
+      execute = function(input)
+        return { success = true, output = input.value or "sync_ok" }
+      end,
+    })
+
+    -- Async tool: holds its callback so it stays in pending_executions.
+    local async_callbacks = {}
+    tools_registry.register("test_async", {
+      name = "test_async",
+      description = "Async test tool for send-while-executing race test",
+      async = true,
+      input_schema = { type = "object", properties = { value = { type = "string" } } },
+      execute = function(_input, _context, callback)
+        table.insert(async_callbacks, callback)
+      end,
+    })
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Do two things" })
+
+    -- Same fixture: two tool_use blocks — test_sync then test_async.
+    client.register_fixture(
+      "api%.anthropic%.com",
+      "tests/fixtures/tool_calling/anthropic_multi_tool_race_streaming.txt"
+    )
+
+    local send_errors = {}
+    vim.notify = function(msg, level, ...)
+      if type(msg) == "string" and msg:match("Cannot send while tool execution is in progress") then
+        table.insert(send_errors, msg)
+      end
+      return orig_notify(msg, level, ...)
+    end
+
+    vim.cmd("Flemma send")
+
+    -- Wait until the async tool has been dispatched (callback captured).
+    local dispatched = vim.wait(3000, function()
+      return #async_callbacks > 0
+    end)
+    assert.is_true(dispatched, "Async tool was not dispatched within 3s")
+
+    -- Pump the event loop: lets the stale on_tools_complete → send_or_execute
+    -- callback fire. Before the fix, this triggers the "Cannot send" warning.
+    vim.wait(500, function()
+      return false
+    end)
+
+    assert.equals(0, #send_errors, "Race condition: " .. (send_errors[1] or "none"))
+
+    -- Resolve the async tool so executor cleanup runs cleanly.
+    for _, cb in ipairs(async_callbacks) do
+      cb({ success = true, output = "async_ok" })
+    end
+    vim.wait(200, function()
+      return false
+    end)
   end)
 end)

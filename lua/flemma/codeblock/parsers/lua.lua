@@ -3,30 +3,41 @@
 ---@class flemma.codeblock.parsers.Lua
 local M = {}
 
+local config = require("flemma.config")
 local eval = require("flemma.templating.eval")
-local ctxutil = require("flemma.context")
-local opt_module = require("flemma.buffer.opt")
+local templating = require("flemma.templating")
 
----Parse Lua code and return global variables as a table
+---Parse Lua code and return global variables as a table.
+---When bufnr is provided, frontmatter writes go directly to the config store's
+---FRONTMATTER layer via a write proxy. The proxy IS flemma.opt — no separate
+---resolve step needed.
 ---@param code string The Lua code to execute
 ---@param context? flemma.Context Optional context with __filename, etc.
+---@param bufnr? integer Buffer number for config store writes
 ---@return table<string, any> variables Table of global variables defined in the code
-function M.parse(code, context)
-  local env = ctxutil.to_eval_env(context or {})
+---@return flemma.config.ValidationFailure[]? validation_failures Schema validation failures (nil when no bufnr)
+function M.parse(code, context, bufnr)
+  local env = templating.from_context(context)
 
-  -- Inject flemma.opt into sandbox env before execute_frontmatter
-  -- This makes it part of initial_keys, so it won't leak to user_globals
-  local opt_proxy, resolve = opt_module.create()
-  env.flemma = { opt = opt_proxy }
+  -- Inject flemma.opt into sandbox env before execute_frontmatter.
+  -- When bufnr is available, use a config write proxy that records ops
+  -- directly in the store. The layer is already cleared by the caller.
+  if bufnr then
+    local writer = config.writer(bufnr, config.LAYERS.FRONTMATTER)
+    env.flemma = { opt = writer }
+  else
+    env.flemma = { opt = {} }
+  end
 
   local user_globals = eval.execute_frontmatter(code, env)
 
   -- Safety net: ensure flemma doesn't leak to returned globals
   user_globals.flemma = nil
 
-  -- Store frontmatter opts on context via accessor
-  if context and type(context.set_opts) == "function" then
-    context:set_opts(resolve())
+  -- Finalize frontmatter: coerce transforms + deferred semantic validation
+  if bufnr then
+    local _, validation_failures = config.finalize(config.LAYERS.FRONTMATTER, nil, bufnr)
+    return user_globals, validation_failures
   end
 
   return user_globals

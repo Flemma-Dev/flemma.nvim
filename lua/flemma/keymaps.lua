@@ -3,11 +3,11 @@
 ---@class flemma.Keymaps
 local M = {}
 
+local config_facade = require("flemma.config")
 local core = require("flemma.core")
 local cursor = require("flemma.cursor")
 local executor = require("flemma.tools.executor")
 local navigation = require("flemma.navigation")
-local state = require("flemma.state")
 local textobject = require("flemma.textobject")
 local ui = require("flemma.ui")
 
@@ -54,7 +54,7 @@ M.setup = function()
   local augroup = vim.api.nvim_create_augroup("FlemmaKeymaps", { clear = true })
 
   -- Set up the mappings for Flemma interaction if enabled
-  local config = state.get_config()
+  local config = config_facade.get()
   if config.keymaps.enabled then
     vim.api.nvim_create_autocmd("FileType", {
       group = augroup,

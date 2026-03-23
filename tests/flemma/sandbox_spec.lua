@@ -1,15 +1,30 @@
 describe("sandbox policy layer", function()
   local sandbox
-  local state
   local bwrap
+  local config_facade
+  local schema
+
+  ---Apply sandbox config to the SETUP layer.
+  ---@param sandbox_opts table
+  local function apply_sandbox(sandbox_opts)
+    config_facade.apply(config_facade.LAYERS.SETUP, { sandbox = sandbox_opts })
+  end
 
   before_each(function()
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
     package.loaded["flemma.tools.approval"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
     sandbox = require("flemma.sandbox")
-    state = require("flemma.state")
     bwrap = require("flemma.sandbox.backends.bwrap")
+    config_facade = require("flemma.config")
+    schema = require("flemma.config.schema")
+
+    -- Initialize config facade with schema defaults
+    config_facade.init(schema)
 
     -- Reset runtime override and registry
     sandbox.reset_enabled()
@@ -24,38 +39,35 @@ describe("sandbox policy layer", function()
     })
 
     -- Set a config with sandbox disabled by default
-    state.set_config({
-      sandbox = {
-        enabled = false,
-        backend = "bwrap",
-        policy = {
-          rw_paths = { "urn:flemma:cwd", "urn:flemma:buffer:path", "/tmp" },
-          network = true,
-          allow_privileged = false,
-        },
-        backends = {
-          bwrap = {
-            path = "bwrap",
-            extra_args = {},
-          },
-        },
+    -- Note: backends sub-tree is omitted because DISCOVER requires backends
+    -- to have config_schema registered. bwrap's default config comes from its
+    -- schema materialization when registered with config_schema in sandbox.setup().
+    apply_sandbox({
+      enabled = false,
+      backend = "bwrap",
+      policy = {
+        rw_paths = { "urn:flemma:cwd", "urn:flemma:buffer:path", "/tmp" },
+        network = true,
+        allow_privileged = false,
       },
     })
   end)
 
   describe("resolve_config", function()
     it("merges global and per-buffer config", function()
-      local opts = {
-        sandbox = { enabled = true, policy = { network = false } },
-      }
-      local cfg = sandbox.resolve_config(opts)
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local w = config_facade.writer(bufnr, config_facade.LAYERS.FRONTMATTER)
+      w.sandbox.enabled = true
+      w.sandbox.policy.network = false
+      local cfg = sandbox.resolve_config(bufnr)
       assert.is_true(cfg.enabled)
       assert.is_false(cfg.policy.network)
-      -- Other defaults preserved
+      -- Other defaults preserved from SETUP layer
       assert.are.same({ "urn:flemma:cwd", "urn:flemma:buffer:path", "/tmp" }, cfg.policy.rw_paths)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
-    it("uses global config when no buffer opts", function()
+    it("uses global config when no buffer", function()
       local cfg = sandbox.resolve_config()
       assert.is_false(cfg.enabled)
       assert.are.equal("bwrap", cfg.backend)
@@ -68,17 +80,19 @@ describe("sandbox policy layer", function()
     end)
 
     it("returns true with per-buffer override", function()
-      assert.is_true(sandbox.is_enabled({ sandbox = { enabled = true } }))
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local w = config_facade.writer(bufnr, config_facade.LAYERS.FRONTMATTER)
+      w.sandbox.enabled = true
+      assert.is_true(sandbox.is_enabled(bufnr))
+      vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
   end)
 
   describe("get_policy", function()
     it("expands urn:flemma:cwd to global working directory", function()
-      state.set_config({
-        sandbox = {
-          enabled = true,
-          policy = { rw_paths = { "urn:flemma:cwd" } },
-        },
+      apply_sandbox({
+        enabled = true,
+        policy = { rw_paths = { "urn:flemma:cwd" } },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
       local policy = sandbox.get_policy(bufnr)
@@ -88,11 +102,9 @@ describe("sandbox policy layer", function()
     end)
 
     it("expands urn:flemma:buffer:path to buffer file directory", function()
-      state.set_config({
-        sandbox = {
-          enabled = true,
-          policy = { rw_paths = { "urn:flemma:buffer:path" } },
-        },
+      apply_sandbox({
+        enabled = true,
+        policy = { rw_paths = { "urn:flemma:buffer:path" } },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_name(bufnr, "/tmp/test_chat.chat")
@@ -103,11 +115,9 @@ describe("sandbox policy layer", function()
     end)
 
     it("skips urn:flemma:buffer:path for unnamed buffers", function()
-      state.set_config({
-        sandbox = {
-          enabled = true,
-          policy = { rw_paths = { "urn:flemma:buffer:path" } },
-        },
+      apply_sandbox({
+        enabled = true,
+        policy = { rw_paths = { "urn:flemma:buffer:path" } },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
       local policy = sandbox.get_policy(bufnr)
@@ -116,11 +126,9 @@ describe("sandbox policy layer", function()
     end)
 
     it("skips unset $VAR without default", function()
-      state.set_config({
-        sandbox = {
-          enabled = true,
-          policy = { rw_paths = { "$FLEMMA_TEST_NONEXISTENT_VAR_12345", "/tmp" } },
-        },
+      apply_sandbox({
+        enabled = true,
+        policy = { rw_paths = { "$FLEMMA_TEST_NONEXISTENT_VAR_12345", "/tmp" } },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
       local policy = sandbox.get_policy(bufnr)
@@ -130,11 +138,9 @@ describe("sandbox policy layer", function()
     end)
 
     it("expands $HOME from environment", function()
-      state.set_config({
-        sandbox = {
-          enabled = true,
-          policy = { rw_paths = { "$HOME" } },
-        },
+      apply_sandbox({
+        enabled = true,
+        policy = { rw_paths = { "$HOME" } },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
       local policy = sandbox.get_policy(bufnr)
@@ -144,11 +150,9 @@ describe("sandbox policy layer", function()
     end)
 
     it("expands ${VAR:-default} with fallback", function()
-      state.set_config({
-        sandbox = {
-          enabled = true,
-          policy = { rw_paths = { "${FLEMMA_TEST_NONEXISTENT:-/fallback}" } },
-        },
+      apply_sandbox({
+        enabled = true,
+        policy = { rw_paths = { "${FLEMMA_TEST_NONEXISTENT:-/fallback}" } },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
       local policy = sandbox.get_policy(bufnr)
@@ -158,11 +162,9 @@ describe("sandbox policy layer", function()
     end)
 
     it("deduplicates paths where parent subsumes child", function()
-      state.set_config({
-        sandbox = {
-          enabled = true,
-          policy = { rw_paths = { "/tmp", "/tmp/foo" } },
-        },
+      apply_sandbox({
+        enabled = true,
+        policy = { rw_paths = { "/tmp", "/tmp/foo" } },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
       local policy = sandbox.get_policy(bufnr)
@@ -171,11 +173,9 @@ describe("sandbox policy layer", function()
     end)
 
     it("deduplicates paths after expansion", function()
-      state.set_config({
-        sandbox = {
-          enabled = true,
-          policy = { rw_paths = { "/tmp", "/tmp" } },
-        },
+      apply_sandbox({
+        enabled = true,
+        policy = { rw_paths = { "/tmp", "/tmp" } },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
       local policy = sandbox.get_policy(bufnr)
@@ -184,11 +184,9 @@ describe("sandbox policy layer", function()
     end)
 
     it("normalizes relative paths to absolute", function()
-      state.set_config({
-        sandbox = {
-          enabled = true,
-          policy = { rw_paths = { "." } },
-        },
+      apply_sandbox({
+        enabled = true,
+        policy = { rw_paths = { "." } },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
       local policy = sandbox.get_policy(bufnr)
@@ -200,11 +198,9 @@ describe("sandbox policy layer", function()
 
   describe("is_path_writable", function()
     it("returns true for paths in resolved rw_paths", function()
-      state.set_config({
-        sandbox = {
-          enabled = true,
-          policy = { rw_paths = { "/tmp" } },
-        },
+      apply_sandbox({
+        enabled = true,
+        policy = { rw_paths = { "/tmp" } },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
       assert.is_true(sandbox.is_path_writable("/tmp/test.txt", bufnr))
@@ -212,11 +208,9 @@ describe("sandbox policy layer", function()
     end)
 
     it("returns false for paths outside rw_paths", function()
-      state.set_config({
-        sandbox = {
-          enabled = true,
-          policy = { rw_paths = { "/tmp" } },
-        },
+      apply_sandbox({
+        enabled = true,
+        policy = { rw_paths = { "/tmp" } },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
       assert.is_false(sandbox.is_path_writable("/home/user/.bashrc", bufnr))
@@ -241,12 +235,10 @@ describe("sandbox policy layer", function()
     end)
 
     it("returns error for unknown backend", function()
-      state.set_config({
-        sandbox = {
-          enabled = true,
-          backend = "nonexistent",
-          policy = { rw_paths = {} },
-        },
+      apply_sandbox({
+        enabled = true,
+        backend = "nonexistent",
+        policy = { rw_paths = {} },
       })
       local inner = { "bash", "-c", "echo hello" }
       local bufnr = vim.api.nvim_create_buf(false, true)
@@ -273,12 +265,10 @@ describe("sandbox policy layer", function()
     end)
 
     it("set_enabled(false) overrides config enabled = true", function()
-      state.set_config({
-        sandbox = {
-          enabled = true,
-          backend = "bwrap",
-          policy = { rw_paths = {} },
-        },
+      apply_sandbox({
+        enabled = true,
+        backend = "bwrap",
+        policy = { rw_paths = {} },
       })
       assert.is_true(sandbox.is_enabled())
       sandbox.set_enabled(false)
@@ -292,10 +282,13 @@ describe("sandbox policy layer", function()
       assert.is_false(sandbox.is_enabled())
     end)
 
-    it("runtime override takes precedence over per-buffer opts", function()
+    it("runtime override takes precedence over per-buffer frontmatter", function()
       sandbox.set_enabled(false)
-      local opts = { sandbox = { enabled = true } }
-      assert.is_false(sandbox.is_enabled(opts))
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local w = config_facade.writer(bufnr, config_facade.LAYERS.FRONTMATTER)
+      w.sandbox.enabled = true
+      assert.is_false(sandbox.is_enabled(bufnr))
+      vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
     it("get_override returns nil by default", function()
@@ -484,9 +477,7 @@ describe("sandbox policy layer", function()
         end,
         priority = 50,
       })
-      state.set_config({
-        sandbox = { enabled = true, backend = "auto", policy = { rw_paths = {} } },
-      })
+      apply_sandbox({ enabled = true, backend = "auto", policy = { rw_paths = {} } })
       local detected, _ = sandbox.detect_available_backend()
       assert.are.equal("mid_available", detected)
     end)
@@ -502,9 +493,7 @@ describe("sandbox policy layer", function()
         end,
         priority = 50,
       })
-      state.set_config({
-        sandbox = { enabled = true, backend = "auto", policy = { rw_paths = {} } },
-      })
+      apply_sandbox({ enabled = true, backend = "auto", policy = { rw_paths = {} } })
       local detected, diagnostic = sandbox.detect_available_backend()
       assert.is_nil(detected)
       assert.is_truthy(diagnostic:match("No sandbox backend available"))
@@ -522,9 +511,7 @@ describe("sandbox policy layer", function()
         end,
         priority = 50,
       })
-      state.set_config({
-        sandbox = { enabled = true, backend = "auto", policy = { rw_paths = {} } },
-      })
+      apply_sandbox({ enabled = true, backend = "auto", policy = { rw_paths = {} } })
       local ok, err = sandbox.validate_backend()
       assert.is_true(ok)
       assert.is_nil(err)
@@ -532,9 +519,7 @@ describe("sandbox policy layer", function()
 
     it("validate_backend returns false when auto-detect finds nothing", function()
       sandbox.clear()
-      state.set_config({
-        sandbox = { enabled = true, backend = "auto", policy = { rw_paths = {} } },
-      })
+      apply_sandbox({ enabled = true, backend = "auto", policy = { rw_paths = {} } })
       local ok, err = sandbox.validate_backend()
       assert.is_false(ok)
       assert.is_truthy(err:match("No sandbox backend available"))
@@ -551,9 +536,7 @@ describe("sandbox policy layer", function()
         end,
         priority = 50,
       })
-      state.set_config({
-        sandbox = { enabled = true, backend = "auto", policy = { rw_paths = {} } },
-      })
+      apply_sandbox({ enabled = true, backend = "auto", policy = { rw_paths = {} } })
       local bufnr = vim.api.nvim_create_buf(false, true)
       local result, err = sandbox.wrap_command({ "echo", "hi" }, bufnr)
       assert.is_nil(err)
@@ -581,9 +564,7 @@ describe("sandbox policy layer", function()
         end,
         priority = 90,
       })
-      state.set_config({
-        sandbox = { enabled = true, backend = "explicit_one", policy = { rw_paths = {} } },
-      })
+      apply_sandbox({ enabled = true, backend = "explicit_one", policy = { rw_paths = {} } })
       local bufnr = vim.api.nvim_create_buf(false, true)
       local result, _ = sandbox.wrap_command({ "test" }, bufnr)
       assert.are.same({ "explicit", "test" }, result)
@@ -605,9 +586,7 @@ describe("sandbox policy layer", function()
         end,
         priority = 50,
       })
-      state.set_config({
-        sandbox = { enabled = true, backend = "auto", policy = { rw_paths = {} } },
-      })
+      apply_sandbox({ enabled = true, backend = "auto", policy = { rw_paths = {} } })
       local bufnr = vim.api.nvim_create_buf(false, true)
 
       -- First call runs detection
@@ -634,9 +613,7 @@ describe("sandbox policy layer", function()
         end,
         priority = 50,
       })
-      state.set_config({
-        sandbox = { enabled = true, backend = "auto", policy = { rw_paths = {} } },
-      })
+      apply_sandbox({ enabled = true, backend = "auto", policy = { rw_paths = {} } })
       local bufnr = vim.api.nvim_create_buf(false, true)
 
       -- Prime the cache
@@ -662,6 +639,7 @@ describe("sandbox policy layer", function()
     end)
 
     it("invalidates cache when backends config changes", function()
+      local s = require("flemma.schema")
       sandbox.clear()
       local call_count = 0
       sandbox.register("counting", {
@@ -673,14 +651,13 @@ describe("sandbox policy layer", function()
           return inner, nil
         end,
         priority = 50,
+        config_schema = s.object({ path = s.optional(s.string()) }),
       })
-      state.set_config({
-        sandbox = {
-          enabled = true,
-          backend = "auto",
-          policy = { rw_paths = {} },
-          backends = { counting = { path = "/usr/bin/count" } },
-        },
+      apply_sandbox({
+        enabled = true,
+        backend = "auto",
+        policy = { rw_paths = {} },
+        backends = { counting = { path = "/usr/bin/count" } },
       })
       local bufnr = vim.api.nvim_create_buf(false, true)
 
@@ -689,13 +666,11 @@ describe("sandbox policy layer", function()
       local after_first = call_count
 
       -- Change backends config
-      state.set_config({
-        sandbox = {
-          enabled = true,
-          backend = "auto",
-          policy = { rw_paths = {} },
-          backends = { counting = { path = "/different/path" } },
-        },
+      apply_sandbox({
+        enabled = true,
+        backend = "auto",
+        policy = { rw_paths = {} },
+        backends = { counting = { path = "/different/path" } },
       })
 
       -- Next call must re-detect (backends config changed)
@@ -709,9 +684,7 @@ describe("sandbox policy layer", function()
   describe("graceful degradation", function()
     it("wrap_command runs unsandboxed in auto mode when no backend available", function()
       sandbox.clear()
-      state.set_config({
-        sandbox = { enabled = true, backend = "auto", policy = { rw_paths = {} } },
-      })
+      apply_sandbox({ enabled = true, backend = "auto", policy = { rw_paths = {} } })
       local bufnr = vim.api.nvim_create_buf(false, true)
       local inner = { "echo", "hello" }
       local result, err = sandbox.wrap_command(inner, bufnr)
@@ -723,9 +696,7 @@ describe("sandbox policy layer", function()
 
     it("wrap_command runs unsandboxed in required mode when no backend available", function()
       sandbox.clear()
-      state.set_config({
-        sandbox = { enabled = true, backend = "required", policy = { rw_paths = {} } },
-      })
+      apply_sandbox({ enabled = true, backend = "required", policy = { rw_paths = {} } })
       local bufnr = vim.api.nvim_create_buf(false, true)
       local inner = { "echo", "hello" }
       local result, err = sandbox.wrap_command(inner, bufnr)
@@ -737,9 +708,7 @@ describe("sandbox policy layer", function()
 
     it("wrap_command errors for explicit backend that is not registered", function()
       sandbox.clear()
-      state.set_config({
-        sandbox = { enabled = true, backend = "nonexistent", policy = { rw_paths = {} } },
-      })
+      apply_sandbox({ enabled = true, backend = "nonexistent", policy = { rw_paths = {} } })
       local bufnr = vim.api.nvim_create_buf(false, true)
       local result, err = sandbox.wrap_command({ "echo" }, bufnr)
       -- Explicit backend: user asked for it, fail if unavailable
@@ -750,9 +719,7 @@ describe("sandbox policy layer", function()
 
     it("late backend registration activates sandbox for auto mode", function()
       sandbox.clear()
-      state.set_config({
-        sandbox = { enabled = true, backend = "auto", policy = { rw_paths = {} } },
-      })
+      apply_sandbox({ enabled = true, backend = "auto", policy = { rw_paths = {} } })
       local bufnr = vim.api.nvim_create_buf(false, true)
 
       -- No backends registered — wrap_command returns inner_cmd unchanged

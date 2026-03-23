@@ -1,5 +1,5 @@
 local registry = require("flemma.provider.registry")
-local config_manager = require("flemma.core.config.manager")
+local normalize = require("flemma.provider.normalize")
 
 describe("provider registration", function()
   -- Save original state and restore after each test
@@ -113,40 +113,6 @@ describe("provider registration", function()
 
     it("returns the default for a registered built-in provider", function()
       assert.are.equal("claude-sonnet-4-6", registry.get_model("anthropic"))
-    end)
-  end)
-
-  describe("get_default_parameters()", function()
-    it("returns registered default parameters", function()
-      local defaults = registry.get_default_parameters("anthropic")
-      assert.is_not_nil(defaults)
-      -- cache_retention is now a global parameter, not a provider default
-      assert.is_nil(defaults.cache_retention)
-    end)
-
-    it("returns registered default parameters for openai", function()
-      local defaults = registry.get_default_parameters("openai")
-      assert.is_not_nil(defaults)
-      -- cache_retention is now a global parameter, not a provider default
-      assert.is_nil(defaults.cache_retention)
-      assert.are.equal("auto", defaults.reasoning_summary)
-    end)
-
-    it("returns custom provider defaults", function()
-      registry.register("custom", {
-        module = "flemma.provider.providers.openai",
-        capabilities = {
-          supports_reasoning = false,
-          supports_thinking_budget = false,
-          outputs_thinking = false,
-        },
-        display_name = "Custom",
-        default_parameters = { api_base = "http://localhost:11434" },
-      })
-
-      local defaults = registry.get_default_parameters("custom")
-      assert.is_not_nil(defaults)
-      assert.are.equal("http://localhost:11434", defaults.api_base)
     end)
   end)
 
@@ -275,76 +241,188 @@ describe("provider registration", function()
   end)
 end)
 
-describe("merge_parameters with registered defaults", function()
-  it("uses registered defaults as fallback", function()
-    local merged = config_manager.merge_parameters({}, "anthropic")
-    -- thinking_budget is a registered default (nil value)
-    assert.is_nil(merged.thinking_budget)
+describe("flatten_parameters with facade", function()
+  local config_facade = require("flemma.config")
+  local schema_definition = require("flemma.config.schema")
+
+  before_each(function()
+    -- Reset facade and registries for clean state
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.provider.registry"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
+    config_facade = require("flemma.config")
+    registry = require("flemma.provider.registry")
+    normalize = require("flemma.provider.normalize")
+
+    config_facade.init(schema_definition)
+    registry.setup()
   end)
 
-  it("general base params override registered defaults", function()
-    local merged = config_manager.merge_parameters({ max_tokens = 8000, cache_retention = "long" }, "anthropic")
-    assert.are.equal(8000, merged.max_tokens)
-    assert.are.equal("long", merged.cache_retention)
+  it("schema defaults provide base parameter values", function()
+    local config = config_facade.materialize()
+    local flat = normalize.flatten_parameters("anthropic", config)
+    -- Schema defaults should be present
+    assert.are.equal("50%", flat.max_tokens)
+    assert.are.equal(0.7, flat.temperature)
+    assert.are.equal(600, flat.timeout)
+    assert.are.equal("short", flat.cache_retention)
   end)
 
-  it("provider-specific overrides take highest priority", function()
-    local merged =
-      config_manager.merge_parameters({ anthropic = { cache_retention = "long", thinking_budget = 4096 } }, "anthropic")
-    assert.are.equal("long", merged.cache_retention)
-    assert.are.equal(4096, merged.thinking_budget)
+  it("general setup params override defaults", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, {
+      parameters = { max_tokens = 8000, cache_retention = "long" },
+    })
+    local config = config_facade.materialize()
+    local flat = normalize.flatten_parameters("anthropic", config)
+    assert.are.equal(8000, flat.max_tokens)
+    assert.are.equal("long", flat.cache_retention)
   end)
 
-  it("explicit provider_overrides argument takes highest priority", function()
-    local merged = config_manager.merge_parameters(
-      { cache_retention = "short", anthropic = { cache_retention = "none" } },
-      "anthropic",
-      { cache_retention = "long" }
-    )
-    assert.are.equal("long", merged.cache_retention)
+  it("provider-specific setup params appear in flattened output", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, {
+      parameters = { anthropic = { thinking_budget = 4096 } },
+    })
+    local config = config_facade.materialize()
+    local flat = normalize.flatten_parameters("anthropic", config)
+    assert.are.equal(4096, flat.thinking_budget)
+  end)
+
+  it("provider-specific values override general values with same key", function()
+    -- The openai schema has reasoning_summary defaulting to "auto"
+    local config = config_facade.materialize()
+    local flat = normalize.flatten_parameters("openai", config)
+    assert.are.equal("auto", flat.reasoning_summary)
   end)
 
   it("cache_retention flows as general parameter to any provider", function()
-    local merged = config_manager.merge_parameters({ cache_retention = "long" }, "openai")
-    assert.are.equal("long", merged.cache_retention)
+    config_facade.apply(config_facade.LAYERS.SETUP, {
+      parameters = { cache_retention = "long" },
+    })
+    local config = config_facade.materialize()
+    local flat = normalize.flatten_parameters("openai", config)
+    assert.are.equal("long", flat.cache_retention)
   end)
 
-  it("includes openai registered defaults when no user params given", function()
-    local merged = config_manager.merge_parameters({}, "openai")
-    assert.are.equal("auto", merged.reasoning_summary)
+  it("runtime layer overrides setup layer", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, {
+      parameters = { cache_retention = "short" },
+    })
+    config_facade.apply(config_facade.LAYERS.RUNTIME, {
+      parameters = { cache_retention = "long" },
+    })
+    local config = config_facade.materialize()
+    local flat = normalize.flatten_parameters("anthropic", config)
+    assert.are.equal("long", flat.cache_retention)
   end)
 
-  it("explicit provider_overrides merges with provider sub-table", function()
-    -- Simulates: user config has vertex.project_id, preset provides only location
-    local merged = config_manager.merge_parameters(
-      { vertex = { project_id = "my-project", location = "us-central1" } },
-      "vertex",
-      { location = "europe-west1" }
-    )
-    -- Explicit override wins for location
-    assert.are.equal("europe-west1", merged.location)
-    -- project_id from sub-table survives (not dropped by the override)
-    assert.are.equal("my-project", merged.project_id)
+  it("vertex provider-specific params from setup survive runtime switch", function()
+    -- Simulates: user config has vertex.project_id, then :Flemma switch vertex location=europe-west1
+    config_facade.apply(config_facade.LAYERS.SETUP, {
+      parameters = { vertex = { project_id = "my-project", location = "us-central1" } },
+    })
+    -- Runtime overrides just location
+    config_facade.apply(config_facade.LAYERS.RUNTIME, {
+      parameters = { vertex = { location = "europe-west1" } },
+    })
+    local config = config_facade.materialize()
+    local flat = normalize.flatten_parameters("vertex", config)
+    assert.are.equal("europe-west1", flat.location)
+    assert.are.equal("my-project", flat.project_id)
   end)
 
-  it("empty explicit overrides preserve provider sub-table", function()
-    -- Simulates: :Flemma switch vertex (no extra params)
-    local merged = config_manager.merge_parameters(
-      { vertex = { project_id = "my-project", location = "us-central1" } },
-      "vertex",
-      {}
-    )
-    assert.are.equal("my-project", merged.project_id)
-    assert.are.equal("us-central1", merged.location)
+  it("runtime provider-specific overrides win over setup on conflict", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, {
+      parameters = { vertex = { project_id = "old-project", location = "us-central1" } },
+    })
+    config_facade.apply(config_facade.LAYERS.RUNTIME, {
+      parameters = { vertex = { project_id = "new-project" } },
+    })
+    local config = config_facade.materialize()
+    local flat = normalize.flatten_parameters("vertex", config)
+    assert.are.equal("new-project", flat.project_id)
+    assert.are.equal("us-central1", flat.location)
   end)
 
-  it("explicit overrides win over sub-table on conflict", function()
-    local merged = config_manager.merge_parameters(
-      { vertex = { project_id = "old-project", location = "us-central1" } },
-      "vertex",
-      { project_id = "new-project" }
-    )
-    assert.are.equal("new-project", merged.project_id)
-    assert.are.equal("us-central1", merged.location)
+  it("model is included from top-level config", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, { model = "claude-sonnet-4-5" })
+    local config = config_facade.materialize()
+    local flat = normalize.flatten_parameters("anthropic", config)
+    assert.are.equal("claude-sonnet-4-5", flat.model)
+  end)
+end)
+
+describe("resolve_preset", function()
+  local config_facade = require("flemma.config")
+  local schema_definition = require("flemma.config.schema")
+
+  before_each(function()
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.provider.registry"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
+    package.loaded["flemma.presets"] = nil
+    config_facade = require("flemma.config")
+    registry = require("flemma.provider.registry")
+    normalize = require("flemma.provider.normalize")
+
+    config_facade.init(schema_definition)
+    registry.setup()
+  end)
+
+  it("returns config unchanged when model is not a preset reference", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, { model = "claude-sonnet-4-5" })
+    local config = config_facade.materialize()
+    local resolved = normalize.resolve_preset(config)
+    assert.equals("claude-sonnet-4-5", resolved.model)
+    assert.equals("anthropic", resolved.provider)
+  end)
+
+  it("returns config unchanged when model is nil", function()
+    local config = config_facade.materialize()
+    local resolved = normalize.resolve_preset(config)
+    assert.is_nil(resolved.model)
+  end)
+
+  it("resolves preset reference to concrete provider and model", function()
+    local presets_mod = require("flemma.presets")
+    presets_mod.refresh({
+      ["$haiku"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514" },
+    })
+    config_facade.apply(config_facade.LAYERS.SETUP, { model = "$haiku" })
+    local config = config_facade.materialize()
+    local resolved = normalize.resolve_preset(config)
+    assert.equals("anthropic", resolved.provider)
+    assert.equals("claude-haiku-4-5-20250514", resolved.model)
+  end)
+
+  it("merges preset parameters into config", function()
+    local presets_mod = require("flemma.presets")
+    presets_mod.refresh({
+      ["$fast"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514", thinking = "low" },
+    })
+    config_facade.apply(config_facade.LAYERS.SETUP, { model = "$fast" })
+    local config = config_facade.materialize()
+    local resolved = normalize.resolve_preset(config)
+    assert.equals("claude-haiku-4-5-20250514", resolved.model)
+    assert.equals("low", resolved.parameters.thinking)
+  end)
+
+  it("does not mutate the original config table", function()
+    local presets_mod = require("flemma.presets")
+    presets_mod.refresh({
+      ["$haiku"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514" },
+    })
+    config_facade.apply(config_facade.LAYERS.SETUP, { model = "$haiku" })
+    local config = config_facade.materialize()
+    normalize.resolve_preset(config)
+    assert.equals("$haiku", config.model)
+  end)
+
+  it("returns config unchanged when preset is not found", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, { model = "$nonexistent" })
+    local config = config_facade.materialize()
+    local resolved = normalize.resolve_preset(config)
+    assert.equals("$nonexistent", resolved.model)
   end)
 end)

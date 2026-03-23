@@ -384,7 +384,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.is_not_nil(req.generationConfig.thinkingConfig)
@@ -403,7 +403,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.is_not_nil(req.generationConfig.thinkingConfig)
@@ -422,7 +422,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.equals("LOW", req.generationConfig.thinkingConfig.thinkingLevel)
@@ -438,7 +438,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.equals("MEDIUM", req.generationConfig.thinkingConfig.thinkingLevel)
@@ -454,7 +454,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.equals("HIGH", req.generationConfig.thinkingConfig.thinkingLevel)
@@ -470,7 +470,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.equals("LOW", req.generationConfig.thinkingConfig.thinkingLevel)
@@ -486,7 +486,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.equals("MINIMAL", req.generationConfig.thinkingConfig.thinkingLevel)
@@ -502,7 +502,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.equals("HIGH", req.generationConfig.thinkingConfig.thinkingLevel)
@@ -518,7 +518,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.equals("LOW", req.generationConfig.thinkingConfig.thinkingLevel)
@@ -534,7 +534,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.equals(4096, req.generationConfig.thinkingConfig.thinkingBudget)
@@ -552,7 +552,7 @@ describe("Vertex AI Provider", function()
       })
 
       local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"))
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local req = provider:build_request(prompt, {})
 
       assert.is_not_nil(
@@ -610,60 +610,6 @@ describe("Vertex AI Provider", function()
       })
       assert.is_false(provider:is_auth_error(nil))
       assert.is_false(provider:is_auth_error(123 --[[@as any]]))
-    end)
-  end)
-
-  describe("reset with opts", function()
-    it("should invalidate all secrets when opts.invalidate_all_secrets is true", function()
-      local secrets_cache = require("flemma.secrets.cache")
-      local provider = vertex.new({
-        model = "gemini-2.5-pro",
-        project_id = "test-project",
-        location = "us-central1",
-      })
-
-      -- Seed a cache entry so we can verify it gets cleared
-      secrets_cache.set(
-        "access_token:vertex",
-        { value = "ya29.fake-token" },
-        { kind = "access_token", service = "vertex" }
-      )
-
-      provider:reset({ invalidate_all_secrets = true })
-
-      assert.is_nil(secrets_cache.get("access_token:vertex"))
-    end)
-
-    it("should NOT reset the response buffer when opts.invalidate_all_secrets is true", function()
-      local provider = vertex.new({
-        model = "gemini-2.5-pro",
-        project_id = "test-project",
-        location = "us-central1",
-      })
-
-      -- Record what the response buffer looks like after construction
-      local original_buffer = provider._response_buffer
-      assert.is_not_nil(original_buffer)
-
-      -- Secrets reset should preserve the response buffer
-      provider:reset({ invalidate_all_secrets = true })
-      assert.equals(original_buffer, provider._response_buffer)
-    end)
-
-    it("should perform full reset when no opts are passed", function()
-      local provider = vertex.new({
-        model = "gemini-2.5-pro",
-        project_id = "test-project",
-        location = "us-central1",
-      })
-
-      local original_buffer = provider._response_buffer
-
-      -- Full reset creates a new response buffer
-      provider:reset()
-      assert.is_not.equals(original_buffer, provider._response_buffer)
-      assert.is_not_nil(provider._response_buffer.extra.thinking_sink)
-      assert.equals("", provider._response_buffer.extra.thinking_sink:read())
     end)
   end)
 

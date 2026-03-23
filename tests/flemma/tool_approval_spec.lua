@@ -12,13 +12,18 @@ package.loaded["flemma.state"] = nil
 package.loaded["flemma.parser"] = nil
 package.loaded["flemma.sandbox"] = nil
 package.loaded["flemma.sandbox.backends.bwrap"] = nil
+package.loaded["flemma.config"] = nil
+package.loaded["flemma.config.store"] = nil
+package.loaded["flemma.config.proxy"] = nil
+package.loaded["flemma.config.schema"] = nil
 
 local approval = require("flemma.tools.approval")
+local config_facade = require("flemma.config")
 local context = require("flemma.tools.context")
 local injector = require("flemma.tools.injector")
-local state = require("flemma.state")
 local parser = require("flemma.parser")
 local processor = require("flemma.processor")
+local schema = require("flemma.config.schema")
 
 --- Helper: get pending non-error tool blocks awaiting execution
 ---@param bufnr integer
@@ -51,20 +56,26 @@ local function get_lines(bufnr)
   return vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 end
 
---- Helper: set config, clear resolvers, and run setup to register built-in resolvers.
---- Mirrors the real plugin flow: config is set, then approval.setup() converts it.
---- @param config table
-local function set_config_and_setup(config)
-  state.set_config(config)
+--- Helper: init config facade, apply setup opts, finalize (coerce),
+--- then clear + setup approval resolvers.
+--- @param opts table
+local function set_config_and_setup(opts)
+  config_facade.init(schema)
+  if opts and next(opts) then
+    config_facade.apply(config_facade.LAYERS.SETUP, opts)
+  end
+  require("flemma.tools.presets").setup(nil)
+  config_facade.finalize(config_facade.LAYERS.SETUP)
   approval.clear()
   approval.setup()
 end
 
---- Helper: evaluate frontmatter and return frontmatter opts for a buffer.
+--- Helper: evaluate frontmatter for a buffer (writes to config store).
+--- After calling this, the config store's L40 layer has the frontmatter ops.
 --- @param bufnr integer
---- @return flemma.opt.FrontmatterOpts|nil
-local function evaluate_opts(bufnr)
-  return processor.evaluate_buffer_frontmatter(bufnr).context:get_opts()
+local function evaluate_frontmatter(bufnr)
+  processor.evaluate_buffer_frontmatter(bufnr)
+  config_facade.finalize(config_facade.LAYERS.FRONTMATTER, nil, bufnr)
 end
 
 -- ============================================================================
@@ -388,7 +399,6 @@ end)
 describe("Approval Setup", function()
   after_each(function()
     approval.clear()
-    state.set_config({})
   end)
 
   describe("with string list auto_approve", function()
@@ -638,7 +648,6 @@ end)
 describe("Approval Third-Party Composition", function()
   after_each(function()
     approval.clear()
-    state.set_config({})
   end)
 
   it("external resolver at high priority overrides built-in config", function()
@@ -1168,17 +1177,16 @@ describe("Approval Placeholder Injection", function()
 end)
 
 -- ============================================================================
--- Frontmatter Approval Resolver Tests
+-- Frontmatter Approval Tests (unified resolver reads from config store)
 -- ============================================================================
 
-describe("Frontmatter Approval Resolver", function()
+describe("Frontmatter Approval", function()
   before_each(function()
     require("flemma.tools").register("extras.flemma.tools.calculator")
   end)
 
   after_each(function()
     approval.clear()
-    state.set_config({})
     vim.cmd("silent! %bdelete!")
   end)
 
@@ -1193,10 +1201,10 @@ describe("Frontmatter Approval Resolver", function()
         "@You:",
         "test",
       })
-      local opts = evaluate_opts(bufnr)
+      evaluate_frontmatter(bufnr)
 
-      assert.equals("approve", approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
-      assert.equals("approve", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t2", opts = opts }))
+      assert.equals("approve", approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1" }))
+      assert.equals("approve", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t2" }))
     end)
 
     it("passes on unlisted tools", function()
@@ -1209,9 +1217,9 @@ describe("Frontmatter Approval Resolver", function()
         "@You:",
         "test",
       })
-      local opts = evaluate_opts(bufnr)
+      evaluate_frontmatter(bufnr)
 
-      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" }))
     end)
 
     it("empty list passes on everything", function()
@@ -1224,12 +1232,9 @@ describe("Frontmatter Approval Resolver", function()
         "@You:",
         "test",
       })
-      local opts = evaluate_opts(bufnr)
+      evaluate_frontmatter(bufnr)
 
-      assert.equals(
-        "require_approval",
-        approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1", opts = opts })
-      )
+      assert.equals("require_approval", approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1" }))
     end)
   end)
 
@@ -1248,11 +1253,11 @@ describe("Frontmatter Approval Resolver", function()
         "@You:",
         "test",
       })
-      local opts = evaluate_opts(bufnr)
+      evaluate_frontmatter(bufnr)
 
-      assert.equals("approve", approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
-      assert.equals("deny", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t2", opts = opts }))
-      assert.equals("require_approval", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t3", opts = opts }))
+      assert.equals("approve", approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1" }))
+      assert.equals("deny", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t2" }))
+      assert.equals("require_approval", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t3" }))
     end)
 
     it("maps nil return to pass-through", function()
@@ -1265,9 +1270,9 @@ describe("Frontmatter Approval Resolver", function()
         "@You:",
         "test",
       })
-      local opts = evaluate_opts(bufnr)
+      evaluate_frontmatter(bufnr)
 
-      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" }))
     end)
 
     it("skips on error and continues chain", function()
@@ -1280,9 +1285,9 @@ describe("Frontmatter Approval Resolver", function()
         "@You:",
         "test",
       })
-      local opts = evaluate_opts(bufnr)
+      evaluate_frontmatter(bufnr)
 
-      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" }))
     end)
   end)
 
@@ -1294,9 +1299,9 @@ describe("Frontmatter Approval Resolver", function()
         "@You:",
         "test",
       })
-      local opts = evaluate_opts(bufnr)
+      evaluate_frontmatter(bufnr)
 
-      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" }))
     end)
 
     it("passes when frontmatter does not set auto_approve", function()
@@ -1309,30 +1314,26 @@ describe("Frontmatter Approval Resolver", function()
         "@You:",
         "test",
       })
-      local opts = evaluate_opts(bufnr)
+      evaluate_frontmatter(bufnr)
 
-      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" }))
     end)
   end)
 
-  describe("priority ordering", function()
-    it("frontmatter resolver is at priority 90", function()
+  describe("layer priority", function()
+    it("unified config resolver is at priority 100", function()
       set_config_and_setup({})
 
-      local entry = approval.get("urn:flemma:approval:frontmatter")
+      local entry = approval.get("urn:flemma:approval:config")
       assert.is_not_nil(entry)
-      assert.equals(90, entry.priority)
+      assert.equals(100, entry.priority)
     end)
 
-    it("config defers to frontmatter when frontmatter sets auto_approve", function()
+    it("frontmatter overrides setup when it sets auto_approve (layer priority)", function()
+      -- Setup has a function that denies calculator
       set_config_and_setup({
         tools = {
-          auto_approve = function(tool_name)
-            if tool_name == "calculator" then
-              return "deny"
-            end
-            return nil
-          end,
+          auto_approve = { "bash" },
         },
       })
 
@@ -1343,13 +1344,15 @@ describe("Frontmatter Approval Resolver", function()
         "@You:",
         "test",
       })
-      local opts = evaluate_opts(bufnr)
+      evaluate_frontmatter(bufnr)
 
-      -- Config defers when frontmatter sets auto_approve; frontmatter approves calculator
-      assert.equals("approve", approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+      -- Frontmatter L40 set overrides setup L20 — only calculator approved
+      assert.equals("approve", approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1" }))
+      -- bash was in setup but frontmatter set replaces the entire list
+      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t2" }))
     end)
 
-    it("config applies when no frontmatter auto_approve is set", function()
+    it("setup applies when no frontmatter auto_approve is set", function()
       set_config_and_setup({
         tools = {
           auto_approve = function(tool_name)
@@ -1361,20 +1364,15 @@ describe("Frontmatter Approval Resolver", function()
         },
       })
 
-      -- No frontmatter auto_approve, so config resolver runs normally
+      -- No frontmatter — config resolver reads setup-level function
       assert.equals("approve", approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" }))
       assert.equals("require_approval", approval.resolve("calculator", {}, { bufnr = 1, tool_id = "t2" }))
     end)
 
-    it("frontmatter fully controls approval when it sets auto_approve", function()
+    it("frontmatter set fully replaces setup auto_approve list", function()
       set_config_and_setup({
         tools = {
-          auto_approve = function(tool_name)
-            if tool_name == "bash" then
-              return true
-            end
-            return nil
-          end,
+          auto_approve = { "bash", "read" },
         },
       })
 
@@ -1385,24 +1383,16 @@ describe("Frontmatter Approval Resolver", function()
         "@You:",
         "test",
       })
-      local opts = evaluate_opts(bufnr)
+      evaluate_frontmatter(bufnr)
 
-      -- Frontmatter approves calculator
-      assert.equals("approve", approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
-      -- Config function defers for bash (frontmatter doesn't list bash), falls through to require_approval
-      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t2", opts = opts }))
+      -- Frontmatter set replaces entire list — only calculator
+      assert.equals("approve", approval.resolve("calculator", {}, { bufnr = bufnr, tool_id = "t1" }))
+      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t2" }))
+      assert.equals("require_approval", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t3" }))
     end)
   end)
 
   describe("frontmatter with presets", function()
-    before_each(function()
-      require("flemma.tools.presets").setup(nil)
-    end)
-
-    after_each(function()
-      require("flemma.tools.presets").clear()
-    end)
-
     it("frontmatter can set auto_approve to a preset", function()
       set_config_and_setup({ tools = { auto_approve = { "$default" } } })
 
@@ -1413,11 +1403,11 @@ describe("Frontmatter Approval Resolver", function()
         "@You:",
         "test",
       })
-      local opts = evaluate_opts(bufnr)
+      evaluate_frontmatter(bufnr)
 
-      -- Frontmatter overrides config; only $readonly active
-      assert.equals("approve", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
-      assert.equals("require_approval", approval.resolve("write", {}, { bufnr = bufnr, tool_id = "t2", opts = opts }))
+      -- Frontmatter set replaces config; only $readonly tools active
+      assert.equals("approve", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t1" }))
+      assert.equals("require_approval", approval.resolve("write", {}, { bufnr = bufnr, tool_id = "t2" }))
     end)
 
     it("frontmatter can remove $default to disable auto-approval", function()
@@ -1431,9 +1421,9 @@ describe("Frontmatter Approval Resolver", function()
         "@You:",
         "test",
       })
-      local opts = evaluate_opts(bufnr)
+      evaluate_frontmatter(bufnr)
 
-      assert.equals("require_approval", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+      assert.equals("require_approval", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t1" }))
     end)
 
     it("frontmatter can exclude a tool from a preset", function()
@@ -1447,11 +1437,11 @@ describe("Frontmatter Approval Resolver", function()
         "@You:",
         "test",
       })
-      local opts = evaluate_opts(bufnr)
+      evaluate_frontmatter(bufnr)
 
-      assert.equals("approve", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
-      assert.equals("require_approval", approval.resolve("write", {}, { bufnr = bufnr, tool_id = "t2", opts = opts }))
-      assert.equals("approve", approval.resolve("edit", {}, { bufnr = bufnr, tool_id = "t3", opts = opts }))
+      assert.equals("approve", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t1" }))
+      assert.equals("require_approval", approval.resolve("write", {}, { bufnr = bufnr, tool_id = "t2" }))
+      assert.equals("approve", approval.resolve("edit", {}, { bufnr = bufnr, tool_id = "t3" }))
     end)
 
     it("frontmatter can add bash on top of default", function()
@@ -1465,10 +1455,10 @@ describe("Frontmatter Approval Resolver", function()
         "@You:",
         "test",
       })
-      local opts = evaluate_opts(bufnr)
+      evaluate_frontmatter(bufnr)
 
-      assert.equals("approve", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
-      assert.equals("approve", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t2", opts = opts }))
+      assert.equals("approve", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t1" }))
+      assert.equals("approve", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t2" }))
     end)
   end)
 end)
@@ -1710,7 +1700,7 @@ describe("Pipeline flemma:tool exclusion", function()
     local doc = parser.parse_lines(lines)
     local pipeline = require("flemma.pipeline")
     local ctx = require("flemma.context")
-    local prompt = pipeline.run(doc, ctx.from_file("test.chat"))
+    local prompt = pipeline.run(doc, ctx.from_file("test.chat"), { bufnr = 0 })
 
     -- The tool should still be in pending_tool_calls because flemma:tool is a placeholder
     assert.equals(1, #prompt.pending_tool_calls)
@@ -1737,7 +1727,7 @@ describe("Pipeline flemma:tool exclusion", function()
     local doc = parser.parse_lines(lines)
     local pipeline = require("flemma.pipeline")
     local ctx = require("flemma.context")
-    local prompt = pipeline.run(doc, ctx.from_file("test.chat"))
+    local prompt = pipeline.run(doc, ctx.from_file("test.chat"), { bufnr = 0 })
 
     assert.equals(0, #prompt.pending_tool_calls)
   end)
@@ -2519,8 +2509,6 @@ describe("advance_phase2 current_request guard", function()
 
   after_each(function()
     vim.cmd("silent! %bdelete!")
-    local st = require("flemma.state")
-    st.set_config({})
   end)
 
   -- NOTE: Race condition simulation test
@@ -2534,10 +2522,14 @@ describe("advance_phase2 current_request guard", function()
   it("does not execute approved tools when current_request is set", function()
     -- Clear core module so it picks up the same state module as the test
     package.loaded["flemma.core"] = nil
-    package.loaded["flemma.core.config.manager"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
 
     local st = require("flemma.state")
-    st.set_config({ tools = { autopilot = { enabled = false } } })
+
+    -- Initialize config facade for approval.setup() and sandbox reads
+    config_facade.init(schema)
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = false } } })
+    config_facade.finalize(config_facade.LAYERS.SETUP)
 
     local bufnr = create_buffer({
       "@Assistant:",
@@ -2584,13 +2576,8 @@ end)
 -- ============================================================================
 
 describe("Approval Preset Expansion", function()
-  before_each(function()
-    require("flemma.tools.presets").setup(nil)
-  end)
-
   after_each(function()
     approval.clear()
-    state.set_config({})
     require("flemma.tools.presets").clear()
   end)
 
@@ -2609,8 +2596,13 @@ describe("Approval Preset Expansion", function()
   end)
 
   it("unions multiple presets", function()
+    -- Register custom presets before facade init (presets.setup is called inside set_config_and_setup)
+    config_facade.init(schema)
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { auto_approve = { "$default", "$extra" } } })
     require("flemma.tools.presets").setup({ ["$extra"] = { approve = { "bash" } } })
-    set_config_and_setup({ tools = { auto_approve = { "$default", "$extra" } } })
+    config_facade.finalize(config_facade.LAYERS.SETUP)
+    approval.clear()
+    approval.setup()
     assert.equals("approve", approval.resolve("read", {}, { bufnr = 1, tool_id = "t1" }))
     assert.equals("approve", approval.resolve("bash", {}, { bufnr = 1, tool_id = "t2" }))
   end)
@@ -2622,33 +2614,24 @@ describe("Approval Preset Expansion", function()
     assert.equals("require_approval", approval.resolve("write", {}, { bufnr = 1, tool_id = "t3" }))
   end)
 
-  it("deny in preset overrides approve from other preset", function()
-    require("flemma.tools.presets").setup({
-      ["$no-bash"] = { deny = { "bash" } },
-      ["$yolo"] = { approve = { "bash" } },
-    })
-    set_config_and_setup({ tools = { auto_approve = { "$yolo", "$no-bash" } } })
-    assert.equals("deny", approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" }))
-  end)
-
   it("unknown preset name is silently ignored", function()
     set_config_and_setup({ tools = { auto_approve = { "$nonexistent", "read" } } })
     assert.equals("approve", approval.resolve("read", {}, { bufnr = 1, tool_id = "t1" }))
     assert.equals("require_approval", approval.resolve("write", {}, { bufnr = 1, tool_id = "t2" }))
   end)
 
-  it("applies exclusions from context", function()
+  it("frontmatter remove excludes a tool from the resolved list", function()
     set_config_and_setup({ tools = { auto_approve = { "$default" } } })
-    local ctx = {
-      bufnr = 1,
-      tool_id = "t1",
-      opts = {
-        auto_approve = { "$default" },
-        auto_approve_exclusions = { read = true },
-      },
-    }
-    assert.equals("approve", approval.resolve("write", {}, ctx))
-    assert.equals("require_approval", approval.resolve("read", {}, ctx))
+    local bufnr = create_buffer({
+      "```lua",
+      'flemma.opt.tools.auto_approve:remove("read")',
+      "```",
+      "@You:",
+      "test",
+    })
+    evaluate_frontmatter(bufnr)
+    assert.equals("approve", approval.resolve("write", {}, { bufnr = bufnr, tool_id = "t1" }))
+    assert.equals("require_approval", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t2" }))
   end)
 end)
 
@@ -2656,33 +2639,43 @@ end)
 -- Config Resolver Defers to Frontmatter Tests
 -- ============================================================================
 
-describe("Config resolver defers to frontmatter", function()
-  before_each(function()
-    require("flemma.tools.presets").setup(nil)
-  end)
-
+describe("Config resolver layer merging", function()
   after_each(function()
     approval.clear()
-    state.set_config({})
     require("flemma.tools.presets").clear()
+    vim.cmd("silent! %bdelete!")
   end)
 
-  it("config resolver returns nil when frontmatter sets auto_approve", function()
+  it("frontmatter set overrides setup auto_approve", function()
     set_config_and_setup({ tools = { auto_approve = { "$default" } } })
+    -- Without frontmatter, setup $default applies
     assert.equals("approve", approval.resolve("read", {}, { bufnr = 1, tool_id = "t1" }))
-    local ctx = { bufnr = 1, tool_id = "t1", opts = { auto_approve = { "$readonly" } } }
-    assert.equals("approve", approval.resolve("read", {}, ctx))
-    assert.equals(
-      "require_approval",
-      approval.resolve("write", {}, { bufnr = 1, tool_id = "t2", opts = { auto_approve = { "$readonly" } } })
-    )
+
+    -- With frontmatter set to $readonly, layer 40 overrides layer 20
+    local bufnr = create_buffer({
+      "```lua",
+      'flemma.opt.tools.auto_approve = { "$readonly" }',
+      "```",
+      "@You:",
+      "test",
+    })
+    evaluate_frontmatter(bufnr)
+    assert.equals("approve", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t2" }))
+    assert.equals("require_approval", approval.resolve("write", {}, { bufnr = bufnr, tool_id = "t3" }))
   end)
 
-  it("frontmatter can remove $default to disable all auto-approval", function()
+  it("frontmatter empty set disables all auto-approval", function()
     set_config_and_setup({ tools = { auto_approve = { "$default" } } })
-    local ctx = { bufnr = 1, tool_id = "t1", opts = { auto_approve = {} } }
-    assert.equals("require_approval", approval.resolve("read", {}, ctx))
-    assert.equals("require_approval", approval.resolve("write", {}, ctx))
+    local bufnr = create_buffer({
+      "```lua",
+      "flemma.opt.tools.auto_approve = {}",
+      "```",
+      "@You:",
+      "test",
+    })
+    evaluate_frontmatter(bufnr)
+    assert.equals("require_approval", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t1" }))
+    assert.equals("require_approval", approval.resolve("write", {}, { bufnr = bufnr, tool_id = "t2" }))
   end)
 end)
 
@@ -2691,12 +2684,12 @@ end)
 -- ============================================================================
 
 describe("Sandbox auto-approval resolver", function()
-  local sandbox
+  local sandbox_module
   local registry = require("flemma.tools.registry")
 
   --- Register a mock sandbox backend that always reports as available.
   local function register_mock_backend()
-    sandbox.register("mock", {
+    sandbox_module.register("mock", {
       available = function()
         return true, nil
       end,
@@ -2707,19 +2700,21 @@ describe("Sandbox auto-approval resolver", function()
     })
   end
 
-  --- Set config with sandbox enabled and a mock backend, then run approval.setup().
+  --- Init facade + apply config with sandbox enabled, then setup approval.
   ---@param overrides? table Overrides merged into the default config
   local function setup_with_sandbox(overrides)
-    local config = vim.tbl_deep_extend("force", {
+    local opts = vim.tbl_deep_extend("force", {
       tools = { auto_approve = { "$default" }, auto_approve_sandboxed = true },
       sandbox = {
         enabled = true,
         backend = "auto",
       },
     }, overrides or {})
-    state.set_config(config)
-    approval.clear()
+    config_facade.init(schema)
+    config_facade.apply(config_facade.LAYERS.SETUP, opts)
     require("flemma.tools.presets").setup(nil)
+    config_facade.finalize(config_facade.LAYERS.SETUP)
+    approval.clear()
     approval.setup()
   end
 
@@ -2727,19 +2722,19 @@ describe("Sandbox auto-approval resolver", function()
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
     package.loaded["flemma.tools.approval"] = nil
-    sandbox = require("flemma.sandbox")
+    sandbox_module = require("flemma.sandbox")
     approval = require("flemma.tools.approval")
-    sandbox.clear()
-    sandbox.reset_enabled()
+    sandbox_module.clear()
+    sandbox_module.reset_enabled()
     register_mock_backend()
   end)
 
   after_each(function()
     approval.clear()
-    state.set_config({})
-    sandbox.clear()
-    sandbox.reset_enabled()
+    sandbox_module.clear()
+    sandbox_module.reset_enabled()
     require("flemma.tools.presets").clear()
+    vim.cmd("silent! %bdelete!")
   end)
 
   it("auto-approves bash when sandbox is enabled with an available backend", function()
@@ -2756,7 +2751,6 @@ describe("Sandbox auto-approval resolver", function()
   end)
 
   it("auto-approves custom tool that declares can_auto_approve_if_sandboxed", function()
-    -- Register a custom tool with the sandbox capability
     registry.register("my_sandboxed_tool", {
       name = "my_sandboxed_tool",
       description = "A custom sandboxed tool",
@@ -2787,7 +2781,7 @@ describe("Sandbox auto-approval resolver", function()
   end)
 
   it("requires approval for bash when no backend is available", function()
-    sandbox.clear() -- remove the mock backend
+    sandbox_module.clear() -- remove the mock backend
     setup_with_sandbox()
     local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
     assert.equals("require_approval", result)
@@ -2799,44 +2793,46 @@ describe("Sandbox auto-approval resolver", function()
     assert.equals("require_approval", result)
   end)
 
-  it("requires approval when tools.auto_approve is not configured", function()
-    setup_with_sandbox()
-    -- Override: clear and re-setup with no auto_approve
-    state.set_config({
-      tools = { auto_approve_sandboxed = true },
-      sandbox = { enabled = true, backend = "auto" },
-    })
-    approval.clear()
-    approval.setup()
+  it("approves bash when auto_approve has schema default", function()
+    -- In the new system, auto_approve always has a schema default ({ "$default" }).
+    -- The sandbox resolver sees a non-nil auto_approve and proceeds normally.
+    setup_with_sandbox({ tools = { auto_approve_sandboxed = true } })
     local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
-    assert.equals("require_approval", result)
+    assert.equals("approve", result)
   end)
 
-  it("respects frontmatter exclusions for bash", function()
+  it("respects frontmatter remove for bash", function()
     setup_with_sandbox()
-    local ctx = {
-      bufnr = 1,
-      tool_id = "t1",
-      opts = { auto_approve_exclusions = { bash = true } },
-    }
-    local result = approval.resolve("bash", {}, ctx)
+    local bufnr = create_buffer({
+      "```lua",
+      'flemma.opt.tools.auto_approve:remove("bash")',
+      "```",
+      "@You:",
+      "test",
+    })
+    evaluate_frontmatter(bufnr)
+    -- Sandbox resolver sees the frontmatter remove op and defers
+    local result = approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" })
     assert.equals("require_approval", result)
   end)
 
   it("respects frontmatter sandbox.enabled = false", function()
     setup_with_sandbox()
-    local ctx = {
-      bufnr = 1,
-      tool_id = "t1",
-      opts = { sandbox = { enabled = false } },
-    }
-    local result = approval.resolve("bash", {}, ctx)
+    local bufnr = create_buffer({
+      "```lua",
+      "flemma.opt.sandbox.enabled = false",
+      "```",
+      "@You:",
+      "test",
+    })
+    evaluate_frontmatter(bufnr)
+    local result = approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" })
     assert.equals("require_approval", result)
   end)
 
   it("respects runtime sandbox override disabling sandbox", function()
     setup_with_sandbox()
-    sandbox.set_enabled(false)
+    sandbox_module.set_enabled(false)
     local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
     assert.equals("require_approval", result)
   end)
@@ -2849,21 +2845,6 @@ describe("Sandbox auto-approval resolver", function()
     })
     local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
     assert.equals("approve", result)
-  end)
-
-  it("config preset deny overrides sandbox resolver", function()
-    setup_with_sandbox({
-      tools = {
-        auto_approve = { "$default", "$deny-bash" },
-        presets = { ["$deny-bash"] = { deny = { "bash" } } },
-      },
-    })
-    require("flemma.tools.presets").setup({ ["$deny-bash"] = { deny = { "bash" } } })
-    -- Re-run setup to pick up new presets
-    approval.clear()
-    approval.setup()
-    local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
-    assert.equals("deny", result)
   end)
 
   it("still auto-approves $default tools (read, write, edit) regardless of sandbox", function()
@@ -2882,7 +2863,6 @@ describe("Sandbox auto-approval resolver", function()
 
   it("community resolver at default priority wins over sandbox resolver", function()
     setup_with_sandbox()
-    -- Register a community resolver that requires approval for bash
     approval.register("community-bash-guard", {
       resolve = function(tool_name)
         if tool_name == "bash" then
@@ -2890,7 +2870,6 @@ describe("Sandbox auto-approval resolver", function()
         end
         return nil
       end,
-      -- No priority specified → DEFAULT_PRIORITY (50), above sandbox (25)
     })
     local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
     assert.equals("require_approval", result)
@@ -2898,8 +2877,7 @@ describe("Sandbox auto-approval resolver", function()
 
   it("frontmatter table assignment blocks sandbox for unlisted tools", function()
     setup_with_sandbox()
-    -- Assignment `= {}` populates exclusions for the entire universe.
-    -- The sandbox resolver sees bash in exclusions and defers.
+    -- Assignment `= {}` is a set op — sandbox resolver sees layer_has_set and defers
     local bufnr = create_buffer({
       "```lua",
       "flemma.opt.tools.auto_approve = {}",
@@ -2907,14 +2885,13 @@ describe("Sandbox auto-approval resolver", function()
       "@You:",
       "test",
     })
-    local opts = evaluate_opts(bufnr)
-    assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+    evaluate_frontmatter(bufnr)
+    assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" }))
   end)
 
   it("frontmatter table assignment with preset blocks sandbox for tools outside preset", function()
     setup_with_sandbox()
-    -- Assignment `= { "$default" }` excludes everything not literally "$default".
-    -- bash is not "$default", so it lands in exclusions and sandbox skips it.
+    -- Assignment is a set op — sandbox defers. Config resolver reads the merged list.
     local bufnr = create_buffer({
       "```lua",
       'flemma.opt.tools.auto_approve = { "$default" }',
@@ -2922,15 +2899,17 @@ describe("Sandbox auto-approval resolver", function()
       "@You:",
       "test",
     })
-    local opts = evaluate_opts(bufnr)
-    assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
-    -- $default tools are still approved by the frontmatter resolver
-    assert.equals("approve", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t2", opts = opts }))
+    evaluate_frontmatter(bufnr)
+    -- sandbox defers (layer_has_set), but config resolver reads the resolved list
+    -- which has $default expanded to tool names — bash is not in $default
+    assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" }))
+    -- $default tools are still approved by the unified config resolver
+    assert.equals("approve", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t2" }))
   end)
 
   it("frontmatter table assignment that explicitly includes bash still approves it", function()
     setup_with_sandbox()
-    -- bash is in the assigned list → not excluded → frontmatter resolver approves it
+    -- bash is in the assigned list — config resolver finds it in the resolved list
     local bufnr = create_buffer({
       "```lua",
       'flemma.opt.tools.auto_approve = { "$default", "bash" }',
@@ -2938,28 +2917,31 @@ describe("Sandbox auto-approval resolver", function()
       "@You:",
       "test",
     })
-    local opts = evaluate_opts(bufnr)
-    assert.equals("approve", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+    evaluate_frontmatter(bufnr)
+    assert.equals("approve", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" }))
   end)
 
-  it("frontmatter function policy returning nil still allows sandbox fallthrough", function()
+  it("frontmatter function assignment blocks sandbox (function controls approval)", function()
     setup_with_sandbox()
-    -- Function returning nil means "no opinion" — sandbox should still work
-    local ctx = {
-      bufnr = 1,
-      tool_id = "t1",
-      opts = {
-        auto_approve = function()
-          return nil
-        end,
-      },
-    }
-    assert.equals("approve", approval.resolve("bash", {}, ctx))
+    -- Frontmatter set op for auto_approve triggers layer_has_set — the sandbox
+    -- resolver defers even though the function returns nil. This is a behavioral
+    -- change from the old two-resolver system where only list assignments blocked
+    -- sandbox. The function's nil means "no opinion" but the set op means "I'm
+    -- taking control of approval for this buffer."
+    local bufnr = create_buffer({
+      "```lua",
+      "flemma.opt.tools.auto_approve = function() return nil end",
+      "```",
+      "@You:",
+      "test",
+    })
+    evaluate_frontmatter(bufnr)
+    assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" }))
   end)
 
   it("frontmatter mutation (append) does not block sandbox for unlisted tools", function()
     setup_with_sandbox()
-    -- :append seeded from config — no exclusions populated, sandbox still works
+    -- :append is not a set op — sandbox resolver doesn't see layer_has_set, still works
     local bufnr = create_buffer({
       "```lua",
       'flemma.opt.tools.auto_approve:append("calculator")',
@@ -2967,7 +2949,7 @@ describe("Sandbox auto-approval resolver", function()
       "@You:",
       "test",
     })
-    local opts = evaluate_opts(bufnr)
-    assert.equals("approve", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1", opts = opts }))
+    evaluate_frontmatter(bufnr)
+    assert.equals("approve", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" }))
   end)
 end)

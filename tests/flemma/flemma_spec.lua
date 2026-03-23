@@ -1,4 +1,4 @@
-local state = require("flemma.state")
+local config_facade = require("flemma.config")
 
 describe("flemma.setup with preset model", function()
   local notifications = {}
@@ -15,7 +15,6 @@ describe("flemma.setup with preset model", function()
 
   after_each(function()
     vim.notify = original_notify
-    state.set_provider(nil)
   end)
 
   it("resolves preset as default provider and model", function()
@@ -27,13 +26,14 @@ describe("flemma.setup with preset model", function()
       },
     })
 
-    local config = state.get_config()
+    local config = config_facade.materialize()
     assert.are.equal("openai", config.provider)
     assert.are.equal("gpt-4o", config.model)
   end)
 
   it("preset parameters merge with config parameters", function()
     local flemma = require("flemma")
+    local normalize = require("flemma.provider.normalize")
     flemma.setup({
       model = "$test",
       parameters = {
@@ -44,10 +44,12 @@ describe("flemma.setup with preset model", function()
       },
     })
 
-    local provider = state.get_provider()
-    assert.is_not_nil(provider)
-    assert.are.equal("europe-west1", provider.parameters.location)
-    assert.are.equal("my-project", provider.parameters.project_id)
+    local config = config_facade.materialize()
+    assert.are.equal("vertex", config.provider)
+    -- Verify merged flat params (general + provider-specific)
+    local flat = normalize.flatten_parameters(config.provider, config)
+    assert.are.equal("europe-west1", flat.location)
+    assert.are.equal("my-project", flat.project_id)
   end)
 
   it("matching explicit provider with preset works", function()
@@ -60,7 +62,7 @@ describe("flemma.setup with preset model", function()
       },
     })
 
-    local config = state.get_config()
+    local config = config_facade.materialize()
     assert.are.equal("openai", config.provider)
     assert.are.equal("gpt-4o", config.model)
   end)
@@ -74,10 +76,12 @@ describe("flemma.setup with preset model", function()
         ["$test"] = { provider = "openai", model = "gpt-4o" },
       },
     })
+    -- Flush vim.schedule callbacks from setup()
+    vim.wait(10, function()
+      return false
+    end)
 
-    -- Provider should NOT have been initialized
-    assert.is_nil(state.get_provider())
-    -- Should have an error notification
+    -- Should have an error notification about the conflict
     local found_error = false
     for _, n in ipairs(notifications) do
       if n.msg and n.msg:match("conflicts") then
@@ -92,9 +96,11 @@ describe("flemma.setup with preset model", function()
     flemma.setup({
       model = "$nonexistent",
     })
+    -- Flush vim.schedule callbacks from setup()
+    vim.wait(10, function()
+      return false
+    end)
 
-    -- Provider should NOT have been initialized
-    assert.is_nil(state.get_provider())
     -- Should have an error notification
     local found_error = false
     for _, n in ipairs(notifications) do
@@ -122,7 +128,7 @@ describe("flemma.setup", function()
       },
     })
 
-    local config = state.get_config()
+    local config = config_facade.materialize()
 
     -- Check that user-provided values are set
     assert.are.equal("openai", config.provider)
@@ -143,7 +149,7 @@ describe("flemma.setup", function()
       },
     })
 
-    local config = state.get_config()
+    local config = config_facade.materialize()
 
     -- Check that user-provided nested value is set
     assert.are.equal(true, config.editing.auto_write)

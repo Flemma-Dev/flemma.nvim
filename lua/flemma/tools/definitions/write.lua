@@ -2,6 +2,7 @@
 --- Write/create files with automatic parent directory creation
 --- Ported from pi by Mario Zechner (https://github.com/badlogic/pi-mono)
 --- Original: MIT License, Copyright (c) 2025 Mario Zechner
+local s = require("flemma.schema")
 local str = require("flemma.utilities.string")
 
 ---@class flemma.tools.definitions.Write
@@ -15,25 +16,11 @@ M.definitions = {
       .. "Creates the file if it doesn't exist, overwrites if it does. "
       .. "Automatically creates parent directories.",
     strict = true,
-    input_schema = {
-      type = "object",
-      properties = {
-        label = {
-          type = "string",
-          description = "A short human-readable label for this operation (e.g., 'creating config.lua')",
-        },
-        path = {
-          type = "string",
-          description = "Path to the file to write (relative or absolute)",
-        },
-        content = {
-          type = "string",
-          description = "Content to write to the file",
-        },
-      },
-      required = { "label", "path", "content" },
-      additionalProperties = false,
-    },
+    input_schema = s.object({
+      label = s.string():describe("A short human-readable label for this operation (e.g., 'creating config.lua')"),
+      path = s.string():describe("Path to the file to write (relative or absolute)"),
+      content = s.string():describe("Content to write to the file"),
+    }):strict(),
     personalities = {
       ["coding-assistant"] = {
         snippet = "Create new files or completely overwrite existing ones",
@@ -43,12 +30,12 @@ M.definitions = {
       },
     },
     async = false,
+    ---@return flemma.tools.ToolPreview
     format_preview = function(input)
-      local parts = { input.path, "(" .. str.format_size(#input.content) .. ")" }
-      if input.label then
-        table.insert(parts, "# " .. input.label)
-      end
-      return table.concat(parts, "  ")
+      return {
+        label = input.label,
+        detail = { input.path, "(" .. str.format_size(#input.content) .. ")" },
+      }
     end,
     execute = function(input, ctx)
       local path = input.path

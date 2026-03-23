@@ -6,6 +6,7 @@
 ---@field _build_command fun(backend: "fd"|"git"|"find", pattern: string, search_path: string, exclude: string[]): string[] Build command array for the given backend (exposed for testing)
 local M = {}
 
+local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
 local sink_module = require("flemma.sink")
 
@@ -130,8 +131,16 @@ end
 M.definitions = {
   {
     name = "find",
+    metadata = {
+      config_schema = s.object({
+        cwd = s.optional(s.string("urn:flemma:buffer:path")),
+        exclude = s.optional(
+          s.list(s.string(), { ".git", "node_modules", "__pycache__", ".venv", "target", "dist", "build", "vendor" })
+        ),
+      }),
+    },
     enabled = function(config)
-      return config and config.experimental and config.experimental.tools or false
+      return not not (config and config.experimental and config.experimental.tools)
     end,
     capabilities = { "can_auto_approve_if_sandboxed" },
     description = "Find files by glob pattern. "
@@ -143,29 +152,12 @@ M.definitions = {
       .. "KB. "
       .. "Returns sorted relative paths, one per line.",
     strict = true,
-    input_schema = {
-      type = "object",
-      properties = {
-        label = {
-          type = "string",
-          description = "A short human-readable label for this operation (e.g., 'finding test files')",
-        },
-        pattern = {
-          type = "string",
-          description = "Glob pattern to search for (e.g., '*.lua', 'src/**/*.tsx')",
-        },
-        path = {
-          type = { "string", "null" },
-          description = "Directory to search in (default: working directory)",
-        },
-        limit = {
-          type = { "number", "null" },
-          description = "Maximum number of results (default: " .. DEFAULT_RESULT_LIMIT .. ")",
-        },
-      },
-      required = { "label", "pattern", "path", "limit" },
-      additionalProperties = false,
-    },
+    input_schema = s.object({
+      label = s.string():describe("A short human-readable label for this operation (e.g., 'finding test files')"),
+      pattern = s.string():describe("Glob pattern to search for (e.g., '*.lua', 'src/**/*.tsx')"),
+      path = s.string():nullable():describe("Directory to search in (default: working directory)"),
+      limit = s.number():nullable():describe("Maximum number of results (default: " .. DEFAULT_RESULT_LIMIT .. ")"),
+    }):strict(),
     personalities = {
       ["coding-assistant"] = {
         snippet = "Find files matching a glob pattern in the project",
@@ -176,15 +168,16 @@ M.definitions = {
       },
     },
     async = true,
+    ---@return flemma.tools.ToolPreview
     format_preview = function(input)
-      local parts = { input.pattern }
+      local detail_parts = { input.pattern }
       if input.path then
-        table.insert(parts, "in " .. input.path)
+        table.insert(detail_parts, "in " .. input.path)
       end
-      if input.label then
-        table.insert(parts, "# " .. input.label)
-      end
-      return table.concat(parts, "  ")
+      return {
+        label = input.label,
+        detail = detail_parts,
+      }
     end,
     execute = function(input, ctx, callback)
       ---@cast callback -nil

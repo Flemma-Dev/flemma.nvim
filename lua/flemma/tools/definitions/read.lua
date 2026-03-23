@@ -8,6 +8,7 @@ local M = {}
 
 -- Module-level require for description constants only (evaluated at load time).
 -- Runtime code inside execute() must use ctx.truncate instead.
+local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
 
 M.definitions = {
@@ -20,29 +21,12 @@ M.definitions = {
       .. "KB (whichever is hit first). "
       .. "Use offset/limit for large files. When you need the full file, continue with offset until complete.",
     strict = true,
-    input_schema = {
-      type = "object",
-      properties = {
-        label = {
-          type = "string",
-          description = "A short human-readable label for this operation (e.g., 'reading config.lua')",
-        },
-        path = {
-          type = "string",
-          description = "Path to the file to read (relative or absolute)",
-        },
-        offset = {
-          type = { "number", "null" },
-          description = "Line number to start reading from (1-indexed)",
-        },
-        limit = {
-          type = { "number", "null" },
-          description = "Maximum number of lines to read",
-        },
-      },
-      required = { "label", "path", "offset", "limit" },
-      additionalProperties = false,
-    },
+    input_schema = s.object({
+      label = s.string():describe("A short human-readable label for this operation (e.g., 'reading config.lua')"),
+      path = s.string():describe("Path to the file to read (relative or absolute)"),
+      offset = s.number():nullable():describe("Line number to start reading from (1-indexed)"),
+      limit = s.number():nullable():describe("Maximum number of lines to read"),
+    }):strict(),
     personalities = {
       ["coding-assistant"] = {
         snippet = "Read file contents with optional offset and line limit",
@@ -52,20 +36,21 @@ M.definitions = {
       },
     },
     async = false,
+    ---@return flemma.tools.ToolPreview
     format_preview = function(input)
-      local parts = { input.path }
+      local detail_parts = { input.path }
       if input.offset or input.limit then
         local offset = input.offset or 0
         local range = "+" .. offset
         if input.limit then
           range = range .. "," .. input.limit
         end
-        table.insert(parts, range)
+        table.insert(detail_parts, range)
       end
-      if input.label then
-        table.insert(parts, "# " .. input.label)
-      end
-      return table.concat(parts, "  ")
+      return {
+        label = input.label,
+        detail = detail_parts,
+      }
     end,
     execute = function(input, ctx)
       local path = input.path

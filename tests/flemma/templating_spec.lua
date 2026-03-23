@@ -6,7 +6,6 @@ describe("flemma.templating", function()
     package.loaded["flemma.templating.builtins.stdlib"] = nil
     package.loaded["flemma.templating.builtins.iterators"] = nil
     templating = require("flemma.templating")
-    templating.clear()
   end)
 
   describe("register", function()
@@ -172,38 +171,76 @@ describe("flemma.templating", function()
     end)
   end)
 
-  describe("clear", function()
-    it("removes all populators", function()
-      templating.register("test", {
-        populate = function(env)
-          env.val = true
-        end,
-      })
-      templating.clear()
-      local env = templating.create_env()
-      -- Use rawget to bypass strict __index (key was never set in this env)
-      assert.is_nil(rawget(env, "val"))
+  describe("from_context", function()
+    local ctx_mod, sym
+
+    before_each(function()
+      -- Clear all three together so they share the same symbols instance
+      package.loaded["flemma.context"] = nil
+      package.loaded["flemma.symbols"] = nil
+      package.loaded["flemma.templating"] = nil
+      package.loaded["flemma.templating.builtins.stdlib"] = nil
+      package.loaded["flemma.templating.builtins.iterators"] = nil
+      ctx_mod = require("flemma.context")
+      sym = require("flemma.symbols")
+      templating = require("flemma.templating")
     end)
 
-    it("resets module tracking", function()
-      package.preload["test.templating.cleartest"] = function()
-        return {
-          name = "cleartest",
-          priority = 300,
-          populate = function(env)
-            env.cleared = true
-          end,
-        }
+    it("sets __filename and __dirname from context", function()
+      local ctx = ctx_mod.from_file("/tmp/flemma.chat")
+      local env = templating.from_context(ctx)
+      assert.equals("/tmp/flemma.chat", env.__filename)
+      assert.equals("/tmp", env.__dirname)
+    end)
+
+    it("sets __filename and __dirname to nil when context has no filename", function()
+      local ctx = ctx_mod.clone(nil)
+      local env = templating.from_context(ctx)
+      assert.is_nil(env.__filename)
+      assert.is_nil(env.__dirname)
+    end)
+
+    it("merges user variables as top-level string keys", function()
+      local base = ctx_mod.from_file("/tmp/flemma.chat")
+      local ext = ctx_mod.extend(base, { foo = "bar" })
+      local env = templating.from_context(ext)
+      assert.equals("bar", env.foo)
+    end)
+
+    it("sets buffer number from explicit parameter", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local ctx = ctx_mod.from_buffer(buf)
+      local env = templating.from_context(ctx, buf)
+      assert.equals(buf, env[sym.BUFFER_NUMBER])
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("buffer number is nil when not provided", function()
+      local ctx = ctx_mod.from_file("/tmp/test.chat")
+      local env = templating.from_context(ctx)
+      assert.is_nil(env[sym.BUFFER_NUMBER])
+    end)
+
+    it("handles nil context gracefully", function()
+      local env = templating.from_context(nil)
+      assert.is_nil(env.__filename)
+      assert.is_nil(env.__dirname)
+      assert.is_nil(env[sym.BUFFER_NUMBER])
+    end)
+
+    it("symbol-keyed fields are invisible to sandbox iteration", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local ctx = ctx_mod.from_buffer(buf)
+      local env = templating.from_context(ctx, buf)
+      local string_keys = {}
+      for k, _ in pairs(env) do
+        if type(k) == "string" then
+          string_keys[k] = true
+        end
       end
-
-      templating.register_module("test.templating.cleartest")
-      templating.clear()
-      local env = templating.create_env()
-      -- Use rawget to bypass strict __index (key was never set in this env)
-      assert.is_nil(rawget(env, "cleared"))
-
-      package.preload["test.templating.cleartest"] = nil
-      package.loaded["test.templating.cleartest"] = nil
+      assert.is_nil(string_keys["__opts"])
+      assert.is_nil(string_keys["__bufnr"])
+      vim.api.nvim_buf_delete(buf, { force = true })
     end)
   end)
 

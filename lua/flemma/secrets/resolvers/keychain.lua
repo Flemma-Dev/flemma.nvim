@@ -39,15 +39,21 @@ end
 
 ---@param _self flemma.secrets.resolvers.Keychain
 ---@param _credential flemma.secrets.Credential
+---@param ctx flemma.secrets.Context
 ---@return boolean
-function M.supports(_self, _credential)
-  return vim.fn.has("mac") == 1
+function M.supports(_self, _credential, ctx)
+  if vim.fn.has("mac") ~= 1 then
+    ctx:diagnostic("not available (requires macOS)")
+    return false
+  end
+  return true
 end
 
 ---@param _self flemma.secrets.resolvers.Keychain
 ---@param credential flemma.secrets.Credential
+---@param ctx flemma.secrets.Context
 ---@return flemma.secrets.Result|nil
-function M.resolve(_self, credential)
+function M.resolve(_self, credential, ctx)
   -- Try new convention first: -s <service> -a <kind>
   local value = try_lookup(credential.service, credential.kind)
   if value then
@@ -65,6 +71,7 @@ function M.resolve(_self, credential)
     end
   end
 
+  ctx:diagnostic("no entry found for service=" .. credential.service .. " account=" .. credential.kind)
   return nil
 end
 

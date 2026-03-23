@@ -5,8 +5,8 @@
 local M = {}
 
 local bar = require("flemma.bar")
+local config_facade = require("flemma.config")
 local provider_registry = require("flemma.provider.registry")
-local state = require("flemma.state")
 local str = require("flemma.utilities.string")
 
 --- Item priorities (higher = more important, shown first when space is scarce)
@@ -49,7 +49,7 @@ end
 ---@param session? flemma.session.Session Session instance
 ---@return flemma.bar.Segment[]
 function M.build_segments(request, session)
-  local config = state.get_config()
+  local config = config_facade.get()
   local pricing_enabled = config.pricing.enabled
 
   local segments = {} ---@type flemma.bar.Segment[]

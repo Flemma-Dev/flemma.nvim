@@ -171,7 +171,6 @@ end
 ---@field trailing_keys? string[] Keys to place last in JSON serialization for cache-friendly ordering
 ---@field process_response_line_fn? fun(line: string, callbacks: flemma.client.RequestCallbacks) Function to process each response line
 ---@field finalize_response_fn? fun(code: number, callbacks: flemma.client.RequestCallbacks) Function to finalize provider response processing
----@field reset_fn? fun() Optional function to reset provider state
 ---@field on_response_headers_fn? fun(headers: table<string, string[]>) Called with parsed HTTP response headers (lowercase keys)
 ---@field on_raw_json? fun(raw_json: string) Called with the serialized JSON request body
 
@@ -179,11 +178,6 @@ end
 ---@param opts flemma.client.RequestOptions Request configuration
 ---@return number|nil job_id Job ID of the started request or nil on failure
 function M.send_request(opts)
-  -- Reset provider state before sending a new request
-  if opts.reset_fn then
-    opts.reset_fn()
-  end
-
   -- Check for registered fixture for this endpoint
   local fixture_path = M.find_fixture_for_endpoint(opts.endpoint)
 

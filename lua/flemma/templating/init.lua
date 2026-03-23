@@ -4,8 +4,9 @@
 ---@class flemma.Templating
 local M = {}
 
+local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
-local state = require("flemma.state")
+local symbols = require("flemma.symbols")
 
 ---@class flemma.templating.Populator
 ---@field name string Unique identifier for this populator
@@ -36,7 +37,7 @@ local function ensure_modules_loaded()
   for _, module_path in ipairs(to_load) do
     if not loaded_modules[module_path] then
       loaded_modules[module_path] = true
-      local mod = require(module_path)
+      local mod = loader.load(module_path)
       M.register(mod.name, mod)
     end
   end
@@ -76,7 +77,7 @@ end
 --- (including underscore-prefixed names like __name__).
 ---@type string[]
 local FRAMEWORK_KEYS = {
-  -- set by context.to_eval_env()
+  -- set by templating.from_context()
   "__filename",
   "__dirname",
   -- set/cleared by compiler.execute()
@@ -142,25 +143,49 @@ function M.create_env()
   return env
 end
 
+---Create a template environment pre-seeded from a document context.
+---
+---Bridges document identity (file path, frontmatter options, user variables)
+---into a fresh template environment. User-visible fields (__filename, __dirname)
+---are set as string keys; internal metadata (frontmatter opts, bufnr, diagnostics)
+---uses symbol keys invisible to sandbox code.
+---@param ctx flemma.Context|nil Document context, or nil for an empty environment
+---@param bufnr? integer Buffer number for context-aware operations
+---@return table env
+function M.from_context(ctx, bufnr)
+  local env = M.create_env()
+
+  if ctx and type(ctx.get_filename) == "function" then
+    env.__filename = ctx:get_filename()
+    env.__dirname = ctx:get_dirname()
+  else
+    env.__filename = nil
+    env.__dirname = nil
+  end
+
+  env[symbols.BUFFER_NUMBER] = bufnr
+  env[symbols.DIAGNOSTICS] = {}
+
+  local variables = ctx and ctx[symbols.VARIABLES]
+  for k, v in pairs(variables or {}) do
+    env[k] = v
+  end
+
+  return env
+end
+
 ---Setup: register built-in populators and user-configured modules.
 function M.setup()
   for _, module_path in ipairs(BUILTIN_POPULATORS) do
-    local mod = require(module_path)
+    local mod = loader.load(module_path)
     M.register(mod.name, mod)
   end
-  local resolved_config = state.get_config()
+  local resolved_config = config_facade.get()
   if resolved_config.templating and resolved_config.templating.modules then
     for _, module_path in ipairs(resolved_config.templating.modules) do
       M.register_module(module_path)
     end
   end
-end
-
----Clear all registered populators and module tracking.
-function M.clear()
-  populators = {}
-  pending_modules = {}
-  loaded_modules = {}
 end
 
 return M

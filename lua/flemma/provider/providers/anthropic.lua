@@ -3,7 +3,8 @@
 local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
-local secrets = require("flemma.secrets")
+local normalize = require("flemma.provider.normalize")
+local s = require("flemma.schema")
 local sink = require("flemma.sink")
 local tools_module = require("flemma.tools")
 local provider_registry = require("flemma.provider.registry")
@@ -25,32 +26,21 @@ M.metadata = {
     output_has_thoughts = true,
     min_thinking_budget = 1024,
   },
-  default_parameters = {
-    thinking_budget = nil,
-  },
+  config_schema = s.object({
+    thinking_budget = s.optional(s.integer()),
+  }),
 }
 
----@param merged_config flemma.provider.Parameters
+---@param params flemma.provider.Parameters
 ---@return flemma.provider.Anthropic
-function M.new(merged_config)
-  local provider = base.new(merged_config) -- Pass the already merged config to base
-
-  -- Anthropic-specific state (endpoint, version)
-  provider.endpoint = "https://api.anthropic.com/v1/messages"
-  provider.api_version = "2023-06-01"
-
-  -- Set metatable BEFORE reset so M.reset (not base.reset) initializes provider-specific state
-  base._init_provider(M, provider)
-  provider:reset()
-
-  return provider --[[@as flemma.provider.Anthropic]]
-end
-
----@param self flemma.provider.Anthropic
-function M.reset(self)
-  -- base.reset auto-destroys sinks in extra via duck typing
-  base.reset(self)
-
+function M.new(params)
+  local self = setmetatable({
+    parameters = params or {},
+    state = {},
+    endpoint = "https://api.anthropic.com/v1/messages",
+    api_version = "2023-06-01",
+  }, { __index = setmetatable(M, { __index = base }) })
+  self:_new_response_buffer()
   self._response_buffer.extra.thinking_sink = sink.create({
     name = "anthropic/thinking",
   })
@@ -61,18 +51,13 @@ function M.reset(self)
   self._response_buffer.extra.tool_input_sink = sink.create({
     name = "anthropic/tool-input",
   })
-  log.debug("anthropic.reset(): Reset Anthropic provider state")
+  return self --[[@as flemma.provider.Anthropic]]
 end
 
----@param self flemma.provider.Anthropic
----@return string|nil
-function M.get_api_key(self)
-  local result = secrets.resolve({
-    kind = "api_key",
-    service = "anthropic",
-    description = "Anthropic API key",
-  })
-  return result and result.value or nil
+---@param _self flemma.provider.Anthropic
+---@return flemma.secrets.Credential
+function M.get_credential(_self)
+  return { kind = "api_key", service = "anthropic", description = "Anthropic API key" }
 end
 
 --- Anthropic uses `data.type == "error"` for errors (not `data.error`).
@@ -249,13 +234,13 @@ function M.build_request(self, prompt, _context)
   -- nil when "none"
 
   -- Build tools array from registry (filtered by per-buffer opts if present)
-  local sorted_tools = tools_module.get_sorted_for_prompt(prompt.opts)
+  local sorted_tools = tools_module.get_sorted_for_prompt(prompt.bufnr)
   local tools_array = {}
   for _, def in ipairs(sorted_tools) do
     table.insert(tools_array, {
       name = def.name,
       description = tools_module.build_description(def),
-      input_schema = def.input_schema,
+      input_schema = tools_module.to_json_schema(def),
     })
   end
 
@@ -300,34 +285,27 @@ function M.build_request(self, prompt, _context)
 
   -- Add thinking configuration using unified resolution
   local model_info = provider_registry.get_model_info("anthropic", self.parameters.model)
-  local thinking = base.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
+  local thinking = normalize.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
 
   if thinking.enabled then
     local is_adaptive = model_info and model_info.supports_adaptive_thinking
 
-    if is_adaptive and model_info and model_info.thinking_effort_map then
-      ---@cast model_info -nil
-      -- 4.6 adaptive thinking: resolve canonical level directly from params
-      -- (the budget path's level loses "max" → "high" via budget_to_effort roundtrip)
-      local canonical_level = thinking.level
-      if type(self.parameters.thinking) == "string" then
-        canonical_level = self.parameters.thinking
-      end
-      local effort = model_info.thinking_effort_map[canonical_level] or "high"
+    if is_adaptive then
+      -- 4.6+ adaptive thinking: effort from resolve_thinking's mapped_effort
+      local effort = thinking.mapped_effort or "high"
       request_body.thinking = { type = "adaptive" }
       request_body.output_config = { effort = effort }
       log.debug("anthropic.build_request: Adaptive thinking enabled with effort: " .. effort)
-    elseif model_info and model_info.thinking_effort_map and thinking.budget then
-      ---@cast model_info -nil
+    elseif thinking.budget and thinking.mapped_effort then
       -- Opus 4.5: budget-based thinking with effort parameter alongside
-      local canonical_level = thinking.level
-      if type(self.parameters.thinking) == "string" then
-        canonical_level = self.parameters.thinking
-      end
-      local effort = model_info.thinking_effort_map[canonical_level] or "high"
       request_body.thinking = { type = "enabled", budget_tokens = thinking.budget }
-      request_body.output_config = { effort = effort }
-      log.debug("anthropic.build_request: Budget thinking with effort: " .. effort .. ", budget: " .. thinking.budget)
+      request_body.output_config = { effort = thinking.mapped_effort }
+      log.debug(
+        "anthropic.build_request: Budget thinking with effort: "
+          .. thinking.mapped_effort
+          .. ", budget: "
+          .. thinking.budget
+      )
     elseif thinking.budget then
       local budget = thinking.budget
       local max_tokens = self.parameters.max_tokens
@@ -680,7 +658,9 @@ local function import_generate_chat(data)
 end
 
 -- Try to import from buffer lines (Claude Workbench format)
-function M.try_import_from_buffer(self, lines)
+---@param lines string[]
+---@return string|nil
+function M.try_import_from_buffer(lines)
   -- Extract and prepare content
   local content = import_extract_content(lines)
   if #content == 0 then

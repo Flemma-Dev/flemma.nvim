@@ -319,7 +319,7 @@ function M.render(segments, available_width, item_widths, opts)
 
   -- Greedily add priority groups from highest to lowest
   local visible_keys = {} ---@type table<string, boolean>
-  local skip_prefix = opts and opts.skip_prefix or false
+  local skip_prefix = opts ~= nil and opts.skip_prefix
 
   for _, priority in ipairs(priorities) do
     local keys = priority_groups[priority]

@@ -1,11 +1,11 @@
-package.loaded["flemma.core.bridge"] = nil
+package.loaded["flemma.bridge"] = nil
 
-local bridge = require("flemma.core.bridge")
+local bridge = require("flemma.bridge")
 
-describe("flemma.core.bridge", function()
+describe("flemma.bridge", function()
   before_each(function()
-    package.loaded["flemma.core.bridge"] = nil
-    bridge = require("flemma.core.bridge")
+    package.loaded["flemma.bridge"] = nil
+    bridge = require("flemma.bridge")
   end)
 
   it("raises error when calling unregistered callback", function()
@@ -39,5 +39,14 @@ describe("flemma.core.bridge", function()
     end)
     bridge.update_ui(7)
     assert.are.equal(7, called_bufnr)
+  end)
+
+  it("dispatches auto_prompt after registration", function()
+    local called_bufnr = nil
+    bridge.register("auto_prompt", function(bufnr)
+      called_bufnr = bufnr
+    end)
+    bridge.auto_prompt(5)
+    assert.are.equal(5, called_bufnr)
   end)
 end)

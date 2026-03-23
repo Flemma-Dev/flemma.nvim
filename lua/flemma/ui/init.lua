@@ -3,16 +3,17 @@
 ---@class flemma.UI
 local M = {}
 
+local config_facade = require("flemma.config")
 local log = require("flemma.logging")
 local state = require("flemma.state")
-local config = require("flemma.config")
 local buffer_utils = require("flemma.utilities.buffer")
 local preview = require("flemma.ui.preview")
 local folding = require("flemma.ui.folding")
 local roles = require("flemma.utilities.roles")
-local bridge = require("flemma.core.bridge")
+local bridge = require("flemma.bridge")
 local migration = require("flemma.migration")
 local parser = require("flemma.parser")
+local processor = require("flemma.processor")
 local cursor = require("flemma.cursor")
 local writequeue = require("flemma.buffer.writequeue")
 local str = require("flemma.utilities.string")
@@ -110,7 +111,7 @@ function M.add_rulers(bufnr, doc)
   -- Clear existing extmarks
   vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
-  local current_config = state.get_config()
+  local current_config = config_facade.get(bufnr)
   local ruler_config = current_config.ruler
   if ruler_config.enabled == false then
     return
@@ -228,7 +229,7 @@ end
 ---@param highlight? string Override highlight group (for timeout warnings)
 ---@return {[1]:string, [2]:string}[]
 local function build_progress_virt_text(progress_text, bufnr, highlight)
-  local current_config = state.get_config()
+  local current_config = config_facade.get(bufnr)
   local ruler_config = current_config.ruler
   local rulers_enabled = ruler_config and ruler_config.enabled ~= false
 
@@ -283,7 +284,7 @@ end
 ---@param row integer Row offset from window top
 ---@param spinner_char string Current spinner character
 local function update_progress_gutter_icon(buffer_state, parent_winid, gutter_width, row, spinner_char)
-  local progress_config = state.get_config().progress
+  local progress_config = config_facade.get().progress
 
   -- Build icon text: spinner right-aligned in the gutter with a trailing space
   local icon_text = string.rep(" ", math.max(0, gutter_width - SPINNER_PREFIX_DISPLAY_WIDTH)) .. spinner_char .. " "
@@ -343,7 +344,7 @@ end
 ---@param highlight? string Override highlight group (for timeout warnings)
 local function show_progress_float(bufnr, parent_winid, progress_text, spinner_char, highlight)
   local buffer_state = state.get_buffer_state(bufnr)
-  local progress_config = state.get_config().progress
+  local progress_config = config_facade.get().progress
   local win_width = vim.api.nvim_win_get_width(parent_winid)
   local win_height = vim.api.nvim_win_get_height(parent_winid)
   local gutter_width = get_gutter_width(parent_winid)
@@ -492,7 +493,7 @@ function M.start_progress(bufnr, progress_opts)
 
       -- Immediately update UI and position cursor
       M.update_ui(bufnr)
-      local is_user_send = progress_opts and progress_opts.force or false
+      local is_user_send = progress_opts ~= nil and progress_opts.force
       cursor.request_move(bufnr, {
         line = vim.api.nvim_buf_line_count(bufnr),
         bottom = true,
@@ -665,7 +666,7 @@ end
 ---@param end_line integer
 ---@param role string
 function M.place_signs(bufnr, start_line, end_line, role)
-  local current_config = state.get_config()
+  local current_config = config_facade.get(bufnr)
   if not current_config.signs.enabled then
     return
   end
@@ -693,7 +694,7 @@ end
 ---@param bufnr integer
 ---@param doc flemma.ast.DocumentNode
 function M.apply_line_highlights(bufnr, doc)
-  local current_config = state.get_config()
+  local current_config = config_facade.get(bufnr)
   if not current_config.line_highlights or not current_config.line_highlights.enabled then
     return
   end
@@ -878,7 +879,8 @@ end
 local function apply_chat_buffer_settings(bufnr)
   folding.setup_folding(bufnr)
 
-  if config.editing.disable_textwidth then
+  local current = config_facade.get(bufnr)
+  if current and current.editing and current.editing.disable_textwidth then
     vim.bo[bufnr].textwidth = 0
   end
 
@@ -907,9 +909,18 @@ function M.setup_chat_filetype_autocmds()
     group = augroup,
     pattern = "*.chat",
     callback = function(ev)
+      -- Clear any orphaned cursorline extmark from a prior session.
+      -- :e reload fires BufUnload first, which calls cleanup_buffer_state() and
+      -- sets buffer_states[bufnr] = nil — losing cursorline_extmark_id. The
+      -- actual extmark in cursorline_ns survives the reload (extmarks are owned
+      -- by the buffer object, not the text), leaving a permanently highlighted
+      -- line that no code path can remove. Clearing the namespace here runs
+      -- once per reload, not on every cursor move.
+      vim.api.nvim_buf_clear_namespace(ev.buf, cursorline_ns, 0, -1)
       migration.migrate_buffer(ev.buf)
       vim.bo[ev.buf].filetype = "chat"
       apply_chat_buffer_settings(ev.buf)
+      bridge.auto_prompt(ev.buf)
     end,
   })
 
@@ -923,7 +934,8 @@ function M.setup_chat_filetype_autocmds()
   })
 
   -- Handle updatetime management for chat buffers
-  if config.editing.manage_updatetime then
+  local editing_config = config_facade.get()
+  if editing_config and editing_config.editing and editing_config.editing.manage_updatetime then
     vim.api.nvim_create_autocmd("BufEnter", {
       group = augroup,
       pattern = "*.chat",
@@ -986,7 +998,7 @@ function M.setup_chat_filetype_autocmds()
   end
 
   -- CursorLine overlay: swap line highlight to blended CursorLine variant under cursor
-  local current_config = state.get_config()
+  local current_config = config_facade.get()
   if current_config.line_highlights and current_config.line_highlights.enabled then
     vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
       group = augroup,
@@ -1098,7 +1110,7 @@ function M.update_ui(bufnr)
   end
 
   -- Bail if config is not fully initialized (e.g. in test environments)
-  local current_config = state.get_config()
+  local current_config = config_facade.get(bufnr)
   if not current_config.ruler or not current_config.signs then
     return
   end
@@ -1434,6 +1446,19 @@ function M.setup()
       end
       bridge.update_ui(ev.buf)
       buffer_state.ui_update_tick = tick
+    end,
+  })
+
+  -- Passively evaluate frontmatter when buffer content changes so integrations
+  -- (e.g., lualine) see up-to-date config values without waiting for a request send.
+  -- Gated inside evaluate_frontmatter_if_changed: no-op unless the frontmatter code
+  -- actually changed, and skipped when buffer is locked (request in flight).
+  -- BufEnter covers switching to a buffer whose frontmatter hasn't been evaluated yet.
+  vim.api.nvim_create_autocmd({ "InsertLeave", "TextChanged", "BufEnter" }, {
+    group = augroup,
+    pattern = "*.chat",
+    callback = function(ev)
+      processor.evaluate_frontmatter_if_changed(ev.buf)
     end,
   })
 

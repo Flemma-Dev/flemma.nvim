@@ -8,6 +8,7 @@
 local M = {}
 
 local json = require("flemma.utilities.json")
+local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
 local sink_module = require("flemma.sink")
 
@@ -108,8 +109,16 @@ end
 M.definitions = {
   {
     name = "grep",
+    metadata = {
+      config_schema = s.object({
+        cwd = s.optional(s.string("urn:flemma:buffer:path")),
+        exclude = s.optional(
+          s.list(s.string(), { ".git", "node_modules", "__pycache__", ".venv", "target", "dist", "build", "vendor" })
+        ),
+      }),
+    },
     enabled = function(config)
-      return config and config.experimental and config.experimental.tools or false
+      return not not (config and config.experimental and config.experimental.tools)
     end,
     capabilities = { "can_auto_approve_if_sandboxed" },
     description = "Search file contents using ripgrep (rg) or grep. "
@@ -120,33 +129,14 @@ M.definitions = {
       .. "Supports regex patterns. "
       .. "When using grep -E fallback, \\d, \\w, \\s are automatically translated to POSIX equivalents.",
     strict = true,
-    input_schema = {
-      type = "object",
-      properties = {
-        label = {
-          type = "string",
-          description = "A short human-readable label for this operation (e.g., 'searching for TODO comments')",
-        },
-        pattern = {
-          type = "string",
-          description = "Regular expression pattern to search for",
-        },
-        path = {
-          type = { "string", "null" },
-          description = "Directory to search in (default: working directory)",
-        },
-        glob = {
-          type = { "string", "null" },
-          description = "File glob filter (e.g., '*.lua', '*.{ts,tsx}')",
-        },
-        limit = {
-          type = { "number", "null" },
-          description = "Maximum number of matches (default: " .. DEFAULT_LIMIT .. ")",
-        },
-      },
-      required = { "label", "pattern", "path", "glob", "limit" },
-      additionalProperties = false,
-    },
+    input_schema = s.object({
+      label = s.string()
+        :describe("A short human-readable label for this operation (e.g., 'searching for TODO comments')"),
+      pattern = s.string():describe("Regular expression pattern to search for"),
+      path = s.string():nullable():describe("Directory to search in (default: working directory)"),
+      glob = s.string():nullable():describe("File glob filter (e.g., '*.lua', '*.{ts,tsx}')"),
+      limit = s.number():nullable():describe("Maximum number of matches (default: " .. DEFAULT_LIMIT .. ")"),
+    }):strict(),
     personalities = {
       ["coding-assistant"] = {
         snippet = "Search file contents for patterns using ripgrep or grep",
@@ -158,20 +148,19 @@ M.definitions = {
       },
     },
     async = true,
-    ---@param input table<string, any>
-    ---@return string
+    ---@return flemma.tools.ToolPreview
     format_preview = function(input)
-      local parts = { "/" .. input.pattern .. "/" }
+      local detail_parts = { "/" .. input.pattern .. "/" }
       if input.path then
-        table.insert(parts, input.path)
+        table.insert(detail_parts, input.path)
       end
       if input.glob then
-        table.insert(parts, input.glob)
+        table.insert(detail_parts, input.glob)
       end
-      if input.label then
-        table.insert(parts, "# " .. input.label)
-      end
-      return table.concat(parts, "  ")
+      return {
+        label = input.label,
+        detail = detail_parts,
+      }
     end,
     ---@param input table<string, any>
     ---@param ctx flemma.tools.ExecutionContext

@@ -3,12 +3,11 @@
 ---@class flemma.Tools
 local M = {}
 
-local config = require("flemma.config")
+local config_facade = require("flemma.config")
 local hooks = require("flemma.hooks")
 local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
 local registry = require("flemma.tools.registry")
-local state = require("flemma.state")
 
 local BUILTIN_TOOLS = {
   "flemma.tools.definitions.bash",
@@ -38,6 +37,19 @@ local function fire_ready_callbacks()
     cb()
   end
   hooks.dispatch("boot:complete")
+end
+
+--- Register a tool definition, materialize its config_schema defaults into L10,
+--- and append its name to the tools allow_list so the default resolved tools
+--- list includes all registered tools.
+---@param name string
+---@param def flemma.tools.ToolDefinition
+local function register_tool(name, def)
+  registry.register(name, def)
+  config_facade.record_default("append", "tools", name)
+  if def.metadata and def.metadata.config_schema then
+    config_facade.register_module_defaults("tools", name, def.metadata.config_schema)
+  end
 end
 
 ---Register an async tool source that resolves definitions asynchronously
@@ -72,11 +84,14 @@ function M.register_async(resolve_fn, opts)
   ---@param name string
   ---@param def flemma.tools.ToolDefinition
   local function register(name, def)
-    registry.register(name, def)
+    register_tool(name, def)
   end
 
   -- Set up timeout
-  local timeout_s = opts.timeout or config.tools.default_timeout or 30
+  local resolved_config = config_facade.get()
+  local timeout_s = opts.timeout
+    or (resolved_config and resolved_config.tools and resolved_config.tools.default_timeout)
+    or 30
   local timer = vim.uv.new_timer()
   if not timer then
     done("Failed to create timer")
@@ -162,7 +177,7 @@ function M.setup()
     M.register(module_name)
   end
 
-  local resolved_config = state.get_config()
+  local resolved_config = config_facade.get()
   if resolved_config.tools and resolved_config.tools.modules then
     for _, module_path in ipairs(resolved_config.tools.modules) do
       M.register_module(module_path)
@@ -189,6 +204,19 @@ function M.build_description(tool)
   return desc
 end
 
+--- Serialize a tool definition's input_schema to a plain JSON Schema table.
+--- If input_schema is a schema DSL node (has `to_json_schema()`), serialize it.
+--- If it's already a plain table, pass it through unchanged.
+---@param definition flemma.tools.ToolDefinition
+---@return flemma.tools.JSONSchema
+function M.to_json_schema(definition)
+  local schema = definition.input_schema
+  if type(schema.to_json_schema) == "function" then
+    return schema:to_json_schema()
+  end
+  return schema --[[@as flemma.tools.JSONSchema]]
+end
+
 ---Get all registered tools (excludes disabled tools by default).
 ---Loads any pending third-party modules before returning.
 ---@param opts? { include_disabled?: boolean, config?: flemma.Config }
@@ -197,33 +225,42 @@ function M.get_all(opts)
   ensure_modules_loaded()
   opts = opts or {}
   if not opts.config then
-    opts.config = state.get_config()
+    opts.config = config_facade.materialize()
   end
+  ---@cast opts { include_disabled?: boolean, config?: flemma.Config|nil }
   return registry.get_all(opts)
 end
 
---- Get tools filtered by resolved per-buffer opts
---- When opts.tools is present, only matching tools are returned (including disabled tools
---- that were explicitly listed — this allows users to enable disabled tools via flemma.opt).
---- When opts is nil or opts.tools is nil, all enabled tools are returned.
----@param opts flemma.opt.FrontmatterOpts|nil
+--- Get tools filtered by per-buffer config.
+--- When the config store has a tools list for this buffer (via frontmatter),
+--- only matching tools are returned (including disabled tools that were
+--- explicitly listed — this allows users to enable disabled tools).
+--- When bufnr is nil or the tools list is empty/unset, all enabled tools are returned.
+---@param bufnr? integer Buffer number for per-buffer config resolution
 ---@return table<string, flemma.tools.ToolDefinition>
-function M.get_for_prompt(opts)
+function M.get_for_prompt(bufnr)
   ensure_modules_loaded()
-  if opts and opts.tools then
-    -- Include disabled tools so users can explicitly enable them
-    local all_tools = M.get_all({ include_disabled = true })
-    local allowed = {}
-    for _, name in ipairs(opts.tools) do
-      allowed[name] = true
-    end
-    local filtered = {}
-    for name, def in pairs(all_tools) do
-      if allowed[name] then
-        filtered[name] = def
+  if bufnr then
+    local tools_info = config_facade.inspect(bufnr, "tools")
+    local tools_list = tools_info and tools_info.value
+    if type(tools_list) == "table" and #tools_list > 0 then
+      -- Check if the list was modified by a layer above DEFAULTS
+      local source = tools_info.layer
+      if source and source ~= "D" then
+        local all_tools = M.get_all({ include_disabled = true })
+        local allowed = {}
+        for _, name in ipairs(tools_list) do
+          allowed[name] = true
+        end
+        local filtered = {}
+        for name, def in pairs(all_tools) do
+          if allowed[name] then
+            filtered[name] = def
+          end
+        end
+        return filtered
       end
     end
-    return filtered
   end
   return M.get_all()
 end
@@ -231,10 +268,10 @@ end
 --- Get all enabled tools for a prompt, sorted alphabetically by name.
 --- Returns an array (not a name-keyed table) for deterministic ordering
 --- in provider API requests, which improves prompt caching hit rates.
----@param opts flemma.opt.FrontmatterOpts|nil Per-buffer options (for tool filtering)
+---@param bufnr? integer Buffer number for per-buffer config resolution
 ---@return flemma.tools.ToolDefinition[] sorted_tools Alphabetically sorted tool definitions
-function M.get_sorted_for_prompt(opts)
-  local all = M.get_for_prompt(opts)
+function M.get_sorted_for_prompt(bufnr)
+  local all = M.get_for_prompt(bufnr)
   local sorted = {}
   for _, definition in pairs(all) do
     table.insert(sorted, definition)
@@ -258,15 +295,15 @@ function M.register(source, definition)
   if type(source) == "string" then
     if definition then
       -- register(name, def) — single definition
-      registry.register(source, definition)
+      register_tool(source, definition)
     else
       -- register("module.name") — load module
-      local mod = require(source)
+      local mod = loader.load(source)
       if type(mod.resolve) == "function" then
         M.register_async(mod.resolve, { timeout = mod.timeout })
       elseif mod.definitions then
         for _, def in ipairs(mod.definitions) do
-          registry.register(def.name, def)
+          register_tool(def.name, def)
         end
       end
     end
@@ -277,11 +314,11 @@ function M.register(source, definition)
       M.register_async(source.resolve, { timeout = source.timeout })
     elseif source.name then
       -- Single definition table
-      registry.register(source.name, source)
+      register_tool(source.name, source)
     else
       -- Array of definitions
       for _, def in ipairs(source) do
-        registry.register(def.name, def)
+        register_tool(def.name, def)
       end
     end
   end
@@ -308,6 +345,18 @@ function M.get(name)
   ensure_modules_loaded()
   return registry.get(name)
 end
+
+---Get a tool's config schema for DISCOVER resolution.
+---@param name string The tool name
+---@return flemma.schema.ObjectNode|nil config_schema Tool config schema, or nil if not found
+function M.get_config_schema(name)
+  local tool = M.get(name)
+  if not tool then
+    return nil
+  end
+  return tool.metadata and tool.metadata.config_schema
+end
+
 M.count = registry.count
 M.is_executable = registry.is_executable
 M.get_executor = registry.get_executor

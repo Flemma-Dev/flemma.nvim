@@ -4,6 +4,7 @@
 ---@class flemma.ui.Folding
 local M = {}
 
+local config_facade = require("flemma.config")
 local state = require("flemma.state")
 local log = require("flemma.logging")
 local loader = require("flemma.loader")
@@ -12,6 +13,9 @@ local roles = require("flemma.utilities.roles")
 local str = require("flemma.utilities.string")
 local preview = require("flemma.ui.preview")
 local query = require("flemma.ast.query")
+
+local CONTENT_PREVIEW_TRUNCATION_MARKER = "…"
+local LABEL_DETAIL_SEPARATOR = " — "
 
 ---@class flemma.ui.folding.FoldRule
 ---@field name string
@@ -181,11 +185,11 @@ local function get_document()
   return parser.get_parsed_document(bufnr)
 end
 
----Get the body text for a tool use fold (custom format_preview or generic key-value).
+---Get the structured preview for a tool use fold.
 ---Delegates to the shared preview helper.
 ---@param tool_seg flemma.ast.ToolUseSegment
 ---@param available integer Available width for the body
----@return string
+---@return { label?: string, detail?: string }
 local function get_tool_use_body(tool_seg, available)
   return preview.get_tool_use_body(tool_seg.name, tool_seg.input, available)
 end
@@ -274,27 +278,55 @@ function M.get_fold_text()
         { "Tool Use: ", "FlemmaToolUseTitle" },
       }
 
-      local fixed_width = str.strwidth("◆ ")
+      -- Pass generous available to get the untruncated structured preview;
+      -- we compute actual available after knowing label width.
+      local structured = get_tool_use_body(tool_seg, text_width)
+      local label = structured.label
+      local detail = structured.detail
+
+      local fixed_chrome = str.strwidth("◆ ")
         + str.strwidth("Tool Use: ")
         + str.strwidth(tool_seg.name)
         + str.strwidth(": ")
-        + str.strwidth(" ")
+        + str.strwidth(" ") -- trailing space before suffix
         + str.strwidth(suffix)
-      local available = text_width - fixed_width
-      local body = get_tool_use_body(tool_seg, available)
+      local separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
+      if label then
+        fixed_chrome = fixed_chrome + str.strwidth(label) + separator_width -- label + em-dash separator
+      end
+      local available = text_width - fixed_chrome
 
-      if body ~= "" then
-        table.insert(chunks, { tool_seg.name, "FlemmaToolName" })
-        table.insert(chunks, { ": " .. body .. " ", "FlemmaFoldPreview" })
+      table.insert(chunks, { tool_seg.name, "FlemmaToolName" })
+
+      if label or detail then
+        table.insert(chunks, { ": ", "FlemmaToolName" })
+
+        if label then
+          table.insert(chunks, { label, "FlemmaToolLabel" })
+          if detail and available > 0 then
+            local detail_text = str.truncate(detail, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
+            if detail_text ~= "" then
+              table.insert(chunks, { LABEL_DETAIL_SEPARATOR .. detail_text, "FlemmaToolDetail" })
+            end
+          end
+        else
+          -- No label: show detail only (reclaim separator space)
+          local detail_text =
+            str.truncate(detail --[[@as string]], available + separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
+          table.insert(chunks, { detail_text, "FlemmaToolDetail" })
+        end
+        table.insert(chunks, { " ", "FlemmaFoldPreview" })
       else
-        table.insert(chunks, { tool_seg.name .. " ", "FlemmaToolName" })
+        table.insert(chunks, { " ", "FlemmaToolName" })
       end
       table.insert(chunks, { suffix, "FlemmaFoldMeta" })
       return chunks
     elseif tool_kind == "tool_result" then
       ---@cast tool_seg flemma.ast.ToolResultSegment
-      local tool_name_map = query.build_tool_name_map(doc)
-      local tool_name = tool_name_map[tool_seg.tool_use_id] or "result"
+      local tool_use_index = query.build_tool_use_index(doc)
+      local tool_info = tool_use_index[tool_seg.tool_use_id]
+      local tool_name = tool_info and tool_info.name or "result"
+      local tool_label = tool_info and tool_info.label
 
       ---@type {[1]:string, [2]:string}[]
       local chunks = {
@@ -303,30 +335,42 @@ function M.get_fold_text()
         { tool_name, "FlemmaToolName" },
       }
 
-      local fixed_width = str.strwidth("◆ ")
+      local fixed_chrome = str.strwidth("◆ ")
         + str.strwidth("Tool Result: ")
         + str.strwidth(tool_name)
         + str.strwidth(": ")
-        + str.strwidth(" ")
+        + str.strwidth(" ") -- trailing space before suffix
         + str.strwidth(suffix)
       if tool_seg.is_error then
-        fixed_width = fixed_width + str.strwidth("(error) ")
+        fixed_chrome = fixed_chrome + str.strwidth("(error) ")
       end
-      local available = text_width - fixed_width
+      local result_separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
+      if tool_label then
+        fixed_chrome = fixed_chrome + str.strwidth(tool_label) + result_separator_width -- label + em-dash separator
+      end
+      local available = text_width - fixed_chrome
 
-      local body = preview.format_content_preview(tool_seg.content, available)
+      table.insert(chunks, { ": ", "FlemmaFoldPreview" })
+      if tool_seg.is_error then
+        table.insert(chunks, { "(error) ", "FlemmaToolResultError" })
+      end
 
-      if body ~= "" or tool_seg.is_error then
-        table.insert(chunks, { ": ", "FlemmaFoldPreview" })
-        if tool_seg.is_error then
-          table.insert(chunks, { "(error) ", "FlemmaToolResultError" })
-        end
-        if body ~= "" then
-          table.insert(chunks, { body .. " ", "FlemmaFoldPreview" })
+      if tool_label then
+        table.insert(chunks, { tool_label, "FlemmaToolLabel" })
+        if available > 0 then
+          local body = preview.format_content_preview(tool_seg.content, available)
+          if body ~= "" then
+            table.insert(chunks, { LABEL_DETAIL_SEPARATOR .. body, "FlemmaToolDetail" })
+          end
         end
       else
-        table.insert(chunks, { " ", "FlemmaToolName" })
+        local body = preview.format_content_preview(tool_seg.content, available)
+        if body ~= "" then
+          table.insert(chunks, { body, "FlemmaFoldPreview" })
+        end
       end
+
+      table.insert(chunks, { " ", "FlemmaFoldPreview" })
       table.insert(chunks, { suffix, "FlemmaFoldMeta" })
       return chunks
     end
@@ -341,7 +385,7 @@ function M.get_fold_text()
 
     -- When rulers are enabled, match the unfolded visual: ─ Role content (N lines)
     -- Otherwise fall back to the standard @Role: prefix
-    local ruler_config = state.get_config().ruler
+    local ruler_config = config_facade.get().ruler
     local use_ruler_prefix = ruler_config and ruler_config.enabled ~= false
 
     ---@type {[1]:string, [2]:string}[]
@@ -401,7 +445,7 @@ function M.setup_folding(bufnr)
   vim.wo[winid].foldmethod = "expr"
   vim.wo[winid].foldexpr = 'v:lua.require("flemma.ui.folding").get_fold_level(v:lnum)'
   vim.wo[winid].foldtext = 'v:lua.require("flemma.ui.folding").get_fold_text()'
-  vim.wo[winid].foldlevel = state.get_config().editing.foldlevel
+  vim.wo[winid].foldlevel = config_facade.get().editing.foldlevel
 end
 
 ---Force Neovim to re-evaluate all fold levels for a buffer.
@@ -411,15 +455,18 @@ end
 ---forces a complete re-evaluation. The fold map cache is also invalidated
 ---so get_fold_level rebuilds from the current AST even when changedtick
 ---has not advanced (e.g., update_ui on the same event loop tick).
+---
+---Unconditionally sets foldmethod=expr rather than guarding on the current
+---value: external view restoration (`:loadview` when `viewoptions` includes
+---`folds`) silently switches foldmethod to `manual`, which would prevent
+---foldexpr from being evaluated for new content. Re-asserting expr on every
+---UI cycle ensures self-healing regardless of session/view persistence.
 ---@param bufnr integer
 function M.invalidate_folds(bufnr)
   invalidate_cache()
   local winid = vim.fn.bufwinid(bufnr)
   if winid ~= -1 then
-    local foldmethod = vim.fn.win_execute(winid, "echo &foldmethod")
-    if vim.trim(foldmethod) == "expr" then
-      vim.fn.win_execute(winid, "set foldmethod=expr")
-    end
+    vim.fn.win_execute(winid, "set foldmethod=expr")
   end
 end
 
@@ -480,7 +527,7 @@ function M.fold_completed_blocks(bufnr)
     return
   end
 
-  local current_config = state.get_config()
+  local current_config = config_facade.get(bufnr)
   local auto_close_config = current_config.editing and current_config.editing.auto_close or {}
 
   if not buffer_state.auto_closed_folds then

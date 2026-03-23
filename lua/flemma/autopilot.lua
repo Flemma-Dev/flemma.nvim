@@ -3,14 +3,24 @@
 ---@class flemma.Autopilot
 local M = {}
 
+local config_facade = require("flemma.config")
 local log = require("flemma.logging")
-local bridge = require("flemma.core.bridge")
+local bridge = require("flemma.bridge")
 local cursor = require("flemma.cursor")
 local parser = require("flemma.parser")
 local state = require("flemma.state")
 local tool_context = require("flemma.tools.context")
 
 ---@alias flemma.autopilot.State "idle"|"armed"|"sending"|"paused"
+
+---Check whether tool executions are currently in progress for a buffer.
+---Reads directly from state to avoid circular dependency with executor module.
+---@param bufnr integer
+---@return boolean
+local function has_executing_tools(bufnr)
+  local pending = state.get_buffer_state(bufnr).pending_executions
+  return pending ~= nil and next(pending) ~= nil
+end
 
 ---@class flemma.autopilot.BufferState
 ---@field state flemma.autopilot.State
@@ -27,43 +37,23 @@ local function get_state(bufnr)
   return buffer_state.autopilot
 end
 
----Check whether autopilot is enabled, with per-buffer frontmatter override.
----Priority: buffer_state.autopilot_override (set from frontmatter) > global config > default (true).
+---Check whether autopilot is enabled for a buffer.
+---Reads from the config facade which resolves through all layers (defaults →
+---setup → runtime → frontmatter). No separate override needed.
 ---@param bufnr integer
 ---@return boolean
 function M.is_enabled(bufnr)
-  -- Check per-buffer override first (set by core.lua from frontmatter evaluation)
-  local buffer_state = state.get_buffer_state(bufnr)
-  if buffer_state.autopilot_override ~= nil then
-    return buffer_state.autopilot_override
-  end
-
-  local config = state.get_config()
-  if not config.tools then
-    return false
-  end
-  local autopilot = config.tools.autopilot
-  if not autopilot then
-    return false
-  end
-  -- Default to true if enabled field is not explicitly set
-  if autopilot.enabled == nil then
-    return true
-  end
-  return autopilot.enabled == true
+  local cfg = config_facade.get(bufnr)
+  return cfg.tools.autopilot.enabled == true
 end
 
----Enable or disable autopilot at runtime by mutating the live config.
----In normal usage config.tools and config.tools.autopilot are always populated
----by setup(); the nil guards are defensive for edge cases (e.g. tests).
+---Enable or disable autopilot at runtime via the config facade.
+---Writes to the RUNTIME layer so the change persists across re-materializations
+---and is visible in :Flemma status as a runtime override.
 ---@param enabled boolean
 function M.set_enabled(enabled)
-  local config = state.get_config()
-  if config.tools and config.tools.autopilot then
-    config.tools.autopilot.enabled = enabled
-  elseif config.tools then
-    config.tools.autopilot = { enabled = enabled, max_turns = 100 }
-  end
+  local w = config_facade.writer(nil, config_facade.LAYERS.RUNTIME)
+  w.tools.autopilot.enabled = enabled
   log.debug("autopilot: set_enabled(" .. tostring(enabled) .. ")")
 end
 
@@ -133,9 +123,8 @@ function M.on_response_complete(bufnr)
   local bs = get_state(bufnr)
   bs.iteration = bs.iteration + 1
 
-  local config = state.get_config()
-  local autopilot_config = config.tools and config.tools.autopilot
-  local max_turns = (autopilot_config and autopilot_config.max_turns) or 100
+  local cfg = config_facade.get(bufnr)
+  local max_turns = cfg.tools.autopilot.max_turns
 
   if bs.iteration > max_turns then
     bs.state = "idle"
@@ -215,6 +204,13 @@ function M.on_tools_complete(bufnr)
       if state.get_buffer_state(bufnr).current_request then
         return
       end
+      -- Guard: Phase 2 may have dispatched new tools between scheduling and
+      -- execution (sync tool completes during for-loop → on_tools_complete fires
+      -- while later tools are still being dispatched). Bail and let the new
+      -- tools' completion re-trigger on_tools_complete.
+      if has_executing_tools(bufnr) then
+        return
+      end
       bridge.send_or_execute({ bufnr = bufnr })
     end)
     return
@@ -229,6 +225,10 @@ function M.on_tools_complete(bufnr)
       return
     end
     if state.get_buffer_state(bufnr).current_request then
+      return
+    end
+    -- Guard: same Phase 2 dispatch race as above.
+    if has_executing_tools(bufnr) then
       return
     end
     bridge.send_or_execute({ bufnr = bufnr })

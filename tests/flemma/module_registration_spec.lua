@@ -99,8 +99,13 @@ describe("provider module resolution", function()
           output_has_thoughts = false,
         },
       }
-      function P.new(opts)
-        return base.new(opts)
+      function P.new(params)
+        local self = setmetatable({
+          parameters = params or {},
+          state = {},
+        }, { __index = setmetatable(P, { __index = base }) })
+        self:_new_response_buffer()
+        return self
       end
       function P.build_request()
         return {}
@@ -128,11 +133,19 @@ end)
 
 describe("approval module resolution", function()
   local approval
-  local state = require("flemma.state")
+  local config_facade = require("flemma.config")
+  local schema = require("flemma.config.schema")
 
   before_each(function()
     package.loaded["flemma.tools.approval"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
     approval = require("flemma.tools.approval")
+    config_facade = require("flemma.config")
+    schema = require("flemma.config.schema")
+    config_facade.init(schema)
 
     package.preload["test.fixture.approval"] = function()
       return {
@@ -147,7 +160,7 @@ describe("approval module resolution", function()
       }
     end
 
-    state.set_config({
+    config_facade.apply(config_facade.LAYERS.SETUP, {
       tools = {
         auto_approve = "test.fixture.approval",
         require_approval = true,
@@ -185,11 +198,19 @@ end)
 
 describe("approval module resolution with string[]", function()
   local approval
-  local state = require("flemma.state")
+  local config_facade = require("flemma.config")
+  local schema = require("flemma.config.schema")
 
   before_each(function()
     package.loaded["flemma.tools.approval"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
     approval = require("flemma.tools.approval")
+    config_facade = require("flemma.config")
+    schema = require("flemma.config.schema")
+    config_facade.init(schema)
 
     package.preload["test.fixture.approval"] = function()
       return {
@@ -223,7 +244,7 @@ describe("approval module resolution with string[]", function()
   end)
 
   it("loads multiple module resolvers from string[]", function()
-    state.set_config({
+    config_facade.apply(config_facade.LAYERS.SETUP, {
       tools = {
         auto_approve = { "test.fixture.approval", "test.fixture.approval2" },
         require_approval = true,
@@ -240,7 +261,7 @@ describe("approval module resolution with string[]", function()
   end)
 
   it("mixes module paths and plain tool names in string[]", function()
-    state.set_config({
+    config_facade.apply(config_facade.LAYERS.SETUP, {
       tools = {
         auto_approve = { "test.fixture.approval", "calculator" },
         require_approval = true,
@@ -263,7 +284,7 @@ describe("approval module resolution with string[]", function()
   end)
 
   it("passes through when no module handles the tool", function()
-    state.set_config({
+    config_facade.apply(config_facade.LAYERS.SETUP, {
       tools = {
         auto_approve = { "test.fixture.approval", "test.fixture.approval2" },
         require_approval = true,

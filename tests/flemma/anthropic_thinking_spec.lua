@@ -338,7 +338,8 @@ describe("Anthropic Provider Extended Thinking", function()
       local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat")
       local prompt = pipeline.run(
         parser.parse_lines(lines),
-        ctx.from_file("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat")
+        ctx.from_file("tests/fixtures/tool_calling/conversation_with_anthropic_signature.chat"),
+        { bufnr = 0 }
       )
       local req = provider:build_request(prompt, {})
 
@@ -382,7 +383,8 @@ describe("Anthropic Provider Extended Thinking", function()
       local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat")
       local prompt = pipeline.run(
         parser.parse_lines(lines),
-        ctx.from_file("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat")
+        ctx.from_file("tests/fixtures/tool_calling/conversation_with_redacted_thinking.chat"),
+        { bufnr = 0 }
       )
       local req = provider:build_request(prompt, {})
 
@@ -458,31 +460,6 @@ describe("Anthropic Provider Extended Thinking", function()
       for _, block in ipairs(assistant_msg.content) do
         assert.is_not_equal("thinking", block.type, "Should not include thinking without signature")
       end
-    end)
-  end)
-
-  describe("reset", function()
-    it("should reset thinking accumulation state", function()
-      local provider = anthropic.new({
-        model = "claude-sonnet-4-5-20250929",
-        thinking_budget = 2048,
-        max_tokens = 4000,
-      })
-
-      -- Manually set some state
-      provider._response_buffer.extra.thinking_sink:write("some thinking")
-      provider._response_buffer.extra.accumulated_signature = "some-sig"
-      provider._response_buffer.extra.redacted_thinking_blocks = { "data1" }
-      provider._response_buffer.extra.current_block_type = "thinking"
-
-      -- Reset
-      provider:reset()
-
-      -- State should be cleared
-      assert.are.equal("", provider._response_buffer.extra.thinking_sink:read())
-      assert.are.equal("", provider._response_buffer.extra.accumulated_signature)
-      assert.are.same({}, provider._response_buffer.extra.redacted_thinking_blocks)
-      assert.is_nil(provider._response_buffer.extra.current_block_type)
     end)
   end)
 end)

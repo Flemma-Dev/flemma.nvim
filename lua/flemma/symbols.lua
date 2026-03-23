@@ -26,12 +26,6 @@ M.SOURCE_PATH = {}
 ---@type table
 M.BUFFER_NUMBER = {}
 
---- Evaluated frontmatter options (flemma.opt proxy result).
---- Carried on Context objects and eval environments so the personality system
---- and tool filtering can access per-buffer frontmatter configuration.
----@type table
-M.FRONTMATTER_OPTS = {}
-
 --- User-defined variables from frontmatter execution.
 --- Carried on Context objects; merged into the eval environment as top-level
 --- keys so expressions can reference them directly.
@@ -59,6 +53,28 @@ M.INCLUDE_BINARY = {}
 --- can write `include('data.bin', { [symbols.BINARY] = true, [symbols.MIME] = 'text/csv' })`.
 ---@type table
 M.INCLUDE_MIME = {}
+
+--- Schema alias map.
+--- Used as a table key in s.object() fields to define alias redirections.
+--- Alias values are strings referencing canonical paths (may contain dots).
+--- Resolution order: real field > alias > DISCOVER callback > validation error.
+---@type table
+M.ALIASES = {}
+
+--- Lazy schema resolver callback.
+--- Used as a table key in s.object() fields to define a discovery callback
+--- for unknown keys. The callback receives the key and returns a schema node
+--- (cached after first resolution) or nil (triggers validation error).
+--- Eliminates passthrough mode — every write is validated, even for dynamically
+--- registered providers and tools.
+---@type table
+M.DISCOVER = {}
+
+--- Clear operation on write proxies.
+--- Used as the key for the clear method on config write proxies, avoiding any
+--- collision with string-keyed config field names.
+---@type table
+M.CLEAR = {}
 
 --- Deep-copy a table while preserving symbol key identity.
 ---

@@ -75,6 +75,9 @@ local M = {}
 ---@field raw? string
 ---@field message_role? string
 ---@field source_file? string
+---@field rewriter_name? string
+---@field include_stack? string[]
+---@field validation? boolean True for diagnostics converted from ValidationFailure (post-execution schema check, not code error)
 
 ---@class flemma.ast.GenericTextPart
 ---@field kind "text"

@@ -6,6 +6,7 @@ local M = {}
 local registry = require("flemma.secrets.registry")
 local cache = require("flemma.secrets.cache")
 local log = require("flemma.logging")
+local context = require("flemma.secrets.context")
 
 ---@class flemma.secrets.Credential
 ---@field kind string
@@ -32,7 +33,7 @@ end
 
 --- Resolve a credential. Checks cache first, then tries resolvers in priority order.
 ---@param credential flemma.secrets.Credential
----@return flemma.secrets.Result|nil
+---@return flemma.secrets.Result|nil result, flemma.secrets.ResolverDiagnostic[]|nil diagnostics
 function M.resolve(credential)
   local key = cache_key(credential.kind, credential.service)
 
@@ -42,23 +43,26 @@ function M.resolve(credential)
     return cached
   end
 
+  local all_diagnostics = {}
   local sorted = registry.get_all_sorted()
   for _, resolver in ipairs(sorted) do
-    if resolver:supports(credential) then
+    local ctx = context.new(resolver.name)
+    if resolver:supports(credential, ctx) then
       log.debug("secrets.resolve(): trying resolver " .. resolver.name .. " for " .. key)
-      local result = resolver:resolve(credential)
+      local result = resolver:resolve(credential, ctx)
       if result then
         log.debug("secrets.resolve(): resolved by " .. resolver.name)
         cache.set(key, result, credential)
         return result
       end
     end
+    vim.list_extend(all_diagnostics, ctx:get_diagnostics())
   end
 
   local description = credential.description or (credential.kind .. " for " .. credential.service)
   log.debug("secrets.resolve(): no resolver could fulfill: " .. description)
-  vim.notify("Flemma: could not resolve credential: " .. description, vim.log.levels.WARN)
-  return nil
+
+  return nil, #all_diagnostics > 0 and all_diagnostics or nil
 end
 
 --- Invalidate a specific cached credential.

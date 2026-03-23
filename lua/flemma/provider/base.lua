@@ -25,29 +25,27 @@ Methods are grouped into three categories:
   - `_is_error_response(self, data)` — detect provider-specific error shapes
     (default: `data.error ~= nil`).
 
-  Required, call super — provider MUST override and invoke the base
-  ------------------------------------------------------------------
-  - `new(opts)` — constructor; must call `base.new(opts)` and
-    `base._init_provider(M, provider)`, then call `provider:reset()`.
-  - `get_api_key(self)` — authentication; resolve credentials via
-    `require("flemma.secrets").resolve()` with the appropriate credential
-    descriptor (kind + service).
-  - `reset(self)` — call `base.reset(self)` plus any provider-specific
-    state initialization. Sinks in `_response_buffer.extra` are
-    auto-destroyed by base.
+  Required — provider MUST implement
+  -----------------------------------
+  - `new(params)` — constructor; creates the instance with plain
+    `self.parameters` table, sets metatable chain, calls
+    `self:_new_response_buffer()`, and performs any provider-specific
+    response buffer setup. See concrete providers for the pattern.
+  - `get_credential(self)` — return a `flemma.secrets.Credential` table
+    describing what this provider needs (kind, service, description, etc.).
+    `get_api_key()` in base calls this, then resolves via `secrets.resolve()`.
 
   Virtual — sensible default provided, override only if needed
   -------------------------------------------------------------
   - `get_endpoint(self)` — return the API URL (default: `self.endpoint`).
-  - `prepare_prompt(self, messages)` — legacy prompt normalization.
   - `validate_parameters(model_name, parameters)` — parameter validation
     (warnings, not failures).
   - `finalize_response(self, exit_code, callbacks)` — post-request cleanup.
     Auto-destroys sinks in `_response_buffer.extra`.
   - `extract_json_response_error(self, data)` — custom error extraction
     from JSON responses.
-  - `try_import_from_buffer(self, lines)` — import conversations from
-    external formats.
+  - `try_import_from_buffer(lines)` — import conversations from
+    external formats (static, no instance state).
   - `is_context_overflow(self, message)` — detect context window overflow
     from error messages.
   - `is_auth_error(self, message)` — detect authentication failures
@@ -102,7 +100,7 @@ local sink = require("flemma.sink")
 
 ---@class flemma.provider.ProviderState
 
---- Flattened per-provider parameters (result of config_manager.merge_parameters on flemma.config.Parameters).
+--- Flattened per-provider parameters (result of normalize.flatten_parameters).
 --- Provider-specific sub-tables (e.g. `vertex`, `openai`) are merged to top level.
 ---@class flemma.provider.Parameters
 ---@field model string Model name (always present after initialization)
@@ -124,11 +122,10 @@ local sink = require("flemma.sink")
 ---@field endpoint? string
 ---@field api_version? string
 ---@field metadata? flemma.provider.Metadata
----@field get_api_key fun(self): string|nil Resolve credentials via secrets module (providers must override)
+---@field get_credential fun(self): flemma.secrets.Credential Credential descriptor (providers must override)
+---@field get_api_key fun(self): string|nil, flemma.secrets.ResolverDiagnostic[]|nil Resolve credentials via secrets module
 ---@field _response_buffer? flemma.provider.ResponseBuffer
 ---@field _response_headers? table<string, string[]>
----@field _base_parameters table<string, any> Underlying parameter table (without per-request overrides), for iteration
----@field set_parameter_overrides fun(self, overrides: table<string, any>|nil)
 local M = {}
 
 ---@class flemma.provider.HistoryMessage
@@ -138,11 +135,8 @@ local M = {}
 ---@class flemma.provider.Prompt
 ---@field history flemma.provider.HistoryMessage[] User/assistant messages (canonical roles)
 ---@field system string|nil The system instruction, if any
----@field opts flemma.opt.FrontmatterOpts|nil Per-buffer options from frontmatter
+---@field bufnr? integer Buffer number for per-buffer config resolution
 ---@field pending_tool_calls flemma.pipeline.UnresolvedTool[]|nil Tool calls without matching results
-
----@class flemma.provider.ResetOpts
----@field invalidate_all_secrets? boolean If true, invalidate all cached credentials only
 
 ---@class flemma.provider.SSELine
 ---@field type "data"|"event"|"done"
@@ -167,11 +161,22 @@ function M.build_request(self, prompt, context)
 end
 
 --- @abstract
---- Resolve credentials via the secrets module.
+--- Return the credential descriptor for this provider.
 ---@param self flemma.provider.Base
----@return string|nil
+---@return flemma.secrets.Credential
+function M.get_credential(self)
+  error("get_credential() must be implemented by provider")
+end
+
+--- Resolve credentials via the secrets module using the provider's credential descriptor.
+---@param self flemma.provider.Base
+---@return string|nil value, flemma.secrets.ResolverDiagnostic[]|nil diagnostics
 function M.get_api_key(self)
-  error("get_api_key() must be implemented by provider")
+  local result, diagnostics = secrets.resolve(self:get_credential())
+  if result then
+    return result.value
+  end
+  return nil, diagnostics
 end
 
 --- @abstract
@@ -235,52 +240,19 @@ function M._process_data(self, data, parsed, callbacks)
 end
 
 -- ============================================================================
--- Required, call super — providers MUST override and invoke the base
+-- Required — providers MUST implement new(params) with this pattern:
+--
+--   function M.new(params)
+--     local self = setmetatable({
+--       parameters = params or {},
+--       state = {},
+--       endpoint = "...",
+--     }, { __index = setmetatable(M, { __index = base }) })
+--     self:_new_response_buffer()
+--     -- Provider-specific response buffer setup here
+--     return self
+--   end
 -- ============================================================================
-
---- Constructor. Providers must call `base.new(opts)` to get the base instance,
---- then set their own metatable and provider-specific fields.
----@param opts flemma.provider.Parameters|nil
----@return flemma.provider.Base
-function M.new(opts)
-  local base_params = opts or {}
-  local overrides = nil
-
-  local params_proxy = setmetatable({}, {
-    __index = function(_, k)
-      if overrides and overrides[k] ~= nil then
-        return overrides[k]
-      end
-      return base_params[k]
-    end,
-    __newindex = function(_, k, v)
-      base_params[k] = v
-    end,
-  })
-
-  local provider = setmetatable({
-    parameters = params_proxy,
-    _base_parameters = base_params,
-    state = {},
-  }, { __index = M })
-
-  --- Set per-request parameter overrides (from frontmatter).
-  --- Each call replaces any previous overrides; pass nil to clear.
-  ---@param new_overrides table<string, any>|nil
-  function provider.set_parameter_overrides(_, new_overrides)
-    overrides = new_overrides
-  end
-
-  return provider
-end
-
---- Set up the standard metatable chain for a provider instance.
---- Call this in provider constructors after base.new() and before reset().
----@param provider_module table The provider module table (M)
----@param provider flemma.provider.Base The provider instance from base.new()
-function M._init_provider(provider_module, provider)
-  setmetatable(provider, { __index = setmetatable(provider_module, { __index = M }) })
-end
 
 --- Destroy all sink objects in a response buffer's extra table.
 --- Finds values with a :destroy() method via duck typing.
@@ -294,31 +266,6 @@ local function destroy_sinks(response_buffer)
       value:destroy()
     end
   end
-end
-
---- Reset provider state before a new request.
---- When called without opts, performs a full reset (response buffer, etc.).
---- When called with opts, performs a selective reset (only the specified fields).
---- Providers must call `base.reset(self)` plus any provider-specific state initialization.
---- Sinks in `_response_buffer.extra` are auto-destroyed on full reset.
----@param self flemma.provider.Base
----@param opts? flemma.provider.ResetOpts
-function M.reset(self, opts)
-  if opts then
-    if opts.invalidate_all_secrets then
-      secrets.invalidate_all()
-    end
-    return
-  end
-  -- Destroy provider-specific sinks in extra
-  destroy_sinks(self._response_buffer)
-  -- Destroy previous response buffer sink if it exists
-  if self._response_buffer and self._response_buffer.lines_sink then
-    self._response_buffer.lines_sink:destroy()
-  end
-  -- Full reset: create response buffer for all providers
-  self:_new_response_buffer()
-  self._response_headers = nil
 end
 
 -- ============================================================================
@@ -343,43 +290,6 @@ end
 ---@return string[]
 function M.get_trailing_keys(self)
   return {}
-end
-
---- Legacy prompt normalization from raw messages.
---- Normalizes messages into a provider-agnostic Prompt structure with canonical
---- roles ('user' and 'assistant'). Used only by tests; production code uses
---- the pipeline instead.
----@param messages { type: string, content: string }[] The raw messages to prepare
----@return flemma.provider.Prompt prompt The prepared prompt with history and system (canonical roles)
-function M.prepare_prompt(self, messages)
-  local history = {}
-  local system = nil
-
-  -- Extract system message (last wins policy)
-  for _, msg in ipairs(messages) do
-    if msg.type == "System" then
-      system = vim.trim(msg.content or "")
-    end
-  end
-
-  -- Add user and assistant messages with canonical roles
-  for _, msg in ipairs(messages) do
-    local role = nil
-    if msg.type == "You" then
-      role = "user"
-    elseif msg.type == "Assistant" then
-      role = "assistant"
-    end
-
-    if role then
-      table.insert(history, {
-        role = role,
-        content = vim.trim(msg.content or ""),
-      })
-    end
-  end
-
-  return { history = history, system = system }
 end
 
 --- Validate provider-specific parameters.
@@ -451,11 +361,10 @@ end
 
 --- Try to import conversation from buffer lines in an external format.
 --- Override to support importing from provider-specific formats (e.g. Anthropic
---- JSON exports).
----@param self flemma.provider.Base
+--- JSON exports). This is a static function — no instance state needed.
 ---@param lines string[]
 ---@return string|nil
-function M.try_import_from_buffer(self, lines)
+function M.try_import_from_buffer(lines)
   return nil
 end
 
@@ -892,159 +801,6 @@ function M._inject_orphan_results(self, pending, format_fn)
     )
   end
   return results
-end
-
--- ============================================================================
--- Shared parameter resolution helpers
--- ============================================================================
-
----@class flemma.provider.ThinkingResolution
----@field enabled boolean Whether thinking/reasoning is active
----@field budget? integer Token budget for budget-based providers (Anthropic, Vertex)
----@field effort? string Effort level for effort-based providers (OpenAI): "minimal"|"low"|"medium"|"high"|"max"
----@field level? string Display level: "minimal"|"low"|"medium"|"high"|"max" (always set when enabled)
-
---- Map a numeric budget to the closest named effort level
----@param budget number
----@return string effort "minimal"|"low"|"medium"|"high"|"max"
-local function budget_to_effort(budget)
-  if budget <= 256 then
-    return "minimal"
-  elseif budget <= 4096 then
-    return "low"
-  elseif budget <= 12288 then
-    return "medium"
-  elseif budget <= 24576 then
-    return "high"
-  else
-    return "max"
-  end
-end
-
---- Map a named effort level to a thinking budget, using per-model data when available
----@param level string "minimal"|"low"|"medium"|"high"|"max"
----@param model_info? flemma.models.ModelInfo
----@return integer budget
-local function effort_to_budget(level, model_info)
-  if model_info and model_info.thinking_budgets then
-    ---@cast model_info -nil
-    local budgets = model_info.thinking_budgets --[[@as table<string, integer>]]
-    if level == "max" then
-      if model_info.max_thinking_budget then
-        return model_info.max_thinking_budget
-      end
-      return budgets.high or 32768
-    end
-    local model_budget = budgets[level]
-    if model_budget then
-      return model_budget
-    end
-  end
-  -- Hardcoded fallback (current behavior)
-  if level == "minimal" then
-    return 128
-  elseif level == "low" then
-    return 2048
-  elseif level == "medium" then
-    return 8192
-  elseif level == "high" then
-    return 16384
-  else -- "max"
-    return 32768
-  end
-end
-
---- Map an effort level through model_info.thinking_effort_map if available
----@param effort string The canonical Flemma effort level
----@param model_info? flemma.models.ModelInfo
----@return string mapped_effort The provider-specific API value
-local function map_effort(effort, model_info)
-  if model_info and model_info.thinking_effort_map then
-    return model_info.thinking_effort_map[effort] or effort
-  end
-  return effort
-end
-
---- Resolve the unified `thinking` parameter into provider-appropriate values.
----
---- Priority: provider-specific param > thinking > provider defaults.
---- For budget-based providers (Anthropic, Vertex), resolves to a token budget.
---- For effort-based providers (OpenAI), resolves to an effort level string.
----
----@param params flemma.provider.Parameters The parameter proxy
----@param caps flemma.provider.Capabilities The provider's capabilities
----@param model_info? flemma.models.ModelInfo Per-model metadata for budget/clamping
----@return flemma.provider.ThinkingResolution
-function M.resolve_thinking(params, caps, model_info)
-  -- For budget-based providers (Anthropic, Vertex)
-  if caps.supports_thinking_budget then
-    local min = (model_info and model_info.min_thinking_budget) or caps.min_thinking_budget or 1
-    local max = model_info and model_info.max_thinking_budget
-
-    -- Priority: provider-specific thinking_budget > unified thinking
-    local raw_budget = params.thinking_budget
-    if raw_budget ~= nil then
-      if type(raw_budget) == "number" and raw_budget > 0 then
-        local budget = math.max(math.floor(raw_budget), min)
-        if max then
-          budget = math.min(budget, max)
-        end
-        return { enabled = true, budget = budget, level = budget_to_effort(budget) }
-      else
-        return { enabled = false }
-      end
-    end
-
-    -- Fall back to unified `thinking` parameter
-    local thinking = params.thinking
-    if thinking == nil or thinking == false or thinking == 0 then
-      return { enabled = false }
-    end
-    if type(thinking) == "string" then
-      local budget = math.max(effort_to_budget(thinking, model_info), min)
-      if max then
-        budget = math.min(budget, max)
-      end
-      return { enabled = true, budget = budget, level = budget_to_effort(budget) }
-    end
-    if type(thinking) == "number" and thinking > 0 then
-      local budget = math.max(math.floor(thinking), min)
-      if max then
-        budget = math.min(budget, max)
-      end
-      return { enabled = true, budget = budget, level = budget_to_effort(budget) }
-    end
-    return { enabled = false }
-  end
-
-  -- For effort-based providers (OpenAI)
-  if caps.supports_reasoning then
-    -- Priority: provider-specific reasoning > unified thinking
-    local raw_reasoning = params.reasoning
-    if raw_reasoning ~= nil and raw_reasoning ~= "" then
-      local mapped = map_effort(raw_reasoning, model_info)
-      return { enabled = true, effort = mapped, level = raw_reasoning }
-    end
-
-    -- Fall back to unified `thinking` parameter
-    local thinking = params.thinking
-    if thinking == nil or thinking == false or thinking == 0 then
-      return { enabled = false }
-    end
-    if type(thinking) == "string" then
-      local mapped = map_effort(thinking, model_info)
-      return { enabled = true, effort = mapped, level = thinking }
-    end
-    if type(thinking) == "number" and thinking > 0 then
-      local canonical = budget_to_effort(thinking)
-      local mapped = map_effort(canonical, model_info)
-      return { enabled = true, effort = mapped, level = canonical }
-    end
-    return { enabled = false }
-  end
-
-  -- Provider supports neither
-  return { enabled = false }
 end
 
 return M

@@ -1,25 +1,28 @@
 describe("flemma.usage segment building", function()
   local usage
-  local state
+  local config_facade
   local session_module
 
   before_each(function()
     package.loaded["flemma.usage"] = nil
-    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.pricing"] = nil
     package.loaded["flemma.session"] = nil
     package.loaded["flemma.bar"] = nil
 
-    usage = require("flemma.usage")
-    state = require("flemma.state")
-    session_module = require("flemma.session")
-
-    state.set_config({
-      provider = "openai",
-      model = "gpt-4o",
+    config_facade = require("flemma.config")
+    local schema = require("flemma.config.schema")
+    config_facade.init(schema)
+    config_facade.apply(config_facade.LAYERS.SETUP, {
       pricing = { enabled = true },
     })
+
+    usage = require("flemma.usage")
+    session_module = require("flemma.session")
   end)
 
   describe("build_segments", function()
@@ -97,9 +100,8 @@ describe("flemma.usage segment building", function()
     end)
 
     it("should not include cost items when pricing disabled", function()
-      state.set_config({
-        provider = "openai",
-        model = "gpt-4o",
+      config_facade.init(require("flemma.config.schema"))
+      config_facade.apply(config_facade.LAYERS.SETUP, {
         pricing = { enabled = false },
       })
 

@@ -13,9 +13,12 @@ describe("flemma.provider.base", function()
   --- Create a base provider with metadata for testing
   ---@return flemma.provider.Base
   local function make_provider()
-    local provider = base.new({ model = "test" })
-    provider:reset()
-    provider.metadata = { name = "test", display_name = "Test" }
+    local provider = setmetatable({
+      parameters = { model = "test" },
+      state = {},
+      metadata = { name = "test", display_name = "Test" },
+    }, { __index = base })
+    provider:_new_response_buffer()
     return provider
   end
 
@@ -250,19 +253,6 @@ describe("flemma.provider.base", function()
       assert.equals(2, #results)
       assert.equals("id1", results[1].id)
       assert.equals("id2", results[2].id)
-    end)
-  end)
-
-  describe("auto-sink-destroy in reset", function()
-    it("destroys sinks in _response_buffer.extra on reset", function()
-      local provider = make_provider()
-      local sink = require("flemma.sink")
-      local test_sink = sink.create({ name = "test/sink" })
-      provider._response_buffer.extra.test_sink = test_sink
-      -- Should not error — auto-destroys the sink
-      provider:reset()
-      -- After reset, extra should be empty (fresh buffer)
-      assert.is_nil(provider._response_buffer.extra.test_sink)
     end)
   end)
 

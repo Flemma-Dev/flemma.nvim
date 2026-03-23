@@ -6,6 +6,7 @@ local M = {}
 
 -- Module-level require for description constants only (evaluated at load time).
 -- Runtime code inside execute() must use ctx.truncate instead.
+local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
 
 ---Maximum recursion depth allowed
@@ -82,8 +83,13 @@ end
 M.definitions = {
   {
     name = "ls",
+    metadata = {
+      config_schema = s.object({
+        cwd = s.optional(s.string("urn:flemma:buffer:path")),
+      }),
+    },
     enabled = function(config)
-      return config and config.experimental and config.experimental.tools or false
+      return not not (config and config.experimental and config.experimental.tools)
     end,
     capabilities = { "can_auto_approve_if_sandboxed" },
     description = "List directory contents. Output is truncated to "
@@ -97,29 +103,12 @@ M.definitions = {
       .. DEFAULT_LIMIT
       .. ").",
     strict = true,
-    input_schema = {
-      type = "object",
-      properties = {
-        label = {
-          type = "string",
-          description = "A short human-readable label for this operation (e.g., 'listing project root')",
-        },
-        path = {
-          type = "string",
-          description = "Directory path to list (relative or absolute)",
-        },
-        max_depth = {
-          type = { "number", "null" },
-          description = "Maximum recursion depth (default: 1, max: 10)",
-        },
-        limit = {
-          type = { "number", "null" },
-          description = "Maximum number of entries (default: 500)",
-        },
-      },
-      required = { "label", "path", "max_depth", "limit" },
-      additionalProperties = false,
-    },
+    input_schema = s.object({
+      label = s.string():describe("A short human-readable label for this operation (e.g., 'listing project root')"),
+      path = s.string():describe("Directory path to list (relative or absolute)"),
+      max_depth = s.number():nullable():describe("Maximum recursion depth (default: 1, max: 10)"),
+      limit = s.number():nullable():describe("Maximum number of entries (default: 500)"),
+    }):strict(),
     personalities = {
       ["coding-assistant"] = {
         snippet = "List directory contents with optional depth and entry limit",
@@ -130,17 +119,16 @@ M.definitions = {
       },
     },
     async = false,
-    ---@param input table<string, any>
-    ---@return string
+    ---@return flemma.tools.ToolPreview
     format_preview = function(input)
-      local parts = { input.path }
+      local detail_parts = { input.path }
       if input.max_depth and input.max_depth > 1 then
-        table.insert(parts, "depth=" .. input.max_depth)
+        table.insert(detail_parts, "depth=" .. input.max_depth)
       end
-      if input.label then
-        table.insert(parts, "# " .. input.label)
-      end
-      return table.concat(parts, "  ")
+      return {
+        label = input.label,
+        detail = detail_parts,
+      }
     end,
     ---@param input table<string, any>
     ---@param ctx flemma.tools.ExecutionContext

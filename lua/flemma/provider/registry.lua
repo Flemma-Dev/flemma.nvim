@@ -7,6 +7,8 @@
 local M = {}
 
 -- Load models from centralized models.lua
+local config_facade = require("flemma.config")
+local loader = require("flemma.loader")
 local models_data = require("flemma.models")
 local registry_utils = require("flemma.registry")
 
@@ -25,19 +27,19 @@ local registry_utils = require("flemma.registry")
 ---@field module string
 ---@field capabilities flemma.provider.Capabilities
 ---@field display_name string
----@field default_parameters? table<string, any>
+---@field config_schema? flemma.schema.ObjectNode Provider-specific config schema for DISCOVER resolution
 
 ---@class flemma.provider.Metadata
 ---@field name string Provider identifier (e.g., "anthropic")
 ---@field display_name string Human-readable name
 ---@field capabilities flemma.provider.Capabilities
----@field default_parameters? table<string, any> Provider-specific param defaults
+---@field config_schema? flemma.schema.ObjectNode Provider-specific config schema for DISCOVER resolution
 
 ---@class flemma.provider.RegistrationEntry
 ---@field module string Lua module path
 ---@field capabilities flemma.provider.Capabilities
 ---@field display_name string
----@field default_parameters? table<string, any> Provider-specific param defaults
+---@field config_schema? flemma.schema.ObjectNode Provider-specific config schema
 ---@field default_model? string Default model name
 ---@field models? table<string, flemma.models.ModelInfo> Model definitions with pricing
 
@@ -91,7 +93,7 @@ function M.register(source, entry)
     definition = entry
   else
     -- Single-arg form: register("module.path") — load module and read metadata
-    local mod = require(source)
+    local mod = loader.load(source)
     if not mod.metadata then
       error("Provider module " .. source .. " does not export metadata", 2)
     end
@@ -100,7 +102,7 @@ function M.register(source, entry)
       module = source,
       capabilities = mod.metadata.capabilities,
       display_name = mod.metadata.display_name,
-      default_parameters = mod.metadata.default_parameters,
+      config_schema = mod.metadata.config_schema,
     }
   end
 
@@ -115,7 +117,7 @@ function M.register(source, entry)
     module = definition.module,
     capabilities = capabilities,
     display_name = definition.display_name,
-    default_parameters = definition.default_parameters,
+    config_schema = definition.config_schema,
   }
 
   -- If models or default_model provided, update models_data
@@ -137,6 +139,11 @@ function M.register(source, entry)
     end
   end
 
+  -- Materialize config_schema defaults into the DEFAULTS layer
+  if definition.config_schema then
+    config_facade.register_module_defaults("parameters", name, definition.config_schema)
+  end
+
   -- Refresh defaults and models for this provider
   M.defaults[name] = models_data.providers[name] and models_data.providers[name].default or nil
   M.models[name] = get_provider_models(name)
@@ -145,7 +152,7 @@ end
 ---Initialize built-in providers (called during setup)
 function M.setup()
   for _, module_path in ipairs(BUILTIN_PROVIDER_MODULES) do
-    local mod = require(module_path)
+    local mod = loader.load(module_path)
     if mod.metadata and not providers[mod.metadata.name] then
       M.register(module_path)
     end
@@ -245,13 +252,13 @@ function M.get_display_name(provider_name)
   return provider and provider.display_name or nil
 end
 
----Get provider default parameters
+---Get provider config schema for DISCOVER resolution
 ---@param provider_name string The provider identifier
----@return table<string, any>|nil default_parameters Provider default parameters, or nil if not found
-function M.get_default_parameters(provider_name)
+---@return flemma.schema.ObjectNode|nil config_schema Provider config schema, or nil if not found
+function M.get_config_schema(provider_name)
   local resolved = M.resolve(provider_name)
   local provider = providers[resolved]
-  return provider and provider.default_parameters or nil
+  return provider and provider.config_schema or nil
 end
 
 --------------------------------------------------------------------------------

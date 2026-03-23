@@ -9,9 +9,17 @@ describe("Rate limit response headers", function()
     base = require("flemma.provider.base")
   end)
 
+  local function make_provider()
+    local provider = setmetatable({
+      parameters = {},
+      state = {},
+    }, { __index = base })
+    return provider
+  end
+
   describe("set_response_headers", function()
     it("stores headers on the provider instance", function()
-      local provider = base.new()
+      local provider = make_provider()
       local headers = {
         ["content-type"] = { "application/json" },
         ["retry-after"] = { "30" },
@@ -21,7 +29,7 @@ describe("Rate limit response headers", function()
     end)
 
     it("overwrites previous headers", function()
-      local provider = base.new()
+      local provider = make_provider()
       provider:set_response_headers({ ["retry-after"] = { "10" } })
       provider:set_response_headers({ ["retry-after"] = { "60" } })
       assert.same({ ["retry-after"] = { "60" } }, provider._response_headers)
@@ -30,7 +38,7 @@ describe("Rate limit response headers", function()
 
   describe("format_rate_limit_details", function()
     it("formats Anthropic rate limit headers", function()
-      local provider = base.new()
+      local provider = make_provider()
       provider:set_response_headers({
         ["content-type"] = { "application/json" },
         ["retry-after"] = { "30" },
@@ -47,7 +55,7 @@ describe("Rate limit response headers", function()
     end)
 
     it("formats OpenAI rate limit headers", function()
-      local provider = base.new()
+      local provider = make_provider()
       provider:set_response_headers({
         ["x-ratelimit-remaining-requests"] = { "0" },
         ["x-ratelimit-reset-requests"] = { "2026-02-24T19:39:00Z" },
@@ -61,7 +69,7 @@ describe("Rate limit response headers", function()
     end)
 
     it("returns sorted output", function()
-      local provider = base.new()
+      local provider = make_provider()
       provider:set_response_headers({
         ["x-ratelimit-remaining-requests"] = { "0" },
         ["retry-after"] = { "30" },
@@ -78,7 +86,7 @@ describe("Rate limit response headers", function()
     end)
 
     it("returns nil when no rate limit headers present", function()
-      local provider = base.new()
+      local provider = make_provider()
       provider:set_response_headers({
         ["content-type"] = { "application/json" },
         ["date"] = { "Mon, 24 Feb 2026 19:00:00 GMT" },
@@ -87,12 +95,12 @@ describe("Rate limit response headers", function()
     end)
 
     it("returns nil when no headers stored", function()
-      local provider = base.new()
+      local provider = make_provider()
       assert.is_nil(provider:format_rate_limit_details())
     end)
 
     it("handles multiple values for the same header", function()
-      local provider = base.new()
+      local provider = make_provider()
       provider:set_response_headers({
         ["x-ratelimit-remaining-requests"] = { "0", "also-0" },
       })
@@ -100,22 +108,6 @@ describe("Rate limit response headers", function()
       assert.is_not_nil(details)
       local lines = vim.split(details, "\n")
       assert.equals(2, #lines)
-    end)
-  end)
-
-  describe("reset clears headers", function()
-    it("clears _response_headers on full reset", function()
-      local provider = base.new()
-      provider:set_response_headers({ ["retry-after"] = { "30" } })
-      provider:reset()
-      assert.is_nil(provider._response_headers)
-    end)
-
-    it("preserves _response_headers on secrets-only reset", function()
-      local provider = base.new()
-      provider:set_response_headers({ ["retry-after"] = { "30" } })
-      provider:reset({ invalidate_all_secrets = true })
-      assert.same({ ["retry-after"] = { "30" } }, provider._response_headers)
     end)
   end)
 end)

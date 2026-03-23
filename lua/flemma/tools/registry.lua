@@ -22,7 +22,7 @@ local M = {}
 --- Context passed to tool execute functions as the third argument.
 --- Tools should code against this contract exclusively — never require() internal
 --- Flemma modules. Sandbox, truncate, and path namespaces are lazy-loaded on first access.
----@class flemma.tools.ExecutionContext
+---@class flemma.tools.ExecutionContext : flemma.config.ConfigAware<table>
 ---@field bufnr integer Buffer number for the current execution
 ---@field cwd string Absolute, normalized working directory
 ---@field timeout integer Default timeout in seconds (resolved from config.tools.default_timeout)
@@ -33,19 +33,29 @@ local M = {}
 ---@field path flemma.tools.PathContext Path resolution utilities (lazy-loaded)
 ---@field get_config fun(self: flemma.tools.ExecutionContext): table? Tool-specific config subtree (read-only copy of config.tools[tool_name])
 
+---@class flemma.StructuredToolPreview
+---@field label? string  Human-readable intent — shown italic, truncated last
+---@field detail? string|string[] Raw technical summary — shown dimmer, truncated first. Tables are joined with double-space upstream.
+
+---@alias flemma.tools.ToolPreview string | flemma.StructuredToolPreview
+
+---@class flemma.tools.ToolMetadata
+---@field config_schema? flemma.schema.ObjectNode Schema for tool-specific configuration (used by DISCOVER resolution)
+
 ---@class flemma.tools.ToolDefinition
 ---@field name string Tool name (must match registry key)
 ---@field description string Human-readable description
 ---@field strict? boolean Enable strict schema enforcement (OpenAI only; requires additionalProperties=false on input_schema)
----@field input_schema flemma.tools.JSONSchema JSON Schema for the tool input
+---@field input_schema flemma.tools.JSONSchema|flemma.schema.Node JSON Schema table or schema DSL node (serialized via to_json_schema())
 ---@field output_schema? flemma.tools.JSONSchema JSON Schema for the tool output (used in description)
 ---@field async? boolean True if execute takes a callback (default false)
 ---@field enabled? boolean|fun(config: flemma.Config): boolean Set to false to exclude from API requests by default (still executable, can be enabled via flemma.opt.tools). When a function, evaluated at query time with the resolved config.
 ---@field executable? boolean Set to false to disable execution
 ---@field execute? fun(input: table<string, any>, context: flemma.tools.ExecutionContext, callback?: fun(result: flemma.tools.ExecutionResult)): any Executor function (sync returns ExecutionResult, async returns cancel fn or nil)
 ---@field capabilities? string[] Declarative capability tags (e.g., "can_auto_approve_if_sandboxed") queried by resolvers and policies
----@field format_preview? fun(input: table<string, any>, max_length: integer): string Custom preview body generator (receives input and available width after "name: " prefix)
+---@field format_preview? fun(input: table<string, any>, max_length: integer): flemma.tools.ToolPreview Custom preview body generator. Returns a plain string (backward-compatible) or a StructuredToolPreview {label?, detail?}. When a string is returned, label is never auto-promoted. When StructuredToolPreview is returned, label is shown italic and detail is shown dimmer in fold text.
 ---@field personalities? table<string, table<string, string|string[]>> Personality-scoped parts keyed by personality name, then by part name
+---@field metadata? flemma.tools.ToolMetadata Tool metadata including config schema for DISCOVER resolution
 
 ---@class flemma.tools.ExecutionResult
 ---@field success boolean Whether execution succeeded
@@ -53,6 +63,7 @@ local M = {}
 ---@field error? string Error message (when success=false)
 
 local registry_utils = require("flemma.registry")
+local string_utils = require("flemma.utilities.string")
 
 ---@type table<string, flemma.tools.ToolDefinition>
 local tools = {}
@@ -79,6 +90,15 @@ M.define = M.register
 ---@return boolean
 function M.has(name)
   return tools[name] ~= nil
+end
+
+--- Find the closest registered tool name to the given input.
+--- Uses Levenshtein distance for fuzzy matching.
+---@param name string The tool name to match against
+---@param max_distance? integer Maximum edit distance (default: 3)
+---@return string|nil closest The closest tool name, or nil if none is close enough
+function M.closest_match(name, max_distance)
+  return string_utils.closest_match(name, tools, max_distance)
 end
 
 ---Get a tool definition by name

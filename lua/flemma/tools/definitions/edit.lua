@@ -2,6 +2,8 @@
 --- Find-and-replace exact text in files
 --- Ported from pi by Mario Zechner (https://github.com/badlogic/pi-mono)
 --- Original: MIT License, Copyright (c) 2025 Mario Zechner
+local s = require("flemma.schema")
+
 ---@class flemma.tools.definitions.Edit
 ---@field definitions flemma.tools.ToolDefinition[]
 local M = {}
@@ -13,29 +15,13 @@ M.definitions = {
       .. "The oldText must match exactly (including whitespace). "
       .. "Use this for precise, surgical edits.",
     strict = true,
-    input_schema = {
-      type = "object",
-      properties = {
-        label = {
-          type = "string",
-          description = "A short human-readable label for this operation (e.g., 'fixing typo in config.lua')",
-        },
-        path = {
-          type = "string",
-          description = "Path to the file to edit (relative or absolute)",
-        },
-        oldText = {
-          type = "string",
-          description = "Exact text to find and replace (must match exactly)",
-        },
-        newText = {
-          type = "string",
-          description = "New text to replace the old text with",
-        },
-      },
-      required = { "label", "path", "oldText", "newText" },
-      additionalProperties = false,
-    },
+    input_schema = s.object({
+      label = s.string()
+        :describe("A short human-readable label for this operation (e.g., 'fixing typo in config.lua')"),
+      path = s.string():describe("Path to the file to edit (relative or absolute)"),
+      oldText = s.string():describe("Exact text to find and replace (must match exactly)"),
+      newText = s.string():describe("New text to replace the old text with"),
+    }):strict(),
     personalities = {
       ["coding-assistant"] = {
         snippet = "Make surgical edits to files (find exact text and replace)",
@@ -46,12 +32,12 @@ M.definitions = {
       },
     },
     async = false,
+    ---@return flemma.tools.ToolPreview
     format_preview = function(input)
-      local parts = { input.path }
-      if input.label then
-        table.insert(parts, "# " .. input.label)
-      end
-      return table.concat(parts, "  ")
+      return {
+        label = input.label,
+        detail = input.path,
+      }
     end,
     execute = function(input, ctx)
       local path = input.path

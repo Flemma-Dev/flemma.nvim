@@ -432,8 +432,8 @@ describe("State Management", function()
       notifications = require("flemma.notifications")
 
       -- Override limit to allow stacking for isolation tests
-      local config = state.get_config()
-      config.notifications.limit = 3
+      local config_facade = require("flemma.config")
+      config_facade.apply(config_facade.LAYERS.RUNTIME, { notifications = { limit = 3 } })
     end)
 
     --- Create minimal test segments for notification tests

@@ -3,6 +3,17 @@
 ---@class flemma.sandbox.backends.Bwrap
 local M = {}
 
+local s = require("flemma.schema")
+
+---@class flemma.sandbox.backends.BwrapMetadata
+---@field config_schema flemma.schema.ObjectNode
+M.metadata = {
+  config_schema = s.object({
+    path = s.string("bwrap"),
+    extra_args = s.list(s.string(), {}),
+  }),
+}
+
 --- Validate that bwrap is available on this platform
 ---@param backend_config flemma.config.BwrapBackendConfig
 ---@return boolean ok, string|nil error

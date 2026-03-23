@@ -14,7 +14,13 @@ package.loaded["flemma.tools.definitions.read"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
 package.loaded["flemma.tools.definitions.write"] = nil
 package.loaded["flemma.utilities.truncate"] = nil
+package.loaded["flemma.config"] = nil
+package.loaded["flemma.config.store"] = nil
+package.loaded["flemma.config.proxy"] = nil
+package.loaded["flemma.config.schema"] = nil
 
+local config_facade = require("flemma.config")
+local schema = require("flemma.config.schema")
 local tools = require("flemma.tools")
 local registry = require("flemma.tools.registry")
 local context = require("flemma.tools.context")
@@ -207,6 +213,7 @@ describe("Calculator Executor", function()
   local calc_def
 
   before_each(function()
+    config_facade.init(schema)
     registry.clear()
     tools.setup()
     tools.register("extras.flemma.tools.calculator")
@@ -1408,6 +1415,7 @@ describe("Cancel Priority Logic", function()
   local executor
 
   before_each(function()
+    config_facade.init(schema)
     package.loaded["flemma.tools.executor"] = nil
     executor = require("flemma.tools.executor")
     registry.clear()
@@ -1530,6 +1538,7 @@ describe("Tool Executor", function()
   local executor
 
   before_each(function()
+    config_facade.init(schema)
     -- Reset executor module state
     package.loaded["flemma.tools.executor"] = nil
     executor = require("flemma.tools.executor")
@@ -1745,8 +1754,8 @@ describe("Tool Executor", function()
 
     it("arms autopilot before executing pending tool", function()
       local ap = require("flemma.autopilot")
-      local ap_state = require("flemma.state")
-      ap_state.set_config({ tools = { autopilot = { enabled = true } } })
+      config_facade.init(schema)
+      config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
 
       local bufnr = create_buffer({
         "@Assistant:",
@@ -1794,7 +1803,7 @@ describe("Tool Executor", function()
 
       vim.api.nvim_win_close(winid, true)
       ap.cleanup_buffer(bufnr)
-      ap_state.set_config({})
+      config_facade.init(schema)
     end)
 
     it("does not arm autopilot when idle (no active loop)", function()
@@ -1802,8 +1811,8 @@ describe("Tool Executor", function()
       -- Alt+Enter should execute the tool without arming autopilot. Only
       -- re-arm when autopilot was paused (actively in a loop).
       local ap = require("flemma.autopilot")
-      local ap_state = require("flemma.state")
-      ap_state.set_config({ tools = { autopilot = { enabled = true } } })
+      config_facade.init(schema)
+      config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
 
       local bufnr = create_buffer({
         "@Assistant:",
@@ -1838,7 +1847,7 @@ describe("Tool Executor", function()
 
       vim.api.nvim_win_close(winid, true)
       ap.cleanup_buffer(bufnr)
-      ap_state.set_config({})
+      config_facade.init(schema)
     end)
 
     it("arms autopilot before resolving rejected tool", function()
@@ -1847,8 +1856,8 @@ describe("Tool Executor", function()
       -- the scheduled on_tools_complete saw "paused" state and was ignored,
       -- breaking the autopilot loop.
       local ap = require("flemma.autopilot")
-      local ap_state = require("flemma.state")
-      ap_state.set_config({ tools = { autopilot = { enabled = true } } })
+      config_facade.init(schema)
+      config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
 
       -- Start with pending block to get autopilot into paused state
       local bufnr = create_buffer({
@@ -1912,14 +1921,14 @@ describe("Tool Executor", function()
 
       vim.api.nvim_win_close(winid, true)
       ap.cleanup_buffer(bufnr)
-      ap_state.set_config({})
+      config_facade.init(schema)
     end)
 
     it("arms autopilot before resolving denied tool", function()
       -- Same regression as rejected, but for denied status.
       local ap = require("flemma.autopilot")
-      local ap_state = require("flemma.state")
-      ap_state.set_config({ tools = { autopilot = { enabled = true } } })
+      config_facade.init(schema)
+      config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
 
       -- Start with pending block to get autopilot into paused state
       local bufnr = create_buffer({
@@ -1978,7 +1987,7 @@ describe("Tool Executor", function()
 
       vim.api.nvim_win_close(winid, true)
       ap.cleanup_buffer(bufnr)
-      ap_state.set_config({})
+      config_facade.init(schema)
     end)
   end)
 

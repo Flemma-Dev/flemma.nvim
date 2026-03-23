@@ -243,6 +243,70 @@ describe("ast.query", function()
     end)
   end)
 
+  describe("build_tool_use_index", function()
+    it("returns name and label for tool_use with input.label", function()
+      local query = require("flemma.ast.query")
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`call_001`)",
+        "```json",
+        '{"command": "ls", "label": "List files", "timeout": 30}',
+        "```",
+      })
+      local index = query.build_tool_use_index(doc)
+      assert.are.equal("bash", index["call_001"].name)
+      assert.are.equal("List files", index["call_001"].label)
+    end)
+
+    it("returns name with nil label when input has no label", function()
+      local query = require("flemma.ast.query")
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `bash` (`call_002`)",
+        "```json",
+        '{"command": "ls", "timeout": 30}',
+        "```",
+      })
+      local index = query.build_tool_use_index(doc)
+      assert.are.equal("bash", index["call_002"].name)
+      assert.is_nil(index["call_002"].label)
+    end)
+
+    it("handles multiple tools across messages", function()
+      local query = require("flemma.ast.query")
+      local doc = parser.parse_lines({
+        "@Assistant:",
+        "**Tool Use:** `read` (`call_003`)",
+        "```json",
+        '{"path": "foo.lua", "label": "Reading foo", "offset": null, "limit": null}',
+        "```",
+        "**Tool Use:** `bash` (`call_004`)",
+        "```json",
+        '{"command": "ls", "label": "List files", "timeout": 30}',
+        "```",
+      })
+      local index = query.build_tool_use_index(doc)
+      assert.are.equal("read", index["call_003"].name)
+      assert.are.equal("Reading foo", index["call_003"].label)
+      assert.are.equal("bash", index["call_004"].name)
+      assert.are.equal("List files", index["call_004"].label)
+    end)
+
+    it("ignores tool_result segments", function()
+      local query = require("flemma.ast.query")
+      local doc = parser.parse_lines({
+        "@You:",
+        "**Tool Result:** `call_005`",
+        "",
+        "```",
+        "output",
+        "```",
+      })
+      local index = query.build_tool_use_index(doc)
+      assert.is_nil(index["call_005"])
+    end)
+  end)
+
   describe("build_tool_sibling_table", function()
     it("returns empty table for empty document", function()
       local doc = parser.parse_lines({})

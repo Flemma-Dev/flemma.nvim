@@ -6,11 +6,12 @@ local M = {}
 local registry = require("flemma.tools.registry")
 local injector = require("flemma.tools.injector")
 local editing = require("flemma.buffer.editing")
+local config_facade = require("flemma.config")
 local state = require("flemma.state")
 local log = require("flemma.logging")
 local autopilot = require("flemma.autopilot")
 local cursor = require("flemma.cursor")
-local bridge = require("flemma.core.bridge")
+local bridge = require("flemma.bridge")
 local hooks = require("flemma.hooks")
 local context_module = require("flemma.context")
 local parser = require("flemma.parser")
@@ -172,7 +173,7 @@ local function do_completion(bufnr, tool_id, result, opts)
 
   -- Move cursor based on config (skip when autopilot is armed — it owns cursor positioning)
   if ok and autopilot.get_state(bufnr) ~= "armed" then
-    local config = state.get_config()
+    local config = config_facade.get(bufnr)
     local cursor_mode = config.tools and config.tools.cursor_after_result or "result"
     if cursor_mode ~= "stay" then
       move_cursor_after_result(bufnr, tool_id, cursor_mode)
@@ -237,7 +238,6 @@ local DEFAULT_TIMEOUT = 30
 ---@field tool_name string Name of the tool being executed (for get_config lookup)
 ---@field __dirname? string Directory containing the .chat buffer
 ---@field __filename? string Full path of the .chat buffer
----@field opts? flemma.opt.FrontmatterOpts Per-buffer frontmatter options (captured by sandbox closures)
 
 ---Build an ExecutionContext with lazy-loaded sandbox/truncate/path namespaces.
 ---Sandbox, truncate, and path are loaded on first access via __index and then
@@ -246,7 +246,6 @@ local DEFAULT_TIMEOUT = 30
 ---@return flemma.tools.ExecutionContext
 function M.build_execution_context(params)
   local bufnr = params.bufnr
-  local opts = params.opts
   local tool_name = params.tool_name
   local dirname = params.__dirname
 
@@ -264,11 +263,11 @@ function M.build_execution_context(params)
   ---Returns config.tools[tool_name] via vim.deepcopy, or nil if no subtree exists.
   ---@return table|nil
   function context:get_config()
-    local tool_config = state.get_config()
-    if not tool_config.tools then
+    local cfg = config_facade.materialize(bufnr)
+    if not cfg.tools then
       return nil
     end
-    local subtree = tool_config.tools[tool_name]
+    local subtree = cfg.tools[tool_name]
     if subtree == nil then
       return nil
     end
@@ -281,10 +280,10 @@ function M.build_execution_context(params)
         ---@type flemma.tools.SandboxContext
         local sandbox_namespace = {
           is_path_writable = function(path)
-            return sandbox_module.is_path_writable(path, bufnr, opts)
+            return sandbox_module.is_path_writable(path, bufnr)
           end,
           wrap_command = function(cmd)
-            return sandbox_module.wrap_command(cmd, bufnr, opts)
+            return sandbox_module.wrap_command(cmd, bufnr)
           end,
         }
         rawset(self, "sandbox", sandbox_namespace)
@@ -314,10 +313,9 @@ end
 ---Execute a tool call
 ---@param bufnr integer
 ---@param context flemma.tools.ToolContext
----@param frontmatter_opts? flemma.opt.FrontmatterOpts Pre-evaluated per-buffer opts (avoids re-evaluating frontmatter)
 ---@return boolean success
 ---@return string|nil error
-function M.execute(bufnr, context, frontmatter_opts)
+function M.execute(bufnr, context)
   local tool_id = context.tool_id
   local tool_name = context.tool_name
 
@@ -375,10 +373,23 @@ function M.execute(bufnr, context, frontmatter_opts)
     maybe_unlock_buffer(bufnr)
     return false, "Failed to inject placeholder: " .. (inject_err or "unknown")
   end
-  pending[tool_id].placeholder_modified = (placeholder_opts and placeholder_opts.modified) or false
+  pending[tool_id].placeholder_modified = placeholder_opts ~= nil and placeholder_opts.modified
+
+  -- Strip any flemma:tool status fence when the placeholder already existed.
+  -- Phase 1 injects placeholders with status=approved; the executor's
+  -- inject_placeholder call above finds that existing block and returns early
+  -- (modified=false), leaving the flemma:tool fence in the buffer.
+  -- Without stripping it, on_tools_complete → resolve_all_tool_blocks
+  -- rediscovers this tool as "approved" and schedules a duplicate execution
+  -- attempt (race: sync tool completing inline during Phase 2's for loop triggers
+  -- on_tools_complete while the autopilot state is already "armed").
+  -- strip_fence_info_string is a no-op when no flemma:tool fence exists.
+  if placeholder_opts and not placeholder_opts.modified then
+    injector.strip_fence_info_string(bufnr, tool_id)
+  end
 
   -- Show execution indicator
-  local config = state.get_config()
+  local config = config_facade.materialize(bufnr)
   if not config.tools or config.tools.show_spinner ~= false then
     ui.show_tool_indicator(bufnr, tool_id, header_line)
   end
@@ -411,7 +422,6 @@ function M.execute(bufnr, context, frontmatter_opts)
     tool_name = tool_name,
     __dirname = dirname,
     __filename = buffer_context:get_filename(),
-    opts = frontmatter_opts,
   })
 
   hooks.dispatch("tool:executing", { bufnr = bufnr, tool_name = tool_name, tool_id = tool_id })
