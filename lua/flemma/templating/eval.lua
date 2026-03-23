@@ -24,7 +24,10 @@ local state = require("flemma.state")
 local str = require("flemma.utilities.string")
 local symbols = require("flemma.symbols")
 
-local PERSONALITY_URN_PREFIX = "urn:flemma:personality:"
+---@type string
+M.URN_PREFIX = "urn:flemma:"
+
+local PERSONALITY_URN_PREFIX = M.URN_PREFIX .. "personality:"
 
 --- Check for file content drift and push a diagnostic if the file changed since
 --- the last evaluation. Stores the current hash for future comparisons.
@@ -99,6 +102,21 @@ local function read_file(path, opts)
   return data, nil
 end
 
+---Resolve a relative include path against a directory.
+---Absolute paths are normalized as-is; relative paths are joined with dirname.
+---@param relative_path string The path from the include() call
+---@param dirname? string The directory to resolve relative paths against
+---@return string resolved_path Normalized absolute or relative path
+function M.resolve_include_target(relative_path, dirname)
+  if relative_path:sub(1, 1) == "/" then
+    return vim.fs.normalize(relative_path)
+  elseif dirname then
+    return vim.fs.normalize(dirname .. "/" .. relative_path)
+  else
+    return relative_path
+  end
+end
+
 --- Build the include() closure for a given environment.
 --- The include_stack is threaded through closures — not stored on the env.
 ---@param env flemma.templating.eval.Environment The environment where include() will be installed
@@ -138,17 +156,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
       return emittable.composite_include_part({ rendered })
     end
 
-    local dirname = env.__dirname
-
-    -- Resolve path: absolute paths used as-is, relative paths joined with __dirname
-    local target_path
-    if relative_path:sub(1, 1) == "/" then
-      target_path = vim.fs.normalize(relative_path)
-    elseif dirname then
-      target_path = vim.fs.normalize(dirname .. "/" .. relative_path)
-    else
-      target_path = relative_path
-    end
+    local target_path = M.resolve_include_target(relative_path, env.__dirname)
 
     -- Check file exists
     if vim.fn.filereadable(target_path) ~= 1 then

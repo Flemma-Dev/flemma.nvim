@@ -6,6 +6,7 @@ local M = {}
 local ast = require("flemma.ast")
 local ctxutil = require("flemma.context")
 local cursor = require("flemma.cursor")
+local diagnostic_format = require("flemma.utilities.diagnostic")
 local eval = require("flemma.templating.eval")
 local templating = require("flemma.templating")
 local log = require("flemma.logging")
@@ -49,8 +50,9 @@ function M.find_prev_message()
 end
 
 ---Resolve the file path for an include expression at a given position.
----Evaluates the expression using the real include() and checks the result
----for a symbols.SOURCE_PATH tag to determine the originating file.
+---Evaluates the expression with a path-only include() that resolves the
+---target path without reading or compiling the file content. This avoids
+---failures on non-template files that contain literal {{ }} documentation.
 ---When lnum/col are omitted, reads the current cursor position.
 ---@param bufnr integer Buffer number
 ---@param lnum? integer 1-indexed line number (defaults to cursor line)
@@ -81,23 +83,59 @@ function M.resolve_include_path(bufnr, lnum, col)
 
   -- Build eval environment with frontmatter variables
   local context = ctxutil.from_buffer(bufnr)
-  local fm = processor.evaluate_frontmatter(doc, context)
+  local fm = processor.evaluate_frontmatter(doc, context, bufnr)
 
+  -- Report execution errors but skip validation failures — those are
+  -- post-execution schema checks (e.g. "unknown tool 'calculator_async'"),
+  -- not broken frontmatter code. User variables are already captured.
   for _, diag in ipairs(fm.diagnostics) do
-    if diag.severity == "error" then
+    if diag.severity == "error" and not diag.validation then
       log.debug("navigation: frontmatter error: " .. (diag.error or "unknown"))
-      vim.notify("Flemma: frontmatter has errors — gf navigation may not work.", vim.log.levels.WARN)
+      local lines = { diagnostic_format.format_message(diag) }
+      local loc = diagnostic_format.format_location(diag)
+      if loc then
+        table.insert(lines, "  " .. loc)
+      end
+      vim.notify(table.concat(lines, "\n"), vim.log.levels.WARN)
       break
     end
   end
 
   local env = templating.from_context(fm.context, bufnr)
 
-  -- Evaluate the expression using the real include() — the result is an
-  -- emittable tagged with symbols.SOURCE_PATH when it originates from a file
+  -- Override include() with a path-only version: resolve the target file path
+  -- without reading, compiling, or executing the file content. Navigation only
+  -- needs the path — not the rendered output. The real include() would fail on
+  -- non-template files (e.g. README.md that documents {{ }} syntax literally).
+  env.include = function(relative_path)
+    if type(relative_path) ~= "string" then
+      return nil
+    end
+    -- URN includes (e.g. urn:flemma:personality:*) are virtual — they resolve
+    -- to rendered content, not a file on disk. The real include() handles URNs
+    -- before path resolution; our path-only override must skip them too.
+    if relative_path:sub(1, #eval.URN_PREFIX) == eval.URN_PREFIX then
+      return nil
+    end
+    return { [symbols.SOURCE_PATH] = eval.resolve_include_target(relative_path, env.__dirname) }
+  end
+
+  -- Evaluate the expression — our path-only include() returns a table tagged
+  -- with SOURCE_PATH without touching the file content.
   local ok, result = pcall(eval.eval_expression, seg.code, env)
   if not ok then
-    log.debug("navigation: expression eval failed: " .. tostring(result))
+    ---@type flemma.ast.Diagnostic
+    local diag = type(result) == "table" and result.type and result
+      or { type = "expression", severity = "error", error = tostring(result), expression = seg.code }
+    diag.expression = diag.expression or seg.code
+    diag.position = diag.position or seg.position
+    log.debug("navigation: expression eval failed: " .. (diag.error or "unknown"))
+    local lines = { diagnostic_format.format_message(diag) }
+    local loc = diagnostic_format.format_location(diag)
+    if loc then
+      table.insert(lines, "  " .. loc)
+    end
+    vim.notify(table.concat(lines, "\n"), vim.log.levels.WARN)
     return nil
   end
 

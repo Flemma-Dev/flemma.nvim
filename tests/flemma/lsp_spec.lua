@@ -404,6 +404,167 @@ describe("Flemma LSP", function()
     assert.is_nil(result)
   end)
 
+  it("returns definition for {{ include(file) }} with frontmatter variable", function()
+    -- End-to-end: frontmatter sets a variable, expression uses it for include,
+    -- LSP definition resolves to the included file.
+    local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
+    local target_path = fixture_dir .. "include_target.txt"
+
+    flemma.setup({ experimental = { lsp = true } })
+
+    test_counter = test_counter + 1
+    local bufnr = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_name(bufnr, fixture_dir .. "lsp_fm_include_" .. test_counter .. ".chat")
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "```lua",
+      "file = './include_target.txt'",
+      "```",
+      "@System:",
+      "{{ include(file) }}",
+    })
+    vim.bo[bufnr].filetype = "chat"
+    vim.cmd("doautocmd FileType")
+
+    vim.wait(1000, function()
+      return #vim.lsp.get_clients({ name = "flemma", bufnr = bufnr }) > 0
+    end)
+
+    local clients = vim.lsp.get_clients({ name = "flemma", bufnr = bufnr })
+    assert.is_true(#clients > 0, "Client should be attached")
+    local client = clients[1]
+
+    -- Cursor on the expression (0-indexed: line 4, col 5)
+    local result = definition_sync(client, bufnr, 4, 5)
+    assert.is_not_nil(result, "LSP definition should resolve include with frontmatter variable")
+    assert.equals(vim.uri_from_fname(target_path), result.uri)
+  end)
+
+  it("returns definition for indirect include via frontmatter variable", function()
+    -- Frontmatter evaluates include() at definition time, storing the result
+    -- in a variable. The body expression {{ mod }} references that variable.
+    -- Navigation must trace SOURCE_PATH through the indirection.
+    local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
+    local target_path = fixture_dir .. "include_target.txt"
+
+    flemma.setup({ experimental = { lsp = true } })
+
+    test_counter = test_counter + 1
+    local bufnr = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_name(bufnr, fixture_dir .. "lsp_indirect_" .. test_counter .. ".chat")
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "```lua",
+      "file = './include_target.txt'",
+      "mod = include(file)",
+      "```",
+      "@System:",
+      "{{ mod }}",
+    })
+    vim.bo[bufnr].filetype = "chat"
+    vim.cmd("doautocmd FileType")
+
+    vim.wait(1000, function()
+      return #vim.lsp.get_clients({ name = "flemma", bufnr = bufnr }) > 0
+    end)
+
+    local clients = vim.lsp.get_clients({ name = "flemma", bufnr = bufnr })
+    assert.is_true(#clients > 0, "Client should be attached")
+    local client = clients[1]
+
+    -- Cursor on {{ mod }} (0-indexed: line 5, col 4)
+    local result = definition_sync(client, bufnr, 5, 4)
+    assert.is_not_nil(result, "Indirect include via frontmatter variable should resolve")
+    assert.equals(vim.uri_from_fname(target_path), result.uri)
+  end)
+
+  it("returns definition for include when frontmatter uses flemma.opt", function()
+    -- Regression: frontmatter with flemma.opt writes must not crash navigation.
+    -- The write proxy requires bufnr to be passed through; without it, nested
+    -- access like flemma.opt.tools.max_concurrent errors on a plain {} table.
+    local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
+    local target_path = fixture_dir .. "include_target.txt"
+
+    flemma.setup({ experimental = { lsp = true } })
+
+    test_counter = test_counter + 1
+    local bufnr = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_name(bufnr, fixture_dir .. "lsp_fm_opt_" .. test_counter .. ".chat")
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "```lua",
+      "flemma.opt.thinking = 'minimal'",
+      "flemma.opt.tools.max_concurrent = 1",
+      "file = './include_target.txt'",
+      "```",
+      "@System:",
+      "{{ include(file) }}",
+    })
+    vim.bo[bufnr].filetype = "chat"
+    vim.cmd("doautocmd FileType")
+
+    vim.wait(1000, function()
+      return #vim.lsp.get_clients({ name = "flemma", bufnr = bufnr }) > 0
+    end)
+
+    local clients = vim.lsp.get_clients({ name = "flemma", bufnr = bufnr })
+    assert.is_true(#clients > 0, "Client should be attached")
+    local client = clients[1]
+
+    -- Cursor on the expression (0-indexed: line 6, col 5)
+    local result = definition_sync(client, bufnr, 6, 5)
+    assert.is_not_nil(result, "flemma.opt in frontmatter must not break LSP include resolution")
+    assert.equals(vim.uri_from_fname(target_path), result.uri)
+  end)
+
+  it("returns definition for include of file containing literal {{ }} syntax", function()
+    -- Regression: files like README.md that document {{ }} and {% %} syntax
+    -- cause template compilation errors. Navigation's path-only include()
+    -- must resolve the path without reading or compiling file content.
+    local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
+    local target_path = fixture_dir .. "doc_with_templates.txt"
+
+    flemma.setup({ experimental = { lsp = true } })
+
+    test_counter = test_counter + 1
+    local bufnr = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_name(bufnr, fixture_dir .. "lsp_doc_templates_" .. test_counter .. ".chat")
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "```lua",
+      "doc = './doc_with_templates.txt'",
+      "```",
+      "@System:",
+      "{{ include(doc) }}",
+    })
+    vim.bo[bufnr].filetype = "chat"
+    vim.cmd("doautocmd FileType")
+
+    vim.wait(1000, function()
+      return #vim.lsp.get_clients({ name = "flemma", bufnr = bufnr }) > 0
+    end)
+
+    local clients = vim.lsp.get_clients({ name = "flemma", bufnr = bufnr })
+    assert.is_true(#clients > 0, "Client should be attached")
+    local client = clients[1]
+
+    -- Cursor on the expression (0-indexed: line 4, col 5)
+    local result = definition_sync(client, bufnr, 4, 5)
+    assert.is_not_nil(result, "Include of file with literal {{ }} must resolve via LSP")
+    assert.equals(vim.uri_from_fname(target_path), result.uri)
+  end)
+
+  it("returns nil for urn:flemma: personality includes", function()
+    local bufnr, client = setup_chat_buffer({
+      "@System:",
+      "{{ include('urn:flemma:personality:coding-assistant') }}",
+    })
+
+    -- URN includes are virtual — no file to jump to
+    local result = definition_sync(client, bufnr, 1, 5)
+    assert.is_nil(result, "URN personality includes have no file definition")
+  end)
+
   it("returns definition from tool_use json body to tool_result", function()
     local bufnr, client = setup_chat_buffer({
       "@Assistant:",

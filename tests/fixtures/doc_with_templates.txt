@@ -1,0 +1,5 @@
+This file documents template syntax.
+
+Use `{{ expressions }}` for inline values.
+Use `{% code %}` blocks for control flow.
+The `include()` helper composes prompts.
