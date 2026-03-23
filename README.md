@@ -1,9 +1,9 @@
 <h1><img src="https://images.weserv.nl/?url=avatars.githubusercontent.com%2Fu%2F231013899%3Fs%3D400%26v%3D4&mask=circle" width="38" height="38" valign="bottom" alt="Flemma's logo"> Flemma</h1>
 
-> [!CAUTION]
-> **Actively Evolving**
+> [!IMPORTANT]
+> **Actively Evolving.** [See the roadmap](ROADMAP.md) for what's coming next.
 >
-> Flemma is growing fast – new tools, providers, and UI features land regularly. Expect occasional breaking changes while the project matures. Pin a commit if you need a steady target.
+> Flemma is growing fast – new tools, providers, and UI features land regularly. Expect occasional breaking changes while the project matures. Pin a commit if you need a stable target.
 
 Flemma turns Neovim into an AI agent. Give it a task, and it works – calling tools, reading and editing files, running shell commands, and re-sending results back to the model in a fully autonomous loop. You stay in control: every action is visible in the `.chat` buffer, every tool call can require your approval, and you can take the wheel at any point. But when you trust the model, Flemma gets out of the way and lets it drive.
 
