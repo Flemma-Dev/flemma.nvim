@@ -371,17 +371,25 @@ local function collect_approval(config, bufnr, enabled_tools)
     end
   end
 
-  -- Per-tool frontmatter attribution: only mark tools that frontmatter
-  -- actually contributed. A "set" op means frontmatter owns the entire list;
-  -- otherwise check individual "append"/"prepend" ops per tool.
+  -- Per-tool frontmatter attribution: mark tools whose approval status
+  -- frontmatter actually determined. A "set" op means frontmatter owns the
+  -- entire list (approved, pending, and denied); otherwise check individual
+  -- "append"/"prepend" ops for approved tools and "remove" ops for pending.
   local fm_layer = config_facade.LAYERS.FRONTMATTER
   local frontmatter_items = {}
   if config_facade.layer_has_set(fm_layer, bufnr, "tools.auto_approve") then
-    -- Frontmatter replaced the entire list — all approved tools are frontmatter-determined
+    -- Frontmatter replaced the entire list — all tools' approval status is
+    -- frontmatter-determined (except sandbox-derived approvals)
     for _, name in ipairs(approved) do
       if not sandbox_items[name] then
         frontmatter_items[name] = true
       end
+    end
+    for _, name in ipairs(pending) do
+      frontmatter_items[name] = true
+    end
+    for _, name in ipairs(denied) do
+      frontmatter_items[name] = true
     end
   else
     for _, name in ipairs(approved) do
@@ -389,6 +397,11 @@ local function collect_approval(config, bufnr, enabled_tools)
         config_facade.layer_has_op(fm_layer, bufnr, "append", "tools.auto_approve", name)
         or config_facade.layer_has_op(fm_layer, bufnr, "prepend", "tools.auto_approve", name)
       then
+        frontmatter_items[name] = true
+      end
+    end
+    for _, name in ipairs(pending) do
+      if config_facade.layer_has_op(fm_layer, bufnr, "remove", "tools.auto_approve", name) then
         frontmatter_items[name] = true
       end
     end
@@ -1167,6 +1180,10 @@ local function format_approval_section(b, data, is_last)
       for i, name in ipairs(ap.denied) do
         b:leaf(i == #ap.denied)
         b:put(name)
+        local vt = tool_markers_virt(name, ap.frontmatter_items, ap.sandbox_items)
+        if vt then
+          b:virt(vt)
+        end
         b:nl()
       end
 
@@ -1183,6 +1200,10 @@ local function format_approval_section(b, data, is_last)
       for i, name in ipairs(ap.pending) do
         b:leaf(i == #ap.pending)
         b:put(name)
+        local vt = tool_markers_virt(name, ap.frontmatter_items, ap.sandbox_items)
+        if vt then
+          b:virt(vt)
+        end
         b:nl()
       end
 
