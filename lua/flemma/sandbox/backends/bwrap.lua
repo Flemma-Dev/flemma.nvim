@@ -15,7 +15,7 @@ M.metadata = {
 }
 
 --- Validate that bwrap is available on this platform
----@param backend_config flemma.config.BwrapBackendConfig
+---@param backend_config flemma.config.SandboxBackendsBwrap
 ---@return boolean ok, string|nil error
 function M.available(backend_config)
   if vim.fn.has("linux") ~= 1 then
@@ -36,7 +36,7 @@ end
 
 --- Translate a resolved sandbox policy into a bwrap-wrapped command
 ---@param policy flemma.config.SandboxPolicy rw_paths are pre-resolved absolutes
----@param backend_config flemma.config.BwrapBackendConfig
+---@param backend_config flemma.config.SandboxBackendsBwrap
 ---@param inner_cmd string[]
 ---@return string[]|nil args, string|nil error
 function M.wrap(policy, backend_config, inner_cmd)

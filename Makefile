@@ -1,4 +1,4 @@
-.PHONY: default changeset qa develop screencast
+.PHONY: default changeset qa develop screencast types
 
 SHELL := $(shell which bash)
 VIMRUNTIME_PATH = $(shell dirname $(shell dirname $(shell readlink -f $(shell which nvim))))/share/nvim/runtime
@@ -20,7 +20,7 @@ qa:
 	VIMRUNTIME=$(VIMRUNTIME_PATH) \
 		lua-language-server --check lua/ --configpath ../.luarc-check.lua \
 		>"$$d/types" 2>&1 & gate[$$!]=types; \
-	bash scripts/lint-inline-requires.sh \
+	bash contrib/scripts/lint-inline-requires.sh \
 		>"$$d/imports" 2>&1 & gate[$$!]=imports; \
 	nvim --headless --noplugin -u tests/minimal.vim \
 		-c "PlenaryBustedDirectory tests/flemma/ {minimal_init = 'tests/minimal_init.lua'}" \
@@ -42,6 +42,10 @@ qa:
 		fi; \
 	done; \
 	echo "qa: OK"
+
+# Generate EmmyLua config types from the schema DSL
+types:
+	nvim --headless --noplugin -u NONE --cmd 'set rtp^=.' -l contrib/scripts/generate-config-types.lua
 
 # Launch Flemma.nvim from local directory
 develop:

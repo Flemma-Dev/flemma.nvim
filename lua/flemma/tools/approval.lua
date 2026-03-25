@@ -13,16 +13,24 @@ local registry_utils = require("flemma.registry")
 local sandbox = require("flemma.sandbox")
 local tools_registry = require("flemma.tools.registry")
 
+---@class flemma.tools.AutoApproveContext
+---@field bufnr integer
+---@field tool_id string
+
+---@alias flemma.tools.AutoApproveDecision true|false|"deny"
+
+---@alias flemma.tools.AutoApproveFunction fun(tool_name: string, input: table, context: flemma.tools.AutoApproveContext): flemma.tools.AutoApproveDecision|nil
+
 ---@alias flemma.tools.ApprovalResult "approve"|"require_approval"|"deny"
 
 ---@class flemma.tools.ApprovalResolverDefinition
----@field resolve fun(tool_name: string, input: table<string, any>, context: flemma.config.AutoApproveContext): flemma.tools.ApprovalResult|nil
+---@field resolve fun(tool_name: string, input: table<string, any>, context: flemma.tools.AutoApproveContext): flemma.tools.ApprovalResult|nil
 ---@field priority? integer Higher values are evaluated first (default: 50)
 ---@field description? string Human-readable description for debugging/introspection
 
 ---@class flemma.tools.ApprovalResolverEntry
 ---@field name string Unique resolver name
----@field resolve fun(tool_name: string, input: table<string, any>, context: flemma.config.AutoApproveContext): flemma.tools.ApprovalResult|nil
+---@field resolve fun(tool_name: string, input: table<string, any>, context: flemma.tools.AutoApproveContext): flemma.tools.ApprovalResult|nil
 ---@field priority integer Higher values are evaluated first
 ---@field description? string Human-readable description
 
@@ -145,7 +153,7 @@ end
 ---If no resolver returns a decision, defaults to "require_approval".
 ---@param tool_name string
 ---@param input table<string, any>
----@param context flemma.config.AutoApproveContext
+---@param context flemma.tools.AutoApproveContext
 ---@return flemma.tools.ApprovalResult
 function M.resolve(tool_name, input, context)
   local result = M.resolve_with_source(tool_name, input, context)
@@ -156,7 +164,7 @@ end
 ---Used by status display to annotate why a tool was approved/denied.
 ---@param tool_name string
 ---@param input table<string, any>
----@param context flemma.config.AutoApproveContext
+---@param context flemma.tools.AutoApproveContext
 ---@return flemma.tools.ApprovalResult result
 ---@return string source Resolver name, or "default" if no resolver matched
 function M.resolve_with_source(tool_name, input, context)
@@ -180,10 +188,10 @@ end
 ---Build a lazy-loading resolve function for a single module path.
 ---Validates existence eagerly but defers require() until first call.
 ---@param module_path string Dot-notation Lua module path
----@return fun(tool_name: string, input: table, context: flemma.config.AutoApproveContext): flemma.tools.ApprovalResult|nil
+---@return fun(tool_name: string, input: table, context: flemma.tools.AutoApproveContext): flemma.tools.ApprovalResult|nil
 local function build_module_resolver(module_path)
   loader.assert_exists(module_path)
-  ---@type { resolve: fun(tool_name: string, input: table, context: flemma.config.AutoApproveContext): flemma.tools.ApprovalResult|nil }|nil
+  ---@type { resolve: fun(tool_name: string, input: table, context: flemma.tools.AutoApproveContext): flemma.tools.ApprovalResult|nil }|nil
   local loaded_resolver = nil
   return function(tool_name, input, context)
     if not loaded_resolver then
@@ -208,10 +216,10 @@ end
 ---Resolve an auto_approve policy (string[] or function) against a tool call.
 ---The string[] path does a simple membership check — presets are already expanded
 ---by the config store's coerce function.
----@param policy flemma.config.AutoApprove The auto_approve value (resolved from config store)
+---@param policy flemma.tools.AutoApprove The auto_approve value (resolved from config store)
 ---@param tool_name string
 ---@param input table<string, any>
----@param context flemma.config.AutoApproveContext
+---@param context flemma.tools.AutoApproveContext
 ---@param error_result? flemma.tools.ApprovalResult Value to return on function error (default: nil/pass)
 ---@return flemma.tools.ApprovalResult|nil
 local function resolve_auto_approve_policy(policy, tool_name, input, context, error_result)
@@ -238,7 +246,7 @@ local function resolve_auto_approve_policy(policy, tool_name, input, context, er
 
   -- Function path unchanged from current code
   if type(policy) == "function" then
-    local fn = policy --[[@as flemma.config.AutoApproveFunction]]
+    local fn = policy --[[@as flemma.tools.AutoApproveFunction]]
     local ok, decision = pcall(fn, tool_name, input, context)
     if not ok then
       log.warn("approval: auto_approve error: " .. tostring(decision))

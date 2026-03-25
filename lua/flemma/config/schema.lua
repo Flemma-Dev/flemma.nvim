@@ -18,23 +18,26 @@ local symbols = require("flemma.symbols")
 --- String defaults produce a union with the string branch carrying the default.
 --- Table defaults produce a union with the object branch carrying the defaults.
 ---@param default? string|table<string, string>
----@return flemma.schema.UnionNode
+---@return flemma.schema.Node
 local function highlight(default)
+  local node
   if type(default) == "table" then
-    return s.union(s.string(), s.object({ dark = s.string(default.dark), light = s.string(default.light) }))
+    node = s.union(s.string(), s.object({ dark = s.string(default.dark), light = s.string(default.light) }))
   elseif type(default) == "string" then
-    return s.union(s.string(default), s.object({ dark = s.string(), light = s.string() }))
+    node = s.union(s.string(default), s.object({ dark = s.string(), light = s.string() }))
   else
-    return s.union(s.string(), s.object({ dark = s.string(), light = s.string() }))
+    node = s.union(s.string(), s.object({ dark = s.string(), light = s.string() }))
   end
+  return node:type_as("flemma.config.HighlightValue")
 end
 
 --- Sign role hl: boolean | string | { dark: string, light: string }
 --- true = inherit from highlights, false = disable, string/table = custom highlight.
 ---@param default boolean
----@return flemma.schema.UnionNode
+---@return flemma.schema.Node
 local function sign_highlight(default)
   return s.union(s.boolean(default), s.string(), s.object({ dark = s.string(), light = s.string() }))
+    :type_as("boolean|flemma.config.HighlightValue")
 end
 
 -- ---------------------------------------------------------------------------
@@ -152,25 +155,31 @@ return s.object({
 
   tools = s.object({
     require_approval = s.boolean(true),
-    auto_approve = s.union(s.list(s.string(), { "$default" }), s.func(), s.string()):coerce(function(value, _ctx)
-      -- Expand $-prefixed preset references to their approve list.
-      -- At boot time presets may not be registered yet; finalize() re-runs
-      -- coerce after tools_presets.setup() so deferred expansion succeeds.
-      if type(value) ~= "string" or not vim.startswith(value, "$") then
-        return value
-      end
-      local preset = require("flemma.tools.presets").get(value)
-      if not preset or not preset.approve then
-        return value
-      end
-      return preset.approve
-    end),
+    auto_approve = s.union(
+      s.list(s.string(), { "$default" }),
+      s.func():type_as("flemma.tools.AutoApproveFunction"),
+      s.string()
+    )
+      :type_as("flemma.tools.AutoApprove")
+      :coerce(function(value, _ctx)
+        -- Expand $-prefixed preset references to their approve list.
+        -- At boot time presets may not be registered yet; finalize() re-runs
+        -- coerce after tools_presets.setup() so deferred expansion succeeds.
+        if type(value) ~= "string" or not vim.startswith(value, "$") then
+          return value
+        end
+        local preset = require("flemma.tools.presets").get(value)
+        if not preset or not preset.approve then
+          return value
+        end
+        return preset.approve
+      end),
     auto_approve_sandboxed = s.boolean(true),
     presets = s.map(
       s.string(),
       s.object({
         approve = s.optional(s.list(s.string())),
-      }),
+      }):type_as("flemma.tools.PresetDefinition"),
       {}
     ),
     autopilot = s.object({
@@ -211,7 +220,7 @@ return s.object({
     modules = s.list(s.loadable(), {}),
   }),
 
-  presets = s.map(s.string(), s.union(s.string(), s.object({}):passthrough()), {}),
+  presets = s.map(s.string(), s.union(s.string(), s.object({}):passthrough()), {}):type_as("table<string, any>"),
 
   text_object = s.union(s.string("m"), s.literal(false)),
 
@@ -240,7 +249,7 @@ return s.object({
     enabled = s.boolean(false),
     path = s.string(vim.fn.stdpath("cache") .. "/flemma.log"),
     level = s.enum({ "TRACE", "DEBUG", "INFO", "WARN", "ERROR" }, "DEBUG"),
-  }),
+  }):type_as("flemma.logging.Config"),
 
   keymaps = s.object({
     normal = s.object({
