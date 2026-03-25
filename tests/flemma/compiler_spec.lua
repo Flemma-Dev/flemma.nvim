@@ -250,6 +250,79 @@ describe("flemma.templating.compiler", function()
     end)
   end)
 
+  describe("print", function()
+    ---@param segments flemma.ast.Segment[]
+    ---@param env? table
+    ---@return string text Concatenated text output
+    local function render(segments, env)
+      env = env or { __filename = "test.chat" }
+      local result = compiler.compile(segments)
+      assert.is_nil(result.error, "compile error: " .. (result.error or ""))
+      local parts, diagnostics = compiler.execute(result, env)
+      assert.equals(0, #diagnostics, "unexpected diagnostics: " .. vim.inspect(diagnostics))
+      local texts = {}
+      for _, p in ipairs(parts) do
+        if p.kind == "text" then
+          table.insert(texts, p.text)
+        end
+      end
+      return table.concat(texts)
+    end
+
+    local pos = { start_line = 1 }
+
+    it("emits a single string argument into template output", function()
+      local output = render({ ast.code(" print('hello') ", pos) })
+      assert.equals("hello", output)
+    end)
+
+    it("concatenates multiple arguments without separators", function()
+      local output = render({ ast.code(" print('hello', ' ', 'world') ", pos) })
+      assert.equals("hello world", output)
+    end)
+
+    it("does not append a trailing newline", function()
+      local output = render({
+        ast.code(" print('first') ", pos),
+        ast.code(" print('second') ", pos),
+      })
+      assert.equals("firstsecond", output)
+    end)
+
+    it("coerces numbers via tostring", function()
+      local output = render({ ast.code(" print(42) ", pos) })
+      assert.equals("42", output)
+    end)
+
+    it("produces no output when called with no arguments", function()
+      local output = render({
+        ast.text("before", pos),
+        ast.code(" print() ", pos),
+        ast.text("after", pos),
+      })
+      assert.equals("beforeafter", output)
+    end)
+
+    it("interleaves with text and expression segments", function()
+      local output = render({
+        ast.text("Hello, ", pos),
+        ast.code(" print('world') ", pos),
+        ast.text("!", pos),
+      })
+      assert.equals("Hello, world!", output)
+    end)
+
+    it("builds a list in a loop", function()
+      local output = render({
+        ast.code(" local rules = {'Be concise', 'Be direct', 'Be helpful'} ", pos),
+        ast.code(" for i, rule in ipairs(rules) do ", pos),
+        ast.code(" print(i .. '. ' .. rule .. '\\n') ", pos),
+        ast.code(" end ", pos),
+      }, { ipairs = ipairs, __filename = "test.chat" })
+      assert.equals("1. Be concise\n2. Be direct\n3. Be helpful\n", output)
+    end)
+  end)
+
   describe("apply_trim (via compile+execute)", function()
     ---@param segments flemma.ast.Segment[]
     ---@param env? table

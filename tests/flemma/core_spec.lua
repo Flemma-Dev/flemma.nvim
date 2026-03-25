@@ -431,4 +431,35 @@ describe(":Flemma send command", function()
     local global_after = require("flemma.config").materialize()
     assert.equals(default_config.provider, global_after.provider)
   end)
+
+  it("print() in code blocks emits text into the request body", function()
+    -- Arrange: Register the default Anthropic fixture
+    client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
+
+    -- Arrange: Buffer with {% print() %} statements building a user message
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@You:",
+      '{%- local topics = {"parsing", "testing"} -%}',
+      '{%- print("Today I need help with: ") -%}',
+      "{%- for topic, loop in each(topics) do",
+      '  if not loop.first then print(", ") end',
+      "  print(topic)",
+      "end -%}",
+      ".",
+    })
+
+    -- Act
+    vim.cmd("Flemma send")
+
+    -- Assert: The user message content should contain the expanded print output
+    local captured = core._get_last_request_body()
+    assert.is_not_nil(captured, "request_body was not captured")
+    assert.equals(1, #captured.messages)
+    assert.equals("user", captured.messages[1].role)
+
+    local user_text = captured.messages[1].content[1].text
+    assert.equals("Today I need help with: parsing, testing.", user_text)
+  end)
 end)

@@ -367,6 +367,13 @@ function M.execute(result, env)
   env.__emit_expr_error = emit_expr_error
   env.__segments = result.segments
 
+  -- Override print to emit into template output (no separators, no trailing newline)
+  env.print = function(...)
+    for i = 1, select("#", ...) do
+      emit(tostring(select(i, ...)))
+    end
+  end
+
   -- Load source with the execution environment
   local chunk, load_err = load(result.source, "template", "t", env)
   if not chunk then
