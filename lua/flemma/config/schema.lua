@@ -156,32 +156,25 @@ return s.object({
   tools = s.object({
     require_approval = s.boolean(true),
     auto_approve = s.union(
-      s.list(s.string(), { "$default" }),
+      s.list(s.string(), { "$standard" }),
       s.func():type_as("flemma.tools.AutoApproveFunction"),
       s.string()
     )
       :type_as("flemma.tools.AutoApprove")
       :coerce(function(value, _ctx)
-        -- Expand $-prefixed preset references to their approve list.
+        -- Expand $-prefixed preset references to their auto_approve list.
         -- At boot time presets may not be registered yet; finalize() re-runs
-        -- coerce after tools_presets.setup() so deferred expansion succeeds.
+        -- coerce after presets.setup() so deferred expansion succeeds.
         if type(value) ~= "string" or not vim.startswith(value, "$") then
           return value
         end
-        local preset = require("flemma.tools.presets").get(value)
-        if not preset or not preset.approve then
+        local preset = require("flemma.presets").get(value)
+        if not preset or not preset.auto_approve then
           return value
         end
-        return preset.approve
+        return preset.auto_approve
       end),
     auto_approve_sandboxed = s.boolean(true),
-    presets = s.map(
-      s.string(),
-      s.object({
-        approve = s.optional(s.list(s.string())),
-      }):type_as("flemma.tools.PresetDefinition"),
-      {}
-    ),
     autopilot = s.object({
       enabled = s.boolean(true),
       max_turns = s.integer(100),
@@ -220,7 +213,25 @@ return s.object({
     modules = s.list(s.loadable(), {}),
   }),
 
-  presets = s.map(s.string(), s.union(s.string(), s.object({}):passthrough()), {}):type_as("table<string, any>"),
+  presets = s.map(
+    s.string():validate(function(name)
+      if not vim.startswith(name, "$") then
+        return false, ("preset key '%s' must start with '$'"):format(name)
+      end
+      return true
+    end),
+    s.union(
+      s.string(),
+      s.object({}):passthrough(),
+      s.object({
+        provider = s.optional(s.string()),
+        model = s.optional(s.string()),
+        parameters = s.optional(s.object({}):passthrough()),
+        auto_approve = s.optional(s.list(s.string())),
+      })
+    ),
+    {}
+  ),
 
   text_object = s.union(s.string("m"), s.literal(false)),
 

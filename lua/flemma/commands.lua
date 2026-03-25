@@ -99,7 +99,13 @@ local function setup_commands()
     if ctx.completing_index == 1 then
       local presets = require("flemma.presets")
       local provider_registry = require("flemma.provider.registry")
-      local preset_suggestions = presets.list()
+      local preset_suggestions = vim.tbl_filter(function(name)
+        local preset = presets.get(name)
+        if not preset or not preset.provider then
+          return false
+        end
+        return true
+      end, presets.list())
       local provider_suggestions = {}
       for name, _ in pairs(provider_registry.models) do
         table.insert(provider_suggestions, name)
@@ -272,6 +278,13 @@ local function setup_commands()
           return
         end
 
+        -- Apply auto_approve from preset to RUNTIME layer
+        if preset.auto_approve then
+          local config_facade = require("flemma.config")
+          local w = config_facade.writer(bufnr, config_facade.LAYERS.RUNTIME)
+          w.tools.auto_approve = preset.auto_approve
+        end
+
         local provider = preset.provider
         local model = preset.model
         local key_value_args = vim.deepcopy(preset.parameters or {})
@@ -319,12 +332,9 @@ local function setup_commands()
           key_value_args[k] = v
         end
 
-        if not provider then
-          vim.notify(("Flemma: Preset '%s' must define a provider"):format(first_arg), vim.log.levels.WARN)
-          return
+        if provider then
+          core.switch_provider(provider, model, key_value_args, { bufnr = bufnr })
         end
-
-        core.switch_provider(provider, model, key_value_args, { bufnr = bufnr })
         return
       end
 

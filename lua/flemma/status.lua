@@ -70,7 +70,7 @@ local OP_HL = {
 ---@field autopilot { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, sources: table<string, string> }
 ---@field sandbox { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil, policy: flemma.config.SandboxPolicy, sources: table<string, string> }
 ---@field tools { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer }
----@field approval { approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil }
+---@field approval { approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil, runtime_items: table<string, true>|nil }
 ---@field buffer { is_chat: boolean, bufnr: integer }
 ---@field diagnostics? flemma.ast.Diagnostic[] Frontmatter validation diagnostics
 ---@field introspection? { layer_ops: { label: string, name: string, ops: table[] }[], resolved: { path: string, value: any, source: string?, depth: integer, is_object: boolean }[] }
@@ -339,12 +339,54 @@ local function resolve_tool_approval(tool_name, bufnr)
   return RESULT_TO_BUCKET[result] or "pending", source
 end
 
+---Attribute tools whose approval status was determined by a specific config layer.
+---When the layer has a "set" op on tools.auto_approve, it owns the entire approval
+---outcome — all buckets are attributed. Otherwise, individual append/prepend ops
+---attribute approved tools and remove ops attribute pending tools.
+---@param layer integer Config layer constant
+---@param bufnr integer|nil Buffer number (nil for global layers)
+---@param approved string[] Tools in the approved bucket
+---@param pending string[] Tools in the pending bucket
+---@param denied string[] Tools in the denied bucket
+---@param exclude table<string, true> Tools already claimed by higher-priority sources
+---@return table<string, true>
+local function attribute_approval_layer(layer, bufnr, approved, pending, denied, exclude)
+  local items = {}
+  if config_facade.layer_has_set(layer, bufnr, "tools.auto_approve") then
+    for _, bucket in ipairs({ approved, pending, denied }) do
+      for _, name in ipairs(bucket) do
+        if not exclude[name] then
+          items[name] = true
+        end
+      end
+    end
+  else
+    for _, name in ipairs(approved) do
+      if
+        not exclude[name]
+        and (
+          config_facade.layer_has_op(layer, bufnr, "append", "tools.auto_approve", name)
+          or config_facade.layer_has_op(layer, bufnr, "prepend", "tools.auto_approve", name)
+        )
+      then
+        items[name] = true
+      end
+    end
+    for _, name in ipairs(pending) do
+      if not exclude[name] and config_facade.layer_has_op(layer, bufnr, "remove", "tools.auto_approve", name) then
+        items[name] = true
+      end
+    end
+  end
+  return items
+end
+
 ---Collect tool approval section data by running each tool through the approval
 ---resolver chain — the same code path used at tool-execution time.
 ---@param config flemma.Config Materialized config (from collect)
 ---@param bufnr integer Buffer number for resolver context
 ---@param enabled_tools string[] Sorted list of enabled tool names
----@return { approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil }
+---@return { approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil, runtime_items: table<string, true>|nil }
 local function collect_approval(config, bufnr, enabled_tools)
   local tools_config = config.tools
   local require_approval_disabled = tools_config ~= nil and tools_config.require_approval == false
@@ -371,41 +413,24 @@ local function collect_approval(config, bufnr, enabled_tools)
     end
   end
 
-  -- Per-tool frontmatter attribution: mark tools whose approval status
-  -- frontmatter actually determined. A "set" op means frontmatter owns the
-  -- entire list (approved, pending, and denied); otherwise check individual
-  -- "append"/"prepend" ops for approved tools and "remove" ops for pending.
-  local fm_layer = config_facade.LAYERS.FRONTMATTER
-  local frontmatter_items = {}
-  if config_facade.layer_has_set(fm_layer, bufnr, "tools.auto_approve") then
-    -- Frontmatter replaced the entire list — all tools' approval status is
-    -- frontmatter-determined (except sandbox-derived approvals)
-    for _, name in ipairs(approved) do
-      if not sandbox_items[name] then
-        frontmatter_items[name] = true
-      end
-    end
-    for _, name in ipairs(pending) do
-      frontmatter_items[name] = true
-    end
-    for _, name in ipairs(denied) do
-      frontmatter_items[name] = true
-    end
-  else
-    for _, name in ipairs(approved) do
-      if
-        config_facade.layer_has_op(fm_layer, bufnr, "append", "tools.auto_approve", name)
-        or config_facade.layer_has_op(fm_layer, bufnr, "prepend", "tools.auto_approve", name)
-      then
-        frontmatter_items[name] = true
-      end
-    end
-    for _, name in ipairs(pending) do
-      if config_facade.layer_has_op(fm_layer, bufnr, "remove", "tools.auto_approve", name) then
-        frontmatter_items[name] = true
-      end
-    end
+  -- Per-tool layer attribution: mark tools whose approval status was
+  -- determined by a specific config layer. A "set" op means the layer owns
+  -- the entire list (approved, pending, and denied); otherwise check
+  -- individual "append"/"prepend" ops for approved and "remove" for pending.
+  -- Higher-priority sources (sandbox, then frontmatter) take precedence.
+  local frontmatter_items =
+    attribute_approval_layer(config_facade.LAYERS.FRONTMATTER, bufnr, approved, pending, denied, sandbox_items)
+
+  local fm_and_sandbox = {}
+  for k in pairs(sandbox_items) do
+    fm_and_sandbox[k] = true
   end
+  for k in pairs(frontmatter_items) do
+    fm_and_sandbox[k] = true
+  end
+
+  local runtime_items =
+    attribute_approval_layer(config_facade.LAYERS.RUNTIME, nil, approved, pending, denied, fm_and_sandbox)
 
   ---@type table<string, true>|nil
   local frontmatter_result = nil
@@ -417,6 +442,11 @@ local function collect_approval(config, bufnr, enabled_tools)
   if next(sandbox_items) then
     sandbox_result = sandbox_items
   end
+  ---@type table<string, true>|nil
+  local runtime_result = nil
+  if next(runtime_items) then
+    runtime_result = runtime_items
+  end
 
   return {
     approved = approved,
@@ -425,6 +455,7 @@ local function collect_approval(config, bufnr, enabled_tools)
     require_approval_disabled = require_approval_disabled,
     frontmatter_items = frontmatter_result,
     sandbox_items = sandbox_result,
+    runtime_items = runtime_result,
   }
 end
 
@@ -675,13 +706,18 @@ local function source_virt_text(source)
   return #chunks > 0 and chunks or nil
 end
 
----Build virtual text chunks for tool markers (frontmatter/sandbox).
+---Build virtual text chunks for tool markers (runtime/frontmatter/sandbox).
+---Parameter order matches render order (R before F before sandbox).
 ---@param name string
+---@param runtime_items table<string, true>|nil
 ---@param frontmatter_items table<string, true>|nil
 ---@param sandbox_items table<string, true>|nil
 ---@return [string, string][]|nil
-local function tool_markers_virt(name, frontmatter_items, sandbox_items)
+local function tool_markers_virt(name, runtime_items, frontmatter_items, sandbox_items)
   local chunks = {}
+  if runtime_items and runtime_items[name] then
+    table.insert(chunks, { SOURCE_ICON.R, SOURCE_HL.R })
+  end
   if frontmatter_items and frontmatter_items[name] then
     table.insert(chunks, { SOURCE_ICON.F, SOURCE_HL.F })
   end
@@ -1096,7 +1132,7 @@ local function format_tools_section(b, data, is_last)
     for i, name in ipairs(t.enabled) do
       b:leaf(i == enabled_count)
       b:put(name, "FlemmaStatusToolEnabled")
-      local vt = tool_markers_virt(name, t.frontmatter_items, nil)
+      local vt = tool_markers_virt(name, nil, t.frontmatter_items, nil)
       if vt then
         b:virt(vt)
       end
@@ -1115,7 +1151,7 @@ local function format_tools_section(b, data, is_last)
     for i, name in ipairs(t.disabled) do
       b:leaf(i == disabled_count)
       b:put(name, "FlemmaStatusToolDisabled")
-      local vt = tool_markers_virt(name, t.frontmatter_items, nil)
+      local vt = tool_markers_virt(name, nil, t.frontmatter_items, nil)
       if vt then
         b:virt(vt)
       end
@@ -1160,7 +1196,7 @@ local function format_approval_section(b, data, is_last)
       for i, name in ipairs(ap.approved) do
         b:leaf(i == #ap.approved)
         b:put(name)
-        local vt = tool_markers_virt(name, ap.frontmatter_items, ap.sandbox_items)
+        local vt = tool_markers_virt(name, ap.runtime_items, ap.frontmatter_items, ap.sandbox_items)
         if vt then
           b:virt(vt)
         end
@@ -1180,7 +1216,7 @@ local function format_approval_section(b, data, is_last)
       for i, name in ipairs(ap.denied) do
         b:leaf(i == #ap.denied)
         b:put(name)
-        local vt = tool_markers_virt(name, ap.frontmatter_items, ap.sandbox_items)
+        local vt = tool_markers_virt(name, ap.runtime_items, ap.frontmatter_items, ap.sandbox_items)
         if vt then
           b:virt(vt)
         end
@@ -1200,7 +1236,7 @@ local function format_approval_section(b, data, is_last)
       for i, name in ipairs(ap.pending) do
         b:leaf(i == #ap.pending)
         b:put(name)
-        local vt = tool_markers_virt(name, ap.frontmatter_items, ap.sandbox_items)
+        local vt = tool_markers_virt(name, ap.runtime_items, ap.frontmatter_items, ap.sandbox_items)
         if vt then
           b:virt(vt)
         end
@@ -1534,6 +1570,7 @@ local function format_legend(b, data)
     or (data.sandbox.sources and next(data.sandbox.sources))
     or data.tools.frontmatter_items
     or data.approval.frontmatter_items
+    or data.approval.runtime_items
   local has_sandbox = data.approval.sandbox_items ~= nil
 
   if not has_source and not has_sandbox then

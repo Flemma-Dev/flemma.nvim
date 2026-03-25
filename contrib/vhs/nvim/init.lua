@@ -71,7 +71,7 @@ require("flemma").setup({
       "extras.flemma.tools.calculator",
     },
     auto_approve = {
-      "$default",
+      "$standard",
       "calculator",
     },
   },

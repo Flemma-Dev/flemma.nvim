@@ -66,7 +66,7 @@ If you edit the content inside an `approved` block, Flemma skips execution to pr
 
 ### Configuring approval
 
-Out of the box, `auto_approve` is set to `{ "$default" }`, which auto-approves `read`, `write`, and `edit` while keeping `bash` gated behind manual approval. This gives you a working agent loop without opting out of safety for shell commands.
+Out of the box, `auto_approve` is set to `{ "$standard" }`, which auto-approves `read`, `write`, `edit`, `find`, `grep`, and `ls` while keeping `bash` gated behind manual approval. This gives you a working agent loop without opting out of safety for shell commands.
 
 Disable approval entirely with `tools.require_approval = false` – this registers a catch-all resolver at priority 0 that auto-approves every tool call. Alternatively, use `tools.auto_approve` to build a custom policy with presets, tool names, or a function:
 
@@ -90,28 +90,28 @@ Presets are named collections of tool approval rules referenced with a `$` prefi
 
 **Built-in presets:**
 
-| Preset      | Approves                | Description                                        |
-| ----------- | ----------------------- | -------------------------------------------------- |
-| `$readonly` | `read`                  | Read-only access – safe for exploration buffers    |
-| `$default`  | `read`, `write`, `edit` | File operations without shell access (the default) |
+| Preset      | Approves                                      | Description                                        |
+| ----------- | --------------------------------------------- | -------------------------------------------------- |
+| `$readonly` | `read`, `find`, `grep`, `ls`                  | Read-only access – safe for exploration buffers    |
+| `$standard` | `read`, `write`, `edit`, `find`, `grep`, `ls` | File operations without shell access (the default) |
 
-**User-defined presets** override built-ins by name. Define them in `tools.presets`:
+**User-defined presets** override built-ins by name. Define them in `presets`:
 
 ```lua
+presets = {
+  ["$yolo"] = { auto_approve = { "bash", "read", "write", "edit" } },
+},
 tools = {
-  presets = {
-    ["$yolo"] = { approve = { "bash", "read", "write", "edit" } },
-  },
   auto_approve = { "$yolo" },
 }
 ```
 
-Each preset is a table with an `approve` array — the tool names to auto-approve.
+Each preset is a table with an `auto_approve` array — the tool names to auto-approve.
 
 **Composition rules:**
 
 - **Union.** When multiple presets appear in `auto_approve`, their `approve` sets are merged.
-- **Plain tool names** mix freely with presets: `{ "$default", "bash" }` approves everything in `$default` plus `bash`.
+- **Plain tool names** mix freely with presets: `{ "$standard", "bash" }` approves everything in `$standard` plus `bash`.
 
 ### Per-buffer approval
 
@@ -126,7 +126,7 @@ flemma.opt.tools.auto_approve = { "$readonly" }
 flemma.opt.tools.auto_approve = { "bash", "read" }
 
 -- Mix presets and tool names
-flemma.opt.tools.auto_approve = { "$default", "bash" }
+flemma.opt.tools.auto_approve = { "$standard", "bash" }
 
 -- Function form: full control per-buffer
 flemma.opt.tools.auto_approve = function(tool_name, input, ctx)
@@ -143,11 +143,11 @@ The function form returns `true` (approve), `false` (require approval), `"deny"`
 ````lua
 ```lua
 -- Start from default, but remove write access
-flemma.opt.tools.auto_approve = { "$default" }
+flemma.opt.tools.auto_approve = { "$standard" }
 flemma.opt.tools.auto_approve:remove("write")
 
 -- Add bash to the default set
-flemma.opt.tools.auto_approve = { "$default" }
+flemma.opt.tools.auto_approve = { "$standard" }
 flemma.opt.tools.auto_approve:append("bash")
 
 -- Operator shorthand: + (append), - (remove)
@@ -155,7 +155,7 @@ flemma.opt.tools.auto_approve = flemma.opt.tools.auto_approve + "bash" - "write"
 ```
 ````
 
-When you `:remove()` a tool that lives inside a preset (e.g., removing `"write"` from `{ "$default" }`), the tool is excluded at expansion time – the preset itself stays in the list, but the named tool is filtered out when the resolver evaluates it.
+When you `:remove()` a tool that lives inside a preset (e.g., removing `"write"` from `{ "$standard" }`), the tool is excluded at expansion time – the preset itself stays in the list, but the named tool is filtered out when the resolver evaluates it.
 
 ---
 

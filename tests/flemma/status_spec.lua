@@ -53,7 +53,7 @@ describe("flemma.status", function()
     package.loaded["flemma.sandbox"] = nil
     package.loaded["flemma.sandbox.backends.bwrap"] = nil
     package.loaded["flemma.provider.normalize"] = nil
-    package.loaded["flemma.tools.presets"] = nil
+    package.loaded["flemma.presets"] = nil
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.config.store"] = nil
     package.loaded["flemma.config.proxy"] = nil
@@ -112,7 +112,7 @@ describe("flemma.status", function()
 
     it("resolves model preset reference to actual provider and model", function()
       local presets_mod = require("flemma.presets")
-      presets_mod.refresh({
+      presets_mod.setup({
         ["$haiku"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514" },
       })
       apply_test_config({
@@ -1011,7 +1011,7 @@ describe("flemma.status", function()
 
   describe("collect — approval logic", function()
     before_each(function()
-      require("flemma.tools.presets").setup()
+      require("flemma.presets").setup(nil)
     end)
 
     ---Set config through the facade and initialize the approval resolver chain.
@@ -1027,12 +1027,12 @@ describe("flemma.status", function()
       require("flemma.tools.approval").setup()
     end
 
-    it("expands $default preset and classifies tools", function()
+    it("expands $standard preset and classifies tools", function()
       setup_config({
         provider = "anthropic",
         parameters = {},
         tools = {
-          auto_approve = { "$default" },
+          auto_approve = { "$standard" },
           autopilot = { enabled = false, max_turns = 100 },
         },
         sandbox = { enabled = false, backend = "auto" },
@@ -1088,7 +1088,7 @@ describe("flemma.status", function()
         provider = "anthropic",
         parameters = {},
         tools = {
-          auto_approve = { "$default", "bash" },
+          auto_approve = { "$standard", "bash" },
           autopilot = { enabled = false, max_turns = 100 },
         },
         sandbox = { enabled = false, backend = "auto" },
@@ -1159,7 +1159,7 @@ describe("flemma.status", function()
         provider = "anthropic",
         parameters = {},
         tools = {
-          auto_approve = { "$default" },
+          auto_approve = { "$standard" },
           autopilot = { enabled = false, max_turns = 100 },
         },
         sandbox = { enabled = false, backend = "auto" },
@@ -1183,7 +1183,7 @@ describe("flemma.status", function()
         provider = "anthropic",
         parameters = {},
         tools = {
-          auto_approve = { "$default" },
+          auto_approve = { "$standard" },
           autopilot = { enabled = false, max_turns = 100 },
         },
         sandbox = { enabled = true, backend = "auto" },
@@ -1224,7 +1224,7 @@ describe("flemma.status", function()
         provider = "anthropic",
         parameters = {},
         tools = {
-          auto_approve = { "$default" },
+          auto_approve = { "$standard" },
           autopilot = { enabled = false, max_turns = 100 },
         },
         sandbox = { enabled = false, backend = "auto" },
@@ -1247,7 +1247,7 @@ describe("flemma.status", function()
 
     it("promotes sandbox-capable tools with default auto_approve when sandbox is active", function()
       -- In the new config system, auto_approve always has a schema default
-      -- ({ "$default" }), so sandbox promotion activates with defaults.
+      -- ({ "$standard" }), so sandbox promotion activates with defaults.
       setup_config({
         provider = "anthropic",
         parameters = {},
@@ -1274,7 +1274,7 @@ describe("flemma.status", function()
       })
 
       local data = status.collect(0)
-      -- auto_approve defaults to { "$default" } → sandbox resolver activates
+      -- auto_approve defaults to { "$standard" } → sandbox resolver activates
       assert.are.same({ "bash" }, data.approval.approved)
       assert.are.same({}, data.approval.pending)
       assert.is_not_nil(data.approval.sandbox_items)

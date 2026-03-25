@@ -142,7 +142,6 @@ M.definitions = {
     enabled = function(config)
       return not not (config and config.experimental and config.experimental.tools)
     end,
-    capabilities = { "can_auto_approve_if_sandboxed" },
     description = "Find files by glob pattern. "
       .. "Uses fd, git ls-files, or GNU find (whichever is available). "
       .. "Output is truncated to "

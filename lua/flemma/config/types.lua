@@ -21,7 +21,7 @@
 ---@field model? string
 ---@field notifications flemma.config.Notifications
 ---@field parameters flemma.config.Parameters
----@field presets table<string, any>
+---@field presets table<string, string|{  }|{ auto_approve: string[], model: string, parameters: {  }, provider: string }>
 ---@field pricing flemma.config.Pricing
 ---@field progress flemma.config.Progress
 ---@field provider string
@@ -157,7 +157,6 @@
 ---@field ls? flemma.config.ToolsLs
 ---@field max_concurrent integer
 ---@field modules string[]
----@field presets table<string, flemma.tools.PresetDefinition>
 ---@field require_approval boolean
 ---@field show_spinner boolean
 ---@field [string] table|nil

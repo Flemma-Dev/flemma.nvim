@@ -307,7 +307,8 @@ function M.setup()
 
   -- Sandbox-aware auto-approval: when sandboxing is enabled and a backend is
   -- available, auto-approve tools that declare "can_auto_approve_if_sandboxed"
-  -- in their capabilities array (currently: bash).
+  -- in their capabilities array. Only bash uses this path — read-only tools
+  -- (find, grep, ls) are approved via the $standard preset instead.
   -- Priority 25: below config (100) and the community default (50)
   -- so both explicit user preferences and third-party resolvers win. Above the
   -- catch-all (0). Checks are deferred to resolve time so runtime overrides and

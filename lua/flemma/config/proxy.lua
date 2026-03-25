@@ -73,7 +73,7 @@ ListProxy.__index = ListProxy
 
 --- Coerce an item and record one or more ops of the given type.
 --- If coerce expands a single item into a table, each expanded item becomes
---- a separate op (e.g., remove("$default") → remove("bash") + remove("ls")).
+--- a separate op (e.g., remove("$standard") → remove("bash") + remove("ls")).
 --- Coerce functions that return a table MUST return a sequential array —
 --- non-sequential tables are silently truncated by ipairs.
 --- Validates each expanded item against the item schema (except for remove).
@@ -340,7 +340,7 @@ local function make_proxy(root_schema, bufnr, layer, base_path, current_schema)
       local unwrapped_leaf = nav.unwrap_optional(leaf)
 
       -- List-typed fields with coerce: expand per-item so that preset references
-      -- like "$default" are resolved into individual tool names at write time.
+      -- like "$standard" are resolved into individual tool names at write time.
       -- This applies to pure ListNodes and hybrid ObjectNodes with allow_list().
       local is_list_set = false
       if leaf:has_coerce() and type(value) == "table" then

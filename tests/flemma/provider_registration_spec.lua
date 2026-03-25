@@ -386,7 +386,7 @@ describe("resolve_preset", function()
 
   it("resolves preset reference to concrete provider and model", function()
     local presets_mod = require("flemma.presets")
-    presets_mod.refresh({
+    presets_mod.setup({
       ["$haiku"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514" },
     })
     config_facade.apply(config_facade.LAYERS.SETUP, { model = "$haiku" })
@@ -398,7 +398,7 @@ describe("resolve_preset", function()
 
   it("merges preset parameters into config", function()
     local presets_mod = require("flemma.presets")
-    presets_mod.refresh({
+    presets_mod.setup({
       ["$fast"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514", thinking = "low" },
     })
     config_facade.apply(config_facade.LAYERS.SETUP, { model = "$fast" })
@@ -410,7 +410,7 @@ describe("resolve_preset", function()
 
   it("does not mutate the original config table", function()
     local presets_mod = require("flemma.presets")
-    presets_mod.refresh({
+    presets_mod.setup({
       ["$haiku"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514" },
     })
     config_facade.apply(config_facade.LAYERS.SETUP, { model = "$haiku" })

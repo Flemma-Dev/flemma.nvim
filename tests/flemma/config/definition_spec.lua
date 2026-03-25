@@ -105,16 +105,15 @@ describe("config.schema.definition", function()
     end)
 
     it("materializes tools auto_approve default as unexpanded preset", function()
-      -- Before finalize/presets setup, $default is stored as-is
+      -- Before finalize/presets setup, $standard is stored as-is
       local cfg = config_facade.get()
-      assert.same({ "$default" }, cfg.tools.auto_approve)
+      assert.same({ "$standard" }, cfg.tools.auto_approve)
     end)
 
     it("materializes tools defaults", function()
       local cfg = config_facade.get()
       assert.is_true(cfg.tools.require_approval)
       assert.is_true(cfg.tools.auto_approve_sandboxed)
-      assert.same({}, cfg.tools.presets)
       assert.is_true(cfg.tools.autopilot.enabled)
       assert.equals(100, cfg.tools.autopilot.max_turns)
       assert.equals(2, cfg.tools.max_concurrent)
@@ -859,11 +858,11 @@ describe("config.schema.definition", function()
   -- ---------------------------------------------------------------------------
 
   describe("auto_approve coerce", function()
-    local tools_presets
+    local unified_presets
 
     before_each(function()
-      package.loaded["flemma.tools.presets"] = nil
-      tools_presets = require("flemma.tools.presets")
+      package.loaded["flemma.presets"] = nil
+      unified_presets = require("flemma.presets")
     end)
 
     it("passes through non-$ strings unchanged", function()
@@ -881,9 +880,9 @@ describe("config.schema.definition", function()
       assert.equals(fn, cfg.tools.auto_approve)
     end)
 
-    it("expands $default preset when presets are registered", function()
-      tools_presets.setup()
-      -- The L10 default has { "$default" }. Finalize expands it.
+    it("expands $standard preset when presets are registered", function()
+      unified_presets.setup(nil)
+      -- The L10 default has { "$standard" }. Finalize expands it.
       config_facade.finalize(config_facade.LAYERS.SETUP)
       local cfg = config_facade.get()
       local approve = cfg.tools.auto_approve
@@ -891,20 +890,21 @@ describe("config.schema.definition", function()
       assert.truthy(vim.tbl_contains(approve, "read"))
       assert.truthy(vim.tbl_contains(approve, "write"))
       assert.truthy(vim.tbl_contains(approve, "edit"))
-      -- $default itself is gone (expanded into individual tool names)
-      assert.is_falsy(vim.tbl_contains(approve, "$default"))
+      -- $standard itself is gone (expanded into individual tool names)
+      assert.is_falsy(vim.tbl_contains(approve, "$standard"))
     end)
 
-    it("leaves $default unexpanded before presets are registered", function()
-      -- No tools_presets.setup() call — presets registry is empty
+    it("leaves $standard unexpanded before presets are registered", function()
+      -- No presets.setup() call — presets registry is empty
+      unified_presets.clear()
       config_facade.finalize(config_facade.LAYERS.SETUP)
       local cfg = config_facade.get()
-      -- $default stays as-is because the preset isn't found
-      assert.truthy(vim.tbl_contains(cfg.tools.auto_approve, "$default"))
+      -- $standard stays as-is because the preset isn't found
+      assert.truthy(vim.tbl_contains(cfg.tools.auto_approve, "$standard"))
     end)
 
     it("expands $preset per-item in list set via write proxy", function()
-      tools_presets.setup({ ["$safe"] = { approve = { "read" } } })
+      unified_presets.setup({ ["$safe"] = { auto_approve = { "read" } } })
       local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
       w.tools.auto_approve = { "$safe", "bash" }
       local cfg = config_facade.get()
@@ -912,9 +912,9 @@ describe("config.schema.definition", function()
     end)
 
     it("expands $preset in append via write proxy", function()
-      tools_presets.setup()
+      unified_presets.setup(nil)
       local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
-      w.tools.auto_approve:append("$default")
+      w.tools.auto_approve:append("$standard")
       local ops = config_facade.dump_layer(config_facade.LAYERS.SETUP)
       -- Should have expanded into individual append ops
       local appended = {}
@@ -929,12 +929,12 @@ describe("config.schema.definition", function()
     end)
 
     it("expands $preset in remove via write proxy", function()
-      tools_presets.setup()
-      -- Start with all $default tools
+      unified_presets.setup(nil)
+      -- Start with all $standard tools
       local w = config_facade.writer(nil, config_facade.LAYERS.SETUP)
       w.tools.auto_approve = { "read", "write", "edit", "bash" }
-      -- Remove the $default preset (should expand to individual remove ops)
-      w.tools.auto_approve:remove("$default")
+      -- Remove the $standard preset (should expand to individual remove ops)
+      w.tools.auto_approve:remove("$standard")
       local cfg = config_facade.get()
       assert.are.same({ "bash" }, cfg.tools.auto_approve)
     end)
