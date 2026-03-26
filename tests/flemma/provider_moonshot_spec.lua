@@ -1,34 +1,7 @@
 --- Test file for Moonshot AI provider functionality
 describe("Moonshot Provider", function()
   local moonshot = require("flemma.provider.providers.moonshot")
-
-  --- Build a Prompt table from legacy message format
-  ---@param messages { type: string, content: string }[]
-  ---@return flemma.provider.Prompt
-  local function make_prompt(messages)
-    local history = {}
-    local system = nil
-    for _, msg in ipairs(messages) do
-      if msg.type == "System" then
-        system = vim.trim(msg.content or "")
-      end
-    end
-    for _, msg in ipairs(messages) do
-      local role = nil
-      if msg.type == "You" then
-        role = "user"
-      elseif msg.type == "Assistant" then
-        role = "assistant"
-      end
-      if role then
-        table.insert(history, {
-          role = role,
-          parts = { { kind = "text", text = vim.trim(msg.content or "") } },
-        })
-      end
-    end
-    return { history = history, system = system }
-  end
+  local make_prompt = require("tests.utilities.prompt").make_prompt
 
   after_each(function()
     vim.cmd("silent! %bdelete!")

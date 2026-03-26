@@ -346,6 +346,12 @@ end
 --- Usage can appear in two locations:
 ---   1. On the finish_reason chunk: `choices[0].usage` (sibling of delta)
 ---   2. On a separate final chunk: empty choices + top-level `data.usage`
+---
+--- Cached token format varies by provider:
+---   - Moonshot: flat `usage.cached_tokens` AND nested `usage.prompt_tokens_details.cached_tokens`
+---     (both present, identical values)
+---   - Standard OpenAI Chat Completions: nested `usage.prompt_tokens_details.cached_tokens` only
+--- Both formats are handled — flat key is checked first, nested as fallback.
 ---@param self flemma.provider.OpenAIChat
 ---@param data table The parsed JSON chunk
 ---@param callbacks flemma.provider.Callbacks
@@ -366,8 +372,10 @@ function M._extract_usage(self, data, callbacks)
     return
   end
 
-  -- Cached tokens (flat, top-level sibling in usage)
-  local cached_tokens = usage.cached_tokens or 0
+  -- Cached tokens — read flat key first (Moonshot), fall back to nested (standard OpenAI).
+  local cached_tokens = usage.cached_tokens
+    or (usage.prompt_tokens_details and usage.prompt_tokens_details.cached_tokens)
+    or 0
 
   if usage.prompt_tokens then
     callbacks.on_usage({ type = "input", tokens = usage.prompt_tokens - cached_tokens })
