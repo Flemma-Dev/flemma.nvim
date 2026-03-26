@@ -569,8 +569,11 @@ end
 ---Validate provider-specific parameters
 ---@param model_name string The model name
 ---@param parameters table<string, any> The parameters to validate
----@return boolean success True if validation passes (warnings don't fail)
+---@return boolean success Always true (warnings don't fail validation)
+---@return string[]|nil warnings Human-readable warning strings, or nil when clean
 function M.validate_parameters(model_name, parameters)
+  local warnings = {}
+
   -- Resolve effective reasoning: provider-specific `reasoning` > unified `thinking`
   local reasoning_value = parameters.reasoning
   if (reasoning_value == nil or reasoning_value == "") and parameters.thinking ~= nil then
@@ -588,12 +591,10 @@ function M.validate_parameters(model_name, parameters)
     local supports_reasoning_effort = model_info and model_info.supports_reasoning_effort == true
 
     if not supports_reasoning_effort then
-      local warning_msg = string.format(
-        "Flemma: The 'reasoning' parameter is not supported by the selected OpenAI model '%s'. It may be ignored or cause an API error.",
-        model_name
+      table.insert(
+        warnings,
+        string.format("'reasoning' is not supported by '%s' and may be ignored or cause an API error", model_name)
       )
-      vim.notify(warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
-      log.warn(warning_msg)
     end
   end
 
@@ -613,14 +614,18 @@ function M.validate_parameters(model_name, parameters)
     and temp_value ~= 1
     and temp_value ~= 1.0
   then
-    local temp_warning_msg = string.format(
-      "Flemma: For OpenAI o-series models with 'reasoning' active, 'temperature' must be 1 or omitted. Current value is '%s'. The API will likely reject this.",
-      tostring(temp_value)
+    table.insert(
+      warnings,
+      string.format(
+        "temperature must be 1 or omitted with reasoning active on o-series, got '%s'",
+        tostring(temp_value)
+      )
     )
-    vim.notify(temp_warning_msg, vim.log.levels.WARN, { title = "Flemma Configuration" })
-    log.warn(temp_warning_msg)
   end
 
+  if #warnings > 0 then
+    return true, warnings
+  end
   return true
 end
 

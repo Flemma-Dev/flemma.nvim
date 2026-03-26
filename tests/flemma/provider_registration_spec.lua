@@ -218,7 +218,7 @@ describe("provider registration", function()
 
   describe("count()", function()
     it("returns the number of registered providers", function()
-      assert.are.equal(3, registry.count())
+      assert.are.equal(4, registry.count())
     end)
 
     it("returns 0 after clear", function()

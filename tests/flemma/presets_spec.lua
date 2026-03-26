@@ -478,6 +478,7 @@ describe(":Flemma switch completion ordering", function()
       "$alpha",
       "$zulu",
       "anthropic",
+      "moonshot",
       "openai",
       "vertex",
     }, completions, "completion order should list switchable presets first followed by providers")

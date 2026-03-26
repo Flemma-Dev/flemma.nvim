@@ -38,8 +38,8 @@ Methods are grouped into three categories:
   Virtual — sensible default provided, override only if needed
   -------------------------------------------------------------
   - `get_endpoint(self)` — return the API URL (default: `self.endpoint`).
-  - `validate_parameters(model_name, parameters)` — parameter validation
-    (warnings, not failures).
+  - `validate_parameters(model_name, parameters)` — returns `true, warnings[]`.
+    Providers collect warnings; caller handles logging/notification.
   - `finalize_response(self, exit_code, callbacks)` — post-request cleanup.
     Auto-destroys sinks in `_response_buffer.extra`.
   - `extract_json_response_error(self, data)` — custom error extraction
@@ -293,10 +293,14 @@ function M.get_trailing_keys(self)
 end
 
 --- Validate provider-specific parameters.
---- Override to add custom validation logic. Return true even for warnings.
+--- Override to collect warnings about invalid or unsupported parameter combinations.
+--- Return true with no warnings for clean validation, or true + warnings array for
+--- advisories. The caller (core.lua) handles logging and vim.notify — providers
+--- never call vim.notify or log.warn from this method.
 ---@param model_name string The model name
 ---@param parameters table<string, any> The parameters to validate
----@return boolean success True if validation passes (warnings don't fail)
+---@return boolean success Always true (warnings don't fail validation)
+---@return string[]|nil warnings Human-readable warning strings, or nil when clean
 function M.validate_parameters(model_name, parameters)
   return true
 end

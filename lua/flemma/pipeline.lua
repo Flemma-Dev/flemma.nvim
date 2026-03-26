@@ -109,6 +109,12 @@ function M.run(doc, context, opts)
     end
   end
 
+  -- Build tool_use_id -> name index for enriching tool_result parts.
+  -- Chat Completions providers (Moonshot, etc.) require a `name` field on tool result
+  -- messages. Rather than searching backward through history at request time, we resolve
+  -- the name here in the pipeline where we have the full document.
+  local tool_use_index = ast.build_tool_use_index(doc)
+
   -- Second pass: resolve aborted parts, then convert to generic parts.
   -- Keep abort markers in ALL text-only assistant messages so the LLM sees that
   -- previous responses were interrupted, and so the conversation prefix stays stable
@@ -132,6 +138,17 @@ function M.run(doc, context, opts)
     for _, d in ipairs(diags) do
       table.insert(all_diagnostics, d)
     end
+
+    -- Enrich tool_result parts with the tool name from the matching tool_use
+    for _, part in ipairs(parts) do
+      if part.kind == "tool_result" and not part.name then
+        local info = tool_use_index[part.tool_use_id]
+        if info then
+          part.name = info.name
+        end
+      end
+    end
+
     table.insert(history, { role = entry.role, parts = parts })
   end
 

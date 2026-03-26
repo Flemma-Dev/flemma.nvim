@@ -51,6 +51,7 @@ local BUILTIN_PROVIDER_MODULES = {
   "flemma.provider.providers.openai",
   "flemma.provider.providers.anthropic",
   "flemma.provider.providers.vertex",
+  "flemma.provider.providers.moonshot",
 }
 
 --------------------------------------------------------------------------------

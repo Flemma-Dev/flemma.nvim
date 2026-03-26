@@ -131,7 +131,7 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
   -- Write to facade
   apply_config(resolved_provider, validated_model, explicit_params, layer)
 
-  -- Validate provider-specific parameters (shows warnings, doesn't fail)
+  -- Validate provider-specific parameters (advisory warnings, never fails)
   if validated_model then
     local resolved_config = config_facade.materialize()
     local flat_params = normalize.flatten_parameters(resolved_provider, resolved_config)
@@ -139,7 +139,21 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
     local provider_module_path = registry.get(resolved_provider)
     if provider_module_path then
       local provider_module = loader.load(provider_module_path)
-      provider_module.validate_parameters(validated_model, flat_params)
+      local _, warnings = provider_module.validate_parameters(validated_model, flat_params)
+      if warnings and #warnings > 0 then
+        local lines = {}
+        for _, w in ipairs(warnings) do
+          table.insert(lines, "  • " .. w)
+          log.warn("validate_parameters(" .. resolved_provider .. "): " .. w)
+        end
+        vim.schedule(function()
+          vim.notify(
+            table.concat(lines, "\n"),
+            vim.log.levels.WARN,
+            { title = "Flemma Configuration [" .. resolved_provider .. "]" }
+          )
+        end)
+      end
     end
   end
 
