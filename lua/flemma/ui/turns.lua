@@ -28,7 +28,6 @@ local state = require("flemma.state")
 ---@class flemma.ui.TurnBufferCache
 ---@field enabled boolean Whether turns are enabled for this buffer
 ---@field result_empty string Pre-computed statuscolumn return string for non-turn lines
----@field result_disabled string Pre-computed statuscolumn return string when disabled
 ---@field results table<string, string> Pre-computed full return strings keyed by character constant
 ---@field changedtick integer Last changedtick when turn data was computed
 ---@field map flemma.ui.TurnMap Line-to-position lookup
@@ -49,6 +48,9 @@ local CHAR_PENDING_END = "\u{2514}" -- └ (incomplete turn end — sharp corner
 -- Per-buffer cache
 -- ============================================================================
 
+-- Per-buffer turn cache. Module-local rather than on BufferState because turn
+-- data is private to this module (only statuscolumn reads it). The one shared
+-- field (streaming_start_line) is on BufferState for cross-module access.
 ---@type table<integer, flemma.ui.TurnBufferCache>
 local turn_caches = {}
 
@@ -180,7 +182,7 @@ local function build_turn_map(ranges)
   local end_line_map = {} ---@type table<integer, integer>
   for _, range in ipairs(ranges) do
     if range.streaming or range.incomplete then
-      -- Streaming/incomplete turns: ╭ at top, ┊ for interior, ╰ at current end.
+      -- Streaming/incomplete turns: ╭ at top, ┊ for interior, └ at current end.
       map[range.start_line] = "top"
       map[range.end_line] = "pending_end"
       for lnum = range.start_line + 1, range.end_line - 1 do
@@ -224,16 +226,15 @@ local CONNECTS_TO_RULER = {
 ---@param padding_left integer
 ---@param padding_right integer
 ---@param highlight_group string
----@param ruler_char string|nil Ruler character (nil or "" when ruler is disabled)
----@param ruler_hl string|nil Ruler highlight group name
+---@param ruler_char string|nil Ruler character (nil when ruler is disabled or padding_right is 0)
 ---@return table<string, string> results Char → full statuscolumn return string
 ---@return string result_empty Full return string for non-turn lines
-local function build_result_strings(padding_left, padding_right, highlight_group, ruler_char, ruler_hl)
+local function build_result_strings(padding_left, padding_right, highlight_group, ruler_char)
   local prefix = "%s%=%l"
   local left = string.rep(" ", padding_left)
   local right_space = string.rep(" ", padding_right)
   local right_ruler = (ruler_char and #ruler_char > 0 and padding_right > 0)
-      and "%#" .. (ruler_hl or "FlemmaRuler") .. "#" .. string.rep(ruler_char, padding_right) .. "%*"
+      and "%#FlemmaRuler#" .. string.rep(ruler_char, padding_right) .. "%*"
     or right_space
   local result_empty = prefix .. left .. " " .. right_space
 
@@ -267,7 +268,6 @@ function M.setup_statuscolumn(bufnr)
     or {
       enabled = false,
       result_empty = "",
-      result_disabled = "%s%=%l ",
       results = {},
       changedtick = 0,
       map = {},
@@ -277,20 +277,18 @@ function M.setup_statuscolumn(bufnr)
   cache.enabled = enabled
 
   if enabled then
-    local padding = turns_cfg.padding or {}
-    local padding_left = padding.left or 1
-    local padding_right = padding.right or 0
-    local highlight_group = turns_cfg.hl or "FlemmaTurn"
+    local padding = turns_cfg.padding
+    local padding_left = padding.left
+    local padding_right = padding.right
+    local highlight_group = turns_cfg.hl
 
-    -- Ruler char for connecting boundary characters to the ruler line
-    local ruler_cfg = cfg.ruler or {}
-    local ruler_char = (ruler_cfg.enabled ~= false and padding_right > 0) and (ruler_cfg.char or "") or nil
+    -- Ruler char for connecting top arc to the ruler line
+    local ruler_cfg = cfg.ruler
+    local ruler_char = (ruler_cfg.enabled and padding_right > 0) and ruler_cfg.char or nil
 
-    local results, result_empty =
-      build_result_strings(padding_left, padding_right, highlight_group, ruler_char, "FlemmaRuler")
+    local results, result_empty = build_result_strings(padding_left, padding_right, highlight_group, ruler_char)
     cache.results = results
     cache.result_empty = result_empty
-    cache.result_disabled = "%s%=%l "
 
     -- Preserve existing turn data if present (config refresh shouldn't discard computed turns)
     cache.changedtick = cache.changedtick or 0
@@ -358,9 +356,10 @@ end
 ---Get the turn map entry for a line, with streaming fallback.
 ---@param cache flemma.ui.TurnBufferCache
 ---@param lnum integer
+---@param bufnr integer
 ---@return flemma.ui.TurnPosition|nil position
 ---@return boolean is_streaming
-local function get_line_turn_info(cache, lnum)
+local function get_line_turn_info(cache, lnum, bufnr)
   local position = cache.map[lnum]
   if position then
     -- Lines in the turn map render with their normal position characters
@@ -371,7 +370,6 @@ local function get_line_turn_info(cache, lnum)
 
   -- Streaming fallback: lines beyond the cached map that appeared after the
   -- last update but before the next are rendered as streaming members.
-  local bufnr = vim.api.nvim_get_current_buf()
   local buffer_state = state.get_buffer_state(bufnr)
   if buffer_state.streaming_start_line and lnum >= buffer_state.streaming_start_line then
     return "middle", true
@@ -397,7 +395,7 @@ function M.statuscolumn()
   local virtnum = vim.v.virtnum
   local results = cache.results
 
-  local position, is_streaming = get_line_turn_info(cache, lnum)
+  local position, is_streaming = get_line_turn_info(cache, lnum, bufnr)
 
   if not position then
     return cache.result_empty
