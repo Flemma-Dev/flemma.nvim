@@ -311,6 +311,61 @@ describe("Anthropic Provider", function()
     end)
   end)
 
+  describe("document metadata", function()
+    it("sets title from filename on PDF document blocks", function()
+      tools.clear()
+      local p = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 4000 })
+      local prompt = {
+        history = {
+          {
+            role = "user",
+            parts = {
+              { kind = "text", text = "Summarize this PDF" },
+              { kind = "pdf", mime_type = "application/pdf", data = "JVBER", filename = "/home/user/reports/quarterly_earnings.pdf" },
+            },
+          },
+        },
+      }
+      local req = p:build_request(prompt)
+      local user_msg = req.messages[1]
+      local doc_block = nil
+      for _, block in ipairs(user_msg.content) do
+        if block.type == "document" then
+          doc_block = block
+          break
+        end
+      end
+      assert.is_not_nil(doc_block, "Expected a document content block")
+      assert.are.equal("quarterly_earnings.pdf", doc_block.title)
+    end)
+
+    it("omits title when filename is absent", function()
+      tools.clear()
+      local p = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 4000 })
+      local prompt = {
+        history = {
+          {
+            role = "user",
+            parts = {
+              { kind = "pdf", mime_type = "application/pdf", data = "JVBER" },
+            },
+          },
+        },
+      }
+      local req = p:build_request(prompt)
+      local user_msg = req.messages[1]
+      local doc_block = nil
+      for _, block in ipairs(user_msg.content) do
+        if block.type == "document" then
+          doc_block = block
+          break
+        end
+      end
+      assert.is_not_nil(doc_block, "Expected a document content block")
+      assert.is_nil(doc_block.title)
+    end)
+  end)
+
   describe("stop reason handling", function()
     local provider, callbacks, completed, errors
 

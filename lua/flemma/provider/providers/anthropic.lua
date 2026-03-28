@@ -126,6 +126,7 @@ function M.build_request(self, prompt, _context)
               media_type = part.mime_type,
               data = part.data,
             },
+            title = part.filename and vim.fn.fnamemodify(part.filename, ":t"),
           })
           log.debug(
             'anthropic.build_request: Added document part for "'
