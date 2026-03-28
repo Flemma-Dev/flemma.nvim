@@ -365,7 +365,7 @@ describe("flemma.status", function()
       assert.is_table(data.provider.model_info)
       assert.is_table(data.provider.model_info.pricing)
       assert.are.equal(3.0, data.provider.model_info.pricing.input)
-      assert.are.equal(200000, data.provider.model_info.max_input_tokens)
+      assert.are.equal(1000000, data.provider.model_info.max_input_tokens)
     end)
 
     it("returns nil model_info for unknown models", function()

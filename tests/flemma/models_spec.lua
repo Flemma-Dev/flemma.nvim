@@ -95,20 +95,15 @@ describe("flemma.models", function()
       assert.are.equal("low", info.thinking_effort_map.minimal)
     end)
 
-    it("vertex gemini-3-pro-preview maps minimal to LOW", function()
-      local info = models_data.providers.vertex.models["gemini-3-pro-preview"]
-      assert.is_not_nil(info.thinking_effort_map)
-      assert.are.equal("LOW", info.thinking_effort_map.minimal)
-    end)
-
     it("vertex gemini-3-flash-preview maps minimal to MINIMAL", function()
       local info = models_data.providers.vertex.models["gemini-3-flash-preview"]
       assert.are.equal("MINIMAL", info.thinking_effort_map.minimal)
     end)
 
-    it("vertex gemini-3-pro-preview maps medium to HIGH (3 Pro has no MEDIUM)", function()
-      local info = models_data.providers.vertex.models["gemini-3-pro-preview"]
-      assert.are.equal("HIGH", info.thinking_effort_map.medium)
+    it("vertex gemini-3.1-pro-preview maps minimal to LOW", function()
+      local info = models_data.providers.vertex.models["gemini-3.1-pro-preview"]
+      assert.is_not_nil(info.thinking_effort_map)
+      assert.are.equal("LOW", info.thinking_effort_map.minimal)
     end)
 
     it("vertex gemini-3.1-pro-preview maps medium to MEDIUM (3.1 Pro added MEDIUM)", function()

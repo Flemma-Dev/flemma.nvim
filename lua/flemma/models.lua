@@ -70,7 +70,7 @@ return {
             cache_read = 0.50,
             cache_write = 6.25,
           },
-          max_input_tokens = 200000,
+          max_input_tokens = 1000000,
           max_output_tokens = 128000,
           thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
           min_thinking_budget = 1024,
@@ -87,7 +87,7 @@ return {
             cache_read = 0.30,
             cache_write = 3.75,
           },
-          max_input_tokens = 200000,
+          max_input_tokens = 1000000,
           max_output_tokens = 64000,
           thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
           min_thinking_budget = 1024,
@@ -326,21 +326,6 @@ return {
           thinking_effort_map = { minimal = "MINIMAL", low = "LOW", medium = "MEDIUM", high = "HIGH", max = "HIGH" },
         },
 
-        -- Gemini 3 Pro Preview (discontinuing March 26, 2026)
-        ["gemini-3-pro-preview"] = {
-          pricing = {
-            input = 2.0,
-            output = 12.0,
-            cache_read = 0.20,
-          },
-          max_input_tokens = 1048576,
-          max_output_tokens = 65536,
-          thinking_budgets = { minimal = 128, low = 2048, medium = 8192, high = 32768 },
-          min_thinking_budget = 1,
-          max_thinking_budget = 32768,
-          thinking_effort_map = { minimal = "LOW", low = "LOW", medium = "HIGH", high = "HIGH", max = "HIGH" },
-        },
-
         -- Gemini 2.5 Pro models
         ["gemini-2.5-pro"] = {
           pricing = {
@@ -435,7 +420,18 @@ return {
             output = 15.0,
             cache_read = 0.25,
           },
-          max_input_tokens = 272000,
+          max_input_tokens = 922000,
+          max_output_tokens = 128000,
+          supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
+        },
+        ["gpt-5.4-2026-03-05"] = {
+          pricing = {
+            input = 2.50,
+            output = 15.0,
+            cache_read = 0.25,
+          },
+          max_input_tokens = 922000,
           max_output_tokens = 128000,
           supports_reasoning_effort = true,
           thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
@@ -446,8 +442,30 @@ return {
             output = 180.0,
             cache_read = 30.0,
           },
+          max_input_tokens = 922000,
+          max_output_tokens = 128000,
+        },
+        ["gpt-5.4-mini"] = {
+          pricing = {
+            input = 0.75,
+            output = 4.50,
+            cache_read = 0.075,
+          },
           max_input_tokens = 272000,
           max_output_tokens = 128000,
+          supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
+        },
+        ["gpt-5.4-nano"] = {
+          pricing = {
+            input = 0.20,
+            output = 1.25,
+            cache_read = 0.02,
+          },
+          max_input_tokens = 272000,
+          max_output_tokens = 128000,
+          supports_reasoning_effort = true,
+          thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
         },
 
         -- GPT-5.3 models
@@ -840,7 +858,7 @@ return {
           pricing = {
             input = 1.10,
             output = 4.40,
-            cache_read = 0.28,
+            cache_read = 0.275,
           },
           max_input_tokens = 200000,
           max_output_tokens = 100000,
@@ -907,25 +925,6 @@ return {
           max_input_tokens = 128000,
           max_output_tokens = 4096,
         },
-        ["gpt-4-0125-preview"] = { -- (deprecated, retiring Mar 26, 2026)
-          pricing = {
-            input = 10.0,
-            output = 30.0,
-            cache_read = 10.0,
-          },
-          max_input_tokens = 128000,
-          max_output_tokens = 4096,
-        },
-        ["gpt-4-1106-preview"] = { -- (deprecated, retiring Mar 26, 2026)
-          pricing = {
-            input = 10.0,
-            output = 30.0,
-            cache_read = 10.0,
-          },
-          max_input_tokens = 128000,
-          max_output_tokens = 4096,
-        },
-
         -- GPT-4 models (legacy)
         ["gpt-4"] = {
           pricing = {
@@ -945,16 +944,6 @@ return {
           max_input_tokens = 8192,
           max_output_tokens = 8192,
         },
-        ["gpt-4-0314"] = { -- (deprecated, retiring Mar 26, 2026)
-          pricing = {
-            input = 30.0,
-            output = 60.0,
-            cache_read = 30.0,
-          },
-          max_input_tokens = 8192,
-          max_output_tokens = 8192,
-        },
-
         -- GPT-3.5 Turbo models (legacy)
         ["gpt-3.5-turbo"] = {
           pricing = {

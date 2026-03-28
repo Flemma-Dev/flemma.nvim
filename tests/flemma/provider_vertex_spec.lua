@@ -444,38 +444,6 @@ describe("Vertex AI Provider", function()
       assert.equals("MEDIUM", req.generationConfig.thinkingConfig.thinkingLevel)
     end)
 
-    it("should collapse medium to HIGH for Gemini 3 Pro (only LOW/HIGH supported)", function()
-      local provider = vertex.new({
-        model = "gemini-3-pro-preview",
-        max_tokens = 4000,
-        project_id = "test-project",
-        location = "us-central1",
-        thinking = "medium",
-      })
-
-      local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
-      local req = provider:build_request(prompt, {})
-
-      assert.equals("HIGH", req.generationConfig.thinkingConfig.thinkingLevel)
-    end)
-
-    it("should use thinkingLevel LOW for Gemini 3 Pro with thinking=low", function()
-      local provider = vertex.new({
-        model = "gemini-3-pro-preview",
-        max_tokens = 4000,
-        project_id = "test-project",
-        location = "us-central1",
-        thinking = "low",
-      })
-
-      local lines = { "@You:", "Hello" }
-      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
-      local req = provider:build_request(prompt, {})
-
-      assert.equals("LOW", req.generationConfig.thinkingConfig.thinkingLevel)
-    end)
-
     it("should use thinkingLevel MINIMAL for Gemini 3 Flash with thinking=minimal", function()
       local provider = vertex.new({
         model = "gemini-3-flash-preview",
@@ -508,9 +476,41 @@ describe("Vertex AI Provider", function()
       assert.equals("HIGH", req.generationConfig.thinkingConfig.thinkingLevel)
     end)
 
-    it("should map thinking='minimal' to LOW for Gemini 3 Pro", function()
+    it("should use thinkingLevel MEDIUM for Gemini 3.1 Pro with thinking=medium", function()
       local provider = vertex.new({
-        model = "gemini-3-pro-preview",
+        model = "gemini-3.1-pro-preview",
+        max_tokens = 4000,
+        project_id = "test-project",
+        location = "us-central1",
+        thinking = "medium",
+      })
+
+      local lines = { "@You:", "Hello" }
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
+      local req = provider:build_request(prompt, {})
+
+      assert.equals("MEDIUM", req.generationConfig.thinkingConfig.thinkingLevel)
+    end)
+
+    it("should use thinkingLevel LOW for Gemini 3.1 Pro with thinking=low", function()
+      local provider = vertex.new({
+        model = "gemini-3.1-pro-preview",
+        max_tokens = 4000,
+        project_id = "test-project",
+        location = "us-central1",
+        thinking = "low",
+      })
+
+      local lines = { "@You:", "Hello" }
+      local prompt = pipeline.run(parser.parse_lines(lines), ctx.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
+      local req = provider:build_request(prompt, {})
+
+      assert.equals("LOW", req.generationConfig.thinkingConfig.thinkingLevel)
+    end)
+
+    it("should map thinking='minimal' to LOW for Gemini 3.1 Pro", function()
+      local provider = vertex.new({
+        model = "gemini-3.1-pro-preview",
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
