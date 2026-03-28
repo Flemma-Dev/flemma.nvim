@@ -427,6 +427,9 @@ M.apply_syntax = function()
   -- Integration busy indicator highlight
   set_highlight("FlemmaBusy", syntax_config.highlights.busy)
 
+  -- Turns column highlight
+  vim.api.nvim_set_hl(0, "FlemmaTurn", { link = "Comment", default = true })
+
   -- Notification bar highlight groups
   -- Derived from the first group in notifications.hl that provides both fg and bg
   local bar_bg_hex, bar_fg_hex, notification_base_group
@@ -551,44 +554,6 @@ local function setup_line_highlights()
   end
 end
 
----Setup signs for different roles
-local function setup_signs()
-  local current_config = config_facade.get()
-  if current_config.signs.enabled then
-    -- Define signs using internal keys ('user', 'system', 'assistant')
-    local signs = {
-      ["user"] = { config = current_config.signs.user, highlight = current_config.highlights.user },
-      ["system"] = { config = current_config.signs.system, highlight = current_config.highlights.system },
-      ["assistant"] = { config = current_config.signs.assistant, highlight = current_config.highlights.assistant },
-    }
-    -- Iterate using internal keys
-    for internal_role_key, sign_data in pairs(signs) do
-      -- Define the specific highlight group name for the sign (e.g., FlemmaSignUser)
-      local sign_hl_group = "FlemmaSign" .. roles.capitalize(internal_role_key)
-
-      -- Set the sign highlight group if highlighting is enabled
-      if sign_data.config.hl ~= false then
-        local target_hl = sign_data.config.hl == true and sign_data.highlight or sign_data.config.hl
-        set_highlight(sign_hl_group, target_hl --[[@as string|table]]) -- Use the helper function
-
-        -- Define the sign using the internal key (e.g., flemma_user)
-        local sign_name = "flemma_" .. internal_role_key
-        vim.fn.sign_define(sign_name, {
-          text = sign_data.config.char or current_config.signs.char,
-          texthl = sign_hl_group, -- Use the linked group
-        })
-      else
-        -- Define the sign without a highlight group if hl is false
-        local sign_name = "flemma_" .. internal_role_key
-        vim.fn.sign_define(sign_name, {
-          text = sign_data.config.char or current_config.signs.char,
-          -- texthl is omitted
-        })
-      end
-    end
-  end
-end
-
 ---Setup function to initialize highlighting functionality
 M.setup = function()
   -- Create or clear the augroup for highlight-related autocmds
@@ -596,9 +561,6 @@ M.setup = function()
 
   -- Set up line highlights for full-line background colors
   setup_line_highlights()
-
-  -- Set up signs
-  setup_signs()
 
   -- Set up autocmd for the chat filetype
   -- NOTE: Only apply_syntax() here — update_ui is handled by the FlemmaUI augroup

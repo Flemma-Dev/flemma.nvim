@@ -64,11 +64,11 @@ describe("config.schema.definition", function()
       assert.is_table(cfg.ruler.hl)
     end)
 
-    it("materializes signs defaults", function()
+    it("materializes turns defaults", function()
       local cfg = config_facade.get()
-      assert.is_false(cfg.signs.enabled)
-      assert.is_true(cfg.signs.system.hl)
-      assert.is_nil(cfg.signs.system.char)
+      assert.is_true(cfg.turns.enabled)
+      assert.equals(1, cfg.turns.padding)
+      assert.equals("FlemmaTurn", cfg.turns.hl)
     end)
 
     it("materializes line_highlights defaults", function()
@@ -443,7 +443,7 @@ describe("config.schema.definition", function()
         "highlights",
         "role_style",
         "ruler",
-        "signs",
+        "turns",
         "line_highlights",
         "notifications",
         "progress",

@@ -31,15 +31,6 @@ local function highlight(default)
   return node:type_as("flemma.config.HighlightValue")
 end
 
---- Sign role hl: boolean | string | { dark: string, light: string }
---- true = inherit from highlights, false = disable, string/table = custom highlight.
----@param default boolean
----@return flemma.schema.Node
-local function sign_highlight(default)
-  return s.union(s.boolean(default), s.string(), s.object({ dark = s.string(), light = s.string() }))
-    :type_as("boolean|flemma.config.HighlightValue")
-end
-
 -- ---------------------------------------------------------------------------
 -- The config schema
 -- ---------------------------------------------------------------------------
@@ -86,21 +77,10 @@ return s.object({
     hl = highlight({ dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }),
   }),
 
-  signs = s.object({
-    enabled = s.boolean(false),
-    char = s.string("\u{258c}"),
-    system = s.object({
-      char = s.optional(s.string()),
-      hl = sign_highlight(true),
-    }),
-    user = s.object({
-      char = s.optional(s.string("\u{258f}")),
-      hl = sign_highlight(true),
-    }),
-    assistant = s.object({
-      char = s.optional(s.string()),
-      hl = sign_highlight(true),
-    }),
+  turns = s.object({
+    enabled = s.boolean(true),
+    padding = s.integer(1),
+    hl = s.string("FlemmaTurn"),
   }),
 
   line_highlights = s.object({

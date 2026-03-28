@@ -1,5 +1,5 @@
 --- UI module for Flemma plugin
---- Handles visual presentation: rulers, progress indicators, folding, and signs
+--- Handles visual presentation: rulers, progress indicators, and folding
 ---@class flemma.UI
 local M = {}
 
@@ -640,36 +640,6 @@ function M.cleanup_progress(bufnr)
   end)
 end
 
----Place signs for a message
----@param bufnr integer
----@param start_line integer
----@param end_line integer
----@param role string
-function M.place_signs(bufnr, start_line, end_line, role)
-  local current_config = config_facade.get(bufnr)
-  if not current_config.signs.enabled then
-    return
-  end
-
-  -- Map the display role to the internal config key
-  local internal_role_key = roles.to_key(role)
-
-  local sign_name = "flemma_" .. internal_role_key -- Construct sign name like "flemma_user"
-  local sign_config = current_config.signs[internal_role_key] -- Look up config using "user", "system", etc.
-
-  -- Check if the sign is actually defined before trying to place it
-  if vim.tbl_isempty(vim.fn.sign_getdefined(sign_name)) then
-    log.debug("place_signs(): Sign not defined: " .. sign_name .. " for role " .. role)
-    return
-  end
-
-  if sign_config and sign_config.hl ~= false then
-    for lnum = start_line, end_line do
-      vim.fn.sign_place(0, "flemma_ns", sign_name, bufnr, { lnum = lnum })
-    end
-  end
-end
-
 ---Apply full-line background highlighting for messages and frontmatter
 ---@param bufnr integer
 ---@param doc flemma.ast.DocumentNode
@@ -1080,7 +1050,7 @@ function M.add_tool_previews(bufnr, doc)
   end
 end
 
----Force UI update (rulers, signs, and line highlights)
+---Force UI update (rulers and line highlights)
 ---@param bufnr integer
 function M.update_ui(bufnr)
   -- Ensure buffer is valid before proceeding
@@ -1091,7 +1061,7 @@ function M.update_ui(bufnr)
 
   -- Bail if config is not fully initialized (e.g. in test environments)
   local current_config = config_facade.get(bufnr)
-  if not current_config.ruler or not current_config.signs then
+  if not current_config.ruler then
     return
   end
 
@@ -1110,14 +1080,6 @@ function M.update_ui(bufnr)
 
   folding.invalidate_folds(bufnr)
   folding.fold_completed_blocks(bufnr)
-
-  -- Clear and reapply all signs
-  vim.fn.sign_unplace("flemma_ns", { buffer = bufnr })
-
-  -- Place signs for each message based on AST positions
-  for _, msg in ipairs(doc.messages) do
-    M.place_signs(bufnr, msg.position.start_line, msg.position.end_line, msg.role)
-  end
 end
 
 -- ============================================================================
@@ -1411,7 +1373,7 @@ function M.setup()
   -- Create or clear the augroup for UI-related autocmds
   local augroup = vim.api.nvim_create_augroup("FlemmaUI", { clear = true })
 
-  -- Add autocmd for updating rulers and signs (debounced via CursorHold)
+  -- Add autocmd for updating rulers and line highlights (debounced via CursorHold)
   vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter", "VimResized", "CursorHold", "CursorHoldI" }, {
     group = augroup,
     pattern = "*.chat",

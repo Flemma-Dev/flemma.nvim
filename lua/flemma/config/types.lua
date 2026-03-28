@@ -29,7 +29,7 @@
 ---@field ruler flemma.config.Ruler
 ---@field sandbox flemma.config.Sandbox
 ---@field secrets flemma.config.Secrets
----@field signs flemma.config.Signs
+---@field turns flemma.config.Turns
 ---@field statusline flemma.config.Statusline
 ---@field templating flemma.config.Templating
 ---@field text_object string|false
@@ -133,12 +133,10 @@
 ---@class flemma.config.Secrets
 ---@field gcloud flemma.config.SecretsGcloud
 
----@class flemma.config.Signs
----@field assistant flemma.config.SignsAssistant
----@field char string
+---@class flemma.config.Turns
 ---@field enabled boolean
----@field system flemma.config.SignsSystem
----@field user flemma.config.SignsUser
+---@field padding integer
+---@field hl string
 
 ---@class flemma.config.Statusline
 ---@field format string
@@ -217,18 +215,6 @@
 
 ---@class flemma.config.SecretsGcloud
 ---@field path string
-
----@class flemma.config.SignsAssistant
----@field char? string
----@field hl boolean|flemma.config.HighlightValue
-
----@class flemma.config.SignsSystem
----@field char? string
----@field hl boolean|flemma.config.HighlightValue
-
----@class flemma.config.SignsUser
----@field char? string
----@field hl boolean|flemma.config.HighlightValue
 
 ---@class flemma.config.ToolsAutopilot
 ---@field enabled boolean

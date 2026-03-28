@@ -19,7 +19,6 @@ describe("UI Line Highlights", function()
 
     flemma.setup({
       line_highlights = { enabled = true },
-      signs = { enabled = false },
     })
 
     vim.cmd("silent! %bdelete!")
