@@ -91,12 +91,10 @@ require("flemma").setup({
     char = "─",
     hl = { dark = "Comment-fg:#303030", light = "Comment+fg:#303030" },
   },
-  signs = {
-    enabled = false,
-    char = "▌",
-    system = { char = nil, hl = true },
-    user = { char = "▏", hl = true },
-    assistant = { char = nil, hl = true },
+  turns = {
+    enabled = true,
+    padding = { left = 1, right = 0 },
+    hl = "FlemmaTurn",
   },
   line_highlights = {
     enabled = true,
@@ -194,7 +192,7 @@ require("flemma").setup({
 
 ## Option details
 
-This section explains options that benefit from more context than an inline comment provides. For UI-related options (highlights, line highlights, signs, ruler, notifications), see [docs/ui.md](ui.md) for detailed explanations and examples.
+This section explains options that benefit from more context than an inline comment provides. For UI-related options (highlights, line highlights, turns, ruler, notifications), see [docs/ui.md](ui.md) for detailed explanations and examples.
 
 ### Thinking parameter priority
 

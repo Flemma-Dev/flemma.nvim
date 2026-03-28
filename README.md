@@ -21,7 +21,7 @@ https://github.com/user-attachments/assets/6ba1704d-7d1b-4ec8-9014-36845cd61815
 - **Usage reporting** – per-request and session token totals, costs, and cache metrics.
 - **Filesystem sandboxing** – shell commands run inside a read-only rootfs with write access limited to your project directory. Limits the blast radius of common accidents. Auto-detects the best available backend; silently degrades on platforms without one.
 - **Git-trackable conversations** – `.chat` files are plain text. Commit them, diff them, branch them, share them. No opaque database, no export step – your conversation history lives in version control the moment you save.
-- **Theme-aware UI** – line highlights, rulers, signs, tool previews, and folding that adapt to your colour scheme.
+- **Theme-aware UI** – line highlights, rulers, turn indicators, tool previews, and folding that adapt to your colour scheme.
 - **In-editor LSP** – an experimental in-process LSP provides hover information on buffer elements (messages, segments, tool blocks) and go-to-definition for file references. Enabled by default when `vim.lsp` is available.
 
 ## Table of Contents
@@ -436,7 +436,7 @@ For programmatic access to token usage and cost data, see [docs/session-api.md](
 
 ## UI Customisation
 
-Flemma adapts to your colour scheme with theme-aware highlights, line backgrounds, rulers, sign column indicators, and folding. Every visual element is configurable – see [docs/ui.md](docs/ui.md) for the full reference.
+Flemma adapts to your colour scheme with theme-aware highlights, line backgrounds, rulers, turn indicators, and folding. Every visual element is configurable – see [docs/ui.md](docs/ui.md) for the full reference.
 
 A progress bar floats alongside the assistant's response while streaming, showing the current phase (thinking, text, tool input). Thinking blocks, tool use, and tool results auto-close (fold) when they finish, keeping the buffer tidy – configure per block type via `editing.auto_close`.
 
