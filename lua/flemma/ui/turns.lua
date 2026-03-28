@@ -417,4 +417,15 @@ end
 -- Register cleanup hook with state module
 state.register_cleanup("turns", M.cleanup)
 
+-- ============================================================================
+-- Test helpers
+-- ============================================================================
+
+---Expose the cached turn data for a buffer (test-only).
+---@param bufnr integer
+---@return { changedtick: integer, map: flemma.ui.TurnMap, ranges: flemma.ui.TurnRange[] }|nil
+function M._get_turn_cache(bufnr)
+  return turn_caches[bufnr]
+end
+
 return M
