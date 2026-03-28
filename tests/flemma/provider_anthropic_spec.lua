@@ -485,6 +485,42 @@ describe("Anthropic Provider", function()
     end)
   end)
 
+  describe("content block ordering", function()
+    it("reorders text after tool_use to text before tool_use", function()
+      tools.clear()
+      local p = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 4000 })
+      local prompt = {
+        history = {
+          { role = "user", parts = { { kind = "text", text = "read that file" } } },
+          {
+            role = "assistant",
+            parts = {
+              { kind = "tool_use", id = "tool_123", name = "read", input = { path = "test.txt" } },
+              { kind = "text", text = "Some trailing text after tool use" },
+            },
+          },
+          {
+            role = "user",
+            parts = {
+              { kind = "tool_result", tool_use_id = "tool_123", content = "file contents here" },
+            },
+          },
+          { role = "user", parts = { { kind = "text", text = "thanks" } } },
+        },
+      }
+      local req = p:build_request(prompt)
+
+      -- The assistant message (messages[2]) should have text BEFORE tool_use
+      local assistant_msg = req.messages[2]
+      assert.are.equal("assistant", assistant_msg.role)
+      assert.are.equal(2, #assistant_msg.content)
+      assert.are.equal("text", assistant_msg.content[1].type)
+      assert.are.equal("Some trailing text after tool use", assistant_msg.content[1].text)
+      assert.are.equal("tool_use", assistant_msg.content[2].type)
+      assert.are.equal("read", assistant_msg.content[2].name)
+    end)
+  end)
+
   describe("adaptive thinking", function()
     it("should use adaptive thinking for opus-4-6 models", function()
       local p = anthropic.new({ model = "claude-opus-4-6", max_tokens = 4000, thinking = "high" })

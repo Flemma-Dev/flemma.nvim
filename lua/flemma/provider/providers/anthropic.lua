@@ -181,14 +181,19 @@ function M.build_request(self, prompt, _context)
         end
       end
 
-      -- Second pass: collect text and tool_use
+      -- Second pass: collect text (must precede tool_use in Anthropic content arrays)
       for _, p in ipairs(msg.parts or {}) do
         if p.kind == "text" then
           local text = vim.trim(p.text or "")
           if #text > 0 then
             table.insert(content_blocks, { type = "text", text = text })
           end
-        elseif p.kind == "tool_use" then
+        end
+      end
+
+      -- Third pass: collect tool_use (must follow text in Anthropic content arrays)
+      for _, p in ipairs(msg.parts or {}) do
+        if p.kind == "tool_use" then
           -- Normalize tool ID for Anthropic compatibility (handles Vertex URN-style IDs)
           local normalized_id = base.normalize_tool_id(p.id)
           table.insert(content_blocks, {
