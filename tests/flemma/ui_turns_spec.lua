@@ -30,15 +30,16 @@ describe("UI Turns", function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  ---Create a chat buffer with the given lines, run turns.update, and return bufnr + cache.
+  ---Create a chat buffer with the given lines, initialize turns, and return bufnr + cache.
   ---@param lines string[]
   ---@return integer bufnr
-  ---@return { map: table<integer, string>, ranges: table[] }|nil cache
+  ---@return flemma.ui.TurnBufferCache|nil cache
   local function setup_buffer(lines)
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
     vim.bo[bufnr].filetype = "chat"
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+    turns.setup_statuscolumn(bufnr)
     turns.update(bufnr)
     return bufnr, turns._get_turn_cache(bufnr)
   end
@@ -405,6 +406,7 @@ describe("UI Turns", function()
       local buffer_state = state.get_buffer_state(bufnr)
       buffer_state.current_request = 12345
 
+      turns.setup_statuscolumn(bufnr)
       turns.update(bufnr)
       local cache = turns._get_turn_cache(bufnr)
 
@@ -412,7 +414,7 @@ describe("UI Turns", function()
       assert.are.equal(1, #cache.ranges)
       assert.is_true(cache.ranges[1].streaming)
 
-      -- Streaming turns: ╭ at top, ┊ for interior, ╯ at current end
+      -- Streaming turns: ╭ at top, ┊ for interior, ╰ at current end
       assert.are.equal("top", cache.map[1])
       assert.are.equal("pending", cache.map[2])
       assert.are.equal("pending", cache.map[3])
@@ -439,6 +441,7 @@ describe("UI Turns", function()
       local buffer_state = state.get_buffer_state(bufnr)
       buffer_state.current_request = 12345
 
+      turns.setup_statuscolumn(bufnr)
       turns.update(bufnr)
       local cache = turns._get_turn_cache(bufnr)
 
@@ -467,6 +470,7 @@ describe("UI Turns", function()
       local buffer_state = state.get_buffer_state(bufnr)
       buffer_state.current_request = nil
 
+      turns.setup_statuscolumn(bufnr)
       turns.update(bufnr)
 
       assert.is_nil(buffer_state.streaming_start_line)
@@ -491,6 +495,7 @@ describe("UI Turns", function()
       local buffer_state = state.get_buffer_state(bufnr)
       buffer_state.current_request = 12345
 
+      turns.setup_statuscolumn(bufnr)
       turns.update(bufnr)
       local cache = turns._get_turn_cache(bufnr)
 
@@ -502,7 +507,7 @@ describe("UI Turns", function()
       assert.are.equal("top", cache.map[1])
       assert.are.equal("bottom", cache.map[4])
 
-      -- Second turn: streaming (╭ at top, ╯ at current end)
+      -- Second turn: streaming (╭ at top, ╰ at current end)
       assert.is_true(cache.ranges[2].streaming)
       assert.are.equal("top", cache.map[5])
       assert.are.equal("pending_end", cache.map[8])
@@ -578,8 +583,8 @@ describe("UI Turns", function()
       turns.update(bufnr)
       local cache2 = turns._get_turn_cache(bufnr)
 
-      -- Should be a different cache entry (recomputed)
-      assert.are_not.equal(cache1, cache2)
+      -- Same cache object (mutated in place), but turn data is recomputed
+      assert.are.equal(cache1, cache2)
       -- Now two turns
       assert.are.equal(2, #cache2.ranges)
     end)
@@ -629,8 +634,11 @@ describe("UI Turns", function()
         "Hi",
       })
 
+      turns.setup_statuscolumn(bufnr)
       turns.update(bufnr)
-      assert.is_nil(turns._get_turn_cache(bufnr))
+      local cache = turns._get_turn_cache(bufnr)
+      assert.is_not_nil(cache)
+      assert.is_false(cache.enabled)
     end)
   end)
 end)

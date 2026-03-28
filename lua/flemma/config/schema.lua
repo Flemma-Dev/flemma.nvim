@@ -79,10 +79,13 @@ return s.object({
 
   turns = s.object({
     enabled = s.boolean(true),
-    padding = s.object({
-      left = s.integer(1),
-      right = s.integer(0),
-    }):coerce(function(value, _ctx)
+    padding = s.union(
+      s.object({
+        left = s.integer(1),
+        right = s.integer(0),
+      }),
+      s.integer()
+    ):coerce(function(value, _ctx)
       if type(value) == "number" then
         return { left = value, right = 0 }
       end

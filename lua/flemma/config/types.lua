@@ -158,7 +158,7 @@
 ---@class flemma.config.Turns
 ---@field enabled boolean
 ---@field hl string
----@field padding flemma.config.TurnsPadding
+---@field padding { left: integer, right: integer }|integer
 
 ---@class flemma.config.DefaultsDark
 ---@field bg string
@@ -235,10 +235,6 @@
 
 ---@class flemma.config.ToolsLs
 ---@field cwd? string
-
----@class flemma.config.TurnsPadding
----@field left integer
----@field right integer
 
 ---@class flemma.config.SandboxBackendsBwrap
 ---@field extra_args string[]
