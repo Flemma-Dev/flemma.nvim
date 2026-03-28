@@ -225,7 +225,7 @@ M.definitions = {
       local job_id_ref = { value = nil }
 
       local output_sink = sink_module.create({
-        name = "find/" .. (input.label or "search"):gsub("[^%w/%-]", "-"),
+        name = "find/" .. (input.label or "search"),
         on_line = function(_)
           result_count = result_count + 1
           if result_count >= result_limit and job_id_ref.value then

@@ -65,7 +65,7 @@ M.definitions = {
       local timeout = input.timeout or ctx.timeout
 
       local output_sink = sink_module.create({
-        name = "bash/" .. (input.label or "cmd"):gsub("[^%w/%-]", "-"),
+        name = "bash/" .. (input.label or "cmd"),
       })
       local job_exited = false
       local finished = false

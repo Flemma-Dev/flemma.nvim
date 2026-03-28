@@ -14,8 +14,29 @@ local writequeue = require("flemma.buffer.writequeue")
 local DEFAULT_FLUSH_INTERVAL = 50
 local next_buffer_id = 0
 
+---Sanitize a string: keep alphanumerics, dots, hyphens, underscores, colons;
+---replace everything else with hyphens, collapse runs, trim edges.
+---@param s string
+---@return string
+local function sanitize_label(s)
+  return (s:gsub("[^%w%.%-_:]", "-"):gsub("%-+", "-"):gsub("^%-", ""):gsub("%-$", ""))
+end
+
+---Sanitize a sink name into canonical `category/label` form.
+---The category (before the first `/`) passes through unchanged; the label
+---portion is sanitized.
+---@param raw string
+---@return string
+local function sanitize_name(raw)
+  local category, label = raw:match("^([^/]+)/(.+)$")
+  if not category then
+    return sanitize_label(raw)
+  end
+  return category .. "/" .. sanitize_label(label)
+end
+
 ---@class flemma.SinkCreateOpts
----@field name string Sink name (e.g. "stream/curl-42"), used in buffer name
+---@field name string Sink name (e.g. "http/api.example.com-v1-messages"). Sanitized automatically — callers pass raw values.
 ---@field flush_interval? integer Milliseconds between auto-flushes (default 50)
 ---@field on_line? fun(line: string) Real-time callback fired for each complete line
 
@@ -105,7 +126,8 @@ function M.create(opts)
     error("flemma.sink.create: opts.name is required")
   end
 
-  return Sink.new(opts.name, opts.flush_interval or DEFAULT_FLUSH_INTERVAL, opts.on_line)
+  local name = sanitize_name(opts.name)
+  return Sink.new(name, opts.flush_interval or DEFAULT_FLUSH_INTERVAL, opts.on_line)
 end
 
 ---Write raw data to the sink with automatic line framing

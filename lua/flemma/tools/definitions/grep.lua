@@ -254,7 +254,7 @@ M.definitions = {
       end
 
       local output_sink = sink_module.create({
-        name = "grep/" .. (input.label or "search"):gsub("[^%w/%-]", "-"),
+        name = "grep/" .. (input.label or "search"),
         on_line = on_line_callback,
       })
 
