@@ -1052,7 +1052,7 @@ function M.add_tool_previews(bufnr, doc)
   end
 end
 
----Force UI update (rulers and line highlights)
+---Force UI update (rulers, line highlights, and turn indicators)
 ---@param bufnr integer
 function M.update_ui(bufnr)
   -- Ensure buffer is valid before proceeding

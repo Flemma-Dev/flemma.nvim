@@ -428,7 +428,7 @@ M.apply_syntax = function()
   set_highlight("FlemmaBusy", syntax_config.highlights.busy)
 
   -- Turns column highlight
-  vim.api.nvim_set_hl(0, "FlemmaTurn", { link = "Comment", default = true })
+  vim.api.nvim_set_hl(0, "FlemmaTurn", { link = "FlemmaRuler", default = true })
 
   -- Notification bar highlight groups
   -- Derived from the first group in notifications.hl that provides both fg and bg
@@ -564,7 +564,7 @@ M.setup = function()
 
   -- Set up autocmd for the chat filetype
   -- NOTE: Only apply_syntax() here — update_ui is handled by the FlemmaUI augroup
-  -- (BufEnter/BufWinEnter/CursorHold) to avoid redundant fold/sign/ruler work.
+  -- (BufEnter/BufWinEnter/CursorHold) to avoid redundant fold/ruler/turn work.
   vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter", "FileType" }, {
     group = augroup,
     pattern = { "*.chat", "chat" },

@@ -207,6 +207,36 @@ describe("UI Turns", function()
       assert.is_nil(cache.map[2])
     end)
 
+    it("creates incomplete turn for trailing tool-use cycle without final answer", function()
+      local _, cache = setup_buffer({
+        "@You:", -- 1
+        "What is 2+2?", -- 2
+        "@Assistant:", -- 3
+        "**Tool Use:** `calculator` (`t1`)", -- 4
+        "```json", -- 5
+        '{"expression":"2+2"}', -- 6
+        "```", -- 7
+        "@You:", -- 8
+        "**Tool Result:** `t1`", -- 9
+        "```", -- 10
+        "4", -- 11
+        "```", -- 12
+      })
+
+      assert.is_not_nil(cache)
+      -- Should detect an incomplete turn (not streaming — no active request)
+      assert.are.equal(1, #cache.ranges)
+      assert.is_true(cache.ranges[1].incomplete)
+      assert.is_false(cache.ranges[1].streaming)
+      assert.are.equal(1, cache.ranges[1].start_line)
+      assert.are.equal(12, cache.ranges[1].end_line)
+
+      -- Incomplete turns: ╭ at top, ┊ for interior, · at end
+      assert.are.equal("top", cache.map[1])
+      assert.are.equal("pending_end", cache.map[12])
+      assert.are.equal("pending", cache.map[6])
+    end)
+
     it("does not create a turn for orphan @Assistant with no preceding @You", function()
       local _, cache = setup_buffer({
         "@Assistant:", -- 1
@@ -357,6 +387,158 @@ describe("UI Turns", function()
       assert.are.equal(1, #cache.ranges)
       assert.are.equal(3, cache.ranges[1].start_line)
       assert.are.equal(6, cache.ranges[1].end_line)
+    end)
+
+    it("marks last turn as streaming when buffer has active request", function()
+      local state = require("flemma.state")
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@You:", -- 1
+        "Hello!", -- 2
+        "@Assistant:", -- 3
+        "Hi there!", -- 4
+      })
+
+      -- Simulate active streaming request
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.current_request = 12345
+
+      turns.update(bufnr)
+      local cache = turns._get_turn_cache(bufnr)
+
+      assert.is_not_nil(cache)
+      assert.are.equal(1, #cache.ranges)
+      assert.is_true(cache.ranges[1].streaming)
+
+      -- Streaming turns: ╭ at top, ┊ for interior, ╯ at current end
+      assert.are.equal("top", cache.map[1])
+      assert.are.equal("pending", cache.map[2])
+      assert.are.equal("pending", cache.map[3])
+      assert.are.equal("pending_end", cache.map[4])
+
+      -- streaming_start_line should be set
+      assert.are.equal(1, buffer_state.streaming_start_line)
+
+      -- Cleanup
+      buffer_state.current_request = nil
+    end)
+
+    it("sets streaming_start_line for fallback rendering during streaming", function()
+      local state = require("flemma.state")
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@You:", -- 1
+        "Question", -- 2
+      })
+
+      -- Simulate active streaming (no @Assistant yet — trailing @You)
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.current_request = 12345
+
+      turns.update(bufnr)
+      local cache = turns._get_turn_cache(bufnr)
+
+      assert.is_not_nil(cache)
+      assert.are.equal(1, #cache.ranges)
+      assert.is_true(cache.ranges[1].streaming)
+      assert.are.equal(1, buffer_state.streaming_start_line)
+
+      -- Cleanup
+      buffer_state.current_request = nil
+    end)
+
+    it("clears streaming_start_line when request completes", function()
+      local state = require("flemma.state")
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@You:", -- 1
+        "Hello", -- 2
+        "@Assistant:", -- 3
+        "Hi", -- 4
+      })
+
+      -- No active request — completed turn
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.current_request = nil
+
+      turns.update(bufnr)
+
+      assert.is_nil(buffer_state.streaming_start_line)
+    end)
+
+    it("does not mark earlier turns as streaming when last turn is streaming", function()
+      local state = require("flemma.state")
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@You:", -- 1
+        "First", -- 2
+        "@Assistant:", -- 3
+        "Reply", -- 4
+        "@You:", -- 5
+        "Second", -- 6
+        "@Assistant:", -- 7
+        "Streaming...", -- 8
+      })
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.current_request = 12345
+
+      turns.update(bufnr)
+      local cache = turns._get_turn_cache(bufnr)
+
+      assert.is_not_nil(cache)
+      assert.are.equal(2, #cache.ranges)
+
+      -- First turn: complete (not streaming)
+      assert.is_false(cache.ranges[1].streaming)
+      assert.are.equal("top", cache.map[1])
+      assert.are.equal("bottom", cache.map[4])
+
+      -- Second turn: streaming (╭ at top, ╯ at current end)
+      assert.is_true(cache.ranges[2].streaming)
+      assert.are.equal("top", cache.map[5])
+      assert.are.equal("pending_end", cache.map[8])
+
+      -- Cleanup
+      buffer_state.current_request = nil
+    end)
+
+    it("uses pending positions for incomplete turn interior lines", function()
+      local _, cache = setup_buffer({
+        "@You:", -- 1
+        "Question", -- 2
+        "@Assistant:", -- 3
+        "**Tool Use:** `bash` (`t1`)", -- 4
+        "```json", -- 5
+        '{"command":"ls"}', -- 6
+        "```", -- 7
+        "@You:", -- 8
+        "**Tool Result:** `t1`", -- 9
+        "```", -- 10
+        "files", -- 11
+        "```", -- 12
+        "@You:", -- 13
+        "", -- 14
+      })
+
+      assert.is_not_nil(cache)
+      assert.are.equal(1, #cache.ranges)
+      assert.is_true(cache.ranges[1].incomplete)
+
+      -- Top gets ╭, all interior get ┊, last gets ·
+      assert.are.equal("top", cache.map[1])
+      for lnum = 2, 13 do
+        assert.are.equal("pending", cache.map[lnum], "expected pending at line " .. lnum)
+      end
+      assert.are.equal("pending_end", cache.map[14])
     end)
   end)
 

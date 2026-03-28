@@ -29,11 +29,11 @@
 ---@field ruler flemma.config.Ruler
 ---@field sandbox flemma.config.Sandbox
 ---@field secrets flemma.config.Secrets
----@field turns flemma.config.Turns
 ---@field statusline flemma.config.Statusline
 ---@field templating flemma.config.Templating
 ---@field text_object string|false
 ---@field tools flemma.config.Tools
+---@field turns flemma.config.Turns
 
 ---@class flemma.config.Defaults
 ---@field dark flemma.config.DefaultsDark
@@ -133,11 +133,6 @@
 ---@class flemma.config.Secrets
 ---@field gcloud flemma.config.SecretsGcloud
 
----@class flemma.config.Turns
----@field enabled boolean
----@field padding integer
----@field hl string
-
 ---@class flemma.config.Statusline
 ---@field format string
 
@@ -159,6 +154,11 @@
 ---@field require_approval boolean
 ---@field show_spinner boolean
 ---@field [string] table|nil
+
+---@class flemma.config.Turns
+---@field enabled boolean
+---@field hl string
+---@field padding flemma.config.TurnsPadding
 
 ---@class flemma.config.DefaultsDark
 ---@field bg string
@@ -235,6 +235,10 @@
 
 ---@class flemma.config.ToolsLs
 ---@field cwd? string
+
+---@class flemma.config.TurnsPadding
+---@field left integer
+---@field right integer
 
 ---@class flemma.config.SandboxBackendsBwrap
 ---@field extra_args string[]

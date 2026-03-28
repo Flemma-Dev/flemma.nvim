@@ -15,14 +15,15 @@ local state = require("flemma.state")
 -- Types
 -- ============================================================================
 
----@alias flemma.ui.TurnPosition "top"|"middle"|"bottom"
+---@alias flemma.ui.TurnPosition "top"|"middle"|"bottom"|"pending"|"pending_end"
 
 ---@alias flemma.ui.TurnMap table<integer, flemma.ui.TurnPosition>
 
 ---@class flemma.ui.TurnRange
 ---@field start_line integer 1-indexed first line of the turn
 ---@field end_line integer 1-indexed last line of the turn
----@field streaming boolean Whether this turn is still receiving data
+---@field streaming boolean Whether this turn is actively receiving streamed data (HTTP request in flight)
+---@field incomplete boolean Whether this turn is open (no terminal assistant yet, e.g., mid-tool-use cycle)
 
 -- ============================================================================
 -- Constants
@@ -31,7 +32,8 @@ local state = require("flemma.state")
 local CHAR_TOP = "\u{256d}" -- ╭
 local CHAR_MIDDLE = "\u{2502}" -- │
 local CHAR_BOTTOM = "\u{2570}" -- ╰
-local CHAR_STREAMING = "\u{250a}" -- ┊
+local CHAR_PENDING = "\u{250a}" -- ┊ (incomplete/streaming interior)
+local CHAR_PENDING_END = "\u{256f}" -- ╯ (incomplete turn end — flipped arc signals "not closed")
 
 -- ============================================================================
 -- Per-buffer turn map cache
@@ -72,8 +74,9 @@ local function detect_turns(doc, is_streaming)
   ---Close a turn spanning message indices [start_index, end_index].
   ---@param start_index integer
   ---@param end_index integer
-  ---@param streaming boolean
-  local function close_turn(start_index, end_index, streaming)
+  ---@param opts? { streaming?: boolean, incomplete?: boolean }
+  local function close_turn(start_index, end_index, opts)
+    opts = opts or {}
     local start_msg = messages[start_index]
     local end_msg = messages[end_index]
     local start_line = start_msg.position.start_line
@@ -81,7 +84,8 @@ local function detect_turns(doc, is_streaming)
     table.insert(turns, {
       start_line = start_line,
       end_line = end_line,
-      streaming = streaming,
+      streaming = opts.streaming or false,
+      incomplete = opts.incomplete or false,
     })
   end
 
@@ -91,7 +95,7 @@ local function detect_turns(doc, is_streaming)
     if msg.role == "System" then
       -- System messages break any open turn (defensive)
       if turn_start_index then
-        close_turn(turn_start_index, i - 1, false)
+        close_turn(turn_start_index, i - 1)
         turn_start_index = nil
       end
       i = i + 1
@@ -115,7 +119,13 @@ local function detect_turns(doc, is_streaming)
           while turn_end + 1 <= #messages and messages[turn_end + 1].role == "Assistant" do
             turn_end = turn_end + 1
           end
-          close_turn(turn_start_index, turn_end, false)
+          -- If streaming and this turn extends to the last message,
+          -- the assistant is still writing — mark as streaming.
+          if is_streaming and turn_end == #messages then
+            close_turn(turn_start_index, turn_end, { streaming = true })
+          else
+            close_turn(turn_start_index, turn_end)
+          end
           turn_start_index = nil
           i = turn_end + 1
         end
@@ -125,13 +135,27 @@ local function detect_turns(doc, is_streaming)
     end
   end
 
-  -- After loop: if turn_start is set and streaming is active, mark as streaming turn
+  -- After loop: if turn_start is set, determine whether to emit an incomplete turn.
+  -- Streaming (active HTTP request) always emits. For non-streaming, emit if the
+  -- trailing sequence contains at least one @Assistant — this covers the tool-use
+  -- cycle where the assistant has responded with tool calls but the final answer
+  -- hasn't arrived yet. A trailing sequence of only @You messages (e.g., the empty
+  -- prompt at buffer bottom) is not emitted.
   if turn_start_index then
-    if is_streaming then
-      close_turn(turn_start_index, #messages, true)
+    local has_assistant = false
+    if not is_streaming then
+      for j = turn_start_index, #messages do
+        if messages[j].role == "Assistant" then
+          has_assistant = true
+          break
+        end
+      end
     end
-    -- If not streaming but turn_start is set, the turn is incomplete (no terminal
-    -- assistant yet). We do not emit it -- it will appear once the response arrives.
+    if is_streaming then
+      close_turn(turn_start_index, #messages, { streaming = true })
+    elseif has_assistant then
+      close_turn(turn_start_index, #messages, { incomplete = true })
+    end
   end
 
   return turns
@@ -144,13 +168,23 @@ local function build_turn_map(ranges)
   local map = {} ---@type flemma.ui.TurnMap
   for _, range in ipairs(ranges) do
     if range.streaming then
-      -- Streaming turns: all lines are marked as "middle" (rendered with ┊)
-      -- The actual rendering uses the streaming flag, but we populate the map
-      -- so the statuscolumn can distinguish streaming lines from empty lines.
-      for lnum = range.start_line, range.end_line do
-        map[lnum] = "middle"
+      -- Streaming turns: ╭ at top, ┊ for interior, ╯ at current end.
+      -- As new lines stream in and the turn map recomputes, ╯ moves to
+      -- the latest line. Lines beyond the map use the streaming fallback.
+      map[range.start_line] = "top"
+      map[range.end_line] = "pending_end"
+      for lnum = range.start_line + 1, range.end_line - 1 do
+        map[lnum] = "pending"
+      end
+    elseif range.incomplete then
+      -- Incomplete turns (mid-tool-use): ╭ at top, ┊ for interior, · at end.
+      map[range.start_line] = "top"
+      map[range.end_line] = "pending_end"
+      for lnum = range.start_line + 1, range.end_line - 1 do
+        map[lnum] = "pending"
       end
     else
+      -- Complete turns: ╭ at top, │ for interior, ╰ at bottom.
       for lnum = range.start_line, range.end_line do
         if lnum == range.start_line then
           map[lnum] = "top"
@@ -227,48 +261,59 @@ end
 ---@type string The static prefix: signs + right-align + line number ("%s%=%l")
 local _cache_prefix = ""
 
----@type string The no-turn full suffix: padding + " " (pre-concatenated for the fast path)
+---@type string The no-turn full suffix: padding_left + " " + padding_right (pre-concatenated for the fast path)
 local _cache_empty_suffix = ""
 
----@type integer Last-seen padding count used to build the cache
-local _cache_padding_count = -1
+---@type integer Last-seen left padding count used to build the cache
+local _cache_padding_left = -1
+
+---@type integer Last-seen right padding count used to build the cache
+local _cache_padding_right = -1
 
 ---@type string Last-seen highlight group used to build the cache
 local _cache_hl_group = ""
 
----@type table<string, string> Memoized full suffixes (padding + highlighted char) keyed by raw character
+---@type table<string, string> Memoized full suffixes keyed by raw character
 local _char_suffixes = {}
 
 ---Rebuild the module-level format string cache for the given config values.
 ---Called only when config values differ from the last-cached values.
----@param padding_count integer
+---@param padding_left integer
+---@param padding_right integer
 ---@param highlight_group string
-local function rebuild_format_cache(padding_count, highlight_group)
-  _cache_padding_count = padding_count
+local function rebuild_format_cache(padding_left, padding_right, highlight_group)
+  _cache_padding_left = padding_left
+  _cache_padding_right = padding_right
   _cache_hl_group = highlight_group
 
   _cache_prefix = "%s%=%l"
-  local padding = string.rep(" ", padding_count)
-  _cache_empty_suffix = padding .. " "
+  local left = string.rep(" ", padding_left)
+  local right = string.rep(" ", padding_right)
+  _cache_empty_suffix = left .. " " .. right
 
   -- Rebuild the highlighted-character suffix table for all four turn characters.
-  -- Each entry is already padding + highlight-open + char + highlight-close so
-  -- the hot path only concatenates _cache_prefix with one pre-built string.
+  -- Each entry is: left_padding + highlight-open + char + highlight-close + right_padding
+  -- so the hot path only concatenates _cache_prefix with one pre-built string.
   _char_suffixes = {}
   local hl_open = "%#" .. highlight_group .. "#"
   local hl_close = "%*"
-  for _, char in ipairs({ CHAR_TOP, CHAR_MIDDLE, CHAR_BOTTOM, CHAR_STREAMING }) do
-    _char_suffixes[char] = padding .. hl_open .. char .. hl_close
+  for _, char in ipairs({ CHAR_TOP, CHAR_MIDDLE, CHAR_BOTTOM, CHAR_PENDING, CHAR_PENDING_END }) do
+    _char_suffixes[char] = left .. hl_open .. char .. hl_close .. right
   end
 end
 
 ---Ensure the module-level cache is valid for the given config values.
 ---A no-op when config has not changed since the last rebuild.
----@param padding_count integer
+---@param padding_left integer
+---@param padding_right integer
 ---@param highlight_group string
-local function ensure_format_cache(padding_count, highlight_group)
-  if padding_count ~= _cache_padding_count or highlight_group ~= _cache_hl_group then
-    rebuild_format_cache(padding_count, highlight_group)
+local function ensure_format_cache(padding_left, padding_right, highlight_group)
+  if
+    padding_left ~= _cache_padding_left
+    or padding_right ~= _cache_padding_right
+    or highlight_group ~= _cache_hl_group
+  then
+    rebuild_format_cache(padding_left, padding_right, highlight_group)
   end
 end
 
@@ -285,12 +330,9 @@ local function get_line_turn_info(bufnr, lnum)
 
   local position = cache.map[lnum]
   if position then
-    -- Check if this line belongs to a streaming range
-    for _, range in ipairs(cache.ranges) do
-      if range.streaming and lnum >= range.start_line and lnum <= range.end_line then
-        return position, true
-      end
-    end
+    -- Lines in the turn map render with their normal position characters
+    -- (╭/│/╰), even if they belong to a streaming range. Only lines that
+    -- fall through to the streaming fallback below get the ┊ indicator.
     return position, false
   end
 
@@ -335,14 +377,11 @@ function M.statuscolumn()
     return "%s%=%l "
   end
 
-  local padding_count = current_config.turns.padding or 1
+  local padding = current_config.turns.padding or {}
+  local padding_left = padding.left or 1
+  local padding_right = padding.right or 0
   local highlight_group = current_config.turns.hl or "FlemmaTurn"
-  ensure_format_cache(padding_count, highlight_group)
-
-  -- Virtual lines above a screen line (v:virtnum < 0)
-  if virtnum < 0 then
-    return _cache_prefix .. _cache_empty_suffix
-  end
+  ensure_format_cache(padding_left, padding_right, highlight_group)
 
   local position, is_streaming = get_line_turn_info(bufnr, lnum)
 
@@ -351,21 +390,42 @@ function M.statuscolumn()
   end
 
   if is_streaming then
-    -- Streaming: all positions render as ┊
-    return _cache_prefix .. _char_suffixes[CHAR_STREAMING]
+    -- Streaming fallback: lines beyond the frozen turn map render as ┊
+    return _cache_prefix .. _char_suffixes[CHAR_PENDING]
   end
 
-  if virtnum > 0 then
-    -- Wrapped lines always get │
+  -- Wrapped lines (virtnum > 0) and virtual lines (virtnum < 0):
+  -- continue the appropriate vertical character to maintain visual continuity.
+  if virtnum ~= 0 then
+    if position == "pending" or position == "pending_end" then
+      return _cache_prefix .. _char_suffixes[CHAR_PENDING]
+    end
     return _cache_prefix .. _char_suffixes[CHAR_MIDDLE]
   end
 
-  -- Real line (virtnum == 0): pick character based on position
+  -- Real line (virtnum == 0): direct position-to-character mapping
+  ---@type string
   local render_char
   if position == "top" then
     render_char = CHAR_TOP
   elseif position == "bottom" then
     render_char = CHAR_BOTTOM
+  elseif position == "pending" then
+    -- Fold correction: if a fold below this line covers the turn's pending_end,
+    -- render · instead of ┊.
+    local fold_end = vim.fn.foldclosedend(lnum)
+    if fold_end ~= -1 then
+      local turn_end = find_turn_end_line(bufnr, lnum)
+      if turn_end and fold_end >= turn_end then
+        render_char = CHAR_PENDING_END
+      else
+        render_char = CHAR_PENDING
+      end
+    else
+      render_char = CHAR_PENDING
+    end
+  elseif position == "pending_end" then
+    render_char = CHAR_PENDING_END
   else
     -- position == "middle"
     -- Fold correction: if this middle line is visible and a fold below it
