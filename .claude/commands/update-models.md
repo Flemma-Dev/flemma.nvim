@@ -175,6 +175,7 @@ Update `lua/flemma/models.lua` with the merged data. Follow the existing structu
 - Group models by family with comments
 - Include deprecation/retirement comments where applicable
 - Today's date is !`date +%Y-%m-%d` — use this for assessing retirement dates
+- **Reassess `HIGH_COST_THRESHOLD`**: Check whether the combined (input + output) price boundary still sits in a natural gap. The threshold is the combined cost of Claude Opus (currently $30), with strict `>` so Opus itself doesn't warn. If Opus pricing changes or the gap shifts, update the constant and its comment block.
 
 ## Rules
 

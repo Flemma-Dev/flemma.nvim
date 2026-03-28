@@ -134,4 +134,24 @@ describe("flemma.models", function()
       assert.is_nil(info.thinking_effort_map)
     end)
   end)
+
+  describe("HIGH_COST_THRESHOLD", function()
+    it("is exported as a number", function()
+      assert.is_number(models_data.HIGH_COST_THRESHOLD)
+    end)
+
+    it("claude-opus-4-6 sits exactly at the boundary and does not exceed it", function()
+      local pricing = models_data.providers.anthropic.models["claude-opus-4-6"].pricing
+      local combined = pricing.input + pricing.output
+      assert.are.equal(30, combined)
+      assert.is_false(combined > models_data.HIGH_COST_THRESHOLD)
+    end)
+
+    it("expensive models exceed the threshold", function()
+      local pricing = models_data.providers.openai.models["gpt-5.4-pro"].pricing
+      local combined = pricing.input + pricing.output
+      assert.is_true(combined > models_data.HIGH_COST_THRESHOLD)
+    end)
+
+  end)
 end)

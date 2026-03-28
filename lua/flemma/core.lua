@@ -36,14 +36,23 @@ local hooks = require("flemma.hooks")
 local preprocessor = require("flemma.preprocessor")
 local usage = require("flemma.usage")
 
+local nav = require("flemma.schema.navigation")
+local schema_definition = require("flemma.config.schema")
+
 local ABORT_MESSAGE = "Response interrupted by the user."
 local DEFAULT_MAX_CONCURRENT = 2
 
+---Format a price value with minimal decimal places ($30, $2.50, $0.075).
+---@param v number
+---@return string
+local function format_price(v)
+  if v == math.floor(v) then return string.format("$%.0f", v) end
+  if math.abs(v * 100 - math.floor(v * 100 + 0.5)) < 0.001 then return string.format("$%.2f", v) end
+  return string.format("$%.3f", v)
+end
+
 -- For testing purposes
 local last_request_body_for_testing = nil
-
-local nav = require("flemma.schema.navigation")
-local schema_definition = require("flemma.config.schema")
 
 --- The parameters schema node, used to distinguish static (general) fields
 --- from DISCOVER-resolved (provider-specific) fields.
@@ -97,7 +106,7 @@ end
 ---@param model_name? string
 ---@param explicit_params? table<string, any> Only the user's explicit overrides
 ---@param layer? integer Facade layer for apply_config (default: RUNTIME)
----@return boolean success
+---@return boolean success, string[] param_warnings, string|nil model_fallback_warning
 local function initialize_provider(provider_name, model_name, explicit_params, layer)
   -- Validate provider
   if not registry.has(provider_name) then
@@ -108,7 +117,7 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
     )
     log.error("initialize_provider(): " .. err)
     vim.notify(err, vim.log.levels.ERROR)
-    return false
+    return false, {}
   end
 
   -- Resolve provider alias (e.g., 'claude' -> 'anthropic')
@@ -116,15 +125,14 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
 
   -- Validate and get appropriate model
   local validated_model = registry.get_appropriate_model(model_name, resolved_provider)
+  ---@type string|nil
+  local model_fallback_warning
   if validated_model ~= model_name and model_name ~= nil then
-    vim.notify(
-      string.format(
-        "Flemma: Model '%s' is not valid for provider '%s'. Using default: '%s'.",
-        tostring(model_name),
-        tostring(resolved_provider),
-        tostring(validated_model)
-      ),
-      vim.log.levels.WARN
+    model_fallback_warning = string.format(
+      "Model '%s' is not valid for provider '%s'. Using default: '%s'.",
+      tostring(model_name),
+      tostring(resolved_provider),
+      tostring(validated_model)
     )
   end
 
@@ -132,6 +140,8 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
   apply_config(resolved_provider, validated_model, explicit_params, layer)
 
   -- Validate provider-specific parameters (advisory warnings, never fails)
+  ---@type string[]
+  local param_warnings = {}
   if validated_model then
     local resolved_config = config_facade.materialize()
     local flat_params = normalize.flatten_parameters(resolved_provider, resolved_config)
@@ -140,19 +150,11 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
     if provider_module_path then
       local provider_module = loader.load(provider_module_path)
       local _, warnings = provider_module.validate_parameters(validated_model, flat_params)
-      if warnings and #warnings > 0 then
-        local lines = {}
+      if warnings then
         for _, w in ipairs(warnings) do
-          table.insert(lines, "  • " .. w)
+          table.insert(param_warnings, w)
           log.warn("validate_parameters(" .. resolved_provider .. "): " .. w)
         end
-        vim.schedule(function()
-          vim.notify(
-            table.concat(lines, "\n"),
-            vim.log.levels.WARN,
-            { title = "Flemma Configuration [" .. resolved_provider .. "]" }
-          )
-        end)
       end
     end
   end
@@ -163,17 +165,35 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
       .. " with model "
       .. log.inspect(validated_model)
   )
-  return true
+  return true, param_warnings, model_fallback_warning
 end
 
----Initialize provider for initial setup (exposed version)
+---Initialize provider for initial setup (exposed version).
+---Emits validation warnings directly (unlike switch_provider which merges them).
 ---@param provider_name string
 ---@param model_name? string
 ---@param explicit_params? table<string, any> Only the user's explicit overrides
 ---@param layer? integer Facade layer for apply_config (default: RUNTIME)
 ---@return boolean success
 function M.initialize_provider(provider_name, model_name, explicit_params, layer)
-  return initialize_provider(provider_name, model_name, explicit_params, layer)
+  local success, param_warnings, model_fallback = initialize_provider(provider_name, model_name, explicit_params, layer)
+  if model_fallback or #param_warnings > 0 then
+    -- Same multi-line format as switch_provider: header + bullet lines
+    local resolved = registry.resolve(provider_name) or provider_name
+    local validated_model = config_facade.get().model
+    local model_desc = validated_model and (" with model '" .. validated_model .. "'") or ""
+    local lines = { "Flemma: Initialized '" .. resolved .. "'" .. model_desc }
+    if model_fallback then
+      table.insert(lines, "  ⚠ " .. model_fallback)
+    end
+    for _, w in ipairs(param_warnings) do
+      table.insert(lines, "  • " .. w)
+    end
+    vim.schedule(function()
+      vim.notify(table.concat(lines, "\n"), vim.log.levels.WARN)
+    end)
+  end
+  return success
 end
 
 ---Switch to a different provider or model.
@@ -200,7 +220,8 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
   -- Note: prepare_config() validates before writing, so the facade is only
   -- mutated for valid providers. No rollback mechanism — if this fails, the
   -- facade retains its previous state from the last successful write.
-  if not initialize_provider(provider_name, model_name, parameters or {}) then
+  local init_ok, param_warnings, model_fallback = initialize_provider(provider_name, model_name, parameters or {})
+  if not init_ok then
     log.warn("switch_provider(): Aborting switch due to invalid provider: " .. log.inspect(provider_name))
     return nil
   end
@@ -219,16 +240,48 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
   local fm_result = processor.evaluate_buffer_frontmatter(bufnr)
   buffer_state.frontmatter_eval_code = fm_result.frontmatter_code
 
-  -- Notify the user. Compare global config (D+S+R) with buffer config (D+S+R+F)
-  -- to detect frontmatter overrides that take precedence over the switch.
+  -- Notify the user. Header line + optional bullet lines for warnings/overrides.
   local global_config = config_facade.get()
   local buffer_config = config_facade.get(bufnr)
   local model_info = global_config.model and (" with model '" .. global_config.model .. "'") or ""
-  local message = "Flemma: Switched to '" .. global_config.provider .. "'" .. model_info .. "."
-  if buffer_config.provider ~= global_config.provider then
-    message = message .. " This buffer uses '" .. buffer_config.provider .. "' (override)."
+  local header = "Flemma: Switched to '" .. global_config.provider .. "'" .. model_info
+  ---@type string[]
+  local lines = {}
+  local notify_level = vim.log.levels.INFO
+
+  -- Model fallback warning (invalid model → provider default)
+  if model_fallback then
+    table.insert(lines, "  ⚠ " .. model_fallback)
+    notify_level = vim.log.levels.WARN
   end
-  vim.notify(message, vim.log.levels.INFO)
+
+  -- High-cost warning
+  local provider_models = models_data.providers[global_config.provider]
+  local model_entry = provider_models and global_config.model and provider_models.models[global_config.model]
+  if model_entry and model_entry.pricing and model_entry.pricing.input + model_entry.pricing.output > models_data.HIGH_COST_THRESHOLD then
+    table.insert(lines, "  ⚠ Billed at " .. format_price(model_entry.pricing.input) .. " input / " .. format_price(model_entry.pricing.output) .. " output per MTok")
+    notify_level = vim.log.levels.WARN
+  end
+
+  -- Frontmatter override notice (provider, model, or both)
+  if buffer_config.provider ~= global_config.provider or buffer_config.model ~= global_config.model then
+    local parts = {}
+    if buffer_config.provider ~= global_config.provider then table.insert(parts, "'" .. buffer_config.provider .. "'") end
+    if buffer_config.model ~= global_config.model then table.insert(parts, "model '" .. buffer_config.model .. "'") end
+    table.insert(lines, "  • This buffer uses " .. table.concat(parts, " / ") .. " (frontmatter)")
+  end
+
+  -- Parameter validation warnings
+  for _, w in ipairs(param_warnings) do
+    table.insert(lines, "  • " .. w)
+    notify_level = vim.log.levels.WARN
+  end
+
+  if #lines == 0 then
+    header = header .. "."
+  end
+  table.insert(lines, 1, header)
+  vim.notify(table.concat(lines, "\n"), notify_level)
 
   hooks.dispatch("config:updated")
 

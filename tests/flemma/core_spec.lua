@@ -399,6 +399,188 @@ describe(":Flemma send command", function()
     notify_spy:revert()
   end)
 
+  it("switch to a normal-cost model emits single-line INFO with period", function()
+    local notify_spy = stub(vim, "notify")
+
+    core.switch_provider("anthropic", "claude-sonnet-4-6", {})
+
+    vim.wait(50, function()
+      return #notify_spy.calls > 0
+    end, 10, false)
+
+    local saw_info = false
+    for _, call in ipairs(notify_spy.calls) do
+      local msg = call.refs[1]
+      local level = call.refs[2]
+      if msg and string.find(msg, "claude%-sonnet%-4%-6") then
+        assert.are.equal(vim.log.levels.INFO, level, "Normal-cost switch should be INFO")
+        assert.is_falsy(string.find(msg, "⚠"), "Should not contain warning icon")
+        assert.is_truthy(string.find(msg, "%.$"), "Should end with period")
+        assert.is_falsy(string.find(msg, "\n"), "Should be single-line")
+        saw_info = true
+        break
+      end
+    end
+    assert.is_true(saw_info, "Normal switch should emit INFO notification")
+
+    notify_spy:revert()
+  end)
+
+  it("switch to boundary-cost model (opus-4-6, $30 exactly) stays INFO", function()
+    local notify_spy = stub(vim, "notify")
+
+    core.switch_provider("anthropic", "claude-opus-4-6", {})
+
+    vim.wait(50, function()
+      return #notify_spy.calls > 0
+    end, 10, false)
+
+    local saw_switch = false
+    for _, call in ipairs(notify_spy.calls) do
+      local msg = call.refs[1]
+      local level = call.refs[2]
+      if msg and string.find(msg, "claude%-opus%-4%-6") then
+        assert.are.equal(vim.log.levels.INFO, level, "Boundary model should stay INFO")
+        assert.is_falsy(string.find(msg, "⚠"), "Should not contain warning icon")
+        saw_switch = true
+        break
+      end
+    end
+    assert.is_true(saw_switch, "Should see switch notification for opus-4-6")
+
+    notify_spy:revert()
+  end)
+
+  it("switch to a high-cost model emits multi-line WARN with pricing", function()
+    local notify_spy = stub(vim, "notify")
+
+    -- gpt-5.4-pro: $30+$180 = $210 > 30 threshold
+    core.switch_provider("openai", "gpt-5.4-pro", {})
+
+    vim.wait(50, function()
+      return #notify_spy.calls > 0
+    end, 10, false)
+
+    local saw_warn = false
+    for _, call in ipairs(notify_spy.calls) do
+      local msg = call.refs[1]
+      local level = call.refs[2]
+      if level == vim.log.levels.WARN and msg and string.find(msg, "gpt%-5%.4%-pro") then
+        assert.is_truthy(string.find(msg, "%$30"), "Should contain input price")
+        assert.is_truthy(string.find(msg, "%$180"), "Should contain output price")
+        assert.is_truthy(string.find(msg, "\n"), "Should be multi-line")
+        assert.is_truthy(string.find(msg, "⚠ Billed at"), "Should have cost bullet")
+        saw_warn = true
+        break
+      end
+    end
+    assert.is_true(saw_warn, "High-cost switch should emit WARN with pricing")
+
+    notify_spy:revert()
+  end)
+
+  it("switch notification shows frontmatter model override as bullet line", function()
+    local notify_spy = stub(vim, "notify")
+
+    -- Switch globally to anthropic/claude-opus-4-6, then set up a buffer
+    -- with frontmatter that overrides the model
+    core.switch_provider("anthropic", "claude-opus-4-6", {})
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "```lua",
+      'flemma.opt.model = "claude-haiku-4-5"',
+      "```",
+      "@You:",
+      "Hello",
+    })
+
+    -- Re-switch to trigger notification with frontmatter evaluated
+    notify_spy:clear()
+    core.switch_provider("anthropic", "claude-opus-4-6", {})
+
+    vim.wait(50, function()
+      return #notify_spy.calls > 0
+    end, 10, false)
+
+    local saw_override = false
+    for _, call in ipairs(notify_spy.calls) do
+      local msg = call.refs[1]
+      if msg and string.find(msg, "claude%-opus%-4%-6") then
+        assert.is_truthy(string.find(msg, "model 'claude%-haiku%-4%-5'"), "Should mention overridden model")
+        assert.is_truthy(string.find(msg, "frontmatter"), "Should mention frontmatter")
+        assert.is_truthy(string.find(msg, "\n"), "Should be multi-line")
+        assert.is_truthy(string.find(msg, "  • This buffer uses"), "Override should be a bullet line")
+        saw_override = true
+        break
+      end
+    end
+    assert.is_true(saw_override, "Should show frontmatter model override")
+
+    notify_spy:revert()
+  end)
+
+  it("model fallback appears as bullet line in switch notification", function()
+    local notify_spy = stub(vim, "notify")
+
+    -- Invalid model falls back to provider default; fallback warning becomes a bullet
+    core.switch_provider("openai", "nonexistent-model", {})
+
+    vim.wait(50, function()
+      return #notify_spy.calls > 0
+    end, 10, false)
+
+    local saw_fallback = false
+    for _, call in ipairs(notify_spy.calls) do
+      local msg = call.refs[1]
+      local level = call.refs[2]
+      if level == vim.log.levels.WARN and msg and string.find(msg, "Switched to") then
+        assert.is_truthy(string.find(msg, "⚠ Model 'nonexistent%-model' is not valid"), "Should have fallback bullet")
+        assert.is_truthy(string.find(msg, "\n"), "Should be multi-line")
+        saw_fallback = true
+        break
+      end
+    end
+    assert.is_true(saw_fallback, "Should show model fallback as bullet in switch notification")
+
+    notify_spy:revert()
+  end)
+
+  it("initialize_provider emits warnings via vim.schedule", function()
+    local notify_spy = stub(vim, "notify")
+
+    -- Use an invalid model to trigger fallback warning
+    core.initialize_provider("openai", "nonexistent-model", {})
+
+    -- vim.schedule defers — need to process the event loop
+    vim.wait(200, function()
+      for _, call in ipairs(notify_spy.calls) do
+        local msg = call.refs[1]
+        if msg and string.find(msg, "nonexistent%-model") then
+          return true
+        end
+      end
+      return false
+    end, 10, false)
+
+    local saw_warn = false
+    for _, call in ipairs(notify_spy.calls) do
+      local msg = call.refs[1]
+      local level = call.refs[2]
+      if msg and string.find(msg, "nonexistent%-model") then
+        assert.are.equal(vim.log.levels.WARN, level, "Should be WARN level")
+        assert.is_truthy(string.find(msg, "Initialized"), "Should have header line")
+        assert.is_truthy(string.find(msg, "⚠ Model 'nonexistent%-model' is not valid"), "Should have fallback bullet")
+        saw_warn = true
+        break
+      end
+    end
+    assert.is_true(saw_warn, "initialize_provider should emit deferred warning")
+
+    notify_spy:revert()
+  end)
+
   it("frontmatter can override provider and model for a single buffer", function()
     -- Arrange: Verify the default provider is NOT OpenAI (what frontmatter will override to)
     local default_config = require("flemma.config").materialize()

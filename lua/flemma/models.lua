@@ -54,10 +54,28 @@
 ---@field models table<string, flemma.models.ModelInfo>
 
 ---@class flemma.models.Data
+---@field HIGH_COST_THRESHOLD number Combined input+output $/MTok above which :Flemma switch warns the user
 ---@field providers table<string, flemma.models.ProviderModels>
 
 ---@type flemma.models.Data
 return {
+  -- Combined (input + output) price per million tokens above which
+  -- :Flemma switch upgrades the notification from INFO to WARN and
+  -- appends pricing details.
+  --
+  -- The threshold is set at the combined cost of Claude Opus
+  -- ($5 input + $25 output = $30), which represents the upper end
+  -- of what most users would consider standard pricing for a
+  -- top-tier model. Models above this point — pro tiers, legacy
+  -- GPT-4, and specialized reasoning models — carry significantly
+  -- higher per-token costs that can produce unexpectedly large
+  -- bills if selected without intent.
+  --
+  -- Using strict > so that Opus itself does not trigger the warning.
+  --
+  -- Reassess when updating model pricing (see /update-models).
+  HIGH_COST_THRESHOLD = 30,
+
   providers = {
     anthropic = {
       default = "claude-sonnet-4-6",
