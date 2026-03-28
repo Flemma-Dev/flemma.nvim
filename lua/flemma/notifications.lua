@@ -696,20 +696,20 @@ function M.recall_last()
   -- Derive segments from session data
   local filepath = vim.api.nvim_buf_get_name(current_bufnr)
   if filepath == "" then
-    vim.notify("No notification for this buffer.", vim.log.levels.WARN)
+    vim.notify("Flemma: No notification for this buffer.", vim.log.levels.WARN)
     return
   end
 
   local session = state.get_session()
   local latest_request = session:get_latest_request_for_filepath(filepath)
   if not latest_request then
-    vim.notify("No notification for this buffer.", vim.log.levels.WARN)
+    vim.notify("Flemma: No notification for this buffer.", vim.log.levels.WARN)
     return
   end
 
   local segments = usage.build_segments(latest_request, session)
   if #segments == 0 then
-    vim.notify("No notification for this buffer.", vim.log.levels.WARN)
+    vim.notify("Flemma: No notification for this buffer.", vim.log.levels.WARN)
     return
   end
 

@@ -46,8 +46,12 @@ local DEFAULT_MAX_CONCURRENT = 2
 ---@param v number
 ---@return string
 local function format_price(v)
-  if v == math.floor(v) then return string.format("$%.0f", v) end
-  if math.abs(v * 100 - math.floor(v * 100 + 0.5)) < 0.001 then return string.format("$%.2f", v) end
+  if v == math.floor(v) then
+    return string.format("$%.0f", v)
+  end
+  if math.abs(v * 100 - math.floor(v * 100 + 0.5)) < 0.001 then
+    return string.format("$%.2f", v)
+  end
   return string.format("$%.3f", v)
 end
 

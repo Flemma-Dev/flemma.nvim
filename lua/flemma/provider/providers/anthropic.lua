@@ -663,7 +663,7 @@ function M.try_import_from_buffer(lines)
   -- Extract and prepare content
   local content = import_extract_content(lines)
   if #content == 0 then
-    vim.notify("No Anthropic API call found in buffer", vim.log.levels.ERROR)
+    vim.notify("Flemma: No Anthropic API call found in buffer.", vim.log.levels.ERROR)
     return nil
   end
 
@@ -687,7 +687,7 @@ function M.try_import_from_buffer(lines)
     end
 
     vim.notify(
-      "Failed to parse API call data. Debug info written to " .. tmp_dir .. sep .. "flemma_import_debug.log",
+      "Flemma: Failed to parse API call data. Debug info written to " .. tmp_dir .. sep .. "flemma_import_debug.log",
       vim.log.levels.ERROR
     )
     return nil
