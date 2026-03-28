@@ -91,6 +91,9 @@ require("flemma").setup({
   editing = {
     auto_write = true,
   },
+  turns = {
+    padding = { 1, 1 },
+  },
 })
 
 require("lualine").setup({
