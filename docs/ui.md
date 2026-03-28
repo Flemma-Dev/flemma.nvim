@@ -148,7 +148,9 @@ When `padding.right > 0`, the top arc (`╭`) connects to the ruler for a seamle
 
 ## Spinner behaviour
 
-While a request is in flight, Flemma writes an `@Assistant:` marker on its own line and renders "Thinking…" as end-of-line virtual text with an animated braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`). The spinner animates at 100ms intervals and is removed once streaming starts.
+While a request is in flight, Flemma writes an `@Assistant:` marker on its own line and renders "Thinking…" as end-of-line virtual text with an animated braille spinner. The animation uses phase-specific frame sequences so the visual rhythm reflects what is happening.
+
+The spinner transitions between phases automatically and is removed once streaming starts.
 
 When the model enters a thinking/reasoning phase, the spinner animation is replaced with a live character count – e.g., `Thinking… (3.2k characters)` – so you can gauge progress at a glance.
 
@@ -158,7 +160,7 @@ When async tool sources (registered via `tools.modules` or `tools.register()` wi
 
 ### Tool execution indicators
 
-During tool execution, a separate spinner appears next to the `**Tool Result:**` block using circular quarter characters (`◐◓◑◒`). When execution completes, the indicator changes to `✓ Complete` or `✗ Failed`. Indicators reposition automatically if the buffer is modified during execution and clear on the next buffer edit.
+During tool execution, an animated braille spinner appears next to the `**Tool Result:**` block using the tool phase frames (a falling sand animation at 200ms intervals). When execution completes, the indicator changes to `✓ Complete` or `✗ Failed`. Indicators reposition automatically if the buffer is modified during execution and clear on the next buffer edit.
 
 ### Tool previews
 

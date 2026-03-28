@@ -94,6 +94,7 @@ The environment resolver constructs the variable name from the credential's serv
 | openai    | api_key         | `OPENAI_API_KEY`         |
 | vertex    | access_token    | `VERTEX_AI_ACCESS_TOKEN` |
 | vertex    | service_account | `VERTEX_SERVICE_ACCOUNT` |
+| moonshot  | api_key         | `MOONSHOT_API_KEY`       |
 
 Credentials can also define `aliases` – alternative variable names checked in order after the convention.
 

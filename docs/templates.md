@@ -196,7 +196,7 @@ Draft a short update for {{recipient}} covering:
 
 ## Template code blocks
 
-Use `{% code %}` to embed Lua statements directly in your messages. Unlike `{{ expressions }}`, which output a value, code blocks execute statements -- control flow, variable assignment, loops -- without emitting output themselves. Use `__emit()` inside code blocks when you need to output text.
+Use `{% code %}` to embed Lua statements directly in your messages. Unlike `{{ expressions }}`, which output a value, code blocks execute statements -- control flow, variable assignment, loops -- without emitting output themselves. Use `print()` or `__emit()` inside code blocks when you need to output text.
 
 ```markdown
 @System:

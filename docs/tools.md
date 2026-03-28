@@ -168,7 +168,7 @@ When you `:remove()` a tool that lives inside a preset (e.g., removing `"write"`
 
 ### Parallel tool use
 
-All three providers support parallel tool calls. Press <kbd>Ctrl-]</kbd> to execute all pending calls at once, or use <kbd>Alt-Enter</kbd> on individual blocks. Flemma validates that every `**Tool Use:**` block has a matching `**Tool Result:**` before sending.
+All supported providers handle parallel tool calls. Press <kbd>Ctrl-]</kbd> to execute all pending calls at once, or use <kbd>Alt-Enter</kbd> on individual blocks. Flemma validates that every `**Tool Use:**` block has a matching `**Tool Result:**` before sending.
 
 ### Concurrency limit
 
@@ -289,7 +289,7 @@ require("flemma").setup({
 | `find` | async | Find files by glob pattern using `fd`, `git ls-files`, or GNU `find` – whichever is available.                                |
 | `ls`   | sync  | List directory contents with configurable recursion depth and entry limit. Directories appear first (suffixed with `/`).      |
 
-All three tools declare `can_auto_approve_if_sandboxed`, so when the sandbox is enabled and `auto_approve_sandboxed` is `true` (the default), they execute without manual approval.
+All three tools are included in the `$standard` and `$readonly` approval presets, so they are auto-approved by default when using either preset.
 
 ### Configuration
 

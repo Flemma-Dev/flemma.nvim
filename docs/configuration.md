@@ -4,11 +4,11 @@ Flemma works without arguments – `require("flemma").setup({})` uses sensible d
 
 ```lua
 require("flemma").setup({
-  provider = "anthropic",                    -- "anthropic" | "openai" | "vertex"
+  provider = "anthropic",                    -- "anthropic" | "openai" | "vertex" | "moonshot"
   model = nil,                               -- nil = provider default
   parameters = {
-    max_tokens = "50%",                           -- Percentage of model's max_output_tokens, or integer
-    temperature = 0.7,
+    max_tokens = "50%",                      -- Percentage of model's max_output_tokens, or integer
+    temperature = nil,                       -- Optional; omitted unless explicitly set
     timeout = 600,                           -- Response timeout (seconds)
     connect_timeout = 10,                    -- Connection timeout (seconds)
     thinking = "high",                       -- "minimal" | "low" | "medium" | "high" | "max" | number | false
@@ -23,6 +23,9 @@ require("flemma").setup({
     },
     openai = {
       reasoning = nil,                       -- Override thinking with explicit effort level
+    },
+    moonshot = {
+      prompt_cache_key = nil,                -- Optional stable key for prompt caching
     },
   },
   presets = {},                              -- Named presets: ["$name"] = "provider model key=val"
@@ -201,6 +204,7 @@ Provider-specific parameters take priority over the unified `thinking` value whe
 1. `parameters.anthropic.thinking_budget` overrides `thinking` for Anthropic (clamped to min 1,024 tokens).
 2. `parameters.openai.reasoning` overrides `thinking` for OpenAI (accepts `"low"`, `"medium"`, `"high"`).
 3. `parameters.vertex.thinking_budget` overrides `thinking` for Vertex AI (min 1 token).
+4. Moonshot has no provider-specific override — the unified `thinking` parameter controls the binary toggle directly.
 
 This lets you set `thinking = "high"` as a cross-provider default and fine-tune specific providers when needed.
 

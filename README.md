@@ -7,14 +7,14 @@
 
 Flemma turns Neovim into an AI agent. Give it a task, and it works – calling tools, reading and editing files, running shell commands, and re-sending results back to the model in a fully autonomous loop. You stay in control: every action is visible in the `.chat` buffer, every tool call can require your approval, and you can take the wheel at any point. But when you trust the model, Flemma gets out of the way and lets it drive.
 
-Streaming conversations, reusable prompt templates, file attachments, cost tracking, and ergonomic commands for Anthropic, OpenAI, and Google Vertex AI.
+Streaming conversations, reusable prompt templates, file attachments, cost tracking, and ergonomic commands for Anthropic, OpenAI, Google Vertex AI, and Moonshot AI.
 
 https://github.com/user-attachments/assets/87b09499-e1f8-4f76-bc06-be73bb7ade63
 
 - **Autonomous agent loop** – Flemma executes approved tool calls and re-sends results automatically, repeating until the task is done or your approval is needed. One keypress can kick off an entire multi-step workflow.
 - **Tool calling** – bash, file read/edit/write, with approval policies, parallel execution, and inline previews that show what each tool will do before you approve it. Register your own tools, approval resolvers, and preview formatters.
 - **User at the wheel** – every tool call is visible in the buffer with a preview of what it will do. Approve tools one at a time with <kbd>Alt-Enter</kbd>, bulk-approve with <kbd>Ctrl-]</kbd>, or let autopilot handle everything. Pause, inspect, edit, resume at any point.
-- **Multi-provider** – Anthropic, OpenAI, and Vertex AI through one unified interface.
+- **Multi-provider** – Anthropic, OpenAI, Vertex AI, and Moonshot AI through one unified interface.
 - **Extended thinking** – unified `thinking` parameter across all providers, with automatic mapping to Anthropic budgets, OpenAI reasoning effort, and Vertex thinking budgets.
 - **Template system** – Lua/JSON frontmatter, inline `{{ expressions }}`, `{% code %}` blocks, `include()` helpers. JSON frontmatter supports MongoDB-style operators for declarative per-buffer config overrides. Frontmatter changes take effect immediately as you edit.
 - **Context attachments** – reference local files with `@./path`; MIME detection and provider-aware formatting.
@@ -80,6 +80,7 @@ For managers that do not wire `opts`, call `require("flemma").setup({})` yoursel
 | Anthropic        | `ANTHROPIC_API_KEY`                                         |                                                             |
 | OpenAI           | `OPENAI_API_KEY`                                            | Supports GPT-5 family, including reasoning effort settings. |
 | Google Vertex AI | `VERTEX_AI_ACCESS_TOKEN` **or** service-account credentials | Requires additional configuration (see below).              |
+| Moonshot AI      | `MOONSHOT_API_KEY`                                          | Kimi models with optional thinking support.                 |
 
 Flemma resolves credentials through a priority-based chain: environment variables are checked first, then platform keyring (Linux Secret Service or macOS Keychain), then `gcloud` CLI for Vertex AI access tokens. The first resolver that finds a credential wins. Credentials are cached with TTL awareness to avoid repeated lookups. When resolution fails, each resolver reports why it couldn't help — the notification lists every resolver that was tried and what went wrong (e.g., "ANTHROPIC_API_KEY not set", "secret-tool not found"). The `gcloud` binary path is configurable via `secrets.gcloud.path` for non-standard installations. See [docs/extending.md](docs/extending.md#credential-resolution) for details on the resolution chain and registering custom resolvers.
 
@@ -92,6 +93,7 @@ When environment variables are absent Flemma looks for secrets in the Secret Ser
 secret-tool store --label="Anthropic API Key" service anthropic key api
 secret-tool store --label="OpenAI API Key" service openai key api
 secret-tool store --label="Vertex AI Service Account" service vertex key api project_id your-gcp-project
+secret-tool store --label="Moonshot API Key" service moonshot key api
 ```
 
 </details>
@@ -269,19 +271,21 @@ Switch using `:Flemma switch $fast` or `:Flemma switch $review temperature=0.1` 
 
 ### Unified thinking
 
-All three providers support extended thinking/reasoning. Flemma provides a single `thinking` parameter that maps automatically to each provider's native format:
+All supported providers offer extended thinking/reasoning. Flemma provides a single `thinking` parameter that maps automatically to each provider's native format:
 
-| `thinking` value       | Anthropic (budget) | OpenAI (effort)      | Vertex AI (budget) |
-| ---------------------- | ------------------ | -------------------- | ------------------ |
-| `"max"`                | model-dependent\*  | `"max"` effort       | 32,768 tokens      |
-| `"high"` **(default)** | 16,384 tokens      | `"high"` effort      | 32,768 tokens      |
-| `"medium"`             | 8,192 tokens       | `"medium"` effort    | 8,192 tokens       |
-| `"low"`                | 2,048 tokens       | `"low"` effort       | 2,048 tokens       |
-| `"minimal"`            | 1,024 tokens       | `"minimal"` effort   | 128 tokens         |
-| number (e.g. `4096`)   | 4,096 tokens       | closest effort level | 4,096 tokens       |
-| `false` or `0`         | disabled           | disabled             | disabled           |
+| `thinking` value       | Anthropic (budget) | OpenAI (effort)      | Vertex AI (budget) | Moonshot (toggle) |
+| ---------------------- | ------------------ | -------------------- | ------------------ | ----------------- |
+| `"max"`                | model-dependent\*  | `"max"` effort       | 32,768 tokens      | enabled†          |
+| `"high"` **(default)** | 16,384 tokens      | `"high"` effort      | 32,768 tokens      | enabled†          |
+| `"medium"`             | 8,192 tokens       | `"medium"` effort    | 8,192 tokens       | enabled†          |
+| `"low"`                | 2,048 tokens       | `"low"` effort       | 2,048 tokens       | enabled†          |
+| `"minimal"`            | 1,024 tokens       | `"minimal"` effort   | 128 tokens         | enabled†          |
+| number (e.g. `4096`)   | 4,096 tokens       | closest effort level | 4,096 tokens       | enabled†          |
+| `false` or `0`         | disabled           | disabled             | disabled           | disabled†         |
 
 \*Anthropic models with adaptive thinking (Opus 4.6) use the provider's native `"max"` effort level. Other Anthropic models map `"max"` to the highest available budget. Exact values are model-dependent – see `lua/flemma/models.lua` for the full per-model catalogue.
+
+†Moonshot thinking is binary (on/off) with no budget control. kimi-k2-thinking models always think regardless of the `thinking` setting. moonshot-v1-\* models do not support thinking.
 
 Set it once in your config and it works everywhere:
 
@@ -295,17 +299,18 @@ require("flemma").setup({
 
 Or override per-request with `:Flemma switch anthropic claude-sonnet-4-6 thinking=medium`.
 
-**Priority order:** Provider-specific parameters (`thinking_budget` for Anthropic/Vertex, `reasoning` for OpenAI) take priority over the unified `thinking` parameter when both are set. This lets you use `thinking` as the default and override with provider-native syntax when needed.
+**Priority order:** Provider-specific parameters (`thinking_budget` for Anthropic/Vertex, `reasoning` for OpenAI) take priority over the unified `thinking` parameter when both are set. Moonshot does not have a provider-specific override – the unified `thinking` parameter controls the toggle directly. This lets you use `thinking` as the default and override with provider-native syntax when needed.
 
 When thinking is active, the Lualine component shows the resolved level – e.g., `claude-sonnet-4-6 (high)` or `o3 (medium)`.
 
 ### Provider-specific capabilities
 
-| Provider  | Defaults                 | Extra parameters                                                                                                        | Notes                                                                              |
-| --------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Anthropic | `claude-sonnet-4-6`      | `thinking_budget` overrides the unified `thinking` parameter with an exact token budget (clamped to min 1,024).         | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer. |
-| OpenAI    | `gpt-5.4`                | `reasoning` overrides the unified `thinking` parameter with an explicit effort level (`"low"`, `"medium"`, `"high"`).   | Cost notifications include reasoning tokens. Lualine shows the reasoning level.    |
-| Vertex AI | `gemini-3.1-pro-preview` | `project_id` (required), `location` (default `global`), `thinking_budget` overrides with an exact token budget (min 1). | `thinking_budget` overrides the unified `thinking` parameter for Vertex.           |
+| Provider     | Defaults                 | Extra parameters                                                                                                        | Notes                                                                                         |
+| ------------ | ------------------------ | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Anthropic    | `claude-sonnet-4-6`      | `thinking_budget` overrides the unified `thinking` parameter with an exact token budget (clamped to min 1,024).         | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer.            |
+| OpenAI       | `gpt-5.4`                | `reasoning` overrides the unified `thinking` parameter with an explicit effort level (`"low"`, `"medium"`, `"high"`).   | Cost notifications include reasoning tokens. Lualine shows the reasoning level.               |
+| Vertex AI    | `gemini-3.1-pro-preview` | `project_id` (required), `location` (default `global`), `thinking_budget` overrides with an exact token budget (min 1). | `thinking_budget` overrides the unified `thinking` parameter for Vertex.                      |
+| Moonshot AI  | `kimi-k2.5`              | `prompt_cache_key` for stable prompt caching keys.                                                                      | kimi-k2-thinking models force thinking on. Temperature locked per thinking mode on kimi-k2.5. |
 
 > [!NOTE]
 > Defaults favour capability at a reasonable price point, **not minimum cost**. Older or smaller models (e.g., `gpt-5.2`, `gemini-2.5-flash`) can be significantly cheaper and may perform just as well for your workload; choosing the right cost/capability trade-off is up to you.
@@ -318,13 +323,13 @@ The full model catalogue (including pricing) is in `lua/flemma/models.lua`. You 
 
 ### Prompt caching
 
-All three providers support prompt caching. Flemma handles breakpoint placement (Anthropic), cache keys (OpenAI), and implicit caching (Vertex) automatically. The `cache_retention` parameter controls the strategy where applicable:
+All supported providers offer prompt caching. Flemma handles breakpoint placement (Anthropic), cache keys (OpenAI), implicit caching (Vertex), and optional cache keys (Moonshot) automatically. The `cache_retention` parameter controls the strategy where applicable:
 
-|               | Anthropic         | OpenAI                | Vertex AI   |
-| ------------- | ----------------- | --------------------- | ----------- |
-| Default       | `"short"` (5 min) | `"short"` (in-memory) | Automatic   |
-| Min. tokens   | 1,024–4,096       | 1,024                 | 1,024–2,048 |
-| Read discount | 90%               | 50%                   | 90%         |
+|               | Anthropic         | OpenAI                | Vertex AI   | Moonshot     |
+| ------------- | ----------------- | --------------------- | ----------- | ------------ |
+| Default       | `"short"` (5 min) | `"short"` (in-memory) | Automatic   | Automatic    |
+| Min. tokens   | 1,024–4,096       | 1,024                 | 1,024–2,048 | —            |
+| Read discount | 90%               | 50%                   | 90%         | 80%          |
 
 When a cache hit occurs, the usage notification shows a `Cache:` line with read/write token counts. See [docs/prompt-caching.md](docs/prompt-caching.md) for provider-specific details, caveats, and pricing tables.
 
@@ -467,11 +472,11 @@ Key defaults:
 
 | Parameter         | Default       | Description                                                   |
 | ----------------- | ------------- | ------------------------------------------------------------- |
-| `provider`        | `"anthropic"` | `"anthropic"` / `"openai"` / `"vertex"`                       |
+| `provider`        | `"anthropic"` | `"anthropic"` / `"openai"` / `"vertex"` / `"moonshot"`        |
 | `thinking`        | `"high"`      | Unified thinking level across providers                       |
 | `cache_retention` | `"short"`     | Prompt caching strategy                                       |
 | `max_tokens`      | `"50%"`       | Maximum response tokens (percentage of model max, or integer) |
-| `temperature`     | `0.7`         | Sampling temperature (disabled when thinking is active)       |
+| `temperature`     | *(unset)*     | Sampling temperature; omitted unless explicitly set           |
 
 ---
 
@@ -568,7 +573,7 @@ On a personal level, I've used Flemma to generate bedtime stories with recurring
 - **Frontmatter errors:** notifications list the exact line and file. Fix the error and resend; Flemma will not contact the provider until the frontmatter parses cleanly. Frontmatter diagnostics also appear in `:Flemma status`.
 - **Misspelled command or tool name:** Flemma suggests the closest match — e.g., `Unknown command 'staus'. Did you mean 'status'?`. This applies to `:Flemma` sub-commands, tool names in `flemma.opt.tools`, and tool names in `auto_approve`.
 - **Attachments ignored:** ensure the file exists relative to the `.chat` file and that the provider supports its MIME type. Use `;type=` to override when necessary.
-- **Temperature ignored:** when thinking is enabled (default `"high"`), Anthropic and OpenAI disable temperature (this is an API requirement, not a Flemma choice). Vertex AI passes temperature regardless. Set `thinking = false` if you need temperature control on Anthropic/OpenAI.
+- **Temperature ignored:** when thinking is enabled (default `"high"`), Anthropic and OpenAI disable temperature (this is an API requirement, not a Flemma choice). Vertex AI passes temperature regardless. Moonshot locks temperature per thinking mode (1.0 when thinking, 0.6 when not on kimi-k2.5). Set `thinking = false` if you need temperature control on Anthropic/OpenAI.
 - **Vertex refuses requests:** double-check `parameters.vertex.project_id` and authentication. Run `gcloud auth print-access-token` manually to ensure credentials are valid.
 - **Tool execution doesn't respond:** make sure the cursor is on or near the `**Tool Use:**` block. Only tools with registered executors can be run – check `:lua print(vim.inspect(require("flemma.tools").get_all()))`.
 - **Keymaps clash:** disable built-in mappings via `keymaps.enabled = false` and register your own `:Flemma` commands.
