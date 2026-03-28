@@ -214,27 +214,62 @@ function M.update(bufnr)
 end
 
 -- ============================================================================
--- Statuscolumn
+-- Statuscolumn format string cache
 -- ============================================================================
 
--- Pre-computed format string fragments.
--- The statuscolumn format is: %s%=%l{padding}{turn_char}
--- where {padding} is spaces and {turn_char} is a highlighted turn character.
--- We build the static prefix once and concatenate the turn character at render time.
+-- Pre-computed format string fragments. Rebuilt only when config changes.
+-- The statuscolumn format is either:
+--   (no turn)  %s%=%l + padding + " "
+--   (turn)     %s%=%l + padding + highlighted_char
+-- All three pieces are pre-computed so M.statuscolumn() does only table
+-- lookups and a single two-operand concatenation of pre-built strings.
 
----Build the static prefix portion of the statuscolumn string.
----Format: %s%=%l (signs + right-align + line number)
----@return string
-local function build_statuscolumn_prefix()
-  return "%s%=%l"
+---@type string The static prefix: signs + right-align + line number ("%s%=%l")
+local _cache_prefix = ""
+
+---@type string The no-turn full suffix: padding + " " (pre-concatenated for the fast path)
+local _cache_empty_suffix = ""
+
+---@type integer Last-seen padding count used to build the cache
+local _cache_padding_count = -1
+
+---@type string Last-seen highlight group used to build the cache
+local _cache_hl_group = ""
+
+---@type table<string, string> Memoized full suffixes (padding + highlighted char) keyed by raw character
+local _char_suffixes = {}
+
+---Rebuild the module-level format string cache for the given config values.
+---Called only when config values differ from the last-cached values.
+---@param padding_count integer
+---@param highlight_group string
+local function rebuild_format_cache(padding_count, highlight_group)
+  _cache_padding_count = padding_count
+  _cache_hl_group = highlight_group
+
+  _cache_prefix = "%s%=%l"
+  local padding = string.rep(" ", padding_count)
+  _cache_empty_suffix = padding .. " "
+
+  -- Rebuild the highlighted-character suffix table for all four turn characters.
+  -- Each entry is already padding + highlight-open + char + highlight-close so
+  -- the hot path only concatenates _cache_prefix with one pre-built string.
+  _char_suffixes = {}
+  local hl_open = "%#" .. highlight_group .. "#"
+  local hl_close = "%*"
+  for _, char in ipairs({ CHAR_TOP, CHAR_MIDDLE, CHAR_BOTTOM, CHAR_STREAMING }) do
+    _char_suffixes[char] = padding .. hl_open .. char .. hl_close
+  end
 end
 
----Build the format string for a highlighted turn character.
----@param char string The turn character to display
----@param highlight_group string The highlight group name
----@return string
-local function format_turn_char(char, highlight_group)
-  return "%#" .. highlight_group .. "#" .. char .. "%*"
+---Ensure the module-level cache is valid for the given config values.
+---A no-op when config has not changed since the last rebuild.
+---@param padding_count integer
+---@param highlight_group string
+local function ensure_format_cache(padding_count, highlight_group)
+  if padding_count ~= _cache_padding_count or highlight_group ~= _cache_hl_group then
+    rebuild_format_cache(padding_count, highlight_group)
+  end
 end
 
 ---Get the turn map entry for a line, with streaming fallback.
@@ -297,35 +332,32 @@ function M.statuscolumn()
 
   local current_config = config_facade.get(bufnr)
   if not current_config.turns or not current_config.turns.enabled then
-    return build_statuscolumn_prefix() .. " "
+    return "%s%=%l "
   end
 
   local padding_count = current_config.turns.padding or 1
   local highlight_group = current_config.turns.hl or "FlemmaTurn"
-  local padding = string.rep(" ", padding_count)
-  local prefix = build_statuscolumn_prefix()
+  ensure_format_cache(padding_count, highlight_group)
 
-  -- Virtual lines below a screen line (v:virtnum < 0 = above, > 0 = wrapped)
+  -- Virtual lines above a screen line (v:virtnum < 0)
   if virtnum < 0 then
-    return prefix .. padding .. " "
+    return _cache_prefix .. _cache_empty_suffix
   end
 
   local position, is_streaming = get_line_turn_info(bufnr, lnum)
 
   if not position then
-    return prefix .. padding .. " "
+    return _cache_prefix .. _cache_empty_suffix
   end
 
   if is_streaming then
     -- Streaming: all positions render as ┊
-    local char = format_turn_char(CHAR_STREAMING, highlight_group)
-    return prefix .. padding .. char
+    return _cache_prefix .. _char_suffixes[CHAR_STREAMING]
   end
 
   if virtnum > 0 then
     -- Wrapped lines always get │
-    local char = format_turn_char(CHAR_MIDDLE, highlight_group)
-    return prefix .. padding .. char
+    return _cache_prefix .. _char_suffixes[CHAR_MIDDLE]
   end
 
   -- Real line (virtnum == 0): pick character based on position
@@ -351,8 +383,7 @@ function M.statuscolumn()
     end
   end
 
-  local char = format_turn_char(render_char, highlight_group)
-  return prefix .. padding .. char
+  return _cache_prefix .. _char_suffixes[render_char]
 end
 
 -- ============================================================================
