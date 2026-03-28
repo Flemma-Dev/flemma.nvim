@@ -210,23 +210,38 @@ end
 -- Pre-computed result strings
 -- ============================================================================
 
+--- Characters whose right padding connects to the ruler when ruler is enabled.
+--- Only the top arc connects — it always lands on a message header line where
+--- the ruler is rendered. Bottom/pending_end only coincide with a ruler when the
+--- last message is folded, but we can't know fold state at pre-computation time.
+local CONNECTS_TO_RULER = {
+  [CHAR_TOP] = true,
+}
+
 ---Build the set of pre-computed statuscolumn return strings for a given config.
----Returns both the full result strings (keyed by character) and the empty-line result.
+---When ruler is enabled and padding_right > 0, boundary characters (╭/╰/└)
+---use the ruler char for right padding so they visually connect to the ruler.
 ---@param padding_left integer
 ---@param padding_right integer
 ---@param highlight_group string
+---@param ruler_char string|nil Ruler character (nil or "" when ruler is disabled)
+---@param ruler_hl string|nil Ruler highlight group name
 ---@return table<string, string> results Char → full statuscolumn return string
 ---@return string result_empty Full return string for non-turn lines
-local function build_result_strings(padding_left, padding_right, highlight_group)
+local function build_result_strings(padding_left, padding_right, highlight_group, ruler_char, ruler_hl)
   local prefix = "%s%=%l"
   local left = string.rep(" ", padding_left)
-  local right = string.rep(" ", padding_right)
-  local result_empty = prefix .. left .. " " .. right
+  local right_space = string.rep(" ", padding_right)
+  local right_ruler = (ruler_char and #ruler_char > 0 and padding_right > 0)
+      and "%#" .. (ruler_hl or "FlemmaRuler") .. "#" .. string.rep(ruler_char, padding_right) .. "%*"
+    or right_space
+  local result_empty = prefix .. left .. " " .. right_space
 
   local results = {} ---@type table<string, string>
   local hl_open = "%#" .. highlight_group .. "#"
   local hl_close = "%*"
   for _, char in ipairs({ CHAR_TOP, CHAR_MIDDLE, CHAR_BOTTOM, CHAR_PENDING, CHAR_PENDING_END }) do
+    local right = CONNECTS_TO_RULER[char] and right_ruler or right_space
     results[char] = prefix .. left .. hl_open .. char .. hl_close .. right
   end
 
@@ -267,7 +282,12 @@ function M.setup_statuscolumn(bufnr)
     local padding_right = padding.right or 0
     local highlight_group = turns_cfg.hl or "FlemmaTurn"
 
-    local results, result_empty = build_result_strings(padding_left, padding_right, highlight_group)
+    -- Ruler char for connecting boundary characters to the ruler line
+    local ruler_cfg = cfg.ruler or {}
+    local ruler_char = (ruler_cfg.enabled ~= false and padding_right > 0) and (ruler_cfg.char or "") or nil
+
+    local results, result_empty =
+      build_result_strings(padding_left, padding_right, highlight_group, ruler_char, "FlemmaRuler")
     cache.results = results
     cache.result_empty = result_empty
     cache.result_disabled = "%s%=%l "
