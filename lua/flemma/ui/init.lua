@@ -18,6 +18,7 @@ local cursor = require("flemma.cursor")
 local writequeue = require("flemma.buffer.writequeue")
 local str = require("flemma.utilities.string")
 local ast = require("flemma.ast")
+local spinners = require("flemma.ui.spinners")
 
 -- Extmark priority constants
 -- Higher values take precedence when multiple extmarks overlap on the same line.
@@ -40,28 +41,6 @@ local PRIORITY = {
 local WAITING_LABEL = "Waiting…"
 
 ---@type table<flemma.state.ProgressPhase, string[]>
-local SPINNER_FRAMES = {
-  waiting = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" },
-  thinking = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" },
-  streaming = { "⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷" },
-  buffering = {
-    "▏",
-    "▎",
-    "▍",
-    "▌",
-    "▋",
-    "▊",
-    "▉",
-    "█",
-    "▉",
-    "▊",
-    "▋",
-    "▌",
-    "▍",
-    "▎",
-    "▏",
-  },
-}
 
 ---@type string
 local MIDDLE_DOT = " · "
@@ -477,7 +456,7 @@ function M.start_progress(bufnr, progress_opts)
 
       -- Create the waiting-phase extmark (virt_text at EOL on @Assistant: line)
       local progress_line_idx0 = vim.api.nvim_buf_line_count(bufnr) - 1
-      local frames = SPINNER_FRAMES.waiting
+      local frames = spinners.FRAMES.waiting
       local spinner_char = frames[(tick % #frames) + 1]
       local progress_text = spinner_char .. " " .. WAITING_LABEL .. MIDDLE_DOT .. "0s"
       local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, spinner_ns, progress_line_idx0, 0, {
@@ -514,8 +493,9 @@ function M.start_progress(bufnr, progress_opts)
     tick = tick + 1
 
     local phase = buffer_state.progress_phase or "waiting"
-    local frames = SPINNER_FRAMES[phase]
-    local spinner_char = frames[(tick % #frames) + 1]
+    local frames = spinners.FRAMES[phase]
+    local speed = spinners.SPEED[phase] or 1
+    local spinner_char = frames[(math.floor(tick / speed) % #frames) + 1]
 
     -- Compute elapsed time
     local elapsed_seconds = 0
@@ -1144,8 +1124,6 @@ end
 -- Tool Execution Indicators
 -- ============================================================================
 
-local TOOL_SPINNER_FRAMES = { "◐", "◓", "◑", "◒" }
-
 --- Get the current line of a tool execution extmark (auto-adjusted by Neovim)
 ---@param bufnr integer
 ---@param extmark_id integer
@@ -1204,7 +1182,7 @@ function M.show_tool_indicator(bufnr, tool_id, header_line)
   local frame = 1
 
   local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
-    virt_text = { { " " .. TOOL_SPINNER_FRAMES[frame] .. " Executing…", "FlemmaToolPending" } },
+    virt_text = { { " " .. spinners.FRAMES.tool[frame] .. " Executing…", "FlemmaToolPending" } },
     virt_text_pos = "eol",
     hl_mode = "combine",
     priority = PRIORITY.TOOL_EXECUTION,
@@ -1212,7 +1190,7 @@ function M.show_tool_indicator(bufnr, tool_id, header_line)
   })
 
   local timer ---@type integer
-  timer = vim.fn.timer_start(100, function()
+  timer = vim.fn.timer_start(200, function()
     if not vim.api.nvim_buf_is_valid(bufnr) then
       -- Buffer gone — stop ourselves; buffer state cleanup may have already run
       vim.fn.timer_stop(timer)
@@ -1230,10 +1208,10 @@ function M.show_tool_indicator(bufnr, tool_id, header_line)
       return
     end
 
-    frame = (frame % #TOOL_SPINNER_FRAMES) + 1
+    frame = (frame % #spinners.FRAMES.tool) + 1
     pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, current_line, 0, {
       id = ind.extmark_id,
-      virt_text = { { " " .. TOOL_SPINNER_FRAMES[frame] .. " Executing…", "FlemmaToolPending" } },
+      virt_text = { { " " .. spinners.FRAMES.tool[frame] .. " Executing…", "FlemmaToolPending" } },
       virt_text_pos = "eol",
       hl_mode = "combine",
       priority = PRIORITY.TOOL_EXECUTION,
