@@ -262,16 +262,31 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
   -- High-cost warning
   local provider_models = models_data.providers[global_config.provider]
   local model_entry = provider_models and global_config.model and provider_models.models[global_config.model]
-  if model_entry and model_entry.pricing and model_entry.pricing.input + model_entry.pricing.output > models_data.HIGH_COST_THRESHOLD then
-    table.insert(lines, "  ⚠ Billed at " .. format_price(model_entry.pricing.input) .. " input / " .. format_price(model_entry.pricing.output) .. " output per MTok")
+  if
+    model_entry
+    and model_entry.pricing
+    and model_entry.pricing.input + model_entry.pricing.output > models_data.HIGH_COST_THRESHOLD
+  then
+    table.insert(
+      lines,
+      "  ⚠ Billed at "
+        .. format_price(model_entry.pricing.input)
+        .. " input / "
+        .. format_price(model_entry.pricing.output)
+        .. " output per MTok"
+    )
     notify_level = vim.log.levels.WARN
   end
 
   -- Frontmatter override notice (provider, model, or both)
   if buffer_config.provider ~= global_config.provider or buffer_config.model ~= global_config.model then
     local parts = {}
-    if buffer_config.provider ~= global_config.provider then table.insert(parts, "'" .. buffer_config.provider .. "'") end
-    if buffer_config.model ~= global_config.model then table.insert(parts, "model '" .. buffer_config.model .. "'") end
+    if buffer_config.provider ~= global_config.provider then
+      table.insert(parts, "'" .. buffer_config.provider .. "'")
+    end
+    if buffer_config.model ~= global_config.model then
+      table.insert(parts, "model '" .. buffer_config.model .. "'")
+    end
     table.insert(lines, "  • This buffer uses " .. table.concat(parts, " / ") .. " (frontmatter)")
   end
 

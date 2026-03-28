@@ -152,6 +152,5 @@ describe("flemma.models", function()
       local combined = pricing.input + pricing.output
       assert.is_true(combined > models_data.HIGH_COST_THRESHOLD)
     end)
-
   end)
 end)

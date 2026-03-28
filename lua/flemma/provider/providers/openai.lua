@@ -513,10 +513,7 @@ function M._process_data(self, data, _parsed, callbacks)
 
     local reason = data.response and data.response.incomplete_details and data.response.incomplete_details.reason
       or "unknown"
-    vim.notify(
-      "Flemma: OpenAI response was truncated (reason: " .. reason .. ")",
-      vim.log.levels.WARN
-    )
+    vim.notify("Flemma: OpenAI response was truncated (reason: " .. reason .. ")", vim.log.levels.WARN)
     -- Emit any accumulated reasoning before completing
     emit_reasoning(self, callbacks)
 
