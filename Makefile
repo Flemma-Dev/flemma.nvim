@@ -33,10 +33,8 @@ qa:
 			echo "qa: FAILED — $$name"; echo ""; \
 			echo "--- $$name ---"; \
 			if [ "$$name" = test ]; then \
-				grep -vE '^.....(Success|Failed|Errors)' "$$d/$$name" \
-					| grep -v '^Scheduling' \
-					| grep -v '^Flemma: Switched to' \
-					| grep -v '^===='; \
+				grep -v '^Scheduling' "$$d/$$name" \
+					| grep -v '^Starting\.\.\.'; \
 			else cat "$$d/$$name"; fi; \
 			echo ""; exit 1; \
 		fi; \
