@@ -321,7 +321,12 @@ describe("Anthropic Provider", function()
             role = "user",
             parts = {
               { kind = "text", text = "Summarize this PDF" },
-              { kind = "pdf", mime_type = "application/pdf", data = "JVBER", filename = "/home/user/reports/quarterly_earnings.pdf" },
+              {
+                kind = "pdf",
+                mime_type = "application/pdf",
+                data = "JVBER",
+                filename = "/home/user/reports/quarterly_earnings.pdf",
+              },
             },
           },
         },
