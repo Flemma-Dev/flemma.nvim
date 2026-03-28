@@ -104,6 +104,7 @@
 ---@field cache_retention "short"|"long"|"none"
 ---@field connect_timeout integer
 ---@field max_tokens string|integer
+---@field moonshot? flemma.config.ParametersMoonshot
 ---@field openai? flemma.config.ParametersOpenai
 ---@field temperature? number
 ---@field thinking "minimal"|"low"|"medium"|"high"|"max"|number|false
@@ -192,6 +193,9 @@
 
 ---@class flemma.config.ParametersAnthropic
 ---@field thinking_budget? integer
+
+---@class flemma.config.ParametersMoonshot
+---@field prompt_cache_key? string
 
 ---@class flemma.config.ParametersOpenai
 ---@field reasoning? string
