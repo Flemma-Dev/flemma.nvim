@@ -16,7 +16,6 @@ describe("Anthropic Provider Extended Thinking", function()
         model = "claude-sonnet-4-5-20250929",
         thinking_budget = 10000,
         max_tokens = 16000,
-        temperature = 0.7,
       })
 
       local prompt = {
@@ -31,7 +30,7 @@ describe("Anthropic Provider Extended Thinking", function()
       assert.is_not_nil(request.thinking, "Request should include thinking config")
       assert.are.equal("enabled", request.thinking.type)
       assert.are.equal(10000, request.thinking.budget_tokens)
-      assert.is_nil(request.temperature, "Temperature should be removed when thinking is enabled")
+      assert.is_nil(request.temperature, "Temperature should not be present when not explicitly set")
     end)
 
     it("should not include thinking config when thinking_budget is nil", function()
@@ -80,7 +79,6 @@ describe("Anthropic Provider Extended Thinking", function()
         model = "claude-sonnet-4-5-20250929",
         thinking_budget = 500,
         max_tokens = 4000,
-        temperature = 0.7,
       })
 
       local prompt = {
@@ -94,7 +92,7 @@ describe("Anthropic Provider Extended Thinking", function()
 
       assert.is_not_nil(request.thinking, "Request should include thinking config (budget clamped to 1024)")
       assert.are.equal(1024, request.thinking.budget_tokens, "Budget should be clamped to minimum 1024")
-      assert.is_nil(request.temperature, "Temperature should be removed when thinking is enabled")
+      assert.is_nil(request.temperature, "Temperature should not be present when not explicitly set")
     end)
 
     it("should floor thinking_budget to integer", function()

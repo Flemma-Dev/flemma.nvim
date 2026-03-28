@@ -331,8 +331,6 @@ function M.build_request(self, prompt, _context)
       }
       log.debug("anthropic.build_request: Thinking enabled with budget: " .. budget)
     end
-    -- Remove temperature when thinking is enabled (Anthropic API requirement)
-    request_body.temperature = nil
   else
     log.debug("anthropic.build_request: Thinking disabled")
   end

@@ -142,7 +142,7 @@ return s.object({
 
   parameters = s.object({
     max_tokens = s.union(s.string("50%"), s.integer()),
-    temperature = s.number(0.7),
+    temperature = s.optional(s.number()),
     timeout = s.integer(600),
     connect_timeout = s.integer(10),
     cache_retention = s.enum({ "short", "long", "none" }, "short"),

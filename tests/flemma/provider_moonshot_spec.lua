@@ -302,11 +302,8 @@ describe("Moonshot Provider", function()
     end)
 
     it("should not warn when parameters are at Flemma defaults", function()
-      -- temperature=0.7 and top_p=1.0 are Flemma schema defaults, not user-intentional
-      local ok, warnings = moonshot.validate_parameters("kimi-k2.5", {
-        temperature = 0.7,
-        top_p = 1.0,
-      })
+      -- temperature=nil (no default) is not user-intentional
+      local ok, warnings = moonshot.validate_parameters("kimi-k2.5", {})
       assert.is_true(ok)
       assert.is_nil(warnings)
     end)

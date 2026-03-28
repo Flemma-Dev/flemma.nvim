@@ -264,7 +264,7 @@ describe("flatten_parameters with facade", function()
     local flat = normalize.flatten_parameters("anthropic", config)
     -- Schema defaults should be present
     assert.are.equal("50%", flat.max_tokens)
-    assert.are.equal(0.7, flat.temperature)
+    assert.is_nil(flat.temperature)
     assert.are.equal(600, flat.timeout)
     assert.are.equal("short", flat.cache_retention)
   end)

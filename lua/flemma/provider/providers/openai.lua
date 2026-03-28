@@ -282,6 +282,7 @@ function M.build_request(self, prompt, context)
     stream = true,
     store = false,
     max_output_tokens = self.parameters.max_tokens,
+    temperature = self.parameters.temperature,
   }
 
   -- Add tools if any are registered
@@ -310,7 +311,6 @@ function M.build_request(self, prompt, context)
         .. thinking.effort
     )
   else
-    request_body.temperature = self.parameters.temperature
     log.debug(
       "openai.build_request: Using max_output_tokens: "
         .. tostring(self.parameters.max_tokens)
@@ -596,31 +596,6 @@ function M.validate_parameters(model_name, parameters)
         string.format("'reasoning' is not supported by '%s' and may be ignored or cause an API error", model_name)
       )
     end
-  end
-
-  -- Check for temperature <> 1.0 with OpenAI o-series models when reasoning is active
-  local temp_value = parameters.temperature
-  local model_info = models.providers.openai
-    and models.providers.openai.models
-    and models.providers.openai.models[model_name]
-  local supports_reasoning_effort = model_info and model_info.supports_reasoning_effort == true
-
-  if
-    reasoning_value ~= nil
-    and reasoning_value ~= ""
-    and supports_reasoning_effort
-    and string.sub(model_name, 1, 1) == "o"
-    and temp_value ~= nil
-    and temp_value ~= 1
-    and temp_value ~= 1.0
-  then
-    table.insert(
-      warnings,
-      string.format(
-        "temperature must be 1 or omitted with reasoning active on o-series, got '%s'",
-        tostring(temp_value)
-      )
-    )
   end
 
   if #warnings > 0 then

@@ -41,7 +41,6 @@ describe(":Flemma send command", function()
 
     -- Arrange: Register a dummy fixture to prevent actual network calls.
     -- The content of the fixture DOES matter, as it's processed by the provider.
-    local config = require("flemma.config").materialize()
     local default_anthropic_model = registry.get_model("anthropic")
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
 
@@ -58,7 +57,7 @@ describe(":Flemma send command", function()
     assert.equals("Be brief.", captured_request_body.system[1].text)
     -- max_tokens resolves from "50%" of claude-sonnet-4-6's 64K max_output → 32000
     assert.equals(32000, captured_request_body.max_tokens)
-    assert.equals(config.parameters.temperature, captured_request_body.temperature)
+    assert.is_nil(captured_request_body.temperature)
     assert.equals(true, captured_request_body.stream)
     assert.equals(1, #captured_request_body.messages)
     assert.equals("user", captured_request_body.messages[1].role)
@@ -88,8 +87,6 @@ describe(":Flemma send command", function()
     local captured_request_body = core._get_last_request_body()
     assert.is_not_nil(captured_request_body, "request_body was not captured")
 
-    local config = require("flemma.config").materialize()
-
     assert.equals("o3", captured_request_body.model)
     assert.is_not_nil(captured_request_body.input, "Should use input field (Responses API)")
     assert.is_nil(captured_request_body.messages, "Should NOT use messages field")
@@ -103,7 +100,7 @@ describe(":Flemma send command", function()
     assert.is_nil(captured_request_body.stream_options, "Responses API does not use stream_options")
     -- max_tokens resolves from "50%" of o3's 100K max_output → 50000
     assert.equals(50000, captured_request_body.max_output_tokens)
-    assert.equals(config.parameters.temperature, captured_request_body.temperature)
+    assert.is_nil(captured_request_body.temperature)
 
     -- Tools are now included by default (parallel tool use enabled)
     if captured_request_body.tools then

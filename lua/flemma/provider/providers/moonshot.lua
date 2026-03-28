@@ -196,10 +196,8 @@ function M.validate_parameters(model_name, parameters)
   local expected_temperature = thinking.enabled and 1.0 or 0.6
 
   -- Only warn about parameters the user has explicitly set to a value that
-  -- differs from both the kimi-k2.5 fixed value AND the general Flemma default.
-  -- This avoids noisy warnings when the user hasn't touched the parameter —
-  -- flatten_parameters merges schema defaults (e.g., temperature=0.7) which
-  -- will always differ from the fixed value but aren't user-intentional.
+  -- differs from the kimi-k2.5 fixed value. Parameters that are nil (not set
+  -- by the user) are not considered intentional conflicts.
   local warnings = {}
 
   ---@param value any The flattened parameter value
@@ -210,7 +208,7 @@ function M.validate_parameters(model_name, parameters)
     return value ~= nil and value ~= fixed and value ~= default
   end
 
-  if is_intentional_conflict(parameters.temperature, expected_temperature, 0.7) then
+  if is_intentional_conflict(parameters.temperature, expected_temperature, nil) then
     table.insert(
       warnings,
       string.format(

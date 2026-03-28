@@ -105,7 +105,7 @@
 ---@field connect_timeout integer
 ---@field max_tokens string|integer
 ---@field openai? flemma.config.ParametersOpenai
----@field temperature number
+---@field temperature? number
 ---@field thinking "minimal"|"low"|"medium"|"high"|"max"|number|false
 ---@field timeout integer
 ---@field vertex? flemma.config.ParametersVertex
