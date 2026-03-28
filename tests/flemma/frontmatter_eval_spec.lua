@@ -17,7 +17,6 @@ describe("Frontmatter evaluation caching", function()
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
-    package.loaded["flemma.models"] = nil
     package.loaded["flemma.autopilot"] = nil
     package.loaded["flemma.processor"] = nil
     package.loaded["flemma.pipeline"] = nil

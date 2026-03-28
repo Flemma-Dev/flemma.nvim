@@ -22,7 +22,6 @@ local diagnostic_format = require("flemma.utilities.diagnostic")
 local diagnostics_module = require("flemma.diagnostics")
 local executor = require("flemma.tools.executor")
 local injector = require("flemma.tools.injector")
-local models_data = require("flemma.models")
 local notifications = require("flemma.notifications")
 local parser = require("flemma.parser")
 local pipeline = require("flemma.pipeline")
@@ -260,12 +259,12 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
   end
 
   -- High-cost warning
-  local provider_models = models_data.providers[global_config.provider]
-  local model_entry = provider_models and global_config.model and provider_models.models[global_config.model]
+  local model_entry = global_config.model and registry.get_model_info(global_config.provider, global_config.model)
+  local high_cost_threshold = global_config.pricing.high_cost_threshold
   if
     model_entry
     and model_entry.pricing
-    and model_entry.pricing.input + model_entry.pricing.output > models_data.HIGH_COST_THRESHOLD
+    and model_entry.pricing.input + model_entry.pricing.output > high_cost_threshold
   then
     table.insert(
       lines,
@@ -986,9 +985,8 @@ function M.send_to_provider(opts)
         end
 
         -- Add request to session with pricing snapshot
-        local provider_data = models_data.providers[config.provider]
-        local model_info = provider_data and provider_data.models[config.model]
-        local pricing_info = model_info and model_info.pricing
+        local pricing_model_info = registry.get_model_info(config.provider, config.model)
+        local pricing_info = pricing_model_info and pricing_model_info.pricing
 
         if pricing_info then
           local session = state.get_session()

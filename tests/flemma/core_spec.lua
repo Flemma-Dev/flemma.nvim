@@ -13,7 +13,6 @@ describe(":Flemma send command", function()
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
-    package.loaded["flemma.models"] = nil
 
     flemma = require("flemma")
     state = require("flemma.state")

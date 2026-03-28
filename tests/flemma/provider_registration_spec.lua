@@ -17,11 +17,6 @@ describe("provider registration", function()
     registry.setup()
     registry.defaults = original_defaults
     registry.models = original_models
-
-    -- Clean up any custom provider models_data entries
-    local models_data = require("flemma.models")
-    models_data.providers["custom"] = nil
-    models_data.providers["minimal"] = nil
   end)
 
   describe("register()", function()

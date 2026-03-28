@@ -12,7 +12,6 @@ package.loaded["flemma.core"] = nil
 package.loaded["flemma.provider.normalize"] = nil
 package.loaded["flemma.bridge"] = nil
 package.loaded["flemma.provider.registry"] = nil
-package.loaded["flemma.models"] = nil
 package.loaded["flemma.autopilot"] = nil
 package.loaded["flemma.config"] = nil
 package.loaded["flemma.config.store"] = nil

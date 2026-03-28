@@ -4,7 +4,6 @@ describe("flemma.provider.normalize.resolve_max_tokens", function()
   before_each(function()
     package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
-    package.loaded["flemma.models"] = nil
 
     -- Ensure registry is initialized with built-in providers
     local registry = require("flemma.provider.registry")

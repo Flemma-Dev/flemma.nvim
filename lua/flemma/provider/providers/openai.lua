@@ -3,7 +3,6 @@
 local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
-local models = require("flemma.models")
 local normalize = require("flemma.provider.normalize")
 local s = require("flemma.schema")
 local sink = require("flemma.sink")
@@ -35,6 +34,7 @@ local NOOP_EVENTS = {
 M.metadata = {
   name = "openai",
   display_name = "OpenAI",
+  models = { "flemma.models.openai" },
   capabilities = {
     supports_reasoning = true,
     supports_thinking_budget = false,
@@ -581,9 +581,7 @@ function M.validate_parameters(model_name, parameters)
 
   -- Check for reasoning parameter support
   if reasoning_value ~= nil and reasoning_value ~= "" then
-    local model_info = models.providers.openai
-      and models.providers.openai.models
-      and models.providers.openai.models[model_name]
+    local model_info = provider_registry.get_model_info("openai", model_name)
     local supports_reasoning_effort = model_info and model_info.supports_reasoning_effort == true
 
     if not supports_reasoning_effort then

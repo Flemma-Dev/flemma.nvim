@@ -36,6 +36,7 @@ local THINKING_CAPABLE_MODELS = {
 M.metadata = {
   name = "moonshot",
   display_name = "Moonshot AI",
+  models = { "flemma.models.moonshot" },
   capabilities = {
     supports_reasoning = false,
     supports_thinking_budget = true,

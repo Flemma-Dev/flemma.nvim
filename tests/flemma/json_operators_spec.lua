@@ -483,7 +483,6 @@ describe("JSON frontmatter E2E", function()
     package.loaded["flemma.pipeline"] = nil
     package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
-    package.loaded["flemma.models"] = nil
     package.loaded["flemma.autopilot"] = nil
     package.loaded["flemma.codeblock.parsers"] = nil
     package.loaded["flemma.codeblock.parsers.json"] = nil

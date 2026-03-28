@@ -4,12 +4,12 @@ Flemma supports prompt caching across all supported providers. Each provider imp
 
 ## Quick Comparison
 
-|               | Anthropic             | OpenAI                | Vertex AI       | Moonshot          |
-| ------------- | --------------------- | --------------------- | --------------- | ----------------- |
-| Default       | `"short"` (5 min TTL) | `"short"` (in-memory) | Automatic       | Automatic         |
-| Min. tokens   | 1,024–4,096           | 1,024                 | 1,024–2,048     | —                 |
-| Read discount | 90% (0.1x)            | 50% (0.5x)            | 90% (0.1x)      | 80% (0.2x)        |
-| Write cost    | 1.25x–2.0x            | Free                  | Free            | Free              |
+|               | Anthropic             | OpenAI                | Vertex AI       | Moonshot           |
+| ------------- | --------------------- | --------------------- | --------------- | ------------------ |
+| Default       | `"short"` (5 min TTL) | `"short"` (in-memory) | Automatic       | Automatic          |
+| Min. tokens   | 1,024–4,096           | 1,024                 | 1,024–2,048     | —                  |
+| Read discount | 90% (0.1x)            | 50% (0.5x)            | 90% (0.1x)      | 80% (0.2x)         |
+| Write cost    | 1.25x–2.0x            | Free                  | Free            | Free               |
 | Control       | `cache_retention`     | `cache_retention`     | None (implicit) | `prompt_cache_key` |
 
 When caching is active, the notification bar includes cache percentage and token counts. Costs are adjusted to reflect each provider's discount on cached input.

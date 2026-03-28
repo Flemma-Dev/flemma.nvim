@@ -699,7 +699,6 @@ describe("Anthropic Streaming Tool Use Response (integration)", function()
     package.loaded["flemma.provider.providers.anthropic"] = nil
     package.loaded["flemma.provider.providers.openai"] = nil
     package.loaded["flemma.provider.providers.vertex"] = nil
-    package.loaded["flemma.models"] = nil
     flemma = require("flemma")
     flemma.setup({ parameters = { thinking = false } })
     tools = require("flemma.tools")
@@ -1064,7 +1063,6 @@ describe("OpenAI Streaming Tool Use Response (integration)", function()
     package.loaded["flemma.provider.providers.anthropic"] = nil
     package.loaded["flemma.provider.providers.openai"] = nil
     package.loaded["flemma.provider.providers.vertex"] = nil
-    package.loaded["flemma.models"] = nil
     flemma = require("flemma")
     flemma.setup({ parameters = { thinking = false } })
     core = require("flemma.core")
@@ -1438,7 +1436,6 @@ describe("Vertex AI Streaming Function Call Response (integration)", function()
     package.loaded["flemma.provider.providers.anthropic"] = nil
     package.loaded["flemma.provider.providers.openai"] = nil
     package.loaded["flemma.provider.providers.vertex"] = nil
-    package.loaded["flemma.models"] = nil
     flemma = require("flemma")
     flemma.setup({ parameters = { thinking = false } })
     core = require("flemma.core")

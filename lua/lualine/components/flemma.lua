@@ -53,10 +53,7 @@ local function resolve_thinking(config)
 
   -- For effort-based providers (OpenAI), check per-model reasoning support
   if capabilities.supports_reasoning and config.model then
-    local models = require("flemma.models")
-    local model_info = models.providers[config.provider]
-      and models.providers[config.provider].models
-      and models.providers[config.provider].models[config.model]
+    local model_info = registry.get_model_info(config.provider, config.model)
     if not model_info or not model_info.supports_reasoning_effort then
       return ""
     end

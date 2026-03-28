@@ -19,6 +19,7 @@ setmetatable(M, { __index = base })
 M.metadata = {
   name = "anthropic",
   display_name = "Anthropic",
+  models = { "flemma.models.anthropic" },
   capabilities = {
     supports_reasoning = false,
     supports_thinking_budget = true,

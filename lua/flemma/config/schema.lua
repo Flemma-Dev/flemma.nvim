@@ -125,6 +125,7 @@ return s.object({
 
   pricing = s.object({
     enabled = s.boolean(true),
+    high_cost_threshold = s.integer(30),
   }),
 
   statusline = s.object({

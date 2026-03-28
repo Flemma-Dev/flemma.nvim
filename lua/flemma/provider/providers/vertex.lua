@@ -27,6 +27,7 @@ setmetatable(M, { __index = base })
 M.metadata = {
   name = "vertex",
   display_name = "Vertex AI",
+  models = { "flemma.models.vertex" },
   capabilities = {
     supports_reasoning = false,
     supports_thinking_budget = true,

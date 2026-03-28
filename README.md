@@ -283,7 +283,7 @@ All supported providers offer extended thinking/reasoning. Flemma provides a sin
 | number (e.g. `4096`)   | 4,096 tokens       | closest effort level | 4,096 tokens       | enabled†          |
 | `false` or `0`         | disabled           | disabled             | disabled           | disabled†         |
 
-\*Anthropic models with adaptive thinking (Opus 4.6) use the provider's native `"max"` effort level. Other Anthropic models map `"max"` to the highest available budget. Exact values are model-dependent – see `lua/flemma/models.lua` for the full per-model catalogue.
+\*Anthropic models with adaptive thinking (Opus 4.6) use the provider's native `"max"` effort level. Other Anthropic models map `"max"` to the highest available budget. Exact values are model-dependent – see the per-provider files under `lua/flemma/models/` for the full per-model catalogue.
 
 †Moonshot thinking is binary (on/off) with no budget control. kimi-k2-thinking models always think regardless of the `thinking` setting. moonshot-v1-\* models do not support thinking.
 
@@ -305,31 +305,31 @@ When thinking is active, the Lualine component shows the resolved level – e.g.
 
 ### Provider-specific capabilities
 
-| Provider     | Defaults                 | Extra parameters                                                                                                        | Notes                                                                                         |
-| ------------ | ------------------------ | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Anthropic    | `claude-sonnet-4-6`      | `thinking_budget` overrides the unified `thinking` parameter with an exact token budget (clamped to min 1,024).         | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer.            |
-| OpenAI       | `gpt-5.4`                | `reasoning` overrides the unified `thinking` parameter with an explicit effort level (`"low"`, `"medium"`, `"high"`).   | Cost notifications include reasoning tokens. Lualine shows the reasoning level.               |
-| Vertex AI    | `gemini-3.1-pro-preview` | `project_id` (required), `location` (default `global`), `thinking_budget` overrides with an exact token budget (min 1). | `thinking_budget` overrides the unified `thinking` parameter for Vertex.                      |
-| Moonshot AI  | `kimi-k2.5`              | `prompt_cache_key` for stable prompt caching keys.                                                                      | kimi-k2-thinking models force thinking on. Temperature locked per thinking mode on kimi-k2.5. |
+| Provider    | Defaults                 | Extra parameters                                                                                                        | Notes                                                                                         |
+| ----------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Anthropic   | `claude-sonnet-4-6`      | `thinking_budget` overrides the unified `thinking` parameter with an exact token budget (clamped to min 1,024).         | Supports text, image, and PDF attachments. Thinking blocks stream into the buffer.            |
+| OpenAI      | `gpt-5.4`                | `reasoning` overrides the unified `thinking` parameter with an explicit effort level (`"low"`, `"medium"`, `"high"`).   | Cost notifications include reasoning tokens. Lualine shows the reasoning level.               |
+| Vertex AI   | `gemini-3.1-pro-preview` | `project_id` (required), `location` (default `global`), `thinking_budget` overrides with an exact token budget (min 1). | `thinking_budget` overrides the unified `thinking` parameter for Vertex.                      |
+| Moonshot AI | `kimi-k2.5`              | `prompt_cache_key` for stable prompt caching keys.                                                                      | kimi-k2-thinking models force thinking on. Temperature locked per thinking mode on kimi-k2.5. |
 
 > [!NOTE]
 > Defaults favour capability at a reasonable price point, **not minimum cost**. Older or smaller models (e.g., `gpt-5.2`, `gemini-2.5-flash`) can be significantly cheaper and may perform just as well for your workload; choosing the right cost/capability trade-off is up to you.
 
-The full model catalogue (including pricing) is in `lua/flemma/models.lua`. You can access it from Neovim with:
+The full model catalogue (including pricing) lives in per-provider files under `lua/flemma/models/` (e.g., `lua/flemma/models/anthropic.lua`). You can inspect a provider's models from Neovim with:
 
 ```lua
-:lua print(vim.inspect(require("flemma.models")))
+:lua print(vim.inspect(require("flemma.models.anthropic")))
 ```
 
 ### Prompt caching
 
 All supported providers offer prompt caching. Flemma handles breakpoint placement (Anthropic), cache keys (OpenAI), implicit caching (Vertex), and optional cache keys (Moonshot) automatically. The `cache_retention` parameter controls the strategy where applicable:
 
-|               | Anthropic         | OpenAI                | Vertex AI   | Moonshot     |
-| ------------- | ----------------- | --------------------- | ----------- | ------------ |
-| Default       | `"short"` (5 min) | `"short"` (in-memory) | Automatic   | Automatic    |
-| Min. tokens   | 1,024–4,096       | 1,024                 | 1,024–2,048 | —            |
-| Read discount | 90%               | 50%                   | 90%         | 80%          |
+|               | Anthropic         | OpenAI                | Vertex AI   | Moonshot  |
+| ------------- | ----------------- | --------------------- | ----------- | --------- |
+| Default       | `"short"` (5 min) | `"short"` (in-memory) | Automatic   | Automatic |
+| Min. tokens   | 1,024–4,096       | 1,024                 | 1,024–2,048 | —         |
+| Read discount | 90%               | 50%                   | 90%         | 80%       |
 
 When a cache hit occurs, the usage notification shows a `Cache:` line with read/write token counts. See [docs/prompt-caching.md](docs/prompt-caching.md) for provider-specific details, caveats, and pricing tables.
 
@@ -431,7 +431,7 @@ Flemma's prompt pipeline supports Lua/JSON frontmatter, inline `{{ expressions }
 
 ## Usage, Pricing, and Notifications
 
-Each completed request emits a floating report that names the provider/model, lists input/output tokens (reasoning tokens are counted under `thoughts`), and – when pricing is enabled – shows the per-request and cumulative session cost derived from `lua/flemma/models.lua`. When prompt caching is active, a `Cache:` line shows read and write token counts. Token accounting persists for the lifetime of the Neovim instance; call `require("flemma.session").get():reset()` to zero the counters without restarting. `pricing.enabled = false` suppresses the dollar amounts while keeping token totals.
+Each completed request emits a floating report that names the provider/model, lists input/output tokens (reasoning tokens are counted under `thoughts`), and – when pricing is enabled – shows the per-request and cumulative session cost derived from the per-provider model data under `lua/flemma/models/`. When prompt caching is active, a `Cache:` line shows read and write token counts. Token accounting persists for the lifetime of the Neovim instance; call `require("flemma.session").get():reset()` to zero the counters without restarting. `pricing.enabled = false` suppresses the dollar amounts while keeping token totals.
 
 Notifications are buffer-local – each `.chat` buffer gets its own notification stack, positioned relative to its window. Notifications for hidden buffers are queued and shown when the buffer becomes visible. Recall the most recent notification with `:Flemma notification:recall`.
 
@@ -476,7 +476,7 @@ Key defaults:
 | `thinking`        | `"high"`      | Unified thinking level across providers                       |
 | `cache_retention` | `"short"`     | Prompt caching strategy                                       |
 | `max_tokens`      | `"50%"`       | Maximum response tokens (percentage of model max, or integer) |
-| `temperature`     | *(unset)*     | Sampling temperature; omitted unless explicitly set           |
+| `temperature`     | _(unset)_     | Sampling temperature; omitted unless explicitly set           |
 
 ---
 
