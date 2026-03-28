@@ -93,7 +93,9 @@ describe("flemma.hooks", function()
 
       -- First dispatch triggers error. silent! suppresses Nvim's "Error detected"
       -- stderr noise from the deliberately error-throwing autocmd callback.
-      vim.cmd('silent! lua require("flemma.hooks").dispatch("tool:executing", { bufnr = 1, tool_name = "read", tool_id = "t1" })')
+      vim.cmd(
+        'silent! lua require("flemma.hooks").dispatch("tool:executing", { bufnr = 1, tool_name = "read", tool_id = "t1" })'
+      )
 
       vim.api.nvim_del_autocmd(error_id)
 
