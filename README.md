@@ -196,7 +196,7 @@ Model thoughts stream here and auto-fold.
 | Level 2    | `<thinking>...</thinking>` | Reasoning traces are useful, but often secondary to the answer. |
 | Level 1    | Each message               | Collapse long exchanges without losing context.                 |
 
-Press `<Space>` to toggle the fold under the cursor, or use your usual mappings (`za`, `zc`, etc.). The fold text shows a snippet of the hidden content so you know whether to expand it. The initial fold level is configurable via `editing.foldlevel` (default `1`, which collapses thinking blocks). The `<Space>` binding is automatically skipped when it conflicts with your `mapleader`.
+Press `<Space>` to toggle the current message fold — it always operates on the entire role, regardless of cursor position within the message. Nested folds (thinking blocks, tool calls) are closed along the way so the message reopens cleanly. Use `za` to toggle individual folds under the cursor (thinking blocks, tool results, etc.). The fold text shows a snippet of the hidden content so you know whether to expand it. The initial fold level is configurable via `editing.foldlevel` (default `1`, which collapses thinking blocks). The `<Space>` binding is automatically skipped when it conflicts with your `mapleader`.
 
 Flemma draws a ruler on each role marker line using the configured `ruler.char` and highlight, visually separating messages without consuming extra vertical space.
 
@@ -204,7 +204,7 @@ Flemma draws a ruler on each role marker line using the configured `ruler.char` 
 
 Inside `.chat` buffers Flemma defines:
 
-- `<Space>` – toggle the fold under the cursor (automatically skipped when `<Space>` is your `mapleader`).
+- `<Space>` – toggle the current message fold (automatically skipped when `<Space>` is your `mapleader`). Always targets the entire role, not the fold under the cursor — use `za` for that.
 - `]m` / `[m` – jump to the next/previous message header.
 - `im` / `am` (configurable) – select the inside or entire message as a text object. `am` selects linewise and includes thinking blocks and trailing blank lines, making `dam` delete entire conversation turns. `im` skips `<thinking>` sections so yanking `im` never includes reasoning traces.
 - `gf` on `@./path` file references and `include()` expressions opens the referenced file. Flemma evaluates the expression to resolve the actual path, so `gf` works even on computed includes.
