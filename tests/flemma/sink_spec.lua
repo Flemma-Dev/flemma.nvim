@@ -511,6 +511,37 @@ describe("flemma.sink", function()
       end)
       assert.is_true(sink:is_destroyed())
     end)
+
+    it("defers buffer deletion when command-line window is active", function()
+      local sink = sink_module.create({ name = "test/destroy-cmdwin" })
+      sink:write("data\n")
+      sink:_drain()
+      local bufnr = sink._bufnr
+      assert.is_true(vim.api.nvim_buf_is_valid(bufnr))
+
+      -- Simulate being inside the command-line window (q:)
+      local original_fn = vim.fn.getcmdwintype
+      vim.fn.getcmdwintype = function()
+        return ":"
+      end
+
+      sink:destroy()
+
+      -- Restore before CmdwinLeave fires so the callback runs outside the mock
+      vim.fn.getcmdwintype = original_fn
+
+      -- Logically destroyed, but buffer deletion was deferred
+      assert.is_true(sink:is_destroyed())
+      assert.is_true(vim.api.nvim_buf_is_valid(bufnr))
+
+      -- Simulate leaving the command-line window and let the scheduled cleanup fire
+      vim.api.nvim_exec_autocmds("CmdwinLeave", {})
+      vim.wait(100, function()
+        return not vim.api.nvim_buf_is_valid(bufnr)
+      end)
+
+      assert.is_false(vim.api.nvim_buf_is_valid(bufnr))
+    end)
   end)
 
   describe("writequeue integration", function()

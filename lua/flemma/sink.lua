@@ -395,6 +395,31 @@ function Sink:destroy()
     return
   end
 
+  -- Buffer deletion and option changes are forbidden inside the command-line
+  -- window (E11). Capture the values we need and defer until it closes.
+  if vim.fn.getcmdwintype() ~= "" then
+    local bufnr = self._bufnr
+    local name = self._name
+    vim.api.nvim_create_autocmd("CmdwinLeave", {
+      once = true,
+      callback = function()
+        vim.schedule(function()
+          if not vim.api.nvim_buf_is_valid(bufnr) then
+            return
+          end
+          if #vim.fn.win_findbuf(bufnr) > 0 then
+            vim.bo[bufnr].bufhidden = "wipe"
+            log.debug("sink '" .. name .. "': buffer visible, deferring wipe (post-cmdwin)")
+          else
+            vim.api.nvim_buf_delete(bufnr, { force = true })
+            log.debug("sink '" .. name .. "': buffer deleted (post-cmdwin)")
+          end
+        end)
+      end,
+    })
+    return
+  end
+
   -- Check visibility: if viewed, defer wipe to window close
   local windows = vim.fn.win_findbuf(self._bufnr)
   if #windows > 0 then
