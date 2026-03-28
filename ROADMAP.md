@@ -2,7 +2,7 @@
 
 What's coming in the next milestone. Items are listed in no particular order — priorities shift as the project evolves.
 
-## v0.9.0
+## v0.9.0+
 
 ### Personalities as `.chat` templates
 
