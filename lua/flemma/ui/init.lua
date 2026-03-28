@@ -19,6 +19,7 @@ local writequeue = require("flemma.buffer.writequeue")
 local str = require("flemma.utilities.string")
 local ast = require("flemma.ast")
 local spinners = require("flemma.ui.spinners")
+local turns = require("flemma.ui.turns")
 
 -- Extmark priority constants
 -- Higher values take precedence when multiple extmarks overlap on the same line.
@@ -828,6 +829,7 @@ end
 ---@param bufnr integer Buffer number
 local function apply_chat_buffer_settings(bufnr)
   folding.setup_folding(bufnr)
+  turns.setup_statuscolumn(bufnr)
 
   local current = config_facade.get(bufnr)
   if current and current.editing and current.editing.disable_textwidth then
@@ -1080,6 +1082,7 @@ function M.update_ui(bufnr)
 
   folding.invalidate_folds(bufnr)
   folding.fold_completed_blocks(bufnr)
+  turns.update(bufnr)
 end
 
 -- ============================================================================
