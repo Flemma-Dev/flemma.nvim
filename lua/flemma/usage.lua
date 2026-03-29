@@ -86,7 +86,7 @@ function M.build_segments(request, session)
     if pricing_enabled then
       table.insert(request_items, {
         key = "request_cost",
-        text = str.format_cost(request:get_total_cost()),
+        text = str.format_money(request:get_total_cost()),
         priority = PRIORITY.REQUEST_COST,
         highlight = { group = "FlemmaNotificationsBar" },
       })
@@ -162,7 +162,7 @@ function M.build_segments(request, session)
     if pricing_enabled then
       table.insert(session_items, {
         key = "session_cost",
-        text = str.format_cost(session:get_total_cost()),
+        text = str.format_money(session:get_total_cost()),
         priority = PRIORITY.SESSION_COST,
         highlight = { group = "FlemmaNotificationsBar" },
       })

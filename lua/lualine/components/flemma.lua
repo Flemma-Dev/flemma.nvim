@@ -98,7 +98,7 @@ local function make_resolvers(config)
     ["session.cost"] = function()
       local s = session.get()
       local total = s:get_total_cost()
-      return total > 0 and str.format_cost(total) or ""
+      return total > 0 and str.format_money(total) or ""
     end,
     ["session.requests"] = function()
       local s = session.get()
@@ -124,7 +124,7 @@ local function make_resolvers(config)
         return ""
       end
       local total = request:get_total_cost()
-      return total > 0 and str.format_cost(total) or ""
+      return total > 0 and str.format_money(total) or ""
     end,
     ["last.tokens.input"] = function()
       local s = session.get()

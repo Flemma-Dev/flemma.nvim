@@ -33,6 +33,7 @@ local tools_module = require("flemma.tools")
 local cursor = require("flemma.cursor")
 local hooks = require("flemma.hooks")
 local preprocessor = require("flemma.preprocessor")
+local str = require("flemma.utilities.string")
 local usage = require("flemma.usage")
 
 local nav = require("flemma.schema.navigation")
@@ -40,19 +41,6 @@ local schema_definition = require("flemma.config.schema")
 
 local ABORT_MESSAGE = "Response interrupted by the user."
 local DEFAULT_MAX_CONCURRENT = 2
-
----Format a price value with minimal decimal places ($30, $2.50, $0.075).
----@param v number
----@return string
-local function format_price(v)
-  if v == math.floor(v) then
-    return string.format("$%.0f", v)
-  end
-  if math.abs(v * 100 - math.floor(v * 100 + 0.5)) < 0.001 then
-    return string.format("$%.2f", v)
-  end
-  return string.format("$%.3f", v)
-end
 
 -- For testing purposes
 local last_request_body_for_testing = nil
@@ -269,9 +257,9 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
     table.insert(
       lines,
       "  ⚠ Billed at "
-        .. format_price(model_entry.pricing.input)
+        .. str.format_money(model_entry.pricing.input)
         .. " input / "
-        .. format_price(model_entry.pricing.output)
+        .. str.format_money(model_entry.pricing.output)
         .. " output per MTok"
     )
     notify_level = vim.log.levels.WARN

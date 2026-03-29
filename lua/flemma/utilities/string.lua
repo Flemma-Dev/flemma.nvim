@@ -92,15 +92,30 @@ function M.format_text_length(count)
   return M.format_tokens(count)
 end
 
----Format a cost in USD with smart precision.
----Sub-cent values (> 0 and < 0.01) use 4 decimal places; otherwise 2.
----@param cost number
+---Format a monetary value in USD with smart precision.
+---Integers get no decimal places, values >= 1 get 2, values in [0.01, 1) get
+---3 (trailing zeros past the 2nd decimal stripped), and sub-cent values get 4
+---(same stripping rule).
+---@param amount number
 ---@return string
-function M.format_cost(cost)
-  if cost > 0 and cost < 0.01 then
-    return string.format("$%.4f", cost)
+function M.format_money(amount)
+  if amount == 0 then
+    return "$0"
   end
-  return string.format("$%.2f", cost)
+  if amount == math.floor(amount) then
+    return string.format("$%.0f", amount)
+  end
+  if amount >= 1 then
+    return string.format("$%.2f", amount)
+  end
+  local s
+  if amount >= 0.01 then
+    s = string.format("$%.3f", amount)
+  else
+    s = string.format("$%.4f", amount)
+  end
+  -- Strip trailing zeros past the 2nd decimal place
+  return (s:gsub("(%.%d%d)(%d-)0+$", "%1%2"))
 end
 
 ---Format a byte size for human-readable display using binary divisors.

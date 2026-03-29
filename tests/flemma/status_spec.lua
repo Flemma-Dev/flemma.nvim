@@ -650,8 +650,8 @@ describe("flemma.status", function()
       assert.truthy(text:find("200K"), "expected 200K input tokens")
       assert.truthy(text:find("64K"), "expected 64K output tokens")
       assert.truthy(text:find("pricing"), "expected pricing line")
-      assert.truthy(text:find("%$3.00"), "expected input price")
-      assert.truthy(text:find("%$15.00"), "expected output price")
+      assert.truthy(text:find("%$3/"), "expected input price")
+      assert.truthy(text:find("%$15"), "expected output price")
       -- Thinking is shown in Parameters (with resolved value), not Model Info
     end)
 

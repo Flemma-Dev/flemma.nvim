@@ -886,14 +886,14 @@ local function format_provider_section(b, data, is_last)
 
     if mi.pricing then
       local pricing = mi.pricing
-      local price_str = string.format("$%.2f/$%.2f", pricing.input, pricing.output)
+      local price_str = str.format_money(pricing.input) .. "/" .. str.format_money(pricing.output)
       if pricing.cache_read or pricing.cache_write then
         local cache_parts = {}
         if pricing.cache_read then
-          table.insert(cache_parts, string.format("$%.2f read", pricing.cache_read))
+          table.insert(cache_parts, str.format_money(pricing.cache_read) .. " read")
         end
         if pricing.cache_write then
-          table.insert(cache_parts, string.format("$%.2f write", pricing.cache_write))
+          table.insert(cache_parts, str.format_money(pricing.cache_write) .. " write")
         end
         price_str = price_str .. " (cache: " .. table.concat(cache_parts, ", ") .. ")"
       end
