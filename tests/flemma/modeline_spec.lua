@@ -165,6 +165,37 @@ describe("flemma.utilities.modeline", function()
       assert.are.equal("", result.present)
     end)
 
+    -- preserve_nil option
+    it("stores vim.NIL for keyword nil values when preserve_nil is true", function()
+      local result = modeline.parse("temperature= other=value", { preserve_nil = true })
+
+      assert.are.equal(vim.NIL, result.temperature)
+      assert.are.equal("value", result.other)
+    end)
+
+    it("stores vim.NIL for nil/null keywords when preserve_nil is true", function()
+      local result = modeline.parse("option=nil other=null keep=value", { preserve_nil = true })
+
+      assert.are.equal(vim.NIL, result.option)
+      assert.are.equal(vim.NIL, result.other)
+      assert.are.equal("value", result.keep)
+    end)
+
+    it("does not affect positional nils when preserve_nil is true", function()
+      local result = modeline.parse("keep nil null", { preserve_nil = true })
+
+      assert.are.equal("keep", result[1])
+      assert.is_nil(result[2])
+      assert.is_nil(result[3])
+    end)
+
+    it('still distinguishes key= from key="" when preserve_nil is true', function()
+      local result = modeline.parse('cleared= present=""', { preserve_nil = true })
+
+      assert.are.equal(vim.NIL, result.cleared)
+      assert.are.equal("", result.present)
+    end)
+
     -- Comma-separated lists
     it("splits comma-separated values into a list", function()
       local result = modeline.parse("tags=foo,bar,baz")
@@ -252,6 +283,15 @@ describe("flemma.utilities.modeline", function()
       local result = modeline.parse_args(args)
 
       assert.are.same({ "a", "b", "c" }, result.tags)
+    end)
+
+    it("stores vim.NIL for empty keyword values when preserve_nil is true", function()
+      local args = { "openai", "gpt-4o", "temperature=" }
+      local result = modeline.parse_args(args, 1, { preserve_nil = true })
+
+      assert.are.equal("openai", result[1])
+      assert.are.equal("gpt-4o", result[2])
+      assert.are.equal(vim.NIL, result.temperature)
     end)
   end)
 end)

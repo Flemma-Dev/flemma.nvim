@@ -68,13 +68,22 @@ local function apply_config(provider_name, model_name, explicit_params, layer)
   -- Write each explicit parameter to the correct namespaced path.
   -- Static fields on the parameters schema (max_tokens, thinking, etc.) are
   -- general params; everything else is provider-specific via DISCOVER.
+  -- vim.NIL values (from modeline parse with preserve_nil) mean "explicitly
+  -- clear this parameter" — convert to real nil for the proxy write, which
+  -- records a set-nil op that shadows lower layers.
   if explicit_params then
     for k, v in pairs(explicit_params) do
       if k ~= "model" then
-        if parameters_schema:has_field(k) then
-          w.parameters[k] = v
+        local write_value
+        if v == vim.NIL then
+          write_value = nil
         else
-          w.parameters[provider_name][k] = v
+          write_value = v
+        end
+        if parameters_schema:has_field(k) then
+          w.parameters[k] = write_value
+        else
+          w.parameters[provider_name][k] = write_value
         end
       end
     end

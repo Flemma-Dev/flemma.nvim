@@ -2,8 +2,13 @@
 ---@class flemma.utilities.Modeline
 local M = {}
 
----Mixed-key table returned by modeline parsing: string keys for key=value tokens, integer keys for positionals
+---Mixed-key table returned by modeline parsing: string keys for key=value tokens, integer keys for positionals.
+---When `preserve_nil` is enabled, keyword values that resolve to nil are stored as `vim.NIL`
+---so callers can distinguish "explicitly cleared" from "not specified."
 ---@alias flemma.utilities.modeline.ParsedTokens table<string|integer, any>
+
+---@class flemma.utilities.modeline.ParseOpts
+---@field preserve_nil? boolean Store vim.NIL for keyword nil values instead of dropping the key
 
 ---Coerce a raw string value to its natural Lua type
 ---@param raw string
@@ -207,17 +212,27 @@ local function scan(input)
   return tokens
 end
 
----Parse a list of tokens into a key=value / positional table
+---Parse a list of tokens into a key=value / positional table.
+---When opts.preserve_nil is true, keyword values that resolve to nil are stored
+---as vim.NIL so callers can distinguish "explicitly cleared" from "not specified."
+---Positional nils remain absent regardless of this option.
 ---@param tokens string[]
+---@param opts? flemma.utilities.modeline.ParseOpts
 ---@return flemma.utilities.modeline.ParsedTokens
-local function parse_tokens(tokens)
+local function parse_tokens(tokens, opts)
+  local preserve_nil = opts and opts.preserve_nil
   local result = {}
   local positional_index = 0
 
   for _, token in ipairs(tokens) do
     local key, raw = token:match("^([%w_]+)=(.*)$")
     if key then
-      result[key] = resolve_value(raw)
+      local value = resolve_value(raw)
+      if value == nil and preserve_nil then
+        result[key] = vim.NIL
+      else
+        result[key] = value
+      end
     elseif token ~= "" then
       positional_index = positional_index + 1
       result[positional_index] = resolve_value(token)
@@ -230,8 +245,9 @@ end
 ---Parse a string array (e.g. command fargs) starting at a given index
 ---@param args string[]|any
 ---@param start_index? integer 1-based start index (default 1)
+---@param opts? flemma.utilities.modeline.ParseOpts
 ---@return flemma.utilities.modeline.ParsedTokens
-function M.parse_args(args, start_index)
+function M.parse_args(args, start_index, opts)
   if type(args) ~= "table" then
     return {}
   end
@@ -241,19 +257,20 @@ function M.parse_args(args, start_index)
     tokens[#tokens + 1] = args[i]
   end
 
-  return parse_tokens(tokens)
+  return parse_tokens(tokens, opts)
 end
 
 ---Parse a single string into key=value / positional table, with quote-aware tokenization
 ---@param line string|any
+---@param opts? flemma.utilities.modeline.ParseOpts
 ---@return flemma.utilities.modeline.ParsedTokens
-function M.parse(line)
+function M.parse(line, opts)
   if type(line) ~= "string" or line == "" then
     return {}
   end
 
   local tokens = scan(line)
-  return parse_tokens(tokens)
+  return parse_tokens(tokens, opts)
 end
 
 return M

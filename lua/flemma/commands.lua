@@ -294,7 +294,7 @@ local function setup_commands()
           remaining_args[#remaining_args + 1] = args[i]
         end
 
-        local overrides = modeline.parse_args(remaining_args, 1)
+        local overrides = modeline.parse_args(remaining_args, 1, { preserve_nil = true })
         local extracted_overrides = provider_registry.extract_switch_arguments(overrides)
 
         if extracted_overrides.has_explicit_provider and extracted_overrides.provider ~= nil then
@@ -338,7 +338,7 @@ local function setup_commands()
         return
       end
 
-      local parsed_args = modeline.parse_args(args, 1)
+      local parsed_args = modeline.parse_args(args, 1, { preserve_nil = true })
       local extracted = provider_registry.extract_switch_arguments(parsed_args)
       local provider = extracted.provider
 
