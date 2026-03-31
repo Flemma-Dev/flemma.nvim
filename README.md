@@ -13,7 +13,7 @@ https://github.com/user-attachments/assets/cd1c509d-faea-48e1-bd4d-d01e234d6856
 
 Flemma is an AI plugin for Neovim. You write in `.chat` files -- plain text with simple role markers -- and Flemma handles everything else: streaming responses, running tools, managing providers, and keeping the conversation clean and navigable.
 
-```
+```markdown
 @You:
 Turn my rough notes into a project update for the team.
 
