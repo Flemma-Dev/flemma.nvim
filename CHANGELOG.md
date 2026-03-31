@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.9.0
+
+### Minor Changes
+
+- 1d9b496: Auto-generate EmmyLua config types from the schema DSL via `make types`
+- 568f684: Added Moonshot AI (Kimi) provider with support for kimi-k2.5 thinking, tool calling, and all Kimi/Moonshot models. Introduced a reusable Chat Completions base class (openai_chat.lua) for OpenAI-compatible APIs.
+- f4714f9: Temperature is now optional with no default. Previously Flemma always sent `temperature: 0.7` to provider APIs, which caused reasoning-native models (gpt-5-mini, o-series) to reject requests entirely. Temperature is now omitted unless explicitly set by the user, letting each API use its own default (typically 1.0).
+
+  If you previously relied on the implicit 0.7 default for less random responses, add `temperature = 0.7` to your setup config or chat frontmatter.
+
+  Note: temperature is no longer silently stripped when set alongside reasoning/thinking. If you explicitly set both, the API will reject the request — correct this by removing the temperature setting.
+
+- c5aac07: Split monolithic models.lua into per-provider data modules under lua/flemma/models/, allowing providers to declare their own model data via metadata.models. Added pricing.high_cost_threshold config option (default 30) replacing the hardcoded constant.
+- 3aa501b: Removed the signs feature and replaced it with a `turns` config schema (`turns.enabled`, `turns.padding`, `turns.hl`) and a `FlemmaTurn` highlight group linked to `FlemmaRuler`.
+- 2bb0d2a: Expose `os.date`, `os.time`, `os.clock`, and `os.difftime` in the template sandbox, enabling date/time formatting in expressions (e.g., `{{ os.date("%B %d, %Y") }}`). Dangerous `os.*` functions (`execute`, `exit`, `getenv`, `remove`, etc.) remain excluded.
+- 6278037: Extended the modeline parser with quote-aware tokenization, type coercion for positional arguments, single and double quote support with backslash escaping, comma-separated list values, and empty value handling (`key=` → nil, `key=""` → empty string).
+- 0371511: `<Space>` now toggles the entire message fold instead of the fold under the cursor. Nested folds (thinking, tool use/result) are closed along the way so the message reopens cleanly. Frontmatter folds are also toggled when the cursor is outside any message. Use `za` for the previous per-fold toggle behavior.
+- d7cea2e: Added turn detection and statuscolumn rendering module for visual turn boundaries in the gutter
+- fcf28d7: Template expressions now handle `}}` and `%}` inside Lua string literals, comments, and table constructors without breaking. Previously, `{{ "email={{ customer.email }}" }}` would crash because the parser matched the first `}}` it found regardless of context.
+- 0ba2eba: Added `print()` support in template code blocks — `{% print("text") %}` now emits directly into the template output instead of going to stdout. Arguments are concatenated with no separators and no trailing newline, giving full whitespace control to the template author.
+- ccd9646: Unified presets: `config.tools.presets` merged into top-level `presets`. Presets can now carry `provider`, `model`, `parameters`, and `auto_approve` fields — enabling composite presets like `$explore` that switch both model and tool approval in one `:Flemma switch` call. Built-in `$default` renamed to `$standard` (approves read, write, edit, find, grep, ls); `$readonly` updated to include find, grep, ls. Read-only tools (find, grep, ls) are now approved via the `$standard` preset instead of the sandbox auto-approval path. Schema validates preset key `$` prefix at finalize via new `MapNode` deferred key validation. `:Flemma status` now shows (R) icon for runtime-sourced tool approvals.
+
+### Patch Changes
+
+- 8b4b516: Send document title metadata on Anthropic PDF blocks so Claude can see the filename
+- 5dd4c2d: Fixed Anthropic API rejection when text content appears after tool_use blocks in assistant messages by reordering content blocks to text-before-tool_use
+- f848083: Centralized sink buffer name sanitization in the sink module. Callers no longer need to sanitize names themselves — `sink.create()` handles it automatically, keeping alphanumerics, dots, hyphens, underscores, and colons while collapsing consecutive hyphens. Sink buffer names are now more readable (e.g. `flemma://sink/http/https:-api.anthropic.com-v1-messages#1` instead of `flemma://sink/http/https-//api-anthropic-com/v1/messages#1`). Removed unused `contrib/extras/sink_viewer.lua`.
+- e031c1f: Fixed crash and stuck spinner when a provider request completes while the command-line window (q:) is open
+- b9c9f6e: Standardized vim.notify prefix to "Flemma: " across all notification call sites
+- c2bc110: Silenced test suite output: passing specs emit a one-line summary, failing specs show only the failure details
+- b8ad1a9: Fixed `:Flemma switch` ignoring `key=` syntax for clearing parameters (e.g., `temperature=` to unset a setup default)
+- 4befc56: Unified all monetary formatting into a single `format_money` function with smart precision: integers show no decimals, values >= $1 use 2, values in [0.01, 1) use 3, and sub-cent values use 4 (trailing zeros past the 2nd decimal are stripped)
+- 486a03a: Updated model definitions and pricing: added gpt-5.4-mini, gpt-5.4-nano, gpt-5.4-2026-03-05; updated context windows for claude-opus-4-6, claude-sonnet-4-6 (1M), gpt-5.4, gpt-5.4-pro (922K); fixed o4-mini cache pricing; removed retired models (gemini-3-pro-preview, gpt-4-0125-preview, gpt-4-1106-preview, gpt-4-0314)
+
 ## 0.8.0
 
 ### Minor Changes
@@ -86,6 +120,7 @@
 - 80fc278: Added persistent progress indicator showing character count, elapsed time, and phase-specific animation throughout the full request lifecycle including tool use buffering. The indicator appears as a floating window at the bottom of the chat window when the progress line is off-screen, with spinner icon placed in the gutter to match notification bar layout. Configurable via `progress.highlight` and `progress.zindex`.
 - 308767b: Preprocessor rewriter modules can now declare their own Vim syntax rules and highlight groups via `get_vim_syntax(config)`, removing the need to modify the main syntax file when adding new rewriters.
 - fcbce89: Sandbox variable expansion overhaul and DNS fix:
+
   - Path variables in `rw_paths` now use `urn:flemma:cwd` and `urn:flemma:buffer:path` instead of `$CWD` and `$FLEMMA_BUFFER_PATH` (breaking change for custom configs)
   - Added `$ENV` and `${ENV:-default}` expansion with bash-style fallback syntax
   - Default `rw_paths` now includes `${TMPDIR:-/tmp}`, `${XDG_CACHE_HOME:-~/.cache}`, and `${XDG_DATA_HOME:-~/.local/share}` for package manager compatibility
@@ -449,17 +484,20 @@ This release marks a major transition for Claudius, evolving from a Claude-speci
 This version introduces significant internal refactoring and configuration changes. Please review the following and update your configuration if necessary:
 
 1.  **Configuration Option Renames:**
+
     - The `prefix_style` option within `setup({})` has been renamed to `role_style`.
       - **Migration:** Rename `prefix_style` to `role_style` in your `require("claudius").setup({...})` call.
     - The `ruler.style` option within `setup({})` has been renamed to `ruler.hl`.
       - **Migration:** Rename `ruler.style` to `ruler.hl` in your `setup({})` call.
 
 2.  **Highlight Group Renames (Affects Manual Linking Only):**
+
     - Internal syntax highlight groups used by `syntax/chat.vim` have been renamed from `Chat*` to `Claudius*` (e.g., `ChatSystem` ⇒ `ClaudiusSystem`, `ChatSystemPrefix` ⇒ `ClaudiusRoleSystem`).
     - **Migration:** This **only** affects users who were manually linking these highlight groups in their Neovim configuration (e.g., using `vim.cmd("highlight link ChatSystem MyCustomGroup")`). If you were doing this, update the source group name (e.g., `vim.cmd("highlight link ClaudiusSystem MyCustomGroup")`).
     - **Users configuring highlights _only_ via the `highlights` table in `setup()` are _not_ affected by this change.**
 
 3.  **Configuration Structure (`model`, `provider`, `parameters`):**
+
     - A new top-level `provider` option specifies the AI provider (`"claude"`, `"openai"`, `"vertex"`). It defaults to `"claude"` for backward compatibility.
     - The `model` option now defaults based on the selected `provider` if set to `nil`. If you specify a `model`, ensure it's valid for the selected provider.
     - Provider-specific parameters (currently only for Vertex AI) are now nested (e.g., `parameters = { vertex = { project_id = "..." } }`).
