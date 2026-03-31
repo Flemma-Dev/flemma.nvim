@@ -50,6 +50,14 @@ function M.populate(env)
     pi = math.pi,
   }
 
+  -- Safe os subset: time/date only (no execute, exit, getenv, remove, rename, tmpname, setlocale)
+  env.os = {
+    clock = os.clock,
+    date = os.date,
+    difftime = os.difftime,
+    time = os.time,
+  }
+
   -- UTF-8 support for unicode string handling (available in Lua 5.3+, nil in LuaJIT)
   env.utf8 = utf8 ---@diagnostic disable-line: undefined-global
 

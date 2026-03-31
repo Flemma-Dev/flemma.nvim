@@ -79,7 +79,7 @@ config.LAYERS                         -- { DEFAULTS=10, SETUP=20, RUNTIME=30, FR
 - **Providers are request-scoped.** Created in `send_to_provider()`, GC'd after. No global instance.
 - **All config reads go through the facade** — `config.get()` or `config.materialize()`.
 - **DISCOVER callbacks lazy-require.** `definition.lua` is pure data — inline `require()` in callbacks avoids circular deps.
-- **`auto_approve` always defaults to `{ "$default" }`.** "Not configured" doesn't exist.
+- **`auto_approve` always defaults to `{ "$standard" }`.** "Not configured" doesn't exist.
 - **Hybrid objects** (`tools`) support sub-key navigation AND list ops on the same path.
 
 ## Reference Files

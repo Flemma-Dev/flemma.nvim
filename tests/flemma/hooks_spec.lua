@@ -79,9 +79,10 @@ describe("flemma.hooks", function()
         error("handler exploded")
       end)
 
-      -- Should not throw
+      -- Should not throw. silent! suppresses Nvim's "Error detected"
+      -- stderr noise from the deliberately error-throwing autocmd callback.
       assert.has_no.errors(function()
-        hooks.dispatch("sink:created", { bufnr = 1, name = "test" })
+        vim.cmd('silent! lua require("flemma.hooks").dispatch("sink:created", { bufnr = 1, name = "test" })')
       end)
     end)
 
@@ -90,8 +91,11 @@ describe("flemma.hooks", function()
         error("boom")
       end)
 
-      -- First dispatch triggers error (silently)
-      hooks.dispatch("tool:executing", { bufnr = 1, tool_name = "read", tool_id = "t1" })
+      -- First dispatch triggers error. silent! suppresses Nvim's "Error detected"
+      -- stderr noise from the deliberately error-throwing autocmd callback.
+      vim.cmd(
+        'silent! lua require("flemma.hooks").dispatch("tool:executing", { bufnr = 1, tool_name = "read", tool_id = "t1" })'
+      )
 
       vim.api.nvim_del_autocmd(error_id)
 

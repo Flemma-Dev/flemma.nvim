@@ -6,10 +6,8 @@
 ---@field models table<string, string[]>
 local M = {}
 
--- Load models from centralized models.lua
 local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
-local models_data = require("flemma.models")
 local registry_utils = require("flemma.registry")
 
 --------------------------------------------------------------------------------
@@ -34,6 +32,7 @@ local registry_utils = require("flemma.registry")
 ---@field display_name string Human-readable name
 ---@field capabilities flemma.provider.Capabilities
 ---@field config_schema? flemma.schema.ObjectNode Provider-specific config schema for DISCOVER resolution
+---@field models? string[] Module paths for model data (loaded via flemma.loader)
 
 ---@class flemma.provider.RegistrationEntry
 ---@field module string Lua module path
@@ -46,31 +45,69 @@ local registry_utils = require("flemma.registry")
 ---@type table<string, flemma.provider.ProviderEntry>
 local providers = {}
 
+---@type table<string, flemma.models.ProviderModels>
+local model_store = {}
+
 -- Built-in provider module paths (each module exports M.metadata)
 local BUILTIN_PROVIDER_MODULES = {
   "flemma.provider.providers.openai",
   "flemma.provider.providers.anthropic",
   "flemma.provider.providers.vertex",
+  "flemma.provider.providers.moonshot",
 }
 
 --------------------------------------------------------------------------------
--- Model helpers (must be defined before register())
+-- Model loading
 --------------------------------------------------------------------------------
 
 ---@param provider_name string
 ---@return string[]
-local function get_provider_models(provider_name)
-  local provider = models_data.providers[provider_name]
+local function get_provider_model_names(provider_name)
+  local provider = model_store[provider_name]
   if not provider then
     return {}
   end
 
-  local models = {}
+  local names = {}
   for model_name, _ in pairs(provider.models) do
-    table.insert(models, model_name)
+    names[#names + 1] = model_name
   end
 
-  return models
+  return names
+end
+
+---Load model data into the internal model store for a provider.
+---By default, merges per-model entries. With `opts.replace`, replaces the entire table.
+---@param provider_name string
+---@param model_data flemma.models.ProviderModels
+---@param opts? { replace: boolean }
+function M.load_models(provider_name, model_data, opts)
+  if opts and opts.replace then
+    model_store[provider_name] = model_data
+  else
+    if not model_store[provider_name] then
+      model_store[provider_name] = { default = model_data.default, models = {} }
+    end
+    if model_data.default then
+      model_store[provider_name].default = model_data.default
+    end
+    for model_name, model_info in pairs(model_data.models) do
+      model_store[provider_name].models[model_name] = model_info
+    end
+  end
+
+  -- Refresh cached lookups
+  M.defaults[provider_name] = model_store[provider_name] and model_store[provider_name].default or nil
+  M.models[provider_name] = get_provider_model_names(provider_name)
+end
+
+---Register model data for a provider from a module path.
+---@param provider_name string
+---@param module_path string Module path loadable via flemma.loader
+---@param opts? { replace: boolean }
+function M.register_models(provider_name, module_path, opts)
+  local model_data = loader.load(module_path)
+  M.load_models(provider_name, model_data, opts)
 end
 
 --------------------------------------------------------------------------------
@@ -86,6 +123,9 @@ end
 function M.register(source, entry)
   local name, definition
 
+  ---@type string[]|nil
+  local model_modules
+
   if entry then
     -- Two-arg form: register("name", entry)
     name = source
@@ -98,6 +138,7 @@ function M.register(source, entry)
       error("Provider module " .. source .. " does not export metadata", 2)
     end
     name = mod.metadata.name
+    model_modules = mod.metadata.models
     definition = {
       module = source,
       capabilities = mod.metadata.capabilities,
@@ -120,33 +161,26 @@ function M.register(source, entry)
     config_schema = definition.config_schema,
   }
 
-  -- If models or default_model provided, update models_data
-  if definition.default_model or definition.models then
-    if not models_data.providers[name] then
-      models_data.providers[name] = {
-        default = definition.default_model or "",
-        models = definition.models or {},
-      }
-    else
-      if definition.default_model then
-        models_data.providers[name].default = definition.default_model
-      end
-      if definition.models then
-        for model_name, model_info in pairs(definition.models) do
-          models_data.providers[name].models[model_name] = model_info
-        end
-      end
+  -- Load model modules declared in provider metadata
+  if model_modules then
+    for _, module_path in ipairs(model_modules) do
+      local model_data = loader.load(module_path)
+      M.load_models(name, model_data)
     end
+  end
+
+  -- If models or default_model provided inline (two-arg form), merge them
+  if definition.default_model or definition.models then
+    M.load_models(name, {
+      default = definition.default_model or (model_store[name] and model_store[name].default or ""),
+      models = definition.models or {},
+    })
   end
 
   -- Materialize config_schema defaults into the DEFAULTS layer
   if definition.config_schema then
     config_facade.register_module_defaults("parameters", name, definition.config_schema)
   end
-
-  -- Refresh defaults and models for this provider
-  M.defaults[name] = models_data.providers[name] and models_data.providers[name].default or nil
-  M.models[name] = get_provider_models(name)
 end
 
 ---Initialize built-in providers (called during setup)
@@ -167,6 +201,7 @@ function M.unregister(name)
     return false
   end
   providers[name] = nil
+  model_store[name] = nil
   M.defaults[name] = nil
   M.models[name] = nil
   return true
@@ -175,6 +210,7 @@ end
 ---Clear all registered providers (for test isolation)
 function M.clear()
   providers = {}
+  model_store = {}
   M.defaults = {}
   M.models = {}
 end
@@ -271,7 +307,7 @@ M.models = {}
 ---@param provider_name string
 ---@return string|nil
 function M.get_model(provider_name)
-  local provider = models_data.providers[provider_name]
+  local provider = model_store[provider_name]
   return provider and provider.default or nil
 end
 
@@ -284,8 +320,8 @@ function M.is_provider_model(model_name, provider_name)
     return false
   end
 
-  -- Check if the provider exists in models_data
-  local provider = models_data.providers[provider_name]
+  -- Check if the provider exists in model_store
+  local provider = model_store[provider_name]
   if not provider or not provider.models or vim.tbl_isempty(provider.models) then
     -- Custom provider with no model list: accept any model string
     return providers[provider_name] ~= nil
@@ -313,7 +349,7 @@ end
 ---@param model_name string
 ---@return flemma.models.ModelInfo|nil
 function M.get_model_info(provider_name, model_name)
-  local provider_data = models_data.providers[provider_name]
+  local provider_data = model_store[provider_name]
   if not provider_data or not provider_data.models then
     return nil
   end

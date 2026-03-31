@@ -1926,4 +1926,225 @@ describe("UI Folding", function()
       assert.are.equal(3, vim.fn.foldclosed(3), "Thinking fold should be closed after returning to buffer")
     end)
   end)
+
+  describe("toggle_message_fold", function()
+    it("should close the message fold when cursor is inside an open message", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "hello",
+        "@Assistant:",
+        "line one",
+        "line two",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99
+
+      -- Cursor on line 4 (inside @Assistant: message body)
+      vim.api.nvim_win_set_cursor(0, { 4, 0 })
+      folding.toggle_message_fold()
+
+      assert.are.equal(3, vim.fn.foldclosed(3), "Message fold should be closed at @Assistant: line")
+    end)
+
+    it("should open the message fold when cursor is on a closed fold", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "hello",
+        "@Assistant:",
+        "response",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99
+
+      -- Close the assistant message manually, then toggle to reopen
+      vim.cmd("3 foldclose")
+      assert.are.equal(3, vim.fn.foldclosed(3), "Sanity: message should be closed")
+
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+      folding.toggle_message_fold()
+
+      assert.are.equal(-1, vim.fn.foldclosed(3), "Message fold should be open after toggle")
+    end)
+
+    it("should close message even when cursor is on a closed sub-fold", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "question",
+        "@Assistant:",
+        "<thinking>",
+        "reasoning",
+        "</thinking>",
+        "answer",
+        "@You:",
+        "follow up",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99
+
+      -- Close the thinking block (level 2), leave message open
+      vim.cmd("4,6 foldclose")
+      assert.are.equal(4, vim.fn.foldclosed(4), "Sanity: thinking fold should be closed")
+      assert.are.equal(-1, vim.fn.foldclosed(3), "Sanity: message fold should be open")
+
+      -- Cursor on the closed thinking fold line — Space should close the message, not open thinking
+      vim.api.nvim_win_set_cursor(0, { 4, 0 })
+      folding.toggle_message_fold()
+
+      assert.are.equal(3, vim.fn.foldclosed(3), "Message fold should be closed, not thinking toggled")
+    end)
+
+    it("should close nested folds when closing a message", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "question",
+        "@Assistant:",
+        "<thinking>",
+        "reasoning",
+        "</thinking>",
+        "answer",
+        "@You:",
+        "follow up",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99
+
+      -- Thinking block is open, message is open
+      assert.are.equal(-1, vim.fn.foldclosed(4), "Sanity: thinking should be open")
+
+      -- Close the message via toggle
+      vim.api.nvim_win_set_cursor(0, { 5, 0 })
+      folding.toggle_message_fold()
+      assert.are.equal(3, vim.fn.foldclosed(3), "Message should be closed")
+
+      -- Reopen the message — thinking should have been closed along the way
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+      folding.toggle_message_fold()
+      assert.are.equal(-1, vim.fn.foldclosed(3), "Message should be open")
+      assert.are.equal(4, vim.fn.foldclosed(4), "Thinking should remain closed after reopen")
+    end)
+
+    it("should close tool use sub-folds when closing a message", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "question",
+        "@Assistant:",
+        "**Tool Use:** `bash` (`call_001`)",
+        "```json",
+        '{"command": "ls"}',
+        "```",
+        "some text",
+        "@You:",
+        "**Tool Result:** `call_001`",
+        "",
+        "```",
+        "file1.txt",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99
+
+      -- Tool use fold should be open
+      assert.are.equal(-1, vim.fn.foldclosed(4), "Sanity: tool use should be open")
+
+      -- Close the assistant message
+      vim.api.nvim_win_set_cursor(0, { 5, 0 })
+      folding.toggle_message_fold()
+      assert.are.equal(3, vim.fn.foldclosed(3), "Assistant message should be closed")
+
+      -- Reopen — tool use sub-fold should be closed
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+      folding.toggle_message_fold()
+      assert.are.equal(-1, vim.fn.foldclosed(3), "Message should be open")
+      assert.are.equal(4, vim.fn.foldclosed(4), "Tool use should remain closed after reopen")
+    end)
+
+    it("should toggle frontmatter fold when cursor is on frontmatter", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "```lua",
+        "-- config",
+        "```",
+        "@System:",
+        "prompt",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99
+
+      assert.are.equal(-1, vim.fn.foldclosed(1), "Sanity: frontmatter should be open")
+
+      -- Close frontmatter via toggle
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+      folding.toggle_message_fold()
+      assert.are.equal(1, vim.fn.foldclosed(1), "Frontmatter should be closed")
+
+      -- Reopen via toggle
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+      folding.toggle_message_fold()
+      assert.are.equal(-1, vim.fn.foldclosed(1), "Frontmatter should be open after toggle")
+    end)
+
+    it("should do nothing when cursor is outside any message", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "" })
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99
+
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+      -- Should not error
+      folding.toggle_message_fold()
+    end)
+  end)
 end)

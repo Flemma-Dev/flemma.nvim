@@ -3,6 +3,7 @@ local codeblock = require("flemma.codeblock")
 local json = require("flemma.utilities.json")
 local modeline = require("flemma.utilities.modeline")
 local roles = require("flemma.utilities.roles")
+local scanner = require("flemma.parser.scanner")
 local state = require("flemma.state")
 
 ---@class flemma.Parser
@@ -130,9 +131,9 @@ local function parse_segments(text, base_line)
       content_offset = 3
     end
 
-    -- Find closing delimiter
-    local close_pattern = is_code and "%-?%%}" or "%-?}}"
-    local close_start, close_end = s:find(close_pattern, next_start + content_offset)
+    -- Find closing delimiter (string-aware, brace-balanced)
+    local close_mode = is_code and "code" or "expression"
+    local close_start, close_end = scanner.find_closing(s, next_start + content_offset, close_mode)
 
     if not close_start then
       -- Unclosed delimiter — emit rest as text (graceful degradation)

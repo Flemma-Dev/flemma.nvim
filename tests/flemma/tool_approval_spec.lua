@@ -4,7 +4,7 @@
 
 -- Clear module caches for clean state
 package.loaded["flemma.tools.approval"] = nil
-package.loaded["flemma.tools.presets"] = nil
+package.loaded["flemma.presets"] = nil
 package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.context"] = nil
 package.loaded["flemma.tools.injector"] = nil
@@ -64,7 +64,7 @@ local function set_config_and_setup(opts)
   if opts and next(opts) then
     config_facade.apply(config_facade.LAYERS.SETUP, opts)
   end
-  require("flemma.tools.presets").setup(nil)
+  require("flemma.presets").setup(nil)
   config_facade.finalize(config_facade.LAYERS.SETUP)
   approval.clear()
   approval.setup()
@@ -1394,7 +1394,7 @@ describe("Frontmatter Approval", function()
 
   describe("frontmatter with presets", function()
     it("frontmatter can set auto_approve to a preset", function()
-      set_config_and_setup({ tools = { auto_approve = { "$default" } } })
+      set_config_and_setup({ tools = { auto_approve = { "$standard" } } })
 
       local bufnr = create_buffer({
         "```lua",
@@ -1410,13 +1410,13 @@ describe("Frontmatter Approval", function()
       assert.equals("require_approval", approval.resolve("write", {}, { bufnr = bufnr, tool_id = "t2" }))
     end)
 
-    it("frontmatter can remove $default to disable auto-approval", function()
-      set_config_and_setup({ tools = { auto_approve = { "$default" } } })
+    it("frontmatter can remove $standard to disable auto-approval", function()
+      set_config_and_setup({ tools = { auto_approve = { "$standard" } } })
 
       local bufnr = create_buffer({
         "```lua",
-        'flemma.opt.tools.auto_approve = { "$default" }',
-        'flemma.opt.tools.auto_approve:remove("$default")',
+        'flemma.opt.tools.auto_approve = { "$standard" }',
+        'flemma.opt.tools.auto_approve:remove("$standard")',
         "```",
         "@You:",
         "test",
@@ -1427,11 +1427,11 @@ describe("Frontmatter Approval", function()
     end)
 
     it("frontmatter can exclude a tool from a preset", function()
-      set_config_and_setup({ tools = { auto_approve = { "$default" } } })
+      set_config_and_setup({ tools = { auto_approve = { "$standard" } } })
 
       local bufnr = create_buffer({
         "```lua",
-        'flemma.opt.tools.auto_approve = { "$default" }',
+        'flemma.opt.tools.auto_approve = { "$standard" }',
         'flemma.opt.tools.auto_approve:remove("write")',
         "```",
         "@You:",
@@ -1445,11 +1445,11 @@ describe("Frontmatter Approval", function()
     end)
 
     it("frontmatter can add bash on top of default", function()
-      set_config_and_setup({ tools = { auto_approve = { "$default" } } })
+      set_config_and_setup({ tools = { auto_approve = { "$standard" } } })
 
       local bufnr = create_buffer({
         "```lua",
-        'flemma.opt.tools.auto_approve = { "$default" }',
+        'flemma.opt.tools.auto_approve = { "$standard" }',
         'flemma.opt.tools.auto_approve:append("bash")',
         "```",
         "@You:",
@@ -2578,11 +2578,11 @@ end)
 describe("Approval Preset Expansion", function()
   after_each(function()
     approval.clear()
-    require("flemma.tools.presets").clear()
+    require("flemma.presets").clear()
   end)
 
-  it("expands $default preset in auto_approve", function()
-    set_config_and_setup({ tools = { auto_approve = { "$default" } } })
+  it("expands $standard preset in auto_approve", function()
+    set_config_and_setup({ tools = { auto_approve = { "$standard" } } })
     assert.equals("approve", approval.resolve("read", {}, { bufnr = 1, tool_id = "t1" }))
     assert.equals("approve", approval.resolve("write", {}, { bufnr = 1, tool_id = "t2" }))
     assert.equals("approve", approval.resolve("edit", {}, { bufnr = 1, tool_id = "t3" }))
@@ -2598,8 +2598,8 @@ describe("Approval Preset Expansion", function()
   it("unions multiple presets", function()
     -- Register custom presets before facade init (presets.setup is called inside set_config_and_setup)
     config_facade.init(schema)
-    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { auto_approve = { "$default", "$extra" } } })
-    require("flemma.tools.presets").setup({ ["$extra"] = { approve = { "bash" } } })
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { auto_approve = { "$standard", "$extra" } } })
+    require("flemma.presets").setup({ ["$extra"] = { auto_approve = { "bash" } } })
     config_facade.finalize(config_facade.LAYERS.SETUP)
     approval.clear()
     approval.setup()
@@ -2621,7 +2621,7 @@ describe("Approval Preset Expansion", function()
   end)
 
   it("frontmatter remove excludes a tool from the resolved list", function()
-    set_config_and_setup({ tools = { auto_approve = { "$default" } } })
+    set_config_and_setup({ tools = { auto_approve = { "$standard" } } })
     local bufnr = create_buffer({
       "```lua",
       'flemma.opt.tools.auto_approve:remove("read")',
@@ -2642,13 +2642,13 @@ end)
 describe("Config resolver layer merging", function()
   after_each(function()
     approval.clear()
-    require("flemma.tools.presets").clear()
+    require("flemma.presets").clear()
     vim.cmd("silent! %bdelete!")
   end)
 
   it("frontmatter set overrides setup auto_approve", function()
-    set_config_and_setup({ tools = { auto_approve = { "$default" } } })
-    -- Without frontmatter, setup $default applies
+    set_config_and_setup({ tools = { auto_approve = { "$standard" } } })
+    -- Without frontmatter, setup $standard applies
     assert.equals("approve", approval.resolve("read", {}, { bufnr = 1, tool_id = "t1" }))
 
     -- With frontmatter set to $readonly, layer 40 overrides layer 20
@@ -2665,7 +2665,7 @@ describe("Config resolver layer merging", function()
   end)
 
   it("frontmatter empty set disables all auto-approval", function()
-    set_config_and_setup({ tools = { auto_approve = { "$default" } } })
+    set_config_and_setup({ tools = { auto_approve = { "$standard" } } })
     local bufnr = create_buffer({
       "```lua",
       "flemma.opt.tools.auto_approve = {}",
@@ -2704,7 +2704,7 @@ describe("Sandbox auto-approval resolver", function()
   ---@param overrides? table Overrides merged into the default config
   local function setup_with_sandbox(overrides)
     local opts = vim.tbl_deep_extend("force", {
-      tools = { auto_approve = { "$default" }, auto_approve_sandboxed = true },
+      tools = { auto_approve = { "$standard" }, auto_approve_sandboxed = true },
       sandbox = {
         enabled = true,
         backend = "auto",
@@ -2712,7 +2712,7 @@ describe("Sandbox auto-approval resolver", function()
     }, overrides or {})
     config_facade.init(schema)
     config_facade.apply(config_facade.LAYERS.SETUP, opts)
-    require("flemma.tools.presets").setup(nil)
+    require("flemma.presets").setup(nil)
     config_facade.finalize(config_facade.LAYERS.SETUP)
     approval.clear()
     approval.setup()
@@ -2733,7 +2733,7 @@ describe("Sandbox auto-approval resolver", function()
     approval.clear()
     sandbox_module.clear()
     sandbox_module.reset_enabled()
-    require("flemma.tools.presets").clear()
+    require("flemma.presets").clear()
     vim.cmd("silent! %bdelete!")
   end)
 
@@ -2794,7 +2794,7 @@ describe("Sandbox auto-approval resolver", function()
   end)
 
   it("approves bash when auto_approve has schema default", function()
-    -- In the new system, auto_approve always has a schema default ({ "$default" }).
+    -- In the new system, auto_approve always has a schema default ({ "$standard" }).
     -- The sandbox resolver sees a non-nil auto_approve and proceeds normally.
     setup_with_sandbox({ tools = { auto_approve_sandboxed = true } })
     local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
@@ -2841,13 +2841,13 @@ describe("Sandbox auto-approval resolver", function()
     -- Config explicitly includes bash in auto_approve — config resolver (P100) wins
     setup_with_sandbox({
       sandbox = { enabled = false },
-      tools = { auto_approve = { "$default", "bash" } },
+      tools = { auto_approve = { "$standard", "bash" } },
     })
     local result = approval.resolve("bash", {}, { bufnr = 1, tool_id = "t1" })
     assert.equals("approve", result)
   end)
 
-  it("still auto-approves $default tools (read, write, edit) regardless of sandbox", function()
+  it("still auto-approves $standard tools (read, write, edit) regardless of sandbox", function()
     setup_with_sandbox()
     assert.equals("approve", approval.resolve("read", {}, { bufnr = 1, tool_id = "t1" }))
     assert.equals("approve", approval.resolve("write", {}, { bufnr = 1, tool_id = "t2" }))
@@ -2894,16 +2894,16 @@ describe("Sandbox auto-approval resolver", function()
     -- Assignment is a set op — sandbox defers. Config resolver reads the merged list.
     local bufnr = create_buffer({
       "```lua",
-      'flemma.opt.tools.auto_approve = { "$default" }',
+      'flemma.opt.tools.auto_approve = { "$standard" }',
       "```",
       "@You:",
       "test",
     })
     evaluate_frontmatter(bufnr)
     -- sandbox defers (layer_has_set), but config resolver reads the resolved list
-    -- which has $default expanded to tool names — bash is not in $default
+    -- which has $standard expanded to tool names — bash is not in $standard
     assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = bufnr, tool_id = "t1" }))
-    -- $default tools are still approved by the unified config resolver
+    -- $standard tools are still approved by the unified config resolver
     assert.equals("approve", approval.resolve("read", {}, { bufnr = bufnr, tool_id = "t2" }))
   end)
 
@@ -2912,7 +2912,7 @@ describe("Sandbox auto-approval resolver", function()
     -- bash is in the assigned list — config resolver finds it in the resolved list
     local bufnr = create_buffer({
       "```lua",
-      'flemma.opt.tools.auto_approve = { "$default", "bash" }',
+      'flemma.opt.tools.auto_approve = { "$standard", "bash" }',
       "```",
       "@You:",
       "test",

@@ -311,6 +311,66 @@ describe("Anthropic Provider", function()
     end)
   end)
 
+  describe("document metadata", function()
+    it("sets title from filename on PDF document blocks", function()
+      tools.clear()
+      local p = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 4000 })
+      local prompt = {
+        history = {
+          {
+            role = "user",
+            parts = {
+              { kind = "text", text = "Summarize this PDF" },
+              {
+                kind = "pdf",
+                mime_type = "application/pdf",
+                data = "JVBER",
+                filename = "/home/user/reports/quarterly_earnings.pdf",
+              },
+            },
+          },
+        },
+      }
+      local req = p:build_request(prompt)
+      local user_msg = req.messages[1]
+      local doc_block = nil
+      for _, block in ipairs(user_msg.content) do
+        if block.type == "document" then
+          doc_block = block
+          break
+        end
+      end
+      assert.is_not_nil(doc_block, "Expected a document content block")
+      assert.are.equal("quarterly_earnings.pdf", doc_block.title)
+    end)
+
+    it("omits title when filename is absent", function()
+      tools.clear()
+      local p = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 4000 })
+      local prompt = {
+        history = {
+          {
+            role = "user",
+            parts = {
+              { kind = "pdf", mime_type = "application/pdf", data = "JVBER" },
+            },
+          },
+        },
+      }
+      local req = p:build_request(prompt)
+      local user_msg = req.messages[1]
+      local doc_block = nil
+      for _, block in ipairs(user_msg.content) do
+        if block.type == "document" then
+          doc_block = block
+          break
+        end
+      end
+      assert.is_not_nil(doc_block, "Expected a document content block")
+      assert.is_nil(doc_block.title)
+    end)
+  end)
+
   describe("stop reason handling", function()
     local provider, callbacks, completed, errors
 
@@ -422,6 +482,42 @@ describe("Anthropic Provider", function()
       -- But should error, not complete
       assert.is_false(completed)
       assert.are.equal(1, #errors)
+    end)
+  end)
+
+  describe("content block ordering", function()
+    it("reorders text after tool_use to text before tool_use", function()
+      tools.clear()
+      local p = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 4000 })
+      local prompt = {
+        history = {
+          { role = "user", parts = { { kind = "text", text = "read that file" } } },
+          {
+            role = "assistant",
+            parts = {
+              { kind = "tool_use", id = "tool_123", name = "read", input = { path = "test.txt" } },
+              { kind = "text", text = "Some trailing text after tool use" },
+            },
+          },
+          {
+            role = "user",
+            parts = {
+              { kind = "tool_result", tool_use_id = "tool_123", content = "file contents here" },
+            },
+          },
+          { role = "user", parts = { { kind = "text", text = "thanks" } } },
+        },
+      }
+      local req = p:build_request(prompt)
+
+      -- The assistant message (messages[2]) should have text BEFORE tool_use
+      local assistant_msg = req.messages[2]
+      assert.are.equal("assistant", assistant_msg.role)
+      assert.are.equal(2, #assistant_msg.content)
+      assert.are.equal("text", assistant_msg.content[1].type)
+      assert.are.equal("Some trailing text after tool use", assistant_msg.content[1].text)
+      assert.are.equal("tool_use", assistant_msg.content[2].type)
+      assert.are.equal("read", assistant_msg.content[2].name)
     end)
   end)
 

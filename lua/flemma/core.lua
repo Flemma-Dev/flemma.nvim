@@ -22,7 +22,6 @@ local diagnostic_format = require("flemma.utilities.diagnostic")
 local diagnostics_module = require("flemma.diagnostics")
 local executor = require("flemma.tools.executor")
 local injector = require("flemma.tools.injector")
-local models_data = require("flemma.models")
 local notifications = require("flemma.notifications")
 local parser = require("flemma.parser")
 local pipeline = require("flemma.pipeline")
@@ -34,16 +33,17 @@ local tools_module = require("flemma.tools")
 local cursor = require("flemma.cursor")
 local hooks = require("flemma.hooks")
 local preprocessor = require("flemma.preprocessor")
+local str = require("flemma.utilities.string")
 local usage = require("flemma.usage")
+
+local nav = require("flemma.schema.navigation")
+local schema_definition = require("flemma.config.schema")
 
 local ABORT_MESSAGE = "Response interrupted by the user."
 local DEFAULT_MAX_CONCURRENT = 2
 
 -- For testing purposes
 local last_request_body_for_testing = nil
-
-local nav = require("flemma.schema.navigation")
-local schema_definition = require("flemma.config.schema")
 
 --- The parameters schema node, used to distinguish static (general) fields
 --- from DISCOVER-resolved (provider-specific) fields.
@@ -68,13 +68,22 @@ local function apply_config(provider_name, model_name, explicit_params, layer)
   -- Write each explicit parameter to the correct namespaced path.
   -- Static fields on the parameters schema (max_tokens, thinking, etc.) are
   -- general params; everything else is provider-specific via DISCOVER.
+  -- vim.NIL values (from modeline parse with preserve_nil) mean "explicitly
+  -- clear this parameter" — convert to real nil for the proxy write, which
+  -- records a set-nil op that shadows lower layers.
   if explicit_params then
     for k, v in pairs(explicit_params) do
       if k ~= "model" then
-        if parameters_schema:has_field(k) then
-          w.parameters[k] = v
+        local write_value
+        if v == vim.NIL then
+          write_value = nil
         else
-          w.parameters[provider_name][k] = v
+          write_value = v
+        end
+        if parameters_schema:has_field(k) then
+          w.parameters[k] = write_value
+        else
+          w.parameters[provider_name][k] = write_value
         end
       end
     end
@@ -97,7 +106,7 @@ end
 ---@param model_name? string
 ---@param explicit_params? table<string, any> Only the user's explicit overrides
 ---@param layer? integer Facade layer for apply_config (default: RUNTIME)
----@return boolean success
+---@return boolean success, string[] param_warnings, string|nil model_fallback_warning
 local function initialize_provider(provider_name, model_name, explicit_params, layer)
   -- Validate provider
   if not registry.has(provider_name) then
@@ -108,7 +117,7 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
     )
     log.error("initialize_provider(): " .. err)
     vim.notify(err, vim.log.levels.ERROR)
-    return false
+    return false, {}
   end
 
   -- Resolve provider alias (e.g., 'claude' -> 'anthropic')
@@ -116,22 +125,23 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
 
   -- Validate and get appropriate model
   local validated_model = registry.get_appropriate_model(model_name, resolved_provider)
+  ---@type string|nil
+  local model_fallback_warning
   if validated_model ~= model_name and model_name ~= nil then
-    vim.notify(
-      string.format(
-        "Flemma: Model '%s' is not valid for provider '%s'. Using default: '%s'.",
-        tostring(model_name),
-        tostring(resolved_provider),
-        tostring(validated_model)
-      ),
-      vim.log.levels.WARN
+    model_fallback_warning = string.format(
+      "Model '%s' is not valid for provider '%s'. Using default: '%s'.",
+      tostring(model_name),
+      tostring(resolved_provider),
+      tostring(validated_model)
     )
   end
 
   -- Write to facade
   apply_config(resolved_provider, validated_model, explicit_params, layer)
 
-  -- Validate provider-specific parameters (shows warnings, doesn't fail)
+  -- Validate provider-specific parameters (advisory warnings, never fails)
+  ---@type string[]
+  local param_warnings = {}
   if validated_model then
     local resolved_config = config_facade.materialize()
     local flat_params = normalize.flatten_parameters(resolved_provider, resolved_config)
@@ -139,7 +149,13 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
     local provider_module_path = registry.get(resolved_provider)
     if provider_module_path then
       local provider_module = loader.load(provider_module_path)
-      provider_module.validate_parameters(validated_model, flat_params)
+      local _, warnings = provider_module.validate_parameters(validated_model, flat_params)
+      if warnings then
+        for _, w in ipairs(warnings) do
+          table.insert(param_warnings, w)
+          log.warn("validate_parameters(" .. resolved_provider .. "): " .. w)
+        end
+      end
     end
   end
 
@@ -149,17 +165,35 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
       .. " with model "
       .. log.inspect(validated_model)
   )
-  return true
+  return true, param_warnings, model_fallback_warning
 end
 
----Initialize provider for initial setup (exposed version)
+---Initialize provider for initial setup (exposed version).
+---Emits validation warnings directly (unlike switch_provider which merges them).
 ---@param provider_name string
 ---@param model_name? string
 ---@param explicit_params? table<string, any> Only the user's explicit overrides
 ---@param layer? integer Facade layer for apply_config (default: RUNTIME)
 ---@return boolean success
 function M.initialize_provider(provider_name, model_name, explicit_params, layer)
-  return initialize_provider(provider_name, model_name, explicit_params, layer)
+  local success, param_warnings, model_fallback = initialize_provider(provider_name, model_name, explicit_params, layer)
+  if model_fallback or #param_warnings > 0 then
+    -- Same multi-line format as switch_provider: header + bullet lines
+    local resolved = registry.resolve(provider_name) or provider_name
+    local validated_model = config_facade.get().model
+    local model_desc = validated_model and (" with model '" .. validated_model .. "'") or ""
+    local lines = { "Flemma: Initialized '" .. resolved .. "'" .. model_desc }
+    if model_fallback then
+      table.insert(lines, "  ⚠ " .. model_fallback)
+    end
+    for _, w in ipairs(param_warnings) do
+      table.insert(lines, "  • " .. w)
+    end
+    vim.schedule(function()
+      vim.notify(table.concat(lines, "\n"), vim.log.levels.WARN)
+    end)
+  end
+  return success
 end
 
 ---Switch to a different provider or model.
@@ -186,7 +220,8 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
   -- Note: prepare_config() validates before writing, so the facade is only
   -- mutated for valid providers. No rollback mechanism — if this fails, the
   -- facade retains its previous state from the last successful write.
-  if not initialize_provider(provider_name, model_name, parameters or {}) then
+  local init_ok, param_warnings, model_fallback = initialize_provider(provider_name, model_name, parameters or {})
+  if not init_ok then
     log.warn("switch_provider(): Aborting switch due to invalid provider: " .. log.inspect(provider_name))
     return nil
   end
@@ -205,16 +240,63 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
   local fm_result = processor.evaluate_buffer_frontmatter(bufnr)
   buffer_state.frontmatter_eval_code = fm_result.frontmatter_code
 
-  -- Notify the user. Compare global config (D+S+R) with buffer config (D+S+R+F)
-  -- to detect frontmatter overrides that take precedence over the switch.
+  -- Notify the user. Header line + optional bullet lines for warnings/overrides.
   local global_config = config_facade.get()
   local buffer_config = config_facade.get(bufnr)
   local model_info = global_config.model and (" with model '" .. global_config.model .. "'") or ""
-  local message = "Flemma: Switched to '" .. global_config.provider .. "'" .. model_info .. "."
-  if buffer_config.provider ~= global_config.provider then
-    message = message .. " This buffer uses '" .. buffer_config.provider .. "' (override)."
+  local header = "Flemma: Switched to '" .. global_config.provider .. "'" .. model_info
+  ---@type string[]
+  local lines = {}
+  local notify_level = vim.log.levels.INFO
+
+  -- Model fallback warning (invalid model → provider default)
+  if model_fallback then
+    table.insert(lines, "  ⚠ " .. model_fallback)
+    notify_level = vim.log.levels.WARN
   end
-  vim.notify(message, vim.log.levels.INFO)
+
+  -- High-cost warning
+  local model_entry = global_config.model and registry.get_model_info(global_config.provider, global_config.model)
+  local high_cost_threshold = global_config.pricing.high_cost_threshold
+  if
+    model_entry
+    and model_entry.pricing
+    and model_entry.pricing.input + model_entry.pricing.output > high_cost_threshold
+  then
+    table.insert(
+      lines,
+      "  ⚠ Billed at "
+        .. str.format_money(model_entry.pricing.input)
+        .. " input / "
+        .. str.format_money(model_entry.pricing.output)
+        .. " output per MTok"
+    )
+    notify_level = vim.log.levels.WARN
+  end
+
+  -- Frontmatter override notice (provider, model, or both)
+  if buffer_config.provider ~= global_config.provider or buffer_config.model ~= global_config.model then
+    local parts = {}
+    if buffer_config.provider ~= global_config.provider then
+      table.insert(parts, "'" .. buffer_config.provider .. "'")
+    end
+    if buffer_config.model ~= global_config.model then
+      table.insert(parts, "model '" .. buffer_config.model .. "'")
+    end
+    table.insert(lines, "  • This buffer uses " .. table.concat(parts, " / ") .. " (frontmatter)")
+  end
+
+  -- Parameter validation warnings
+  for _, w in ipairs(param_warnings) do
+    table.insert(lines, "  • " .. w)
+    notify_level = vim.log.levels.WARN
+  end
+
+  if #lines == 0 then
+    header = header .. "."
+  end
+  table.insert(lines, 1, header)
+  vim.notify(table.concat(lines, "\n"), notify_level)
 
   hooks.dispatch("config:updated")
 
@@ -900,9 +982,8 @@ function M.send_to_provider(opts)
         end
 
         -- Add request to session with pricing snapshot
-        local provider_data = models_data.providers[config.provider]
-        local model_info = provider_data and provider_data.models[config.model]
-        local pricing_info = model_info and model_info.pricing
+        local pricing_model_info = registry.get_model_info(config.provider, config.model)
+        local pricing_info = pricing_model_info and pricing_model_info.pricing
 
         if pricing_info then
           local session = state.get_session()

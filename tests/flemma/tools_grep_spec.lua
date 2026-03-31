@@ -34,8 +34,10 @@ describe("Grep Tool", function()
     assert.is_true(grep_def.async)
   end)
 
-  it("has can_auto_approve_if_sandboxed capability", function()
-    assert.is_truthy(vim.tbl_contains(grep_def.capabilities, "can_auto_approve_if_sandboxed"))
+  it("does not declare can_auto_approve_if_sandboxed (approved via $standard preset)", function()
+    if grep_def.capabilities then
+      assert.is_falsy(vim.tbl_contains(grep_def.capabilities, "can_auto_approve_if_sandboxed"))
+    end
   end)
 
   describe("backend detection", function()

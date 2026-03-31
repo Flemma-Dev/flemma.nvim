@@ -91,10 +91,10 @@ function M.resolve_include_path(bufnr, lnum, col)
   for _, diag in ipairs(fm.diagnostics) do
     if diag.severity == "error" and not diag.validation then
       log.debug("navigation: frontmatter error: " .. (diag.error or "unknown"))
-      local lines = { diagnostic_format.format_message(diag) }
+      local lines = { "Flemma:", " " .. diagnostic_format.format_message(diag) }
       local loc = diagnostic_format.format_location(diag)
       if loc then
-        table.insert(lines, "  " .. loc)
+        table.insert(lines, "   " .. loc)
       end
       vim.notify(table.concat(lines, "\n"), vim.log.levels.WARN)
       break
@@ -130,10 +130,10 @@ function M.resolve_include_path(bufnr, lnum, col)
     diag.expression = diag.expression or seg.code
     diag.position = diag.position or seg.position
     log.debug("navigation: expression eval failed: " .. (diag.error or "unknown"))
-    local lines = { diagnostic_format.format_message(diag) }
+    local lines = { "Flemma:", " " .. diagnostic_format.format_message(diag) }
     local loc = diagnostic_format.format_location(diag)
     if loc then
-      table.insert(lines, "  " .. loc)
+      table.insert(lines, "   " .. loc)
     end
     vim.notify(table.concat(lines, "\n"), vim.log.levels.WARN)
     return nil

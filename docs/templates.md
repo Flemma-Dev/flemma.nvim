@@ -97,8 +97,8 @@ flemma.opt.tools.auto_approve = { "$readonly" }
 flemma.opt.tools.auto_approve = { "bash", "read" }
 
 -- ListOption operations: modify the default policy incrementally
-flemma.opt.tools.auto_approve = { "$default" }
-flemma.opt.tools.auto_approve:remove("write")       -- exclude write from $default
+flemma.opt.tools.auto_approve = { "$standard" }
+flemma.opt.tools.auto_approve:remove("write")       -- exclude write from $standard
 flemma.opt.tools.auto_approve:append("bash")        -- add bash on top
 
 -- Operator shorthand: + (append), - (remove)
@@ -112,7 +112,7 @@ end
 ```
 ````
 
-Removing a tool that lives inside a preset (e.g., `"write"` from `{ "$default" }`) creates an exclusion – the tool is filtered out when the preset expands, without affecting other tools in the preset.
+Removing a tool that lives inside a preset (e.g., `"write"` from `{ "$standard" }`) creates an exclusion – the tool is filtered out when the preset expands, without affecting other tools in the preset.
 
 **Per-buffer autopilot:** Disable (or force-enable) autopilot for a specific buffer:
 
@@ -180,6 +180,8 @@ Key built-ins:
 - `__filename` – the absolute path to the current `.chat` file.
 - `__dirname` – the directory containing the current file.
 - `include()` – inline another file (see below).
+- `string`, `table`, `math`, `utf8` – standard Lua libraries (safe subsets).
+- `os.date`, `os.time`, `os.clock`, `os.difftime` – read-only time functions (no `execute`, `exit`, `getenv`, etc.).
 
 ```markdown
 @You:
@@ -196,7 +198,7 @@ Draft a short update for {{recipient}} covering:
 
 ## Template code blocks
 
-Use `{% code %}` to embed Lua statements directly in your messages. Unlike `{{ expressions }}`, which output a value, code blocks execute statements -- control flow, variable assignment, loops -- without emitting output themselves. Use `__emit()` inside code blocks when you need to output text.
+Use `{% code %}` to embed Lua statements directly in your messages. Unlike `{{ expressions }}`, which output a value, code blocks execute statements -- control flow, variable assignment, loops -- without emitting output themselves. Use `print()` or `__emit()` inside code blocks when you need to output text.
 
 ```markdown
 @System:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/lint-inline-requires.sh
+# contrib/scripts/lint-inline-requires.sh
 # Detect inline require("flemma.*") calls that should be at the top of the file.
 # Exits 0 if clean, 1 if violations found.
 set -euo pipefail

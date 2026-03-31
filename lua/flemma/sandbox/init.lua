@@ -231,7 +231,7 @@ end
 --- Resolve which backend to use from a sandbox config.
 --- When backend is "auto" or "required", uses cached auto-detection.
 --- When an explicit name, looks up by name directly.
----@param cfg flemma.config.SandboxConfig
+---@param cfg flemma.config.Sandbox
 ---@return flemma.sandbox.BackendEntry|nil entry, string|nil error
 local function resolve_backend(cfg)
   local backend_name = cfg.backend
@@ -382,7 +382,7 @@ end
 --- Reads the resolved sandbox config (all layers merged, including frontmatter
 --- when bufnr is provided). Runtime override wins over everything.
 ---@param bufnr? integer Buffer number for per-buffer resolution
----@return flemma.config.SandboxConfig
+---@return flemma.config.Sandbox
 function M.resolve_config(bufnr)
   -- Use materialize() to get a plain mutable table. The read proxy from
   -- config_facade.get() is frozen — vim.deepcopy triggers __newindex errors.

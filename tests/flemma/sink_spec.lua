@@ -19,6 +19,36 @@ describe("flemma.sink", function()
         sink_module.create({})
       end)
     end)
+
+    it("sanitizes label portion of category/label names", function()
+      local sink = sink_module.create({ name = "http/https://api.anthropic.com/v1/messages" })
+      sink:write("x\n")
+      sink:_drain()
+      local buf_name = vim.api.nvim_buf_get_name(sink._bufnr)
+      local name_without_id = buf_name:gsub("#%d+$", "")
+      assert.equals("flemma://sink/http/https:-api.anthropic.com-v1-messages", name_without_id)
+      sink:destroy()
+    end)
+
+    it("collapses consecutive hyphens and trims edges", function()
+      local sink = sink_module.create({ name = "bash/echo 'hello world' && ls" })
+      sink:write("x\n")
+      sink:_drain()
+      local buf_name = vim.api.nvim_buf_get_name(sink._bufnr)
+      local name_without_id = buf_name:gsub("#%d+$", "")
+      assert.equals("flemma://sink/bash/echo-hello-world-ls", name_without_id)
+      sink:destroy()
+    end)
+
+    it("leaves already-clean names unchanged", function()
+      local sink = sink_module.create({ name = "anthropic/thinking" })
+      sink:write("x\n")
+      sink:_drain()
+      local buf_name = vim.api.nvim_buf_get_name(sink._bufnr)
+      local name_without_id = buf_name:gsub("#%d+$", "")
+      assert.equals("flemma://sink/anthropic/thinking", name_without_id)
+      sink:destroy()
+    end)
   end)
 
   describe("write", function()
@@ -511,6 +541,37 @@ describe("flemma.sink", function()
       end)
       assert.is_true(sink:is_destroyed())
     end)
+
+    it("defers buffer deletion when command-line window is active", function()
+      local sink = sink_module.create({ name = "test/destroy-cmdwin" })
+      sink:write("data\n")
+      sink:_drain()
+      local bufnr = sink._bufnr
+      assert.is_true(vim.api.nvim_buf_is_valid(bufnr))
+
+      -- Simulate being inside the command-line window (q:)
+      local original_fn = vim.fn.getcmdwintype
+      vim.fn.getcmdwintype = function()
+        return ":"
+      end
+
+      sink:destroy()
+
+      -- Restore before CmdwinLeave fires so the callback runs outside the mock
+      vim.fn.getcmdwintype = original_fn
+
+      -- Logically destroyed, but buffer deletion was deferred
+      assert.is_true(sink:is_destroyed())
+      assert.is_true(vim.api.nvim_buf_is_valid(bufnr))
+
+      -- Simulate leaving the command-line window and let the scheduled cleanup fire
+      vim.api.nvim_exec_autocmds("CmdwinLeave", {})
+      vim.wait(100, function()
+        return not vim.api.nvim_buf_is_valid(bufnr)
+      end)
+
+      assert.is_false(vim.api.nvim_buf_is_valid(bufnr))
+    end)
   end)
 
   describe("writequeue integration", function()
@@ -545,7 +606,7 @@ describe("flemma.sink", function()
       local sink = sink_module.create({ name = "test/wq-visible-nomod" })
       sink:write("data\n")
       sink:_drain()
-      -- Open the sink buffer in a window (simulates sink_viewer)
+      -- Open the sink buffer in a window (simulates external viewer)
       local win = vim.api.nvim_open_win(sink._bufnr, false, {
         split = "below",
         win = vim.api.nvim_get_current_win(),

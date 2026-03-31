@@ -243,6 +243,59 @@ describe("ast.query", function()
     end)
   end)
 
+  describe("find_message_at_line", function()
+    it("returns message when lnum matches start_line (fast path)", function()
+      local query = require("flemma.ast.query")
+      local doc = parser.parse_lines({
+        "@You:",
+        "hello",
+        "@Assistant:",
+        "world",
+      })
+      local msg = query.find_message_at_line(doc, 1)
+      assert.is_not_nil(msg)
+      assert.equals("You", msg.role)
+    end)
+
+    it("returns message when lnum is inside the message (containment fallback)", function()
+      local query = require("flemma.ast.query")
+      local doc = parser.parse_lines({
+        "@You:",
+        "hello",
+        "@Assistant:",
+        "line one",
+        "line two",
+        "line three",
+      })
+      local msg = query.find_message_at_line(doc, 5)
+      assert.is_not_nil(msg)
+      assert.equals("Assistant", msg.role)
+    end)
+
+    it("returns nil when lnum is outside all messages", function()
+      local query = require("flemma.ast.query")
+      local doc = parser.parse_lines({})
+      local msg = query.find_message_at_line(doc, 1)
+      assert.is_nil(msg)
+    end)
+
+    it("finds the correct message among multiple", function()
+      local query = require("flemma.ast.query")
+      local doc = parser.parse_lines({
+        "@System:",
+        "system prompt",
+        "@You:",
+        "question",
+        "@Assistant:",
+        "answer",
+      })
+      -- Line 4 is inside @You: message
+      local msg = query.find_message_at_line(doc, 4)
+      assert.is_not_nil(msg)
+      assert.equals("You", msg.role)
+    end)
+  end)
+
   describe("build_tool_use_index", function()
     it("returns name and label for tool_use with input.label", function()
       local query = require("flemma.ast.query")

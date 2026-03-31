@@ -21,7 +21,6 @@ local secrets = require("flemma.secrets")
 local tools = require("flemma.tools")
 local preprocessor = require("flemma.preprocessor")
 local templating = require("flemma.templating")
-local tools_presets = require("flemma.tools.presets")
 local tools_approval = require("flemma.tools.approval")
 local diagnostic_format = require("flemma.utilities.diagnostic")
 local cursor = require("flemma.cursor")
@@ -71,8 +70,8 @@ M.setup = function(user_opts)
   -- defaults aren't in L10 yet — those arrive as each module registers.
   local config = config_facade.materialize()
 
-  -- Hydrate preset definitions for fast lookup
-  presets.refresh(config.presets)
+  -- Initialize unified preset registry (built-ins + user presets)
+  presets.setup(config.presets)
 
   -- Configure logging based on user settings
   log.configure({
@@ -112,11 +111,10 @@ M.setup = function(user_opts)
   -- Register built-in sandbox backends and validate availability
   sandbox.setup()
 
-  -- Initialize tool approval presets before finalize so that the auto_approve
-  -- coerce function can expand $preset references during the coerce pass.
-  -- Read presets config from the store — L20 has the user's setup values.
-  local presets_cfg = config_facade.get()
-  tools_presets.setup(presets_cfg.tools and presets_cfg.tools.presets)
+  -- Validate preset auto_approve entries against the now-populated tool registry.
+  -- Must run before finalize so the auto_approve coerce function can expand
+  -- $preset references during the coerce pass.
+  presets.finalize()
 
   -- Phase 3: Finalize — replay deferred DISCOVER writes + run coerce transforms
   -- Deferred user opts (e.g., parameters.vertex, tools.bash) now resolve.
@@ -173,7 +171,7 @@ M.setup = function(user_opts)
   -- setup parameters are already in L20 from config_facade.apply() above.
   if resolved_preset then
     core.initialize_provider(
-      resolved_preset.provider or config.provider,
+      resolved_preset.provider or config.provider --[[@as string]],
       resolved_preset.model or config.model,
       resolved_preset.parameters or {},
       config_facade.LAYERS.SETUP
@@ -225,7 +223,6 @@ M.setup = function(user_opts)
   personalities.setup()
 
   -- Initialize approval resolver chain from config
-  -- (tools_presets.setup() already called before finalize in Phase 2)
   tools_approval.setup()
 
   -- Set up experimental LSP if enabled

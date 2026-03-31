@@ -14,8 +14,29 @@ local writequeue = require("flemma.buffer.writequeue")
 local DEFAULT_FLUSH_INTERVAL = 50
 local next_buffer_id = 0
 
+---Sanitize a string: keep alphanumerics, dots, hyphens, underscores, colons;
+---replace everything else with hyphens, collapse runs, trim edges.
+---@param s string
+---@return string
+local function sanitize_label(s)
+  return (s:gsub("[^%w%.%-_:]", "-"):gsub("%-+", "-"):gsub("^%-", ""):gsub("%-$", ""))
+end
+
+---Sanitize a sink name into canonical `category/label` form.
+---The category (before the first `/`) passes through unchanged; the label
+---portion is sanitized.
+---@param raw string
+---@return string
+local function sanitize_name(raw)
+  local category, label = raw:match("^([^/]+)/(.+)$")
+  if not category then
+    return sanitize_label(raw)
+  end
+  return category .. "/" .. sanitize_label(label)
+end
+
 ---@class flemma.SinkCreateOpts
----@field name string Sink name (e.g. "stream/curl-42"), used in buffer name
+---@field name string Sink name (e.g. "http/api.example.com-v1-messages"). Sanitized automatically — callers pass raw values.
 ---@field flush_interval? integer Milliseconds between auto-flushes (default 50)
 ---@field on_line? fun(line: string) Real-time callback fired for each complete line
 
@@ -105,7 +126,8 @@ function M.create(opts)
     error("flemma.sink.create: opts.name is required")
   end
 
-  return Sink.new(opts.name, opts.flush_interval or DEFAULT_FLUSH_INTERVAL, opts.on_line)
+  local name = sanitize_name(opts.name)
+  return Sink.new(name, opts.flush_interval or DEFAULT_FLUSH_INTERVAL, opts.on_line)
 end
 
 ---Write raw data to the sink with automatic line framing
@@ -392,6 +414,31 @@ function Sink:destroy()
 
   -- Check if the buffer is still valid before operating on it
   if not vim.api.nvim_buf_is_valid(self._bufnr) then
+    return
+  end
+
+  -- Buffer deletion and option changes are forbidden inside the command-line
+  -- window (E11). Capture the values we need and defer until it closes.
+  if vim.fn.getcmdwintype() ~= "" then
+    local bufnr = self._bufnr
+    local name = self._name
+    vim.api.nvim_create_autocmd("CmdwinLeave", {
+      once = true,
+      callback = function()
+        vim.schedule(function()
+          if not vim.api.nvim_buf_is_valid(bufnr) then
+            return
+          end
+          if #vim.fn.win_findbuf(bufnr) > 0 then
+            vim.bo[bufnr].bufhidden = "wipe"
+            log.debug("sink '" .. name .. "': buffer visible, deferring wipe (post-cmdwin)")
+          else
+            vim.api.nvim_buf_delete(bufnr, { force = true })
+            log.debug("sink '" .. name .. "': buffer deleted (post-cmdwin)")
+          end
+        end)
+      end,
+    })
     return
   end
 

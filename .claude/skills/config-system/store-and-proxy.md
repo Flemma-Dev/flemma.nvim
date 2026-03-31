@@ -9,7 +9,7 @@ The store is **schema-free** — it stores operations and resolves paths. It has
 ```lua
 store.record(layer, bufnr, "set", "provider", "anthropic")
 store.record(layer, bufnr, "append", "tools.auto_approve", "bash")
-store.record(layer, bufnr, "remove", "tools.auto_approve", "$default")
+store.record(layer, bufnr, "remove", "tools.auto_approve", "$standard")
 store.record(layer, bufnr, "prepend", "tools.modules", "my.tool")
 ```
 

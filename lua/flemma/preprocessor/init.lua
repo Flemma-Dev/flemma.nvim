@@ -280,7 +280,7 @@ function M.setup()
     local load_ok, load_err = pcall(M.register, module_path)
     if not load_ok then
       vim.notify(
-        "flemma: failed to load built-in rewriter " .. module_path .. ": " .. tostring(load_err),
+        "Flemma: Failed to load built-in rewriter " .. module_path .. ": " .. tostring(load_err),
         vim.log.levels.WARN
       )
     end

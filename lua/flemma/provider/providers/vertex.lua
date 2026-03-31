@@ -27,6 +27,7 @@ setmetatable(M, { __index = base })
 M.metadata = {
   name = "vertex",
   display_name = "Vertex AI",
+  models = { "flemma.models.vertex" },
   capabilities = {
     supports_reasoning = false,
     supports_thinking_budget = true,
@@ -570,6 +571,19 @@ function M.extract_json_response_error(self, data)
 
   -- If Vertex-specific patterns don't match, fall back to base class patterns
   return base.extract_json_response_error(self, data)
+end
+
+--- Validate Vertex-specific parameters.
+--- Warns early about missing required configuration that would cause a request-time error.
+---@param _model_name string The model name
+---@param parameters table<string, any> The parameters to validate
+---@return boolean success Always true (warnings don't fail validation)
+---@return string[]|nil warnings Human-readable warning strings, or nil when clean
+function M.validate_parameters(_model_name, parameters)
+  if not parameters.project_id or parameters.project_id == "" then
+    return true, { "project_id is required — configure it in `parameters.vertex.project_id` or via :Flemma switch" }
+  end
+  return true
 end
 
 --- Detect whether an error message indicates an authentication failure.

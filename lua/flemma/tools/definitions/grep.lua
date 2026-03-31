@@ -120,7 +120,6 @@ M.definitions = {
     enabled = function(config)
       return not not (config and config.experimental and config.experimental.tools)
     end,
-    capabilities = { "can_auto_approve_if_sandboxed" },
     description = "Search file contents using ripgrep (rg) or grep. "
       .. "Returns matching lines with file paths and line numbers. "
       .. "Output is limited to "
@@ -255,7 +254,7 @@ M.definitions = {
       end
 
       local output_sink = sink_module.create({
-        name = "grep/" .. (input.label or "search"):gsub("[^%w/%-]", "-"),
+        name = "grep/" .. (input.label or "search"),
         on_line = on_line_callback,
       })
 

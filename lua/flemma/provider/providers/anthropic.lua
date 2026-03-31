@@ -19,6 +19,7 @@ setmetatable(M, { __index = base })
 M.metadata = {
   name = "anthropic",
   display_name = "Anthropic",
+  models = { "flemma.models.anthropic" },
   capabilities = {
     supports_reasoning = false,
     supports_thinking_budget = true,
@@ -126,6 +127,7 @@ function M.build_request(self, prompt, _context)
               media_type = part.mime_type,
               data = part.data,
             },
+            title = part.filename and vim.fn.fnamemodify(part.filename, ":t"),
           })
           log.debug(
             'anthropic.build_request: Added document part for "'
@@ -180,14 +182,19 @@ function M.build_request(self, prompt, _context)
         end
       end
 
-      -- Second pass: collect text and tool_use
+      -- Second pass: collect text (must precede tool_use in Anthropic content arrays)
       for _, p in ipairs(msg.parts or {}) do
         if p.kind == "text" then
           local text = vim.trim(p.text or "")
           if #text > 0 then
             table.insert(content_blocks, { type = "text", text = text })
           end
-        elseif p.kind == "tool_use" then
+        end
+      end
+
+      -- Third pass: collect tool_use (must follow text in Anthropic content arrays)
+      for _, p in ipairs(msg.parts or {}) do
+        if p.kind == "tool_use" then
           -- Normalize tool ID for Anthropic compatibility (handles Vertex URN-style IDs)
           local normalized_id = base.normalize_tool_id(p.id)
           table.insert(content_blocks, {
@@ -330,8 +337,6 @@ function M.build_request(self, prompt, _context)
       }
       log.debug("anthropic.build_request: Thinking enabled with budget: " .. budget)
     end
-    -- Remove temperature when thinking is enabled (Anthropic API requirement)
-    request_body.temperature = nil
   else
     log.debug("anthropic.build_request: Thinking disabled")
   end
@@ -664,7 +669,7 @@ function M.try_import_from_buffer(lines)
   -- Extract and prepare content
   local content = import_extract_content(lines)
   if #content == 0 then
-    vim.notify("No Anthropic API call found in buffer", vim.log.levels.ERROR)
+    vim.notify("Flemma: No Anthropic API call found in buffer.", vim.log.levels.ERROR)
     return nil
   end
 
@@ -688,7 +693,7 @@ function M.try_import_from_buffer(lines)
     end
 
     vim.notify(
-      "Failed to parse API call data. Debug info written to " .. tmp_dir .. sep .. "flemma_import_debug.log",
+      "Flemma: Failed to parse API call data. Debug info written to " .. tmp_dir .. sep .. "flemma_import_debug.log",
       vim.log.levels.ERROR
     )
     return nil

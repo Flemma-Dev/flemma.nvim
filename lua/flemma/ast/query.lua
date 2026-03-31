@@ -43,13 +43,20 @@ function M.find_tool_segment_at_line(doc, lnum)
   return nil, nil
 end
 
----Find a message whose start line matches the given line number.
+---Find the message at a given line number.
+---Fast path: exact match on start_line (fold text, navigation).
+---Fallback: containment check (start_line <= lnum <= end_line).
 ---@param doc flemma.ast.DocumentNode
 ---@param lnum integer 1-indexed line number
 ---@return flemma.ast.MessageNode|nil message
 function M.find_message_at_line(doc, lnum)
   for _, msg in ipairs(doc.messages) do
     if msg.position.start_line == lnum then
+      return msg
+    end
+  end
+  for _, msg in ipairs(doc.messages) do
+    if lnum >= msg.position.start_line and lnum <= msg.position.end_line then
       return msg
     end
   end

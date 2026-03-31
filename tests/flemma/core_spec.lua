@@ -13,7 +13,6 @@ describe(":Flemma send command", function()
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
-    package.loaded["flemma.models"] = nil
 
     flemma = require("flemma")
     state = require("flemma.state")
@@ -41,7 +40,6 @@ describe(":Flemma send command", function()
 
     -- Arrange: Register a dummy fixture to prevent actual network calls.
     -- The content of the fixture DOES matter, as it's processed by the provider.
-    local config = require("flemma.config").materialize()
     local default_anthropic_model = registry.get_model("anthropic")
     client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
 
@@ -58,7 +56,7 @@ describe(":Flemma send command", function()
     assert.equals("Be brief.", captured_request_body.system[1].text)
     -- max_tokens resolves from "50%" of claude-sonnet-4-6's 64K max_output → 32000
     assert.equals(32000, captured_request_body.max_tokens)
-    assert.equals(config.parameters.temperature, captured_request_body.temperature)
+    assert.is_nil(captured_request_body.temperature)
     assert.equals(true, captured_request_body.stream)
     assert.equals(1, #captured_request_body.messages)
     assert.equals("user", captured_request_body.messages[1].role)
@@ -88,8 +86,6 @@ describe(":Flemma send command", function()
     local captured_request_body = core._get_last_request_body()
     assert.is_not_nil(captured_request_body, "request_body was not captured")
 
-    local config = require("flemma.config").materialize()
-
     assert.equals("o3", captured_request_body.model)
     assert.is_not_nil(captured_request_body.input, "Should use input field (Responses API)")
     assert.is_nil(captured_request_body.messages, "Should NOT use messages field")
@@ -103,7 +99,7 @@ describe(":Flemma send command", function()
     assert.is_nil(captured_request_body.stream_options, "Responses API does not use stream_options")
     -- max_tokens resolves from "50%" of o3's 100K max_output → 50000
     assert.equals(50000, captured_request_body.max_output_tokens)
-    assert.equals(config.parameters.temperature, captured_request_body.temperature)
+    assert.is_nil(captured_request_body.temperature)
 
     -- Tools are now included by default (parallel tool use enabled)
     if captured_request_body.tools then
@@ -399,6 +395,188 @@ describe(":Flemma send command", function()
     notify_spy:revert()
   end)
 
+  it("switch to a normal-cost model emits single-line INFO with period", function()
+    local notify_spy = stub(vim, "notify")
+
+    core.switch_provider("anthropic", "claude-sonnet-4-6", {})
+
+    vim.wait(50, function()
+      return #notify_spy.calls > 0
+    end, 10, false)
+
+    local saw_info = false
+    for _, call in ipairs(notify_spy.calls) do
+      local msg = call.refs[1]
+      local level = call.refs[2]
+      if msg and string.find(msg, "claude%-sonnet%-4%-6") then
+        assert.are.equal(vim.log.levels.INFO, level, "Normal-cost switch should be INFO")
+        assert.is_falsy(string.find(msg, "⚠"), "Should not contain warning icon")
+        assert.is_truthy(string.find(msg, "%.$"), "Should end with period")
+        assert.is_falsy(string.find(msg, "\n"), "Should be single-line")
+        saw_info = true
+        break
+      end
+    end
+    assert.is_true(saw_info, "Normal switch should emit INFO notification")
+
+    notify_spy:revert()
+  end)
+
+  it("switch to boundary-cost model (opus-4-6, $30 exactly) stays INFO", function()
+    local notify_spy = stub(vim, "notify")
+
+    core.switch_provider("anthropic", "claude-opus-4-6", {})
+
+    vim.wait(50, function()
+      return #notify_spy.calls > 0
+    end, 10, false)
+
+    local saw_switch = false
+    for _, call in ipairs(notify_spy.calls) do
+      local msg = call.refs[1]
+      local level = call.refs[2]
+      if msg and string.find(msg, "claude%-opus%-4%-6") then
+        assert.are.equal(vim.log.levels.INFO, level, "Boundary model should stay INFO")
+        assert.is_falsy(string.find(msg, "⚠"), "Should not contain warning icon")
+        saw_switch = true
+        break
+      end
+    end
+    assert.is_true(saw_switch, "Should see switch notification for opus-4-6")
+
+    notify_spy:revert()
+  end)
+
+  it("switch to a high-cost model emits multi-line WARN with pricing", function()
+    local notify_spy = stub(vim, "notify")
+
+    -- gpt-5.4-pro: $30+$180 = $210 > 30 threshold
+    core.switch_provider("openai", "gpt-5.4-pro", {})
+
+    vim.wait(50, function()
+      return #notify_spy.calls > 0
+    end, 10, false)
+
+    local saw_warn = false
+    for _, call in ipairs(notify_spy.calls) do
+      local msg = call.refs[1]
+      local level = call.refs[2]
+      if level == vim.log.levels.WARN and msg and string.find(msg, "gpt%-5%.4%-pro") then
+        assert.is_truthy(string.find(msg, "%$30"), "Should contain input price")
+        assert.is_truthy(string.find(msg, "%$180"), "Should contain output price")
+        assert.is_truthy(string.find(msg, "\n"), "Should be multi-line")
+        assert.is_truthy(string.find(msg, "⚠ Billed at"), "Should have cost bullet")
+        saw_warn = true
+        break
+      end
+    end
+    assert.is_true(saw_warn, "High-cost switch should emit WARN with pricing")
+
+    notify_spy:revert()
+  end)
+
+  it("switch notification shows frontmatter model override as bullet line", function()
+    local notify_spy = stub(vim, "notify")
+
+    -- Switch globally to anthropic/claude-opus-4-6, then set up a buffer
+    -- with frontmatter that overrides the model
+    core.switch_provider("anthropic", "claude-opus-4-6", {})
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "```lua",
+      'flemma.opt.model = "claude-haiku-4-5"',
+      "```",
+      "@You:",
+      "Hello",
+    })
+
+    -- Re-switch to trigger notification with frontmatter evaluated
+    notify_spy:clear()
+    core.switch_provider("anthropic", "claude-opus-4-6", {})
+
+    vim.wait(50, function()
+      return #notify_spy.calls > 0
+    end, 10, false)
+
+    local saw_override = false
+    for _, call in ipairs(notify_spy.calls) do
+      local msg = call.refs[1]
+      if msg and string.find(msg, "claude%-opus%-4%-6") then
+        assert.is_truthy(string.find(msg, "model 'claude%-haiku%-4%-5'"), "Should mention overridden model")
+        assert.is_truthy(string.find(msg, "frontmatter"), "Should mention frontmatter")
+        assert.is_truthy(string.find(msg, "\n"), "Should be multi-line")
+        assert.is_truthy(string.find(msg, "  • This buffer uses"), "Override should be a bullet line")
+        saw_override = true
+        break
+      end
+    end
+    assert.is_true(saw_override, "Should show frontmatter model override")
+
+    notify_spy:revert()
+  end)
+
+  it("model fallback appears as bullet line in switch notification", function()
+    local notify_spy = stub(vim, "notify")
+
+    -- Invalid model falls back to provider default; fallback warning becomes a bullet
+    core.switch_provider("openai", "nonexistent-model", {})
+
+    vim.wait(50, function()
+      return #notify_spy.calls > 0
+    end, 10, false)
+
+    local saw_fallback = false
+    for _, call in ipairs(notify_spy.calls) do
+      local msg = call.refs[1]
+      local level = call.refs[2]
+      if level == vim.log.levels.WARN and msg and string.find(msg, "Switched to") then
+        assert.is_truthy(string.find(msg, "⚠ Model 'nonexistent%-model' is not valid"), "Should have fallback bullet")
+        assert.is_truthy(string.find(msg, "\n"), "Should be multi-line")
+        saw_fallback = true
+        break
+      end
+    end
+    assert.is_true(saw_fallback, "Should show model fallback as bullet in switch notification")
+
+    notify_spy:revert()
+  end)
+
+  it("initialize_provider emits warnings via vim.schedule", function()
+    local notify_spy = stub(vim, "notify")
+
+    -- Use an invalid model to trigger fallback warning
+    core.initialize_provider("openai", "nonexistent-model", {})
+
+    -- vim.schedule defers — need to process the event loop
+    vim.wait(200, function()
+      for _, call in ipairs(notify_spy.calls) do
+        local msg = call.refs[1]
+        if msg and string.find(msg, "nonexistent%-model") then
+          return true
+        end
+      end
+      return false
+    end, 10, false)
+
+    local saw_warn = false
+    for _, call in ipairs(notify_spy.calls) do
+      local msg = call.refs[1]
+      local level = call.refs[2]
+      if msg and string.find(msg, "nonexistent%-model") then
+        assert.are.equal(vim.log.levels.WARN, level, "Should be WARN level")
+        assert.is_truthy(string.find(msg, "Initialized"), "Should have header line")
+        assert.is_truthy(string.find(msg, "⚠ Model 'nonexistent%-model' is not valid"), "Should have fallback bullet")
+        saw_warn = true
+        break
+      end
+    end
+    assert.is_true(saw_warn, "initialize_provider should emit deferred warning")
+
+    notify_spy:revert()
+  end)
+
   it("frontmatter can override provider and model for a single buffer", function()
     -- Arrange: Verify the default provider is NOT OpenAI (what frontmatter will override to)
     local default_config = require("flemma.config").materialize()
@@ -430,5 +608,36 @@ describe(":Flemma send command", function()
     -- Assert: Global config still points to the original provider (frontmatter is per-buffer)
     local global_after = require("flemma.config").materialize()
     assert.equals(default_config.provider, global_after.provider)
+  end)
+
+  it("print() in code blocks emits text into the request body", function()
+    -- Arrange: Register the default Anthropic fixture
+    client.register_fixture("api%.anthropic%.com", "tests/fixtures/anthropic_hello_success_stream.txt")
+
+    -- Arrange: Buffer with {% print() %} statements building a user message
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@You:",
+      '{%- local topics = {"parsing", "testing"} -%}',
+      '{%- print("Today I need help with: ") -%}',
+      "{%- for topic, loop in each(topics) do",
+      '  if not loop.first then print(", ") end',
+      "  print(topic)",
+      "end -%}",
+      ".",
+    })
+
+    -- Act
+    vim.cmd("Flemma send")
+
+    -- Assert: The user message content should contain the expanded print output
+    local captured = core._get_last_request_body()
+    assert.is_not_nil(captured, "request_body was not captured")
+    assert.equals(1, #captured.messages)
+    assert.equals("user", captured.messages[1].role)
+
+    local user_text = captured.messages[1].content[1].text
+    assert.equals("Today I need help with: parsing, testing.", user_text)
   end)
 end)

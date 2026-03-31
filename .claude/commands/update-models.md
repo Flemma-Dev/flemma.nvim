@@ -1,11 +1,19 @@
 ---
-description: Update models and pricing in models.lua using models.dev API and provider documentation
+description: Update models and pricing in per-provider model files using models.dev API and provider documentation
 disable-model-invocation: true
 ---
 
 # Update Models and Pricing
 
-Update the following file (and only this file!): `lua/flemma/models.lua` — with up-to-date information about the models and pricing of Google Gemini (via Vertex AI), Anthropic Claude, and OpenAI.
+Update the per-provider model data files under `lua/flemma/models/` with up-to-date information about the models and pricing of Google Gemini (via Vertex AI), Anthropic Claude, OpenAI, and Moonshot AI.
+
+**Target files:**
+- `lua/flemma/models/anthropic.lua`
+- `lua/flemma/models/openai.lua`
+- `lua/flemma/models/vertex.lua`
+- `lua/flemma/models/moonshot.lua`
+
+Each file is a pure data module returning `{ default = "...", models = { ... } }`. Type annotations live in `lua/flemma/models/types.lua` (do not modify).
 
 ## Phase 1: Fetch models.dev API data
 
@@ -167,14 +175,15 @@ For Anthropic models, also set `cache_write` (the short/5-minute TTL price). The
 
 For Vertex models, `cache_read` is typically 10% of the input price (implicit caching discount).
 
-## Phase 4: Generate models.lua
+## Phase 4: Update per-provider model files
 
-Update `lua/flemma/models.lua` with the merged data. Follow the existing structure exactly:
+Update each file under `lua/flemma/models/` with the merged data. Follow the existing structure exactly:
 
-- Preserve the file header comment block and type annotations unchanged
+- Preserve the file header comment block unchanged
 - Group models by family with comments
 - Include deprecation/retirement comments where applicable
 - Today's date is !`date +%Y-%m-%d` — use this for assessing retirement dates
+- **Reassess `high_cost_threshold`**: Check whether the combined (input + output) price boundary still sits in a natural gap. The threshold lives in `lua/flemma/config/schema.lua` under `pricing.high_cost_threshold` (currently `30`), with strict `>` so Claude Opus itself doesn't warn. If Opus pricing changes or the gap shifts, update the default value in the schema.
 
 ## Rules
 
@@ -196,5 +205,5 @@ If you discover a newer Sonnet version during the update, scan the codebase for 
 1. **Fetch models.dev API** and extract data via jq.
 2. **Fetch provider docs** for cross-referencing.
 3. **Merge data**, applying hardcoded overrides.
-4. **Update `lua/flemma/models.lua`**.
+4. **Update per-provider files** under `lua/flemma/models/`.
 5. **Run `make test`** to check for tests that may reference retired models.

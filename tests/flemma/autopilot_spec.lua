@@ -867,7 +867,6 @@ describe("Autopilot integration", function()
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
-    package.loaded["flemma.models"] = nil
     package.loaded["flemma.autopilot"] = nil
 
     flemma_mod = require("flemma")
@@ -948,7 +947,6 @@ describe("Autopilot race condition: sync + async tool dispatch", function()
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
-    package.loaded["flemma.models"] = nil
     package.loaded["flemma.autopilot"] = nil
 
     flemma_mod = require("flemma")

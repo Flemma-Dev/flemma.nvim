@@ -1,6 +1,6 @@
 # UI Customisation
 
-Flemma adapts to your colour scheme with theme-aware highlights, line backgrounds, rulers, sign column indicators, and folding. Every visual element is configurable.
+Flemma adapts to your colour scheme with theme-aware highlights, line backgrounds, rulers, turn indicators, and folding. Every visual element is configurable.
 
 > For the full configuration block including all UI-related keys, see [docs/configuration.md](configuration.md).
 
@@ -126,25 +126,31 @@ ruler = {
 
 With rulers enabled, a role marker line like `@You:` renders as `─ You ────────...` spanning the full window width. The first message also gets a ruler when frontmatter is present.
 
-## Sign column indicators
+## Turn indicators
 
-Set `signs.enabled = true` to place a sign character on every line of each message. Each role can override the character and highlight independently:
+Turn indicators use the statuscolumn to visually group contiguous request/response cycles — an `@You` message through its terminal `@Assistant` response, including any intermediate tool use. Box drawing characters run continuously down the left edge, covering wrapped lines and virtual lines.
 
 ```lua
-signs = {
-  enabled = false,       -- default: false
-  char = "▌",            -- default character for all roles
-  system = { char = nil, hl = true },     -- nil = inherit `char`; hl = true inherits from highlights.system
-  user = { char = "▏", hl = true },
-  assistant = { char = nil, hl = true },
+turns = {
+  enabled = true,
+  padding = { left = 1, right = 0 },   -- also accepts a number (left only) or tuple {L, R}
+  hl = "FlemmaTurn",                   -- links to FlemmaRuler by default
 }
 ```
 
-When `hl = true`, the sign colour is derived from the corresponding `highlights.<role>` group. Set `hl` to a string or table to use an explicit highlight instead.
+Three visual states indicate turn progress:
+
+- **Complete** (`╭│╰`) — the assistant responded with no pending tool calls.
+- **Incomplete** (`╭┊└`) — mid-tool-use; tool results are pending before the turn can finish.
+- **Streaming** (`╭┊└` moving) — the assistant is actively generating a response.
+
+When `padding.right > 0`, the top arc (`╭`) connects to the ruler for a seamless visual join.
 
 ## Spinner behaviour
 
-While a request is in flight, Flemma writes an `@Assistant:` marker on its own line and renders "Thinking…" as end-of-line virtual text with an animated braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`). The spinner animates at 100ms intervals and is removed once streaming starts.
+While a request is in flight, Flemma writes an `@Assistant:` marker on its own line and renders "Thinking…" as end-of-line virtual text with an animated braille spinner. The animation uses phase-specific frame sequences so the visual rhythm reflects what is happening.
+
+The spinner transitions between phases automatically and is removed once streaming starts.
 
 When the model enters a thinking/reasoning phase, the spinner animation is replaced with a live character count – e.g., `Thinking… (3.2k characters)` – so you can gauge progress at a glance.
 
@@ -154,7 +160,7 @@ When async tool sources (registered via `tools.modules` or `tools.register()` wi
 
 ### Tool execution indicators
 
-During tool execution, a separate spinner appears next to the `**Tool Result:**` block using circular quarter characters (`◐◓◑◒`). When execution completes, the indicator changes to `✓ Complete` or `✗ Failed`. Indicators reposition automatically if the buffer is modified during execution and clear on the next buffer edit.
+During tool execution, an animated braille spinner appears next to the `**Tool Result:**` block using the tool phase frames (a falling sand animation at 200ms intervals). When execution completes, the indicator changes to `✓ Complete` or `✗ Failed`. Indicators reposition automatically if the buffer is modified during execution and clear on the next buffer edit.
 
 ### Tool previews
 

@@ -17,11 +17,6 @@ describe("provider registration", function()
     registry.setup()
     registry.defaults = original_defaults
     registry.models = original_models
-
-    -- Clean up any custom provider models_data entries
-    local models_data = require("flemma.models")
-    models_data.providers["custom"] = nil
-    models_data.providers["minimal"] = nil
   end)
 
   describe("register()", function()
@@ -218,7 +213,7 @@ describe("provider registration", function()
 
   describe("count()", function()
     it("returns the number of registered providers", function()
-      assert.are.equal(3, registry.count())
+      assert.are.equal(4, registry.count())
     end)
 
     it("returns 0 after clear", function()
@@ -264,7 +259,7 @@ describe("flatten_parameters with facade", function()
     local flat = normalize.flatten_parameters("anthropic", config)
     -- Schema defaults should be present
     assert.are.equal("50%", flat.max_tokens)
-    assert.are.equal(0.7, flat.temperature)
+    assert.is_nil(flat.temperature)
     assert.are.equal(600, flat.timeout)
     assert.are.equal("short", flat.cache_retention)
   end)
@@ -386,7 +381,7 @@ describe("resolve_preset", function()
 
   it("resolves preset reference to concrete provider and model", function()
     local presets_mod = require("flemma.presets")
-    presets_mod.refresh({
+    presets_mod.setup({
       ["$haiku"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514" },
     })
     config_facade.apply(config_facade.LAYERS.SETUP, { model = "$haiku" })
@@ -398,7 +393,7 @@ describe("resolve_preset", function()
 
   it("merges preset parameters into config", function()
     local presets_mod = require("flemma.presets")
-    presets_mod.refresh({
+    presets_mod.setup({
       ["$fast"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514", thinking = "low" },
     })
     config_facade.apply(config_facade.LAYERS.SETUP, { model = "$fast" })
@@ -410,7 +405,7 @@ describe("resolve_preset", function()
 
   it("does not mutate the original config table", function()
     local presets_mod = require("flemma.presets")
-    presets_mod.refresh({
+    presets_mod.setup({
       ["$haiku"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514" },
     })
     config_facade.apply(config_facade.LAYERS.SETUP, { model = "$haiku" })

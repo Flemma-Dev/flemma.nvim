@@ -91,7 +91,6 @@ M.definitions = {
     enabled = function(config)
       return not not (config and config.experimental and config.experimental.tools)
     end,
-    capabilities = { "can_auto_approve_if_sandboxed" },
     description = "List directory contents. Output is truncated to "
       .. truncate.MAX_LINES
       .. " lines or "

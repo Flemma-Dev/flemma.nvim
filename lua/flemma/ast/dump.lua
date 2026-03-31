@@ -368,6 +368,7 @@ function M.open_diff(bufnr)
   for _, buf in ipairs({ buf_raw, buf_rewritten }) do
     vim.bo[buf].buftype = "nofile"
     vim.bo[buf].bufhidden = "wipe"
+    vim.bo[buf].modifiable = false
     vim.bo[buf].filetype = "flemma-ast"
   end
 

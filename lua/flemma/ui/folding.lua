@@ -448,6 +448,60 @@ function M.setup_folding(bufnr)
   vim.wo[winid].foldlevel = config_facade.get().editing.foldlevel
 end
 
+---Close all open sub-folds within a line range before closing the outer fold.
+---Scans the cached fold map for fold-start markers (`>N`) and closes each one
+---individually, skipping any that are already closed. Processing fold starts
+---individually avoids the Vim limitation where a range `:foldclose` skips lines
+---hidden inside an earlier closed fold.
+---@param start_line integer First body line (after the outer fold's start line)
+---@param end_line integer Last line of the outer fold
+local function close_sub_folds(start_line, end_line)
+  for lnum = start_line, end_line do
+    local expr = fold_map_cache.map[lnum]
+    if expr and expr:sub(1, 1) == ">" and vim.fn.foldclosed(lnum) == -1 then
+      pcall(function()
+        vim.cmd(lnum .. " foldclose")
+      end)
+    end
+  end
+end
+
+---Toggle the message fold containing the cursor.
+---Always operates on the level-1 message fold, not whatever fold is under the cursor.
+---When closing, closes all nested folds first (thinking, tool blocks) so they
+---remain tidy when the message is reopened.
+---Falls back to toggling the frontmatter fold when the cursor is outside any message.
+function M.toggle_message_fold()
+  local lnum = vim.fn.line(".")
+  local bufnr = vim.api.nvim_get_current_buf()
+  local doc = parser.get_parsed_document(bufnr)
+  local msg = query.find_message_at_line(doc, lnum)
+
+  if msg then
+    local msg_start = msg.position.start_line
+    if vim.fn.foldclosed(msg_start) ~= -1 then
+      vim.cmd(msg_start .. " foldopen")
+    else
+      -- Ensure the fold map is fresh so close_sub_folds sees current fold starts
+      M.get_fold_level(msg_start)
+      close_sub_folds(msg_start + 1, msg.position.end_line)
+      vim.cmd(msg_start .. " foldclose")
+    end
+    return
+  end
+
+  -- No message at cursor — check frontmatter
+  local fm = doc.frontmatter
+  if fm and lnum >= fm.position.start_line and lnum <= fm.position.end_line then
+    local fm_start = fm.position.start_line
+    if vim.fn.foldclosed(fm_start) ~= -1 then
+      vim.cmd(fm_start .. " foldopen")
+    else
+      vim.cmd(fm_start .. " foldclose")
+    end
+  end
+end
+
 ---Force Neovim to re-evaluate all fold levels for a buffer.
 ---
 ---Incremental fold recalculation only updates changed lines, but tool_use

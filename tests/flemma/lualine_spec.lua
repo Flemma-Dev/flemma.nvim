@@ -361,7 +361,7 @@ describe("Lualine component", function()
       local status = flemma_component:update_status()
 
       -- Assert: cost = (100000/1M)*3 + (5000/1M)*15 = 0.30 + 0.075 = 0.375
-      assert.are.equal("claude-sonnet-4-5 last:$0.38", status)
+      assert.are.equal("claude-sonnet-4-5 last:$0.375", status)
     end)
   end)
 

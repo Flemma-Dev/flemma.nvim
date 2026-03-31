@@ -557,6 +557,39 @@ function MapNode.new(key_schema, value_schema, default)
   return node
 end
 
+--- Delegate deferred validator to the key schema. When the key schema has a
+--- deferred validator, MapNode wraps it to validate each key in a set op table.
+---@return boolean
+function MapNode:has_deferred_validator()
+  return self._deferred_validator ~= nil or self._key_schema:has_deferred_validator()
+end
+
+--- Return a deferred validator that validates map keys when the key schema has
+--- one. For set ops with a table value, validate_ops() calls this on the whole
+--- table — the wrapper iterates keys and delegates to the key schema's validator.
+---@return (fun(value: any, ctx: flemma.schema.CoerceContext): boolean, string?)?
+function MapNode:get_deferred_validator()
+  if self._deferred_validator then
+    return self._deferred_validator
+  end
+  local key_validator = self._key_schema:get_deferred_validator()
+  if not key_validator then
+    return nil
+  end
+  return function(value, ctx)
+    if type(value) ~= "table" then
+      return true
+    end
+    for k, _ in pairs(value) do
+      local ok, err = key_validator(k, ctx)
+      if not ok then
+        return false, err
+      end
+    end
+    return true
+  end
+end
+
 ---@return table
 function MapNode:to_json_schema()
   local result = {

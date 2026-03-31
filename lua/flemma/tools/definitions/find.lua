@@ -142,7 +142,6 @@ M.definitions = {
     enabled = function(config)
       return not not (config and config.experimental and config.experimental.tools)
     end,
-    capabilities = { "can_auto_approve_if_sandboxed" },
     description = "Find files by glob pattern. "
       .. "Uses fd, git ls-files, or GNU find (whichever is available). "
       .. "Output is truncated to "
@@ -226,7 +225,7 @@ M.definitions = {
       local job_id_ref = { value = nil }
 
       local output_sink = sink_module.create({
-        name = "find/" .. (input.label or "search"):gsub("[^%w/%-]", "-"),
+        name = "find/" .. (input.label or "search"),
         on_line = function(_)
           result_count = result_count + 1
           if result_count >= result_limit and job_id_ref.value then

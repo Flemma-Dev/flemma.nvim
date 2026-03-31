@@ -255,8 +255,16 @@ describe("flemma.templating", function()
       assert.is_function(env.pairs)
       assert.is_function(env.pcall)
       assert.is_function(env.tostring)
-      -- os and io are not exposed — strict env errors on access rather than returning nil
-      assert.is_nil(rawget(env, "os"))
+      -- os exposes only safe time functions; io is not exposed
+      assert.is_table(env.os)
+      assert.is_function(env.os.date)
+      assert.is_function(env.os.time)
+      assert.is_function(env.os.clock)
+      assert.is_function(env.os.difftime)
+      assert.is_nil(rawget(env.os, "execute"))
+      assert.is_nil(rawget(env.os, "exit"))
+      assert.is_nil(rawget(env.os, "getenv"))
+      assert.is_nil(rawget(env.os, "remove"))
       assert.is_nil(rawget(env, "io"))
     end)
 

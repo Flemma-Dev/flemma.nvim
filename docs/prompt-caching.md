@@ -1,16 +1,16 @@
 # Prompt Caching
 
-Flemma supports prompt caching across all three providers. Each provider implements caching differently, but the general `cache_retention` parameter provides a consistent interface – set it once and it applies to whichever provider you use.
+Flemma supports prompt caching across all supported providers. Each provider implements caching differently, but the general `cache_retention` parameter provides a consistent interface – set it once and it applies to whichever provider you use.
 
 ## Quick Comparison
 
-|               | Anthropic             | OpenAI                | Vertex AI       |
-| ------------- | --------------------- | --------------------- | --------------- |
-| Default       | `"short"` (5 min TTL) | `"short"` (in-memory) | Automatic       |
-| Min. tokens   | 1,024–4,096           | 1,024                 | 1,024–2,048     |
-| Read discount | 90% (0.1x)            | 50% (0.5x)            | 90% (0.1x)      |
-| Write cost    | 1.25x–2.0x            | Free                  | Free            |
-| Control       | `cache_retention`     | `cache_retention`     | None (implicit) |
+|               | Anthropic             | OpenAI                | Vertex AI       | Moonshot           |
+| ------------- | --------------------- | --------------------- | --------------- | ------------------ |
+| Default       | `"short"` (5 min TTL) | `"short"` (in-memory) | Automatic       | Automatic          |
+| Min. tokens   | 1,024–4,096           | 1,024                 | 1,024–2,048     | —                  |
+| Read discount | 90% (0.1x)            | 50% (0.5x)            | 90% (0.1x)      | 80% (0.2x)         |
+| Write cost    | 1.25x–2.0x            | Free                  | Free            | Free               |
+| Control       | `cache_retention`     | `cache_retention`     | None (implicit) | `prompt_cache_key` |
 
 When caching is active, the notification bar includes cache percentage and token counts. Costs are adjusted to reflect each provider's discount on cached input.
 
@@ -80,6 +80,32 @@ Gemini 2.5+ models support implicit context caching[^vertex-cache]. When consecu
 > - **No user control.** There is no TTL parameter or opt-out – caching is managed entirely by Google's infrastructure.
 >
 > Google also offers an **explicit Context Caching API**[^vertex-cache-explicit] that creates named cache resources with configurable TTLs via a separate endpoint. Explicit caching requires a different workflow (create cache, then reference it) and is not yet supported by Flemma.
+
+---
+
+## Moonshot AI
+
+Moonshot uses automatic prompt caching with no separate write fee. The API reports `cached_tokens` on cache hits, and cached input is billed at a reduced rate (approximately 80% discount). There is no minimum token threshold or TTL to manage – caching is handled entirely by Moonshot's infrastructure.
+
+To improve cache hit rates across requests, you can set a stable `prompt_cache_key` via provider parameters:
+
+```lua
+require("flemma").setup({
+  parameters = {
+    moonshot = {
+      prompt_cache_key = "my-project-key",
+    },
+  },
+})
+```
+
+Or per-buffer in frontmatter:
+
+```lua
+flemma.opt.moonshot = { prompt_cache_key = "my-project-key" }
+```
+
+When a cache hit occurs, the usage notification includes the cached token count. Caching is available on kimi-k2 family models; moonshot-v1-\* models do not report cached tokens.
 
 ---
 

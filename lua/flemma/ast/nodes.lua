@@ -126,6 +126,7 @@ local M = {}
 ---@class flemma.ast.GenericToolResultPart
 ---@field kind "tool_result"
 ---@field tool_use_id string
+---@field name? string Tool function name (resolved from matching tool_use in pipeline)
 ---@field content string
 ---@field is_error boolean
 ---@field status? flemma.ast.ToolStatus

@@ -497,4 +497,85 @@ describe("flemma.config — deferred validation", function()
       assert.equals(0, #validation_failures)
     end)
   end)
+
+  -- ---------------------------------------------------------------------------
+  -- Map key validation
+  -- ---------------------------------------------------------------------------
+
+  describe("map key validation", function()
+    it("MapNode delegates has_deferred_validator to key schema", function()
+      local key = s.string():validate(function()
+        return true
+      end)
+      local node = s.map(key, s.string(), {})
+      assert.is_true(node:has_deferred_validator())
+    end)
+
+    it("MapNode has no deferred validator when key schema has none", function()
+      local node = s.map(s.string(), s.string(), {})
+      assert.is_false(node:has_deferred_validator())
+    end)
+
+    it("MapNode key validator rejects invalid keys at finalize", function()
+      local schema = s.object({
+        presets = s.map(
+          s.string():validate(function(name)
+            if not vim.startswith(name, "$") then
+              return false, ("key '%s' must start with '$'"):format(name)
+            end
+            return true
+          end),
+          s.string(),
+          {}
+        ),
+      })
+      config.init(schema)
+      config.apply(L.SETUP, { presets = { foo = "bar" } })
+
+      local _, validation_failures = config.finalize(L.SETUP, nil)
+
+      assert.equals(1, #validation_failures)
+      assert.equals("presets", validation_failures[1].path)
+      assert.matches("key 'foo' must start with '%$'", validation_failures[1].message)
+    end)
+
+    it("MapNode key validator passes valid keys", function()
+      local schema = s.object({
+        presets = s.map(
+          s.string():validate(function(name)
+            if not vim.startswith(name, "$") then
+              return false, ("key '%s' must start with '$'"):format(name)
+            end
+            return true
+          end),
+          s.string(),
+          {}
+        ),
+      })
+      config.init(schema)
+      config.apply(L.SETUP, { presets = { ["$good"] = "bar", ["$also_good"] = "baz" } })
+
+      local _, validation_failures = config.finalize(L.SETUP, nil)
+
+      assert.equals(0, #validation_failures)
+    end)
+
+    it("MapNode own validator takes precedence over key schema", function()
+      local schema = s.object({
+        items = s.map(s.string(), s.string(), {}):validate(function(value)
+          if type(value) == "table" and next(value) == nil then
+            return false, "map must not be empty"
+          end
+          return true
+        end),
+      })
+      config.init(schema)
+      config.apply(L.SETUP, { items = {} })
+
+      local _, validation_failures = config.finalize(L.SETUP, nil)
+
+      assert.equals(1, #validation_failures)
+      assert.matches("map must not be empty", validation_failures[1].message)
+    end)
+  end)
 end)

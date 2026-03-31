@@ -530,19 +530,22 @@ end
 ---@field message string Human-readable error description
 
 --- Find the deferred validator for a given op path.
---- For scalar paths, returns the node's own validator.
---- For list-capable paths, returns the item schema's validator.
+--- For scalar paths, returns the node's own validator (whole-value).
+--- For list-capable paths, returns the item schema's validator (per-item).
+--- For map paths with a key validator, returns the map's validator (whole-value).
+--- The second return value indicates whether the validator operates on the whole
+--- value (true) or per-item for list set ops (false/nil).
 ---@param path string Dot-delimited canonical path
----@return (fun(value: any, ctx: flemma.schema.CoerceContext): boolean, string?)?
+---@return (fun(value: any, ctx: flemma.schema.CoerceContext): boolean, string?)?, boolean?
 local function find_validator_for_path(path)
   ---@cast root_schema flemma.schema.Node
   local node = nav.navigate_schema(root_schema, path, { unwrap_leaf = true })
   if not node then
     return nil
   end
-  -- Direct validator on the node itself (scalar fields)
+  -- Direct validator on the node itself (scalar fields, maps with key validators)
   if node:has_deferred_validator() then
-    return node:get_deferred_validator()
+    return node:get_deferred_validator(), true
   end
   -- List item validator (ObjectNode with allow_list, or ListNode)
   local item_schema = nil
@@ -554,7 +557,7 @@ local function find_validator_for_path(path)
   if item_schema then
     local item_unwrapped = nav.unwrap_optional(item_schema)
     if item_unwrapped:has_deferred_validator() then
-      return item_unwrapped:get_deferred_validator()
+      return item_unwrapped:get_deferred_validator(), false
     end
   end
   return nil
@@ -569,10 +572,12 @@ end
 local function validate_ops(layer, ctx, bufnr, failures)
   local ops = store.dump_layer(layer, bufnr)
   for _, entry in ipairs(ops) do
-    local validator = find_validator_for_path(entry.path)
+    local validator, whole_value = find_validator_for_path(entry.path)
     if validator then
-      -- For set ops with a table value, validate each item individually
-      if entry.op == "set" and type(entry.value) == "table" then
+      -- For list set ops, validate each item individually.
+      -- Whole-value validators (scalars, maps with key validators) always
+      -- receive the full value — the validator handles iteration internally.
+      if entry.op == "set" and type(entry.value) == "table" and not whole_value then
         for _, item in ipairs(entry.value) do
           local ok, message = validator(item, ctx)
           if not ok then

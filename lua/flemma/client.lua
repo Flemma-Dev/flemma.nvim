@@ -261,7 +261,7 @@ function M.send_request(opts)
   -- Neovim's jobstart splits stdout on newlines; table.concat(data, "\n")
   -- reconstructs the original bytes which the sink re-frames into lines.
   local stdout_sink = sink.create({
-    name = "http/" .. (opts.endpoint or "request"):gsub("[^%w/%-]", "-"),
+    name = "http/" .. (opts.endpoint or "request"),
     on_line = function(line)
       process_stdout_line(line)
     end,
@@ -300,9 +300,16 @@ function M.send_request(opts)
       end
     end,
     on_exit = function(_, code)
-      -- Clean up temporary file and stdout sink
+      -- Clean up temporary file and stdout sink.
+      -- pcall: destroy() may fail if e.g. the command-line window is active
+      -- (E11) — the sink defers cleanup internally, but we must not let a
+      -- failure here prevent finalize_response_fn / on_request_complete from
+      -- firing (that leaves the spinner stuck and the buffer non-modifiable).
       os.remove(tmp_file)
-      stdout_sink:destroy()
+      local destroy_ok, destroy_err = pcall(stdout_sink.destroy, stdout_sink)
+      if not destroy_ok then
+        log.warn("send_request(): on_exit: sink:destroy() failed: " .. tostring(destroy_err))
+      end
 
       -- Log exit code (INFO for failures, DEBUG for expected success)
       if code ~= 0 then

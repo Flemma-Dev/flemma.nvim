@@ -58,6 +58,7 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field confirmation_answers? table<string, boolean> Cached answers for preprocessor confirmation prompts
 ---@field rewriter_diagnostics? flemma.preprocessor.RewriterDiagnostic[] Diagnostics from the last preprocessor run
 ---@field _pending_confirmation? flemma.preprocessor.Confirmation In-flight confirmation awaiting user response
+---@field streaming_start_line? integer 1-indexed start line of the streaming turn (set by turns module during active requests)
 
 ---@type table<integer, flemma.state.BufferState>
 local buffer_states = {}

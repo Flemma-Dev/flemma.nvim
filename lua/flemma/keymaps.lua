@@ -9,6 +9,7 @@ local cursor = require("flemma.cursor")
 local executor = require("flemma.tools.executor")
 local navigation = require("flemma.navigation")
 local textobject = require("flemma.textobject")
+local folding = require("flemma.ui.folding")
 local ui = require("flemma.ui")
 
 local ROLE_NAMES = { ["@System"] = true, ["@You"] = true, ["@Assistant"] = true }
@@ -112,7 +113,12 @@ M.setup = function()
         if fold_toggle_key then
           local leader = vim.g.mapleader or "\\"
           if vim.keycode(fold_toggle_key) ~= leader then
-            vim.keymap.set("n", fold_toggle_key, "za", { buffer = true, desc = "Toggle fold" })
+            vim.keymap.set(
+              "n",
+              fold_toggle_key,
+              folding.toggle_message_fold,
+              { buffer = true, desc = "Toggle message fold" }
+            )
           end
         end
 

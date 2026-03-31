@@ -189,7 +189,7 @@ Or exclude specific tools per-buffer in frontmatter:
 
 ````lua
 ```lua
-flemma.opt.tools.auto_approve = { "$default" }
+flemma.opt.tools.auto_approve = { "$standard" }
 flemma.opt.tools.auto_approve:remove("bash")
 ```
 ````

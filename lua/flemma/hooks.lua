@@ -102,7 +102,7 @@ function M.dispatch(name, data)
   if not ok then
     local message = string.format("hook '%s' handler error: %s", name, tostring(err))
     log.warn(message)
-    vim.notify("[flemma] " .. message, vim.log.levels.WARN)
+    vim.notify("Flemma: " .. message, vim.log.levels.WARN)
   end
 end
 

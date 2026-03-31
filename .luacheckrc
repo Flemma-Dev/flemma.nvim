@@ -52,3 +52,8 @@ files["lua/flemma/provider/providers/*.lua"] = {
 files["tests/**/*.lua"] = {
   std = "+busted",
 }
+
+-- minimal_init.lua replaces io.stdout with a buffering proxy
+files["tests/minimal_init.lua"] = {
+  globals = { io = { fields = { "stdout" } } },
+}
