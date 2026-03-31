@@ -114,6 +114,7 @@
 
 ---@class flemma.config.Pricing
 ---@field enabled boolean
+---@field high_cost_threshold integer
 
 ---@class flemma.config.Progress
 ---@field highlight string
