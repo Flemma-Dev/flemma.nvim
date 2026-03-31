@@ -85,40 +85,28 @@ develop:
 .PHONY: screencast
 # Create a VHS screencast demonstrating Flemma's capabilities, with a poster frame prepended
 screencast: .vapor/catppuccin/nvim.git .vapor/NStefan002/screenkey.nvim.git
-	@-rm -R \
-		.vapor/cache/ .vapor/state/ .vapor/scratch.chat .vapor/templates/example .vapor/math.png \
+	@rm -Rf \
+		.vapor/cache/ .vapor/state/ .vapor/release.chat \
 		.vapor/poster.jpg .vapor/poster.mp4 .vapor/concat_list.txt \
 		.vapor/flemma_cast_with_poster.mp4 assets/flemma_cast.mp4
-	@mkdir -p .vapor/cache/ .vapor/state/ .vapor/templates/
-	@echo -en "* Delete files via \`trash\` avoid \`rm\`\n* PC memory can be checked via \`free -h\`\n* When passing OCR content to tools use the exact syntax from the image without modifications\n* Never break down calculations to the user, only display the calculator result" > .vapor/templates/example
-	@echo -en "\`\`\`lua\nname = \"Flemma Jr.\"\n\nflemma.opt.thinking = \"medium\"\n\`\`\`\n@System:\n{{ include('templates/example') }}\n\n" > .vapor/scratch.chat
-	magick \
-		-size 1500x200 \
-		xc:white \
-		-font DejaVu-Sans \
-		-pointsize 48 \
-		-fill black \
-		-gravity center \
-		-annotate +0+0 '1000000 - (456 * 789 - (456 * 789 %% 123)) / 123 + 4567' \
-		-bordercolor white \
-		-border 20 \
-		.vapor/math.png
-	env \
-		PS1='$$ ' \
-		XDG_DATA_HOME=`pwd`/.vapor \
-		XDG_CONFIG_HOME=`pwd`/contrib/vhs \
-		XDG_CACHE_HOME=`pwd`/.vapor/cache \
-		XDG_STATE_HOME=`pwd`/.vapor/state \
-	vhs contrib/vhs/flemma_cast.tape
+	@mkdir -p .vapor/ .vapor/cache/ .vapor/state/
+	@contrib/vhs/setup-aurora.sh
+	@export PS1='$$ ' ;\
+	 export XDG_CONFIG_HOME=`pwd`/contrib/vhs ;\
+	 export XDG_DATA_HOME=`pwd`/.vapor ;\
+	 export XDG_CACHE_HOME=`pwd`/.vapor/cache ;\
+	 export XDG_STATE_HOME=`pwd`/.vapor/state ;\
+	 nvim --headless +"TSInstallSync markdown markdown_inline lua json" +qa && \
+	 vhs contrib/vhs/flemma_cast.tape
 	ffmpeg -hide_banner -y \
-		-ss 00:00:17 \
+		-ss 00:00:14 \
 		-i assets/flemma_cast.mp4 \
 		-vframes 1 -q:v 2 \
 		.vapor/poster.jpg
 	ffmpeg -hide_banner -y \
 		-loop 1 \
 		-i .vapor/poster.jpg \
-		-vframes 1 -r 25 \
+		-vframes 1 -r 60 \
 		-c:v libx264 -pix_fmt yuv420p \
 		.vapor/poster.mp4
 	printf 'file $(CURDIR)/.vapor/poster.mp4\nfile $(CURDIR)/assets/flemma_cast.mp4\n' \

@@ -20,7 +20,6 @@ pkgs.mkShell rec {
     bubblewrap
     gh
     google-cloud-sdk
-    imagemagick
     libsecret
     links2
     nodejs_lts.pkgs.pnpm

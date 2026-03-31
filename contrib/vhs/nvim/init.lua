@@ -1,7 +1,13 @@
-local cwd = vim.fn.getcwd()
+local function get_current_script_path()
+  local script = debug.getinfo(1, "S").source
+  return script:sub(2) -- Removes the '@' prefix
+end
+
+local cwd = get_current_script_path():match("(.*/)") .. "../../../"
+
 vim.opt.runtimepath:prepend(cwd)
-vim.opt.runtimepath:prepend(cwd .. "/.vapor/catppuccin/nvim.git")
-vim.opt.runtimepath:prepend(cwd .. "/.vapor/NStefan002/screenkey.nvim.git")
+vim.opt.runtimepath:prepend(cwd .. ".vapor/catppuccin/nvim.git")
+vim.opt.runtimepath:prepend(cwd .. ".vapor/NStefan002/screenkey.nvim.git")
 
 vim.opt.termguicolors = true
 vim.cmd.colorscheme("catppuccin-mocha")
@@ -17,8 +23,6 @@ vim.opt.listchars = {
 }
 
 vim.opt.swapfile = false
-
-vim.cmd("lcd .vapor/")
 
 vim.api.nvim_set_hl(0, "Folded", { fg = "#8f8f8f" })
 

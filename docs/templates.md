@@ -180,6 +180,8 @@ Key built-ins:
 - `__filename` – the absolute path to the current `.chat` file.
 - `__dirname` – the directory containing the current file.
 - `include()` – inline another file (see below).
+- `string`, `table`, `math`, `utf8` – standard Lua libraries (safe subsets).
+- `os.date`, `os.time`, `os.clock`, `os.difftime` – read-only time functions (no `execute`, `exit`, `getenv`, etc.).
 
 ```markdown
 @You:
