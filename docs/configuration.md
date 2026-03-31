@@ -197,6 +197,24 @@ require("flemma").setup({
 
 This section explains options that benefit from more context than an inline comment provides. For UI-related options (highlights, line highlights, turns, ruler, notifications), see [docs/ui.md](ui.md) for detailed explanations and examples.
 
+### Thinking parameter mapping
+
+The `thinking` parameter maps to each provider's native format:
+
+| `thinking` value       | Anthropic (budget) | OpenAI (effort)      | Vertex AI (budget) | Moonshot (toggle) |
+| ---------------------- | ------------------ | -------------------- | ------------------ | ----------------- |
+| `"max"`                | model-dependent\*  | `"max"` effort       | 32,768 tokens      | enabled\*\*       |
+| `"high"` **(default)** | 16,384 tokens      | `"high"` effort      | 32,768 tokens      | enabled\*\*       |
+| `"medium"`             | 8,192 tokens       | `"medium"` effort    | 8,192 tokens       | enabled\*\*       |
+| `"low"`                | 2,048 tokens       | `"low"` effort       | 2,048 tokens       | enabled\*\*       |
+| `"minimal"`            | 1,024 tokens       | `"minimal"` effort   | 128 tokens         | enabled\*\*       |
+| number (e.g. `4096`)   | 4,096 tokens       | closest effort level | 4,096 tokens       | enabled\*\*       |
+| `false` or `0`         | disabled           | disabled             | disabled           | disabled\*\*      |
+
+_\*Anthropic models with adaptive thinking (Opus 4.6) use the provider's native `"max"` effort level. Other Anthropic models map `"max"` to the highest available budget. Exact values are model-dependent -- see the per-provider files under `lua/flemma/models/` for the full per-model catalogue._
+
+_\*\*Moonshot thinking is binary (on/off) with no budget control. kimi-k2-thinking models always think regardless of the `thinking` setting. `moonshot-v1-*` models do not support thinking._
+
 ### Thinking parameter priority
 
 Provider-specific parameters take priority over the unified `thinking` value when both are set:
