@@ -153,9 +153,11 @@
 ---@field grep? flemma.config.ToolsGrep
 ---@field ls? flemma.config.ToolsLs
 ---@field max_concurrent integer
+---@field mcporter flemma.config.ToolsMcporter
 ---@field modules string[]
 ---@field require_approval boolean
 ---@field show_spinner boolean
+---@field truncate flemma.config.ToolsTruncate
 ---@field [string] table|nil
 
 ---@class flemma.config.Turns
@@ -239,9 +241,23 @@
 ---@class flemma.config.ToolsLs
 ---@field cwd? string
 
+---@class flemma.config.ToolsMcporter
+---@field enabled boolean
+---@field exclude string[]
+---@field include string[]
+---@field path string
+---@field startup flemma.config.ToolsMcporterStartup
+---@field timeout integer
+
+---@class flemma.config.ToolsTruncate
+---@field output_path_format string
+
 ---@class flemma.config.SandboxBackendsBwrap
 ---@field extra_args string[]
 ---@field path string
+
+---@class flemma.config.ToolsMcporterStartup
+---@field concurrency integer
 
 ---User-facing setup options — alias for flemma.Config.
 ---@alias flemma.Config.Opts flemma.Config
