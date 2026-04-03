@@ -50,16 +50,15 @@ end
 
 ---Check whether all possible tools from a server would be excluded.
 ---Used to skip the schema fetch entirely for fully-excluded servers.
+---Only triggers for whole-server wildcard patterns (e.g., `slack:*`).
+---Narrower patterns like `slack:a*` are not treated as full-server excludes.
 ---@param server_name string
 ---@param exclude string[]
 ---@return boolean
 local function server_fully_excluded(server_name, exclude)
   local prefix = sanitize_server_name(server_name) .. SEPARATOR
   for _, pattern in ipairs(exclude) do
-    local lua_pat = glob_to_pattern(pattern)
-    -- If the exclude pattern matches `server__*`, all tools from this server
-    -- would be excluded. We test by checking if the prefix + wildcard matches.
-    if (prefix .. "anything"):find(lua_pat) then
+    if pattern == prefix .. "*" then
       return true
     end
   end
@@ -385,14 +384,14 @@ function M._fanout_schema_fetches(servers, opts, on_server, on_done)
               return
             end
 
-            local parse_ok, data = pcall(json.decode, raw_output)
-            if not parse_ok or type(data) ~= "table" or type(data.tools) ~= "table" then
+            local parse_ok, parsed = pcall(json.decode, raw_output)
+            if not parse_ok or type(parsed) ~= "table" or type(parsed.tools) ~= "table" then
               log.warn("mcporter: malformed schema response for server '" .. server.name .. "'")
               complete_server(server.name, nil)
               return
             end
 
-            complete_server(server.name, data.tools)
+            complete_server(server.name, parsed.tools)
           end)
         end,
       }

@@ -2007,7 +2007,7 @@ function M.show(opts)
     group = augroup,
     pattern = { "FlemmaBootComplete", "FlemmaConfigUpdated" },
     callback = function()
-      if not vim.api.nvim_buf_is_valid(buf) then
+      if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_win_is_valid(win) then
         pcall(vim.api.nvim_del_augroup_by_id, augroup)
         return
       end
