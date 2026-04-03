@@ -186,7 +186,7 @@ function M.build_request(self, prompt, context)
           table.insert(messages, {
             role = "tool",
             tool_call_id = tool_id,
-            name = tool_name,
+            name = base.encode_tool_name(tool_name),
             content = content,
           })
           log.debug("openai_chat.build_request: Added tool result for " .. tool_id)
@@ -261,7 +261,7 @@ function M.build_request(self, prompt, context)
             id = part.id,
             type = "function",
             ["function"] = {
-              name = part.name,
+              name = base.encode_tool_name(part.name),
               arguments = json.encode(part.input),
             },
           })
@@ -298,7 +298,7 @@ function M.build_request(self, prompt, context)
     return {
       role = "tool",
       tool_call_id = orphan.id,
-      name = orphan.name,
+      name = base.encode_tool_name(orphan.name),
       content = "Error: No result provided",
     }
   end)
@@ -315,7 +315,7 @@ function M.build_request(self, prompt, context)
     table.insert(tools_array, {
       type = "function",
       ["function"] = {
-        name = definition.name,
+        name = base.encode_tool_name(definition.name),
         description = tools_module.build_description(definition),
         parameters = tools_module.to_json_schema(definition),
       },

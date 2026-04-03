@@ -288,7 +288,7 @@ function M.build_request(self, prompt, _context)
   local orphan_results = base._inject_orphan_results(self, prompt.pending_tool_calls, function(orphan)
     return {
       functionResponse = {
-        name = orphan.name,
+        name = base.encode_tool_name(orphan.name),
         response = { error = "No result provided", success = false },
       },
     }
