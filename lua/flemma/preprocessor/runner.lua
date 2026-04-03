@@ -555,6 +555,22 @@ end
 ---@param message_context flemma.preprocessor.MessageContext Current message iteration context
 ---@return flemma.ast.Segment[]
 local function process_segment(segment, rewriter, rewriter_state, opts, message_context)
+  -- Recurse into compound segments (e.g., tool_result with child segments).
+  -- Children are processed through the full handler pipeline; the container
+  -- itself bypasses text and segment handlers — it is structural, not content.
+  if segment.segments then
+    local new_children = {} ---@type flemma.ast.Segment[]
+    ---@cast segment flemma.ast.ToolResultSegment
+    for _, child in ipairs(segment.segments) do
+      local result_segs = process_segment(child, rewriter, rewriter_state, opts, message_context)
+      for _, seg in ipairs(result_segs) do
+        table.insert(new_children, seg)
+      end
+    end
+    local updated = vim.tbl_extend("force", segment, { segments = new_children }) --[[@as flemma.ast.ToolResultSegment]]
+    return { updated } --[[@as flemma.ast.Segment[] ]]
+  end
+
   -- Phase 1: on_text handlers (only for text segments)
   local phase1_segments ---@type flemma.ast.Segment[]
   if segment.kind == "text" then
