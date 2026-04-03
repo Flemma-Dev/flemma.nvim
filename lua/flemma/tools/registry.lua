@@ -108,6 +108,18 @@ function M.get(name)
   return tools[name]
 end
 
+--- Check whether a tool declares a specific capability.
+---@param name string Tool name
+---@param capability string Capability tag to check
+---@return boolean
+function M.has_capability(name, capability)
+  local definition = M.get(name)
+  if not definition or not definition.capabilities then
+    return false
+  end
+  return vim.tbl_contains(definition.capabilities, capability)
+end
+
 ---Evaluate a tool's enabled field. Supports boolean and function forms.
 ---When enabled is absent (nil), the tool is enabled by default. When defined,
 ---the result is checked for truthiness: nil and false both disable the tool.
