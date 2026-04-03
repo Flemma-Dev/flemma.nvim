@@ -17,6 +17,7 @@ local BUILTIN_TOOLS = {
   "flemma.tools.definitions.grep",
   "flemma.tools.definitions.find",
   "flemma.tools.definitions.ls",
+  "flemma.tools.definitions.mcporter",
 }
 
 --------------------------------------------------------------------------------
@@ -42,11 +43,15 @@ end
 --- Register a tool definition, materialize its config_schema defaults into L10,
 --- and append its name to the tools allow_list so the default resolved tools
 --- list includes all registered tools.
+--- Tools with `enabled = false` are registered in the registry (available for
+--- frontmatter opt-in) but not appended to the default tools list.
 ---@param name string
 ---@param def flemma.tools.ToolDefinition
 local function register_tool(name, def)
   registry.register(name, def)
-  config_facade.record_default("append", "tools", name)
+  if def.enabled ~= false then
+    config_facade.record_default("append", "tools", name)
+  end
   if def.metadata and def.metadata.config_schema then
     config_facade.register_module_defaults("tools", name, def.metadata.config_schema)
   end

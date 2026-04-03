@@ -1,0 +1,5 @@
+{
+  "mode": "list",
+  "counts": { "ok": 0, "auth": 0, "offline": 0, "http": 0, "error": 0 },
+  "servers": []
+}

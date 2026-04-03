@@ -184,6 +184,16 @@ return s.object({
     show_spinner = s.boolean(true),
     cursor_after_result = s.enum({ "result", "stay", "next" }, "result"),
     modules = s.list(s.loadable(), {}),
+    mcporter = s.object({
+      enabled = s.boolean(false),
+      path = s.string("mcporter"),
+      timeout = s.integer(60),
+      startup = s.object({
+        concurrency = s.integer(4),
+      }),
+      include = s.list(s.string(), {}),
+      exclude = s.list(s.string(), {}),
+    }),
     -- Tool-specific config schemas (resolved lazily via tools registry)
     [symbols.DISCOVER] = function(key)
       return require("flemma.tools").get_config_schema(key)
