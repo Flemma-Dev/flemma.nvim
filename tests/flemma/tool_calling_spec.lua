@@ -367,49 +367,38 @@ describe("Parser Tool Blocks", function()
     assert.is_true(tool_use.input.template:match("```python") ~= nil, "Should contain nested markdown code block")
   end)
 
-  it("emits warning for malformed tool result and treats as plain text", function()
+  it("parses malformed JSON tool result as plain text segments without diagnostics", function()
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_malformed_tool_result.chat")
     local doc = parser.parse_lines(lines)
 
-    -- Should have a diagnostic warning about malformed JSON
-    assert.is_true(#doc.errors > 0, "Should have parsing diagnostics")
-    local has_warning = false
-    for _, err in ipairs(doc.errors) do
-      if err.type == "tool_result" and err.severity == "warning" then
-        has_warning = true
-      end
-    end
-    assert.is_true(has_warning, "Should have tool_result warning")
+    -- Fence content is now always parsed as template segments, not as JSON.
+    -- No diagnostic is emitted for malformed JSON since we no longer attempt JSON parsing.
+    assert.equals(0, #doc.errors, "Should have no parsing diagnostics")
 
     -- Messages: 1=System, 2=You, 3=Assistant, 4=You (malformed tool_result)
     local user_msg = doc.messages[4]
     assert.is_not_nil(user_msg)
     assert.equals("You", user_msg.role)
 
-    -- Should still parse a tool_result with the raw content
+    -- Should parse a tool_result with the raw content as fallback
     local tool_result = nil
     for _, seg in ipairs(user_msg.segments) do
       if seg.kind == "tool_result" then
         tool_result = seg
       end
     end
-    assert.is_not_nil(tool_result, "Should have tool_result segment despite malformed JSON")
+    assert.is_not_nil(tool_result, "Should have tool_result segment")
     assert.equals("toolu_01A09q90qw90lq917835lgs0", tool_result.tool_use_id)
+    assert.is_true(#tool_result.segments >= 1, "Should have parsed content into segments")
   end)
 
-  it("emits warning for unsupported YAML format in tool result", function()
+  it("parses YAML tool result as plain text segments without diagnostics", function()
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_tool_result_yaml.chat")
     local doc = parser.parse_lines(lines)
 
-    -- Should have a diagnostic warning about YAML not being supported
-    assert.is_true(#doc.errors > 0, "Should have parsing diagnostics for unsupported YAML")
-    local has_yaml_warning = false
-    for _, err in ipairs(doc.errors) do
-      if err.type == "tool_result" and err.error:match("yaml") then
-        has_yaml_warning = true
-      end
-    end
-    assert.is_true(has_yaml_warning, "Should warn about unsupported YAML parser")
+    -- Fence content is now always parsed as template segments, not by language.
+    -- No diagnostic is emitted for YAML since we no longer attempt language-specific parsing.
+    assert.equals(0, #doc.errors, "Should have no parsing diagnostics for YAML content")
 
     -- Messages: 1=System, 2=You, 3=Assistant, 4=You (yaml tool_result), 5=Assistant
     local user_msg = doc.messages[4]
@@ -420,10 +409,11 @@ describe("Parser Tool Blocks", function()
       end
     end
 
-    -- Should still have a tool_result with raw YAML content
+    -- Should have a tool_result with raw YAML content as fallback
     assert.is_not_nil(tool_result)
     assert.equals("toolu_01A09q90qw90lq917835lgs0", tool_result.tool_use_id)
-    assert.is_true(tool_result.fallback:match("result") ~= nil, "Should contain raw YAML content")
+    assert.is_true(tool_result.fallback:match("result") ~= nil, "Should contain raw YAML content as fallback")
+    assert.is_true(#tool_result.segments >= 1, "Should have parsed content into segments")
   end)
 end)
 

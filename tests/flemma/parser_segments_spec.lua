@@ -1,5 +1,82 @@
 local parser = require("flemma.parser")
 
+describe("tool result segment parsing", function()
+  local function parse_user_message_segments(lines)
+    -- Build a @You: message from the given content lines and parse it
+    local full_lines = { "@You:" }
+    for _, line in ipairs(lines) do
+      table.insert(full_lines, line)
+    end
+    local doc = parser.parse_lines(full_lines)
+    assert.equals(1, #doc.messages)
+    return doc.messages[1].segments
+  end
+
+  it("parses tool result fence content into segments", function()
+    -- A tool result with expression should produce text + expression + text segments
+    local lines = {
+      "**Tool Result:** `tool_123`",
+      "```",
+      "Hello {{ 1 + 1 }} world",
+      "```",
+    }
+    local segments = parse_user_message_segments(lines)
+
+    assert.equals(1, #segments)
+    local tr = segments[1]
+    assert.equals("tool_result", tr.kind)
+    assert.equals("tool_123", tr.tool_use_id)
+    assert.equals("Hello {{ 1 + 1 }} world", tr.fallback)
+    assert.is_true(#tr.segments >= 3)
+    assert.equals("text", tr.segments[1].kind)
+    assert.equals("expression", tr.segments[2].kind)
+    assert.equals("text", tr.segments[3].kind)
+  end)
+
+  it("stores raw fallback for plain text tool results", function()
+    local lines = {
+      "**Tool Result:** `tool_456`",
+      "```",
+      '{"key": "value"}',
+      "```",
+    }
+    local segments = parse_user_message_segments(lines)
+
+    local tr = segments[1]
+    assert.equals('{"key": "value"}', tr.fallback)
+    assert.equals(1, #tr.segments)
+    assert.equals("text", tr.segments[1].kind)
+  end)
+
+  it("preserves status blocks without segment parsing", function()
+    local lines = {
+      "**Tool Result:** `tool_789`",
+      "```flemma:tool status=pending",
+      "",
+      "```",
+    }
+    local segments = parse_user_message_segments(lines)
+
+    local tr = segments[1]
+    assert.equals("pending", tr.status)
+    assert.equals(0, #tr.segments)
+  end)
+
+  it("handles error tool results", function()
+    local lines = {
+      "**Tool Result:** `tool_err` (error)",
+      "```",
+      "Something went wrong",
+      "```",
+    }
+    local segments = parse_user_message_segments(lines)
+
+    local tr = segments[1]
+    assert.is_true(tr.is_error)
+    assert.equals("Something went wrong", tr.fallback)
+  end)
+end)
+
 describe("parse_segments", function()
   -- Use parse_inline_content as the public API for parse_segments
   local function parse(text)

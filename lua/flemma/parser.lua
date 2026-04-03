@@ -1,6 +1,5 @@
 local ast = require("flemma.ast")
 local codeblock = require("flemma.codeblock")
-local json = require("flemma.utilities.json")
 local modeline = require("flemma.utilities.modeline")
 local roles = require("flemma.utilities.roles")
 local scanner = require("flemma.parser.scanner")
@@ -243,6 +242,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
           table.insert(
             segments,
             ast.tool_result(tool_use_id, {
+              segments = {},
               fallback = block.content,
               is_error = is_error,
               status = tool_status,
@@ -253,38 +253,14 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
           )
           i = block_end + 1
         else
-          -- Regular fenced block: parse content by language or treat as plain text
-          local result_content
-
-          if block.language then
-            local content, parse_err = codeblock.parse(block.language, block.content)
-
-            if parse_err then
-              table.insert(diagnostics, {
-                type = "tool_result",
-                severity = "warning",
-                error = "Failed to parse tool result: " .. parse_err,
-                position = { start_line = result_start_line },
-              })
-              -- Treat as plain text result
-              result_content = block.content
-            else
-              -- If parsed to a simple value, convert to string for API
-              if type(content) == "table" then
-                result_content = json.encode(content)
-              else
-                result_content = tostring(content)
-              end
-            end
-          else
-            -- No language specified - treat as plain text
-            result_content = block.content
-          end
+          -- Regular fenced block: parse fence content as template segments
+          local inner_segments = parse_segments(block.content, base_line_num + content_start)
 
           table.insert(
             segments,
             ast.tool_result(tool_use_id, {
-              fallback = result_content,
+              segments = inner_segments,
+              fallback = block.content,
               is_error = is_error,
               start_line = result_start_line,
               end_line = base_line_num + block_end - 1,
