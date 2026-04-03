@@ -50,6 +50,7 @@ end
 ---@field kind "tool_result"
 ---@field tool_use_id string
 ---@field fallback string
+---@field parts? table[] Child parts from capture (file/text); populated only for opted-in tools
 ---@field is_error boolean
 
 -- Part types unique to the processor stage (pre-conversion)
