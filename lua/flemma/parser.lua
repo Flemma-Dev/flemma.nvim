@@ -36,7 +36,7 @@ local TOOL_STATUS_MAP = {
 --- Unified segment parser: parse text for {{ }} expressions
 --- Returns array of AST segments (text, expression)
 --- Note: <thinking> tags are NOT parsed here - only in @Assistant messages
---- Note: @./ file references are handled by the preprocessor rewriter, not here
+--- Note: @./ and @~/ file references are handled by the preprocessor rewriter, not here
 ---@param text string|nil
 ---@param base_line integer|nil 1-indexed line number for accurate position tracking
 ---@return flemma.ast.Segment[]
@@ -652,7 +652,7 @@ function M.parse_lines(lines)
 end
 
 --- Parse inline content (for include() results) - no frontmatter, no message roles
---- Scans for {{ }} expressions only; @./ file references are handled by the preprocessor
+--- Scans for {{ }} expressions only; @./ and @~/ file references are handled by the preprocessor
 ---@param text string|nil
 ---@return flemma.ast.Segment[]
 function M.parse_inline_content(text)

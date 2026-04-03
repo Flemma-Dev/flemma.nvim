@@ -1,5 +1,5 @@
 --- File-references rewriter
---- Converts @./path and @../path references into include() expressions
+--- Converts @./path, @../path, and @~/path references into include() expressions
 --- that the processor evaluates into file parts.
 ---@class flemma.preprocessor.rewriters.FileReferences
 local M = {}
@@ -22,8 +22,14 @@ end
 
 local file_refs = preprocessor.create_rewriter("file-references", { priority = 100 })
 
-file_refs:on_text("@(%.%.?%/[%.%/]*%S+)", function(match, ctx)
-  -- File references only apply to non-Assistant messages (parity with original parser)
+--- Shared handler for file reference patterns (@./, @../, @~/).
+--- Parses options (;type=mime), strips trailing punctuation, and emits
+--- an include() expression with BINARY and optional MIME flags.
+---@param match flemma.preprocessor.Match
+---@param ctx flemma.preprocessor.Context
+---@return flemma.preprocessor.Emission|flemma.preprocessor.EmissionList|nil
+local function handle_file_reference(match, ctx)
+  -- File references only apply to non-Assistant messages
   if ctx.message and ctx.message.role == "Assistant" then
     return nil
   end
@@ -59,7 +65,10 @@ file_refs:on_text("@(%.%.?%/[%.%/]*%S+)", function(match, ctx)
   end
 
   return ctx:expression(code)
-end)
+end
+
+file_refs:on_text("@(%.%.?%/[%.%/]*%S+)", handle_file_reference)
+file_refs:on_text("@(~%/%S+)", handle_file_reference)
 
 ---@param config flemma.Config
 ---@return flemma.preprocessor.SyntaxRule[]
@@ -69,6 +78,13 @@ function file_refs:get_vim_syntax(config)
       kind = "match",
       group = "FlemmaUserFileReference",
       pattern = [=[@\v(\.\.?\/)\S*[^[:punct:]\s]]=],
+      containedin = { "user", "system" },
+      hl = config.highlights.user_file_reference,
+    },
+    {
+      kind = "match",
+      group = "FlemmaUserFileReference",
+      pattern = [=[@\v(\~\/)\S*[^[:punct:]\s]]=],
       containedin = { "user", "system" },
       hl = config.highlights.user_file_reference,
     },

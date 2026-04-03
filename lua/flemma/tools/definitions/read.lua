@@ -12,40 +12,6 @@ local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
 local mime = require("flemma.mime")
 
---- Compute a relative path from a directory to a file.
----@param from_dir string Absolute directory path
----@param to_file string Absolute file path
----@return string relative_path
-local function compute_relative_path(from_dir, to_file)
-  from_dir = vim.fs.normalize(from_dir)
-  to_file = vim.fs.normalize(to_file)
-  if not vim.endswith(from_dir, "/") then
-    from_dir = from_dir .. "/"
-  end
-
-  local from_parts = vim.split(from_dir, "/", { plain = true, trimempty = true })
-  local to_parts = vim.split(to_file, "/", { plain = true, trimempty = true })
-
-  local common = 0
-  for i = 1, math.min(#from_parts, #to_parts) do
-    if from_parts[i] == to_parts[i] then
-      common = i
-    else
-      break
-    end
-  end
-
-  local parts = {}
-  for _ = common + 1, #from_parts do
-    table.insert(parts, "..")
-  end
-  for i = common + 1, #to_parts do
-    table.insert(parts, to_parts[i])
-  end
-
-  return table.concat(parts, "/")
-end
-
 M.definitions = {
   {
     name = "read",
@@ -106,14 +72,9 @@ M.definitions = {
       local mime_type = mime.detect(path)
       if mime_type and mime.is_binary(mime_type) then
         local ref_path = input.path
-        -- For ~ paths, compute a relative path from the buffer directory so the
-        -- preprocessor can resolve it correctly (a literal ~/... reference would
-        -- be treated as relative to the buffer dir, which is wrong).
-        if vim.startswith(ref_path, "~/") or ref_path == "~" then
-          local buffer_dir = ctx.path.resolve(".")
-          ref_path = compute_relative_path(buffer_dir, path)
-        end
-        if not ref_path:match("^%.%.?/") then
+        -- ~/ paths are emitted as-is (the preprocessor handles @~/ references)
+        -- Other relative paths get ./ prefix for the preprocessor pattern
+        if not vim.startswith(ref_path, "~/") and not ref_path:match("^%.%.?/") then
           ref_path = "./" .. ref_path
         end
         return {

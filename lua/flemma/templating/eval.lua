@@ -106,6 +106,8 @@ end
 function M.resolve_include_target(relative_path, dirname)
   if relative_path:sub(1, 1) == "/" then
     return vim.fs.normalize(relative_path)
+  elseif vim.startswith(relative_path, "~/") then
+    return vim.fs.normalize(vim.fn.expand(relative_path))
   elseif dirname then
     return vim.fs.normalize(dirname .. "/" .. relative_path)
   else
