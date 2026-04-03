@@ -140,10 +140,20 @@ function M._parse_call_response(raw)
   local ok, data = pcall(json.decode, raw)
   if ok and type(data) == "table" and type(data.content) == "table" then
     local texts = {}
+    local skipped = {}
     for _, block in ipairs(data.content) do
       if block.type == "text" and type(block.text) == "string" then
         table.insert(texts, block.text)
+      elseif block.type then
+        skipped[block.type] = (skipped[block.type] or 0) + 1
       end
+    end
+    if next(skipped) then
+      local parts = {}
+      for content_type, count in pairs(skipped) do
+        table.insert(parts, count .. " " .. content_type)
+      end
+      log.warn("mcporter: dropped non-text content blocks: " .. table.concat(parts, ", "))
     end
     if #texts > 0 then
       local is_error = data.isError == true
