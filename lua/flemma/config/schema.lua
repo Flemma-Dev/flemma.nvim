@@ -305,10 +305,11 @@ return s.object({
     }),
   }),
 
-  experimental = s.object({
-    lsp = s.boolean(vim.lsp ~= nil),
-    tools = s.boolean(false),
+  lsp = s.object({
+    enabled = s.boolean(vim.lsp ~= nil),
   }),
+
+  experimental = s.object({}),
 
   [symbols.ALIASES] = {
     timeout = "parameters.timeout",

@@ -18,6 +18,7 @@
 ---@field keymaps flemma.config.Keymaps
 ---@field line_highlights flemma.config.LineHighlights
 ---@field logging flemma.logging.Config
+---@field lsp flemma.config.Lsp
 ---@field model? string
 ---@field notifications flemma.config.Notifications
 ---@field parameters flemma.config.Parameters
@@ -51,8 +52,6 @@
 ---@field manage_updatetime boolean
 
 ---@class flemma.config.Experimental
----@field lsp boolean
----@field tools boolean
 
 ---@class flemma.config.Highlights
 ---@field assistant flemma.config.HighlightValue
@@ -89,6 +88,9 @@
 ---@field frontmatter flemma.config.HighlightValue
 ---@field system flemma.config.HighlightValue
 ---@field user flemma.config.HighlightValue
+
+---@class flemma.config.Lsp
+---@field enabled boolean
 
 ---@class flemma.config.Notifications
 ---@field border false|"underline"|"underdouble"|"undercurl"|"underdotted"|"underdashed"

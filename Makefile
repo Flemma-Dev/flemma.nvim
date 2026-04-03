@@ -72,7 +72,6 @@ develop:
 			logging = { enabled = true, level = \"TRACE\" },							\
 			editing = { auto_write = true },											\
 			tools = { modules = { \"extras.flemma.tools.calculator\" } },				\
-			experimental = { tools = true },											\
 		})																				\
 		pcall(function()																\
 			require(\"bufferline.config\").options.get_element_icon =					\

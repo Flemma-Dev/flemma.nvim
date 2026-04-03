@@ -40,7 +40,7 @@ describe("Flemma LSP", function()
   ---@return integer bufnr
   ---@return vim.lsp.Client client
   local function setup_chat_buffer(lines)
-    flemma.setup({ experimental = { lsp = true } })
+    flemma.setup({ lsp = { enabled = true } })
 
     test_counter = test_counter + 1
     local bufnr = vim.api.nvim_create_buf(true, false)
@@ -77,8 +77,8 @@ describe("Flemma LSP", function()
     return nil
   end
 
-  it("attaches to chat buffers when experimental.lsp is enabled", function()
-    flemma.setup({ experimental = { lsp = true } })
+  it("attaches to chat buffers when lsp is enabled", function()
+    flemma.setup({ lsp = { enabled = true } })
 
     local bufnr = vim.api.nvim_create_buf(true, false)
     vim.api.nvim_set_current_buf(bufnr)
@@ -89,8 +89,8 @@ describe("Flemma LSP", function()
     assert.is_true(#clients > 0, "Expected flemma LSP client to be attached")
   end)
 
-  it("does not attach when experimental.lsp is disabled", function()
-    flemma.setup({ experimental = { lsp = false } })
+  it("does not attach when lsp is disabled", function()
+    flemma.setup({ lsp = { enabled = false } })
 
     local bufnr = vim.api.nvim_create_buf(true, false)
     vim.api.nvim_set_current_buf(bufnr)
@@ -180,7 +180,7 @@ describe("Flemma LSP", function()
     -- end_col so find_segment_at_position can match them by cursor column
     local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
 
-    flemma.setup({ experimental = { lsp = true } })
+    flemma.setup({ lsp = { enabled = true } })
 
     test_counter = test_counter + 1
     local bufnr = vim.api.nvim_create_buf(true, false)
@@ -213,7 +213,7 @@ describe("Flemma LSP", function()
     local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
     local target_path = fixture_dir .. "include_target.txt"
 
-    flemma.setup({ experimental = { lsp = true } })
+    flemma.setup({ lsp = { enabled = true } })
 
     test_counter = test_counter + 1
     local bufnr = vim.api.nvim_create_buf(true, false)
@@ -246,7 +246,7 @@ describe("Flemma LSP", function()
     local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
     local target_path = fixture_dir .. "include_target.txt"
 
-    flemma.setup({ experimental = { lsp = true } })
+    flemma.setup({ lsp = { enabled = true } })
 
     test_counter = test_counter + 1
     local bufnr = vim.api.nvim_create_buf(true, false)
@@ -410,7 +410,7 @@ describe("Flemma LSP", function()
     local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
     local target_path = fixture_dir .. "include_target.txt"
 
-    flemma.setup({ experimental = { lsp = true } })
+    flemma.setup({ lsp = { enabled = true } })
 
     test_counter = test_counter + 1
     local bufnr = vim.api.nvim_create_buf(true, false)
@@ -447,7 +447,7 @@ describe("Flemma LSP", function()
     local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
     local target_path = fixture_dir .. "include_target.txt"
 
-    flemma.setup({ experimental = { lsp = true } })
+    flemma.setup({ lsp = { enabled = true } })
 
     test_counter = test_counter + 1
     local bufnr = vim.api.nvim_create_buf(true, false)
@@ -485,7 +485,7 @@ describe("Flemma LSP", function()
     local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
     local target_path = fixture_dir .. "include_target.txt"
 
-    flemma.setup({ experimental = { lsp = true } })
+    flemma.setup({ lsp = { enabled = true } })
 
     test_counter = test_counter + 1
     local bufnr = vim.api.nvim_create_buf(true, false)
@@ -524,7 +524,7 @@ describe("Flemma LSP", function()
     local fixture_dir = vim.fn.fnamemodify("tests/fixtures", ":p")
     local target_path = fixture_dir .. "doc_with_templates.txt"
 
-    flemma.setup({ experimental = { lsp = true } })
+    flemma.setup({ lsp = { enabled = true } })
 
     test_counter = test_counter + 1
     local bufnr = vim.api.nvim_create_buf(true, false)

@@ -117,9 +117,6 @@ M.definitions = {
         ),
       }),
     },
-    enabled = function(config)
-      return not not (config and config.experimental and config.experimental.tools)
-    end,
     description = "Search file contents using ripgrep (rg) or grep. "
       .. "Returns matching lines with file paths and line numbers. "
       .. "Output is limited to "
