@@ -195,7 +195,7 @@ return s.object({
       exclude = s.list(s.string(), {}),
     }),
     truncate = s.object({
-      output_path_format = s.string("${TMPDIR:-/tmp}/flemma_#{source}_#{id}.txt"),
+      output_path_format = s.string("${TMPDIR:-/tmp}/flemma_#{source}_#{path}_#{id}.txt"),
     }),
     -- Tool-specific config schemas (resolved lazily via tools registry)
     [symbols.DISCOVER] = function(key)

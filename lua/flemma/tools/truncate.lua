@@ -59,6 +59,9 @@ local function resolve_output_path(format_str, opts)
     path = opts.filename and normalize_path(opts.filename) or "",
   }
 
+  -- Order matters: format.expand resolves #{...} first, then expand_inline
+  -- handles ${...} in the result. Reversing would let bare $VAR inside
+  -- #{...} expressions get expanded prematurely.
   local expanded = format.expand(format_str, vars)
   expanded = variables.expand_inline(expanded)
 
@@ -174,13 +177,13 @@ function M.truncate_with_overflow(text, opts)
   if not format_str then
     local config = config_facade.materialize(opts.bufnr)
     format_str = config.tools and config.tools.truncate and config.tools.truncate.output_path_format
-      or "${TMPDIR:-/tmp}/flemma_#{source}_#{id}.txt"
+      or "${TMPDIR:-/tmp}/flemma_#{source}_#{path}_#{id}.txt"
   end
 
   local output_path = resolve_output_path(format_str, opts)
 
   -- Write full output to overflow file
-  local overflow_path = nil ---@type string|nil
+  local overflow_path ---@type string|nil
   if write_overflow_file(output_path, text) then
     overflow_path = output_path
   end
