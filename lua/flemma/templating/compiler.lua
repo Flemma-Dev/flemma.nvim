@@ -83,8 +83,8 @@ end
 ---   __emit_part(segment)         — pass-through for structural segments
 ---   __emit_expr_error(err, idx)  — report expression evaluation failures
 ---   __segments                   — the original segment array (for index references)
----   __capture_open()             — redirect subsequent __emit calls into a sub-collector
----   __capture_close()            — restore previous collector; return captured parts[]
+---   __capture_start()             — redirect subsequent __emit calls into a sub-collector
+---   __capture_end()              — restore previous collector; return captured parts[]
 ---@param segments flemma.ast.Segment[]
 ---@return flemma.templating.compiler.CompilationResult
 function M.compile(segments)
@@ -144,7 +144,7 @@ function M.compile(segments)
       ---@cast segment flemma.ast.ToolResultSegment
       -- Compound tool_result: capture child segment output into a tool_result envelope.
       local var = tmp_var()
-      add_line_fn("__capture_open()", lnum)
+      add_line_fn("__capture_start()", lnum)
       for _, child in ipairs(segment.segments) do
         compile_one(child, nil, add_line_fn)
       end
@@ -161,7 +161,7 @@ function M.compile(segments)
             .. ".is_error, content = "
             .. var
             .. ".content, "
-            .. "parts = __capture_close() }) end",
+            .. "parts = __capture_end() }) end",
           lnum
         )
       else
@@ -174,7 +174,7 @@ function M.compile(segments)
             .. ", content = '"
             .. escape_lua_string(segment.content)
             .. "', "
-            .. "parts = __capture_close() })",
+            .. "parts = __capture_end() })",
           lnum
         )
       end
@@ -376,21 +376,21 @@ function M.execute(result, env)
     end
   end
 
-  -- Capture stack for __capture_open / __capture_close.
+  -- Capture stack for __capture_start / __capture_end.
   -- Each frame saves the outer `parts` and `text_accum` so they can be restored.
   local capture_stack = {} ---@type table[]
 
-  -- __capture_open: redirect subsequent __emit calls into a new sub-collector.
-  local function capture_open()
+  -- __capture_start: redirect subsequent __emit calls into a new sub-collector.
+  local function capture_start()
     flush_text()
     table.insert(capture_stack, { parts = parts, text_accum = text_accum })
     parts = {}
     text_accum = {}
   end
 
-  -- __capture_close: restore the outer collector; return captured parts[].
+  -- __capture_end: restore the outer collector; return captured parts[].
   ---@return table[] captured_parts
-  local function capture_close()
+  local function capture_end()
     flush_text()
     local captured_parts = parts
     local frame = table.remove(capture_stack)
@@ -446,13 +446,13 @@ function M.execute(result, env)
     env.error = error
   end
 
-  -- Install __emit, __emit_part, __emit_expr_error, __segments, __capture_open, __capture_close on env
+  -- Install __emit, __emit_part, __emit_expr_error, __segments, __capture_start, __capture_end on env
   env.__emit = emit
   env.__emit_part = emit_part
   env.__emit_expr_error = emit_expr_error
   env.__segments = result.segments
-  env.__capture_open = capture_open
-  env.__capture_close = capture_close
+  env.__capture_start = capture_start
+  env.__capture_end = capture_end
 
   -- Override print to emit into template output (no separators, no trailing newline)
   env.print = function(...)
@@ -477,8 +477,8 @@ function M.execute(result, env)
     env.__emit_part = nil
     env.__emit_expr_error = nil
     env.__segments = nil
-    env.__capture_open = nil
-    env.__capture_close = nil
+    env.__capture_start = nil
+    env.__capture_end = nil
     return {}, diagnostics
   end
 
@@ -511,8 +511,8 @@ function M.execute(result, env)
     env.__emit_part = nil
     env.__emit_expr_error = nil
     env.__segments = nil
-    env.__capture_open = nil
-    env.__capture_close = nil
+    env.__capture_start = nil
+    env.__capture_end = nil
     return {}, diagnostics
   end
 
@@ -523,8 +523,8 @@ function M.execute(result, env)
   env.__emit_part = nil
   env.__emit_expr_error = nil
   env.__segments = nil
-  env.__capture_open = nil
-  env.__capture_close = nil
+  env.__capture_start = nil
+  env.__capture_end = nil
 
   return parts, diagnostics
 end

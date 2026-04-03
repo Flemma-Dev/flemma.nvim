@@ -181,14 +181,21 @@ function M.build_request(self, prompt, context)
               table.insert(texts, op.text)
             end
             result_output = table.concat(texts, "")
+            -- OpenAI doesn't have is_error field; prefix content with "Error: " for text-only results
+            if part.is_error then
+              result_output = "Error: " .. (result_output ~= "" and result_output or "Tool execution failed")
+            end
           else
+            -- Mixed content (images, PDFs, etc.): prepend an error text block when is_error
+            if part.is_error then
+              table.insert(output_parts, 1, { type = "input_text", text = "Error:" })
+            end
             result_output = output_parts
           end
 
           table.insert(tool_results, {
             call_id = normalized_id,
             content = result_output,
-            is_error = part.is_error,
           })
           log.debug("openai.build_request: Added tool_result for " .. normalized_id)
         end
@@ -197,16 +204,10 @@ function M.build_request(self, prompt, context)
       -- Add tool results FIRST as top-level function_call_output items
       -- Tool results must come before any new user content in the same turn
       for _, tr in ipairs(tool_results) do
-        -- OpenAI doesn't have is_error field; prefix content with "Error: " to signal error semantics
-        local result_content = tr.content
-        if tr.is_error then
-          result_content = "Error: " .. (tr.content or "Tool execution failed")
-          log.debug("openai.build_request: Tool result marked as error for " .. tr.call_id)
-        end
         table.insert(input_items, {
           type = "function_call_output",
           call_id = tr.call_id,
-          output = result_content,
+          output = tr.content,
         })
       end
 
