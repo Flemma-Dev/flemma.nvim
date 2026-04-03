@@ -1,4 +1,6 @@
 -- tests/flemma/mcporter_spec.lua
+local tools_truncate = require("flemma.tools.truncate")
+
 describe("mcporter", function()
   local mcporter
 
@@ -397,6 +399,12 @@ describe("mcporter", function()
         get_config = function()
           return nil
         end,
+        truncate = setmetatable({
+          truncate_with_overflow = function(text, opts)
+            opts.bufnr = 0
+            return tools_truncate.truncate_with_overflow(text, opts)
+          end,
+        }, { __index = tools_truncate }),
       }
 
       def.execute({ channel_types = "public_channel" }, ctx, function(r)
@@ -427,6 +435,12 @@ describe("mcporter", function()
         get_config = function()
           return nil
         end,
+        truncate = setmetatable({
+          truncate_with_overflow = function(text, opts)
+            opts.bufnr = 0
+            return tools_truncate.truncate_with_overflow(text, opts)
+          end,
+        }, { __index = tools_truncate }),
       }
 
       def.execute({}, ctx, function(r)

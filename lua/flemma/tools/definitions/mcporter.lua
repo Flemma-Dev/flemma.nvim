@@ -249,6 +249,13 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
               return
             end
 
+            -- Truncate output to prevent chat buffer overflow
+            local truncated = ctx.truncate.truncate_with_overflow(text, {
+              direction = "head",
+              source = "tool",
+            })
+            text = truncated.content
+
             if is_error then
               callback({ success = false, error = text })
               return
