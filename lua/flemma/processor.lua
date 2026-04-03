@@ -332,14 +332,17 @@ function M.evaluate(doc, base_context, opts)
           if info and tools_registry.has_capability(info.name, "template_tool_result") then
             table.insert(prepared, seg)
           else
-            table.insert(prepared, ast.tool_result(seg.tool_use_id, {
-              segments = {},
-              fallback = seg.fallback,
-              is_error = seg.is_error,
-              status = seg.status,
-              start_line = seg.position and seg.position.start_line,
-              end_line = seg.position and seg.position.end_line,
-            }))
+            table.insert(
+              prepared,
+              ast.tool_result(seg.tool_use_id, {
+                segments = {},
+                fallback = seg.fallback,
+                is_error = seg.is_error,
+                status = seg.status,
+                start_line = seg.position and seg.position.start_line,
+                end_line = seg.position and seg.position.end_line,
+              })
+            )
           end
         else
           table.insert(prepared, seg)

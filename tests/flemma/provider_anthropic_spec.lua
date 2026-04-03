@@ -502,7 +502,12 @@ describe("Anthropic Provider", function()
           {
             role = "user",
             parts = {
-              { kind = "tool_result", tool_use_id = "tool_123", content = "file contents here" },
+              {
+                kind = "tool_result",
+                tool_use_id = "tool_123",
+                parts = { { kind = "text", text = "file contents here" } },
+                is_error = false,
+              },
             },
           },
           { role = "user", parts = { { kind = "text", text = "thanks" } } },

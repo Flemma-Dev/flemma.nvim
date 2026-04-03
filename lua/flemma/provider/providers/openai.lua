@@ -140,9 +140,54 @@ function M.build_request(self, prompt, context)
         elseif part.kind == "tool_result" then
           -- Normalize tool ID for OpenAI compatibility (handles Vertex URN-style IDs)
           local normalized_id = base.normalize_tool_id(part.tool_use_id)
+
+          -- Map .parts to Responses API format for tool results
+          local has_non_text = false
+          local output_parts = {}
+          for _, rp in ipairs(part.parts or {}) do
+            if rp.kind == "text" then
+              if rp.text and #rp.text > 0 then
+                table.insert(output_parts, { type = "input_text", text = rp.text })
+              end
+            elseif rp.kind == "image" then
+              has_non_text = true
+              table.insert(output_parts, {
+                type = "input_image",
+                image_url = rp.data_url,
+                detail = "auto",
+              })
+            elseif rp.kind == "pdf" then
+              has_non_text = true
+              table.insert(output_parts, {
+                type = "input_file",
+                filename = rp.filename or "document.pdf",
+                file_data = rp.data_url,
+              })
+            elseif rp.kind == "text_file" then
+              table.insert(output_parts, { type = "input_text", text = rp.text })
+            elseif rp.kind == "unsupported_file" then
+              table.insert(output_parts, {
+                type = "input_text",
+                text = "[binary file: " .. (rp.filename or "unknown") .. "]",
+              })
+            end
+          end
+
+          -- When all parts are text, collapse to a plain string
+          local result_output
+          if not has_non_text then
+            local texts = {}
+            for _, op in ipairs(output_parts) do
+              table.insert(texts, op.text)
+            end
+            result_output = table.concat(texts, "")
+          else
+            result_output = output_parts
+          end
+
           table.insert(tool_results, {
             call_id = normalized_id,
-            content = part.content,
+            content = result_output,
             is_error = part.is_error,
           })
           log.debug("openai.build_request: Added tool_result for " .. normalized_id)

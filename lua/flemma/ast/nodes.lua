@@ -134,7 +134,6 @@ local M = {}
 ---@field tool_use_id string
 ---@field name? string Tool function name (resolved from matching tool_use in pipeline)
 ---@field parts flemma.ast.GenericPart[]
----@field content string @deprecated Use .parts instead; retained for provider compatibility until Task 9
 ---@field is_error boolean
 
 ---@alias flemma.ast.GenericPart flemma.ast.GenericTextPart|flemma.ast.GenericImagePart|flemma.ast.GenericPdfPart|flemma.ast.GenericTextFilePart|flemma.ast.GenericUnsupportedFilePart|flemma.ast.GenericThinkingPart|flemma.ast.GenericToolUsePart|flemma.ast.GenericToolResultPart
@@ -390,14 +389,10 @@ function M.to_generic_parts(evaluated_parts, source_file)
         table.insert(tool_parts, { kind = "text", text = p.fallback })
       end
 
-      -- Build the generic tool_result with both .parts and deprecated .content.
-      -- .content is retained for provider backward compatibility until Task 9.
-      local fallback_text = p.fallback or ""
       table.insert(parts, {
         kind = "tool_result",
         tool_use_id = p.tool_use_id,
         parts = tool_parts,
-        content = fallback_text,
         is_error = p.is_error,
       })
     end

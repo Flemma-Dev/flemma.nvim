@@ -256,7 +256,12 @@ describe("OpenAI Provider", function()
           {
             role = "user",
             parts = {
-              { kind = "tool_result", tool_use_id = "call_abc", content = "4" },
+              {
+                kind = "tool_result",
+                tool_use_id = "call_abc",
+                parts = { { kind = "text", text = "4" } },
+                is_error = false,
+              },
             },
           },
         },
@@ -303,7 +308,12 @@ describe("OpenAI Provider", function()
           {
             role = "user",
             parts = {
-              { kind = "tool_result", tool_use_id = "call_xyz", content = "4" },
+              {
+                kind = "tool_result",
+                tool_use_id = "call_xyz",
+                parts = { { kind = "text", text = "4" } },
+                is_error = false,
+              },
             },
           },
         },
@@ -349,7 +359,12 @@ describe("OpenAI Provider", function()
           {
             role = "user",
             parts = {
-              { kind = "tool_result", tool_use_id = "call_abc", content = "4" },
+              {
+                kind = "tool_result",
+                tool_use_id = "call_abc",
+                parts = { { kind = "text", text = "4" } },
+                is_error = false,
+              },
               { kind = "text", text = "Thanks" },
             },
           },
