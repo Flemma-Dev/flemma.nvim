@@ -31,6 +31,10 @@ pkgs.mkShell rec {
     lua-language-server
     lua54Packages.luacheck
 
+    (writeShellScriptBin "mcporter" ''
+      exec ${lib.getExe envchain} mcp_keys pnpm --silent --package=mcporter@latest dlx -- mcporter "$@"
+    '')
+
     (writeShellApplication {
       name = "flemma-fmt";
       runtimeInputs = [

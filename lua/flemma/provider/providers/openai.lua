@@ -266,7 +266,7 @@ function M.build_request(self, prompt, context)
           table.insert(input_items, {
             type = "function_call",
             call_id = normalized_id,
-            name = p.name,
+            name = base.encode_tool_name(p.name),
             arguments = json.encode(p.input),
             status = "completed",
           })
@@ -312,7 +312,7 @@ function M.build_request(self, prompt, context)
   for _, definition in ipairs(sorted_tools) do
     local tool_entry = {
       type = "function",
-      name = definition.name,
+      name = base.encode_tool_name(definition.name),
       description = tools_module.build_description(definition),
       parameters = tools_module.to_json_schema(definition),
     }

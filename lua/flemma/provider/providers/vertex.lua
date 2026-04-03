@@ -234,7 +234,7 @@ function M.build_request(self, prompt, _context)
           -- Convert tool_use to Vertex functionCall format
           local fc_part = {
             functionCall = {
-              name = p.name,
+              name = base.encode_tool_name(p.name),
               args = p.input,
             },
           }
@@ -288,7 +288,7 @@ function M.build_request(self, prompt, _context)
   local orphan_results = base._inject_orphan_results(self, prompt.pending_tool_calls, function(orphan)
     return {
       functionResponse = {
-        name = orphan.name,
+        name = base.encode_tool_name(orphan.name),
         response = { error = "No result provided", success = false },
       },
     }
@@ -346,7 +346,7 @@ function M.build_request(self, prompt, _context)
 
   for _, definition in ipairs(sorted_tools) do
     table.insert(function_declarations, {
-      name = definition.name,
+      name = base.encode_tool_name(definition.name),
       description = tools_module.build_description(definition),
       parametersJsonSchema = tools_module.to_json_schema(definition),
     })

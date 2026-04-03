@@ -1,0 +1,71 @@
+{
+  "mode": "list",
+  "server": "slack",
+  "status": "ok",
+  "durationMs": 2100,
+  "transport": "STDIO pnpm --silent --package=slack-mcp-server@latest dlx -- slack-mcp-server",
+  "source": {
+    "kind": "local",
+    "path": "/home/user/.mcporter/mcporter.jsonc"
+  },
+  "tools": [
+    {
+      "name": "channels_list",
+      "description": "List public channels in the workspace with pagination",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "channel_types": {
+            "type": "string",
+            "description": "Comma-separated list of channel types (public_channel, private_channel, mpim, im)"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Maximum number of channels to return (default 100, max 1000)"
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor from a previous response"
+          }
+        },
+        "required": ["channel_types"]
+      }
+    },
+    {
+      "name": "users_search",
+      "description": "Search for users by name or email",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query to match against user names and emails"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "usergroups_create",
+      "description": "Create a new user group",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the user group"
+          },
+          "handle": {
+            "type": "string",
+            "description": "Short handle for the user group"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of the user group"
+          }
+        },
+        "required": ["name"]
+      }
+    }
+  ]
+}

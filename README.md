@@ -173,6 +173,25 @@ You can watch the whole thing happen in the buffer. Every tool call, every resul
 - **Turn limit.** Autopilot stops after 100 consecutive turns to prevent runaway cost.
 - **You're in control.** Let it run fully autonomous, supervise and approve tools one at a time, or stop at any point, edit the conversation, and resume.
 
+### MCP support
+
+Flemma supports the [Model Context Protocol](https://modelcontextprotocol.io) (MCP) through [MCPorter](https://github.com/steipete/mcporter), a standalone CLI toolkit that handles server discovery, OAuth, and connection management. Rather than reimplement MCP inside a Neovim plugin, Flemma delegates the hard parts -- OAuth flows, token caching, transport negotiation, credential vaults -- and focuses on what it does well: making those tools available to the model in your `.chat` buffer.
+
+Enable it and point it at the servers you want:
+
+```lua
+tools = {
+  mcporter = {
+    enabled = true,
+    include = { "slack:*", "linear:*" },   -- glob patterns for which tools to enable
+  },
+}
+```
+
+At startup, Flemma discovers your MCP servers, fetches their tool schemas, and registers each one as a native tool. The model sees them alongside `bash`, `read`, and `edit` -- same approval flow, same autopilot, same `.chat` visibility. MCPorter auto-imports servers from Claude Code, Cursor, VS Code, and Windsurf, so you can likely enable it and have tools available immediately.
+
+Read the full setup and configuration guide in [mcp.md](docs/mcp.md).
+
 ---
 
 ## Where Flemma Fits
@@ -245,6 +264,7 @@ Individual `.chat` files can override any of these settings. Detailed references
 
 - [configuration.md](docs/configuration.md) -- every option explained with inline comments
 - [tools.md](docs/tools.md) -- tool approval, custom tools, and the resolver API
+- [mcp.md](docs/mcp.md) -- MCP support via MCPorter
 - [templates.md](docs/templates.md) -- per-file settings, expressions, and file includes
 - [sandbox.md](docs/sandbox.md) -- sandbox policies, path variables, and custom backends
 - [ui.md](docs/ui.md) -- highlights, rulers, turns, notifications, and folding
@@ -329,7 +349,7 @@ Flemma checks environment variables first, then your platform keyring (Linux Sec
 <details>
 <summary><strong>Can I add my own tools or integrate with other systems?</strong></summary>
 
-Yes. Register custom tools, approval resolvers, credential resolvers, sandbox backends, and more -- everything plugs in through registries. Read more in [tools.md](docs/tools.md#registering-custom-tools) and [extending.md](docs/extending.md).
+Yes. Register custom tools, approval resolvers, credential resolvers, sandbox backends, and more -- everything plugs in through registries. For MCP servers (Slack, Linear, GitHub, etc.), enable the built-in MCPorter integration -- see [mcp.md](docs/mcp.md). For custom Lua tools, read [tools.md](docs/tools.md#registering-custom-tools) and [extending.md](docs/extending.md).
 
 </details>
 

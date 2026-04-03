@@ -71,7 +71,10 @@ develop:
 			diagnostics = { enabled = true },											\
 			logging = { enabled = true, level = \"TRACE\" },							\
 			editing = { auto_write = true },											\
-			tools = { modules = { \"extras.flemma.tools.calculator\" } },				\
+			tools = {																	\
+				modules = { \"extras.flemma.tools.calculator\" },						\
+				mcporter = { enabled = true },											\
+			},																			\
 		})																				\
 		pcall(function()																\
 			require(\"bufferline.config\").options.get_element_icon =					\
