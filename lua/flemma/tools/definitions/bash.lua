@@ -99,7 +99,6 @@ M.definitions = {
             -- Apply tail truncation with overflow handling
             local result = ctx.truncate.truncate_with_overflow(full_output, {
               direction = "tail",
-              source = "tool",
             })
             local output_text = result.content ~= "" and result.content or "(no output)"
 

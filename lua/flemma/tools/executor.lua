@@ -295,6 +295,9 @@ function M.build_execution_context(params)
           truncate_with_overflow = function(text, opts)
             opts.bufnr = bufnr
             opts.filename = params.__filename
+            if not opts.source then
+              opts.source = "tool"
+            end
             if not opts.id then
               opts.id = params.tool_id or ""
             end

@@ -22,7 +22,7 @@ M.MAX_LINE_CHARS = base.MAX_LINE_CHARS
 
 ---@class flemma.tools.TruncateOverflowOpts
 ---@field direction "head"|"tail"
----@field source string
+---@field source? string Defaults to "tool" via the bound wrapper on `ctx.truncate`
 ---@field id? string Filled in by the bound wrapper on `ctx.truncate`
 ---@field bufnr? integer Filled in by the bound wrapper on `ctx.truncate`
 ---@field filename? string
