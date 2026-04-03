@@ -17,7 +17,7 @@ local function is_tool_result_terminal(seg)
   if seg.status then
     return seg.status == "denied" or seg.status == "rejected" or seg.status == "aborted"
   end
-  return seg.fallback ~= ""
+  return seg.content ~= ""
 end
 
 ---Check if a tool segment should be folded.

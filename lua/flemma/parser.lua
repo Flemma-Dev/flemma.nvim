@@ -243,7 +243,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
             segments,
             ast.tool_result(tool_use_id, {
               segments = {},
-              fallback = block.content,
+              content = block.content,
               is_error = is_error,
               status = tool_status,
               start_line = result_start_line,
@@ -260,7 +260,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
             segments,
             ast.tool_result(tool_use_id, {
               segments = inner_segments,
-              fallback = block.content,
+              content = block.content,
               is_error = is_error,
               start_line = result_start_line,
               end_line = base_line_num + block_end - 1,

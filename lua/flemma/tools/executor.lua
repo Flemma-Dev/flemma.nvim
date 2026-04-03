@@ -609,7 +609,7 @@ function M.execute_at_cursor(bufnr)
     if result_seg.status and (result_seg.status == "rejected" or result_seg.status == "denied") then
       injector.inject_result(bufnr, ctx.tool_id, {
         success = false,
-        error = injector.resolve_error_message(result_seg.status --[[@as "rejected"|"denied"]], result_seg.fallback),
+        error = injector.resolve_error_message(result_seg.status --[[@as "rejected"|"denied"]], result_seg.content),
       })
       if autopilot.get_state(bufnr) == "paused" then
         autopilot.arm(bufnr)

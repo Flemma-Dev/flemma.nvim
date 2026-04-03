@@ -158,9 +158,9 @@ function M.compile(segments)
             .. ".tool_use_id, "
             .. "is_error = "
             .. var
-            .. ".is_error, fallback = "
+            .. ".is_error, content = "
             .. var
-            .. ".fallback, "
+            .. ".content, "
             .. "parts = __capture_close() }) end",
           lnum
         )
@@ -171,8 +171,8 @@ function M.compile(segments)
             .. "', "
             .. "is_error = "
             .. tostring(segment.is_error)
-            .. ", fallback = '"
-            .. escape_lua_string(segment.fallback)
+            .. ", content = '"
+            .. escape_lua_string(segment.content)
             .. "', "
             .. "parts = __capture_close() })",
           lnum
@@ -238,7 +238,7 @@ local function structural_segment_to_part(segment)
       return {
         kind = "tool_result",
         tool_use_id = segment.tool_use_id,
-        fallback = segment.fallback,
+        content = segment.content,
         is_error = segment.is_error,
       }
     end

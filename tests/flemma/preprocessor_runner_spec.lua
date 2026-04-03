@@ -1228,7 +1228,7 @@ describe("flemma.preprocessor.runner", function()
             segments = {
               ast.text("before REPLACE_ME after", { start_line = 2 }),
             },
-            fallback = "before REPLACE_ME after",
+            content = "before REPLACE_ME after",
             start_line = 1,
             end_line = 3,
           }),

@@ -57,7 +57,7 @@ local M = {}
 ---@field tool_use_id string
 ---@field is_error boolean
 ---@field segments flemma.ast.Segment[]
----@field fallback string
+---@field content string
 ---@field status? flemma.ast.ToolStatus
 ---@field fence_line? integer 1-based line number of the fence opener (only for flemma:tool blocks)
 ---@field position flemma.ast.Position
@@ -239,7 +239,7 @@ function M.tool_use(id, name, input, pos)
 end
 
 ---@param tool_use_id string
----@param opts? { segments?: flemma.ast.Segment[], fallback?: string, is_error?: boolean, status?: flemma.ast.ToolStatus, start_line?: integer, end_line?: integer, fence_line?: integer }
+---@param opts? { segments?: flemma.ast.Segment[], content?: string, is_error?: boolean, status?: flemma.ast.ToolStatus, start_line?: integer, end_line?: integer, fence_line?: integer }
 ---@return flemma.ast.ToolResultSegment
 function M.tool_result(tool_use_id, opts)
   opts = opts or {}
@@ -247,7 +247,7 @@ function M.tool_result(tool_use_id, opts)
     kind = "tool_result",
     tool_use_id = tool_use_id,
     segments = opts.segments or {},
-    fallback = opts.fallback or "",
+    content = opts.content or "",
     is_error = opts.is_error or false,
     status = opts.status,
     fence_line = opts.fence_line,
@@ -384,9 +384,9 @@ function M.to_generic_parts(evaluated_parts, source_file)
             end
           end
         end
-      elseif p.fallback and #p.fallback > 0 then
-        -- Collapsed/non-opted-in tool result: wrap fallback as a text part.
-        table.insert(tool_parts, { kind = "text", text = p.fallback })
+      elseif p.content and #p.content > 0 then
+        -- Collapsed/non-opted-in tool result: wrap content as a text part.
+        table.insert(tool_parts, { kind = "text", text = p.content })
       end
 
       table.insert(parts, {

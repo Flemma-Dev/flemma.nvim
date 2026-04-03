@@ -234,15 +234,15 @@ describe("AST Tool Nodes", function()
   end)
 
   it("creates tool_result node", function()
-    local node = ast.tool_result("toolu_123", { fallback = "42", start_line = 10 })
+    local node = ast.tool_result("toolu_123", { content = "42", start_line = 10 })
     assert.equals("tool_result", node.kind)
     assert.equals("toolu_123", node.tool_use_id)
-    assert.equals("42", node.fallback)
+    assert.equals("42", node.content)
     assert.equals(false, node.is_error)
   end)
 
   it("creates tool_result error node", function()
-    local node = ast.tool_result("toolu_123", { fallback = "Division by zero", is_error = true, start_line = 10 })
+    local node = ast.tool_result("toolu_123", { content = "Division by zero", is_error = true, start_line = 10 })
     assert.equals("tool_result", node.kind)
     assert.equals(true, node.is_error)
   end)
@@ -287,7 +287,7 @@ describe("Parser Tool Blocks", function()
 
     assert.is_not_nil(tool_result, "Should have tool_result segment")
     assert.equals("toolu_01A09q90qw90lq917835lgs0", tool_result.tool_use_id)
-    assert.equals("105", tool_result.fallback)
+    assert.equals("105", tool_result.content)
     assert.equals(false, tool_result.is_error)
   end)
 
@@ -306,7 +306,7 @@ describe("Parser Tool Blocks", function()
 
     assert.is_not_nil(tool_result)
     assert.equals("toolu_01A09q90qw90lq917835lgs0", tool_result.tool_use_id)
-    assert.is_true(tool_result.fallback:match("105") ~= nil, "Should contain result value")
+    assert.is_true(tool_result.content:match("105") ~= nil, "Should contain result value")
   end)
 
   it("parses tool_result with plain fenced block (no language)", function()
@@ -325,7 +325,7 @@ describe("Parser Tool Blocks", function()
     assert.is_not_nil(tool_result)
     assert.equals("toolu_01PLAIN123", tool_result.tool_use_id)
     assert.equals(false, tool_result.is_error)
-    assert.equals("this is a result of a tool\nwith multiple lines", tool_result.fallback)
+    assert.equals("this is a result of a tool\nwith multiple lines", tool_result.content)
   end)
 
   it("parses tool_result with error marker", function()
@@ -344,7 +344,7 @@ describe("Parser Tool Blocks", function()
     assert.is_not_nil(tool_result)
     assert.equals("toolu_01ERROR123", tool_result.tool_use_id)
     assert.equals(true, tool_result.is_error)
-    assert.is_true(tool_result.fallback:match("Division by zero") ~= nil)
+    assert.is_true(tool_result.content:match("Division by zero") ~= nil)
   end)
 
   it("handles nested backticks with dynamic fence sizing", function()
@@ -380,7 +380,7 @@ describe("Parser Tool Blocks", function()
     assert.is_not_nil(user_msg)
     assert.equals("You", user_msg.role)
 
-    -- Should parse a tool_result with the raw content as fallback
+    -- Should parse a tool_result with the raw content
     local tool_result = nil
     for _, seg in ipairs(user_msg.segments) do
       if seg.kind == "tool_result" then
@@ -409,10 +409,10 @@ describe("Parser Tool Blocks", function()
       end
     end
 
-    -- Should have a tool_result with raw YAML content as fallback
+    -- Should have a tool_result with raw YAML content
     assert.is_not_nil(tool_result)
     assert.equals("toolu_01A09q90qw90lq917835lgs0", tool_result.tool_use_id)
-    assert.is_true(tool_result.fallback:match("result") ~= nil, "Should contain raw YAML content as fallback")
+    assert.is_true(tool_result.content:match("result") ~= nil, "Should contain raw YAML content")
     assert.is_true(#tool_result.segments >= 1, "Should have parsed content into segments")
   end)
 end)
@@ -449,7 +449,7 @@ describe("Processor Tool Parts", function()
       if p.kind == "tool_result" then
         has_tool_result = true
         assert.equals("toolu_01A09q90qw90lq917835lgs0", p.tool_use_id)
-        assert.equals("105", p.fallback)
+        assert.equals("105", p.content)
         assert.equals(false, p.is_error)
       end
     end

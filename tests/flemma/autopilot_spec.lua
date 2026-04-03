@@ -606,7 +606,7 @@ describe("Autopilot conflict detection", function()
     local seg = you_msg.segments[1]
     assert.equals("tool_result", seg.kind)
     assert.equals("pending", seg.status)
-    assert.equals("User typed something here", seg.fallback)
+    assert.equals("User typed something here", seg.content)
   end)
 
   it("parser sets empty content on empty flemma:tool", function()
@@ -631,7 +631,7 @@ describe("Autopilot conflict detection", function()
     local seg = you_msg.segments[1]
     assert.equals("tool_result", seg.kind)
     assert.equals("approved", seg.status)
-    assert.equals("", seg.fallback)
+    assert.equals("", seg.content)
   end)
 
   it("get_awaiting_execution excludes results with user content", function()

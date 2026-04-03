@@ -30,9 +30,9 @@ describe("Processor: capability-gated tool result evaluation", function()
   --- @param tool_name string
   --- @param tool_use_id string
   --- @param result_segments flemma.ast.Segment[] Inner segments of the tool_result
-  --- @param fallback string
+  --- @param content string
   --- @return flemma.ast.DocumentNode
-  local function build_doc(tool_name, tool_use_id, result_segments, fallback)
+  local function build_doc(tool_name, tool_use_id, result_segments, content)
     local pos = { start_line = 1, end_line = 1 }
     local assistant_msg = ast.message("Assistant", {
       ast.tool_use(tool_use_id, tool_name, {}, pos),
@@ -40,7 +40,7 @@ describe("Processor: capability-gated tool result evaluation", function()
     local you_msg = ast.message("You", {
       ast.tool_result(tool_use_id, {
         segments = result_segments,
-        fallback = fallback,
+        content = content,
         is_error = false,
         start_line = 2,
         end_line = 4,
@@ -98,9 +98,9 @@ describe("Processor: capability-gated tool result evaluation", function()
     local tr_part = you_parts[1]
     assert.equals("tool_result", tr_part.kind)
     assert.equals("call_002", tr_part.tool_use_id)
-    -- Without the capability, fallback is used — no .parts from segments
-    -- The part should carry the fallback string
-    assert.equals("plain fallback", tr_part.fallback)
+    -- Without the capability, content is used — no .parts from segments
+    -- The part should carry the content string
+    assert.equals("plain fallback", tr_part.content)
     -- .parts should NOT be present (it's a ToolResultPart, not a compiled one)
     assert.is_nil(tr_part.parts)
   end)
@@ -124,16 +124,16 @@ describe("Processor: capability-gated tool result evaluation", function()
     assert.equals("tool_result", tr_part.kind)
     -- Empty segments -> no .parts created through capture
     assert.is_nil(tr_part.parts)
-    assert.equals("fallback for empty", tr_part.fallback)
+    assert.equals("fallback for empty", tr_part.content)
   end)
 
-  it("unknown tool_use_id (no matching use) collapses to fallback", function()
+  it("unknown tool_use_id (no matching use) collapses to content", function()
     -- No tool_use segment with matching id in the doc
     local pos = { start_line = 1, end_line = 1 }
     local you_msg = ast.message("You", {
       ast.tool_result("orphan_id", {
         segments = { ast.text("content", nil) },
-        fallback = "orphan fallback",
+        content = "orphan fallback",
         is_error = false,
         start_line = 1,
         end_line = 2,
@@ -147,9 +147,9 @@ describe("Processor: capability-gated tool result evaluation", function()
     assert.equals(1, #you_parts)
     local tr_part = you_parts[1]
     assert.equals("tool_result", tr_part.kind)
-    -- No matching tool_use → info is nil → collapses to fallback
+    -- No matching tool_use → info is nil → collapses to content
     assert.is_nil(tr_part.parts)
-    assert.equals("orphan fallback", tr_part.fallback)
+    assert.equals("orphan fallback", tr_part.content)
   end)
 
   it("non-tool-result segments in @You messages pass through unchanged", function()

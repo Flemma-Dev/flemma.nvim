@@ -49,7 +49,7 @@ end
 ---@class flemma.processor.ToolResultPart
 ---@field kind "tool_result"
 ---@field tool_use_id string
----@field fallback string
+---@field content string
 ---@field parts? table[] Child parts from capture (file/text); populated only for opted-in tools
 ---@field is_error boolean
 
@@ -310,7 +310,7 @@ function M.evaluate(doc, base_context, opts)
             table.insert(parts, {
               kind = "tool_result",
               tool_use_id = seg.tool_use_id,
-              fallback = seg.fallback,
+              content = seg.content,
               is_error = seg.is_error,
             })
           end
@@ -336,7 +336,7 @@ function M.evaluate(doc, base_context, opts)
               prepared,
               ast.tool_result(seg.tool_use_id, {
                 segments = {},
-                fallback = seg.fallback,
+                content = seg.content,
                 is_error = seg.is_error,
                 status = seg.status,
                 start_line = seg.position and seg.position.start_line,

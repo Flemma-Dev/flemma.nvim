@@ -38,7 +38,7 @@ describe("flemma.templating.compiler", function()
     it("compiles structural segments as __emit_part calls", function()
       local segments = {
         ast.text("before", { start_line = 1 }),
-        ast.tool_result("id123", { fallback = "content", start_line = 2, end_line = 3 }),
+        ast.tool_result("id123", { content = "content", start_line = 2, end_line = 3 }),
         ast.text("after", { start_line = 4 }),
       }
       local result = compiler.compile(segments)
@@ -151,7 +151,7 @@ describe("flemma.templating.compiler", function()
       local segments = {
         ast.text("before", { start_line = 1 }),
         ast.tool_result("id1", {
-          fallback = "result content",
+          content = "result content",
           start_line = 2,
           end_line = 4,
         }),
@@ -171,7 +171,7 @@ describe("flemma.templating.compiler", function()
     it("code block wrapping structural segment", function()
       local segments = {
         ast.code(" if show then ", { start_line = 1 }),
-        ast.tool_result("id1", { fallback = "content", start_line = 2, end_line = 3 }),
+        ast.tool_result("id1", { content = "content", start_line = 2, end_line = 3 }),
         ast.code(" end ", { start_line = 4 }),
       }
       local result = compiler.compile(segments)
@@ -331,7 +331,7 @@ describe("flemma.templating.compiler", function()
       }
       local segments = {
         ast.text("before", { start_line = 1 }),
-        ast.tool_result("id123", { segments = inner, fallback = "hello", start_line = 2, end_line = 3 }),
+        ast.tool_result("id123", { segments = inner, content = "hello", start_line = 2, end_line = 3 }),
         ast.text("after", { start_line = 4 }),
       }
       local result = compiler.compile(segments)
@@ -343,7 +343,7 @@ describe("flemma.templating.compiler", function()
 
     it("compiles opaque tool_result as structural pass-through", function()
       local segments = {
-        ast.tool_result("id456", { fallback = "plain text", start_line = 1, end_line = 2 }),
+        ast.tool_result("id456", { content = "plain text", start_line = 1, end_line = 2 }),
       }
       local result = compiler.compile(segments)
       assert.is_nil(result.error)
@@ -355,8 +355,8 @@ describe("flemma.templating.compiler", function()
       local inner1 = { ast.text("a", { start_line = 2 }) }
       local inner2 = { ast.text("b", { start_line = 5 }) }
       local segments = {
-        ast.tool_result("id1", { segments = inner1, fallback = "a", start_line = 1, end_line = 3 }),
-        ast.tool_result("id2", { segments = inner2, fallback = "b", start_line = 4, end_line = 6 }),
+        ast.tool_result("id1", { segments = inner1, content = "a", start_line = 1, end_line = 3 }),
+        ast.tool_result("id2", { segments = inner2, content = "b", start_line = 4, end_line = 6 }),
       }
       local result = compiler.compile(segments)
       assert.is_nil(result.error)
@@ -373,7 +373,7 @@ describe("flemma.templating.compiler", function()
       local segments = {
         ast.tool_result("id_cap", {
           segments = inner,
-          fallback = "captured text",
+          content = "captured text",
           is_error = false,
           start_line = 1,
           end_line = 3,
@@ -389,7 +389,7 @@ describe("flemma.templating.compiler", function()
       assert.equals("tool_result", parts[1].kind)
       assert.equals("id_cap", parts[1].tool_use_id)
       assert.is_false(parts[1].is_error)
-      assert.equals("captured text", parts[1].fallback)
+      assert.equals("captured text", parts[1].content)
       assert.equals(1, #parts[1].parts)
       assert.equals("text", parts[1].parts[1].kind)
       assert.equals("captured text", parts[1].parts[1].text)
@@ -399,7 +399,7 @@ describe("flemma.templating.compiler", function()
       local segments = {
         ast.tool_result("id_empty", {
           segments = {},
-          fallback = "",
+          content = "",
           start_line = 1,
           end_line = 2,
         }),
@@ -411,7 +411,7 @@ describe("flemma.templating.compiler", function()
       -- Empty segments = opaque pass-through, not a capture
       assert.equals(1, #parts)
       assert.equals("tool_result", parts[1].kind)
-      assert.equals("", parts[1].fallback)
+      assert.equals("", parts[1].content)
     end)
   end)
 
@@ -605,7 +605,7 @@ describe("flemma.templating.compiler", function()
     it("non-text segments pass through unchanged regardless of adjacent trim flags", function()
       local segments = {
         ast.code(" if true then ", pos, { trim_after = true }),
-        ast.tool_result("id1", { fallback = "content", start_line = 2, end_line = 3 }),
+        ast.tool_result("id1", { content = "content", start_line = 2, end_line = 3 }),
         ast.code(" end ", pos, { trim_before = true }),
       }
       local result = compiler.compile(segments)

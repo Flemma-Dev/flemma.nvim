@@ -332,7 +332,7 @@ function M.tree(node, opts)
     append_json(output, level + 1, "input", node.input)
   elseif kind == "tool_result" then
     ---@cast node flemma.ast.ToolResultSegment
-    append_multiline(output, level + 1, "fallback", node.fallback)
+    append_multiline(output, level + 1, "content", node.content)
   end
   -- aborted: message is inline, no multiline fields
 

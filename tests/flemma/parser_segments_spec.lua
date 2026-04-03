@@ -26,14 +26,14 @@ describe("tool result segment parsing", function()
     local tr = segments[1]
     assert.equals("tool_result", tr.kind)
     assert.equals("tool_123", tr.tool_use_id)
-    assert.equals("Hello {{ 1 + 1 }} world", tr.fallback)
+    assert.equals("Hello {{ 1 + 1 }} world", tr.content)
     assert.is_true(#tr.segments >= 3)
     assert.equals("text", tr.segments[1].kind)
     assert.equals("expression", tr.segments[2].kind)
     assert.equals("text", tr.segments[3].kind)
   end)
 
-  it("stores raw fallback for plain text tool results", function()
+  it("stores raw content for plain text tool results", function()
     local lines = {
       "**Tool Result:** `tool_456`",
       "```",
@@ -43,7 +43,7 @@ describe("tool result segment parsing", function()
     local segments = parse_user_message_segments(lines)
 
     local tr = segments[1]
-    assert.equals('{"key": "value"}', tr.fallback)
+    assert.equals('{"key": "value"}', tr.content)
     assert.equals(1, #tr.segments)
     assert.equals("text", tr.segments[1].kind)
   end)
@@ -73,7 +73,7 @@ describe("tool result segment parsing", function()
 
     local tr = segments[1]
     assert.is_true(tr.is_error)
-    assert.equals("Something went wrong", tr.fallback)
+    assert.equals("Something went wrong", tr.content)
   end)
 end)
 

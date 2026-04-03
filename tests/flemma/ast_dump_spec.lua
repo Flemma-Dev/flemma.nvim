@@ -83,7 +83,7 @@ describe("flemma.ast.dump", function()
 
     it("renders tool_result segment with status", function()
       local seg = nodes.tool_result("call_123", {
-        fallback = "file contents here",
+        content = "file contents here",
         is_error = false,
         status = "approved",
         start_line = 9,
@@ -93,7 +93,7 @@ describe("flemma.ast.dump", function()
       assert.is_truthy(lines[1]:find('tool_use_id="call_123"'))
       assert.is_truthy(lines[1]:find("is_error=false"))
       assert.is_truthy(lines[1]:find('status="approved"'))
-      assert.equals("  fallback:", lines[2])
+      assert.equals("  content:", lines[2])
       assert.equals("    file contents here", lines[3])
     end)
 

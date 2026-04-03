@@ -761,7 +761,7 @@ describe("Parser plain tool_result support", function()
     local you_msg = doc.messages[2]
     local seg = you_msg.segments[1]
     assert.equals("tool_result", seg.kind)
-    assert.equals("", seg.fallback)
+    assert.equals("", seg.content)
     assert.is_nil(seg.status)
   end)
 
@@ -787,7 +787,7 @@ describe("Parser plain tool_result support", function()
     local you_msg = doc.messages[2]
     local seg = you_msg.segments[1]
     assert.equals("tool_result", seg.kind)
-    assert.equals("4", seg.fallback)
+    assert.equals("4", seg.content)
     assert.is_nil(seg.status)
   end)
 end)
@@ -1497,9 +1497,9 @@ describe("Parser flemma:tool support", function()
     local seg = you_msg.segments[1]
     assert.equals("tool_result", seg.kind)
     assert.equals("toolu_01", seg.tool_use_id)
-    assert.equals("", seg.fallback)
+    assert.equals("", seg.content)
     assert.equals("pending", seg.status)
-    assert.equals("", seg.fallback)
+    assert.equals("", seg.content)
     assert.is_false(seg.is_error)
   end)
 
@@ -1525,7 +1525,7 @@ describe("Parser flemma:tool support", function()
     local seg = you_msg.segments[1]
     assert.equals("tool_result", seg.kind)
     assert.equals("approved", seg.status)
-    assert.equals("", seg.fallback)
+    assert.equals("", seg.content)
   end)
 
   it("parses status=rejected with user content", function()
@@ -1551,7 +1551,7 @@ describe("Parser flemma:tool support", function()
     local seg = you_msg.segments[1]
     assert.equals("tool_result", seg.kind)
     assert.equals("rejected", seg.status)
-    assert.equals("I don't want to run this dangerous command.", seg.fallback)
+    assert.equals("I don't want to run this dangerous command.", seg.content)
   end)
 
   it("parses status=denied", function()
@@ -1576,7 +1576,7 @@ describe("Parser flemma:tool support", function()
     local seg = you_msg.segments[1]
     assert.equals("tool_result", seg.kind)
     assert.equals("denied", seg.status)
-    assert.equals("", seg.fallback)
+    assert.equals("", seg.content)
   end)
 
   it("defaults to status=pending when no info string", function()
@@ -2182,7 +2182,7 @@ describe("Injector strip_fence_info_string", function()
           if seg.kind == "tool_result" then
             assert.equals("toolu_01", seg.tool_use_id)
             assert.is_nil(seg.status)
-            assert.equals("hi", seg.fallback)
+            assert.equals("hi", seg.content)
           end
         end
       end
@@ -2225,7 +2225,7 @@ describe("Injector strip_fence_info_string", function()
     end
     assert.equals(1, #tool_result_parts)
     assert.equals("toolu_01", tool_result_parts[1].tool_use_id)
-    assert.equals("hi", tool_result_parts[1].fallback)
+    assert.equals("hi", tool_result_parts[1].content)
   end)
 
   it("preserves (error) suffix on header", function()
@@ -2254,7 +2254,7 @@ describe("Injector strip_fence_info_string", function()
         for _, seg in ipairs(msg.segments) do
           if seg.kind == "tool_result" then
             assert.is_true(seg.is_error)
-            assert.equals("command not found: bad_cmd", seg.fallback)
+            assert.equals("command not found: bad_cmd", seg.content)
           end
         end
       end

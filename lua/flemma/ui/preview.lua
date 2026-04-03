@@ -465,7 +465,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
 
         local separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
         if remaining > separator_width then
-          local body = M.format_content_preview(result_seg.fallback, remaining - separator_width)
+          local body = M.format_content_preview(result_seg.content, remaining - separator_width)
           if body ~= "" then
             table.insert(entry_chunks, { LABEL_DETAIL_SEPARATOR .. body, "FlemmaToolDetail" })
             entry_width = entry_width + separator_width + str.strwidth(body)
@@ -473,7 +473,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
         end
       else
         -- No label: show content only (backward-compat highlight)
-        local body = M.format_content_preview(result_seg.fallback, remaining)
+        local body = M.format_content_preview(result_seg.content, remaining)
         if body ~= "" or result_seg.is_error then
           if body ~= "" then
             table.insert(entry_chunks, { body, "FlemmaFoldPreview" })
