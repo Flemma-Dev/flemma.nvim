@@ -121,10 +121,13 @@ describe("tools.truncate", function()
         lines[i] = "line " .. i
       end
       local text = table.concat(lines, "\n")
-      local result = tools_truncate.truncate_with_overflow(text, make_opts({
-        source = "mysource",
-        id = "myid",
-      }))
+      local result = tools_truncate.truncate_with_overflow(
+        text,
+        make_opts({
+          source = "mysource",
+          id = "myid",
+        })
+      )
 
       assert.is_truthy(result.overflow_path)
       assert.is_truthy(result.overflow_path:find("flemma_mysource_myid%.txt"))

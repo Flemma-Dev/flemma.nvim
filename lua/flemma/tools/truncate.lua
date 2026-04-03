@@ -173,9 +173,7 @@ function M.truncate_with_overflow(text, opts)
   local format_str = opts.output_path_format
   if not format_str then
     local config = config_facade.materialize(opts.bufnr)
-    format_str = config.tools
-      and config.tools.truncate
-      and config.tools.truncate.output_path_format
+    format_str = config.tools and config.tools.truncate and config.tools.truncate.output_path_format
       or "${TMPDIR:-/tmp}/flemma_#{source}_#{id}.txt"
   end
 
