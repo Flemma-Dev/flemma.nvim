@@ -75,11 +75,7 @@ local function detect_mime(path, override)
   if override and #override > 0 then
     return override
   end
-  local ok, mt, _ = pcall(mime_util.get_mime_type, path)
-  if ok and mt then
-    return mt
-  end
-  return mime_util.get_mime_by_extension(path)
+  return mime_util.detect(path)
 end
 
 --- Read file content (binary or text mode).
