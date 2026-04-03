@@ -102,8 +102,8 @@ M.definitions = {
 
             if result.truncated then
               -- Save full output to temp file
-              local temp_path = vim.fn.tempname()
-              local f = io.open(temp_path, "w")
+              local tmp_path = vim.fn.tempname()
+              local f = io.open(tmp_path, "w")
               if f then
                 f:write(full_output)
                 f:close()
@@ -121,7 +121,7 @@ M.definitions = {
                     ctx.truncate.format_size(result.output_bytes),
                     end_line,
                     last_line_size,
-                    temp_path
+                    tmp_path
                   )
               elseif result.truncated_by == "lines" then
                 output_text = output_text
@@ -130,7 +130,7 @@ M.definitions = {
                     start_line,
                     end_line,
                     result.total_lines,
-                    temp_path
+                    tmp_path
                   )
               else
                 output_text = output_text
@@ -140,7 +140,7 @@ M.definitions = {
                     end_line,
                     result.total_lines,
                     ctx.truncate.format_size(ctx.truncate.MAX_BYTES),
-                    temp_path
+                    tmp_path
                   )
               end
             end

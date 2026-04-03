@@ -49,7 +49,7 @@ end
 ---Create temporary file for request body
 ---@param opts flemma.client.RequestOptions
 ---@return string|nil tmp_file, string|nil err, string|nil raw_json
-local function create_temp_file(opts)
+local function create_tmp_file(opts)
   -- Create temporary file for request body
   local tmp_file = os.tmpname()
   -- Handle both Unix and Windows paths
@@ -185,7 +185,7 @@ function M.send_request(opts)
   -- The provider's get_request_headers() already handles API key validation
 
   -- Create temporary file for request body
-  local tmp_file, err, raw_json = create_temp_file(opts)
+  local tmp_file, err, raw_json = create_tmp_file(opts)
   if not tmp_file then
     if opts.callbacks.on_error then
       opts.callbacks.on_error(err or "Failed to create temporary file")
