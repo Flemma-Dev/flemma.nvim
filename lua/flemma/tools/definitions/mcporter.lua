@@ -11,8 +11,9 @@ local config_facade = require("flemma.config")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local sink_module = require("flemma.sink")
+local tool_names = require("flemma.utilities.tools")
 
-local SEPARATOR = "__"
+local SEPARATOR = tool_names.INTERNAL_SEPARATOR
 
 --------------------------------------------------------------------------------
 -- Internal helpers

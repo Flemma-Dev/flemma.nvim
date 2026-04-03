@@ -241,7 +241,7 @@ function M.build_request(self, prompt, _context)
           table.insert(content_blocks, {
             type = "tool_use",
             id = normalized_id,
-            name = p.name,
+            name = base.encode_tool_name(p.name),
             input = p.input,
           })
           log.debug("anthropic.build_request: Added tool_use for " .. p.name .. " (" .. normalized_id .. ")")
@@ -286,7 +286,7 @@ function M.build_request(self, prompt, _context)
   local tools_array = {}
   for _, def in ipairs(sorted_tools) do
     table.insert(tools_array, {
-      name = def.name,
+      name = base.encode_tool_name(def.name),
       description = tools_module.build_description(def),
       input_schema = tools_module.to_json_schema(def),
     })

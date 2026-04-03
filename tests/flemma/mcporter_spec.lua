@@ -9,15 +9,15 @@ describe("mcporter", function()
 
   describe("_glob_match", function()
     it("matches exact names", function()
-      assert.is_true(mcporter._glob_match("slack__channels_list", "slack__channels_list"))
+      assert.is_true(mcporter._glob_match("slack:channels_list", "slack:channels_list"))
     end)
 
     it("matches wildcard suffix", function()
-      assert.is_true(mcporter._glob_match("slack__channels_list", "slack__*"))
+      assert.is_true(mcporter._glob_match("slack:channels_list", "slack:*"))
     end)
 
     it("matches wildcard prefix", function()
-      assert.is_true(mcporter._glob_match("slack__channels_list", "*__channels_list"))
+      assert.is_true(mcporter._glob_match("slack:channels_list", "*:channels_list"))
     end)
 
     it("matches standalone wildcard", function()
@@ -25,21 +25,21 @@ describe("mcporter", function()
     end)
 
     it("rejects non-matching pattern", function()
-      assert.is_false(mcporter._glob_match("slack__channels_list", "github__*"))
+      assert.is_false(mcporter._glob_match("slack:channels_list", "github:*"))
     end)
 
     it("rejects partial mismatch", function()
-      assert.is_false(mcporter._glob_match("slack__channels_list", "slack__users_*"))
+      assert.is_false(mcporter._glob_match("slack:channels_list", "slack:users_*"))
     end)
   end)
 
   describe("_filter_tools", function()
     local tools = {
-      { name = "slack__channels_list" },
-      { name = "slack__users_search" },
-      { name = "slack__usergroups_create" },
-      { name = "github__search_code" },
-      { name = "github__create_pull_request" },
+      { name = "slack:channels_list" },
+      { name = "slack:users_search" },
+      { name = "slack:usergroups_create" },
+      { name = "github:search_code" },
+      { name = "github:create_pull_request" },
     }
 
     it("returns all disabled when include is empty", function()
@@ -51,7 +51,7 @@ describe("mcporter", function()
     end)
 
     it("enables matching include patterns", function()
-      local result = mcporter._filter_tools(tools, { "slack__*" }, {})
+      local result = mcporter._filter_tools(tools, { "slack:*" }, {})
       local enabled = vim.tbl_filter(function(t)
         return t.enabled
       end, result)
@@ -63,11 +63,11 @@ describe("mcporter", function()
     end)
 
     it("excludes matching exclude patterns", function()
-      local result = mcporter._filter_tools(tools, { "slack__*" }, { "slack__usergroups_*" })
+      local result = mcporter._filter_tools(tools, { "slack:*" }, { "slack:usergroups_*" })
       local names = vim.tbl_map(function(t)
         return t.name
       end, result)
-      assert.is_false(vim.tbl_contains(names, "slack__usergroups_create"))
+      assert.is_false(vim.tbl_contains(names, "slack:usergroups_create"))
       assert.equals(4, #result)
     end)
 
@@ -79,7 +79,7 @@ describe("mcporter", function()
     end)
 
     it("exclude removes before include sees them", function()
-      local result = mcporter._filter_tools(tools, { "*" }, { "github__*" })
+      local result = mcporter._filter_tools(tools, { "*" }, { "github:*" })
       local names = vim.tbl_map(function(t)
         return t.name
       end, result)
@@ -206,7 +206,7 @@ describe("mcporter", function()
         timeout = 60,
       })
 
-      assert.equals("slack__" .. tool_data.name, def.name)
+      assert.equals("slack:" .. tool_data.name, def.name)
       assert.equals(tool_data.description, def.description)
       assert.is_true(def.async)
       assert.is_function(def.execute)
@@ -214,14 +214,14 @@ describe("mcporter", function()
       assert.equals("object", def.input_schema.type)
     end)
 
-    it("uses double underscore separator in name", function()
+    it("uses colon separator in name", function()
       local def = mcporter._build_tool_definition("my-server", {
         name = "my_tool",
         description = "test",
         inputSchema = { type = "object", properties = {} },
       }, { path = "mcporter", timeout = 60 })
 
-      assert.equals("my-server__my_tool", def.name)
+      assert.equals("my-server:my_tool", def.name)
     end)
 
     it("sanitizes dots in server names to hyphens", function()
@@ -231,7 +231,7 @@ describe("mcporter", function()
         inputSchema = { type = "object", properties = {} },
       }, { path = "mcporter", timeout = 60 })
 
-      assert.equals("my-dotted-server__my_tool", def.name)
+      assert.equals("my-dotted-server:my_tool", def.name)
     end)
   end)
 
@@ -297,7 +297,7 @@ describe("mcporter", function()
         path = mock_path,
         timeout = 10,
         startup = { concurrency = 2 },
-        include = { "slack__*" },
+        include = { "slack:*" },
         exclude = {},
       }, function(name, def)
         registered[name] = def
@@ -312,7 +312,7 @@ describe("mcporter", function()
 
       local has_slack = false
       for name, def in pairs(registered) do
-        if name:find("^slack__") then
+        if name:find("^slack:") then
           has_slack = true
           assert.is_true(def.enabled)
         end
@@ -320,7 +320,7 @@ describe("mcporter", function()
       assert.is_true(has_slack)
 
       for name, def in pairs(registered) do
-        if name:find("^github__") then
+        if name:find("^github:") then
           assert.is_false(def.enabled)
         end
       end
