@@ -324,6 +324,97 @@ describe("flemma.templating.compiler", function()
     end)
   end)
 
+  describe("capture mechanism", function()
+    it("compiles compound tool_result with capture open/close", function()
+      local inner = {
+        ast.text("hello", { start_line = 2 }),
+      }
+      local segments = {
+        ast.text("before", { start_line = 1 }),
+        ast.tool_result("id123", { segments = inner, fallback = "hello", start_line = 2, end_line = 3 }),
+        ast.text("after", { start_line = 4 }),
+      }
+      local result = compiler.compile(segments)
+      assert.is_nil(result.error)
+      assert.truthy(result.source:find("__capture_open"))
+      assert.truthy(result.source:find("__capture_close"))
+      assert.truthy(result.source:find("__emit_part"))
+    end)
+
+    it("compiles opaque tool_result as structural pass-through", function()
+      local segments = {
+        ast.tool_result("id456", { fallback = "plain text", start_line = 1, end_line = 2 }),
+      }
+      local result = compiler.compile(segments)
+      assert.is_nil(result.error)
+      assert.truthy(result.source:find("__emit_part"))
+      assert.falsy(result.source:find("__capture_open"))
+    end)
+
+    it("generates unique tmp vars for nested captures", function()
+      local inner1 = { ast.text("a", { start_line = 2 }) }
+      local inner2 = { ast.text("b", { start_line = 5 }) }
+      local segments = {
+        ast.tool_result("id1", { segments = inner1, fallback = "a", start_line = 1, end_line = 3 }),
+        ast.tool_result("id2", { segments = inner2, fallback = "b", start_line = 4, end_line = 6 }),
+      }
+      local result = compiler.compile(segments)
+      assert.is_nil(result.error)
+      assert.truthy(result.source:find("__tmp1"))
+      assert.truthy(result.source:find("__tmp2"))
+    end)
+  end)
+
+  describe("capture execution", function()
+    it("captures parts into tool_result envelope", function()
+      local inner = {
+        ast.text("captured text", { start_line = 2 }),
+      }
+      local segments = {
+        ast.tool_result("id_cap", {
+          segments = inner,
+          fallback = "captured text",
+          is_error = false,
+          start_line = 1,
+          end_line = 3,
+        }),
+      }
+      local result = compiler.compile(segments)
+      assert.is_nil(result.error)
+
+      local env = { pcall = pcall, tostring = tostring, error = error }
+      local parts, _ = compiler.execute(result, env)
+
+      assert.equals(1, #parts)
+      assert.equals("tool_result", parts[1].kind)
+      assert.equals("id_cap", parts[1].tool_use_id)
+      assert.is_false(parts[1].is_error)
+      assert.equals("captured text", parts[1].fallback)
+      assert.equals(1, #parts[1].parts)
+      assert.equals("text", parts[1].parts[1].kind)
+      assert.equals("captured text", parts[1].parts[1].text)
+    end)
+
+    it("produces empty parts for empty capture", function()
+      local segments = {
+        ast.tool_result("id_empty", {
+          segments = {},
+          fallback = "",
+          start_line = 1,
+          end_line = 2,
+        }),
+      }
+      local result = compiler.compile(segments)
+      local env = { pcall = pcall, tostring = tostring, error = error }
+      local parts, _ = compiler.execute(result, env)
+
+      -- Empty segments = opaque pass-through, not a capture
+      assert.equals(1, #parts)
+      assert.equals("tool_result", parts[1].kind)
+      assert.equals("", parts[1].fallback)
+    end)
+  end)
+
   describe("apply_trim (via compile+execute)", function()
     ---@param segments flemma.ast.Segment[]
     ---@param env? table
