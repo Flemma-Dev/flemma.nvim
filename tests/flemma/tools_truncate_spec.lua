@@ -1,172 +1,155 @@
---- Tests for truncation utilities
+-- tests/flemma/tools_truncate_spec.lua
+describe("tools.truncate", function()
+  local tools_truncate
+  local base_truncate = require("flemma.utilities.truncate")
 
-package.loaded["flemma.utilities.truncate"] = nil
+  before_each(function()
+    package.loaded["flemma.tools.truncate"] = nil
+    tools_truncate = require("flemma.tools.truncate")
+  end)
 
-local truncate = require("flemma.utilities.truncate")
-
-describe("Truncation Utilities", function()
-  describe("truncate_head", function()
-    it("returns content unchanged when within limits", function()
-      local result = truncate.truncate_head("line1\nline2\nline3")
-      assert.is_false(result.truncated)
-      assert.equals("line1\nline2\nline3", result.content)
-      assert.equals(3, result.total_lines)
-      assert.equals(3, result.output_lines)
+  describe("re-exports", function()
+    it("exposes truncate_head from utilities", function()
+      assert.equals(base_truncate.truncate_head, tools_truncate.truncate_head)
     end)
 
-    it("truncates by line count", function()
-      -- Create content with more than max_lines
-      local lines = {}
-      for i = 1, 10 do
-        lines[i] = "line " .. i
-      end
-      local content = table.concat(lines, "\n")
-
-      local result = truncate.truncate_head(content, { max_lines = 5 })
-      assert.is_true(result.truncated)
-      assert.equals("lines", result.truncated_by)
-      assert.equals(5, result.output_lines)
-      assert.equals(10, result.total_lines)
+    it("exposes truncate_tail from utilities", function()
+      assert.equals(base_truncate.truncate_tail, tools_truncate.truncate_tail)
     end)
 
-    it("truncates by byte count", function()
-      -- Create content that exceeds byte limit but not line limit
-      local lines = {}
-      for i = 1, 5 do
-        lines[i] = string.rep("x", 100) -- 100 bytes per line
-      end
-      local content = table.concat(lines, "\n")
-
-      local result = truncate.truncate_head(content, { max_bytes = 250 })
-      assert.is_true(result.truncated)
-      assert.equals("bytes", result.truncated_by)
-      assert.is_true(result.output_lines < 5)
+    it("exposes format_size from utilities", function()
+      assert.equals(base_truncate.format_size, tools_truncate.format_size)
     end)
 
-    it("detects first line exceeding byte limit", function()
-      local content = string.rep("x", 200) .. "\nshort line"
-      local result = truncate.truncate_head(content, { max_bytes = 100 })
-      assert.is_true(result.truncated)
-      assert.is_true(result.first_line_exceeds_limit)
-      assert.equals("", result.content)
-      assert.equals(0, result.output_lines)
+    it("exposes MAX_LINES constant", function()
+      assert.equals(base_truncate.MAX_LINES, tools_truncate.MAX_LINES)
     end)
 
-    it("handles empty content", function()
-      local result = truncate.truncate_head("")
-      assert.is_false(result.truncated)
-      assert.equals("", result.content)
-      assert.equals(1, result.total_lines) -- "" splits to {""}
-    end)
-
-    it("handles single line within limits", function()
-      local result = truncate.truncate_head("hello world")
-      assert.is_false(result.truncated)
-      assert.equals("hello world", result.content)
-    end)
-
-    it("keeps complete lines only", function()
-      -- 3 lines: "aaa", "bbb", "ccc" - with newlines that's 11 bytes total
-      local content = "aaa\nbbb\nccc"
-      -- Set byte limit so that only first 2 lines fit (3 + 1 + 3 = 7 bytes for 2 lines)
-      local result = truncate.truncate_head(content, { max_bytes = 8 })
-      assert.is_true(result.truncated)
-      assert.equals(2, result.output_lines)
-      assert.equals("aaa\nbbb", result.content)
+    it("exposes MAX_BYTES constant", function()
+      assert.equals(base_truncate.MAX_BYTES, tools_truncate.MAX_BYTES)
     end)
   end)
 
-  describe("truncate_tail", function()
-    it("returns content unchanged when within limits", function()
-      local result = truncate.truncate_tail("line1\nline2\nline3")
+  describe("truncate_with_overflow", function()
+    local function temp_dir()
+      local dir = vim.fn.tempname()
+      vim.fn.mkdir(dir, "p")
+      return dir
+    end
+
+    local function make_opts(overrides)
+      local dir = temp_dir()
+      overrides = overrides or {}
+      return vim.tbl_extend("force", {
+        direction = "head",
+        source = "tool",
+        id = "test_123",
+        bufnr = 0,
+        output_path_format = dir .. "/flemma_#{source}_#{id}.txt",
+      }, overrides)
+    end
+
+    it("passes short output through unchanged", function()
+      local result = tools_truncate.truncate_with_overflow("hello world", make_opts())
+      assert.equals("hello world", result.content)
+      assert.is_nil(result.overflow_path)
       assert.is_false(result.truncated)
-      assert.equals("line1\nline2\nline3", result.content)
     end)
 
-    it("truncates by line count keeping tail", function()
+    it("truncates head output exceeding line limit and writes file", function()
       local lines = {}
-      for i = 1, 10 do
+      for i = 1, base_truncate.MAX_LINES + 500 do
         lines[i] = "line " .. i
       end
-      local content = table.concat(lines, "\n")
+      local text = table.concat(lines, "\n")
+      local result = tools_truncate.truncate_with_overflow(text, make_opts())
 
-      local result = truncate.truncate_tail(content, { max_lines = 3 })
       assert.is_true(result.truncated)
-      assert.equals("lines", result.truncated_by)
-      assert.equals(3, result.output_lines)
-      assert.equals(10, result.total_lines)
-      -- Should keep last 3 lines
-      assert.is_truthy(result.content:match("line 8"))
-      assert.is_truthy(result.content:match("line 9"))
-      assert.is_truthy(result.content:match("line 10"))
-      -- Should NOT contain early lines
-      assert.is_falsy(result.content:match("line 1\n"))
+      assert.is_string(result.overflow_path)
+      assert.is_truthy(result.content:find("%[Showing lines 1%-"))
+      assert.is_truthy(result.content:find("Full output:"))
+      local f = io.open(result.overflow_path, "r")
+      assert.is_truthy(f)
+      local saved = f:read("*a")
+      f:close()
+      assert.equals(text, saved)
+      assert.is_falsy(result.content:find("line " .. #lines))
     end)
 
-    it("truncates by byte count keeping tail", function()
+    it("truncates head output exceeding byte limit", function()
       local lines = {}
-      for i = 1, 5 do
-        lines[i] = string.rep("x", 100)
+      local long_line = string.rep("x", 1000)
+      for i = 1, 200 do
+        lines[i] = long_line
       end
-      local content = table.concat(lines, "\n")
+      local text = table.concat(lines, "\n")
+      assert.is_truthy(#text > base_truncate.MAX_BYTES)
+      local result = tools_truncate.truncate_with_overflow(text, make_opts())
 
-      local result = truncate.truncate_tail(content, { max_bytes = 250 })
       assert.is_true(result.truncated)
-      assert.equals("bytes", result.truncated_by)
-      assert.is_true(result.output_lines < 5)
+      assert.is_string(result.overflow_path)
+      assert.is_truthy(result.content:find("limit"))
     end)
 
-    it("handles partial last line when single line exceeds limit", function()
-      -- Single very long line
-      local content = string.rep("x", 200)
-      local result = truncate.truncate_tail(content, { max_bytes = 50 })
+    it("truncates tail output exceeding line limit", function()
+      local lines = {}
+      for i = 1, base_truncate.MAX_LINES + 500 do
+        lines[i] = "line " .. i
+      end
+      local text = table.concat(lines, "\n")
+      local result = tools_truncate.truncate_with_overflow(text, make_opts({ direction = "tail" }))
+
       assert.is_true(result.truncated)
-      assert.is_true(result.last_line_partial)
-      assert.is_true(#result.content <= 50)
+      assert.is_string(result.overflow_path)
+      assert.is_truthy(result.content:find("line " .. #lines))
+      assert.is_falsy(result.content:find("^line 1\n"))
     end)
 
-    it("handles empty content", function()
-      local result = truncate.truncate_tail("")
-      assert.is_false(result.truncated)
-      assert.equals("", result.content)
+    it("handles first line exceeding byte limit", function()
+      local text = string.rep("x", base_truncate.MAX_BYTES + 1000)
+      local result = tools_truncate.truncate_with_overflow(text, make_opts())
+
+      assert.is_true(result.truncated)
+      assert.is_string(result.overflow_path)
+      assert.is_truthy(result.content:find("%[Output too large"))
+      assert.is_truthy(result.content:find("Full output:"))
     end)
 
-    it("does not split multi-byte UTF-8 on partial line", function()
-      -- Single line of 10 box-drawing chars (─): 30 bytes total
-      local content = string.rep("\xe2\x94\x80", 10)
-      -- Truncate to 8 bytes — raw sub would land mid-character
-      local result = truncate.truncate_tail(content, { max_bytes = 8 })
-      assert.is_true(result.truncated)
-      assert.is_true(result.last_line_partial)
-      -- Result must contain only complete 3-byte characters
-      -- 8 bytes fits 2 complete chars (6 bytes), not 2.67
-      assert.equals(6, #result.content)
-      assert.equals(string.rep("\xe2\x94\x80", 2), result.content)
+    it("uses #{source} and #{id} in output path", function()
+      local lines = {}
+      for i = 1, base_truncate.MAX_LINES + 10 do
+        lines[i] = "line " .. i
+      end
+      local text = table.concat(lines, "\n")
+      local result = tools_truncate.truncate_with_overflow(text, make_opts({
+        source = "mysource",
+        id = "myid",
+      }))
+
+      assert.is_truthy(result.overflow_path)
+      assert.is_truthy(result.overflow_path:find("flemma_mysource_myid%.txt"))
     end)
 
-    it("does not split Cyrillic on partial line", function()
-      -- 20 Cyrillic chars (2 bytes each) = 40 bytes
-      local content = string.rep("\xd0\x9f", 20) -- "П" x 20
-      -- Truncate to 7 bytes — raw sub would land mid-character
-      local result = truncate.truncate_tail(content, { max_bytes = 7 })
-      assert.is_true(result.truncated)
-      assert.is_true(result.last_line_partial)
-      -- 7 bytes fits 3 complete 2-byte chars (6 bytes)
-      assert.equals(6, #result.content)
-      assert.equals(string.rep("\xd0\x9f", 3), result.content)
+    it("creates parent directories for overflow path", function()
+      local base = vim.fn.tempname()
+      local result = tools_truncate.truncate_with_overflow(
+        string.rep("x", base_truncate.MAX_BYTES + 1000),
+        make_opts({ output_path_format = base .. "/deep/nested/flemma_#{source}_#{id}.txt" })
+      )
+
+      assert.is_truthy(result.overflow_path)
+      assert.equals(1, vim.fn.filereadable(result.overflow_path))
     end)
 
-    it("does not split 4-byte emoji on partial line", function()
-      -- 10 emoji (4 bytes each) = 40 bytes
-      local emoji = "\xf0\x9f\x98\x80" -- U+1F600 😀
-      local content = string.rep(emoji, 10)
-      -- Truncate to 6 bytes — raw sub would land mid-emoji
-      local result = truncate.truncate_tail(content, { max_bytes = 6 })
+    it("omits Full output suffix when file write fails", function()
+      local result = tools_truncate.truncate_with_overflow(
+        string.rep("x", base_truncate.MAX_BYTES + 1000),
+        make_opts({ output_path_format = "/dev/null/impossible/flemma_#{source}_#{id}.txt" })
+      )
+
       assert.is_true(result.truncated)
-      assert.is_true(result.last_line_partial)
-      -- 6 bytes fits 1 complete 4-byte emoji (4 bytes)
-      assert.equals(4, #result.content)
-      assert.equals(emoji, result.content)
+      assert.is_nil(result.overflow_path)
+      assert.is_falsy(result.content:find("Full output:"))
     end)
   end)
 end)
