@@ -8,8 +8,8 @@ These are counter-default behaviors — violating them breaks the build or intro
 
 - **All JSON through `require("flemma.utilities.json")`** — never bare `vim.json.*` or `vim.fn.json_*` (JSON `null` becomes truthy `vim.NIL` instead of `nil`)
 - **All structural buffer inspection through the AST** — never regex/substring matching on buffer lines
-- **All `require()` calls at file top** — `make lint-inline-requires` enforces this
-- **Full EmmyLua type annotations on all production code** — `make check` enforces this
+- **All `require()` calls at file top** — `make qa` enforces this
+- **Full EmmyLua type annotations on all production code** — `make qa` enforces this
 - **Never `---@diagnostic disable` as an easy fix** — use `---@cast`, `--[[@as type]]`, or restructure; suppressions only for genuine LuaLS limitations
 
 ## Architecture Principles
@@ -18,7 +18,7 @@ These are counter-default behaviors — violating them breaks the build or intro
 - Name modules according to their file path (`lua/flemma/provider/providers/openai.lua` → `flemma.provider.providers.openai`). Public APIs belong in the module that owns the domain — tool registration lives in `flemma.tools`, provider registration in `flemma.provider.registry`, session access in `flemma.session`, etc. Don't pollute `init.lua` with single-use accessors; users require the specific module directly.
 - **All structural operations go through the AST.** The parsed AST (cached per buffer via `state.ast_cache`) is the only way to inspect conversation structure — roles, tool use/result blocks, thinking blocks, positions. Never call `nvim_buf_get_lines` and scan with regex or substring matching to find structural elements. If the AST lacks information you need (e.g., a position field), extend the AST rather than bypassing it. Direct buffer manipulation is only appropriate for content injection (tool results, streaming text) and UI concerns (spinners, extmarks).
 - Make incremental changes that isolate behaviour shifts so refactors remain reviewable.
-- **EmmyLua type annotations are mandatory.** Every production file must have full LuaLS type coverage — `---@class`, `---@param`, `---@return`, `---@field`, `---@type` on all public and private functions, fields, and return values. New code without type annotations will not pass `make check`. This is not optional; the type system is a core part of the project's quality infrastructure.
+- **EmmyLua type annotations are mandatory.** Every production file must have full LuaLS type coverage — `---@class`, `---@param`, `---@return`, `---@field`, `---@type` on all public and private functions, fields, and return values. New code without type annotations will not pass `make qa`. This is not optional; the type system is a core part of the project's quality infrastructure.
 
 ## Project Structure & Module Organization
 
@@ -48,7 +48,7 @@ All `require()` calls go at the top of the file, before any function definition.
 - **Dynamic requires via `flemma.loader`** — when resolving a module path string at runtime (from config, user input, or a `BUILTIN_*` list), use `loader.load(path)` instead of bare `require(path)`. The loader is Flemma's extensibility contract: users put string paths in config (e.g., `{ tools = { modules = { "my.custom.tool" } } }`) and the loader turns them into loaded modules. Never use bare `require()` for dynamic module path resolution.
 - **Vim string-context requires** — inside `foldexpr`, `foldtext`, or keymap strings that Vim evaluates in a separate Lua context
 
-`make lint-inline-requires` enforces this convention. If you need to call a function from a module that would create a circular require dependency, use `flemma.bridge` — see its module documentation.
+`make qa` enforces this convention. If you need to call a function from a module that would create a circular require dependency, use `flemma.bridge` — see its module documentation.
 
 ### Type annotation patterns
 
@@ -97,6 +97,14 @@ All tool IDs and metadata are embedded in buffer text so `.chat` files are porta
 - **`make changeset`** — interactive changeset creation (for human use; agents write changeset files directly).
 - **`make develop`** — launch Flemma from the working directory for manual testing.
 - `flemma-fmt` reformats the entire codebase.
+
+### `make qa` Only
+
+Do not invoke `nvim` directly with Plenary commands. Only `make qa` is wired correctly for running tests.
+
+### Run `make qa` Bare
+
+Never pipe it through `grep`/`tail`/`head`. It's silent on success and self-explanatory on failure.
 
 ## Testing Guidelines
 
