@@ -169,6 +169,24 @@ describe("mcporter", function()
       assert.is_nil(text)
       assert.is_string(err)
     end)
+
+    it("returns is_error true when isError is set", function()
+      local text, err, is_error =
+        mcporter._parse_call_response('{"content":[{"type":"text","text":"something went wrong"}],"isError":true}')
+      assert.equals("something went wrong", text)
+      assert.is_nil(err)
+      assert.is_true(is_error)
+    end)
+
+    it("returns is_error false for normal responses", function()
+      local _, _, is_error = mcporter._parse_call_response('{"content":[{"type":"text","text":"ok"}]}')
+      assert.is_false(is_error)
+    end)
+
+    it("returns is_error false for raw text passthrough", function()
+      local _, _, is_error = mcporter._parse_call_response("plain text")
+      assert.is_false(is_error)
+    end)
   end)
 
   describe("_build_tool_definition", function()

@@ -122,17 +122,21 @@ end
 ---Parse an MCP call response, extracting text content.
 ---
 ---Tries two formats in order:
----1. MCP content wrapper: `{ content: [{ type: "text", text: "..." }] }`
+---1. MCP CallToolResult: `{ content: [{ type: "text", text: "..." }], isError?: boolean }`
 ---2. Raw text passthrough: any non-empty string returned as-is.
+---
+---Only `text` content blocks are extracted; image, audio, and resource blocks
+---are silently dropped (not representable in the .chat buffer format).
 ---@param raw string
----@return string|nil text Extracted text, or nil on error
+---@return string|nil text Extracted text, or nil on parse failure
 ---@return string|nil error Error message if parsing failed
+---@return boolean is_error True when the MCP response signals a tool-level error via isError
 function M._parse_call_response(raw)
   if raw == "" then
-    return nil, "mcporter returned empty output"
+    return nil, "mcporter returned empty output", false
   end
 
-  -- Try MCP content wrapper first
+  -- Try MCP CallToolResult first
   local ok, data = pcall(json.decode, raw)
   if ok and type(data) == "table" and type(data.content) == "table" then
     local texts = {}
@@ -142,12 +146,14 @@ function M._parse_call_response(raw)
       end
     end
     if #texts > 0 then
-      return table.concat(texts, "\n\n"), nil
+      local is_error = data.isError == true
+      return table.concat(texts, "\n\n"), nil, is_error
     end
   end
 
-  -- Fall back to raw text passthrough (--output raw returns content directly)
-  return raw, nil
+  -- Fall back to raw text passthrough (e.g., mcporter --output json for some servers
+  -- returns the tool's JSON response directly without the MCP content wrapper)
+  return raw, nil, false
 end
 
 ---Build a `flemma.tools.ToolDefinition` from a single mcporter tool schema entry.
@@ -171,7 +177,7 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
     execute = function(input, ctx, callback)
       ---@cast callback -nil
       local args_json = json.encode(input)
-      local cmd = { mcporter_path, "call", selector, "--args", args_json, "--output", "raw" }
+      local cmd = { mcporter_path, "call", selector, "--args", args_json, "--output", "json" }
 
       local output_sink = sink_module.create({
         name = "mcporter/" .. tool_name,
@@ -223,13 +229,18 @@ function M._build_tool_definition(server_name, tool_data, exec_opts)
               return
             end
 
-            local text, parse_err = M._parse_call_response(raw_output)
+            local text, parse_err, is_error = M._parse_call_response(raw_output)
             if not text then
               local diagnostic = parse_err or "Failed to parse response"
               if stderr_text then
                 diagnostic = diagnostic .. "\nstderr: " .. stderr_text
               end
               callback({ success = false, error = diagnostic })
+              return
+            end
+
+            if is_error then
+              callback({ success = false, error = text })
               return
             end
 
