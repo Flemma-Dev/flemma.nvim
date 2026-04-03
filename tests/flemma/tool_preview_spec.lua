@@ -1153,7 +1153,7 @@ describe("format_message_fold_preview with tool results", function()
       ast.tool_use("t1", "calculator_async", { expression = "2+2" }, { start_line = 2, end_line = 5 }),
     })
     local you_msg = make_message("You", {
-      ast.tool_result("t1", "4", { start_line = 7, end_line = 12 }),
+      ast.tool_result("t1", { fallback = "4", start_line = 7, end_line = 12 }),
     })
     local doc = make_doc({ assistant_msg, you_msg })
 
@@ -1166,7 +1166,7 @@ describe("format_message_fold_preview with tool results", function()
       ast.tool_use("t1", "calculator_async", { expression = "2+2" }, { start_line = 2, end_line = 5 }),
     })
     local you_msg = make_message("You", {
-      ast.tool_result("t1", "4", { start_line = 7, end_line = 12 }),
+      ast.tool_result("t1", { fallback = "4", start_line = 7, end_line = 12 }),
     })
     local doc = make_doc({ assistant_msg, you_msg })
 
@@ -1182,8 +1182,8 @@ describe("format_message_fold_preview with tool results", function()
       ast.tool_use("t2", "calculator_async", { expression = "4+4" }, { start_line = 6, end_line = 9 }),
     })
     local you_msg = make_message("You", {
-      ast.tool_result("t1", "4", { start_line = 11, end_line = 15 }),
-      ast.tool_result("t2", "8", { start_line = 16, end_line = 20 }),
+      ast.tool_result("t1", { fallback = "4", start_line = 11, end_line = 15 }),
+      ast.tool_result("t2", { fallback = "8", start_line = 16, end_line = 20 }),
     })
     local doc = make_doc({ assistant_msg, you_msg })
 
@@ -1196,7 +1196,7 @@ describe("format_message_fold_preview with tool results", function()
 
   it("falls back to 'result' when doc is not provided", function()
     local you_msg = make_message("You", {
-      ast.tool_result("t1", "4", { start_line = 2, end_line = 6 }),
+      ast.tool_result("t1", { fallback = "4", start_line = 2, end_line = 6 }),
     })
 
     local chunks = preview_mod.format_message_fold_preview(you_msg, 80, nil, "FlemmaUser")
@@ -1208,7 +1208,7 @@ describe("format_message_fold_preview with tool results", function()
       ast.text("No tools here"),
     })
     local you_msg = make_message("You", {
-      ast.tool_result("unknown_id", "some output", { start_line = 3, end_line = 7 }),
+      ast.tool_result("unknown_id", { fallback = "some output", start_line = 3, end_line = 7 }),
     })
     local doc = make_doc({ assistant_msg, you_msg })
 
@@ -1221,7 +1221,7 @@ describe("format_message_fold_preview with tool results", function()
       ast.tool_use("t1", "bash", { command = "bad_cmd" }, { start_line = 2, end_line = 5 }),
     })
     local you_msg = make_message("You", {
-      ast.tool_result("t1", "command not found", { is_error = true, start_line = 7, end_line = 12 }),
+      ast.tool_result("t1", { fallback = "command not found", is_error = true, start_line = 7, end_line = 12 }),
     })
     local doc = make_doc({ assistant_msg, you_msg })
 
@@ -1234,7 +1234,7 @@ describe("format_message_fold_preview with tool results", function()
       ast.tool_use("t1", "bash", { command = "bad_cmd" }, { start_line = 2, end_line = 5 }),
     })
     local you_msg = make_message("You", {
-      ast.tool_result("t1", "command not found", { is_error = true, start_line = 7, end_line = 12 }),
+      ast.tool_result("t1", { fallback = "command not found", is_error = true, start_line = 7, end_line = 12 }),
     })
     local doc = make_doc({ assistant_msg, you_msg })
 
@@ -1249,7 +1249,7 @@ describe("format_message_fold_preview with tool results", function()
       ast.tool_use("t1", "bash", { command = "ls" }, { start_line = 2, end_line = 5 }),
     })
     local you_msg = make_message("You", {
-      ast.tool_result("t1", "file1.txt", { start_line = 7, end_line = 12 }),
+      ast.tool_result("t1", { fallback = "file1.txt", start_line = 7, end_line = 12 }),
       ast.text("\n"),
       ast.text("Please continue."),
     })

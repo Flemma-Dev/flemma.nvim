@@ -358,13 +358,13 @@ function M.get_fold_text()
       if tool_label then
         table.insert(chunks, { tool_label, "FlemmaToolLabel" })
         if available > 0 then
-          local body = preview.format_content_preview(tool_seg.content, available)
+          local body = preview.format_content_preview(tool_seg.fallback, available)
           if body ~= "" then
             table.insert(chunks, { LABEL_DETAIL_SEPARATOR .. body, "FlemmaToolDetail" })
           end
         end
       else
-        local body = preview.format_content_preview(tool_seg.content, available)
+        local body = preview.format_content_preview(tool_seg.fallback, available)
         if body ~= "" then
           table.insert(chunks, { body, "FlemmaFoldPreview" })
         end

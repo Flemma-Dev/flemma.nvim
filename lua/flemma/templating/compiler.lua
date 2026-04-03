@@ -183,7 +183,7 @@ local function structural_segment_to_part(segment)
       return {
         kind = "tool_result",
         tool_use_id = segment.tool_use_id,
-        content = segment.content,
+        fallback = segment.fallback,
         is_error = segment.is_error,
       }
     end

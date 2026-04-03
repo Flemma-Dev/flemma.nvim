@@ -52,9 +52,15 @@ local M = {}
 ---@class flemma.ast.ToolUseSegment : flemma.ast.GenericToolUsePart
 ---@field position flemma.ast.Position
 
----@class flemma.ast.ToolResultSegment : flemma.ast.GenericToolResultPart
----@field position flemma.ast.Position
+---@class flemma.ast.ToolResultSegment
+---@field kind "tool_result"
+---@field tool_use_id string
+---@field is_error boolean
+---@field segments flemma.ast.Segment[]
+---@field fallback string
+---@field status? flemma.ast.ToolStatus
 ---@field fence_line? integer 1-based line number of the fence opener (only for flemma:tool blocks)
+---@field position flemma.ast.Position
 
 ---@class flemma.ast.AbortedSegment
 ---@field kind "aborted"
@@ -127,9 +133,9 @@ local M = {}
 ---@field kind "tool_result"
 ---@field tool_use_id string
 ---@field name? string Tool function name (resolved from matching tool_use in pipeline)
----@field content string
+---@field parts flemma.ast.GenericPart[]
+---@field content string @deprecated Use .parts instead; retained for provider compatibility until Task 9
 ---@field is_error boolean
----@field status? flemma.ast.ToolStatus
 
 ---@alias flemma.ast.GenericPart flemma.ast.GenericTextPart|flemma.ast.GenericImagePart|flemma.ast.GenericPdfPart|flemma.ast.GenericTextFilePart|flemma.ast.GenericUnsupportedFilePart|flemma.ast.GenericThinkingPart|flemma.ast.GenericToolUsePart|flemma.ast.GenericToolResultPart
 
@@ -234,15 +240,15 @@ function M.tool_use(id, name, input, pos)
 end
 
 ---@param tool_use_id string
----@param content string
----@param opts? { is_error?: boolean, status?: flemma.ast.ToolStatus, start_line?: integer, end_line?: integer, fence_line?: integer }
+---@param opts? { segments?: flemma.ast.Segment[], fallback?: string, is_error?: boolean, status?: flemma.ast.ToolStatus, start_line?: integer, end_line?: integer, fence_line?: integer }
 ---@return flemma.ast.ToolResultSegment
-function M.tool_result(tool_use_id, content, opts)
+function M.tool_result(tool_use_id, opts)
   opts = opts or {}
   return {
     kind = "tool_result",
     tool_use_id = tool_use_id,
-    content = content,
+    segments = opts.segments or {},
+    fallback = opts.fallback or "",
     is_error = opts.is_error or false,
     status = opts.status,
     fence_line = opts.fence_line,
@@ -327,10 +333,12 @@ function M.to_generic_parts(evaluated_parts, source_file)
         input = p.input,
       })
     elseif p.kind == "tool_result" then
+      ---@cast p flemma.processor.ToolResultPart
       table.insert(parts, {
         kind = "tool_result",
         tool_use_id = p.tool_use_id,
-        content = p.content,
+        parts = { { kind = "text", text = p.fallback } },
+        content = p.fallback,
         is_error = p.is_error,
       })
     end

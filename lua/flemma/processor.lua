@@ -42,7 +42,12 @@ end
 ---@alias flemma.processor.TextPart flemma.ast.GenericTextPart
 ---@alias flemma.processor.ThinkingPart flemma.ast.GenericThinkingPart
 ---@alias flemma.processor.ToolUsePart flemma.ast.GenericToolUsePart
----@alias flemma.processor.ToolResultPart flemma.ast.GenericToolResultPart
+
+---@class flemma.processor.ToolResultPart
+---@field kind "tool_result"
+---@field tool_use_id string
+---@field fallback string
+---@field is_error boolean
 
 -- Part types unique to the processor stage (pre-conversion)
 ---@class flemma.processor.FilePart
@@ -298,7 +303,7 @@ function M.evaluate(doc, base_context, opts)
             table.insert(parts, {
               kind = "tool_result",
               tool_use_id = seg.tool_use_id,
-              content = seg.content,
+              fallback = seg.fallback,
               is_error = seg.is_error,
             })
           end

@@ -1031,7 +1031,7 @@ function M.add_tool_previews(bufnr, doc)
   for _, msg in ipairs(doc.messages) do
     if roles.is_user(msg.role) then
       for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_result" and seg.status and seg.content == "" then
+        if seg.kind == "tool_result" and seg.status and seg.fallback == "" then
           local sibling = siblings[seg.tool_use_id]
           local tool_use = sibling and sibling.use or nil
           if tool_use then

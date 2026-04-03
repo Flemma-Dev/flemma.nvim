@@ -38,7 +38,7 @@ describe("flemma.templating.compiler", function()
     it("compiles structural segments as __emit_part calls", function()
       local segments = {
         ast.text("before", { start_line = 1 }),
-        ast.tool_result("id123", "content", { start_line = 2, end_line = 3 }),
+        ast.tool_result("id123", { fallback = "content", start_line = 2, end_line = 3 }),
         ast.text("after", { start_line = 4 }),
       }
       local result = compiler.compile(segments)
@@ -150,7 +150,8 @@ describe("flemma.templating.compiler", function()
     it("structural segments pass through", function()
       local segments = {
         ast.text("before", { start_line = 1 }),
-        ast.tool_result("id1", "result content", {
+        ast.tool_result("id1", {
+          fallback = "result content",
           start_line = 2,
           end_line = 4,
         }),
@@ -170,7 +171,7 @@ describe("flemma.templating.compiler", function()
     it("code block wrapping structural segment", function()
       local segments = {
         ast.code(" if show then ", { start_line = 1 }),
-        ast.tool_result("id1", "content", { start_line = 2, end_line = 3 }),
+        ast.tool_result("id1", { fallback = "content", start_line = 2, end_line = 3 }),
         ast.code(" end ", { start_line = 4 }),
       }
       local result = compiler.compile(segments)
@@ -513,7 +514,7 @@ describe("flemma.templating.compiler", function()
     it("non-text segments pass through unchanged regardless of adjacent trim flags", function()
       local segments = {
         ast.code(" if true then ", pos, { trim_after = true }),
-        ast.tool_result("id1", "content", { start_line = 2, end_line = 3 }),
+        ast.tool_result("id1", { fallback = "content", start_line = 2, end_line = 3 }),
         ast.code(" end ", pos, { trim_before = true }),
       }
       local result = compiler.compile(segments)
