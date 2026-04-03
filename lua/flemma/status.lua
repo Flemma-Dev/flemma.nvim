@@ -70,7 +70,7 @@ local OP_HL = {
 ---@field parameters { merged: table<string, any>, sources: table<string, string>, resolved_max_tokens: integer|nil, resolved_thinking: string|nil }
 ---@field autopilot { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, sources: table<string, string> }
 ---@field sandbox { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil, policy: flemma.config.SandboxPolicy, sources: table<string, string> }
----@field tools { enabled: string[], disabled: string[], descriptions: table<string, string>, input_schemas: table<string, table>, booting: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer }
+---@field tools { enabled: string[], disabled: string[], descriptions: table<string, string>, input_schemas: table<string, table>, booting: boolean, boot_completed?: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer }
 ---@field approval { approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil, runtime_items: table<string, true>|nil }
 ---@field buffer { is_chat: boolean, bufnr: integer }
 ---@field diagnostics? flemma.ast.Diagnostic[] Frontmatter validation diagnostics
@@ -249,7 +249,7 @@ end
 ---When frontmatter changes the tool list, items that differ from the base
 ---config are tracked in frontmatter_items for annotation.
 ---@param bufnr integer
----@return { enabled: string[], disabled: string[], descriptions: table<string, string>, input_schemas: table<string, table>, booting: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer }
+---@return { enabled: string[], disabled: string[], descriptions: table<string, string>, input_schemas: table<string, table>, booting: boolean, boot_completed?: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer }
 local function collect_tools(bufnr)
   local all_tools = tools_module.get_all({ include_disabled = true })
 
@@ -1235,10 +1235,14 @@ local function format_tools_section(b, data, is_last, verbose)
   b:put(summary, "FlemmaStatusSummary")
   b:nl()
 
-  -- booting indicator
+  -- booting indicator (kept stable across refreshes to avoid layout jumps)
   if t.booting then
     b:leaf(false)
     b:put("⏳ loading async tool sources…", "FlemmaStatusBooting")
+    b:nl()
+  elseif t.boot_completed then
+    b:leaf(false)
+    b:put("✔ finished loading tool sources", "FlemmaStatusEnabled")
     b:nl()
   end
 
@@ -1895,6 +1899,46 @@ local function setup_highlights()
   end
 end
 
+---Render formatted status data into a status buffer, replacing all content
+---and extmark highlights.
+---@param buf integer
+---@param win integer
+---@param result flemma.status.FormatResult
+local function render_buffer(buf, win, result)
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, result.lines)
+  vim.bo[buf].modifiable = false
+
+  setup_highlights()
+  vim.api.nvim_buf_clear_namespace(buf, NS, 0, -1)
+
+  for _, em in ipairs(result.extmarks) do
+    vim.api.nvim_buf_set_extmark(buf, NS, em[1], em[2], {
+      end_col = em[3],
+      hl_group = em[4],
+    })
+  end
+
+  for _, vt in ipairs(result.virt_texts) do
+    vim.api.nvim_buf_set_extmark(buf, NS, vt[1], 0, {
+      virt_text = vt[2],
+      virt_text_pos = "right_align",
+      hl_mode = "combine",
+    })
+  end
+
+  if result.conceals and #result.conceals > 0 then
+    for _, c in ipairs(result.conceals) do
+      vim.api.nvim_buf_set_extmark(buf, NS, c[1], c[2], {
+        end_col = c[3],
+        conceal = "",
+      })
+    end
+    vim.wo[win].conceallevel = 3
+    vim.wo[win].concealcursor = ""
+  end
+end
+
 ---Open a vertical-split scratch buffer with formatted status output
 ---@param opts flemma.status.ShowOptions
 function M.show(opts)
@@ -1951,43 +1995,40 @@ function M.show(opts)
   vim.wo[win].spell = false
   vim.api.nvim_buf_set_name(buf, "flemma://status")
   vim.b[buf].flemma_source_bufnr = target_bufnr
+  vim.b[buf].flemma_verbose = is_verbose
+  vim.b[buf].flemma_was_booting = data.tools.booting
 
-  -- Write content
-  vim.bo[buf].modifiable = true
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, result.lines)
-  vim.bo[buf].modifiable = false
+  render_buffer(buf, win, result)
   vim.bo[buf].filetype = "flemma-status"
 
-  -- Apply extmark-based highlighting
-  setup_highlights()
-  vim.api.nvim_buf_clear_namespace(buf, NS, 0, -1)
-
-  for _, em in ipairs(result.extmarks) do
-    vim.api.nvim_buf_set_extmark(buf, NS, em[1], em[2], {
-      end_col = em[3],
-      hl_group = em[4],
-    })
-  end
-
-  for _, vt in ipairs(result.virt_texts) do
-    vim.api.nvim_buf_set_extmark(buf, NS, vt[1], 0, {
-      virt_text = vt[2],
-      virt_text_pos = "right_align",
-      hl_mode = "combine",
-    })
-  end
-
-  -- Apply conceal extmarks (tool descriptions hidden until cursor hovers)
-  if result.conceals and #result.conceals > 0 then
-    for _, c in ipairs(result.conceals) do
-      vim.api.nvim_buf_set_extmark(buf, NS, c[1], c[2], {
-        end_col = c[3],
-        conceal = "",
-      })
-    end
-    vim.wo[win].conceallevel = 3
-    vim.wo[win].concealcursor = ""
-  end
+  -- Auto-refresh when async tool sources finish loading or config changes
+  local augroup = vim.api.nvim_create_augroup("FlemmaStatus", { clear = true })
+  vim.api.nvim_create_autocmd("User", {
+    group = augroup,
+    pattern = { "FlemmaBootComplete", "FlemmaConfigUpdated" },
+    callback = function()
+      if not vim.api.nvim_buf_is_valid(buf) then
+        pcall(vim.api.nvim_del_augroup_by_id, augroup)
+        return
+      end
+      local source = vim.b[buf].flemma_source_bufnr
+      local refresh_bufnr = (source and vim.api.nvim_buf_is_valid(source)) and source or 0
+      local verbose = vim.b[buf].flemma_verbose or false
+      local refresh_data
+      if verbose then
+        refresh_data = M.collect_verbose(refresh_bufnr)
+      else
+        refresh_data = M.collect(refresh_bufnr)
+      end
+      -- Show "finished" line only if the loading indicator was visible before
+      local was_booting = vim.b[buf].flemma_was_booting or false
+      if was_booting and not refresh_data.tools.booting then
+        refresh_data.tools.boot_completed = true
+      end
+      vim.b[buf].flemma_was_booting = refresh_data.tools.booting
+      render_buffer(buf, win, M.format(refresh_data, verbose))
+    end,
+  })
 
   -- Map q to close
   vim.keymap.set("n", "q", "<cmd>close<cr>", { buffer = buf, nowait = true })
