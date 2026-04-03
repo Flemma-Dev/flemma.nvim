@@ -28,8 +28,9 @@ local M = {}
 ---@field timeout integer Default timeout in seconds (resolved from config.tools.default_timeout)
 ---@field __dirname? string Directory containing the .chat buffer (nil for unsaved buffers)
 ---@field __filename? string Full path of the .chat buffer (nil for unsaved buffers)
+---@field tool_id? string Tool call ID for the current invocation
 ---@field sandbox flemma.tools.SandboxContext Sandbox enforcement utilities (lazy-loaded)
----@field truncate flemma.utilities.Truncate Truncation utilities (lazy-loaded)
+---@field truncate flemma.tools.Truncate Truncation utilities (lazy-loaded)
 ---@field path flemma.tools.PathContext Path resolution utilities (lazy-loaded)
 ---@field get_config fun(self: flemma.tools.ExecutionContext): table? Tool-specific config subtree (read-only copy of config.tools[tool_name])
 
