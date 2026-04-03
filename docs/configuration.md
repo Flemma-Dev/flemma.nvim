@@ -57,6 +57,16 @@ require("flemma").setup({
     ls = {                                   -- [experimental.tools] Ls tool configuration
       cwd = "urn:flemma:buffer:path",        -- Working directory for directory listings
     },
+    mcporter = {
+      enabled = false,                       -- Discover MCP servers via mcporter CLI (see docs/mcp.md)
+      path = "mcporter",                     -- Binary path or command
+      timeout = 60,                          -- Per-operation timeout (seconds)
+      startup = {
+        concurrency = 4,                     -- Max parallel schema fetches at startup
+      },
+      include = {},                          -- Glob patterns: matching tools enabled (e.g., { "slack:*" })
+      exclude = {},                          -- Glob patterns: matching tools skipped entirely
+    },
     modules = {},                            -- Lua module paths for third-party tool sources (e.g., "3rd.tools.todos")
   },
   templating = {
