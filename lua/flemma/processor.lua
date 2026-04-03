@@ -10,6 +10,9 @@ local parser = require("flemma.parser")
 local state = require("flemma.state")
 local diagnostic_format = require("flemma.utilities.diagnostic")
 local symbols = require("flemma.symbols")
+local ast = require("flemma.ast")
+local ast_query = require("flemma.ast.query")
+local tools_registry = require("flemma.tools.registry")
 
 ---@class flemma.Processor
 local M = {}
@@ -273,6 +276,9 @@ function M.evaluate(doc, base_context, opts)
   local env = templating.from_context(context, opts.bufnr)
   eval.ensure_env(env)
 
+  -- Build a tool_use_id -> info index once per document for capability lookups.
+  local tool_use_index = ast_query.build_tool_use_index(doc)
+
   for _, msg in ipairs(doc.messages or {}) do
     local parts
 
@@ -314,7 +320,32 @@ function M.evaluate(doc, base_context, opts)
     else
       -- @System and @You: compile and execute via template engine
       log.trace("processor: compiling @" .. msg.role .. " message (" .. #(msg.segments or {}) .. " segments)")
-      local compile_result = compiler.compile(msg.segments or {})
+
+      -- Collapse non-opted-in tool results to their fallback form (empty segments).
+      -- Only tools declaring the `template_tool_result` capability get their
+      -- inner segments compiled and evaluated through the capture mechanism.
+      local prepared = {}
+      for _, seg in ipairs(msg.segments or {}) do
+        if seg.kind == "tool_result" and seg.segments and #seg.segments > 0 then
+          local info = tool_use_index[seg.tool_use_id]
+          if info and tools_registry.has_capability(info.name, "template_tool_result") then
+            table.insert(prepared, seg)
+          else
+            table.insert(prepared, ast.tool_result(seg.tool_use_id, {
+              segments = {},
+              fallback = seg.fallback,
+              is_error = seg.is_error,
+              status = seg.status,
+              start_line = seg.position and seg.position.start_line,
+              end_line = seg.position and seg.position.end_line,
+            }))
+          end
+        else
+          table.insert(prepared, seg)
+        end
+      end
+
+      local compile_result = compiler.compile(prepared)
       local exec_parts, exec_diagnostics = compiler.execute(compile_result, env)
       parts = exec_parts
       for _, d in ipairs(exec_diagnostics) do
