@@ -10,6 +10,7 @@ local M = {}
 -- Runtime code inside execute() must use ctx.truncate instead.
 local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
+local mime = require("flemma.mime")
 
 M.definitions = {
   {
@@ -36,6 +37,7 @@ M.definitions = {
       },
     },
     async = false,
+    capabilities = { "template_tool_result" },
     ---@return flemma.tools.ToolPreview
     format_preview = function(input)
       local detail_parts = { input.path }
@@ -64,6 +66,19 @@ M.definitions = {
       -- Check file exists and is readable
       if vim.fn.filereadable(path) ~= 1 then
         return { success = false, error = "File not found: " .. input.path }
+      end
+
+      -- Check for binary content — emit a file reference instead of raw bytes
+      local mime_type = mime.detect(path)
+      if mime_type and mime.is_binary(mime_type) then
+        local ref_path = input.path
+        if not ref_path:match("^%.%.?/") then
+          ref_path = "./" .. ref_path
+        end
+        return {
+          success = true,
+          output = "@" .. ref_path .. ";type=" .. mime_type,
+        }
       end
 
       -- Read file lines
