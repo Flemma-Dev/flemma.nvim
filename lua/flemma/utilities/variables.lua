@@ -129,4 +129,37 @@ function M.deduplicate_by_prefix(paths)
   return result
 end
 
+--- Expand environment variable references inline within a larger string.
+---
+--- Unlike `expand()` which requires the entire string to be one variable
+--- reference, this finds and replaces all `${VAR:-default}`, `$VAR`, and
+--- leading `~/` occurrences within the string.
+---
+--- URN references (`urn:flemma:*`) are not supported inline — they are
+--- whole-string patterns handled by `expand()`.
+---@param text string
+---@return string
+function M.expand_inline(text)
+  -- ${VAR:-default} — greedy match on var name, non-greedy on default
+  text = text:gsub("%${([%w_]+):%-(.-)}", function(var, default)
+    local val = os.getenv(var)
+    if val and val ~= "" then
+      return val
+    end
+    return expand_tilde(default)
+  end)
+
+  -- Bare $VAR — only match word-character var names to avoid false positives
+  text = text:gsub("%$([%w_]+)", function(var)
+    return os.getenv(var) or ""
+  end)
+
+  -- Leading ~/
+  if text:sub(1, 2) == "~/" or text == "~" then
+    text = expand_tilde(text)
+  end
+
+  return text
+end
+
 return M
