@@ -295,6 +295,9 @@ function M.build_execution_context(params)
         ---@type flemma.tools.PathContext
         local path_namespace = {
           resolve = function(path)
+            if vim.startswith(path, "~/") or path == "~" then
+              path = vim.fn.expand(path)
+            end
             if vim.startswith(path, "/") then
               return path
             end
