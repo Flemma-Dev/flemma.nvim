@@ -28,6 +28,21 @@ describe("client.prepare_curl_command()", function()
     assert.is_truthy(flat:match("%-%-connect%-timeout 5"))
     assert.is_truthy(flat:match("%-%-max%-time 60"))
   end)
+
+  it("includes User-Agent header with flemma.nvim version", function()
+    local cmd = client.prepare_curl_command("/dev/null", {}, "http://localhost", {})
+    local found = false
+    for i, arg in ipairs(cmd) do
+      if cmd[i - 1] == "-H" and arg:match("^User%-Agent: flemma%.nvim/") then
+        found = true
+        -- Verify format: flemma.nvim/X.Y.Z Neovim/A.B.C
+        assert.is_truthy(arg:match("^User%-Agent: flemma%.nvim/%d+%.%d+%.%d+"), "version format must be semver")
+        assert.is_truthy(arg:match("Neovim/%d+%.%d+%.%d+$"), "must include Neovim version")
+        break
+      end
+    end
+    assert.is_true(found, "curl command must include User-Agent header")
+  end)
 end)
 
 -- ─── integration: header capture via socat ─────────────────────────────────
@@ -147,5 +162,7 @@ describe("client.send_request() header wire format", function()
     assert.is_falsy(raw:match("expect:%s*100%-continue"), "curl must NOT send Expect: 100-continue")
     -- Also confirm we did capture *something* (sanity check).
     assert.is_truthy(raw:match("content%-type"), "should have captured at least the Content-Type header")
+    -- Verify User-Agent header was sent with expected format.
+    assert.is_truthy(raw:match("user%-agent: flemma%.nvim/"), "User-Agent header must be present on the wire")
   end)
 end)

@@ -3,6 +3,7 @@
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local sink = require("flemma.sink")
+local version = require("flemma.version")
 
 ---@class flemma.Client
 local M = {}
@@ -142,6 +143,8 @@ function M.prepare_curl_command(tmp_file, headers, endpoint, parameters)
     "Expect:", -- suppress cURL's default Expect: 100-continue (HTTP 417 on Vertex AI)
     "-H",
     "Connection: close", -- request connection close
+    "-H",
+    "User-Agent: flemma.nvim/" .. version.VERSION .. " Neovim/" .. tostring(vim.version()),
   }
 
   -- Add headers
