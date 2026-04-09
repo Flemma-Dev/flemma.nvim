@@ -41,6 +41,7 @@ pkgs.mkShell rec {
       runtimeInputs = [
         nixfmt-tree
         nodejs_lts.pkgs.prettier
+        shfmt
         stylua
       ];
       text = ''
@@ -49,7 +50,10 @@ pkgs.mkShell rec {
         find . -name "*.lua" -print0 | xargs -0 \
         stylua
 
-        find . \( -name "*.md" -o -name "*.yml" -o -name "*.yaml" \) -not -path '*/.claude/*' -not -path '*/contrib/*' -print0 | xargs -0 \
+        find . -name "*.sh" -print0 | xargs -0 \
+        shfmt -w -i 2 -ci
+
+        find . \( -name "*.md" -o -name "*.yml" -o -name "*.yaml" \) -not -name 'pnpm-lock.yaml' -not -path '*/.claude/*' -not -path '*/contrib/*' -print0 | xargs -0 \
         prettier --write
       '';
     })

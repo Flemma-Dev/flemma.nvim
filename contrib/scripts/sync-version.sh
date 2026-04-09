@@ -20,7 +20,7 @@ if [ "${1:-}" = "--dev" ]; then
   version="${version}-dev"
 fi
 
-cat > lua/flemma/version.lua << EOF
+cat >lua/flemma/version.lua <<EOF
 ---@class flemma.Version
 local M = {}
 
