@@ -1,8 +1,10 @@
 name: Post-Release
 
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
 
 concurrency:
   group: ${{ github.workflow }}
@@ -10,6 +12,10 @@ concurrency:
 jobs:
   update-develop:
     name: Update develop to -dev
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -27,21 +33,36 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "Release version: ${version}"
 
+      - name: Check if release tag exists
+        id: check
+        run: |
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "tagged=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tagged=false" >> "$GITHUB_OUTPUT"
+            echo "No tag v${{ steps.version.outputs.version }} found — skipping"
+          fi
+
       - name: Configure git identity
+        if: steps.check.outputs.tagged == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Create post-release branch and set -dev version
+        if: steps.check.outputs.tagged == 'true'
         run: |
-          git checkout -b "post-release/v${{ steps.version.outputs.version }}"
+          branch="post-release/v${{ steps.version.outputs.version }}"
+          git push origin --delete "$branch" 2>/dev/null || true
+          git checkout -b "$branch"
           chmod +x contrib/scripts/sync-version.sh
           contrib/scripts/sync-version.sh --dev
           git add lua/flemma/version.lua
           git commit -m "chore: set version to ${{ steps.version.outputs.version }}-dev for development"
-          git push origin "post-release/v${{ steps.version.outputs.version }}"
+          git push origin "$branch"
 
       - name: Open PR to develop
+        if: steps.check.outputs.tagged == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
