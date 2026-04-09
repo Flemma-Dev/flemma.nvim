@@ -325,11 +325,7 @@ function M.setup()
       end
 
       -- Only handle tools that declare the sandbox auto-approve capability
-      local definition = tools_registry.get(tool_name)
-      if not definition or not definition.capabilities then
-        return nil
-      end
-      if not vim.tbl_contains(definition.capabilities, "can_auto_approve_if_sandboxed") then
+      if not tools_registry.has_capability(tool_name, "can_auto_approve_if_sandboxed") then
         return nil
       end
 

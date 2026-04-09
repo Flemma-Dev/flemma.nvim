@@ -118,13 +118,40 @@ function M.build_request(self, prompt, _context)
           -- Extract function name from the synthetic ID
           local function_name = extract_function_name_from_id(part.tool_use_id)
 
+          -- Map .parts to Vertex functionResponse format.
+          -- Text parts → output string; binary parts → inlineData.
+          local text_pieces = {}
+          local inline_data_parts = {}
+          for _, rp in ipairs(part.parts or {}) do
+            if rp.kind == "text" then
+              if rp.text and #rp.text > 0 then
+                table.insert(text_pieces, rp.text)
+              end
+            elseif rp.kind == "text_file" then
+              if rp.text and #rp.text > 0 then
+                table.insert(text_pieces, rp.text)
+              end
+            elseif rp.kind == "image" or rp.kind == "pdf" then
+              table.insert(inline_data_parts, {
+                inlineData = {
+                  mimeType = rp.mime_type,
+                  data = rp.data,
+                },
+              })
+            elseif rp.kind == "unsupported_file" then
+              table.insert(text_pieces, "[binary file: " .. (rp.filename or "unknown") .. "]")
+            end
+          end
+
+          local text_content = table.concat(text_pieces, "")
+
           -- Build response object: use { output: ... } for success, { error: ... } for errors
           -- (matches the official Google SDK convention that Pi/Gemini models expect)
           local response_obj
           if part.is_error then
-            response_obj = { error = part.content }
+            response_obj = { error = text_content }
           else
-            response_obj = { output = part.content }
+            response_obj = { output = text_content }
           end
 
           table.insert(parts, {
@@ -133,6 +160,13 @@ function M.build_request(self, prompt, _context)
               response = response_obj,
             },
           })
+
+          -- Append binary parts after the functionResponse (Vertex supports
+          -- inline binary data as separate content parts in the same turn)
+          for _, idp in ipairs(inline_data_parts) do
+            table.insert(parts, idp)
+          end
+
           log.debug("vertex.build_request: Added functionResponse for " .. function_name)
         end
       end
@@ -200,7 +234,7 @@ function M.build_request(self, prompt, _context)
           -- Convert tool_use to Vertex functionCall format
           local fc_part = {
             functionCall = {
-              name = p.name,
+              name = base.encode_tool_name(p.name),
               args = p.input,
             },
           }
@@ -254,7 +288,7 @@ function M.build_request(self, prompt, _context)
   local orphan_results = base._inject_orphan_results(self, prompt.pending_tool_calls, function(orphan)
     return {
       functionResponse = {
-        name = orphan.name,
+        name = base.encode_tool_name(orphan.name),
         response = { error = "No result provided", success = false },
       },
     }
@@ -312,7 +346,7 @@ function M.build_request(self, prompt, _context)
 
   for _, definition in ipairs(sorted_tools) do
     table.insert(function_declarations, {
-      name = definition.name,
+      name = base.encode_tool_name(definition.name),
       description = tools_module.build_description(definition),
       parametersJsonSchema = tools_module.to_json_schema(definition),
     })

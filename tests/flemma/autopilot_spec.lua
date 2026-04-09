@@ -474,6 +474,103 @@ describe("Autopilot on_tools_complete", function()
     assert.equals("armed", autopilot.get_state(bufnr))
     autopilot.cleanup_buffer(bufnr)
   end)
+
+  -- Regression: max_concurrent throttling leaves approved tools in the buffer
+  -- while non-auto-approved tools remain pending. on_tools_complete must process
+  -- actionable (approved) blocks before pausing for pending blocks, otherwise the
+  -- throttled-but-approved tools are skipped entirely.
+  it("prioritizes approved blocks over pending blocks when both exist", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
+    -- Simulate buffer state after Phase 2 executed first tool with max_concurrent=1:
+    -- - toolu_01 completed (result injected, no flemma:tool fence)
+    -- - toolu_02 still approved (throttled, never executed)
+    -- - toolu_03 pending (needs user approval)
+    local bufnr = create_buffer({
+      "@You:",
+      "Run tools",
+      "",
+      "@Assistant:",
+      "Three tools.",
+      "",
+      "**Tool Use:** `calc_async` (`toolu_01`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "**Tool Use:** `calc_async` (`toolu_02`)",
+      "```json",
+      '{ "expression": "4+4" }',
+      "```",
+      "",
+      "**Tool Use:** `bash` (`toolu_03`)",
+      "```json",
+      '{ "command": "echo hi" }',
+      "```",
+      "",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
+      "",
+      "```",
+      "4",
+      "```",
+      "",
+      "**Tool Result:** `toolu_02`",
+      "",
+      "```flemma:tool status=approved",
+      "```",
+      "",
+      "**Tool Result:** `toolu_03`",
+      "",
+      "```flemma:tool status=pending",
+      "```",
+    })
+
+    autopilot.arm(bufnr)
+    autopilot.on_tools_complete(bufnr)
+    -- Must set sending to process the approved tool — NOT paused for pending
+    assert.equals("sending", autopilot.get_state(bufnr))
+    autopilot.cleanup_buffer(bufnr)
+  end)
+
+  it("still pauses when only pending blocks remain (no actionable)", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
+    -- All auto-approved tools completed, only pending blocks left
+    local bufnr = create_buffer({
+      "@You:",
+      "Run tools",
+      "",
+      "@Assistant:",
+      "Two tools.",
+      "",
+      "**Tool Use:** `calc_async` (`toolu_01`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "**Tool Use:** `bash` (`toolu_02`)",
+      "```json",
+      '{ "command": "echo hi" }',
+      "```",
+      "",
+      "@You:",
+      "**Tool Result:** `toolu_01`",
+      "",
+      "```",
+      "4",
+      "```",
+      "",
+      "**Tool Result:** `toolu_02`",
+      "",
+      "```flemma:tool status=pending",
+      "```",
+    })
+
+    autopilot.arm(bufnr)
+    autopilot.on_tools_complete(bufnr)
+    -- No actionable blocks → should pause for pending
+    assert.equals("paused", autopilot.get_state(bufnr))
+    autopilot.cleanup_buffer(bufnr)
+  end)
 end)
 
 -- ============================================================================
@@ -1117,5 +1214,151 @@ describe("Autopilot race condition: sync + async tool dispatch", function()
     vim.wait(200, function()
       return false
     end)
+  end)
+end)
+
+-- ============================================================================
+-- Regression: max_concurrent=1 skips throttled auto-approved tools
+-- ============================================================================
+-- When max_concurrent=1, Phase 2 executes only the first approved tool and
+-- breaks. When that tool completes, on_tools_complete must re-enter Phase 2
+-- to execute remaining approved tools BEFORE pausing for pending (non-auto-
+-- approved) blocks. Without this, the second approved tool is skipped entirely.
+
+describe("Autopilot max_concurrent throttle with mixed approval", function()
+  local client = require("flemma.client")
+  local flemma_mod
+  local tools_registry
+  local orig_notify
+
+  before_each(function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.commands"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.tools.registry"] = nil
+    package.loaded["flemma.tools.approval"] = nil
+    package.loaded["flemma.tools.executor"] = nil
+    package.loaded["flemma.core"] = nil
+    package.loaded["flemma.provider.normalize"] = nil
+    package.loaded["flemma.provider.registry"] = nil
+    package.loaded["flemma.autopilot"] = nil
+
+    flemma_mod = require("flemma")
+    require("flemma.core")
+    autopilot = require("flemma.autopilot")
+    tools_registry = require("flemma.tools.registry")
+
+    orig_notify = vim.notify
+  end)
+
+  after_each(function()
+    vim.notify = orig_notify
+    client.clear_fixtures()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  it("executes both auto-approved tools sequentially before pausing for pending", function()
+    -- Scenario matching example.chat: two auto-approved async tools + one manual tool,
+    -- max_concurrent=1. Both approved tools must execute before autopilot pauses.
+
+    -- Capture async callbacks to control timing
+    local callbacks_a = {}
+    local callbacks_b = {}
+
+    tools_registry.register("throttle_a", {
+      name = "throttle_a",
+      description = "First auto-approved async tool",
+      async = true,
+      input_schema = { type = "object", properties = { value = { type = "string" } } },
+      execute = function(_input, _context, callback)
+        table.insert(callbacks_a, callback)
+      end,
+    })
+
+    tools_registry.register("throttle_b", {
+      name = "throttle_b",
+      description = "Second auto-approved async tool",
+      async = true,
+      input_schema = { type = "object", properties = { value = { type = "string" } } },
+      execute = function(_input, _context, callback)
+        table.insert(callbacks_b, callback)
+      end,
+    })
+
+    tools_registry.register("throttle_manual", {
+      name = "throttle_manual",
+      description = "Manual approval tool",
+      async = true,
+      input_schema = { type = "object", properties = { value = { type = "string" } } },
+      execute = function(_input, _context, callback)
+        callback({ success = true, output = "manual_ok" })
+      end,
+    })
+
+    flemma_mod.setup({
+      parameters = { thinking = false },
+      tools = {
+        autopilot = { enabled = true },
+        auto_approve = { "throttle_a", "throttle_b" },
+        max_concurrent = 1,
+      },
+    })
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Do three things" })
+
+    client.register_fixture(
+      "api%.anthropic%.com",
+      "tests/fixtures/tool_calling/anthropic_throttle_three_tools_streaming.txt"
+    )
+
+    vim.cmd("Flemma send")
+
+    -- Step 1: Wait for throttle_a to be dispatched (first tool, max_concurrent=1)
+    local a_dispatched = vim.wait(3000, function()
+      return #callbacks_a > 0
+    end)
+    assert.is_true(a_dispatched, "throttle_a was not dispatched within 3s")
+    -- throttle_b should NOT be dispatched yet (throttled)
+    assert.equals(0, #callbacks_b, "throttle_b should not be dispatched while throttle_a runs")
+
+    -- Step 2: Complete throttle_a — this should trigger on_tools_complete → Phase 2 → throttle_b
+    callbacks_a[1]({ success = true, output = "a_result" })
+
+    local b_dispatched = vim.wait(3000, function()
+      return #callbacks_b > 0
+    end)
+    assert.is_true(b_dispatched, "throttle_b was not dispatched after throttle_a completed")
+
+    -- Step 3: Complete throttle_b — now autopilot should pause for the pending throttle_manual
+    callbacks_b[1]({ success = true, output = "b_result" })
+
+    -- Pump event loop for completion processing
+    vim.wait(500, function()
+      return false
+    end)
+
+    -- Verify buffer contains results from both auto-approved tools
+    local buf_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local content = table.concat(buf_lines, "\n")
+    assert.truthy(content:match("a_result"), "Buffer should contain throttle_a result")
+    assert.truthy(content:match("b_result"), "Buffer should contain throttle_b result")
+
+    -- Verify autopilot paused for the manual tool (not sending or idle)
+    local ap_state = autopilot.get_state(bufnr)
+    assert.equals("paused", ap_state, "Autopilot should pause for the pending manual tool")
+
+    -- Verify the pending block exists for throttle_manual
+    local tool_blocks = context.resolve_all_tool_blocks(bufnr)
+    local pending_blocks = tool_blocks["pending"] or {}
+    local manual_pending = false
+    for _, ctx in ipairs(pending_blocks) do
+      if ctx.tool_name == "throttle_manual" then
+        manual_pending = true
+      end
+    end
+    assert.is_true(manual_pending, "throttle_manual should still be pending")
   end)
 end)

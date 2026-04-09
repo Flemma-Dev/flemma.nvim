@@ -18,7 +18,7 @@ local parser = require("flemma.parser")
 local ast = require("flemma.ast")
 local sandbox_module = require("flemma.sandbox")
 local tool_context = require("flemma.tools.context")
-local truncate_module = require("flemma.utilities.truncate")
+local truncate_module = require("flemma.tools.truncate")
 local ui = require("flemma.ui")
 local variables = require("flemma.utilities.variables")
 local writequeue = require("flemma.buffer.writequeue")
@@ -236,6 +236,7 @@ local DEFAULT_TIMEOUT = 30
 ---@field cwd string Resolved working directory
 ---@field timeout? integer Default timeout in seconds (defaults to DEFAULT_TIMEOUT)
 ---@field tool_name string Name of the tool being executed (for get_config lookup)
+---@field tool_id? string Tool call ID (for overflow path resolution)
 ---@field __dirname? string Directory containing the .chat buffer
 ---@field __filename? string Full path of the .chat buffer
 
@@ -255,6 +256,7 @@ function M.build_execution_context(params)
     bufnr = bufnr,
     cwd = params.cwd,
     timeout = params.timeout or DEFAULT_TIMEOUT,
+    tool_id = params.tool_id,
     __dirname = dirname,
     __filename = params.__filename,
   }
@@ -289,12 +291,28 @@ function M.build_execution_context(params)
         rawset(self, "sandbox", sandbox_namespace)
         return sandbox_namespace
       elseif key == "truncate" then
-        rawset(self, "truncate", truncate_module)
-        return truncate_module
+        local bound = setmetatable({
+          truncate_with_overflow = function(text, opts)
+            opts.bufnr = bufnr
+            opts.filename = params.__filename
+            if not opts.source then
+              opts.source = "tool"
+            end
+            if not opts.id then
+              opts.id = params.tool_id or ""
+            end
+            return truncate_module.truncate_with_overflow(text, opts)
+          end,
+        }, { __index = truncate_module })
+        rawset(self, "truncate", bound)
+        return bound
       elseif key == "path" then
         ---@type flemma.tools.PathContext
         local path_namespace = {
           resolve = function(path)
+            if vim.startswith(path, "~/") or path == "~" then
+              path = vim.fn.expand(path)
+            end
             if vim.startswith(path, "/") then
               return path
             end
@@ -420,6 +438,7 @@ function M.execute(bufnr, context)
     cwd = resolved_cwd,
     timeout = (config.tools and config.tools.default_timeout) or DEFAULT_TIMEOUT,
     tool_name = tool_name,
+    tool_id = tool_id,
     __dirname = dirname,
     __filename = buffer_context:get_filename(),
   })

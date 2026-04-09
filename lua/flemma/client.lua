@@ -3,6 +3,7 @@
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local sink = require("flemma.sink")
+local version = require("flemma.version")
 
 ---@class flemma.Client
 local M = {}
@@ -49,7 +50,7 @@ end
 ---Create temporary file for request body
 ---@param opts flemma.client.RequestOptions
 ---@return string|nil tmp_file, string|nil err, string|nil raw_json
-local function create_temp_file(opts)
+local function create_tmp_file(opts)
   -- Create temporary file for request body
   local tmp_file = os.tmpname()
   -- Handle both Unix and Windows paths
@@ -139,7 +140,11 @@ function M.prepare_curl_command(tmp_file, headers, endpoint, parameters)
     "0", -- disable retries
     "--http1.1", -- force HTTP/1.1 for better interrupt handling
     "-H",
+    "Expect:", -- suppress cURL's default Expect: 100-continue (HTTP 417 on Vertex AI)
+    "-H",
     "Connection: close", -- request connection close
+    "-H",
+    "User-Agent: flemma.nvim/" .. version.VERSION .. " Neovim/" .. tostring(vim.version()),
   }
 
   -- Add headers
@@ -185,7 +190,7 @@ function M.send_request(opts)
   -- The provider's get_request_headers() already handles API key validation
 
   -- Create temporary file for request body
-  local tmp_file, err, raw_json = create_temp_file(opts)
+  local tmp_file, err, raw_json = create_tmp_file(opts)
   if not tmp_file then
     if opts.callbacks.on_error then
       opts.callbacks.on_error(err or "Failed to create temporary file")

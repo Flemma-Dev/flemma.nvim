@@ -1,4 +1,5 @@
 local registry_utils = require("flemma.registry")
+local registry = require("flemma.tools.registry")
 
 describe("flemma.registry", function()
   describe("validate_name()", function()
@@ -34,5 +35,46 @@ describe("flemma.registry", function()
       assert.is_false(ok)
       assert.matches("sandbox backend name 'my.backend' must not contain dots", tostring(err))
     end)
+  end)
+end)
+
+describe("flemma.tools.registry has_capability", function()
+  before_each(function()
+    package.loaded["flemma.tools.registry"] = nil
+    registry = require("flemma.tools.registry")
+  end)
+
+  it("returns true when tool has the capability", function()
+    registry.register("test_tool", {
+      name = "test_tool",
+      description = "test",
+      input_schema = {},
+      capabilities = { "can_auto_approve_if_sandboxed", "template_tool_result" },
+    })
+    assert.is_true(registry.has_capability("test_tool", "template_tool_result"))
+    assert.is_true(registry.has_capability("test_tool", "can_auto_approve_if_sandboxed"))
+  end)
+
+  it("returns false when tool lacks the capability", function()
+    registry.register("test_tool", {
+      name = "test_tool",
+      description = "test",
+      input_schema = {},
+      capabilities = { "can_auto_approve_if_sandboxed" },
+    })
+    assert.is_false(registry.has_capability("test_tool", "template_tool_result"))
+  end)
+
+  it("returns false when tool has no capabilities field", function()
+    registry.register("test_tool", {
+      name = "test_tool",
+      description = "test",
+      input_schema = {},
+    })
+    assert.is_false(registry.has_capability("test_tool", "template_tool_result"))
+  end)
+
+  it("returns false when tool does not exist", function()
+    assert.is_false(registry.has_capability("nonexistent", "template_tool_result"))
   end)
 end)

@@ -234,7 +234,7 @@ describe("AST Tool Nodes", function()
   end)
 
   it("creates tool_result node", function()
-    local node = ast.tool_result("toolu_123", "42", { start_line = 10 })
+    local node = ast.tool_result("toolu_123", { content = "42", start_line = 10 })
     assert.equals("tool_result", node.kind)
     assert.equals("toolu_123", node.tool_use_id)
     assert.equals("42", node.content)
@@ -242,7 +242,7 @@ describe("AST Tool Nodes", function()
   end)
 
   it("creates tool_result error node", function()
-    local node = ast.tool_result("toolu_123", "Division by zero", { is_error = true, start_line = 10 })
+    local node = ast.tool_result("toolu_123", { content = "Division by zero", is_error = true, start_line = 10 })
     assert.equals("tool_result", node.kind)
     assert.equals(true, node.is_error)
   end)
@@ -367,49 +367,38 @@ describe("Parser Tool Blocks", function()
     assert.is_true(tool_use.input.template:match("```python") ~= nil, "Should contain nested markdown code block")
   end)
 
-  it("emits warning for malformed tool result and treats as plain text", function()
+  it("parses malformed JSON tool result as plain text segments without diagnostics", function()
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_malformed_tool_result.chat")
     local doc = parser.parse_lines(lines)
 
-    -- Should have a diagnostic warning about malformed JSON
-    assert.is_true(#doc.errors > 0, "Should have parsing diagnostics")
-    local has_warning = false
-    for _, err in ipairs(doc.errors) do
-      if err.type == "tool_result" and err.severity == "warning" then
-        has_warning = true
-      end
-    end
-    assert.is_true(has_warning, "Should have tool_result warning")
+    -- Fence content is now always parsed as template segments, not as JSON.
+    -- No diagnostic is emitted for malformed JSON since we no longer attempt JSON parsing.
+    assert.equals(0, #doc.errors, "Should have no parsing diagnostics")
 
     -- Messages: 1=System, 2=You, 3=Assistant, 4=You (malformed tool_result)
     local user_msg = doc.messages[4]
     assert.is_not_nil(user_msg)
     assert.equals("You", user_msg.role)
 
-    -- Should still parse a tool_result with the raw content
+    -- Should parse a tool_result with the raw content
     local tool_result = nil
     for _, seg in ipairs(user_msg.segments) do
       if seg.kind == "tool_result" then
         tool_result = seg
       end
     end
-    assert.is_not_nil(tool_result, "Should have tool_result segment despite malformed JSON")
+    assert.is_not_nil(tool_result, "Should have tool_result segment")
     assert.equals("toolu_01A09q90qw90lq917835lgs0", tool_result.tool_use_id)
+    assert.is_true(#tool_result.segments >= 1, "Should have parsed content into segments")
   end)
 
-  it("emits warning for unsupported YAML format in tool result", function()
+  it("parses YAML tool result as plain text segments without diagnostics", function()
     local lines = vim.fn.readfile("tests/fixtures/tool_calling/conversation_tool_result_yaml.chat")
     local doc = parser.parse_lines(lines)
 
-    -- Should have a diagnostic warning about YAML not being supported
-    assert.is_true(#doc.errors > 0, "Should have parsing diagnostics for unsupported YAML")
-    local has_yaml_warning = false
-    for _, err in ipairs(doc.errors) do
-      if err.type == "tool_result" and err.error:match("yaml") then
-        has_yaml_warning = true
-      end
-    end
-    assert.is_true(has_yaml_warning, "Should warn about unsupported YAML parser")
+    -- Fence content is now always parsed as template segments, not by language.
+    -- No diagnostic is emitted for YAML since we no longer attempt language-specific parsing.
+    assert.equals(0, #doc.errors, "Should have no parsing diagnostics for YAML content")
 
     -- Messages: 1=System, 2=You, 3=Assistant, 4=You (yaml tool_result), 5=Assistant
     local user_msg = doc.messages[4]
@@ -420,10 +409,11 @@ describe("Parser Tool Blocks", function()
       end
     end
 
-    -- Should still have a tool_result with raw YAML content
+    -- Should have a tool_result with raw YAML content
     assert.is_not_nil(tool_result)
     assert.equals("toolu_01A09q90qw90lq917835lgs0", tool_result.tool_use_id)
     assert.is_true(tool_result.content:match("result") ~= nil, "Should contain raw YAML content")
+    assert.is_true(#tool_result.segments >= 1, "Should have parsed content into segments")
   end)
 end)
 
@@ -489,7 +479,7 @@ describe("Anthropic Provider Tool Support", function()
     local req = provider:build_request(prompt, {})
 
     assert.is_not_nil(req.tools, "Request should include tools array")
-    assert.equals(5, #req.tools)
+    assert.equals(8, #req.tools)
     local calc = find_anthropic_tool(req.tools, "calculator")
     assert.is_not_nil(calc, "calculator tool should be in tools array")
   end)
@@ -786,7 +776,7 @@ describe("Request Body Validation", function()
 
     -- Validate tools array
     assert.is_not_nil(req.tools)
-    assert.equals(5, #req.tools)
+    assert.equals(8, #req.tools)
     local calc = find_anthropic_tool(req.tools, "calculator")
     assert.is_not_nil(calc, "calculator tool should be in tools array")
     assert.is_not_nil(calc.input_schema)
@@ -855,7 +845,7 @@ describe("OpenAI Provider Request Building with Tools", function()
     local req = provider:build_request(prompt, context)
 
     assert.is_not_nil(req.tools, "Request should include tools array")
-    assert.equals(5, #req.tools)
+    assert.equals(8, #req.tools)
     local calc = find_openai_tool(req.tools, "calculator")
     assert.is_not_nil(calc, "calculator tool should be in tools array")
     assert.equals("function", calc.type)
@@ -1135,7 +1125,7 @@ describe("OpenAI Request Body Validation with Tools", function()
 
     -- Validate tools array in OpenAI format
     assert.is_not_nil(req.tools)
-    assert.equals(5, #req.tools)
+    assert.equals(8, #req.tools)
     local calc = find_openai_tool(req.tools, "calculator")
     assert.is_not_nil(calc, "calculator tool should be in tools array")
     assert.equals("function", calc.type)
@@ -1192,7 +1182,7 @@ describe("Vertex AI Provider Request Building with Tools", function()
     assert.is_not_nil(req.tools, "Request should include tools array")
     assert.equals(1, #req.tools)
     assert.is_not_nil(req.tools[1].functionDeclarations)
-    assert.equals(5, #req.tools[1].functionDeclarations)
+    assert.equals(8, #req.tools[1].functionDeclarations)
     local calc = find_vertex_decl(req.tools[1].functionDeclarations, "calculator")
     assert.is_not_nil(calc, "calculator functionDeclaration should be present")
     assert.is_not_nil(calc.parametersJsonSchema)
@@ -1888,7 +1878,7 @@ describe("Vertex AI Request Body Validation with Tools", function()
     assert.is_not_nil(req.tools)
     assert.equals(1, #req.tools)
     assert.is_not_nil(req.tools[1].functionDeclarations)
-    assert.equals(5, #req.tools[1].functionDeclarations)
+    assert.equals(8, #req.tools[1].functionDeclarations)
     local calc = find_vertex_decl(req.tools[1].functionDeclarations, "calculator")
     assert.is_not_nil(calc, "calculator functionDeclaration should be present")
 

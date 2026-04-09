@@ -75,11 +75,7 @@ local function detect_mime(path, override)
   if override and #override > 0 then
     return override
   end
-  local ok, mt, _ = pcall(mime_util.get_mime_type, path)
-  if ok and mt then
-    return mt
-  end
-  return mime_util.get_mime_by_extension(path)
+  return mime_util.detect(path)
 end
 
 --- Read file content (binary or text mode).
@@ -110,6 +106,8 @@ end
 function M.resolve_include_target(relative_path, dirname)
   if relative_path:sub(1, 1) == "/" then
     return vim.fs.normalize(relative_path)
+  elseif vim.startswith(relative_path, "~/") then
+    return vim.fs.normalize(vim.fn.expand(relative_path))
   elseif dirname then
     return vim.fs.normalize(dirname .. "/" .. relative_path)
   else

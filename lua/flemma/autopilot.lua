@@ -186,15 +186,11 @@ function M.on_tools_complete(bufnr)
     or (tool_blocks["denied"] and #tool_blocks["denied"] > 0)
     or (tool_blocks["rejected"] and #tool_blocks["rejected"] > 0)
 
-  if first_empty_pending then
-    bs.state = "paused"
-    log.debug("autopilot: flemma:tool status=pending blocks remain, pausing")
-    cursor.request_move(bufnr, { line = first_empty_pending.tool_result.start_line, reason = "autopilot/pending-tool" })
-    return
-  end
-
   if has_actionable then
-    -- Approved/denied/rejected blocks remain — schedule send_or_execute to process them
+    -- Approved/denied/rejected blocks remain — schedule send_or_execute to process them.
+    -- This must be checked BEFORE empty pending blocks: when max_concurrent throttling
+    -- defers approved tools, those must execute before we pause for user-facing pending
+    -- blocks (otherwise the deferred approved tools are skipped entirely).
     bs.state = "sending"
     log.debug("autopilot: actionable flemma:tool blocks remain, scheduling send for buffer " .. bufnr)
     vim.schedule(function()
@@ -213,6 +209,13 @@ function M.on_tools_complete(bufnr)
       end
       bridge.send_or_execute({ bufnr = bufnr })
     end)
+    return
+  end
+
+  if first_empty_pending then
+    bs.state = "paused"
+    log.debug("autopilot: flemma:tool status=pending blocks remain, pausing")
+    cursor.request_move(bufnr, { line = first_empty_pending.tool_result.start_line, reason = "autopilot/pending-tool" })
     return
   end
 

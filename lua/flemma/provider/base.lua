@@ -81,6 +81,7 @@ local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local secrets = require("flemma.secrets")
 local sink = require("flemma.sink")
+local tool_names = require("flemma.utilities.tools")
 
 -- ============================================================================
 -- Type definitions
@@ -511,6 +512,22 @@ function M.normalize_tool_id(id)
   return normalized
 end
 
+---Encode a tool name for the wire (LLM API): replace internal `:` with `__`.
+---Names without `:` pass through unchanged.
+---@param name string
+---@return string
+function M.encode_tool_name(name)
+  return tool_names.encode_tool_name(name)
+end
+
+---Decode a tool name from the wire (LLM API): replace `__` with internal `:`.
+---Names without `__` pass through unchanged.
+---@param name string
+---@return string
+function M.decode_tool_name(name)
+  return tool_names.decode_tool_name(name)
+end
+
 --- Parse a single SSE (Server-Sent Events) line
 ---@param line string The raw line from the stream
 ---@return flemma.provider.SSELine|nil
@@ -687,6 +704,7 @@ end
 ---@param arguments_json string JSON string of tool arguments
 ---@param callbacks flemma.provider.Callbacks
 function M._emit_tool_use_block(self, name, id, arguments_json, callbacks)
+  local decoded_name = M.decode_tool_name(name)
   local max_ticks = 0
   for ticks in arguments_json:gmatch("`+") do
     max_ticks = math.max(max_ticks, #ticks)
@@ -694,8 +712,15 @@ function M._emit_tool_use_block(self, name, id, arguments_json, callbacks)
   local fence = string.rep("`", math.max(3, max_ticks + 1))
 
   local prefix = self:_get_content_prefix()
-  local formatted =
-    string.format("%s**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n", prefix, name, id, fence, arguments_json, fence)
+  local formatted = string.format(
+    "%s**Tool Use:** `%s` (`%s`)\n\n%sjson\n%s\n%s\n",
+    prefix,
+    decoded_name,
+    id,
+    fence,
+    arguments_json,
+    fence
+  )
 
   M._signal_content(self, formatted, callbacks)
   log.debug(self.metadata.name .. ".process_response_line(): Emitted tool_use block for " .. name)

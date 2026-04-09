@@ -203,6 +203,65 @@ describe("flemma.preprocessor.rewriters.file_references", function()
     assert.is_true(has_expression, "System messages should still have file references processed")
   end)
 
+  -- @~/ file reference tests
+
+  it("converts @~/file to include() expression", function()
+    local doc = run_rewriter("@~/Downloads/file.pdf")
+    local segs = doc.messages[1].segments
+    assert.equals(1, #segs)
+    assert.equals("expression", segs[1].kind)
+    assert.truthy(segs[1].code:match("include%('~/Downloads/file%.pdf'"))
+    assert.truthy(segs[1].code:match("%[symbols%.BINARY%] = true"))
+  end)
+
+  it("converts @~/file with ;type= MIME override", function()
+    local doc = run_rewriter("@~/Pictures/photo.bin;type=image/png")
+    local segs = doc.messages[1].segments
+    assert.equals(1, #segs)
+    assert.equals("expression", segs[1].kind)
+    assert.truthy(segs[1].code:match("%[symbols%.BINARY%] = true"))
+    assert.truthy(segs[1].code:match("image/png"))
+  end)
+
+  it("strips trailing punctuation from @~/file", function()
+    local doc = run_rewriter("See @~/file.txt, then continue")
+    local segs = doc.messages[1].segments
+    local expr_seg = nil
+    for _, seg in ipairs(segs) do
+      if seg.kind == "expression" then
+        expr_seg = seg
+        break
+      end
+    end
+    assert.is_not_nil(expr_seg)
+    local path_in_code = expr_seg.code:match("include%('([^']+)'")
+    assert.is_not_nil(path_in_code)
+    assert.is_nil(path_in_code:find(","), "Trailing comma should not be in file path")
+  end)
+
+  it("does not process @~/file in Assistant messages", function()
+    local doc = ast.document(nil, {
+      ast.message("Assistant", {
+        ast.text("See @~/Downloads/readme.md for details", { start_line = 2, end_line = 2 }),
+      }, { start_line = 1, end_line = 2 }),
+    }, {}, { start_line = 1, end_line = 2 })
+
+    local result = runner.run_pipeline(doc, 0, {
+      interactive = false,
+      rewriters = { file_refs_module.rewriter },
+    })
+
+    local segs = result.messages[1].segments
+    for _, seg in ipairs(segs) do
+      assert.equals("text", seg.kind, "expected no expression segments in Assistant message")
+    end
+    local full_text = ""
+    for _, seg in ipairs(segs) do
+      full_text = full_text .. seg.value
+    end
+    assert.equals("See @~/Downloads/readme.md for details", full_text)
+  end)
+
   it("does not match email-like patterns", function()
     local doc = run_rewriter("email user@example.com here")
     local kinds = segment_kinds(doc)

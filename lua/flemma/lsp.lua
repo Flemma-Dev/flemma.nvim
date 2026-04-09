@@ -1,5 +1,5 @@
 --- In-process LSP server for .chat buffers
---- Provides hover inspection of AST nodes. Experimental feature.
+--- Provides hover inspection of AST nodes.
 ---@class flemma.Lsp
 local M = {}
 

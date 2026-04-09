@@ -17,11 +17,11 @@ AURORA_DIR="$ROOT_DIR/.vapor/aurora"
 
 NOW="$(date +%s)"
 days_ago() { date -u -d "@$((NOW - $1 * 86400))" "+%Y-%m-%d" 2>/dev/null ||
-	date -u -r "$((NOW - $1 * 86400))" "+%Y-%m-%d"; }
+  date -u -r "$((NOW - $1 * 86400))" "+%Y-%m-%d"; }
 ts_ago() { date -u -d "@$((NOW - $1 * 86400 + $2 * 3600))" "+%Y-%m-%dT%H:%M:%S+00:00" 2>/dev/null ||
-	date -u -r "$((NOW - $1 * 86400 + $2 * 3600))" "+%Y-%m-%dT%H:%M:%S+00:00"; }
+  date -u -r "$((NOW - $1 * 86400 + $2 * 3600))" "+%Y-%m-%dT%H:%M:%S+00:00"; }
 month_ago() { date -u -d "@$((NOW - $1 * 86400))" "+%B %Y" 2>/dev/null ||
-	date -u -r "$((NOW - $1 * 86400))" "+%B %Y"; }
+  date -u -r "$((NOW - $1 * 86400))" "+%B %Y"; }
 
 # ── Clean slate ──────────────────────────────────────────────────
 
@@ -35,13 +35,13 @@ git init -q
 git branch -m main
 
 commit() {
-	local date="$1" name="$2" email="$3" msg="$4"
-	shift 4
-	git add "$@"
-	GIT_AUTHOR_NAME="$name" GIT_AUTHOR_EMAIL="$email" \
-		GIT_COMMITTER_NAME="$name" GIT_COMMITTER_EMAIL="$email" \
-		GIT_AUTHOR_DATE="$date" GIT_COMMITTER_DATE="$date" \
-		git commit -q -m "$msg"
+  local date="$1" name="$2" email="$3" msg="$4"
+  shift 4
+  git add "$@"
+  GIT_AUTHOR_NAME="$name" GIT_AUTHOR_EMAIL="$email" \
+    GIT_COMMITTER_NAME="$name" GIT_COMMITTER_EMAIL="$email" \
+    GIT_AUTHOR_DATE="$date" GIT_COMMITTER_DATE="$date" \
+    git commit -q -m "$msg"
 }
 
 # ── Project skeleton ─────────────────────────────────────────────
@@ -113,41 +113,41 @@ Initial release.
 EOF
 
 commit "$(ts_ago 21 9)" \
-	"Jordan Lee" "jordan@auroradev.io" \
-	"feat: initial project structure for v0.4 cycle" \
-	.
+  "Jordan Lee" "jordan@auroradev.io" \
+  "feat: initial project structure for v0.4 cycle" \
+  .
 
 # ── Feature commits ──────────────────────────────────────────────
 
 touch internal/auth/oauth.go internal/auth/pkce.go
 commit "$(ts_ago 17 14)" \
-	"Sam Rivera" "sam@auroradev.io" \
-	"feat(auth): add OAuth2 PKCE flow support" \
-	internal/auth/
+  "Sam Rivera" "sam@auroradev.io" \
+  "feat(auth): add OAuth2 PKCE flow support" \
+  internal/auth/
 
 touch internal/router/params.go
 commit "$(ts_ago 13 10)" \
-	"Jordan Lee" "jordan@auroradev.io" \
-	"fix(router): resolve path parameter collision on nested routes" \
-	internal/router/params.go
+  "Jordan Lee" "jordan@auroradev.io" \
+  "fix(router): resolve path parameter collision on nested routes" \
+  internal/router/params.go
 
 touch internal/middleware/ratelimit.go internal/middleware/sliding_window.go
 commit "$(ts_ago 9 16)" \
-	"Sam Rivera" "sam@auroradev.io" \
-	"feat(middleware): add request rate limiting with sliding window" \
-	internal/middleware/
+  "Sam Rivera" "sam@auroradev.io" \
+  "feat(middleware): add request rate limiting with sliding window" \
+  internal/middleware/
 
 touch docs/api-reference.md
 commit "$(ts_ago 6 11)" \
-	"Jordan Lee" "jordan@auroradev.io" \
-	"docs: update API reference for v0.4 endpoints" \
-	docs/api-reference.md
+  "Jordan Lee" "jordan@auroradev.io" \
+  "docs: update API reference for v0.4 endpoints" \
+  docs/api-reference.md
 
 touch internal/tls/certs.go internal/tls/system_store_linux.go
 commit "$(ts_ago 4 9)" \
-	"Sam Rivera" "sam@auroradev.io" \
-	"fix(tls): honor system cert store on Linux" \
-	internal/tls/
+  "Sam Rivera" "sam@auroradev.io" \
+  "fix(tls): honor system cert store on Linux" \
+  internal/tls/
 
 cat >go.mod <<'EOF'
 module github.com/Aurora-Dev/aurora
@@ -160,9 +160,9 @@ require (
 )
 EOF
 commit "$(ts_ago 2 13)" \
-	"Jordan Lee" "jordan@auroradev.io" \
-	"chore: bump minimum Go version to 1.22" \
-	go.mod
+  "Jordan Lee" "jordan@auroradev.io" \
+  "chore: bump minimum Go version to 1.22" \
+  go.mod
 
 # ── PDF: Architecture document ───────────────────────────────────
 
@@ -246,9 +246,9 @@ typst compile "$TYPST_SRC" "$AURORA_DIR/docs/architecture.pdf"
 rm -f "$TYPST_SRC"
 
 commit "$(ts_ago 1 10)" \
-	"Jordan Lee" "jordan@auroradev.io" \
-	"docs: add v0.4 architecture overview" \
-	docs/architecture.pdf
+  "Jordan Lee" "jordan@auroradev.io" \
+  "docs: add v0.4 architecture overview" \
+  docs/architecture.pdf
 
 # ── Done ─────────────────────────────────────────────────────────
 

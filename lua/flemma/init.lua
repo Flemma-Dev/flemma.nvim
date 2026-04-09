@@ -225,8 +225,8 @@ M.setup = function(user_opts)
   -- Initialize approval resolver chain from config
   tools_approval.setup()
 
-  -- Set up experimental LSP if enabled
-  if config.experimental and config.experimental.lsp then
+  -- Set up LSP if enabled
+  if config.lsp and config.lsp.enabled then
     lsp.setup()
   end
 

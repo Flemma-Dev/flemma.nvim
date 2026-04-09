@@ -88,9 +88,6 @@ M.definitions = {
         cwd = s.optional(s.string("urn:flemma:buffer:path")),
       }),
     },
-    enabled = function(config)
-      return not not (config and config.experimental and config.experimental.tools)
-    end,
     description = "List directory contents. Output is truncated to "
       .. truncate.MAX_LINES
       .. " lines or "

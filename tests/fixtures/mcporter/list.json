@@ -1,0 +1,36 @@
+{
+  "mode": "list",
+  "counts": { "ok": 2, "auth": 0, "offline": 0, "http": 0, "error": 0 },
+  "servers": [
+    {
+      "name": "slack",
+      "status": "ok",
+      "durationMs": 1750,
+      "transport": "STDIO pnpm --silent --package=slack-mcp-server@latest dlx -- slack-mcp-server",
+      "source": {
+        "kind": "local",
+        "path": "/home/user/.mcporter/mcporter.jsonc"
+      },
+      "tools": [
+        { "name": "channels_list", "description": "List public channels in the workspace with pagination" },
+        { "name": "users_search", "description": "Search for users by name or email" },
+        { "name": "usergroups_create", "description": "Create a new user group" }
+      ]
+    },
+    {
+      "name": "github",
+      "status": "ok",
+      "durationMs": 300,
+      "transport": "HTTP https://api.githubcopilot.com/mcp",
+      "source": {
+        "kind": "import",
+        "path": "/home/user/.claude.json",
+        "importKind": "claude-code"
+      },
+      "tools": [
+        { "name": "search_code", "description": "Search for code across repositories" },
+        { "name": "create_pull_request", "description": "Create a pull request" }
+      ]
+    }
+  ]
+}

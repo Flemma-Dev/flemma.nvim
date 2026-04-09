@@ -139,14 +139,6 @@ If any sub-path fails validation, the entire `apply()` aborts — no partial wri
 
 Returning `nil` from DISCOVER doesn't cache — the callback fires again next time. This is intentional for the two-pass boot where modules register between passes.
 
-### `make qa` Only
-
-Do not invoke `nvim` directly with Plenary commands. Only `make qa` is wired correctly for running tests.
-
-### Run `make qa` Bare
-
-Never pipe it through `grep`/`tail`/`head`. It's silent on success and self-explanatory on failure.
-
 ### `__pairs` Guard Is Ineffective Under LuaJIT
 
 Config proxies define `__pairs` that errors to prevent accidental iteration on proxy objects. But Neovim uses LuaJIT (Lua 5.1 semantics), which ignores `__pairs`. Calling `pairs()` on a proxy silently returns an empty iterator instead of erroring. **Always use `config.materialize()` when you need `pairs()`, dynamic key access, `vim.deepcopy()`, or `vim.inspect()`.**

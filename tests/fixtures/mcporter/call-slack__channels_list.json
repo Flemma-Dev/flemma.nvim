@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"ok\":true,\"channels\":[{\"id\":\"C00000AA01\",\"name\":\"general\",\"is_channel\":true,\"num_members\":10},{\"id\":\"C00000AA02\",\"name\":\"random\",\"is_channel\":true,\"num_members\":8}],\"response_metadata\":{\"next_cursor\":\"\"}}"
+    }
+  ]
+}

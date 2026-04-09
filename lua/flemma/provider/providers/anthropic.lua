@@ -87,10 +87,51 @@ function M.build_request(self, prompt, _context)
         if part.kind == "tool_result" then
           -- Normalize tool ID for Anthropic compatibility (handles Vertex URN-style IDs)
           local normalized_id = base.normalize_tool_id(part.tool_use_id)
+
+          -- Map .parts to Anthropic content blocks for tool results
+          local result_content
+          local has_non_text = false
+          local blocks = {}
+          for _, rp in ipairs(part.parts or {}) do
+            if rp.kind == "text" then
+              if rp.text and #rp.text > 0 then
+                table.insert(blocks, { type = "text", text = rp.text })
+              end
+            elseif rp.kind == "image" then
+              has_non_text = true
+              table.insert(blocks, {
+                type = "image",
+                source = { type = "base64", media_type = rp.mime_type, data = rp.data },
+              })
+            elseif rp.kind == "pdf" then
+              has_non_text = true
+              table.insert(blocks, {
+                type = "document",
+                source = { type = "base64", media_type = rp.mime_type, data = rp.data },
+                title = rp.filename and vim.fn.fnamemodify(rp.filename, ":t"),
+              })
+            elseif rp.kind == "text_file" then
+              table.insert(blocks, { type = "text", text = rp.text })
+            elseif rp.kind == "unsupported_file" then
+              table.insert(blocks, { type = "text", text = "[binary file: " .. (rp.filename or "unknown") .. "]" })
+            end
+          end
+
+          -- When all parts are text, collapse to a plain string (matches current wire format)
+          if not has_non_text then
+            local texts = {}
+            for _, b in ipairs(blocks) do
+              table.insert(texts, b.text)
+            end
+            result_content = table.concat(texts, "")
+          else
+            result_content = blocks
+          end
+
           table.insert(content_blocks, {
             type = "tool_result",
             tool_use_id = normalized_id,
-            content = part.content,
+            content = result_content,
             is_error = part.is_error or nil,
           })
           log.debug("anthropic.build_request: Added tool_result for " .. normalized_id)
@@ -200,7 +241,7 @@ function M.build_request(self, prompt, _context)
           table.insert(content_blocks, {
             type = "tool_use",
             id = normalized_id,
-            name = p.name,
+            name = base.encode_tool_name(p.name),
             input = p.input,
           })
           log.debug("anthropic.build_request: Added tool_use for " .. p.name .. " (" .. normalized_id .. ")")
@@ -245,7 +286,7 @@ function M.build_request(self, prompt, _context)
   local tools_array = {}
   for _, def in ipairs(sorted_tools) do
     table.insert(tools_array, {
-      name = def.name,
+      name = base.encode_tool_name(def.name),
       description = tools_module.build_description(def),
       input_schema = tools_module.to_json_schema(def),
     })

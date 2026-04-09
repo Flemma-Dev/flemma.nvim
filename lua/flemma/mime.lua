@@ -148,7 +148,44 @@ function M.get_mime_type(filepath)
   end
 end
 
---- Publicly expose the extension-based fallback
-M.get_mime_by_extension = get_mime_by_extension
+--- Detect MIME type for a file path. Tries extension-based lookup first,
+--- falls back to the `file` command if available.
+---@param filepath string
+---@return string|nil mime_type
+function M.detect(filepath)
+  local by_ext = get_mime_by_extension(filepath)
+  if by_ext then
+    return by_ext
+  end
+  local ok, result = pcall(M.get_mime_type, filepath)
+  if ok and result then
+    return result
+  end
+  return nil
+end
+
+--- Set of application/* MIME types that are textual despite the prefix
+local TEXTUAL_APPLICATION_MIMES = {
+  ["application/json"] = true,
+  ["application/javascript"] = true,
+  ["application/typescript"] = true,
+  ["application/xml"] = true,
+  ["application/yaml"] = true,
+  ["application/toml"] = true,
+  ["application/sql"] = true,
+}
+
+--- Check whether a MIME type represents binary (non-textual) content.
+---@param mime_type string
+---@return boolean
+function M.is_binary(mime_type)
+  if mime_type:match("^text/") then
+    return false
+  end
+  if TEXTUAL_APPLICATION_MIMES[mime_type] then
+    return false
+  end
+  return true
+end
 
 return M

@@ -82,7 +82,8 @@ describe("flemma.ast.dump", function()
     end)
 
     it("renders tool_result segment with status", function()
-      local seg = nodes.tool_result("call_123", "file contents here", {
+      local seg = nodes.tool_result("call_123", {
+        content = "file contents here",
         is_error = false,
         status = "approved",
         start_line = 9,

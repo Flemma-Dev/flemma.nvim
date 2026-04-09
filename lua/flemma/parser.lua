@@ -1,6 +1,5 @@
 local ast = require("flemma.ast")
 local codeblock = require("flemma.codeblock")
-local json = require("flemma.utilities.json")
 local modeline = require("flemma.utilities.modeline")
 local roles = require("flemma.utilities.roles")
 local scanner = require("flemma.parser.scanner")
@@ -37,7 +36,7 @@ local TOOL_STATUS_MAP = {
 --- Unified segment parser: parse text for {{ }} expressions
 --- Returns array of AST segments (text, expression)
 --- Note: <thinking> tags are NOT parsed here - only in @Assistant messages
---- Note: @./ file references are handled by the preprocessor rewriter, not here
+--- Note: @./ and @~/ file references are handled by the preprocessor rewriter, not here
 ---@param text string|nil
 ---@param base_line integer|nil 1-indexed line number for accurate position tracking
 ---@return flemma.ast.Segment[]
@@ -242,7 +241,9 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
 
           table.insert(
             segments,
-            ast.tool_result(tool_use_id, block.content, {
+            ast.tool_result(tool_use_id, {
+              segments = {},
+              content = block.content,
               is_error = is_error,
               status = tool_status,
               start_line = result_start_line,
@@ -252,37 +253,14 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
           )
           i = block_end + 1
         else
-          -- Regular fenced block: parse content by language or treat as plain text
-          local result_content
-
-          if block.language then
-            local content, parse_err = codeblock.parse(block.language, block.content)
-
-            if parse_err then
-              table.insert(diagnostics, {
-                type = "tool_result",
-                severity = "warning",
-                error = "Failed to parse tool result: " .. parse_err,
-                position = { start_line = result_start_line },
-              })
-              -- Treat as plain text result
-              result_content = block.content
-            else
-              -- If parsed to a simple value, convert to string for API
-              if type(content) == "table" then
-                result_content = json.encode(content)
-              else
-                result_content = tostring(content)
-              end
-            end
-          else
-            -- No language specified - treat as plain text
-            result_content = block.content
-          end
+          -- Regular fenced block: parse fence content as template segments
+          local inner_segments = parse_segments(block.content, base_line_num + content_start)
 
           table.insert(
             segments,
-            ast.tool_result(tool_use_id, result_content, {
+            ast.tool_result(tool_use_id, {
+              segments = inner_segments,
+              content = block.content,
               is_error = is_error,
               start_line = result_start_line,
               end_line = base_line_num + block_end - 1,
@@ -674,7 +652,7 @@ function M.parse_lines(lines)
 end
 
 --- Parse inline content (for include() results) - no frontmatter, no message roles
---- Scans for {{ }} expressions only; @./ file references are handled by the preprocessor
+--- Scans for {{ }} expressions only; @./ and @~/ file references are handled by the preprocessor
 ---@param text string|nil
 ---@return flemma.ast.Segment[]
 function M.parse_inline_content(text)

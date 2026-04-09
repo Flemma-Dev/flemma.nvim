@@ -140,10 +140,62 @@ function M.build_request(self, prompt, context)
         elseif part.kind == "tool_result" then
           -- Normalize tool ID for OpenAI compatibility (handles Vertex URN-style IDs)
           local normalized_id = base.normalize_tool_id(part.tool_use_id)
+
+          -- Map .parts to Responses API format for tool results
+          local has_non_text = false
+          local output_parts = {}
+          for _, rp in ipairs(part.parts or {}) do
+            if rp.kind == "text" then
+              if rp.text and #rp.text > 0 then
+                table.insert(output_parts, { type = "input_text", text = rp.text })
+              end
+            elseif rp.kind == "image" then
+              has_non_text = true
+              table.insert(output_parts, {
+                type = "input_image",
+                image_url = rp.data_url,
+                detail = "auto",
+              })
+            elseif rp.kind == "pdf" then
+              has_non_text = true
+              table.insert(output_parts, {
+                type = "input_file",
+                filename = rp.filename or "document.pdf",
+                file_data = rp.data_url,
+              })
+            elseif rp.kind == "text_file" then
+              table.insert(output_parts, { type = "input_text", text = rp.text })
+            elseif rp.kind == "unsupported_file" then
+              table.insert(output_parts, {
+                type = "input_text",
+                text = "[binary file: " .. (rp.filename or "unknown") .. "]",
+              })
+            end
+          end
+
+          -- When all parts are text, collapse to a plain string
+          local result_output
+          if not has_non_text then
+            local texts = {}
+            for _, op in ipairs(output_parts) do
+              table.insert(texts, op.text)
+            end
+            result_output = table.concat(texts, "")
+            -- OpenAI doesn't have is_error field; prefix content with "Error: " for text-only results
+            if part.is_error then
+              result_output = "Error: " .. (result_output ~= "" and result_output or "Tool execution failed")
+            end
+          else
+            -- Mixed content (images, PDFs, etc.): prepend an error text block when is_error
+            if part.is_error then
+              table.insert(output_parts, 1, { type = "input_text", text = "Error:" })
+            end
+            result_output = output_parts
+          end
+
           table.insert(tool_results, {
             call_id = normalized_id,
-            content = part.content,
-            is_error = part.is_error,
+            content = result_output,
           })
           log.debug("openai.build_request: Added tool_result for " .. normalized_id)
         end
@@ -152,16 +204,10 @@ function M.build_request(self, prompt, context)
       -- Add tool results FIRST as top-level function_call_output items
       -- Tool results must come before any new user content in the same turn
       for _, tr in ipairs(tool_results) do
-        -- OpenAI doesn't have is_error field; prefix content with "Error: " to signal error semantics
-        local result_content = tr.content
-        if tr.is_error then
-          result_content = "Error: " .. (tr.content or "Tool execution failed")
-          log.debug("openai.build_request: Tool result marked as error for " .. tr.call_id)
-        end
         table.insert(input_items, {
           type = "function_call_output",
           call_id = tr.call_id,
-          output = result_content,
+          output = tr.content,
         })
       end
 
@@ -220,7 +266,7 @@ function M.build_request(self, prompt, context)
           table.insert(input_items, {
             type = "function_call",
             call_id = normalized_id,
-            name = p.name,
+            name = base.encode_tool_name(p.name),
             arguments = json.encode(p.input),
             status = "completed",
           })
@@ -266,7 +312,7 @@ function M.build_request(self, prompt, context)
   for _, definition in ipairs(sorted_tools) do
     local tool_entry = {
       type = "function",
-      name = definition.name,
+      name = base.encode_tool_name(definition.name),
       description = tools_module.build_description(definition),
       parameters = tools_module.to_json_schema(definition),
     }

@@ -194,10 +194,9 @@ describe("config.schema.definition", function()
       assert.equals("gcloud", cfg.secrets.gcloud.path)
     end)
 
-    it("materializes experimental defaults", function()
+    it("materializes lsp defaults", function()
       local cfg = config_facade.get()
-      assert.is_true(cfg.experimental.lsp)
-      assert.is_false(cfg.experimental.tools)
+      assert.is_true(cfg.lsp.enabled)
     end)
   end)
 
@@ -463,6 +462,7 @@ describe("config.schema.definition", function()
         "diagnostics",
         "sandbox",
         "secrets",
+        "lsp",
         "experimental",
       }
       for _, field in ipairs(expected_fields) do

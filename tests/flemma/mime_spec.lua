@@ -280,4 +280,78 @@ describe("MIME type detection", function()
       end)
     end)
   end)
+
+  describe("is_binary", function()
+    it("returns false for text/* types", function()
+      assert.is_false(mime.is_binary("text/plain"))
+      assert.is_false(mime.is_binary("text/html"))
+      assert.is_false(mime.is_binary("text/x-lua"))
+    end)
+
+    it("returns false for textual application/* types", function()
+      assert.is_false(mime.is_binary("application/json"))
+      assert.is_false(mime.is_binary("application/javascript"))
+      assert.is_false(mime.is_binary("application/xml"))
+      assert.is_false(mime.is_binary("application/yaml"))
+      assert.is_false(mime.is_binary("application/toml"))
+      assert.is_false(mime.is_binary("application/sql"))
+      assert.is_false(mime.is_binary("application/typescript"))
+    end)
+
+    it("returns true for image types", function()
+      assert.is_true(mime.is_binary("image/png"))
+      assert.is_true(mime.is_binary("image/jpeg"))
+      assert.is_true(mime.is_binary("image/gif"))
+      assert.is_true(mime.is_binary("image/webp"))
+    end)
+
+    it("returns true for PDF", function()
+      assert.is_true(mime.is_binary("application/pdf"))
+    end)
+
+    it("returns true for generic binary types", function()
+      assert.is_true(mime.is_binary("application/octet-stream"))
+      assert.is_true(mime.is_binary("application/zip"))
+      assert.is_true(mime.is_binary("application/x-executable"))
+    end)
+  end)
+
+  describe("detect", function()
+    it("returns MIME from extension table for known extensions", function()
+      assert.equals("image/png", mime.detect("/path/to/file.png"))
+      assert.equals("application/json", mime.detect("data.json"))
+      assert.equals("text/x-lua", mime.detect("init.lua"))
+      assert.equals("application/pdf", mime.detect("document.pdf"))
+    end)
+
+    it("falls back to file command when extension is unknown", function()
+      local os_execute_stub = create_stub(os, "execute")
+      os_execute_stub.on_call_with("command -v file >/dev/null 2>&1").returns(0)
+
+      local mock_handle = {
+        read = function(_, mode)
+          if mode == "*a" then
+            return "application/x-sharedlib\n"
+          end
+        end,
+        close = function()
+          return true, "exit", 0
+        end,
+      }
+      local io_popen_stub = create_stub(io, "popen")
+      io_popen_stub.returns(mock_handle)
+
+      assert.equals("application/x-sharedlib", mime.detect("/path/to/binary_no_ext"))
+    end)
+
+    it("returns nil when both extension and file command fail", function()
+      package.loaded["flemma.mime"] = nil
+      mime = require("flemma.mime")
+
+      local os_execute_stub = create_stub(os, "execute")
+      os_execute_stub.on_call_with("command -v file >/dev/null 2>&1").returns(1)
+
+      assert.is_nil(mime.detect("/path/to/unknown_file"))
+    end)
+  end)
 end)

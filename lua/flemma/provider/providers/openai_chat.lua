@@ -149,14 +149,44 @@ function M.build_request(self, prompt, context)
           -- Anthropic's restricted charset/length constraints don't apply here.
           local tool_id = part.tool_use_id
           local tool_name = part.name or tool_id
-          local content = part.content
+
+          -- Chat Completions only supports text in tool results.
+          -- Concatenate text parts; non-text parts become placeholders with a warning.
+          local text_pieces = {}
+          for _, rp in ipairs(part.parts or {}) do
+            if rp.kind == "text" then
+              if rp.text and #rp.text > 0 then
+                table.insert(text_pieces, rp.text)
+              end
+            elseif rp.kind == "text_file" then
+              if rp.text and #rp.text > 0 then
+                table.insert(text_pieces, rp.text)
+              end
+            else
+              local label = rp.filename or "unknown"
+              local mime = rp.mime_type or ""
+              if mime ~= "" then
+                label = label .. " (" .. mime .. ")"
+              end
+              table.insert(text_pieces, "[binary file: " .. label .. "]")
+              log.warn(
+                "openai_chat.build_request: Non-text part (kind="
+                  .. rp.kind
+                  .. ") in tool result for "
+                  .. tool_id
+                  .. "; replaced with placeholder"
+              )
+            end
+          end
+
+          local content = table.concat(text_pieces, "")
           if part.is_error then
-            content = "Error: " .. (part.content or "Tool execution failed")
+            content = "Error: " .. (content ~= "" and content or "Tool execution failed")
           end
           table.insert(messages, {
             role = "tool",
             tool_call_id = tool_id,
-            name = tool_name,
+            name = base.encode_tool_name(tool_name),
             content = content,
           })
           log.debug("openai_chat.build_request: Added tool result for " .. tool_id)
@@ -231,7 +261,7 @@ function M.build_request(self, prompt, context)
             id = part.id,
             type = "function",
             ["function"] = {
-              name = part.name,
+              name = base.encode_tool_name(part.name),
               arguments = json.encode(part.input),
             },
           })
@@ -268,7 +298,7 @@ function M.build_request(self, prompt, context)
     return {
       role = "tool",
       tool_call_id = orphan.id,
-      name = orphan.name,
+      name = base.encode_tool_name(orphan.name),
       content = "Error: No result provided",
     }
   end)
@@ -285,7 +315,7 @@ function M.build_request(self, prompt, context)
     table.insert(tools_array, {
       type = "function",
       ["function"] = {
-        name = definition.name,
+        name = base.encode_tool_name(definition.name),
         description = tools_module.build_description(definition),
         parameters = tools_module.to_json_schema(definition),
       },

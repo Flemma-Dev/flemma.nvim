@@ -52,9 +52,15 @@ local M = {}
 ---@class flemma.ast.ToolUseSegment : flemma.ast.GenericToolUsePart
 ---@field position flemma.ast.Position
 
----@class flemma.ast.ToolResultSegment : flemma.ast.GenericToolResultPart
----@field position flemma.ast.Position
+---@class flemma.ast.ToolResultSegment
+---@field kind "tool_result"
+---@field tool_use_id string
+---@field is_error boolean
+---@field segments flemma.ast.Segment[]
+---@field content string
+---@field status? flemma.ast.ToolStatus
 ---@field fence_line? integer 1-based line number of the fence opener (only for flemma:tool blocks)
+---@field position flemma.ast.Position
 
 ---@class flemma.ast.AbortedSegment
 ---@field kind "aborted"
@@ -127,9 +133,8 @@ local M = {}
 ---@field kind "tool_result"
 ---@field tool_use_id string
 ---@field name? string Tool function name (resolved from matching tool_use in pipeline)
----@field content string
+---@field parts flemma.ast.GenericPart[]
 ---@field is_error boolean
----@field status? flemma.ast.ToolStatus
 
 ---@alias flemma.ast.GenericPart flemma.ast.GenericTextPart|flemma.ast.GenericImagePart|flemma.ast.GenericPdfPart|flemma.ast.GenericTextFilePart|flemma.ast.GenericUnsupportedFilePart|flemma.ast.GenericThinkingPart|flemma.ast.GenericToolUsePart|flemma.ast.GenericToolResultPart
 
@@ -234,15 +239,15 @@ function M.tool_use(id, name, input, pos)
 end
 
 ---@param tool_use_id string
----@param content string
----@param opts? { is_error?: boolean, status?: flemma.ast.ToolStatus, start_line?: integer, end_line?: integer, fence_line?: integer }
+---@param opts? { segments?: flemma.ast.Segment[], content?: string, is_error?: boolean, status?: flemma.ast.ToolStatus, start_line?: integer, end_line?: integer, fence_line?: integer }
 ---@return flemma.ast.ToolResultSegment
-function M.tool_result(tool_use_id, content, opts)
+function M.tool_result(tool_use_id, opts)
   opts = opts or {}
   return {
     kind = "tool_result",
     tool_use_id = tool_use_id,
-    content = content,
+    segments = opts.segments or {},
+    content = opts.content or "",
     is_error = opts.is_error or false,
     status = opts.status,
     fence_line = opts.fence_line,
@@ -257,6 +262,53 @@ function M.aborted(message, pos)
   return { kind = "aborted", message = message, position = pos }
 end
 
+--- Convert a file part to its generic representation based on MIME type.
+--- Handles image/*, application/pdf, text/*, and unsupported types.
+---@param file_part table The file part with mime_type, data, filename, position fields
+---@param accumulator table[] The parts array to append to
+---@param diagnostics_accumulator flemma.ast.Diagnostic[] The diagnostics array to append warnings to
+---@param source_file string Source file path for diagnostics
+local function convert_file_part(file_part, accumulator, diagnostics_accumulator, source_file)
+  local mt = file_part.mime_type or ""
+  if mt:sub(1, 6) == "image/" then
+    local encoded = vim.base64.encode(file_part.data or "")
+    table.insert(accumulator, {
+      kind = "image",
+      mime_type = mt,
+      data = encoded,
+      data_url = "data:" .. mt .. ";base64," .. encoded,
+      filename = file_part.filename,
+    })
+  elseif mt == "application/pdf" then
+    local encoded = vim.base64.encode(file_part.data or "")
+    table.insert(accumulator, {
+      kind = "pdf",
+      mime_type = mt,
+      data = encoded,
+      data_url = "data:application/pdf;base64," .. encoded,
+      filename = file_part.filename,
+    })
+  elseif mt:sub(1, 5) == "text/" then
+    table.insert(accumulator, {
+      kind = "text_file",
+      mime_type = mt,
+      text = file_part.data,
+      filename = file_part.filename,
+    })
+  else
+    local err = "Unsupported MIME type: " .. mt
+    table.insert(diagnostics_accumulator, {
+      type = "file",
+      severity = "warning",
+      filename = file_part.filename,
+      error = err,
+      position = file_part.position,
+      source_file = source_file,
+    })
+    table.insert(accumulator, { kind = "unsupported_file", filename = file_part.filename })
+  end
+end
+
 --- Evaluated message parts -> GenericPart[], diagnostics[]
 --- Returns both the generic parts and any diagnostics generated during conversion
 ---@param evaluated_parts flemma.processor.EvaluatedPart[]|nil
@@ -266,51 +318,14 @@ end
 function M.to_generic_parts(evaluated_parts, source_file)
   local parts = {}
   local diagnostics = {}
+  local src = source_file or "N/A"
   for _, p in ipairs(evaluated_parts or {}) do
     if p.kind == "text" then
       if p.text and #p.text > 0 then
         table.insert(parts, { kind = "text", text = p.text })
       end
     elseif p.kind == "file" then
-      local mt = p.mime_type or ""
-      if mt:sub(1, 6) == "image/" then
-        local encoded = vim.base64.encode(p.data or "")
-        table.insert(parts, {
-          kind = "image",
-          mime_type = mt,
-          data = encoded,
-          data_url = "data:" .. mt .. ";base64," .. encoded,
-          filename = p.filename,
-        })
-      elseif mt == "application/pdf" then
-        local encoded = vim.base64.encode(p.data or "")
-        table.insert(parts, {
-          kind = "pdf",
-          mime_type = mt,
-          data = encoded,
-          data_url = "data:application/pdf;base64," .. encoded,
-          filename = p.filename,
-        })
-      elseif mt:sub(1, 5) == "text/" then
-        table.insert(parts, {
-          kind = "text_file",
-          mime_type = mt,
-          text = p.data, -- treat as text content
-          filename = p.filename,
-        })
-      else
-        -- Unsupported file type - emit diagnostic
-        local err = "Unsupported MIME type: " .. mt
-        table.insert(diagnostics, {
-          type = "file",
-          severity = "warning",
-          filename = p.filename,
-          error = err,
-          position = p.position,
-          source_file = source_file or "N/A",
-        })
-        table.insert(parts, { kind = "unsupported_file", filename = p.filename })
-      end
+      convert_file_part(p, parts, diagnostics, src)
     elseif p.kind == "thinking" then
       -- Preserve thinking nodes with signature/redacted for provider state preservation
       table.insert(parts, {
@@ -327,10 +342,29 @@ function M.to_generic_parts(evaluated_parts, source_file)
         input = p.input,
       })
     elseif p.kind == "tool_result" then
+      ---@cast p flemma.processor.ToolResultPart
+      local tool_parts = {}
+      if p.parts and #p.parts > 0 then
+        -- Opted-in tool result: convert child parts (file parts -> generic types,
+        -- text parts pass through).
+        for _, child_part in ipairs(p.parts) do
+          if child_part.kind == "file" then
+            convert_file_part(child_part, tool_parts, diagnostics, src)
+          elseif child_part.kind == "text" then
+            if child_part.text and #child_part.text > 0 then
+              table.insert(tool_parts, { kind = "text", text = child_part.text })
+            end
+          end
+        end
+      elseif p.content and #p.content > 0 then
+        -- Collapsed/non-opted-in tool result: wrap content as a text part.
+        table.insert(tool_parts, { kind = "text", text = p.content })
+      end
+
       table.insert(parts, {
         kind = "tool_result",
         tool_use_id = p.tool_use_id,
-        content = p.content,
+        parts = tool_parts,
         is_error = p.is_error,
       })
     end

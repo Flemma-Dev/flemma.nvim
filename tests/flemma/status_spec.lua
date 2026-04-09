@@ -1007,6 +1007,153 @@ describe("flemma.status", function()
       end
       assert.is_true(found_title, "expected FlemmaStatusTitle extmark on line 0")
     end)
+
+    it("includes concealed descriptions in normal mode", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "test", initialized = true },
+        parameters = { merged = {}, sources = {} },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, sources = {} },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
+        },
+        tools = {
+          enabled = { "my_tool" },
+          disabled = {},
+          descriptions = { my_tool = "Does something useful" },
+          input_schemas = {},
+        },
+        approval = { approved = {}, denied = {}, pending = { "my_tool" }, require_approval_disabled = false },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local result = status.format(data, false)
+      local text = table.concat(result.lines, "\n")
+      assert.truthy(text:find("my_tool"), "expected tool name in output")
+      assert.truthy(text:find("Does something useful"), "expected description in line text")
+      assert.is_true(#result.conceals > 0, "expected conceal ranges for descriptions")
+    end)
+
+    it("shows descriptions without conceal in verbose mode", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "test", initialized = true },
+        parameters = { merged = {}, sources = {} },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, sources = {} },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
+        },
+        tools = {
+          enabled = { "my_tool" },
+          disabled = {},
+          descriptions = { my_tool = "Does something useful" },
+          input_schemas = {
+            my_tool = {
+              type = "object",
+              properties = {
+                query = { type = "string", description = "Search query" },
+                limit = { type = "number" },
+              },
+              required = { "query" },
+            },
+          },
+        },
+        approval = { approved = {}, denied = {}, pending = { "my_tool" }, require_approval_disabled = false },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local result = status.format(data, true)
+      local text = table.concat(result.lines, "\n")
+      assert.truthy(text:find("my_tool"), "expected tool name")
+      assert.truthy(text:find("Does something useful"), "expected description on its own line")
+      assert.truthy(text:find("query"), "expected query parameter")
+      assert.truthy(text:find("{string}"), "expected type in braces")
+      assert.truthy(text:find("limit%?"), "expected optional marker on limit")
+      assert.truthy(text:find("Search query"), "expected parameter description")
+      assert.equals(0, #result.conceals, "verbose mode should not conceal")
+    end)
+
+    it("handles schema DSL nodes via to_json_schema", function()
+      local s = require("flemma.schema")
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "test", initialized = true },
+        parameters = { merged = {}, sources = {} },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, sources = {} },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
+        },
+        tools = {
+          enabled = { "dsl_tool" },
+          disabled = {},
+          descriptions = { dsl_tool = "Uses schema DSL" },
+          input_schemas = {
+            dsl_tool = s.object({
+              command = s.string():describe("The command to run"),
+              timeout = s.number():nullable():optional():describe("Timeout in seconds"),
+            }),
+          },
+        },
+        approval = { approved = {}, denied = {}, pending = { "dsl_tool" }, require_approval_disabled = false },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local result = status.format(data, true)
+      local text = table.concat(result.lines, "\n")
+      assert.truthy(text:find("command"), "expected command parameter from DSL schema")
+      assert.truthy(text:find("{string}"), "expected string type from DSL")
+      assert.truthy(text:find("The command to run"), "expected DSL description")
+      assert.truthy(text:find("timeout%?"), "expected nullable param to be optional")
+    end)
+
+    it("sanitizes newlines in descriptions", function()
+      ---@type flemma.status.Data
+      local data = {
+        provider = { name = "anthropic", model = "test", initialized = true },
+        parameters = { merged = {}, sources = {} },
+        autopilot = { enabled = false, buffer_state = "idle", max_turns = 100, sources = {} },
+        sandbox = {
+          enabled = false,
+          config_enabled = false,
+          backend = "bwrap",
+          backend_mode = "auto",
+          backend_available = true,
+          policy = { rw_paths = {}, network = true, allow_privileged = false },
+          sources = {},
+        },
+        tools = {
+          enabled = { "nl_tool" },
+          disabled = {},
+          descriptions = { nl_tool = "Line one\nLine two" },
+          input_schemas = {},
+        },
+        approval = { approved = {}, denied = {}, pending = { "nl_tool" }, require_approval_disabled = false },
+        buffer = { is_chat = false, bufnr = 0 },
+      }
+
+      local result = status.format(data, false)
+      for _, line in ipairs(result.lines) do
+        assert.is_nil(line:find("\n"), "no line should contain a literal newline")
+      end
+    end)
   end)
 
   describe("collect — approval logic", function()

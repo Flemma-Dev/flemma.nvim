@@ -17,6 +17,8 @@ qa:
 	declare -A gate; \
 	luacheck lua/ tests/ \
 		>"$$d/luacheck" 2>&1 & gate[$$!]=luacheck; \
+	actionlint \
+		>"$$d/actionlint" 2>&1 & gate[$$!]=actionlint; \
 	VIMRUNTIME=$(VIMRUNTIME_PATH) \
 		lua-language-server --check lua/ --configpath ../.luarc-check.lua \
 		>"$$d/types" 2>&1 & gate[$$!]=types; \
@@ -71,8 +73,10 @@ develop:
 			diagnostics = { enabled = true },											\
 			logging = { enabled = true, level = \"TRACE\" },							\
 			editing = { auto_write = true },											\
-			tools = { modules = { \"extras.flemma.tools.calculator\" } },				\
-			experimental = { tools = true },											\
+			tools = {																	\
+				modules = { \"extras.flemma.tools.calculator\" },						\
+				mcporter = { enabled = true },											\
+			},																			\
 		})																				\
 		pcall(function()																\
 			require(\"bufferline.config\").options.get_element_icon =					\

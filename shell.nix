@@ -17,6 +17,7 @@ pkgs.mkShell rec {
   '';
 
   buildInputs = with pkgs; [
+    actionlint
     bubblewrap
     gh
     google-cloud-sdk
@@ -31,11 +32,16 @@ pkgs.mkShell rec {
     lua-language-server
     lua54Packages.luacheck
 
+    (writeShellScriptBin "mcporter" ''
+      exec ${lib.getExe envchain} mcp_keys pnpm --silent --package=mcporter@latest dlx -- mcporter "$@"
+    '')
+
     (writeShellApplication {
       name = "flemma-fmt";
       runtimeInputs = [
         nixfmt-tree
         nodejs_lts.pkgs.prettier
+        shfmt
         stylua
       ];
       text = ''
@@ -44,7 +50,10 @@ pkgs.mkShell rec {
         find . -name "*.lua" -print0 | xargs -0 \
         stylua
 
-        find . -name "*.md" -not -path '*/.claude/*' -print0 | xargs -0 \
+        find . -name "*.sh" -print0 | xargs -0 \
+        shfmt -w -i 2 -ci
+
+        find . \( -name "*.md" -o -name "*.yml" -o -name "*.yaml" \) -not -name 'pnpm-lock.yaml' -not -path '*/.claude/*' -not -path '*/contrib/*' -print0 | xargs -0 \
         prettier --write
       '';
     })

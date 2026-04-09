@@ -9,7 +9,7 @@ local M = {}
 -- Module-level require for description constants only (evaluated at load time).
 -- Runtime code inside execute() must use ctx.truncate instead.
 local s = require("flemma.schema")
-local truncate = require("flemma.utilities.truncate")
+local truncate = require("flemma.tools.truncate")
 local sink_module = require("flemma.sink")
 
 M.definitions = {
@@ -96,54 +96,11 @@ M.definitions = {
             local full_output = table.concat(all_lines, "\n"):gsub("%s+$", "")
             output_sink:destroy()
 
-            -- Apply tail truncation
-            local result = ctx.truncate.truncate_tail(full_output)
+            -- Apply tail truncation with overflow handling
+            local result = ctx.truncate.truncate_with_overflow(full_output, {
+              direction = "tail",
+            })
             local output_text = result.content ~= "" and result.content or "(no output)"
-
-            if result.truncated then
-              -- Save full output to temp file
-              local temp_path = vim.fn.tempname()
-              local f = io.open(temp_path, "w")
-              if f then
-                f:write(full_output)
-                f:close()
-              end
-
-              -- Build actionable notice
-              local start_line = result.total_lines - result.output_lines + 1
-              local end_line = result.total_lines
-
-              if result.last_line_partial then
-                local last_line_size = ctx.truncate.format_size(#all_lines[#all_lines])
-                output_text = output_text
-                  .. string.format(
-                    "\n\n[Showing last %s of line %d (line is %s). Full output: %s]",
-                    ctx.truncate.format_size(result.output_bytes),
-                    end_line,
-                    last_line_size,
-                    temp_path
-                  )
-              elseif result.truncated_by == "lines" then
-                output_text = output_text
-                  .. string.format(
-                    "\n\n[Showing lines %d-%d of %d. Full output: %s]",
-                    start_line,
-                    end_line,
-                    result.total_lines,
-                    temp_path
-                  )
-              else
-                output_text = output_text
-                  .. string.format(
-                    "\n\n[Showing lines %d-%d of %d (%s limit). Full output: %s]",
-                    start_line,
-                    end_line,
-                    result.total_lines,
-                    ctx.truncate.format_size(ctx.truncate.MAX_BYTES),
-                    temp_path
-                  )
-              end
-            end
 
             if code ~= 0 then
               output_text = output_text .. string.format("\n\nCommand exited with code %d", code)

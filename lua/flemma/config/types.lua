@@ -18,6 +18,7 @@
 ---@field keymaps flemma.config.Keymaps
 ---@field line_highlights flemma.config.LineHighlights
 ---@field logging flemma.logging.Config
+---@field lsp flemma.config.Lsp
 ---@field model? string
 ---@field notifications flemma.config.Notifications
 ---@field parameters flemma.config.Parameters
@@ -51,8 +52,6 @@
 ---@field manage_updatetime boolean
 
 ---@class flemma.config.Experimental
----@field lsp boolean
----@field tools boolean
 
 ---@class flemma.config.Highlights
 ---@field assistant flemma.config.HighlightValue
@@ -89,6 +88,9 @@
 ---@field frontmatter flemma.config.HighlightValue
 ---@field system flemma.config.HighlightValue
 ---@field user flemma.config.HighlightValue
+
+---@class flemma.config.Lsp
+---@field enabled boolean
 
 ---@class flemma.config.Notifications
 ---@field border false|"underline"|"underdouble"|"undercurl"|"underdotted"|"underdashed"
@@ -151,9 +153,11 @@
 ---@field grep? flemma.config.ToolsGrep
 ---@field ls? flemma.config.ToolsLs
 ---@field max_concurrent integer
+---@field mcporter flemma.config.ToolsMcporter
 ---@field modules string[]
 ---@field require_approval boolean
 ---@field show_spinner boolean
+---@field truncate flemma.config.ToolsTruncate
 ---@field [string] table|nil
 
 ---@class flemma.config.Turns
@@ -237,9 +241,23 @@
 ---@class flemma.config.ToolsLs
 ---@field cwd? string
 
+---@class flemma.config.ToolsMcporter
+---@field enabled boolean
+---@field exclude string[]
+---@field include string[]
+---@field path string
+---@field startup flemma.config.ToolsMcporterStartup
+---@field timeout integer
+
+---@class flemma.config.ToolsTruncate
+---@field output_path_format string
+
 ---@class flemma.config.SandboxBackendsBwrap
 ---@field extra_args string[]
 ---@field path string
+
+---@class flemma.config.ToolsMcporterStartup
+---@field concurrency integer
 
 ---User-facing setup options — alias for flemma.Config.
 ---@alias flemma.Config.Opts flemma.Config

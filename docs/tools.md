@@ -633,6 +633,8 @@ Key details:
 - **Timeout** – if `done()` is never called, the source times out after `tools.default_timeout` seconds (default 30). This prevents a broken source from blocking requests forever.
 - **Error handling** – if the resolve function throws, `done(err)` is called automatically.
 
+Flemma's built-in [MCP integration](mcp.md) is implemented as an async tool source -- it's a good reference for the pattern in practice (`lua/flemma/tools/definitions/mcporter.lua`).
+
 ---
 
 ## Approval resolvers

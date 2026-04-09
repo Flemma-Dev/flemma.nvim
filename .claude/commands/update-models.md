@@ -206,4 +206,4 @@ If you discover a newer Sonnet version during the update, scan the codebase for 
 2. **Fetch provider docs** for cross-referencing.
 3. **Merge data**, applying hardcoded overrides.
 4. **Update per-provider files** under `lua/flemma/models/`.
-5. **Run `make test`** to check for tests that may reference retired models.
+5. **Run `make qa`** to check for tests that may reference retired models.

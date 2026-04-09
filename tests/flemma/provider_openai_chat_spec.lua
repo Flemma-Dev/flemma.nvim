@@ -133,7 +133,13 @@ describe("OpenAI Chat Completions Base Provider", function()
           {
             role = "user",
             parts = {
-              { kind = "tool_result", tool_use_id = "call_abc", name = "calculator", content = "4", is_error = false },
+              {
+                kind = "tool_result",
+                tool_use_id = "call_abc",
+                name = "calculator",
+                parts = { { kind = "text", text = "4" } },
+                is_error = false,
+              },
               { kind = "text", text = "Thanks" },
             },
           },
@@ -181,7 +187,12 @@ describe("OpenAI Chat Completions Base Provider", function()
           {
             role = "user",
             parts = {
-              { kind = "tool_result", tool_use_id = "call_err", content = "Something went wrong", is_error = true },
+              {
+                kind = "tool_result",
+                tool_use_id = "call_err",
+                parts = { { kind = "text", text = "Something went wrong" } },
+                is_error = true,
+              },
             },
           },
         },
@@ -218,7 +229,12 @@ describe("OpenAI Chat Completions Base Provider", function()
           {
             role = "user",
             parts = {
-              { kind = "tool_result", tool_use_id = "call_xyz", content = "Found it", is_error = false },
+              {
+                kind = "tool_result",
+                tool_use_id = "call_xyz",
+                parts = { { kind = "text", text = "Found it" } },
+                is_error = false,
+              },
             },
           },
         },
@@ -374,7 +390,12 @@ describe("OpenAI Chat Completions Base Provider", function()
           {
             role = "user",
             parts = {
-              { kind = "tool_result", tool_use_id = "call_1", content = "result", is_error = false },
+              {
+                kind = "tool_result",
+                tool_use_id = "call_1",
+                parts = { { kind = "text", text = "result" } },
+                is_error = false,
+              },
             },
           },
         },

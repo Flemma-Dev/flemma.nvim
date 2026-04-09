@@ -33,12 +33,12 @@ for file in $(find lua/flemma -name '*.lua' -type f | sort); do
     abs_line=$((first_fn + line_num - 1))
 
     # Skip vim string-context requires (inside single-quoted strings)
-    if echo "$content" | grep -qE "^[^']*'[^']*require\(\"flemma\." ; then
+    if echo "$content" | grep -qE "^[^']*'[^']*require\(\"flemma\."; then
       continue
     fi
 
     # Skip dynamic requires (no string literal — require(variable))
-    if echo "$content" | grep -qE 'require\([^"'"'"']' ; then
+    if echo "$content" | grep -qE 'require\([^"'"'"']'; then
       continue
     fi
 

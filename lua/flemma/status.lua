@@ -13,6 +13,7 @@ local str = require("flemma.utilities.string")
 local tools_module = require("flemma.tools")
 local tools_approval = require("flemma.tools.approval")
 local diagnostic_format = require("flemma.utilities.diagnostic")
+local display = require("flemma.utilities.display")
 local registry = require("flemma.provider.registry")
 
 local MARKER_SANDBOX = "⊡"
@@ -69,7 +70,7 @@ local OP_HL = {
 ---@field parameters { merged: table<string, any>, sources: table<string, string>, resolved_max_tokens: integer|nil, resolved_thinking: string|nil }
 ---@field autopilot { enabled: boolean, config_enabled: boolean, buffer_state: string, max_turns: integer, sources: table<string, string> }
 ---@field sandbox { enabled: boolean, config_enabled: boolean, runtime_override: boolean|nil, backend: string|nil, backend_mode: string|nil, backend_available: boolean, backend_error: string|nil, policy: flemma.config.SandboxPolicy, sources: table<string, string> }
----@field tools { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer }
+---@field tools { enabled: string[], disabled: string[], descriptions: table<string, string>, input_schemas: table<string, table>, booting: boolean, boot_completed?: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer }
 ---@field approval { approved: string[], denied: string[], pending: string[], require_approval_disabled: boolean, frontmatter_items: table<string, true>|nil, sandbox_items: table<string, true>|nil, runtime_items: table<string, true>|nil }
 ---@field buffer { is_chat: boolean, bufnr: integer }
 ---@field diagnostics? flemma.ast.Diagnostic[] Frontmatter validation diagnostics
@@ -79,6 +80,7 @@ local OP_HL = {
 ---@field lines string[]
 ---@field extmarks integer[][] Each entry: {line, col_start, col_end, hl_group_idx}
 ---@field virt_texts { [1]: integer, [2]: [string, string][] }[]
+---@field conceals { [1]: integer, [2]: integer, [3]: integer }[] Each entry: {line, col_start, col_end}
 
 -- ---------------------------------------------------------------------------
 -- Collectors
@@ -247,7 +249,7 @@ end
 ---When frontmatter changes the tool list, items that differ from the base
 ---config are tracked in frontmatter_items for annotation.
 ---@param bufnr integer
----@return { enabled: string[], disabled: string[], booting: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer }
+---@return { enabled: string[], disabled: string[], descriptions: table<string, string>, input_schemas: table<string, table>, booting: boolean, boot_completed?: boolean, frontmatter_items: table<string, true>|nil, max_concurrent: integer }
 local function collect_tools(bufnr)
   local all_tools = tools_module.get_all({ include_disabled = true })
 
@@ -259,7 +261,18 @@ local function collect_tools(bufnr)
 
   local enabled = {}
   local disabled = {}
+  local descriptions = {}
+  local input_schemas = {}
   local frontmatter_items = {}
+
+  for name, definition in pairs(all_tools) do
+    if definition.description and definition.description ~= "" then
+      descriptions[name] = definition.description
+    end
+    if definition.input_schema then
+      input_schemas[name] = definition.input_schema
+    end
+  end
 
   if frontmatter_modified and type(tools_list) == "table" and #tools_list > 0 then
     -- Frontmatter modified the tools list — filter by it and detect diffs
@@ -316,6 +329,8 @@ local function collect_tools(bufnr)
   return {
     enabled = enabled,
     disabled = disabled,
+    descriptions = descriptions,
+    input_schemas = input_schemas,
     booting = not tools_module.is_ready(),
     frontmatter_items = next(frontmatter_items) and frontmatter_items or nil,
     max_concurrent = max_concurrent,
@@ -505,8 +520,10 @@ end
 ---@field lines string[]
 ---@field extmarks { [1]: integer, [2]: integer, [3]: integer, [4]: string }[]
 ---@field virt_texts { [1]: integer, [2]: [string, string][] }[]
+---@field conceals { [1]: integer, [2]: integer, [3]: integer }[]
 ---@field _cur string
 ---@field _marks { col_start: integer, col_end: integer, hl_group: string }[]
+---@field _conceals { col_start: integer, col_end: integer }[]
 ---@field _virt [string, string][]|nil
 ---@field _depth boolean[]
 ---@field _line integer
@@ -519,8 +536,10 @@ local function new_builder()
     lines = {},
     extmarks = {},
     virt_texts = {},
+    conceals = {},
     _cur = "",
     _marks = {},
+    _conceals = {},
     _virt = nil,
     _depth = {},
     _line = 0,
@@ -530,11 +549,15 @@ end
 ---Append text to the current line, optionally highlighted.
 ---@param text string
 ---@param hl_group? string
-function Builder:put(text, hl_group)
+---@param opts? { conceal?: boolean }
+function Builder:put(text, hl_group, opts)
   local start = #self._cur
   self._cur = self._cur .. text
   if hl_group then
     table.insert(self._marks, { col_start = start, col_end = start + #text, hl_group = hl_group })
+  end
+  if opts and opts.conceal then
+    table.insert(self._conceals, { col_start = start, col_end = start + #text })
   end
 end
 
@@ -550,6 +573,9 @@ function Builder:nl()
   for _, m in ipairs(self._marks) do
     table.insert(self.extmarks, { self._line, m.col_start, m.col_end, m.hl_group })
   end
+  for _, c in ipairs(self._conceals) do
+    table.insert(self.conceals, { self._line, c.col_start, c.col_end })
+  end
   if self._virt then
     table.insert(self.virt_texts, { self._line, self._virt })
     self._virt = nil
@@ -557,6 +583,7 @@ function Builder:nl()
   self._line = self._line + 1
   self._cur = ""
   self._marks = {}
+  self._conceals = {}
 end
 
 ---Emit an empty line.
@@ -628,7 +655,7 @@ function Builder:build()
   if self._cur ~= "" then
     self:nl()
   end
-  return { lines = self.lines, extmarks = self.extmarks, virt_texts = self.virt_texts }
+  return { lines = self.lines, extmarks = self.extmarks, virt_texts = self.virt_texts, conceals = self.conceals }
 end
 
 -- ---------------------------------------------------------------------------
@@ -1092,10 +1119,111 @@ local function format_sandbox_section(b, data, is_last)
   b:unbranch()
 end
 
+---Build a sorted list of parameter summaries from an input_schema.
+---Accepts both raw JSON Schema objects and Flemma schema DSL nodes
+---(which are serialized via `to_json_schema()` first).
+---Each entry is a string like "channel_types? {string} Description text".
+---@param schema table JSON Schema object or schema DSL node
+---@return string[]
+local function format_schema_params(schema)
+  -- Schema DSL nodes have to_json_schema(); raw JSON Schema tables don't
+  if type(schema.to_json_schema) == "function" then
+    schema = schema:to_json_schema()
+  end
+  local props = schema.properties
+  if not props then
+    return {}
+  end
+  local required_set = {}
+  if type(schema.required) == "table" then
+    for _, name in ipairs(schema.required) do
+      required_set[name] = true
+    end
+  end
+  local params = {}
+  for name, prop in pairs(props) do
+    local raw_type = prop.type or "any"
+    local param_type
+    if type(raw_type) == "table" then
+      param_type = table.concat(raw_type, "|")
+    else
+      param_type = raw_type
+    end
+    local param_name = name
+    if not required_set[name] then
+      param_name = param_name .. "?"
+    end
+    local entry = param_name .. " {" .. param_type .. "}"
+    if type(prop.description) == "string" and prop.description ~= "" then
+      entry = entry .. " " .. prop.description:gsub("\n", display.get_newline_char())
+    end
+    table.insert(params, entry)
+  end
+  table.sort(params)
+  return params
+end
+
+---Render a single tool entry with concealed description.
+---In normal mode the description is hidden via conceal and revealed on cursor hover.
+---In verbose mode the description and schema are shown on separate lines (not concealed).
+---@param b flemma.status.Builder
+---@param name string
+---@param hl string Highlight group for the tool name
+---@param is_last boolean
+---@param t { descriptions: table<string, string>, input_schemas: table<string, table>, frontmatter_items: table<string, true>|nil }
+---@param verbose boolean
+local function format_tool_entry(b, name, hl, is_last, t, verbose)
+  b:leaf(is_last)
+  b:put(name, hl)
+  local vt = tool_markers_virt(name, nil, t.frontmatter_items, nil)
+  local raw_description = t.descriptions and t.descriptions[name]
+  local description = raw_description and raw_description:gsub("\n", display.get_newline_char()) or nil
+  if description then
+    if verbose then
+      -- Verbose: description and schema on their own lines (always visible)
+      if vt then
+        b:virt(vt)
+      end
+      b:nl()
+      local leaf_cont
+      if is_last then
+        leaf_cont = b:_cont() .. "   "
+      else
+        leaf_cont = b:_cont() .. "│  "
+      end
+      b:put(leaf_cont, "FlemmaStatusTree")
+      b:put(description, "Comment")
+      b:nl()
+      local schema = t.input_schemas and t.input_schemas[name]
+      if schema then
+        local params = format_schema_params(schema)
+        for _, param in ipairs(params) do
+          b:put(leaf_cont, "FlemmaStatusTree")
+          b:put("– " .. param, "Comment")
+          b:nl()
+        end
+      end
+    else
+      -- Normal: inline description, concealed until cursor hovers
+      b:put("  " .. description, "Comment", { conceal = true })
+      if vt then
+        b:virt(vt)
+      end
+      b:nl()
+    end
+  else
+    if vt then
+      b:virt(vt)
+    end
+    b:nl()
+  end
+end
+
 ---@param b flemma.status.Builder
 ---@param data flemma.status.Data
 ---@param is_last boolean
-local function format_tools_section(b, data, is_last)
+---@param verbose boolean
+local function format_tools_section(b, data, is_last, verbose)
   local t = data.tools
   local enabled_count = #t.enabled
   local disabled_count = #t.disabled
@@ -1107,10 +1235,14 @@ local function format_tools_section(b, data, is_last)
   b:put(summary, "FlemmaStatusSummary")
   b:nl()
 
-  -- booting indicator
+  -- booting indicator (kept stable across refreshes to avoid layout jumps)
   if t.booting then
     b:leaf(false)
     b:put("⏳ loading async tool sources…", "FlemmaStatusBooting")
+    b:nl()
+  elseif t.boot_completed then
+    b:leaf(false)
+    b:put("✔ finished loading tool sources", "FlemmaStatusEnabled")
     b:nl()
   end
 
@@ -1130,13 +1262,7 @@ local function format_tools_section(b, data, is_last)
     b:nl()
 
     for i, name in ipairs(t.enabled) do
-      b:leaf(i == enabled_count)
-      b:put(name, "FlemmaStatusToolEnabled")
-      local vt = tool_markers_virt(name, nil, t.frontmatter_items, nil)
-      if vt then
-        b:virt(vt)
-      end
-      b:nl()
+      format_tool_entry(b, name, "FlemmaStatusToolEnabled", i == enabled_count, t, verbose)
     end
 
     b:unbranch()
@@ -1149,13 +1275,7 @@ local function format_tools_section(b, data, is_last)
     b:nl()
 
     for i, name in ipairs(t.disabled) do
-      b:leaf(i == disabled_count)
-      b:put(name, "FlemmaStatusToolDisabled")
-      local vt = tool_markers_virt(name, nil, t.frontmatter_items, nil)
-      if vt then
-        b:virt(vt)
-      end
-      b:nl()
+      format_tool_entry(b, name, "FlemmaStatusToolDisabled", i == disabled_count, t, verbose)
     end
 
     b:unbranch()
@@ -1648,7 +1768,7 @@ function M.format(data, verbose)
   b:gap()
 
   -- ── Tools ──
-  format_tools_section(b, data, false)
+  format_tools_section(b, data, false, verbose)
   b:gap()
 
   -- ── Approval ──
@@ -1779,6 +1899,46 @@ local function setup_highlights()
   end
 end
 
+---Render formatted status data into a status buffer, replacing all content
+---and extmark highlights.
+---@param buf integer
+---@param win integer
+---@param result flemma.status.FormatResult
+local function render_buffer(buf, win, result)
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, result.lines)
+  vim.bo[buf].modifiable = false
+
+  setup_highlights()
+  vim.api.nvim_buf_clear_namespace(buf, NS, 0, -1)
+
+  for _, em in ipairs(result.extmarks) do
+    vim.api.nvim_buf_set_extmark(buf, NS, em[1], em[2], {
+      end_col = em[3],
+      hl_group = em[4],
+    })
+  end
+
+  for _, vt in ipairs(result.virt_texts) do
+    vim.api.nvim_buf_set_extmark(buf, NS, vt[1], 0, {
+      virt_text = vt[2],
+      virt_text_pos = "right_align",
+      hl_mode = "combine",
+    })
+  end
+
+  if result.conceals and #result.conceals > 0 then
+    for _, c in ipairs(result.conceals) do
+      vim.api.nvim_buf_set_extmark(buf, NS, c[1], c[2], {
+        end_col = c[3],
+        conceal = "",
+      })
+    end
+    vim.wo[win].conceallevel = 3
+    vim.wo[win].concealcursor = ""
+  end
+end
+
 ---Open a vertical-split scratch buffer with formatted status output
 ---@param opts flemma.status.ShowOptions
 function M.show(opts)
@@ -1832,33 +1992,43 @@ function M.show(opts)
   vim.bo[buf].bufhidden = "wipe"
   vim.bo[buf].swapfile = false
   vim.wo[win].wrap = false
+  vim.wo[win].spell = false
   vim.api.nvim_buf_set_name(buf, "flemma://status")
   vim.b[buf].flemma_source_bufnr = target_bufnr
+  vim.b[buf].flemma_verbose = is_verbose
+  vim.b[buf].flemma_was_booting = data.tools.booting
 
-  -- Write content
-  vim.bo[buf].modifiable = true
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, result.lines)
-  vim.bo[buf].modifiable = false
+  render_buffer(buf, win, result)
   vim.bo[buf].filetype = "flemma-status"
 
-  -- Apply extmark-based highlighting
-  setup_highlights()
-  vim.api.nvim_buf_clear_namespace(buf, NS, 0, -1)
-
-  for _, em in ipairs(result.extmarks) do
-    vim.api.nvim_buf_set_extmark(buf, NS, em[1], em[2], {
-      end_col = em[3],
-      hl_group = em[4],
-    })
-  end
-
-  for _, vt in ipairs(result.virt_texts) do
-    vim.api.nvim_buf_set_extmark(buf, NS, vt[1], 0, {
-      virt_text = vt[2],
-      virt_text_pos = "right_align",
-      hl_mode = "combine",
-    })
-  end
+  -- Auto-refresh when async tool sources finish loading or config changes
+  local augroup = vim.api.nvim_create_augroup("FlemmaStatus", { clear = true })
+  vim.api.nvim_create_autocmd("User", {
+    group = augroup,
+    pattern = { "FlemmaBootComplete", "FlemmaConfigUpdated" },
+    callback = function()
+      if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_win_is_valid(win) then
+        pcall(vim.api.nvim_del_augroup_by_id, augroup)
+        return
+      end
+      local source = vim.b[buf].flemma_source_bufnr
+      local refresh_bufnr = (source and vim.api.nvim_buf_is_valid(source)) and source or 0
+      local verbose = vim.b[buf].flemma_verbose or false
+      local refresh_data
+      if verbose then
+        refresh_data = M.collect_verbose(refresh_bufnr)
+      else
+        refresh_data = M.collect(refresh_bufnr)
+      end
+      -- Show "finished" line only if the loading indicator was visible before
+      local was_booting = vim.b[buf].flemma_was_booting or false
+      if was_booting and not refresh_data.tools.booting then
+        refresh_data.tools.boot_completed = true
+      end
+      vim.b[buf].flemma_was_booting = refresh_data.tools.booting
+      render_buffer(buf, win, M.format(refresh_data, verbose))
+    end,
+  })
 
   -- Map q to close
   vim.keymap.set("n", "q", "<cmd>close<cr>", { buffer = buf, nowait = true })

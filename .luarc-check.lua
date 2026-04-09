@@ -1,4 +1,4 @@
--- LuaLS configuration for CLI type checking (used by `make check`).
+-- LuaLS configuration for CLI type checking (used by `make qa`).
 --
 -- Reads .luarc.jsonc as the single source of truth for diagnostic settings,
 -- then resolves LuaLS variables ($VIMRUNTIME, ${3rd}) in all string values.

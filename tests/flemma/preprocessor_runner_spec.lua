@@ -1214,6 +1214,62 @@ describe("flemma.preprocessor.runner", function()
     end)
   end)
 
+  describe("compound segment recursion", function()
+    it("processes text children of compound segments", function()
+      local rewriter = preprocessor.create_rewriter("test_rewriter")
+      rewriter:on_text("REPLACE_ME", function(_match, _ctx)
+        return { kind = "rewrite", value = "REPLACED" }
+      end)
+      preprocessor.register(rewriter)
+
+      local doc = ast.document(nil, {
+        ast.message("You", {
+          ast.tool_result("tr_1", {
+            segments = {
+              ast.text("before REPLACE_ME after", { start_line = 2 }),
+            },
+            content = "before REPLACE_ME after",
+            start_line = 1,
+            end_line = 3,
+          }),
+        }, { start_line = 1, end_line = 3 }),
+      })
+
+      local result_doc = preprocessor.run(doc, nil, { interactive = false })
+      local tr = result_doc.messages[1].segments[1]
+      assert.equals("tool_result", tr.kind)
+
+      -- The child text should have been processed by the rewriter
+      local child_text = ""
+      for _, seg in ipairs(tr.segments) do
+        if seg.kind == "text" then
+          child_text = child_text .. seg.value
+        end
+      end
+      assert.truthy(child_text:find("REPLACED"))
+      assert.falsy(child_text:find("REPLACE_ME"))
+    end)
+
+    it("does not recurse into segments without .segments field", function()
+      local rewriter = preprocessor.create_rewriter("noop_rewriter")
+      local handler_called = false
+      rewriter:on_text("anything", function(_match, _ctx)
+        handler_called = true
+        return nil
+      end)
+      preprocessor.register(rewriter)
+
+      local doc = ast.document(nil, {
+        ast.message("You", {
+          ast.text("anything", { start_line = 1 }),
+        }, { start_line = 1, end_line = 1 }),
+      })
+
+      preprocessor.run(doc, nil, { interactive = false })
+      assert.is_true(handler_called)
+    end)
+  end)
+
   describe("parser post-parse hook and raw_ast_cache", function()
     local parser_mod
 

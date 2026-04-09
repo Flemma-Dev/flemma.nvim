@@ -1027,11 +1027,16 @@ function M.add_tool_previews(bufnr, doc)
 
   local line_count = vim.api.nvim_buf_line_count(bufnr)
 
-  -- Find tool_result segments with status and empty content
+  -- Show previews for tool_result blocks with empty content that are either
+  -- pending/approved (have status fence) or currently executing (have active indicator).
+  -- Without the indicator check, the preview disappears when the executor strips
+  -- the flemma:tool fence info at execution start.
+  local indicators = get_tool_indicators(bufnr)
+
   for _, msg in ipairs(doc.messages) do
     if roles.is_user(msg.role) then
       for _, seg in ipairs(msg.segments) do
-        if seg.kind == "tool_result" and seg.status and seg.content == "" then
+        if seg.kind == "tool_result" and seg.content == "" and (seg.status or indicators[seg.tool_use_id]) then
           local sibling = siblings[seg.tool_use_id]
           local tool_use = sibling and sibling.use or nil
           if tool_use then
