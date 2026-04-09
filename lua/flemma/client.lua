@@ -139,6 +139,8 @@ function M.prepare_curl_command(tmp_file, headers, endpoint, parameters)
     "0", -- disable retries
     "--http1.1", -- force HTTP/1.1 for better interrupt handling
     "-H",
+    "Expect:", -- suppress cURL's default Expect: 100-continue (HTTP 417 on Vertex AI)
+    "-H",
     "Connection: close", -- request connection close
   }
 
