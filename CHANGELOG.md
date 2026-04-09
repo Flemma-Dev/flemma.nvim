@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.10.0
+
+### Minor Changes
+
+- 72eeb7a: Added binary content support in tool results. The read tool now detects binary files (images, PDFs) and emits file references instead of raw bytes. Providers that support mixed content (Anthropic, OpenAI Responses, Vertex) send images and PDFs natively; providers that don't (OpenAI Chat, Moonshot) fall back to text placeholders with a diagnostic warning.
+- 65f80df: Added mcporter tool integration: dynamically discovers MCP servers and registers their tools as Flemma tool definitions. Configure via `tools.mcporter` with include/exclude glob patterns. Disabled by default.
+- 5ddd354: Added `mime.detect(filepath)` as the single public entry point for MIME detection — tries extension-based lookup first, falls back to the `file` command. Added `mime.is_binary(mime_type)` for classifying MIME types as binary vs textual. The previous `get_mime_type()` and `get_mime_by_extension()` methods are now internal.
+- f921664: Promoted LSP and exploration tools (find, grep, ls) out of experimental. LSP is now configured via `lsp = { enabled = true }` (top-level). The three exploration tools are enabled by default. The `experimental` config section is now empty and strict — any keys passed to it will produce a validation error.
+- 5ddd354: Added `@~/path` file reference syntax for home-directory relative paths, alongside the existing `@./` and `@../`. The `~` is expanded at evaluation time, keeping `.chat` files portable across machines.
+- ad7227e: Use colon as internal tool name separator with wire encoding to double underscore for LLM APIs
+- e3f6e0e: Added shared tool output overflow handling: when bash or MCP tool results exceed 2000 lines or 50KB, the full output is saved to a configurable temp file and the model receives truncated content with instructions to read the full output. The overflow path format is configurable via `tools.truncate.output_path_format`.
+- 1e20943: Added `User-Agent: flemma.nvim/X.Y.Z Neovim/A.B.C` header to all API requests, backed by a version module that is automatically kept in sync with releases via CI
+
+### Patch Changes
+
+- e86eafe: Fixed autopilot skipping throttled auto-approved tools when pending (non-auto-approved) tools coexist in the same response
+- 2cdde26: Fixed HTTP 417 errors from Vertex AI caused by cURL's default `Expect: 100-continue` header
+- 0de4dd0: Status buffer now auto-refreshes when async tool sources finish loading, replacing the "loading" indicator with a "finished" confirmation
+- e698820: Fixed tool preview disappearing during execution. The virtual line preview (e.g., `bash: print Hello — $ sleep 5 && echo Hello`) now remains visible while a tool is executing, not just while pending approval.
+
 ## 0.9.0
 
 ### Minor Changes
@@ -120,6 +140,7 @@
 - 80fc278: Added persistent progress indicator showing character count, elapsed time, and phase-specific animation throughout the full request lifecycle including tool use buffering. The indicator appears as a floating window at the bottom of the chat window when the progress line is off-screen, with spinner icon placed in the gutter to match notification bar layout. Configurable via `progress.highlight` and `progress.zindex`.
 - 308767b: Preprocessor rewriter modules can now declare their own Vim syntax rules and highlight groups via `get_vim_syntax(config)`, removing the need to modify the main syntax file when adding new rewriters.
 - fcbce89: Sandbox variable expansion overhaul and DNS fix:
+
   - Path variables in `rw_paths` now use `urn:flemma:cwd` and `urn:flemma:buffer:path` instead of `$CWD` and `$FLEMMA_BUFFER_PATH` (breaking change for custom configs)
   - Added `$ENV` and `${ENV:-default}` expansion with bash-style fallback syntax
   - Default `rw_paths` now includes `${TMPDIR:-/tmp}`, `${XDG_CACHE_HOME:-~/.cache}`, and `${XDG_DATA_HOME:-~/.local/share}` for package manager compatibility
@@ -483,17 +504,20 @@ This release marks a major transition for Claudius, evolving from a Claude-speci
 This version introduces significant internal refactoring and configuration changes. Please review the following and update your configuration if necessary:
 
 1.  **Configuration Option Renames:**
+
     - The `prefix_style` option within `setup({})` has been renamed to `role_style`.
       - **Migration:** Rename `prefix_style` to `role_style` in your `require("claudius").setup({...})` call.
     - The `ruler.style` option within `setup({})` has been renamed to `ruler.hl`.
       - **Migration:** Rename `ruler.style` to `ruler.hl` in your `setup({})` call.
 
 2.  **Highlight Group Renames (Affects Manual Linking Only):**
+
     - Internal syntax highlight groups used by `syntax/chat.vim` have been renamed from `Chat*` to `Claudius*` (e.g., `ChatSystem` ⇒ `ClaudiusSystem`, `ChatSystemPrefix` ⇒ `ClaudiusRoleSystem`).
     - **Migration:** This **only** affects users who were manually linking these highlight groups in their Neovim configuration (e.g., using `vim.cmd("highlight link ChatSystem MyCustomGroup")`). If you were doing this, update the source group name (e.g., `vim.cmd("highlight link ClaudiusSystem MyCustomGroup")`).
     - **Users configuring highlights _only_ via the `highlights` table in `setup()` are _not_ affected by this change.**
 
 3.  **Configuration Structure (`model`, `provider`, `parameters`):**
+
     - A new top-level `provider` option specifies the AI provider (`"claude"`, `"openai"`, `"vertex"`). It defaults to `"claude"` for backward compatibility.
     - The `model` option now defaults based on the selected `provider` if set to `nil`. If you specify a `model`, ensure it's valid for the selected provider.
     - Provider-specific parameters (currently only for Vertex AI) are now nested (e.g., `parameters = { vertex = { project_id = "..." } }`).
