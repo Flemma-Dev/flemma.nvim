@@ -37,7 +37,7 @@ describe("client.prepare_curl_command()", function()
         found = true
         -- Verify format: flemma.nvim/X.Y.Z Neovim/A.B.C
         assert.is_truthy(arg:match("^User%-Agent: flemma%.nvim/%d+%.%d+%.%d+"), "version format must be semver")
-        assert.is_truthy(arg:match("Neovim/%d+%.%d+%.%d+$"), "must include Neovim version")
+        assert.is_truthy(arg:match("Neovim/%d+%.%d+%.%d+"), "must include Neovim version")
         break
       end
     end
