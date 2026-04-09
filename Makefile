@@ -17,6 +17,8 @@ qa:
 	declare -A gate; \
 	luacheck lua/ tests/ \
 		>"$$d/luacheck" 2>&1 & gate[$$!]=luacheck; \
+	actionlint \
+		>"$$d/actionlint" 2>&1 & gate[$$!]=actionlint; \
 	VIMRUNTIME=$(VIMRUNTIME_PATH) \
 		lua-language-server --check lua/ --configpath ../.luarc-check.lua \
 		>"$$d/types" 2>&1 & gate[$$!]=types; \

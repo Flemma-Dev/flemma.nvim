@@ -17,6 +17,7 @@ pkgs.mkShell rec {
   '';
 
   buildInputs = with pkgs; [
+    actionlint
     bubblewrap
     gh
     google-cloud-sdk
@@ -48,7 +49,7 @@ pkgs.mkShell rec {
         find . -name "*.lua" -print0 | xargs -0 \
         stylua
 
-        find . -name "*.md" -not -path '*/.claude/*' -print0 | xargs -0 \
+        find . \( -name "*.md" -o -name "*.yml" -o -name "*.yaml" \) -not -path '*/.claude/*' -not -path '*/contrib/*' -print0 | xargs -0 \
         prettier --write
       '';
     })
