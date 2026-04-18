@@ -6,6 +6,7 @@ local M = {}
 local query = require("flemma.ast.query")
 local str = require("flemma.utilities.string")
 local display = require("flemma.utilities.display")
+local buffer = require("flemma.utilities.buffer")
 local tools = require("flemma.tools")
 
 ---Normalise a raw format_preview return to a StructuredToolPreview.
@@ -40,11 +41,7 @@ function M.get_text_area_width(winid)
     return DEFAULT_MAX_LENGTH
   end
   local total = vim.api.nvim_win_get_width(winid)
-  local info = vim.fn.getwininfo(winid)
-  if info and #info > 0 then
-    return total - (info[1].textoff or 0)
-  end
-  return total
+  return total - buffer.get_gutter_width(winid)
 end
 
 ---Generate a truncated preview string from content
