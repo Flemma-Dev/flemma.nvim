@@ -28,6 +28,34 @@ local function get_hl_color(group_name, attr)
   return nil
 end
 
+---Walk a chain of highlight group names and return the first group whose
+---resolved highlight definition provides BOTH a foreground and a background
+---colour. Matches the "complete" criterion used by the notification and
+---progress bar fallback logic.
+---@param chain string|string[] Comma-separated string or list of group names
+---@return string|nil group The first complete group, or nil
+function M.resolve_first_complete(chain)
+  local names
+  if type(chain) == "string" then
+    names = {}
+    for name in chain:gmatch("[^,]+") do
+      table.insert(names, vim.trim(name))
+    end
+  else
+    names = chain
+  end
+  for _, name in ipairs(names) do
+    if name ~= "" then
+      local fg = get_hl_color(name, "fg")
+      local bg = get_hl_color(name, "bg")
+      if fg and bg then
+        return name
+      end
+    end
+  end
+  return nil
+end
+
 ---Get the default fallback color for an attribute.
 ---First tries the Normal highlight group, then falls back to config defaults.
 ---@param attr string "fg" or "bg"
@@ -432,19 +460,10 @@ M.apply_syntax = function()
   vim.api.nvim_set_hl(0, "FlemmaTurn", { link = "FlemmaRuler", default = true })
 
   -- Notification bar highlight groups
-  -- Derived from the first group in notifications.hl that provides both fg and bg
-  local bar_bg_hex, bar_fg_hex, notification_base_group
-  for candidate in syntax_config.notifications.highlight:gmatch("[^,]+") do
-    candidate = vim.trim(candidate)
-    local bg = get_hl_color(candidate, "bg")
-    local fg = get_hl_color(candidate, "fg")
-    if bg and fg then
-      bar_bg_hex = bg
-      bar_fg_hex = fg
-      notification_base_group = candidate
-      break
-    end
-  end
+  -- Derived from the first group in notifications.highlight that provides both fg and bg
+  local notification_base_group = M.resolve_first_complete(syntax_config.notifications.highlight)
+  local bar_bg_hex = notification_base_group and get_hl_color(notification_base_group, "bg") or nil
+  local bar_fg_hex = notification_base_group and get_hl_color(notification_base_group, "fg") or nil
 
   if bar_bg_hex and bar_fg_hex then
     -- Primary tier: base group fg + bg as-is (model name, cost)
@@ -515,17 +534,9 @@ M.apply_syntax = function()
   -- Progress bar highlight groups
   -- Derived from the first group in progress.highlight that provides both fg and bg
   local progress_config = syntax_config.progress or { highlight = "@text.note,PmenuSel" }
-  local progress_bg_hex, progress_fg_hex
-  for candidate in (progress_config.highlight or ""):gmatch("[^,]+") do
-    candidate = vim.trim(candidate)
-    local bg = get_hl_color(candidate, "bg")
-    local fg = get_hl_color(candidate, "fg")
-    if bg and fg then
-      progress_bg_hex = bg
-      progress_fg_hex = fg
-      break
-    end
-  end
+  local progress_base = M.resolve_first_complete(progress_config.highlight or "")
+  local progress_bg_hex = progress_base and get_hl_color(progress_base, "bg") or nil
+  local progress_fg_hex = progress_base and get_hl_color(progress_base, "fg") or nil
 
   if progress_bg_hex and progress_fg_hex then
     vim.api.nvim_set_hl(0, "FlemmaProgressBar", { bg = progress_bg_hex, fg = progress_fg_hex, default = true })

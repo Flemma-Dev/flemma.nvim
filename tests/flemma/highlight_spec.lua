@@ -596,3 +596,34 @@ describe("CursorLine overlay highlights", function()
     end)
   end)
 end)
+
+describe("flemma.highlight.resolve_first_complete", function()
+  local highlight
+
+  before_each(function()
+    package.loaded["flemma.highlight"] = nil
+    highlight = require("flemma.highlight")
+
+    vim.api.nvim_set_hl(0, "TestComplete", { fg = "#ffffff", bg = "#000000" })
+    vim.api.nvim_set_hl(0, "TestOnlyFg", { fg = "#ffffff" })
+    vim.api.nvim_set_hl(0, "TestOnlyBg", { bg = "#000000" })
+    -- NB: leave "TestMissing" unset
+  end)
+
+  it("returns the first group with both fg and bg", function()
+    assert.equals("TestComplete", highlight.resolve_first_complete({ "TestOnlyFg", "TestComplete" }))
+  end)
+
+  it("accepts a comma-separated string", function()
+    assert.equals("TestComplete", highlight.resolve_first_complete("TestOnlyFg,TestComplete"))
+  end)
+
+  it("returns nil when no candidate resolves", function()
+    assert.is_nil(highlight.resolve_first_complete({ "TestOnlyFg", "TestOnlyBg", "TestMissing" }))
+  end)
+
+  it("returns nil on empty input", function()
+    assert.is_nil(highlight.resolve_first_complete(""))
+    assert.is_nil(highlight.resolve_first_complete({}))
+  end)
+end)
