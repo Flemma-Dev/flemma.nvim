@@ -20,6 +20,13 @@ These are counter-default behaviors — violating them breaks the build or intro
 - Make incremental changes that isolate behaviour shifts so refactors remain reviewable.
 - **EmmyLua type annotations are mandatory.** Every production file must have full LuaLS type coverage — `---@class`, `---@param`, `---@return`, `---@field`, `---@type` on all public and private functions, fields, and return values. New code without type annotations will not pass `make qa`. This is not optional; the type system is a core part of the project's quality infrastructure.
 
+## How We Work
+
+- **Verify claims before asserting them.** Commit messages, comments, and docs that make claims you haven't tested rot fast and mislead the next agent. If you write "X is only reachable via Y," back it with a test.
+- **Before mirroring a pattern, understand why it lives where it does.** Patterns are shaped by surrounding context — which capability branch owns them, which module, which provider. A mirror that ignores context becomes a leak into shared code.
+- **"Just make it work" beats "validate and warn".** When a user configures something we can't honor on the current model, prefer silent graceful fallback over warnings. Warnings that fire on every request are noise; reserve them for config with no useful interpretation.
+- **Start with the smallest change that solves the problem.** If three lines in one file would do, don't reach for shared infrastructure. Complexity creep is the tax on going in search of trouble.
+
 ## Project Structure & Module Organization
 
 Explore `lua/flemma/` to understand the codebase — module files are named descriptively and each has a `---@class` annotation explaining its role. Key structural landmarks:
@@ -93,7 +100,8 @@ All tool IDs and metadata are embedded in buffer text so `.chat` files are porta
 
 ## Build, Test, and Development Commands
 
-- **`make qa`** — run all quality gates (luacheck, types, imports, test). Silent on success; on failure, re-runs only the failed gate(s) with visible output. This is the single command to run before committing.
+- **`make qa`** — run all quality gates (luacheck, type-check, imports, test). Silent on success; on failure, re-runs only the failed gate(s) with visible output. This is the single command to run before committing.
+- **`make types`** — regenerate `lua/flemma/config/types.lua` after any schema change. `make qa` type-checks but does not regenerate.
 - **`make changeset`** — interactive changeset creation (for human use; agents write changeset files directly).
 - **`make develop`** — launch Flemma from the working directory for manual testing.
 - `flemma-fmt` reformats the entire codebase.
