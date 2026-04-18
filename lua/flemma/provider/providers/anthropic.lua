@@ -339,9 +339,10 @@ function M.build_request(self, prompt, _context)
     local is_adaptive = model_info and model_info.supports_adaptive_thinking
 
     if is_adaptive then
-      -- 4.6+ adaptive thinking: effort from resolve_thinking's mapped_effort
+      -- 4.6+ adaptive thinking: effort from resolve_thinking's mapped_effort.
+      -- Explicit display="summarized" so Opus 4.7 returns thinking text (its default is "omitted").
       local effort = thinking.mapped_effort or "high"
-      request_body.thinking = { type = "adaptive" }
+      request_body.thinking = { type = "adaptive", display = "summarized" }
       request_body.output_config = { effort = effort }
       log.debug("anthropic.build_request: Adaptive thinking enabled with effort: " .. effort)
     elseif thinking.budget and thinking.mapped_effort then

@@ -534,7 +534,7 @@ describe("Anthropic Provider", function()
       }
       local req = p:build_request(prompt)
 
-      assert.are.same({ type = "adaptive" }, req.thinking)
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
       assert.are.same({ effort = "high" }, req.output_config)
       assert.is_nil(req.temperature)
     end)
@@ -558,7 +558,7 @@ describe("Anthropic Provider", function()
       }
       local req = p:build_request(prompt)
 
-      assert.are.same({ type = "adaptive" }, req.thinking)
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
       assert.are.same({ effort = "low" }, req.output_config)
     end)
 
@@ -569,7 +569,7 @@ describe("Anthropic Provider", function()
       }
       local req = p:build_request(prompt)
 
-      assert.are.same({ type = "adaptive" }, req.thinking)
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
       assert.are.same({ effort = "max" }, req.output_config)
     end)
 
@@ -580,7 +580,7 @@ describe("Anthropic Provider", function()
       }
       local req = p:build_request(prompt)
 
-      assert.are.same({ type = "adaptive" }, req.thinking)
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
       assert.are.same({ effort = "low" }, req.output_config)
     end)
 
@@ -591,7 +591,7 @@ describe("Anthropic Provider", function()
       }
       local req = p:build_request(prompt)
 
-      assert.are.same({ type = "adaptive" }, req.thinking)
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
       assert.are.same({ effort = "high" }, req.output_config)
       assert.is_nil(req.temperature)
     end)
@@ -603,7 +603,7 @@ describe("Anthropic Provider", function()
       }
       local req = p:build_request(prompt)
 
-      assert.are.same({ type = "adaptive" }, req.thinking)
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
       assert.are.same({ effort = "high" }, req.output_config)
     end)
 
@@ -616,6 +616,31 @@ describe("Anthropic Provider", function()
 
       assert.are.equal("enabled", req.thinking.type)
       assert.are.equal(3999, req.thinking.budget_tokens)
+    end)
+
+    it("should use adaptive thinking for opus-4-7 with display='summarized'", function()
+      local p = anthropic.new({ model = "claude-opus-4-7", max_tokens = 16000, thinking = "high" })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      -- Opus 4.7: adaptive-only (manual budget_tokens rejected), display must be explicit
+      -- so the API returns thinking text (4.7's default is "omitted")
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
+      assert.are.same({ effort = "high" }, req.output_config)
+      assert.is_nil(req.thinking.budget_tokens)
+    end)
+
+    it("should map thinking='max' to effort='max' on opus-4-7", function()
+      local p = anthropic.new({ model = "claude-opus-4-7", max_tokens = 16000, thinking = "max" })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
+      assert.are.same({ effort = "max" }, req.output_config)
     end)
   end)
 end)
