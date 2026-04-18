@@ -642,5 +642,50 @@ describe("Anthropic Provider", function()
       assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
       assert.are.same({ effort = "max" }, req.output_config)
     end)
+
+    it("should route provider-specific effort='xhigh' to output_config on opus-4-7", function()
+      local p = anthropic.new({ model = "claude-opus-4-7", max_tokens = 16000, effort = "xhigh" })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
+      assert.are.same({ effort = "xhigh" }, req.output_config)
+    end)
+
+    it("should let effort override thinking on opus-4-7", function()
+      local p = anthropic.new({
+        model = "claude-opus-4-7",
+        max_tokens = 16000,
+        thinking = "low",
+        effort = "xhigh",
+      })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      assert.are.same({ effort = "xhigh" }, req.output_config)
+    end)
+
+    it("should silently ignore effort on non-adaptive models and honor thinking", function()
+      -- On Sonnet 4.5 (budget-only), `effort` has no adaptive path to land in.
+      -- Fall through to budget-based thinking using the `thinking` param.
+      local p = anthropic.new({
+        model = "claude-sonnet-4-5",
+        max_tokens = 4000,
+        thinking = "high",
+        effort = "xhigh",
+      })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      assert.are.equal("enabled", req.thinking.type)
+      assert.is_not_nil(req.thinking.budget_tokens)
+      assert.is_nil(req.output_config)
+    end)
   end)
 end)

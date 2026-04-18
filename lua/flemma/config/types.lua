@@ -195,6 +195,7 @@
 ---@field tool_execute string
 
 ---@class flemma.config.ParametersAnthropic
+---@field effort? "low"|"medium"|"high"|"xhigh"|"max"
 ---@field thinking_budget? integer
 
 ---@class flemma.config.ParametersMoonshot

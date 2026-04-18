@@ -29,6 +29,7 @@ M.metadata = {
   },
   config_schema = s.object({
     thinking_budget = s.optional(s.integer()),
+    effort = s.optional(s.enum({ "low", "medium", "high", "xhigh", "max" })),
   }),
 }
 
@@ -334,6 +335,15 @@ function M.build_request(self, prompt, _context)
   -- Add thinking configuration using unified resolution
   local model_info = provider_registry.get_model_info("anthropic", self.parameters.model)
   local thinking = normalize.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
+
+  -- Provider-specific `effort` override: on adaptive models, `parameters.anthropic.effort`
+  -- maps straight to `output_config.effort`, bypassing Flemma's 5-level canonical enum so
+  -- users can reach API-only values like Opus 4.7's `xhigh`. Silently ignored on non-adaptive
+  -- models — `thinking`/`thinking_budget` continue to drive those.
+  local raw_effort = self.parameters.effort
+  if raw_effort and raw_effort ~= "" and model_info and model_info.supports_adaptive_thinking then
+    thinking = { enabled = true, mapped_effort = raw_effort }
+  end
 
   if thinking.enabled then
     local is_adaptive = model_info and model_info.supports_adaptive_thinking
