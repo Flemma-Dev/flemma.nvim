@@ -50,5 +50,3 @@ fi
 
 echo "lint-no-vim-notify: OK (no direct vim.notify calls found)"
 exit 0
-</content>
-</invoke>
