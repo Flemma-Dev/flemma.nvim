@@ -61,6 +61,8 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field streaming_start_line? integer 1-indexed start line of the streaming turn (set by turns module during active requests)
 ---@field usage_bar? flemma.ui.bar.Bar Active usage bar handle, if any
 ---@field usage_timer? integer Timer ID for auto-dismissing the usage bar
+---@field progress_bar? flemma.ui.bar.Bar Active progress bar handle, if any
+---@field progress_tick? integer Monotonic 100ms tick counter across progress phases
 
 ---@type table<integer, flemma.state.BufferState>
 local buffer_states = {}
