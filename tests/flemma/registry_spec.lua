@@ -1,7 +1,7 @@
 local registry_utils = require("flemma.utilities.registry")
 local registry = require("flemma.tools.registry")
 
-describe("flemma.registry", function()
+describe("flemma.utilities.registry", function()
   describe("validate_name()", function()
     it("accepts plain names without error", function()
       assert.has_no.errors(function()

@@ -34,10 +34,10 @@ Explore `lua/flemma/` to understand the codebase — module files are named desc
 - `init.lua` — setup entry point; `config/` — layered config system (see below)
 - `config/init.lua` — public facade (`get`, `materialize`, `apply`, `writer`, `inspect`); `config/store.lua` — layer store (DEFAULTS→SETUP→RUNTIME→FRONTMATTER); `config/proxy.lua` — read/write proxy metatables; `config/schema.lua` — config schema definition (defaults, DISCOVER, aliases); `config/types.lua` — EmmyLua type definitions
 - `schema/` — general-purpose schema DSL engine: `schema/init.lua` — factory functions (`s.string()`, `s.object()`, etc.); `schema/types.lua` — node type classes; `schema/navigation.lua` — schema tree traversal
-- `parser.lua` / `ast.lua` — AST-based buffer parsing (heart of the stateless design)
+- `parser/` / `ast.lua` — AST-based buffer parsing (heart of the stateless design)
 - `provider/base.lua` — provider contract (metatable inheritance); `provider/normalize.lua` — parameter normalization (flatten, max_tokens, thinking, preset resolution); `provider/adapters/{anthropic,openai,vertex}.lua` — implementations (request-scoped, no global instance)
 - `tools/` — tool registry (`get_all()` filters by `enabled`), executor, injector, approval, and built-in definitions in `tools/definitions/`
-- `utilities/` — stateless shared infrastructure: `json.lua`, `roles.lua`, `modeline.lua`, `truncate.lua`, `display.lua`, `folding.lua`, `buffer.lua`, `bash/`
+- `utilities/` — stateless shared infrastructure: `json.lua`, `roles.lua`, `modeline.lua`, `truncate.lua`, `display.lua`, `registry.lua`, `buffer.lua`, `bash/`
 - `core.lua` — main orchestration (provider construction inline per-request); `state.lua` — ephemeral per-buffer state (no config or provider — those live in the config facade)
 - Production file names prefer single words; multi-word descriptive names use snake_case (`secret_tool.lua`, `coding_assistant.lua`), while established domain concepts are concatenated (`writequeue.lua`, `textobject.lua`). Test files use `_spec.lua` suffix.
 - Tests live in `tests/flemma/*_spec.lua` with fixtures in `tests/fixtures/`.
