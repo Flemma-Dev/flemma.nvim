@@ -23,7 +23,6 @@ local diagnostic_format = require("flemma.utilities.diagnostic")
 local diagnostics_module = require("flemma.diagnostics")
 local executor = require("flemma.tools.executor")
 local injector = require("flemma.tools.injector")
-local notifications = require("flemma.notifications")
 local parser = require("flemma.parser")
 local pipeline = require("flemma.pipeline")
 local processor = require("flemma.processor")
@@ -1004,12 +1003,9 @@ function M.send_to_provider(opts)
             cache_write_price = pricing_info.cache_write,
           })
 
-          -- Use the just-created Request for the notification
+          -- Use the just-created Request for the usage bar
           local latest_request = session:get_latest_request()
-          local segments = usage.build_segments(latest_request, session)
-          if #segments > 0 then
-            notifications.show(segments, bufnr)
-          end
+          usage.show(bufnr, latest_request)
         end
 
         -- Diagnostics: compare request with previous
