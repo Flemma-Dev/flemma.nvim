@@ -11,6 +11,7 @@
 local M = {}
 
 local log = require("flemma.logging")
+local notify = require("flemma.notify")
 
 ---@alias flemma.hooks.Name
 ---| "request:sending"
@@ -82,7 +83,7 @@ end
 ---
 ---The name is transformed from "domain:action" format to a
 ---"Flemma<Domain><Action>" autocmd pattern. Errors in consumer
----handlers are caught and surfaced via log + vim.notify.
+---handlers are caught and surfaced via log + flemma.notify.
 ---@overload fun(name: "request:sending", data: flemma.hooks.RequestSendingData)
 ---@overload fun(name: "request:finished", data: flemma.hooks.RequestFinishedData)
 ---@overload fun(name: "tool:executing", data: flemma.hooks.ToolExecutingData)
@@ -102,7 +103,7 @@ function M.dispatch(name, data)
   if not ok then
     local message = string.format("hook '%s' handler error: %s", name, tostring(err))
     log.warn(message)
-    vim.notify("Flemma: " .. message, vim.log.levels.WARN)
+    notify.warn(message)
   end
 end
 

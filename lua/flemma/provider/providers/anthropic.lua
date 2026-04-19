@@ -3,6 +3,7 @@
 local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local notify = require("flemma.notify")
 local normalize = require("flemma.provider.normalize")
 local s = require("flemma.schema")
 local sink = require("flemma.sink")
@@ -721,7 +722,7 @@ function M.try_import_from_buffer(lines)
   -- Extract and prepare content
   local content = import_extract_content(lines)
   if #content == 0 then
-    vim.notify("Flemma: No Anthropic API call found in buffer.", vim.log.levels.ERROR)
+    notify.error("No Anthropic API call found in buffer.")
     return nil
   end
 
@@ -744,10 +745,7 @@ function M.try_import_from_buffer(lines)
       debug_file:close()
     end
 
-    vim.notify(
-      "Flemma: Failed to parse API call data. Debug info written to " .. tmp_dir .. sep .. "flemma_import_debug.log",
-      vim.log.levels.ERROR
-    )
+    notify.error("Failed to parse API call data. Debug info written to " .. tmp_dir .. sep .. "flemma_import_debug.log")
     return nil
   end
 

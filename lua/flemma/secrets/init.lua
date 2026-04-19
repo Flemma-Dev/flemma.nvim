@@ -6,6 +6,7 @@ local M = {}
 local registry = require("flemma.secrets.registry")
 local cache = require("flemma.secrets.cache")
 local log = require("flemma.logging")
+local notify = require("flemma.notify")
 local context = require("flemma.secrets.context")
 
 ---@class flemma.secrets.Credential
@@ -88,13 +89,13 @@ function M.register(source, resolver)
   else
     local ok, mod = pcall(require, source)
     if not ok then
-      vim.notify("Flemma: failed to load secrets resolver: " .. source, vim.log.levels.ERROR)
+      notify.error("failed to load secrets resolver: " .. source)
       log.error("secrets.register(): " .. tostring(mod))
       return
     end
     ---@cast mod flemma.secrets.Resolver
     if not mod.name then
-      vim.notify("Flemma: secrets resolver module missing 'name' field: " .. source, vim.log.levels.ERROR)
+      notify.error("secrets resolver module missing 'name' field: " .. source)
       return
     end
     registry.register(mod.name, mod)

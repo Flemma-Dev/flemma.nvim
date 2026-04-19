@@ -2,6 +2,7 @@
 
 SHELL := $(shell which bash)
 VIMRUNTIME_PATH = $(shell dirname $(shell dirname $(shell readlink -f $(shell which nvim))))/share/nvim/runtime
+override PROJECT_ROOT := $(CURDIR)
 
 default:
 	@echo "Usage: make [$(shell cat ${MAKEFILE_LIST} | grep -E '^[a-zA-Z_-]+:' | sed 's/:.*//g' | grep -v '^default' | tr '\n' '|' | sed 's/|$$//')]"
@@ -24,7 +25,9 @@ qa:
 		>"$$d/types" 2>&1 & gate[$$!]=types; \
 	bash contrib/scripts/lint-inline-requires.sh \
 		>"$$d/imports" 2>&1 & gate[$$!]=imports; \
-	nvim --headless --noplugin -u tests/minimal.vim \
+	bash contrib/scripts/lint-no-vim-notify.sh \
+		>"$$d/notify" 2>&1 & gate[$$!]=notify; \
+	PROJECT_ROOT=$(PROJECT_ROOT) nvim --headless --noplugin -u tests/minimal.vim \
 		-c "PlenaryBustedDirectory tests/flemma/ {minimal_init = 'tests/minimal_init.lua'}" \
 		>"$$d/test" 2>&1 & gate[$$!]=test; \
 	while (( $${#gate[@]} )); do \

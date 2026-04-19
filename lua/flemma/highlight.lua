@@ -6,6 +6,7 @@ local M = {}
 local color = require("flemma.utilities.color")
 local config_facade = require("flemma.config")
 local log = require("flemma.logging")
+local notify = require("flemma.notify")
 local str = require("flemma.utilities.string")
 local preprocessor_syntax = require("flemma.preprocessor.syntax")
 local roles = require("flemma.utilities.roles")
@@ -332,7 +333,7 @@ local function validate_role_style(role_style)
         if suggestion then
           msg = msg .. string.format(". Did you mean '%s'?", suggestion)
         end
-        vim.notify_once(msg, vim.log.levels.WARN)
+        notify.warn(msg, { once = true })
       end
     end
   end

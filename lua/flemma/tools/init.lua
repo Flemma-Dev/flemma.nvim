@@ -7,6 +7,7 @@ local config_facade = require("flemma.config")
 local hooks = require("flemma.hooks")
 local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
+local notify = require("flemma.notify")
 local registry = require("flemma.tools.registry")
 
 local BUILTIN_TOOLS = {
@@ -75,9 +76,7 @@ function M.register_async(resolve_fn, opts)
     completed = true
 
     if err then
-      vim.schedule(function()
-        vim.notify("Flemma: Async tool source failed: " .. err, vim.log.levels.WARN)
-      end)
+      notify.warn("Async tool source failed: " .. err)
     end
 
     pending_sources = pending_sources - 1

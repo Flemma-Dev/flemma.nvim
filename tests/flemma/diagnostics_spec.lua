@@ -1,3 +1,11 @@
+local notify = require("flemma.notify")
+
+local function flush_schedule()
+  vim.wait(10, function()
+    return false
+  end)
+end
+
 describe("flemma.diagnostics", function()
   local diagnostics
 
@@ -321,14 +329,17 @@ describe("flemma.diagnostics", function()
       diagnostics = require("flemma.diagnostics")
       local bufnr = vim.api.nvim_create_buf(false, true)
 
-      -- Intercept vim.notify to detect warnings
+      -- Drain any pending notifications from prior tests before installing the spy.
+      flush_schedule()
+
+      -- Intercept flemma.notify to detect warnings
       local notified = false
-      local original_notify = vim.notify
-      vim.notify = function(msg, level)
-        if level == vim.log.levels.WARN and msg:match("Cache break") then
+      notify._set_impl(function(notification)
+        if notification.level == vim.log.levels.WARN and notification.message:match("Cache break") then
           notified = true
         end
-      end
+        return notification
+      end)
 
       local turn1 = '{"model":"gpt-4","messages":[{"role":"user","content":"hi"}]}'
       local turn2 =
@@ -337,7 +348,8 @@ describe("flemma.diagnostics", function()
       diagnostics.record_and_compare(bufnr, turn1)
       diagnostics.record_and_compare(bufnr, turn2)
 
-      vim.notify = original_notify
+      flush_schedule()
+      notify._reset_impl()
       assert.is_false(notified, "Should not warn when messages are only appended")
 
       vim.api.nvim_buf_delete(bufnr, { force = true })
@@ -351,13 +363,16 @@ describe("flemma.diagnostics", function()
       diagnostics = require("flemma.diagnostics")
       local bufnr = vim.api.nvim_create_buf(false, true)
 
+      -- Drain any pending notifications from prior tests before installing the spy.
+      flush_schedule()
+
       local notified = false
-      local original_notify = vim.notify
-      vim.notify = function(msg, level)
-        if level == vim.log.levels.WARN and msg:match("Cache break") then
+      notify._set_impl(function(notification)
+        if notification.level == vim.log.levels.WARN and notification.message:match("Cache break") then
           notified = true
         end
-      end
+        return notification
+      end)
 
       -- tools come before messages — appending tools breaks the prefix for messages
       local turn1 = '{"tools":[{"name":"bash"}],"messages":[{"role":"user","content":"hi"}]}'
@@ -366,7 +381,8 @@ describe("flemma.diagnostics", function()
       diagnostics.record_and_compare(bufnr, turn1)
       diagnostics.record_and_compare(bufnr, turn2)
 
-      vim.notify = original_notify
+      flush_schedule()
+      notify._reset_impl()
       assert.is_true(notified, "Should warn when tools are appended (prefix broken for messages)")
 
       vim.api.nvim_buf_delete(bufnr, { force = true })

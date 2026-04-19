@@ -7,6 +7,7 @@ local M = {}
 
 local log = require("flemma.logging")
 local modeline = require("flemma.utilities.modeline")
+local notify = require("flemma.notify")
 local registry = require("flemma.provider.registry")
 local tools_registry = require("flemma.tools.registry")
 
@@ -28,7 +29,7 @@ local normalized_presets = {}
 ---@param message string
 local function warn(message)
   log.warn("presets: " .. message)
-  vim.notify("Flemma: " .. message, vim.log.levels.WARN)
+  notify.warn(message)
 end
 
 ---Validate and normalize a single preset definition.
@@ -178,7 +179,7 @@ function M.resolve_default(model_field, explicit_provider)
 
   local preset = M.get(model_field)
   if not preset then
-    return nil, "Flemma: Default preset '" .. model_field .. "' not found. Provider not initialized."
+    return nil, "Default preset '" .. model_field .. "' not found. Provider not initialized."
   end
 
   -- Conflict check: only when the user explicitly set a provider
@@ -187,7 +188,7 @@ function M.resolve_default(model_field, explicit_provider)
     local resolved_preset = registry.resolve(preset.provider)
     if resolved_user ~= resolved_preset then
       return nil,
-        "Flemma: Explicit provider '"
+        "Explicit provider '"
           .. explicit_provider
           .. "' conflicts with preset '"
           .. model_field

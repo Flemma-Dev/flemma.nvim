@@ -1,27 +1,26 @@
+local notify = require("flemma.notify")
 local presets = require("flemma.presets")
 
-local function collect_notification(notifications, message, level)
-  notifications[#notifications + 1] = {
-    message = message,
-    level = level,
-  }
+local function flush_schedule()
+  vim.wait(10, function()
+    return false
+  end)
 end
 
 describe("flemma.presets", function()
   local notifications = {}
-  local original_notify
 
   before_each(function()
     notifications = {}
-    original_notify = vim.notify
-    vim.notify = function(message, level)
-      collect_notification(notifications, message, level)
-    end
+    notify._set_impl(function(notification)
+      table.insert(notifications, notification)
+      return notification
+    end)
     presets.clear()
   end)
 
   after_each(function()
-    vim.notify = original_notify
+    notify._reset_impl()
     presets.clear()
   end)
 
@@ -204,6 +203,7 @@ describe("flemma.presets", function()
 
     assert.is_nil(presets.get("$bad"))
 
+    flush_schedule()
     local found = false
     for _, note in ipairs(notifications) do
       if note.message:find("auto_approve must be a string") then
@@ -221,6 +221,7 @@ describe("flemma.presets", function()
 
     assert.is_nil(presets.get("$bad"))
 
+    flush_schedule()
     local found = false
     for _, note in ipairs(notifications) do
       if note.message:find("string definitions must start") then
@@ -293,6 +294,7 @@ describe("flemma.presets", function()
       })
       presets.finalize()
 
+      flush_schedule()
       local found = false
       for _, note in ipairs(notifications) do
         if note.message:find("unknown tool 'nonexistent_tool'") then
@@ -323,6 +325,7 @@ describe("flemma.presets", function()
       })
       presets.finalize()
 
+      flush_schedule()
       local found = false
       for _, note in ipairs(notifications) do
         if note.message:find("unknown tool") then
@@ -403,7 +406,6 @@ end)
 
 describe(":Flemma switch completion ordering", function()
   local notifications = {}
-  local original_notify
   local stub_core
 
   local modules_to_reset = {
@@ -432,10 +434,10 @@ describe(":Flemma switch completion ordering", function()
 
   before_each(function()
     notifications = {}
-    original_notify = vim.notify
-    vim.notify = function(message, level)
-      collect_notification(notifications, message, level)
-    end
+    notify._set_impl(function(notification)
+      table.insert(notifications, notification)
+      return notification
+    end)
     presets.clear()
     reset_commands()
     reset_modules()
@@ -452,7 +454,7 @@ describe(":Flemma switch completion ordering", function()
   end)
 
   after_each(function()
-    vim.notify = original_notify
+    notify._reset_impl()
     presets.clear()
     reset_commands()
     reset_modules()
@@ -487,7 +489,6 @@ end)
 
 describe(":Flemma switch with presets", function()
   local notifications = {}
-  local original_notify
   local stub_core
 
   local modules_to_reset = {
@@ -516,10 +517,10 @@ describe(":Flemma switch with presets", function()
 
   before_each(function()
     notifications = {}
-    original_notify = vim.notify
-    vim.notify = function(message, level)
-      collect_notification(notifications, message, level)
-    end
+    notify._set_impl(function(notification)
+      table.insert(notifications, notification)
+      return notification
+    end)
     presets.clear()
     reset_commands()
     reset_modules()
@@ -544,7 +545,7 @@ describe(":Flemma switch with presets", function()
   end)
 
   after_each(function()
-    vim.notify = original_notify
+    notify._reset_impl()
     presets.clear()
     reset_commands()
     reset_modules()
@@ -653,6 +654,7 @@ describe(":Flemma switch with presets", function()
 
     assert.is_nil(stub_core.last_switch, "switch should not run for unknown preset")
 
+    flush_schedule()
     local found = false
     for _, note in ipairs(notifications) do
       if note.message:find("Unknown preset") then

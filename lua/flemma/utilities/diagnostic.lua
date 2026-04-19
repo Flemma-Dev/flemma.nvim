@@ -1,4 +1,4 @@
---- Shared diagnostic formatting for vim.notify and status view.
+--- Shared diagnostic formatting for flemma.notify and status view.
 ---@class flemma.utilities.Diagnostic
 local M = {}
 

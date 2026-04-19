@@ -99,3 +99,9 @@ end
 
 -- Initialize the plugin with default settings
 require("flemma").setup({})
+
+-- Suppress flemma.notify dispatches by default. Specs that want to inspect
+-- notifications override this by calling _set_impl in their before_each.
+require("flemma.notify")._set_impl(function(notification)
+  return notification
+end)

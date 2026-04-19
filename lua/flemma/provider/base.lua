@@ -79,6 +79,7 @@ Missing boolean capabilities default to `false` at registration time.
 
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local notify = require("flemma.notify")
 local secrets = require("flemma.secrets")
 local sink = require("flemma.sink")
 local tool_names = require("flemma.utilities.tools")
@@ -296,8 +297,8 @@ end
 --- Validate provider-specific parameters.
 --- Override to collect warnings about invalid or unsupported parameter combinations.
 --- Return true with no warnings for clean validation, or true + warnings array for
---- advisories. The caller (core.lua) handles logging and vim.notify — providers
---- never call vim.notify or log.warn from this method.
+--- advisories. The caller (core.lua) handles logging and flemma.notify — providers
+--- never call notify or log.warn from this method.
 ---@param model_name string The model name
 ---@param parameters table<string, any> The parameters to validate
 ---@return boolean success Always true (warnings don't fail validation)
@@ -778,9 +779,7 @@ end
 ---@param callbacks flemma.provider.Callbacks
 function M._warn_truncated(self, callbacks)
   log.warn(self.metadata.name .. ".process_response_line(): Response truncated (max_tokens)")
-  vim.schedule(function()
-    vim.notify("Flemma: Response truncated \u{2013} model reached max output tokens", vim.log.levels.WARN)
-  end)
+  notify.warn("Response truncated \u{2013} model reached max output tokens")
   if callbacks.on_response_complete then
     callbacks.on_response_complete()
   end

@@ -13,6 +13,7 @@
 local M = {}
 
 local nav = require("flemma.schema.navigation")
+local notify = require("flemma.notify")
 local operators = require("flemma.config.operators")
 local proxy = require("flemma.config.proxy")
 local store = require("flemma.config.store")
@@ -297,7 +298,7 @@ function M.register_module_defaults(parent_path, name, config_schema)
   local ctx = { schema = root_schema, layer = M.LAYERS.DEFAULTS, bufnr = nil, deferred = nil }
   local ok, err = apply_recursive(ctx, base_path, defaults)
   if not ok then
-    vim.notify("Flemma: register_module_defaults failed for " .. base_path .. ": " .. err, vim.log.levels.WARN)
+    notify.warn("register_module_defaults failed for " .. base_path .. ": " .. err)
   end
 end
 

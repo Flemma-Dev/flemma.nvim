@@ -4,6 +4,7 @@
 local M = {}
 
 local json = require("flemma.utilities.json")
+local notify = require("flemma.notify")
 local state = require("flemma.state")
 
 local INDENT = "  "
@@ -399,15 +400,12 @@ function M.open_diff(bufnr, normalized)
   local current = buffer_state.diagnostics_current_request
 
   if not current then
-    vim.notify(
-      "Flemma: No request data available. Send at least one request with diagnostics enabled.",
-      vim.log.levels.WARN
-    )
+    notify.warn("No request data available. Send at least one request with diagnostics enabled.")
     return
   end
 
   if not previous then
-    vim.notify("Flemma: Only one request recorded. Send another request to compare.", vim.log.levels.WARN)
+    notify.warn("Only one request recorded. Send another request to compare.")
     return
   end
 
@@ -496,8 +494,8 @@ function M.record_and_compare(bufnr, raw_json)
 
     -- Build notification with all changes (including appends when they're not tail-safe)
     local change_descriptions = #breaking_changes > 0 and breaking_changes or structural_changes
-    vim.notify(
-      "Flemma [diagnostics]: Cache break detected"
+    notify.warn(
+      "[diagnostics]: Cache break detected"
         .. "\nPrefix diverged at byte "
         .. divergence.byte_offset
         .. " (in "
@@ -505,21 +503,19 @@ function M.record_and_compare(bufnr, raw_json)
         .. ")"
         .. "\nChanges:\n  • "
         .. table.concat(change_descriptions, "\n  • ")
-        .. "\n\nRun :Flemma diagnostics:diff for full diff",
-      vim.log.levels.WARN
+        .. "\n\nRun :Flemma diagnostics:diff for full diff"
     )
   else
     -- No structural changes at all but bytes diverged — serialization non-determinism
-    vim.notify(
-      "Flemma [diagnostics]: Cache break detected"
+    notify.warn(
+      "[diagnostics]: Cache break detected"
         .. "\nPrefix diverged at byte "
         .. divergence.byte_offset
         .. " (in "
         .. path
         .. ")"
         .. "\nLikely cause: JSON serialization non-determinism (key ordering)"
-        .. "\n\nRun :Flemma diagnostics:diff for full diff",
-      vim.log.levels.WARN
+        .. "\n\nRun :Flemma diagnostics:diff for full diff"
     )
   end
 end

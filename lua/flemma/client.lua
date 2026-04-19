@@ -2,6 +2,7 @@
 --- Handles all HTTP requests and transport mechanisms
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local notify = require("flemma.notify")
 local sink = require("flemma.sink")
 local version = require("flemma.version")
 
@@ -351,7 +352,7 @@ function M.cancel_request(job_id)
 
   if not ok then
     log.warn("Failed to get job PID for cancellation (job may have already completed): " .. tostring(job_id))
-    vim.notify("Flemma: Request already completed or terminated", vim.log.levels.WARN)
+    notify.warn("Request already completed or terminated")
     return false
   end
 

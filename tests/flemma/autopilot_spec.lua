@@ -1029,9 +1029,10 @@ end)
 
 describe("Autopilot race condition: sync + async tool dispatch", function()
   local client = require("flemma.client")
+  local notify = require("flemma.notify")
   local flemma_mod
   local tools_registry
-  local orig_notify
+  local captured_notifications = {}
 
   before_each(function()
     package.loaded["flemma"] = nil
@@ -1061,11 +1062,15 @@ describe("Autopilot race condition: sync + async tool dispatch", function()
       },
     })
 
-    orig_notify = vim.notify
+    captured_notifications = {}
+    notify._set_impl(function(notification)
+      table.insert(captured_notifications, notification)
+      return notification
+    end)
   end)
 
   after_each(function()
-    vim.notify = orig_notify
+    notify._reset_impl()
     client.clear_fixtures()
     vim.cmd("silent! %bdelete!")
   end)
@@ -1109,14 +1114,6 @@ describe("Autopilot race condition: sync + async tool dispatch", function()
       "tests/fixtures/tool_calling/anthropic_multi_tool_race_streaming.txt"
     )
 
-    local race_errors = {}
-    vim.notify = function(msg, level, ...)
-      if type(msg) == "string" and msg:match("already executing") then
-        table.insert(race_errors, msg)
-      end
-      return orig_notify(msg, level, ...)
-    end
-
     vim.cmd("Flemma send")
 
     -- Wait until the async tool has been dispatched (callback captured).
@@ -1132,6 +1129,12 @@ describe("Autopilot race condition: sync + async tool dispatch", function()
       return false
     end)
 
+    local race_errors = {}
+    for _, n in ipairs(captured_notifications) do
+      if n.message:match("already executing") then
+        table.insert(race_errors, n.message)
+      end
+    end
     assert.equals(0, #race_errors, "Race condition: " .. (race_errors[1] or "none"))
 
     -- Resolve the async tool so executor cleanup runs cleanly.
@@ -1183,14 +1186,6 @@ describe("Autopilot race condition: sync + async tool dispatch", function()
       "tests/fixtures/tool_calling/anthropic_multi_tool_race_streaming.txt"
     )
 
-    local send_errors = {}
-    vim.notify = function(msg, level, ...)
-      if type(msg) == "string" and msg:match("Cannot send while tool execution is in progress") then
-        table.insert(send_errors, msg)
-      end
-      return orig_notify(msg, level, ...)
-    end
-
     vim.cmd("Flemma send")
 
     -- Wait until the async tool has been dispatched (callback captured).
@@ -1205,6 +1200,12 @@ describe("Autopilot race condition: sync + async tool dispatch", function()
       return false
     end)
 
+    local send_errors = {}
+    for _, n in ipairs(captured_notifications) do
+      if n.message:match("Cannot send while tool execution is in progress") then
+        table.insert(send_errors, n.message)
+      end
+    end
     assert.equals(0, #send_errors, "Race condition: " .. (send_errors[1] or "none"))
 
     -- Resolve the async tool so executor cleanup runs cleanly.
@@ -1227,9 +1228,9 @@ end)
 
 describe("Autopilot max_concurrent throttle with mixed approval", function()
   local client = require("flemma.client")
+  local notify = require("flemma.notify")
   local flemma_mod
   local tools_registry
-  local orig_notify
 
   before_each(function()
     package.loaded["flemma"] = nil
@@ -1249,11 +1250,13 @@ describe("Autopilot max_concurrent throttle with mixed approval", function()
     autopilot = require("flemma.autopilot")
     tools_registry = require("flemma.tools.registry")
 
-    orig_notify = vim.notify
+    notify._set_impl(function(notification)
+      return notification
+    end)
   end)
 
   after_each(function()
-    vim.notify = orig_notify
+    notify._reset_impl()
     client.clear_fixtures()
     vim.cmd("silent! %bdelete!")
   end)

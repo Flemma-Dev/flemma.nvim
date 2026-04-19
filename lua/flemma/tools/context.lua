@@ -4,6 +4,7 @@
 local M = {}
 
 local parser = require("flemma.parser")
+local notify = require("flemma.notify")
 local roles = require("flemma.utilities.roles")
 local ast = require("flemma.ast")
 
@@ -188,12 +189,10 @@ function M.resolve_all_tool_blocks(bufnr)
   end
 
   if conflict_count > 0 then
-    vim.notify(
-      "Flemma: "
-        .. conflict_count
+    notify.warn(
+      conflict_count
         .. " tool result(s) have edited content inside an approved flemma:tool block – "
-        .. "skipping execution to protect your edits. Remove the flemma:tool fence to send your content.",
-      vim.log.levels.WARN
+        .. "skipping execution to protect your edits. Remove the flemma:tool fence to send your content."
     )
   end
 
