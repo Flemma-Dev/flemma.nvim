@@ -360,12 +360,19 @@ function Bar:_render()
   local text_area_width = (icon_in_gutter and (W - G)) or W
 
   -- Render segments with layout engine; Bar always skips the built-in prefix.
+  -- layout.render right-pads its output to `available_width` so full-width
+  -- positions (top / bottom) get a bar that spans the whole line. Corner
+  -- positions (top|bottom {left|right}) must be sized to the natural content
+  -- instead — trim the trailing pad before measuring so the float hugs the
+  -- text rather than stretching across the window. Highlight byte offsets sit
+  -- inside the content, so trimming does not invalidate them.
   local rendered = layout.render(self.segments, text_area_width, nil, { skip_prefix = true })
-  local T = str.strwidth(rendered.text)
+  local natural_text = (rendered.text:gsub("%s+$", ""))
+  local T = str.strwidth(natural_text)
 
   local geom = compute_geometry(self.position, W, H, G, T, icon_width, icon_in_gutter)
 
-  local text = rendered.text
+  local text = natural_text
   if geom.pad_text then
     text = string.rep(" ", G) .. text
   end

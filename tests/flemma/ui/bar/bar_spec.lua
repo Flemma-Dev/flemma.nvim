@@ -181,6 +181,39 @@ describe("flemma.ui.bar", function()
       bar:dismiss()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
+
+    -- Regression guard. layout.render right-pads to available_width; without
+    -- trimming, Bar measured the padded width and every corner-position bar
+    -- stretched to cover the whole window. Corner positions must hug the
+    -- natural content width.
+    it("sizes 'bottom left' float to content, not full window", function()
+      local bufnr = make_visible_buf()
+      local winid = vim.fn.bufwinid(bufnr)
+      local W = vim.api.nvim_win_get_width(winid)
+      local bar = Bar.new({ bufnr = bufnr, position = "bottom left", segments = segments_with("hi") })
+      local cfg = vim.api.nvim_win_get_config(bar._float_winid)
+      assert.is_true(
+        cfg.width < W,
+        "bottom-left float width (" .. cfg.width .. ") should be less than window width (" .. W .. ")"
+      )
+      assert.is_true(
+        cfg.width < 20,
+        "bottom-left float width (" .. cfg.width .. ") should hug the 2-char content 'hi', not the pad"
+      )
+      bar:dismiss()
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("sizes 'top' (full-width) float to the whole window", function()
+      local bufnr = make_visible_buf()
+      local winid = vim.fn.bufwinid(bufnr)
+      local W = vim.api.nvim_win_get_width(winid)
+      local bar = Bar.new({ bufnr = bufnr, position = "top", segments = segments_with("hi") })
+      local cfg = vim.api.nvim_win_get_config(bar._float_winid)
+      assert.equals(W, cfg.width, "top (full-width) bar should span the whole window")
+      bar:dismiss()
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
   end)
 
   describe("on_shown firing rule", function()
