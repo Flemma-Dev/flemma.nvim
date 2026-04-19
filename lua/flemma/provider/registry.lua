@@ -50,10 +50,10 @@ local model_store = {}
 
 -- Built-in provider module paths (each module exports M.metadata)
 local BUILTIN_PROVIDER_MODULES = {
-  "flemma.provider.providers.openai",
-  "flemma.provider.providers.anthropic",
-  "flemma.provider.providers.vertex",
-  "flemma.provider.providers.moonshot",
+  "flemma.provider.adapters.openai",
+  "flemma.provider.adapters.anthropic",
+  "flemma.provider.adapters.vertex",
+  "flemma.provider.adapters.moonshot",
 }
 
 --------------------------------------------------------------------------------

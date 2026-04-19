@@ -436,7 +436,7 @@ describe("File References and Path Parsing", function()
     describe("Anthropic Provider", function()
       it("formats PNG images correctly", function()
         -- Setup Anthropic provider
-        local anthropic = require("flemma.provider.providers.anthropic")
+        local anthropic = require("flemma.provider.adapters.anthropic")
         local provider = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 1000 })
 
         -- Mock file operations
@@ -509,7 +509,7 @@ describe("File References and Path Parsing", function()
         -- Regression test: binary data with embedded NUL bytes caused
         -- Vim:E976 (Using a Blob as a String) because vim.fn.sha256
         -- received a Blob when check_file_drift hashed the raw content.
-        local anthropic = require("flemma.provider.providers.anthropic")
+        local anthropic = require("flemma.provider.adapters.anthropic")
         local provider = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 1000 })
 
         local filereadable_stub = create_stub(vim.fn, "filereadable")
@@ -568,7 +568,7 @@ describe("File References and Path Parsing", function()
 
       it("formats PDF documents correctly", function()
         -- Setup Anthropic provider
-        local anthropic = require("flemma.provider.providers.anthropic")
+        local anthropic = require("flemma.provider.adapters.anthropic")
         local provider = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 1000 })
 
         -- Mock file operations
@@ -628,7 +628,7 @@ describe("File References and Path Parsing", function()
 
       it("formats text files correctly", function()
         -- Setup Anthropic provider
-        local anthropic = require("flemma.provider.providers.anthropic")
+        local anthropic = require("flemma.provider.adapters.anthropic")
         local provider = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 1000 })
 
         -- Mock file operations
@@ -687,7 +687,7 @@ describe("File References and Path Parsing", function()
     describe("OpenAI Provider", function()
       it("formats PNG images correctly", function()
         -- Setup OpenAI provider
-        local openai = require("flemma.provider.providers.openai")
+        local openai = require("flemma.provider.adapters.openai")
         local provider = openai.new({ model = "gpt-4o", max_tokens = 1000 })
 
         -- Mock file operations
@@ -760,7 +760,7 @@ describe("File References and Path Parsing", function()
 
       it("formats PDF documents correctly", function()
         -- Setup OpenAI provider
-        local openai = require("flemma.provider.providers.openai")
+        local openai = require("flemma.provider.adapters.openai")
         local provider = openai.new({ model = "gpt-4o", max_tokens = 1000 })
 
         -- Mock file operations
@@ -823,7 +823,7 @@ describe("File References and Path Parsing", function()
 
       it("formats text files correctly", function()
         -- Setup OpenAI provider
-        local openai = require("flemma.provider.providers.openai")
+        local openai = require("flemma.provider.adapters.openai")
         local provider = openai.new({ model = "gpt-4o", max_tokens = 1000 })
 
         -- Mock file operations
@@ -889,7 +889,7 @@ describe("File References and Path Parsing", function()
     describe("Vertex AI Provider", function()
       it("formats PNG images correctly", function()
         -- Setup Vertex AI provider
-        local vertex = require("flemma.provider.providers.vertex")
+        local vertex = require("flemma.provider.adapters.vertex")
         local provider = vertex.new({ model = "gemini-2.5-pro", max_tokens = 1000, project_id = "test-project" })
 
         -- Mock file operations
@@ -959,7 +959,7 @@ describe("File References and Path Parsing", function()
 
       it("formats PDF documents correctly", function()
         -- Setup Vertex AI provider
-        local vertex = require("flemma.provider.providers.vertex")
+        local vertex = require("flemma.provider.adapters.vertex")
         local provider = vertex.new({ model = "gemini-2.5-pro", max_tokens = 1000, project_id = "test-project" })
 
         -- Mock file operations
@@ -1018,7 +1018,7 @@ describe("File References and Path Parsing", function()
 
       it("formats text files correctly", function()
         -- Setup Vertex AI provider
-        local vertex = require("flemma.provider.providers.vertex")
+        local vertex = require("flemma.provider.adapters.vertex")
         local provider = vertex.new({ model = "gemini-2.5-pro", max_tokens = 1000, project_id = "test-project" })
 
         -- Mock file operations

@@ -45,7 +45,7 @@ files["lua/flemma/provider/base.lua"] = {
 }
 
 -- Provider implementations have intentional empty branches for skipping `thinking` nodes
-files["lua/flemma/provider/providers/*.lua"] = {
+files["lua/flemma/provider/adapters/*.lua"] = {
   ignore = { "542" }, -- empty if branches (intentional skip patterns)
 }
 

@@ -1,6 +1,6 @@
 --- Test file for OpenAI provider functionality
 describe("OpenAI Provider", function()
-  local openai = require("flemma.provider.providers.openai")
+  local openai = require("flemma.provider.adapters.openai")
   local make_prompt = require("tests.utilities.prompt").make_prompt
 
   after_each(function()

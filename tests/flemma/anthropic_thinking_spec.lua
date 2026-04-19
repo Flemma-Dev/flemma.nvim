@@ -4,7 +4,7 @@ local pipeline = require("flemma.pipeline")
 local ctx = require("flemma.context")
 
 describe("Anthropic Provider Extended Thinking", function()
-  local anthropic = require("flemma.provider.providers.anthropic")
+  local anthropic = require("flemma.provider.adapters.anthropic")
 
   after_each(function()
     vim.cmd("silent! %bdelete!")

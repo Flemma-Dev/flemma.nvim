@@ -1,6 +1,6 @@
 --- Test file for Moonshot AI provider functionality
 describe("Moonshot Provider", function()
-  local moonshot = require("flemma.provider.providers.moonshot")
+  local moonshot = require("flemma.provider.adapters.moonshot")
   local make_prompt = require("tests.utilities.prompt").make_prompt
 
   after_each(function()

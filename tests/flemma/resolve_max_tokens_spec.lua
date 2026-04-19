@@ -62,7 +62,7 @@ describe("flemma.provider.normalize.resolve_max_tokens", function()
     -- Register a custom provider with a model that has pricing but no max_output_tokens
     local registry = require("flemma.provider.registry")
     registry.register("partial", {
-      module = "flemma.provider.providers.openai",
+      module = "flemma.provider.adapters.openai",
       capabilities = {
         supports_reasoning = false,
         supports_thinking_budget = false,

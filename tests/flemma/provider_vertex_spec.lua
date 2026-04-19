@@ -9,10 +9,10 @@ package.loaded["flemma.tools.definitions.bash"] = nil
 package.loaded["flemma.tools.definitions.read"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
 package.loaded["flemma.tools.definitions.write"] = nil
-package.loaded["flemma.provider.providers.vertex"] = nil
+package.loaded["flemma.provider.adapters.vertex"] = nil
 
 describe("Vertex AI Provider", function()
-  local vertex = require("flemma.provider.providers.vertex")
+  local vertex = require("flemma.provider.adapters.vertex")
   local tools = require("flemma.tools")
 
   before_each(function()

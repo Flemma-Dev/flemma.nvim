@@ -783,7 +783,7 @@ end)
 
 describe("Provider Integration", function()
   it("builds Anthropic request from pipeline output", function()
-    local anthropic = require("flemma.provider.providers.anthropic")
+    local anthropic = require("flemma.provider.adapters.anthropic")
     local provider = anthropic.new({ model = "claude-3-haiku-20240307", max_tokens = 256, temperature = 0 })
 
     local lines = {
@@ -802,7 +802,7 @@ describe("Provider Integration", function()
   end)
 
   it("builds OpenAI request from pipeline output", function()
-    local openai = require("flemma.provider.providers.openai")
+    local openai = require("flemma.provider.adapters.openai")
     local provider = openai.new({ model = "gpt-4o-mini", max_tokens = 100, temperature = 0 })
 
     local lines = {
@@ -1050,11 +1050,11 @@ describe("multi-turn API content stability", function()
   local anthropic
 
   before_each(function()
-    package.loaded["flemma.provider.providers.anthropic"] = nil
+    package.loaded["flemma.provider.adapters.anthropic"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.tools.registry"] = nil
     package.loaded["flemma.tools.approval"] = nil
-    anthropic = require("flemma.provider.providers.anthropic")
+    anthropic = require("flemma.provider.adapters.anthropic")
     local tools = require("flemma.tools")
     tools.clear()
   end)

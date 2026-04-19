@@ -1,6 +1,6 @@
 --- Test file for OpenAI Chat Completions base provider functionality
 describe("OpenAI Chat Completions Base Provider", function()
-  local openai_chat = require("flemma.provider.providers.openai_chat")
+  local openai_chat = require("flemma.provider.adapters.openai_chat")
   local json = require("flemma.utilities.json")
   local make_prompt = require("tests.utilities.prompt").make_prompt
 
