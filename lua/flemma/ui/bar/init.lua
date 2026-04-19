@@ -547,8 +547,7 @@ function Bar:_install_autocmds()
 
   -- BufWinEnter can be scoped to a buffer; WinEnter cannot (it is a
   -- window-level event and silently no-ops when `buffer` is passed).
-  -- Register them separately, matching the pattern in the now-deleted
-  -- notifications.lua (lines 742–755).
+  -- Register them separately so buffer-visibility changes re-render.
   vim.api.nvim_create_autocmd("BufWinEnter", {
     group = group,
     buffer = self.bufnr,
