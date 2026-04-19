@@ -78,7 +78,7 @@ describe("config.schema.definition", function()
       assert.is_table(cfg.line_highlights.frontmatter)
     end)
 
-    it("materializes notifications defaults", function()
+    it("materializes ui.usage defaults", function()
       local cfg = config_facade.get()
       assert.is_true(cfg.ui.usage.enabled)
       assert.equals(10000, cfg.ui.usage.timeout)

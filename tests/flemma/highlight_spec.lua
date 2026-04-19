@@ -315,7 +315,7 @@ describe("^ contrast operator in expressions", function()
   end)
 end)
 
-describe("notification bar highlights", function()
+describe("usage bar highlights", function()
   local highlight
   local color
 
@@ -327,7 +327,7 @@ describe("notification bar highlights", function()
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
-    -- Truly clear notification groups so default = true can re-define them.
+    -- Truly clear the usage bar groups so default = true can re-define them.
     -- nvim_set_hl(0, group, {}) leaves an empty definition that default = true
     -- treats as "already defined"; highlight clear actually removes the group.
     for _, group in ipairs({

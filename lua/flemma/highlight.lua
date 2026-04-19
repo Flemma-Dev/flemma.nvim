@@ -30,7 +30,7 @@ end
 
 ---Walk a chain of highlight group names and return the first group whose
 ---resolved highlight definition provides BOTH a foreground and a background
----colour. Matches the "complete" criterion used by the notification and
+---colour. Matches the "complete" criterion used by the usage bar and
 ---progress bar fallback logic.
 ---@param chain string|string[] Comma-separated string or list of group names
 ---@return string|nil group The first complete group, or nil
@@ -459,11 +459,11 @@ M.apply_syntax = function()
   -- Turns column highlight
   vim.api.nvim_set_hl(0, "FlemmaTurn", { link = "FlemmaRuler", default = true })
 
-  -- Notification bar highlight groups
-  -- Derived from the first group in notifications.highlight that provides both fg and bg
-  local notification_base_group = M.resolve_first_complete(syntax_config.ui.usage.highlight)
-  local bar_bg_hex = notification_base_group and get_hl_color(notification_base_group, "bg") or nil
-  local bar_fg_hex = notification_base_group and get_hl_color(notification_base_group, "fg") or nil
+  -- Usage bar highlight groups
+  -- Derived from the first group in ui.usage.highlight that provides both fg and bg
+  local usage_base_group = M.resolve_first_complete(syntax_config.ui.usage.highlight)
+  local bar_bg_hex = usage_base_group and get_hl_color(usage_base_group, "bg") or nil
+  local bar_fg_hex = usage_base_group and get_hl_color(usage_base_group, "fg") or nil
 
   if bar_bg_hex and bar_fg_hex then
     -- Primary tier: base group fg + bg as-is (model name, cost)
@@ -471,18 +471,14 @@ M.apply_syntax = function()
 
     -- Secondary tier: slightly dimmed fg (cache label, token counts, request count)
     local is_dark = vim.o.background == "dark"
-    local secondary_expr = notification_base_group .. (is_dark and "-fg:#222222" or "+fg:#222222")
+    local secondary_expr = usage_base_group .. (is_dark and "-fg:#222222" or "+fg:#222222")
     local secondary_resolved = parse_highlight_expression(secondary_expr)
     if secondary_resolved and secondary_resolved.fg then
-      vim.api.nvim_set_hl(
-        0,
-        "FlemmaUsageBarSecondary",
-        { bg = bar_bg_hex, fg = secondary_resolved.fg, default = true }
-      )
+      vim.api.nvim_set_hl(0, "FlemmaUsageBarSecondary", { bg = bar_bg_hex, fg = secondary_resolved.fg, default = true })
     end
 
     -- Muted tier: more dimmed fg (provider, separators, session label)
-    local muted_expr = notification_base_group .. (is_dark and "-fg:#444444" or "+fg:#444444")
+    local muted_expr = usage_base_group .. (is_dark and "-fg:#444444" or "+fg:#444444")
     local muted_resolved = parse_highlight_expression(muted_expr)
     if muted_resolved and muted_resolved.fg then
       vim.api.nvim_set_hl(0, "FlemmaUsageBarMuted", { bg = bar_bg_hex, fg = muted_resolved.fg, default = true })

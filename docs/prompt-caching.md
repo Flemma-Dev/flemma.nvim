@@ -12,7 +12,7 @@ Flemma supports prompt caching across all supported providers. Each provider imp
 | Write cost    | 1.25x–2.0x            | Free                  | Free            | Free               |
 | Control       | `cache_retention`     | `cache_retention`     | None (implicit) | `prompt_cache_key` |
 
-When caching is active, the notification bar includes cache percentage and token counts. Costs are adjusted to reflect each provider's discount on cached input.
+When caching is active, the usage bar includes cache percentage and token counts. Costs are adjusted to reflect each provider's discount on cached input.
 
 ---
 
@@ -28,7 +28,7 @@ The `cache_retention` parameter controls the caching strategy[^anthropic-cache-p
 | `"long"`  | 1 hour | 2.0x       | 0.1x      | Better for long-running tasks. |
 | `"none"`  | —      | —          | —         | Disable caching entirely.      |
 
-When caching is active, the notification bar includes cache percentage and read/write token counts. Costs are adjusted accordingly – cache reads are 90% cheaper than regular input tokens.
+When caching is active, the usage bar includes cache percentage and read/write token counts. Costs are adjusted accordingly – cache reads are 90% cheaper than regular input tokens.
 
 > [!NOTE]
 > Anthropic requires a **minimum number of tokens** in the cached prefix before caching activates[^anthropic-cache-limits]. The thresholds vary by model: **4096 tokens** for Opus 4.6, Opus 4.5, and Haiku 4.5; **1024 tokens** for Sonnet 4.6, Sonnet 4.5, Opus 4.1, Opus 4, and Sonnet 4. If your conversation is below this threshold, the API returns zero cache tokens and charges the standard input rate. This is expected – caching benefits grow with longer conversations and system prompts.
@@ -37,7 +37,7 @@ When caching is active, the notification bar includes cache percentage and read/
 
 ## OpenAI
 
-Flemma sends prompt caching hints to the OpenAI Responses API using the `cache_retention` parameter[^openai-cache]. When caching is active, Flemma sends the buffer's file path as `prompt_cache_key` and a retention policy as `prompt_cache_retention`. When a cache hit occurs, the notification bar includes the cache percentage and read token count. Costs are adjusted to reflect the 50% discount on cached input[^openai-cache-pricing].
+Flemma sends prompt caching hints to the OpenAI Responses API using the `cache_retention` parameter[^openai-cache]. When caching is active, Flemma sends the buffer's file path as `prompt_cache_key` and a retention policy as `prompt_cache_retention`. When a cache hit occurs, the usage bar includes the cache percentage and read token count. Costs are adjusted to reflect the 50% discount on cached input[^openai-cache-pricing].
 
 The `cache_retention` parameter controls the caching strategy:
 
@@ -48,7 +48,7 @@ The `cache_retention` parameter controls the caching strategy:
 | `"none"`  | —          | —                | —         | No caching hints sent.                                |
 
 > [!NOTE]
-> Unlike Anthropic, OpenAI does not report cache **write** tokens in the API response. Writes happen automatically and are free, so the notification bar only shows cache reads.
+> Unlike Anthropic, OpenAI does not report cache **write** tokens in the API response. Writes happen automatically and are free, so the usage bar only shows cache reads.
 
 > [!IMPORTANT]
 > OpenAI caching is **best-effort and not guaranteed**. Even when the prompt meets all requirements, the API may return zero cached tokens. Key conditions:
@@ -62,7 +62,7 @@ The `cache_retention` parameter controls the caching strategy:
 
 ## Vertex AI
 
-Gemini 2.5+ models support implicit context caching[^vertex-cache]. When consecutive requests share a common input prefix, the Vertex AI serving infrastructure automatically caches and reuses it – no configuration or request changes are needed. When a cache hit occurs, the notification bar includes the cache percentage and read token count. Costs are adjusted to reflect the 90% discount on cached input[^vertex-cache-pricing].
+Gemini 2.5+ models support implicit context caching[^vertex-cache]. When consecutive requests share a common input prefix, the Vertex AI serving infrastructure automatically caches and reuses it – no configuration or request changes are needed. When a cache hit occurs, the usage bar includes the cache percentage and read token count. Costs are adjusted to reflect the 90% discount on cached input[^vertex-cache-pricing].
 
 | Metric      | Value         | Description                                            |
 | ----------- | ------------- | ------------------------------------------------------ |
@@ -105,7 +105,7 @@ Or per-buffer in frontmatter:
 flemma.opt.moonshot = { prompt_cache_key = "my-project-key" }
 ```
 
-When a cache hit occurs, the usage notification includes the cached token count. Caching is available on kimi-k2 family models; moonshot-v1-\* models do not report cached tokens.
+When a cache hit occurs, the usage bar includes the cached token count. Caching is available on kimi-k2 family models; moonshot-v1-\* models do not report cached tokens.
 
 ---
 

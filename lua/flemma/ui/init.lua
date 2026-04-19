@@ -42,8 +42,6 @@ local PRIORITY = {
 ---@type string
 local WAITING_LABEL = "Waiting…"
 
----@type table<flemma.state.ProgressPhase, string[]>
-
 ---@type string
 local MIDDLE_DOT = " · "
 
@@ -389,9 +387,7 @@ local function advance_progress(bufnr)
     update_inline_waiting_extmark(bufnr, frame .. " " .. body, warn_hl)
 
     local winid = vim.fn.bufwinid(bufnr)
-    local off_screen = winid ~= -1
-      and bs.progress_last_line
-      and (bs.progress_last_line + 1) > vim.fn.line("w$", winid)
+    local off_screen = winid ~= -1 and bs.progress_last_line and (bs.progress_last_line + 1) > vim.fn.line("w$", winid)
 
     if off_screen then
       ensure_progress_bar(bufnr):update({

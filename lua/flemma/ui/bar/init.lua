@@ -1,7 +1,5 @@
---- Reusable notification/progress bar as a floating window.
+--- Reusable floating-window bar, used by the usage and progress drivers.
 --- Handle-based API: callers hold a handle and call methods on it.
---- See docs/superpowers/specs/2026-04-18-bar-utility-design.md for the
---- design rationale.
 ---@class flemma.ui.bar
 local M = {}
 

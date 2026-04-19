@@ -1,5 +1,5 @@
 --- Usage and pricing functionality for Flemma plugin
---- Centralizes notification display for request and session costs
+--- Centralizes the usage bar display for request and session costs
 
 ---@class flemma.Usage
 local M = {}
@@ -282,20 +282,20 @@ function M.recall_last()
 
   local filepath = vim.api.nvim_buf_get_name(bufnr)
   if filepath == "" then
-    vim.notify("Flemma: No notification for this buffer.", vim.log.levels.WARN)
+    vim.notify("Flemma: No usage data for this buffer.", vim.log.levels.WARN)
     return
   end
 
   local session = state.get_session()
   local latest = session:get_latest_request_for_filepath(filepath)
   if not latest then
-    vim.notify("Flemma: No notification for this buffer.", vim.log.levels.WARN)
+    vim.notify("Flemma: No usage data for this buffer.", vim.log.levels.WARN)
     return
   end
 
   local segments = M.build_segments(latest, session)
   if #segments == 0 then
-    vim.notify("Flemma: No notification for this buffer.", vim.log.levels.WARN)
+    vim.notify("Flemma: No usage data for this buffer.", vim.log.levels.WARN)
     return
   end
 

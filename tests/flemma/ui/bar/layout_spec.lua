@@ -325,7 +325,7 @@ describe("flemma.ui.bar.layout", function()
     end)
 
     it("should align separators across two segment sets with merged widths", function()
-      -- Simulate two notifications with different token widths
+      -- Simulate two bar renders with different token widths
       local segments_a = {
         {
           key = "identity",

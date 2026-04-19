@@ -211,16 +211,16 @@ describe("progress line", function()
       end
 
       assert.is_truthy(icon, "Bar should carry an icon (spinner lives in icon slot)")
-      assert.is_truthy(
-        segments and segments[1] and segments[1].items[1],
-        "Bar should have a segment text body"
-      )
+      assert.is_truthy(segments and segments[1] and segments[1].items[1], "Bar should have a segment text body")
       local text = segments[1].items[1].text or ""
       assert.is_false(
         text:sub(1, #icon) == icon,
         "segment text must not begin with the icon; this duplicates the spinner "
           .. "either in the gutter float (wide gutter) or inline prepend (narrow gutter). "
-          .. "icon=" .. vim.inspect(icon) .. " text=" .. vim.inspect(text)
+          .. "icon="
+          .. vim.inspect(icon)
+          .. " text="
+          .. vim.inspect(text)
       )
 
       ui.cleanup_progress(bufnr)

@@ -1,4 +1,4 @@
---- Notification bar layout engine
+--- Bar layout engine
 --- Takes structured segments and renders a single line with priority-based truncation
 ---@class flemma.ui.bar.Layout
 local M = {}
@@ -17,7 +17,7 @@ local SEPARATOR_RELAXED_DISPLAY_WIDTH = 5
 local PREFIX = "\xE2\x84\xB9 " -- "ℹ " (U+2139, 3 bytes + 1 space)
 local PREFIX_DISPLAY_WIDTH = 2 -- ℹ is 1 display col + 1 space
 
---- Exported constants for use by notifications module
+--- Exported constants for consumers of this layout engine
 M.PREFIX = PREFIX
 M.PREFIX_DISPLAY_WIDTH = PREFIX_DISPLAY_WIDTH
 
@@ -273,12 +273,12 @@ function M.measure_item_widths(segments)
   return widths
 end
 
---- Render segments into a single notification bar line
+--- Render segments into a single bar line
 --- Uses a greedy priority-fit algorithm: items are selected by priority but displayed in
 --- fixed segment order. Equal-priority items are treated as a group (all or none).
 ---@param segments flemma.ui.bar.layout.Segment[] Segments in display order
 ---@param available_width integer Window width in display characters
----@param item_widths? table<string, integer> Optional minimum display widths per item key (for cross-notification alignment)
+---@param item_widths? table<string, integer> Optional minimum display widths per item key (for cross-bar alignment)
 ---@param opts? flemma.ui.bar.layout.RenderOpts Optional render options
 ---@return flemma.ui.bar.layout.RenderResult
 function M.render(segments, available_width, item_widths, opts)
