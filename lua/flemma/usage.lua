@@ -8,6 +8,8 @@ local layout = require("flemma.ui.bar.layout")
 local config_facade = require("flemma.config")
 local provider_registry = require("flemma.provider.registry")
 local str = require("flemma.utilities.string")
+local Bar = require("flemma.ui.bar")
+local state = require("flemma.state")
 
 --- Item priorities (higher = more important, shown first when space is scarce)
 local PRIORITY = {
@@ -196,18 +198,126 @@ function M.build_segments(request, session)
   return segments
 end
 
---- Format usage information for notification bar display
---- Builds segments from request/session data and renders via the bar layout engine.
----@param request? flemma.session.Request Most recent completed request
----@param session? flemma.session.Session Session instance
----@param available_width integer Window width in display characters
----@return flemma.ui.bar.layout.RenderResult
-function M.format_notification(request, session, available_width)
-  local segments = M.build_segments(request, session)
-  if #segments == 0 then
-    return { text = "", highlights = {} }
+---Start the auto-dismiss timer for the bar on a given buffer.
+---Reads cfg.timeout; 0 = persistent (no timer).
+---@param bufnr integer
+local function start_timeout_timer(bufnr)
+  local cfg = config_facade.get(bufnr).ui.usage
+  if cfg.timeout <= 0 then
+    return
   end
-  return layout.render(segments, available_width)
+  local bs = state.get_buffer_state(bufnr)
+  bs.usage_timer = vim.fn.timer_start(cfg.timeout, function()
+    local inner = state.get_buffer_state(bufnr)
+    if inner.usage_bar then
+      inner.usage_bar:dismiss()
+    end
+    inner.usage_timer = nil
+  end)
 end
+
+---Public entrypoint used by core.lua after a successful request.
+---The enabled gate runs synchronously; everything else defers via
+---vim.schedule to let the triggering callback finish first.
+---@param bufnr integer
+---@param request flemma.session.Request|nil
+function M.show(bufnr, request)
+  local cfg = config_facade.get(bufnr).ui.usage
+  if not cfg.enabled then
+    return
+  end
+
+  vim.schedule(function()
+    if not vim.api.nvim_buf_is_valid(bufnr) then
+      return
+    end
+
+    local bs = state.get_buffer_state(bufnr)
+    if bs.usage_timer then
+      vim.fn.timer_stop(bs.usage_timer)
+      bs.usage_timer = nil
+    end
+
+    local segments = M.build_segments(request, state.get_session())
+    if #segments == 0 then
+      return
+    end
+
+    bs.usage_bar = Bar.new({
+      bufnr = bufnr,
+      position = cfg.position,
+      segments = segments,
+      icon = layout.PREFIX,
+      -- Paint with the pre-computed FlemmaUsageBar group so attributes
+      -- (italic/bold/underline) on the user's resolved chain group do
+      -- NOT leak through. highlight.lua already derived FlemmaUsageBar's
+      -- bg+fg from cfg.highlight; cfg.highlight is kept as a fallback
+      -- tail in case FlemmaUsageBar is somehow undefined.
+      highlight = "FlemmaUsageBar," .. cfg.highlight,
+      on_shown = function()
+        start_timeout_timer(bufnr)
+      end,
+      on_dismiss = function()
+        local inner = state.get_buffer_state(bufnr)
+        inner.usage_bar = nil
+      end,
+    })
+  end)
+end
+
+---Recall the most recent request for the current buffer's filepath and
+---re-display the usage bar. Takes no argument: resolves the current
+---buffer internally. Three failure paths each emit a single
+---vim.notify(WARN): no filepath, no latest request, empty segments.
+function M.recall_last()
+  local bufnr = vim.api.nvim_get_current_buf()
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  local bs = state.get_buffer_state(bufnr)
+  if bs.usage_bar and not bs.usage_bar:is_dismissed() then
+    return
+  end
+
+  local filepath = vim.api.nvim_buf_get_name(bufnr)
+  if filepath == "" then
+    vim.notify("Flemma: No notification for this buffer.", vim.log.levels.WARN)
+    return
+  end
+
+  local session = state.get_session()
+  local latest = session:get_latest_request_for_filepath(filepath)
+  if not latest then
+    vim.notify("Flemma: No notification for this buffer.", vim.log.levels.WARN)
+    return
+  end
+
+  local segments = M.build_segments(latest, session)
+  if #segments == 0 then
+    vim.notify("Flemma: No notification for this buffer.", vim.log.levels.WARN)
+    return
+  end
+
+  M.show(bufnr, latest)
+end
+
+---Per-buffer cleanup; called via state.register_cleanup.
+---@param bufnr integer
+function M.cleanup_buffer(bufnr)
+  local bs = state.get_buffer_state(bufnr)
+  if bs.usage_timer then
+    vim.fn.timer_stop(bs.usage_timer)
+    bs.usage_timer = nil
+  end
+  if bs.usage_bar then
+    bs.usage_bar:dismiss()
+    bs.usage_bar = nil
+  end
+end
+
+state.register_cleanup("usage", function(bufnr)
+  M.cleanup_buffer(bufnr)
+end)
 
 return M

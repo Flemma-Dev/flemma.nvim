@@ -59,6 +59,8 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field rewriter_diagnostics? flemma.preprocessor.RewriterDiagnostic[] Diagnostics from the last preprocessor run
 ---@field _pending_confirmation? flemma.preprocessor.Confirmation In-flight confirmation awaiting user response
 ---@field streaming_start_line? integer 1-indexed start line of the streaming turn (set by turns module during active requests)
+---@field usage_bar? flemma.ui.bar.Bar Active usage bar handle, if any
+---@field usage_timer? integer Timer ID for auto-dismissing the usage bar
 
 ---@type table<integer, flemma.state.BufferState>
 local buffer_states = {}
