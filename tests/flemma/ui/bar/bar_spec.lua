@@ -377,6 +377,42 @@ describe("flemma.ui.bar", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
+    -- Replaces the deleted notifications.lua test "should defer notification
+    -- until buffer becomes visible". A Bar created on a hidden buffer must
+    -- (a) keep on_shown silent, (b) fire on_shown exactly once when the
+    -- buffer becomes visible via BufWinEnter / WinEnter. usage.show wires
+    -- the auto-dismiss timer to on_shown, so any regression here would let
+    -- the timer start on a still-invisible bar.
+    it("fires once when a hidden-at-construction buffer becomes visible", function()
+      local hidden_bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(hidden_bufnr, 0, -1, false, { "hidden" })
+      -- Construct Bar BEFORE making the buffer current so the buffer is
+      -- truly hidden at first render.
+      local count = 0
+      local bar = Bar.new({
+        bufnr = hidden_bufnr,
+        position = "top",
+        segments = { { key = "s", items = { { key = "i", text = "x", priority = 1 } } } },
+        on_shown = function()
+          count = count + 1
+        end,
+      })
+      assert.equals(0, count, "on_shown should not have fired while buffer is hidden")
+      assert.is_nil(bar._float_winid, "no float should be open while buffer is hidden")
+
+      -- Make the buffer visible — Bar's BufWinEnter autocmd should fire
+      -- _render(), which finally opens the float and triggers on_shown.
+      vim.api.nvim_set_current_buf(hidden_bufnr)
+      vim.wait(50, function()
+        return count > 0
+      end)
+      assert.equals(1, count, "on_shown should fire exactly once on first visible render")
+      assert.is_truthy(bar._float_winid, "float should be open after buffer becomes visible")
+
+      bar:dismiss()
+      vim.api.nvim_buf_delete(hidden_bufnr, { force = true })
+    end)
+
     it("does not fire when bar is dismissed before becoming visible", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
       local count = 0
