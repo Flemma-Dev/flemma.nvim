@@ -1,6 +1,6 @@
 --- Coding assistant personality for Flemma
 --- Generates a system prompt for LLM-powered coding assistance in Neovim.
----@class flemma.personalities.CodingAssistant : flemma.personalities.Personality
+---@class flemma.personalities.styles.CodingAssistant : flemma.personalities.Personality
 local M = {}
 
 ---@param opts flemma.personalities.RenderOpts

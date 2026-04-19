@@ -2,7 +2,7 @@
 ---@class flemma.ui.folding.rules.ToolBlocks : flemma.ui.folding.FoldRule
 local M = {}
 
-local utils = require("flemma.utilities.folding")
+local utils = require("flemma.ui.folding.merge")
 local ast = require("flemma.ast")
 
 M.name = "tool_blocks"

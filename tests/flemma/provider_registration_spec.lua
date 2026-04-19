@@ -22,7 +22,7 @@ describe("provider registration", function()
   describe("register()", function()
     it("adds a provider recognized by has(), get(), supported_providers()", function()
       registry.register("custom", {
-        module = "flemma.provider.providers.openai",
+        module = "flemma.provider.adapters.openai",
         capabilities = {
           supports_reasoning = false,
           supports_thinking_budget = false,
@@ -32,7 +32,7 @@ describe("provider registration", function()
       })
 
       assert.is_true(registry.has("custom"))
-      assert.are.equal("flemma.provider.providers.openai", registry.get("custom"))
+      assert.are.equal("flemma.provider.adapters.openai", registry.get("custom"))
       assert.are.equal("Custom", registry.get_display_name("custom"))
 
       local supported = registry.supported_providers()
@@ -48,7 +48,7 @@ describe("provider registration", function()
 
     it("populates defaults and models when models are provided", function()
       registry.register("custom", {
-        module = "flemma.provider.providers.openai",
+        module = "flemma.provider.adapters.openai",
         capabilities = {
           supports_reasoning = false,
           supports_thinking_budget = false,
@@ -73,7 +73,7 @@ describe("provider registration", function()
   describe("is_provider_model() without models", function()
     it("accepts any model string for a registered provider with no model list", function()
       registry.register("minimal", {
-        module = "flemma.provider.providers.openai",
+        module = "flemma.provider.adapters.openai",
         capabilities = {
           supports_reasoning = false,
           supports_thinking_budget = false,
@@ -88,7 +88,7 @@ describe("provider registration", function()
 
     it("returns false for nil model_name even with no model list", function()
       registry.register("minimal", {
-        module = "flemma.provider.providers.openai",
+        module = "flemma.provider.adapters.openai",
         capabilities = {
           supports_reasoning = false,
           supports_thinking_budget = false,
@@ -157,7 +157,7 @@ describe("provider registration", function()
   describe("unregister()", function()
     it("removes a provider and returns true", function()
       registry.register("custom", {
-        module = "flemma.provider.providers.openai",
+        module = "flemma.provider.adapters.openai",
         capabilities = {
           supports_reasoning = false,
           supports_thinking_budget = false,
@@ -177,7 +177,7 @@ describe("provider registration", function()
 
     it("cleans up defaults and models", function()
       registry.register("custom", {
-        module = "flemma.provider.providers.openai",
+        module = "flemma.provider.adapters.openai",
         capabilities = {
           supports_reasoning = false,
           supports_thinking_budget = false,
@@ -201,7 +201,7 @@ describe("provider registration", function()
       assert.is_not_nil(all["anthropic"])
       assert.is_not_nil(all["openai"])
       assert.is_not_nil(all["vertex"])
-      assert.are.equal("flemma.provider.providers.anthropic", all["anthropic"].module)
+      assert.are.equal("flemma.provider.adapters.anthropic", all["anthropic"].module)
     end)
 
     it("returns a deep copy (mutations do not affect registry)", function()

@@ -5,7 +5,7 @@
 local M = {}
 
 local loader = require("flemma.loader")
-local registry_utils = require("flemma.registry")
+local registry_utils = require("flemma.utilities.registry")
 
 ---@class flemma.personalities.Personality
 ---@field render fun(opts: flemma.personalities.RenderOpts): string
@@ -37,7 +37,7 @@ local registry_utils = require("flemma.registry")
 
 ---@type table<string, string>
 local BUILTIN_PERSONALITIES = {
-  ["coding-assistant"] = "flemma.personalities.coding_assistant",
+  ["coding-assistant"] = "flemma.personalities.styles.coding_assistant",
 }
 
 ---@type table<string, flemma.personalities.Personality>

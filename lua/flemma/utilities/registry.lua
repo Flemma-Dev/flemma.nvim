@@ -2,7 +2,7 @@
 --- Provides the canonical type contract and name validation shared by all registries.
 --- NOT a base class — each registry remains self-contained. This module provides
 --- DRY utilities and a type annotation that documents the expected API surface.
----@class flemma.RegistryUtils
+---@class flemma.utilities.Registry
 local M = {}
 
 local loader = require("flemma.loader")

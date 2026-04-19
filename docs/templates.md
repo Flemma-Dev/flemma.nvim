@@ -42,7 +42,7 @@ require("flemma.codeblock.parsers").register("yaml", function(code, context)
 end)
 ```
 
-Parsers are lazy-loaded on first use and cached for the session. See `lua/flemma/codeblock/parsers.lua` for the built-in implementations.
+Parsers are lazy-loaded on first use and cached for the session. See `lua/flemma/codeblock/parsers/` for the built-in implementations.
 
 ### Per-buffer overrides with `flemma.opt`
 

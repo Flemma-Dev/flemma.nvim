@@ -64,7 +64,7 @@ local M = {}
 ---@field error? string Error message (when success=false)
 
 local notify = require("flemma.notify")
-local registry_utils = require("flemma.registry")
+local registry_utils = require("flemma.utilities.registry")
 local string_utils = require("flemma.utilities.string")
 
 ---@type table<string, flemma.tools.ToolDefinition>

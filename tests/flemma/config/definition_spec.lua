@@ -215,25 +215,25 @@ describe("config.schema.definition", function()
     end)
 
     it("materializes OpenAI reasoning_summary default after registration", function()
-      provider_reg.register("flemma.provider.providers.openai")
+      provider_reg.register("flemma.provider.adapters.openai")
       local cfg = config_facade.get()
       assert.equals("auto", cfg.parameters.openai.reasoning_summary)
     end)
 
     it("materializes Vertex location default after registration", function()
-      provider_reg.register("flemma.provider.providers.vertex")
+      provider_reg.register("flemma.provider.adapters.vertex")
       local cfg = config_facade.get()
       assert.equals("global", cfg.parameters.vertex.location)
     end)
 
     it("does not materialize Anthropic defaults (all optional, no defaults)", function()
-      provider_reg.register("flemma.provider.providers.anthropic")
+      provider_reg.register("flemma.provider.adapters.anthropic")
       local cfg = config_facade.get()
       assert.is_nil(cfg.parameters.anthropic.thinking_budget)
     end)
 
     it("does not materialize Vertex project_id (optional, no default)", function()
-      provider_reg.register("flemma.provider.providers.vertex")
+      provider_reg.register("flemma.provider.adapters.vertex")
       local cfg = config_facade.get()
       assert.is_nil(cfg.parameters.vertex.project_id)
     end)
@@ -337,7 +337,7 @@ describe("config.schema.definition", function()
       package.loaded["flemma.provider.registry"] = nil
       local provider_reg = require("flemma.provider.registry")
       provider_reg.clear()
-      provider_reg.register("flemma.provider.providers.anthropic")
+      provider_reg.register("flemma.provider.adapters.anthropic")
       config_facade.apply(config_facade.LAYERS.SETUP, {
         parameters = { anthropic = { thinking_budget = 2048 } },
       })
@@ -474,9 +474,9 @@ describe("config.schema.definition", function()
       package.loaded["flemma.provider.registry"] = nil
       local provider_reg = require("flemma.provider.registry")
       provider_reg.clear()
-      provider_reg.register("flemma.provider.providers.anthropic")
-      provider_reg.register("flemma.provider.providers.openai")
-      provider_reg.register("flemma.provider.providers.vertex")
+      provider_reg.register("flemma.provider.adapters.anthropic")
+      provider_reg.register("flemma.provider.adapters.openai")
+      provider_reg.register("flemma.provider.adapters.vertex")
       local params = schema:get_child_schema("parameters")
       assert.is_not_nil(params:get_child_schema("anthropic"))
       assert.is_not_nil(params:get_child_schema("openai"))
@@ -603,7 +603,7 @@ describe("config.schema.definition", function()
       it("resolves custom provider config schema via registry", function()
         local s = require("flemma.schema")
         provider_reg.register("custom", {
-          module = "flemma.provider.providers.anthropic",
+          module = "flemma.provider.adapters.anthropic",
           capabilities = {
             supports_reasoning = false,
             supports_thinking_budget = false,
@@ -632,7 +632,7 @@ describe("config.schema.definition", function()
       end)
 
       it("built-in provider schemas work after registration", function()
-        provider_reg.register("flemma.provider.providers.anthropic")
+        provider_reg.register("flemma.provider.adapters.anthropic")
         config_facade.apply(config_facade.LAYERS.SETUP, {
           parameters = { anthropic = { thinking_budget = 4096 } },
         })
@@ -642,7 +642,7 @@ describe("config.schema.definition", function()
       it("rejects unknown field on custom provider schema", function()
         local s = require("flemma.schema")
         provider_reg.register("custom", {
-          module = "flemma.provider.providers.anthropic",
+          module = "flemma.provider.adapters.anthropic",
           capabilities = {
             supports_reasoning = false,
             supports_thinking_budget = false,
@@ -808,7 +808,7 @@ describe("config.schema.definition", function()
 
         local s = require("flemma.schema")
         provider_reg.register("my_provider", {
-          module = "flemma.provider.providers.anthropic",
+          module = "flemma.provider.adapters.anthropic",
           capabilities = {
             supports_reasoning = false,
             supports_thinking_budget = false,

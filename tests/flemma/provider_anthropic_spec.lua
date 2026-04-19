@@ -9,7 +9,7 @@ package.loaded["flemma.tools.definitions.bash"] = nil
 package.loaded["flemma.tools.definitions.read"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
 package.loaded["flemma.tools.definitions.write"] = nil
-package.loaded["flemma.provider.providers.anthropic"] = nil
+package.loaded["flemma.provider.adapters.anthropic"] = nil
 package.loaded["flemma.config"] = nil
 package.loaded["flemma.config.store"] = nil
 package.loaded["flemma.config.proxy"] = nil
@@ -19,7 +19,7 @@ package.loaded["flemma.config.schema"] = nil
 require("flemma.config").init(require("flemma.config.schema"))
 
 describe("Anthropic Provider", function()
-  local anthropic = require("flemma.provider.providers.anthropic")
+  local anthropic = require("flemma.provider.adapters.anthropic")
   local tools = require("flemma.tools")
 
   before_each(function()

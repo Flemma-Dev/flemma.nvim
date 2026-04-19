@@ -3,7 +3,7 @@
 --- (highest first) during credential resolution.
 local M = {}
 
-local registry_utils = require("flemma.registry")
+local registry_utils = require("flemma.utilities.registry")
 
 ---@class flemma.secrets.Resolver
 ---@field name string
