@@ -49,6 +49,10 @@ files["lua/flemma/provider/adapters/*.lua"] = {
   ignore = { "542" }, -- empty if branches (intentional skip patterns)
 }
 
+files["lua/flemma/provider/openai_chat.lua"] = {
+  ignore = { "542" }, -- empty if branches (intentional skip patterns)
+}
+
 files["tests/**/*.lua"] = {
   std = "+busted",
 }
