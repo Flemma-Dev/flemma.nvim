@@ -9,7 +9,7 @@ local M = {}
 local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
 local log = require("flemma.logging")
-local registry_utils = require("flemma.registry")
+local registry_utils = require("flemma.utilities.registry")
 local sandbox = require("flemma.sandbox")
 local tools_registry = require("flemma.tools.registry")
 

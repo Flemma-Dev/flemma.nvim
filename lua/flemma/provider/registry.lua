@@ -8,7 +8,7 @@ local M = {}
 
 local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
-local registry_utils = require("flemma.registry")
+local registry_utils = require("flemma.utilities.registry")
 
 --------------------------------------------------------------------------------
 -- Provider registry

@@ -7,7 +7,7 @@ local M = {}
 local bwrap = require("flemma.sandbox.backends.bwrap")
 local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
-local registry_utils = require("flemma.registry")
+local registry_utils = require("flemma.utilities.registry")
 local variables = require("flemma.utilities.variables")
 
 -- ---------------------------------------------------------------------------

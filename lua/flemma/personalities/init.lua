@@ -5,7 +5,7 @@
 local M = {}
 
 local loader = require("flemma.loader")
-local registry_utils = require("flemma.registry")
+local registry_utils = require("flemma.utilities.registry")
 
 ---@class flemma.personalities.Personality
 ---@field render fun(opts: flemma.personalities.RenderOpts): string

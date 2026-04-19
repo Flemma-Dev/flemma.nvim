@@ -1,4 +1,4 @@
-local registry_utils = require("flemma.registry")
+local registry_utils = require("flemma.utilities.registry")
 local registry = require("flemma.tools.registry")
 
 describe("flemma.registry", function()
