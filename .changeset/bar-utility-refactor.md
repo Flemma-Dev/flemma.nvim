@@ -1,5 +1,5 @@
 ---
-"@flemma-dev/flemma.nvim": major
+"@flemma-dev/flemma.nvim": minor
 ---
 
 Extract reusable Bar UI utility and reorganise ui config namespace.
