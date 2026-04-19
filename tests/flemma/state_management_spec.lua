@@ -423,57 +423,39 @@ describe("State Management", function()
     end)
   end)
 
-  describe("notification per-buffer isolation", function()
-    local notifications
+  describe("usage bar per-buffer isolation", function()
+    local usage
+    local bar_mock
 
     before_each(function()
-      package.loaded["flemma.notifications"] = nil
-      package.loaded["flemma.bar"] = nil
-      notifications = require("flemma.notifications")
-
-      -- Override limit to allow stacking for isolation tests
-      local config_facade = require("flemma.config")
-      config_facade.apply(config_facade.LAYERS.RUNTIME, { notifications = { limit = 3 } })
+      package.loaded["flemma.ui.bar"] = nil
+      package.loaded["flemma.ui.bar.layout"] = nil
+      package.loaded["flemma.usage"] = nil
+      bar_mock = require("tests.utilities.bar_mock").install_as_flemma_ui_bar()
+      usage = require("flemma.usage")
     end)
 
-    --- Create minimal test segments for notification tests
-    local function make_test_segments()
+    --- Build a minimal fake request that satisfies usage.build_segments
+    ---@return table
+    local function make_test_request()
       return {
-        { key = "identity", items = { { key = "model", text = "test-model", priority = 90 } } },
+        model = "test-model",
+        provider = "test",
+        thoughts_tokens = 0,
+        cache_read_input_tokens = 0,
+        get_total_input_tokens = function()
+          return 100
+        end,
+        get_total_output_tokens = function()
+          return 50
+        end,
+        get_total_cost = function()
+          return 0.01
+        end,
       }
     end
 
-    --- Detect notification floating windows by checking for non-focusable floating windows
-    --- relative to a specific parent window
-    local function count_notification_windows(parent_win)
-      local count = 0
-      for _, win in ipairs(vim.api.nvim_list_wins()) do
-        if vim.api.nvim_win_is_valid(win) then
-          local win_config = vim.api.nvim_win_get_config(win)
-          if win_config.relative == "win" and not win_config.focusable then
-            if parent_win == nil or win_config.win == parent_win then
-              count = count + 1
-            end
-          end
-        end
-      end
-      return count
-    end
-
-    --- Find any notification floating window
-    local function find_notification_window()
-      for _, win in ipairs(vim.api.nvim_list_wins()) do
-        if vim.api.nvim_win_is_valid(win) then
-          local win_config = vim.api.nvim_win_get_config(win)
-          if win_config.relative == "win" and not win_config.focusable then
-            return win
-          end
-        end
-      end
-      return nil
-    end
-
-    it("should display notification in the buffer's window", function()
+    it("should target the requested buffer when constructing the usage bar", function()
       -- Create two windows side by side
       vim.cmd("vnew")
       local win1 = vim.api.nvim_get_current_win()
@@ -493,136 +475,35 @@ describe("State Management", function()
       vim.bo[buf2].filetype = "chat"
       vim.api.nvim_win_set_buf(win2, buf2)
 
-      -- Show notification for buf1 while we're in win2
+      -- Call usage.show for buf1 while focus is on win2; the Bar
+      -- must be constructed against buf1, not the current buffer.
       vim.api.nvim_set_current_win(win2)
-      notifications.show(make_test_segments(), buf1)
+      usage.show(buf1, make_test_request())
 
-      -- Wait for vim.schedule to execute
-      vim.wait(20, function()
-        return false
-      end)
+      assert.is_true(vim.wait(200, function()
+        return #bar_mock._handles > 0
+      end))
+      assert.equals(buf1, bar_mock._handles[1].opts.bufnr)
 
-      -- Find the notification window
-      local notify_win = find_notification_window()
-      assert.is_not_nil(notify_win, "Notification window should exist")
-
-      -- Check that the notification is relative to win1 (the buffer's window)
-      local config = vim.api.nvim_win_get_config(notify_win)
-      assert.equals("win", config.relative)
-      assert.equals(win1, config.win)
-
-      -- Clean up notification
-      notifications.cleanup_buffer(buf1)
+      usage.cleanup_buffer(buf1)
     end)
 
-    it("should maintain separate notification stacks per buffer", function()
-      -- Create two windows
-      vim.cmd("vnew")
-      local win1 = vim.api.nvim_get_current_win()
-      vim.cmd("vertical resize 40")
-
-      vim.cmd("wincmd l")
-      local win2 = vim.api.nvim_get_current_win()
-
-      -- Create buffers
-      local buf1 = vim.api.nvim_create_buf(false, false)
-      vim.api.nvim_win_set_buf(win1, buf1)
-
-      local buf2 = vim.api.nvim_create_buf(false, false)
-      vim.api.nvim_win_set_buf(win2, buf2)
-
-      -- Show multiple notifications for buf1
-      notifications.show(make_test_segments(), buf1)
-      notifications.show(make_test_segments(), buf1)
-
-      -- Show notification for buf2
-      notifications.show(make_test_segments(), buf2)
-
-      -- Wait for vim.schedule
-      vim.wait(20, function()
-        return false
-      end)
-
-      -- Count notifications per window
-      local notif_count_win1 = count_notification_windows(win1)
-      local notif_count_win2 = count_notification_windows(win2)
-
-      -- buf1's window should have 2 notifications
-      assert.equals(2, notif_count_win1)
-      -- buf2's window should have 1 notification
-      assert.equals(1, notif_count_win2)
-
-      -- Clean up
-      notifications.cleanup_buffer(buf1)
-      notifications.cleanup_buffer(buf2)
-    end)
-
-    it("should cleanup notifications when buffer is deleted", function()
-      -- Create window and buffer
+    it("should cleanup the usage bar when the buffer is cleaned up", function()
       local buf = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(buf)
 
-      -- Show notification
-      notifications.show(make_test_segments(), buf)
+      usage.show(buf, make_test_request())
 
-      -- Wait for vim.schedule
-      vim.wait(20, function()
-        return false
-      end)
+      assert.is_true(vim.wait(200, function()
+        return state.get_buffer_state(buf).usage_bar ~= nil
+      end))
+      assert.is_truthy(state.get_buffer_state(buf).usage_bar)
+      assert.is_false(bar_mock._handles[1]:is_dismissed())
 
-      -- Count notification windows
-      local initial_notif_count = count_notification_windows(nil)
-      assert.equals(1, initial_notif_count)
+      usage.cleanup_buffer(buf)
 
-      -- Cleanup the buffer's notifications
-      notifications.cleanup_buffer(buf)
-
-      -- Wait for cleanup
-      vim.wait(20, function()
-        return false
-      end)
-
-      -- Count notification windows after cleanup
-      local final_notif_count = count_notification_windows(nil)
-      assert.equals(0, final_notif_count)
-    end)
-
-    it("should defer notification until buffer becomes visible", function()
-      -- Set up notify autocmds
-      notifications.setup()
-
-      -- Create a buffer but don't display it in any window
-      local hidden_buf = vim.api.nvim_create_buf(false, false)
-
-      -- Show notification for hidden buffer
-      notifications.show(make_test_segments(), hidden_buf)
-
-      -- Wait for vim.schedule
-      vim.wait(20, function()
-        return false
-      end)
-
-      -- Count notification windows - should be 0 since buffer is hidden
-      local notif_count = count_notification_windows(nil)
-      assert.equals(0, notif_count, "No notification should be shown for hidden buffer")
-
-      -- Now make the buffer visible by switching to it
-      vim.api.nvim_set_current_buf(hidden_buf)
-
-      -- Trigger WinEnter autocmd (simulates tab/window switch)
-      vim.cmd("doautocmd WinEnter")
-
-      -- Wait for notification to appear
-      vim.wait(20, function()
-        return false
-      end)
-
-      -- Count notification windows - should now be 1
-      notif_count = count_notification_windows(nil)
-      assert.equals(1, notif_count, "Notification should appear when buffer becomes visible")
-
-      -- Clean up
-      notifications.cleanup_buffer(hidden_buf)
+      assert.is_true(bar_mock._handles[1]:is_dismissed())
+      assert.is_nil(state.get_buffer_state(buf).usage_bar)
     end)
   end)
 end)

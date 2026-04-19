@@ -20,6 +20,7 @@ local str = require("flemma.utilities.string")
 local ast = require("flemma.ast")
 local spinners = require("flemma.ui.spinners")
 local turns = require("flemma.ui.turns")
+local Bar = require("flemma.ui.bar")
 
 -- Extmark priority constants
 -- Higher values take precedence when multiple extmarks overlap on the same line.
@@ -41,13 +42,8 @@ local PRIORITY = {
 ---@type string
 local WAITING_LABEL = "Waiting…"
 
----@type table<flemma.state.ProgressPhase, string[]>
-
 ---@type string
 local MIDDLE_DOT = " · "
-
---- Display width of the spinner prefix (spinner char + space), matching bar.PREFIX_DISPLAY_WIDTH
-local SPINNER_PREFIX_DISPLAY_WIDTH = 2
 
 -- Define namespace for our extmarks
 local ns_id = vim.api.nvim_create_namespace("flemma")
@@ -229,197 +225,191 @@ local function build_progress_virt_text(progress_text, bufnr, highlight)
   return chunks
 end
 
----Get the gutter width (line number, sign, fold columns) for a window.
----@param winid integer
----@return integer
-local function get_gutter_width(winid)
-  local info = vim.fn.getwininfo(winid)
-  if info and info[1] then
-    return info[1].textoff
+---Return the warning highlight group to apply when approaching timeout.
+---Matches the two-tier threshold already used inline:
+---  >= 90% elapsed -> DiagnosticError
+---  >= 80% elapsed -> DiagnosticWarn
+---  else           -> nil (neutral)
+---Also returns the updated text (may append "timeout in Xs").
+---@param bs flemma.state.BufferState
+---@param base_text string
+---@return string text
+---@return string|nil highlight
+local function timeout_pressure(bs, base_text)
+  local timeout = bs.progress_timeout
+  if not (timeout and timeout > 0 and bs.progress_started_at) then
+    return base_text, nil
   end
-  return 0
+  local elapsed_seconds = (vim.uv.now() - bs.progress_started_at) / 1000
+  local pct = elapsed_seconds / timeout
+  if pct >= 0.9 then
+    local remaining = math.max(0, math.floor(timeout - elapsed_seconds))
+    return base_text .. MIDDLE_DOT .. "timeout in " .. str.format_elapsed(remaining), "DiagnosticError"
+  elseif pct >= 0.8 then
+    local remaining = math.max(0, math.floor(timeout - elapsed_seconds))
+    return base_text .. MIDDLE_DOT .. "timeout in " .. str.format_elapsed(remaining), "DiagnosticWarn"
+  end
+  return base_text, nil
 end
 
----Check whether the gutter is wide enough to hold the spinner prefix icon.
----@param gutter_width integer
----@return boolean
-local function gutter_fits_spinner(gutter_width)
-  return gutter_width >= SPINNER_PREFIX_DISPLAY_WIDTH
-end
-
----Close the progress gutter icon window.
----@param buffer_state flemma.state.BufferState
-local function close_progress_gutter_icon(buffer_state)
-  if buffer_state.progress_gutter_icon_winid and vim.api.nvim_win_is_valid(buffer_state.progress_gutter_icon_winid) then
-    vim.api.nvim_win_close(buffer_state.progress_gutter_icon_winid, true)
+---Produce the progress body (label + elapsed, optionally char count) without
+---the leading spinner glyph. The spinner is the Bar's `icon` or a prepended
+---chunk on the inline virt_text path — it is never baked into the body so the
+---two rendering paths can share one source of truth without duplicating glyphs.
+---@param bs flemma.state.BufferState
+---@return string
+local function format_progress_body(bs)
+  local phase = bs.progress_phase or "waiting"
+  local elapsed_seconds = 0
+  if bs.progress_started_at then
+    elapsed_seconds = (vim.uv.now() - bs.progress_started_at) / 1000
   end
-  buffer_state.progress_gutter_icon_winid = nil
-  buffer_state.progress_gutter_icon_bufnr = nil
-end
+  local elapsed_str = str.format_elapsed(elapsed_seconds)
 
----Create or update the progress gutter icon floating window.
----@param buffer_state flemma.state.BufferState
----@param parent_winid integer Parent window ID
----@param gutter_width integer Gutter width in columns
----@param row integer Row offset from window top
----@param spinner_char string Current spinner character
-local function update_progress_gutter_icon(buffer_state, parent_winid, gutter_width, row, spinner_char)
-  local progress_config = config_facade.get().progress
-
-  -- Build icon text: spinner right-aligned in the gutter with a trailing space
-  local icon_text = string.rep(" ", math.max(0, gutter_width - SPINNER_PREFIX_DISPLAY_WIDTH)) .. spinner_char .. " "
-
-  if
-    not buffer_state.progress_gutter_icon_bufnr
-    or not vim.api.nvim_buf_is_valid(buffer_state.progress_gutter_icon_bufnr)
-  then
-    buffer_state.progress_gutter_icon_bufnr = vim.api.nvim_create_buf(false, true)
-    vim.bo[buffer_state.progress_gutter_icon_bufnr].buftype = "nofile"
-    vim.bo[buffer_state.progress_gutter_icon_bufnr].bufhidden = "wipe"
-    vim.bo[buffer_state.progress_gutter_icon_bufnr].undolevels = -1
-  end
-
-  local icon_bufnr = buffer_state.progress_gutter_icon_bufnr --[[@as integer]]
-  vim.bo[icon_bufnr].modifiable = true
-  vim.api.nvim_buf_set_lines(icon_bufnr, 0, -1, false, { icon_text })
-  vim.bo[icon_bufnr].modifiable = false
-
-  if buffer_state.progress_gutter_icon_winid and vim.api.nvim_win_is_valid(buffer_state.progress_gutter_icon_winid) then
-    pcall(vim.api.nvim_win_set_config, buffer_state.progress_gutter_icon_winid, {
-      relative = "win",
-      win = parent_winid,
-      row = row,
-      col = 0,
-      width = gutter_width,
-      height = 1,
-    })
+  if phase == "waiting" then
+    return WAITING_LABEL .. MIDDLE_DOT .. elapsed_str
   else
-    local ok, icon_winid = pcall(vim.api.nvim_open_win, icon_bufnr, false, {
-      relative = "win",
-      win = parent_winid,
-      row = row,
-      col = 0,
-      width = gutter_width,
-      height = 1,
-      focusable = false,
-      style = "minimal",
-      noautocmd = true,
-      zindex = progress_config.zindex,
-    })
-    if ok then
-      buffer_state.progress_gutter_icon_winid = icon_winid
-      vim.api.nvim_set_option_value("winhighlight", "NormalFloat:FlemmaProgressBar", { win = icon_winid })
-    end
+    local count = bs.progress_char_count or 0
+    local suffix = count == 1 and " character" or " characters"
+    local count_str = str.format_text_length(count) .. suffix
+    return count_str .. MIDDLE_DOT .. elapsed_str
   end
 end
 
----Show or update the progress float at the bottom of the window.
----When the gutter is wide enough, the spinner character is placed in a separate
----gutter icon window (matching the notification bar layout) and the main float
----contains only the text portion (character count, elapsed time, etc.).
+---Set the inline "Waiting"/"Thinking" virt_text extmark on the
+---@Assistant: line. Stable id via buffer_state.progress_extmark_id.
 ---@param bufnr integer
----@param parent_winid integer Window displaying the chat buffer
----@param progress_text string Formatted progress text (spinner_char .. " " .. rest)
----@param spinner_char string Current spinner character (for gutter icon)
----@param highlight? string Override highlight group (for timeout warnings)
-local function show_progress_float(bufnr, parent_winid, progress_text, spinner_char, highlight)
-  local buffer_state = state.get_buffer_state(bufnr)
-  local progress_config = config_facade.get().progress
-  local win_width = vim.api.nvim_win_get_width(parent_winid)
-  local win_height = vim.api.nvim_win_get_height(parent_winid)
-  local gutter_width = get_gutter_width(parent_winid)
-  local use_gutter_icon = gutter_fits_spinner(gutter_width)
-
-  -- Create or reuse the scratch buffer
-  if not buffer_state.progress_float_bufnr or not vim.api.nvim_buf_is_valid(buffer_state.progress_float_bufnr) then
-    buffer_state.progress_float_bufnr = vim.api.nvim_create_buf(false, true)
-    vim.bo[buffer_state.progress_float_bufnr].buftype = "nofile"
-    vim.bo[buffer_state.progress_float_bufnr].bufhidden = "wipe"
-    vim.bo[buffer_state.progress_float_bufnr].undolevels = -1
+---@param text string Progress text (spinner + label + elapsed, optionally timeout)
+---@param highlight? string Override highlight group (nil in neutral state)
+local function update_inline_waiting_extmark(bufnr, text, highlight)
+  local bs = state.get_buffer_state(bufnr)
+  local target_line = bs.progress_last_line
+  local ext_id = bs.progress_extmark_id
+  if target_line == nil or ext_id == nil then
+    return
   end
+  local chunks = build_progress_virt_text(text, bufnr, highlight)
+  pcall(vim.api.nvim_buf_set_extmark, bufnr, spinner_ns, target_line, 0, {
+    id = ext_id,
+    virt_text = chunks,
+    virt_text_pos = "eol",
+    hl_mode = "combine",
+    priority = PRIORITY.SPINNER,
+    spell = false,
+  })
+end
 
-  -- When spinner is in gutter, strip the "spinner_char " prefix from the text
-  local display_text
-  if use_gutter_icon then
-    -- Remove leading "X " (spinner + space) — show just the content portion
-    display_text = progress_text:sub(#spinner_char + 2) -- +2 for the space after spinner
-  else
-    display_text = string.rep(" ", gutter_width) .. progress_text
+---Wrap a flat progress text into a minimal single-item segment list.
+---warn_hl is nil in neutral state (no extmark emitted) or a diagnostic
+---group name during timeout pressure.
+---@param text string
+---@param warn_hl string|nil
+---@return flemma.ui.bar.layout.Segment[]
+local function progress_segments(text, warn_hl)
+  return {
+    {
+      key = "progress",
+      items = {
+        {
+          key = "text",
+          text = text,
+          priority = 1,
+          highlight = warn_hl and { group = warn_hl } or nil,
+        },
+      },
+    },
+  }
+end
+
+---Get or create the progress Bar for a buffer.
+---@param bufnr integer
+---@return flemma.ui.bar.Bar
+local function ensure_progress_bar(bufnr)
+  local bs = state.get_buffer_state(bufnr)
+  if bs.progress_bar and not bs.progress_bar:is_dismissed() then
+    return bs.progress_bar
   end
+  local cfg = config_facade.get(bufnr).ui.progress
+  local frames = spinners.FRAMES[bs.progress_phase or "waiting"] or spinners.FRAMES.waiting
+  bs.progress_bar = Bar.new({
+    bufnr = bufnr,
+    position = cfg.position,
+    segments = progress_segments("", nil),
+    icon = frames[1],
+    -- Same reasoning as usage.show: paint with FlemmaProgressBar
+    -- (derived by highlight.lua from cfg.highlight) so attributes on
+    -- the user's resolved chain group do NOT leak. cfg.highlight stays
+    -- as a fallback tail.
+    highlight = "FlemmaProgressBar," .. cfg.highlight,
+    on_dismiss = function()
+      local inner = state.get_buffer_state(bufnr)
+      inner.progress_bar = nil
+    end,
+  })
+  return bs.progress_bar
+end
 
-  -- Add one trailing space for breathing room
-  display_text = display_text .. " "
-
-  local float_bufnr = buffer_state.progress_float_bufnr --[[@as integer]]
-  vim.api.nvim_buf_set_lines(float_bufnr, 0, -1, false, { display_text })
-
-  -- Apply highlight to the text (timeout warnings override bar text color)
-  vim.api.nvim_buf_clear_namespace(float_bufnr, spinner_ns, 0, -1)
-  if highlight then
-    vim.api.nvim_buf_set_extmark(float_bufnr, spinner_ns, 0, 0, {
-      end_col = #display_text,
-      hl_group = highlight,
-    })
-  end
-
-  -- Size float to fit text only — uncovered area to the right reveals buffer content
-  local float_col = use_gutter_icon and gutter_width or 0
-  local text_display_width = vim.api.nvim_strwidth(display_text)
-  local max_width = use_gutter_icon and (win_width - gutter_width) or win_width
-  local float_width = math.max(1, math.min(text_display_width, max_width))
-  local float_row = win_height - 1
-
-  if buffer_state.progress_float_winid and vim.api.nvim_win_is_valid(buffer_state.progress_float_winid) then
-    pcall(vim.api.nvim_win_set_config, buffer_state.progress_float_winid, {
-      relative = "win",
-      win = parent_winid,
-      row = float_row,
-      col = float_col,
-      width = float_width,
-      height = 1,
-    })
-  else
-    local ok, float_winid = pcall(vim.api.nvim_open_win, float_bufnr, false, {
-      relative = "win",
-      win = parent_winid,
-      row = float_row,
-      col = float_col,
-      width = float_width,
-      height = 1,
-      style = "minimal",
-      focusable = false,
-      noautocmd = true,
-      zindex = progress_config.zindex,
-    })
-    if ok then
-      buffer_state.progress_float_winid = float_winid
-      vim.api.nvim_set_option_value(
-        "winhighlight",
-        "Normal:FlemmaProgressBar,NormalFloat:FlemmaProgressBar",
-        { win = float_winid }
-      )
-    end
-  end
-
-  -- Manage gutter icon: create/reposition when gutter fits, close when it doesn't
-  if use_gutter_icon then
-    update_progress_gutter_icon(buffer_state, parent_winid, gutter_width, float_row, spinner_char)
-  else
-    close_progress_gutter_icon(buffer_state)
+---@param bufnr integer
+local function dismiss_progress_bar(bufnr)
+  local bs = state.get_buffer_state(bufnr)
+  if bs.progress_bar then
+    bs.progress_bar:dismiss()
+    bs.progress_bar = nil
   end
 end
 
----Hide the progress float and gutter icon if they exist.
+---Per-tick advance. Preserves today's behaviour exactly:
+---  waiting / thinking  -> inline virt_text + Bar only when off-screen
+---  streaming / buffering -> Bar only (clears leftover inline extmark)
 ---@param bufnr integer
-local function hide_progress_float(bufnr)
-  local buffer_state = state.get_buffer_state(bufnr)
-  if buffer_state.progress_float_winid then
-    if vim.api.nvim_win_is_valid(buffer_state.progress_float_winid) then
-      vim.api.nvim_win_close(buffer_state.progress_float_winid, true)
-    end
-    buffer_state.progress_float_winid = nil
+local function advance_progress(bufnr)
+  local bs = state.get_buffer_state(bufnr)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
   end
-  close_progress_gutter_icon(buffer_state)
+  if not bs.current_request then
+    return
+  end
+
+  bs.progress_tick = (bs.progress_tick or 0) + 1
+
+  local phase = bs.progress_phase or "waiting"
+  local frames = spinners.FRAMES[phase]
+  local speed = spinners.SPEED[phase] or 1
+  local frame = frames[(math.floor(bs.progress_tick / speed) % #frames) + 1]
+
+  local base_body = format_progress_body(bs)
+  local body, warn_hl = timeout_pressure(bs, base_body)
+
+  if phase == "waiting" or phase == "thinking" then
+    -- Inline virt_text is a flat chunk list with no icon slot; prepend the
+    -- spinner to the body so the `@Assistant:` line shows `<spinner> <body>`.
+    update_inline_waiting_extmark(bufnr, frame .. " " .. body, warn_hl)
+
+    local winid = vim.fn.bufwinid(bufnr)
+    local off_screen = winid ~= -1 and bs.progress_last_line and (bs.progress_last_line + 1) > vim.fn.line("w$", winid)
+
+    if off_screen then
+      ensure_progress_bar(bufnr):update({
+        icon = frame,
+        segments = progress_segments(body, warn_hl),
+      })
+    else
+      dismiss_progress_bar(bufnr)
+    end
+    return
+  end
+
+  -- streaming / buffering: clear any leftover inline extmark; Bar only.
+  if bs.progress_extmark_id ~= nil then
+    vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)
+    bs.progress_extmark_id = nil
+  end
+
+  ensure_progress_bar(bufnr):update({
+    icon = frame,
+    segments = progress_segments(body, warn_hl),
+  })
 end
 
 ---Start the progress line for a new request.
@@ -431,7 +421,6 @@ end
 ---@return integer timer_id
 function M.start_progress(bufnr, progress_opts)
   local buffer_state = state.get_buffer_state(bufnr)
-  local tick = 0
 
   -- Initialize progress state
   buffer_state.progress_phase = "waiting"
@@ -440,6 +429,7 @@ function M.start_progress(bufnr, progress_opts)
   buffer_state.progress_timeout = progress_opts.timeout
   buffer_state.progress_extmark_id = nil
   buffer_state.progress_last_line = nil
+  buffer_state.progress_tick = 0
 
   writequeue.schedule(bufnr, function()
     buffer_utils.with_modifiable(bufnr, function()
@@ -458,7 +448,7 @@ function M.start_progress(bufnr, progress_opts)
       -- Create the waiting-phase extmark (virt_text at EOL on @Assistant: line)
       local progress_line_idx0 = vim.api.nvim_buf_line_count(bufnr) - 1
       local frames = spinners.FRAMES.waiting
-      local spinner_char = frames[(tick % #frames) + 1]
+      local spinner_char = frames[1]
       local progress_text = spinner_char .. " " .. WAITING_LABEL .. MIDDLE_DOT .. "0s"
       local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, spinner_ns, progress_line_idx0, 0, {
         virt_text = build_progress_virt_text(progress_text, bufnr),
@@ -484,97 +474,7 @@ function M.start_progress(bufnr, progress_opts)
   end)
 
   local timer = vim.fn.timer_start(100, function()
-    if not vim.api.nvim_buf_is_valid(bufnr) then
-      return
-    end
-    if not buffer_state.current_request then
-      return
-    end
-
-    tick = tick + 1
-
-    local phase = buffer_state.progress_phase or "waiting"
-    local frames = spinners.FRAMES[phase]
-    local speed = spinners.SPEED[phase] or 1
-    local spinner_char = frames[(math.floor(tick / speed) % #frames) + 1]
-
-    -- Compute elapsed time
-    local elapsed_seconds = 0
-    if buffer_state.progress_started_at then
-      elapsed_seconds = (vim.uv.now() - buffer_state.progress_started_at) / 1000
-    end
-    local elapsed_str = str.format_elapsed(elapsed_seconds)
-
-    -- Build the progress text
-    local progress_text
-    if phase == "waiting" then
-      progress_text = spinner_char .. " " .. WAITING_LABEL .. MIDDLE_DOT .. elapsed_str
-    else
-      local count = buffer_state.progress_char_count or 0
-      local suffix = count == 1 and " character" or " characters"
-      local count_str = str.format_text_length(count) .. suffix
-      progress_text = spinner_char .. " " .. count_str .. MIDDLE_DOT .. elapsed_str
-    end
-
-    -- Timeout warning
-    local highlight = nil
-    local timeout = buffer_state.progress_timeout
-    if timeout and timeout > 0 then
-      local pct = elapsed_seconds / timeout
-      if pct >= 0.9 then
-        highlight = "DiagnosticError"
-        local remaining = math.max(0, math.floor(timeout - elapsed_seconds))
-        progress_text = progress_text .. MIDDLE_DOT .. "timeout in " .. str.format_elapsed(remaining)
-      elseif pct >= 0.8 then
-        highlight = "DiagnosticWarn"
-        local remaining = math.max(0, math.floor(timeout - elapsed_seconds))
-        progress_text = progress_text .. MIDDLE_DOT .. "timeout in " .. str.format_elapsed(remaining)
-      end
-    end
-
-    -- Rendering strategy:
-    -- - Waiting/thinking: inline virt_text at EOL on @Assistant: line,
-    --   plus float if the line is scrolled out of view
-    -- - Streaming/buffering: float only (virt_lines below the last buffer
-    --   line are unreliable — Neovim doesn't include them in scroll calcs)
-    local winid = vim.fn.bufwinid(bufnr)
-
-    if phase == "waiting" or phase == "thinking" then
-      -- Inline virt_text at EOL
-      local virt_text_chunks = build_progress_virt_text(progress_text, bufnr, highlight)
-      local target_line = buffer_state.progress_last_line
-      local ext_id = buffer_state.progress_extmark_id
-      if target_line ~= nil and ext_id ~= nil then
-        pcall(vim.api.nvim_buf_set_extmark, bufnr, spinner_ns, target_line, 0, {
-          id = ext_id,
-          virt_text = virt_text_chunks,
-          virt_text_pos = "eol",
-          hl_mode = "combine",
-          priority = PRIORITY.SPINNER,
-          spell = false,
-        })
-      end
-
-      -- Also show float if the inline extmark is off-screen
-      if winid ~= -1 and target_line ~= nil then
-        local last_visible = vim.fn.line("w$", winid)
-        if target_line + 1 > last_visible then
-          show_progress_float(bufnr, winid, progress_text, spinner_char, highlight)
-        else
-          hide_progress_float(bufnr)
-        end
-      end
-    else
-      -- Streaming/buffering: float only — clear any leftover inline extmark
-      if buffer_state.progress_extmark_id ~= nil then
-        vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)
-        buffer_state.progress_extmark_id = nil
-      end
-
-      if winid ~= -1 then
-        show_progress_float(bufnr, winid, progress_text, spinner_char, highlight)
-      end
-    end
+    advance_progress(bufnr)
   end, { ["repeat"] = -1 })
 
   buffer_state.progress_timer = timer
@@ -597,7 +497,7 @@ function M.cleanup_progress(bufnr)
     end
 
     -- Close the progress float if open
-    hide_progress_float(bufnr)
+    dismiss_progress_bar(bufnr)
 
     -- Clear progress state
     buffer_state.progress_phase = nil
@@ -606,9 +506,7 @@ function M.cleanup_progress(bufnr)
     buffer_state.progress_timeout = nil
     buffer_state.progress_extmark_id = nil
     buffer_state.progress_last_line = nil
-    buffer_state.progress_float_bufnr = nil
-    buffer_state.progress_gutter_icon_winid = nil
-    buffer_state.progress_gutter_icon_bufnr = nil
+    buffer_state.progress_tick = nil
 
     vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
     vim.api.nvim_buf_clear_namespace(bufnr, spinner_ns, 0, -1)

@@ -177,6 +177,8 @@ When you resolve a non-obvious issue — something that required real investigat
 
 - **Lua `a and b or c` ternary fails when `b` is falsy.** `true and false or x` evaluates to `x`, not `false`. Always use explicit `if/else` when the "true" branch value could be `false` or `nil`. This bit a dual-call convention closure (`maybe_item ~= nil and maybe_item or self_or_item`) where `maybe_item` was legitimately `false`.
 
+- **Tests must assert on observable output, not internal state.** Internal fields and intermediate values can stay coherent while the thing a user or caller actually sees is wrong. Bind assertions to the observable surface — rendered UI (`nvim_win_get_config`, buffer text, extmark positions), outgoing HTTP request bodies, parsed AST nodes, command stdout, emitted `vim.notify` calls — never the builder, flag, or counter that was meant to produce it. Two regressions slipped past the Bar refactor's CI (duplicate spinner glyph, full-width corner floats) because specs checked `bar._some_flag` instead of window dimensions and buffer contents.
+
 ## Session Closure Checklist
 
 - Run `flemma-fmt` to reformat the entire codebase.

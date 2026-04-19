@@ -78,7 +78,7 @@ Composes with blend operations – blends are applied first, then contrast is en
 "DiffChange-fg:#222222^fg:4.5"
 ```
 
-> **Scope:** The `^` operator requires a background context provided by the caller. Currently only the notification bar highlight setup provides this context. Using `^` in user-facing config values (e.g., `ruler.hl`) has no effect – the operator is silently ignored when no background context is available.
+> **Scope:** The `^` operator requires a background context provided by the caller. Currently only the usage bar highlight setup provides this context. Using `^` in user-facing config values (e.g., `ruler.hl`) has no effect – the operator is silently ignored when no background context is available.
 
 **Fallback chains** try groups in order, separated by commas. Only the last group in the chain uses the configured `defaults` when the attribute is missing:
 
@@ -191,37 +191,37 @@ Collapsed folds show a preview of their content with per-segment syntax highligh
 - **Thinking blocks:** `<thinking preview...> (N lines)` – shows `<thinking redacted>` for redacted blocks, or `<thinking provider>` for blocks with a provider signature. Uses `FlemmaThinkingTag` for delimiters and `FlemmaThinkingFoldPreview` for content (fg-only, so the background comes from the line highlight extmark and correctly blends with CursorLine).
 - **Frontmatter:** ` ```language preview... ``` (N lines) ` – uses `FlemmaFoldMeta` for fences and `FlemmaFoldPreview` for content.
 
-## Notifications
+## Usage bar
 
-Completed requests show a single-line notification bar pinned to the top of the chat window. The bar displays model, provider, token counts, cost, and cache statistics – all rendered using priority-based truncation so content degrades gracefully in narrow terminals. Higher-priority items (model name, cost) survive; lower-priority items (individual token breakdowns) are dropped first.
+Completed requests show a single-line usage bar anchored to one of the chat window's edges. The bar displays model, provider, token counts, cost, and cache statistics – all rendered using priority-based truncation so content degrades gracefully in narrow terminals. Higher-priority items (model name, cost) survive; lower-priority items (individual token breakdowns) are dropped first.
 
 ```lua
-notifications = {
-  enabled = true,                          -- set to false to suppress all notification bars
-  timeout = 10000,                         -- milliseconds before auto-dismiss (0 = persistent)
-  limit = 1,                               -- maximum stacked notifications per buffer
-  position = "overlay",                    -- "overlay" (pinned to window top)
-  zindex = 30,                             -- floating window z-index (above nvim-treesitter-context)
-  highlight = "@text.note, PmenuSel",      -- highlight group(s) for bar colours; first with both fg+bg wins
-  border = false,                          -- bottom border style, or false to disable
+ui = {
+  usage = {
+    enabled = true,                        -- set to false to suppress the usage bar
+    timeout = 10000,                       -- milliseconds before auto-dismiss (0 = persistent)
+    position = "top",                      -- one of: top, bottom, top left, top right,
+                                           --          bottom left, bottom right
+    highlight = "@text.note,PmenuSel",     -- highlight group(s) for bar colours; first with both fg+bg wins
+  },
 }
 ```
 
 The `highlight` option accepts a comma-separated list of highlight group names. Flemma tries each in order and uses the first one that provides both `fg` and `bg` attributes. This lets you specify preferred groups with fallbacks for colorschemes that may not define them all.
 
-Notification bars derive all colours from the resolved highlight group using three foreground tiers against a shared background:
+The usage bar derives all colours from the resolved highlight group using three foreground tiers against a shared background:
 
-| Tier      | Group                          | Used by                                  |
-| --------- | ------------------------------ | ---------------------------------------- |
-| Primary   | `FlemmaNotificationsBar`       | Model name, cost                         |
-| Secondary | `FlemmaNotificationsSecondary` | Token counts, cache label, request count |
-| Muted     | `FlemmaNotificationsMuted`     | Provider, separators, session label      |
+| Tier      | Group                     | Used by                                  |
+| --------- | ------------------------- | ---------------------------------------- |
+| Primary   | `FlemmaUsageBar`          | Model name, cost                         |
+| Secondary | `FlemmaUsageBarSecondary` | Token counts, cache label, request count |
+| Muted     | `FlemmaUsageBarMuted`     | Provider, separators, session label      |
 
-Cache hit percentage uses semantic colours (`DiagnosticOk` / `DiagnosticWarn`) with automatic WCAG contrast enforcement against the bar background. The bottom-most bar has a border (`FlemmaNotificationsBottom`) whose style is controlled by the `border` option – set to `"underdouble"`, `"undercurl"`, `"underdotted"`, `"underdashed"`, or `false` to disable. The border colour matches the muted tier fg for a uniform appearance with the `│` separators.
+Cache hit percentage uses semantic colours through `FlemmaUsageBarCacheGood` (links to `DiagnosticOk`) and `FlemmaUsageBarCacheBad` (links to `DiagnosticWarn`) with automatic WCAG contrast enforcement against the bar background.
 
-Bars stack vertically when multiple are active – the most recent appears at the top, older ones shift down. Each `.chat` buffer has its own notification stack. Notifications for hidden buffers are queued and shown when the buffer becomes visible. Bars re-render automatically on window resize to reflow content for the new width. Recall the most recent notification with `:Flemma notification:recall`.
+Each `.chat` buffer owns at most one active usage bar — a new request dismisses the previous bar before rendering the next. Bars re-render automatically on window resize to reflow content for the new width. Recall the most recent usage bar with `:Flemma usage:recall`.
 
-See `lua/flemma/notifications.lua` for the full implementation.
+See `lua/flemma/usage.lua` for the driver and `lua/flemma/ui/bar/` for the shared Bar rendering class.
 
 ## Extmark priority
 
@@ -240,12 +240,15 @@ This hierarchy is defined in `lua/flemma/ui/init.lua` and is not user-configurab
 
 ## Progress bar
 
-While a request is streaming, Flemma shows a persistent progress indicator as a floating bar anchored to the assistant's response line. The bar displays the current phase (thinking, streaming text, receiving tool input) and repositions automatically if the target line scrolls off-screen. When the response line is visible in the window, the progress bar appears inline; when it scrolls out of view, a floating indicator appears so you always know what Flemma is doing.
+While a request is streaming, Flemma shows a persistent progress indicator as a floating bar anchored to one of the chat window's edges. The bar displays the current phase (thinking, streaming text, receiving tool input) and re-renders automatically on window resize.
 
 ```lua
-progress = {
-  highlight = "StatusLine",  -- highlight group(s); first with both fg+bg is used
-  zindex = 50,               -- above notifications (zindex 30)
+ui = {
+  progress = {
+    position = "bottom left",  -- one of: top, bottom, top left, top right,
+                               --          bottom left, bottom right
+    highlight = "StatusLine",  -- highlight group(s); first with both fg+bg is used
+  },
 }
 ```
 

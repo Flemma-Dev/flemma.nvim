@@ -29,7 +29,7 @@ describe("flemma.utilities.string", function()
       assert.are.equal(4, str.strwidth("hi你"))
     end)
 
-    it("counts Unicode symbols used in notifications", function()
+    it("counts Unicode symbols used in the usage bar", function()
       -- "Σ" (U+03A3) is 1 display column
       assert.are.equal(1, str.strwidth("Σ"))
       -- "↑" (U+2191) is 1 display column

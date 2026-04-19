@@ -1,13 +1,16 @@
 --- Usage and pricing functionality for Flemma plugin
---- Centralizes notification display for request and session costs
+--- Centralizes the usage bar display for request and session costs
 
 ---@class flemma.Usage
 local M = {}
 
-local bar = require("flemma.bar")
+local layout = require("flemma.ui.bar.layout")
 local config_facade = require("flemma.config")
 local provider_registry = require("flemma.provider.registry")
 local str = require("flemma.utilities.string")
+local Bar = require("flemma.ui.bar")
+local state = require("flemma.state")
+local notify = require("flemma.notify")
 
 --- Item priorities (higher = more important, shown first when space is scarce)
 local PRIORITY = {
@@ -47,29 +50,29 @@ end
 --- Build structured segments from request and session data for bar rendering
 ---@param request? flemma.session.Request Most recent completed request
 ---@param session? flemma.session.Session Session instance
----@return flemma.bar.Segment[]
+---@return flemma.ui.bar.layout.Segment[]
 function M.build_segments(request, session)
   local config = config_facade.get()
   local pricing_enabled = config.pricing.enabled
 
-  local segments = {} ---@type flemma.bar.Segment[]
+  local segments = {} ---@type flemma.ui.bar.layout.Segment[]
 
   -- Identity segment (from request)
   if request then
-    local identity_items = {} ---@type flemma.bar.Item[]
+    local identity_items = {} ---@type flemma.ui.bar.layout.Item[]
 
     table.insert(identity_items, {
       key = "model_name",
       text = request.model,
       priority = PRIORITY.MODEL_NAME,
-      highlight = { group = "FlemmaNotificationsBar" },
+      highlight = { group = "FlemmaUsageBar" },
     })
 
     table.insert(identity_items, {
       key = "provider_name",
       text = "(" .. request.provider .. ")",
       priority = PRIORITY.PROVIDER_NAME,
-      highlight = { group = "FlemmaNotificationsMuted" },
+      highlight = { group = "FlemmaUsageBarMuted" },
     })
 
     table.insert(segments, {
@@ -80,7 +83,7 @@ function M.build_segments(request, session)
 
   -- Request segment
   if request then
-    local request_items = {} ---@type flemma.bar.Item[]
+    local request_items = {} ---@type flemma.ui.bar.layout.Item[]
 
     -- Cost
     if pricing_enabled then
@@ -88,7 +91,7 @@ function M.build_segments(request, session)
         key = "request_cost",
         text = str.format_money(request:get_total_cost()),
         priority = PRIORITY.REQUEST_COST,
-        highlight = { group = "FlemmaNotificationsBar" },
+        highlight = { group = "FlemmaUsageBar" },
       })
     end
 
@@ -106,7 +109,7 @@ function M.build_segments(request, session)
 
       if not below_threshold then
         local cache_text = str.format_percent(cache_percent)
-        local group = cache_percent > 50 and "FlemmaNotificationsCacheGood" or "FlemmaNotificationsCacheBad"
+        local group = cache_percent > 50 and "FlemmaUsageBarCacheGood" or "FlemmaUsageBarCacheBad"
         table.insert(request_items, {
           key = "cache_percent",
           text = cache_text,
@@ -123,7 +126,7 @@ function M.build_segments(request, session)
       key = "request_input_tokens",
       text = M.format_number(request:get_total_input_tokens()) .. "\xE2\x86\x91", -- ↑
       priority = PRIORITY.REQUEST_INPUT_TOKENS,
-      highlight = { group = "FlemmaNotificationsSecondary" },
+      highlight = { group = "FlemmaUsageBarSecondary" },
     })
 
     -- Output tokens
@@ -132,7 +135,7 @@ function M.build_segments(request, session)
       key = "request_output_tokens",
       text = M.format_number(total_output_tokens) .. "\xE2\x86\x93", -- ↓
       priority = PRIORITY.REQUEST_OUTPUT_TOKENS,
-      highlight = { group = "FlemmaNotificationsSecondary" },
+      highlight = { group = "FlemmaUsageBarSecondary" },
     })
 
     -- Thinking tokens
@@ -141,7 +144,7 @@ function M.build_segments(request, session)
         key = "thinking_tokens",
         text = M.format_number(request.thoughts_tokens) .. "\xE2\x81\x82", -- ⁂
         priority = PRIORITY.THINKING_TOKENS,
-        highlight = { group = "FlemmaNotificationsSecondary" },
+        highlight = { group = "FlemmaUsageBarSecondary" },
       })
     end
 
@@ -149,14 +152,14 @@ function M.build_segments(request, session)
       table.insert(segments, {
         key = "request",
         items = request_items,
-        separator_highlight = "FlemmaNotificationsMuted",
+        separator_highlight = "FlemmaUsageBarMuted",
       })
     end
   end
 
   -- Session segment
   if session and session:get_request_count() > 0 then
-    local session_items = {} ---@type flemma.bar.Item[]
+    local session_items = {} ---@type flemma.ui.bar.layout.Item[]
 
     -- Session cost
     if pricing_enabled then
@@ -164,7 +167,7 @@ function M.build_segments(request, session)
         key = "session_cost",
         text = str.format_money(session:get_total_cost()),
         priority = PRIORITY.SESSION_COST,
-        highlight = { group = "FlemmaNotificationsBar" },
+        highlight = { group = "FlemmaUsageBar" },
       })
     end
 
@@ -173,7 +176,7 @@ function M.build_segments(request, session)
       key = "session_input_tokens",
       text = M.format_number(session:get_total_input_tokens()) .. "\xE2\x86\x91", -- ↑
       priority = PRIORITY.SESSION_INPUT_TOKENS,
-      highlight = { group = "FlemmaNotificationsSecondary" },
+      highlight = { group = "FlemmaUsageBarSecondary" },
     })
 
     -- Session output tokens
@@ -181,14 +184,14 @@ function M.build_segments(request, session)
       key = "session_output_tokens",
       text = M.format_number(session:get_total_output_tokens()) .. "\xE2\x86\x93", -- ↓
       priority = PRIORITY.SESSION_OUTPUT_TOKENS,
-      highlight = { group = "FlemmaNotificationsSecondary" },
+      highlight = { group = "FlemmaUsageBarSecondary" },
     })
 
     table.insert(segments, {
       key = "session",
       label = "Σ" .. tostring(session:get_request_count()),
-      label_highlight = "FlemmaNotificationsMuted",
-      separator_highlight = "FlemmaNotificationsMuted",
+      label_highlight = "FlemmaUsageBarMuted",
+      separator_highlight = "FlemmaUsageBarMuted",
       items = session_items,
     })
   end
@@ -196,18 +199,126 @@ function M.build_segments(request, session)
   return segments
 end
 
---- Format usage information for notification bar display
---- Builds segments from request/session data and renders via the bar layout engine.
----@param request? flemma.session.Request Most recent completed request
----@param session? flemma.session.Session Session instance
----@param available_width integer Window width in display characters
----@return flemma.bar.RenderResult
-function M.format_notification(request, session, available_width)
-  local segments = M.build_segments(request, session)
-  if #segments == 0 then
-    return { text = "", highlights = {} }
+---Start the auto-dismiss timer for the bar on a given buffer.
+---Reads cfg.timeout; 0 = persistent (no timer).
+---@param bufnr integer
+local function start_timeout_timer(bufnr)
+  local cfg = config_facade.get(bufnr).ui.usage
+  if cfg.timeout <= 0 then
+    return
   end
-  return bar.render(segments, available_width)
+  local bs = state.get_buffer_state(bufnr)
+  bs.usage_timer = vim.fn.timer_start(cfg.timeout, function()
+    local inner = state.get_buffer_state(bufnr)
+    if inner.usage_bar then
+      inner.usage_bar:dismiss()
+    end
+    inner.usage_timer = nil
+  end)
 end
+
+---Public entrypoint used by core.lua after a successful request.
+---The enabled gate runs synchronously; everything else defers via
+---vim.schedule to let the triggering callback finish first.
+---@param bufnr integer
+---@param request flemma.session.Request|nil
+function M.show(bufnr, request)
+  local cfg = config_facade.get(bufnr).ui.usage
+  if not cfg.enabled then
+    return
+  end
+
+  vim.schedule(function()
+    if not vim.api.nvim_buf_is_valid(bufnr) then
+      return
+    end
+
+    local bs = state.get_buffer_state(bufnr)
+    if bs.usage_timer then
+      vim.fn.timer_stop(bs.usage_timer)
+      bs.usage_timer = nil
+    end
+
+    local segments = M.build_segments(request, state.get_session())
+    if #segments == 0 then
+      return
+    end
+
+    bs.usage_bar = Bar.new({
+      bufnr = bufnr,
+      position = cfg.position,
+      segments = segments,
+      icon = layout.PREFIX,
+      -- Paint with the pre-computed FlemmaUsageBar group so attributes
+      -- (italic/bold/underline) on the user's resolved chain group do
+      -- NOT leak through. highlight.lua already derived FlemmaUsageBar's
+      -- bg+fg from cfg.highlight; cfg.highlight is kept as a fallback
+      -- tail in case FlemmaUsageBar is somehow undefined.
+      highlight = "FlemmaUsageBar," .. cfg.highlight,
+      on_shown = function()
+        start_timeout_timer(bufnr)
+      end,
+      on_dismiss = function()
+        local inner = state.get_buffer_state(bufnr)
+        inner.usage_bar = nil
+      end,
+    })
+  end)
+end
+
+---Recall the most recent request for the current buffer's filepath and
+---re-display the usage bar. Takes no argument: resolves the current
+---buffer internally. Three failure paths each emit a single
+---vim.notify(WARN): no filepath, no latest request, empty segments.
+function M.recall_last()
+  local bufnr = vim.api.nvim_get_current_buf()
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  local bs = state.get_buffer_state(bufnr)
+  if bs.usage_bar and not bs.usage_bar:is_dismissed() then
+    return
+  end
+
+  local filepath = vim.api.nvim_buf_get_name(bufnr)
+  if filepath == "" then
+    notify.warn("No usage data for this buffer.")
+    return
+  end
+
+  local session = state.get_session()
+  local latest = session:get_latest_request_for_filepath(filepath)
+  if not latest then
+    notify.warn("No usage data for this buffer.")
+    return
+  end
+
+  local segments = M.build_segments(latest, session)
+  if #segments == 0 then
+    notify.warn("No usage data for this buffer.")
+    return
+  end
+
+  M.show(bufnr, latest)
+end
+
+---Per-buffer cleanup; called via state.register_cleanup.
+---@param bufnr integer
+function M.cleanup_buffer(bufnr)
+  local bs = state.get_buffer_state(bufnr)
+  if bs.usage_timer then
+    vim.fn.timer_stop(bs.usage_timer)
+    bs.usage_timer = nil
+  end
+  if bs.usage_bar then
+    bs.usage_bar:dismiss()
+    bs.usage_bar = nil
+  end
+end
+
+state.register_cleanup("usage", function(bufnr)
+  M.cleanup_buffer(bufnr)
+end)
 
 return M

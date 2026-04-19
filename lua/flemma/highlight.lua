@@ -28,6 +28,34 @@ local function get_hl_color(group_name, attr)
   return nil
 end
 
+---Walk a chain of highlight group names and return the first group whose
+---resolved highlight definition provides BOTH a foreground and a background
+---colour. Matches the "complete" criterion used by the usage bar and
+---progress bar fallback logic.
+---@param chain string|string[] Comma-separated string or list of group names
+---@return string|nil group The first complete group, or nil
+function M.resolve_first_complete(chain)
+  local names
+  if type(chain) == "string" then
+    names = {}
+    for name in chain:gmatch("[^,]+") do
+      table.insert(names, vim.trim(name))
+    end
+  else
+    names = chain
+  end
+  for _, name in ipairs(names) do
+    if name ~= "" then
+      local fg = get_hl_color(name, "fg")
+      local bg = get_hl_color(name, "bg")
+      if fg and bg then
+        return name
+      end
+    end
+  end
+  return nil
+end
+
 ---Get the default fallback color for an attribute.
 ---First tries the Normal highlight group, then falls back to config defaults.
 ---@param attr string "fg" or "bg"
@@ -431,101 +459,62 @@ M.apply_syntax = function()
   -- Turns column highlight
   vim.api.nvim_set_hl(0, "FlemmaTurn", { link = "FlemmaRuler", default = true })
 
-  -- Notification bar highlight groups
-  -- Derived from the first group in notifications.hl that provides both fg and bg
-  local bar_bg_hex, bar_fg_hex, notification_base_group
-  for candidate in syntax_config.notifications.highlight:gmatch("[^,]+") do
-    candidate = vim.trim(candidate)
-    local bg = get_hl_color(candidate, "bg")
-    local fg = get_hl_color(candidate, "fg")
-    if bg and fg then
-      bar_bg_hex = bg
-      bar_fg_hex = fg
-      notification_base_group = candidate
-      break
-    end
-  end
+  -- Usage bar highlight groups
+  -- Derived from the first group in ui.usage.highlight that provides both fg and bg
+  local usage_base_group = M.resolve_first_complete(syntax_config.ui.usage.highlight)
+  local bar_bg_hex = usage_base_group and get_hl_color(usage_base_group, "bg") or nil
+  local bar_fg_hex = usage_base_group and get_hl_color(usage_base_group, "fg") or nil
 
   if bar_bg_hex and bar_fg_hex then
     -- Primary tier: base group fg + bg as-is (model name, cost)
-    vim.api.nvim_set_hl(0, "FlemmaNotificationsBar", { bg = bar_bg_hex, fg = bar_fg_hex, default = true })
+    vim.api.nvim_set_hl(0, "FlemmaUsageBar", { bg = bar_bg_hex, fg = bar_fg_hex, default = true })
 
     -- Secondary tier: slightly dimmed fg (cache label, token counts, request count)
     local is_dark = vim.o.background == "dark"
-    local secondary_expr = notification_base_group .. (is_dark and "-fg:#222222" or "+fg:#222222")
+    local secondary_expr = usage_base_group .. (is_dark and "-fg:#222222" or "+fg:#222222")
     local secondary_resolved = parse_highlight_expression(secondary_expr)
     if secondary_resolved and secondary_resolved.fg then
-      vim.api.nvim_set_hl(
-        0,
-        "FlemmaNotificationsSecondary",
-        { bg = bar_bg_hex, fg = secondary_resolved.fg, default = true }
-      )
+      vim.api.nvim_set_hl(0, "FlemmaUsageBarSecondary", { bg = bar_bg_hex, fg = secondary_resolved.fg, default = true })
     end
 
     -- Muted tier: more dimmed fg (provider, separators, session label)
-    local muted_expr = notification_base_group .. (is_dark and "-fg:#444444" or "+fg:#444444")
+    local muted_expr = usage_base_group .. (is_dark and "-fg:#444444" or "+fg:#444444")
     local muted_resolved = parse_highlight_expression(muted_expr)
     if muted_resolved and muted_resolved.fg then
-      vim.api.nvim_set_hl(0, "FlemmaNotificationsMuted", { bg = bar_bg_hex, fg = muted_resolved.fg, default = true })
+      vim.api.nvim_set_hl(0, "FlemmaUsageBarMuted", { bg = bar_bg_hex, fg = muted_resolved.fg, default = true })
     end
 
     -- Semantic cache highlights with contrast enforcement
     local cache_good_fg = get_hl_color("DiagnosticOk", "fg")
     if cache_good_fg then
       cache_good_fg = color.ensure_contrast(cache_good_fg, bar_bg_hex, 4.5)
-      vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheGood", { bg = bar_bg_hex, fg = cache_good_fg, default = true })
+      vim.api.nvim_set_hl(0, "FlemmaUsageBarCacheGood", { bg = bar_bg_hex, fg = cache_good_fg, default = true })
     else
-      vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheGood", { link = "DiagnosticOk", default = true })
+      vim.api.nvim_set_hl(0, "FlemmaUsageBarCacheGood", { link = "DiagnosticOk", default = true })
     end
 
     local cache_bad_fg = get_hl_color("DiagnosticWarn", "fg")
     if cache_bad_fg then
       cache_bad_fg = color.ensure_contrast(cache_bad_fg, bar_bg_hex, 4.5)
-      vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheBad", { bg = bar_bg_hex, fg = cache_bad_fg, default = true })
+      vim.api.nvim_set_hl(0, "FlemmaUsageBarCacheBad", { bg = bar_bg_hex, fg = cache_bad_fg, default = true })
     else
-      vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheBad", { link = "DiagnosticWarn", default = true })
-    end
-
-    -- Bottom border: sp matches the muted fg so │ separators and border look uniform
-    local border_style = syntax_config.notifications.border
-    if border_style then
-      local muted_fg = get_hl_color("FlemmaNotificationsMuted", "fg")
-      if muted_fg then
-        vim.api.nvim_set_hl(0, "FlemmaNotificationsBottom", { [border_style] = true, sp = muted_fg, default = true })
-      end
+      vim.api.nvim_set_hl(0, "FlemmaUsageBarCacheBad", { link = "DiagnosticWarn", default = true })
     end
   else
     -- Fallback when no candidate group provides both bg and fg: link to StatusLine
-    vim.api.nvim_set_hl(0, "FlemmaNotificationsBar", { link = "StatusLine", default = true })
-    vim.api.nvim_set_hl(0, "FlemmaNotificationsSecondary", { link = "StatusLine", default = true })
-    vim.api.nvim_set_hl(0, "FlemmaNotificationsMuted", { link = "Comment", default = true })
-    vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheGood", { link = "DiagnosticOk", default = true })
-    vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheBad", { link = "DiagnosticWarn", default = true })
-    local fallback_border_style = syntax_config.notifications.border
-    if fallback_border_style then
-      local muted_fallback = vim.api.nvim_get_hl(0, { name = "Comment", link = false })
-      vim.api.nvim_set_hl(
-        0,
-        "FlemmaNotificationsBottom",
-        { [fallback_border_style] = true, sp = muted_fallback.fg, default = true }
-      )
-    end
+    vim.api.nvim_set_hl(0, "FlemmaUsageBar", { link = "StatusLine", default = true })
+    vim.api.nvim_set_hl(0, "FlemmaUsageBarSecondary", { link = "StatusLine", default = true })
+    vim.api.nvim_set_hl(0, "FlemmaUsageBarMuted", { link = "Comment", default = true })
+    vim.api.nvim_set_hl(0, "FlemmaUsageBarCacheGood", { link = "DiagnosticOk", default = true })
+    vim.api.nvim_set_hl(0, "FlemmaUsageBarCacheBad", { link = "DiagnosticWarn", default = true })
   end
 
   -- Progress bar highlight groups
   -- Derived from the first group in progress.highlight that provides both fg and bg
-  local progress_config = syntax_config.progress or { highlight = "@text.note,PmenuSel" }
-  local progress_bg_hex, progress_fg_hex
-  for candidate in (progress_config.highlight or ""):gmatch("[^,]+") do
-    candidate = vim.trim(candidate)
-    local bg = get_hl_color(candidate, "bg")
-    local fg = get_hl_color(candidate, "fg")
-    if bg and fg then
-      progress_bg_hex = bg
-      progress_fg_hex = fg
-      break
-    end
-  end
+  local progress_config = syntax_config.ui and syntax_config.ui.progress or { highlight = "StatusLine" }
+  local progress_base = M.resolve_first_complete(progress_config.highlight or "")
+  local progress_bg_hex = progress_base and get_hl_color(progress_base, "bg") or nil
+  local progress_fg_hex = progress_base and get_hl_color(progress_base, "fg") or nil
 
   if progress_bg_hex and progress_fg_hex then
     vim.api.nvim_set_hl(0, "FlemmaProgressBar", { bg = progress_bg_hex, fg = progress_fg_hex, default = true })

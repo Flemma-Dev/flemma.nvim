@@ -1,6 +1,6 @@
---- Notification bar layout engine
+--- Bar layout engine
 --- Takes structured segments and renders a single line with priority-based truncation
----@class flemma.Bar
+---@class flemma.ui.bar.Layout
 local M = {}
 
 local str = require("flemma.utilities.string")
@@ -17,43 +17,43 @@ local SEPARATOR_RELAXED_DISPLAY_WIDTH = 5
 local PREFIX = "\xE2\x84\xB9 " -- "ℹ " (U+2139, 3 bytes + 1 space)
 local PREFIX_DISPLAY_WIDTH = 2 -- ℹ is 1 display col + 1 space
 
---- Exported constants for use by notifications module
+--- Exported constants for consumers of this layout engine
 M.PREFIX = PREFIX
 M.PREFIX_DISPLAY_WIDTH = PREFIX_DISPLAY_WIDTH
 
----@class flemma.bar.Item
+---@class flemma.ui.bar.layout.Item
 ---@field key string Identifier (e.g. "model_name", "request_cost")
 ---@field text string Rendered text (e.g. "$0.00", "Cache 0%")
 ---@field priority integer Absolute priority (higher = more important)
----@field highlight? flemma.bar.ItemHighlight Optional highlight for part of this item
+---@field highlight? flemma.ui.bar.layout.ItemHighlight Optional highlight for part of this item
 
----@class flemma.bar.ItemHighlight
+---@class flemma.ui.bar.layout.ItemHighlight
 ---@field group string Highlight group name
 ---@field offset? integer Byte offset within item text where highlight starts (default: 0, full text)
 ---@field length? integer Byte length of highlighted span (default: full item text length)
 
----@class flemma.bar.Segment
+---@class flemma.ui.bar.layout.Segment
 ---@field key string Identifier ("identity", "request", "session")
----@field items flemma.bar.Item[] Items in display order
+---@field items flemma.ui.bar.layout.Item[] Items in display order
 ---@field label? string Fixed prefix shown when segment has visible items (e.g. "Session")
 ---@field label_highlight? string Highlight group for the label text
 ---@field separator_highlight? string Highlight group for the separator preceding this segment
 
----@class flemma.bar.RenderOpts
+---@class flemma.ui.bar.layout.RenderOpts
 ---@field skip_prefix? boolean When true, omit the ℹ prefix from rendered output
 
----@class flemma.bar.RenderResult
+---@class flemma.ui.bar.layout.RenderResult
 ---@field text string Rendered line, right-padded with spaces to available_width
----@field highlights flemma.bar.RenderedHighlight[] Highlight spans with byte offsets relative to line start
+---@field highlights flemma.ui.bar.layout.RenderedHighlight[] Highlight spans with byte offsets relative to line start
 
----@class flemma.bar.RenderedHighlight
+---@class flemma.ui.bar.layout.RenderedHighlight
 ---@field group string Highlight group name
 ---@field col_start integer Byte offset from line start
 ---@field col_end integer Byte offset from line start (exclusive)
 
 --- Calculate the total display width of a rendered line from visible segments
 --- Each segment's items are space-separated, segments are separated by SEPARATOR
----@param segments flemma.bar.Segment[] Segment definitions
+---@param segments flemma.ui.bar.layout.Segment[] Segment definitions
 ---@param visible_keys table<string, boolean> Set of visible item keys
 ---@param item_widths? table<string, integer> Optional minimum display widths per item key
 ---@param skip_prefix? boolean When true, omit the prefix from width calculation
@@ -120,18 +120,18 @@ local function calculate_line_width(segments, visible_keys, item_widths, skip_pr
 end
 
 --- Build the rendered line text and collect highlight positions
----@param segments flemma.bar.Segment[]
+---@param segments flemma.ui.bar.layout.Segment[]
 ---@param visible_keys table<string, boolean>
 ---@param available_width integer
 ---@param item_widths? table<string, integer> Optional minimum display widths per item key
 ---@param skip_prefix? boolean When true, omit the prefix from rendered output
 ---@param relaxed? boolean When true, use double spacing between items and wider separators
----@return flemma.bar.RenderResult
+---@return flemma.ui.bar.layout.RenderResult
 local function build_line(segments, visible_keys, available_width, item_widths, skip_prefix, relaxed)
   local joiner = relaxed and "  " or " "
   local sep = relaxed and SEPARATOR_RELAXED or SEPARATOR
   local parts = {} ---@type string[]
-  local highlights = {} ---@type flemma.bar.RenderedHighlight[]
+  local highlights = {} ---@type flemma.ui.bar.layout.RenderedHighlight[]
   local byte_offset = 0
   local segment_count = 0
 
@@ -261,7 +261,7 @@ local function build_line(segments, visible_keys, available_width, item_widths, 
 end
 
 --- Measure the natural display width of each item across all segments
----@param segments flemma.bar.Segment[]
+---@param segments flemma.ui.bar.layout.Segment[]
 ---@return table<string, integer> widths Mapping of item key → display width
 function M.measure_item_widths(segments)
   local widths = {} ---@type table<string, integer>
@@ -273,17 +273,17 @@ function M.measure_item_widths(segments)
   return widths
 end
 
---- Render segments into a single notification bar line
+--- Render segments into a single bar line
 --- Uses a greedy priority-fit algorithm: items are selected by priority but displayed in
 --- fixed segment order. Equal-priority items are treated as a group (all or none).
----@param segments flemma.bar.Segment[] Segments in display order
+---@param segments flemma.ui.bar.layout.Segment[] Segments in display order
 ---@param available_width integer Window width in display characters
----@param item_widths? table<string, integer> Optional minimum display widths per item key (for cross-notification alignment)
----@param opts? flemma.bar.RenderOpts Optional render options
----@return flemma.bar.RenderResult
+---@param item_widths? table<string, integer> Optional minimum display widths per item key (for cross-bar alignment)
+---@param opts? flemma.ui.bar.layout.RenderOpts Optional render options
+---@return flemma.ui.bar.layout.RenderResult
 function M.render(segments, available_width, item_widths, opts)
   -- Collect all items with their segment index for grouping
-  ---@type { item: flemma.bar.Item, segment_index: integer }[]
+  ---@type { item: flemma.ui.bar.layout.Item, segment_index: integer }[]
   local all_items = {}
   for segment_index, segment in ipairs(segments) do
     for _, item in ipairs(segment.items) do
@@ -343,6 +343,21 @@ function M.render(segments, available_width, item_widths, opts)
   local relaxed = calculate_line_width(segments, visible_keys, item_widths, skip_prefix, true) <= available_width
 
   return build_line(segments, visible_keys, available_width, item_widths, skip_prefix, relaxed)
+end
+
+---Apply rendered-highlight extmarks to a buffer.
+---Clears the namespace first, then sets one extmark per highlight span.
+---@param bufnr integer Target buffer
+---@param ns integer Namespace id
+---@param highlights flemma.ui.bar.layout.RenderedHighlight[]
+function M.apply_rendered_highlights(bufnr, ns, highlights)
+  vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
+  for _, hl in ipairs(highlights) do
+    vim.api.nvim_buf_set_extmark(bufnr, ns, 0, hl.col_start, {
+      end_col = hl.col_end,
+      hl_group = hl.group,
+    })
+  end
 end
 
 return M
