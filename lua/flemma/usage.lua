@@ -10,6 +10,7 @@ local provider_registry = require("flemma.provider.registry")
 local str = require("flemma.utilities.string")
 local Bar = require("flemma.ui.bar")
 local state = require("flemma.state")
+local notify = require("flemma.notify")
 
 --- Item priorities (higher = more important, shown first when space is scarce)
 local PRIORITY = {
@@ -282,20 +283,20 @@ function M.recall_last()
 
   local filepath = vim.api.nvim_buf_get_name(bufnr)
   if filepath == "" then
-    vim.notify("Flemma: No usage data for this buffer.", vim.log.levels.WARN)
+    notify.warn("No usage data for this buffer.")
     return
   end
 
   local session = state.get_session()
   local latest = session:get_latest_request_for_filepath(filepath)
   if not latest then
-    vim.notify("Flemma: No usage data for this buffer.", vim.log.levels.WARN)
+    notify.warn("No usage data for this buffer.")
     return
   end
 
   local segments = M.build_segments(latest, session)
   if #segments == 0 then
-    vim.notify("Flemma: No usage data for this buffer.", vim.log.levels.WARN)
+    notify.warn("No usage data for this buffer.")
     return
   end
 

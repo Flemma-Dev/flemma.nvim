@@ -409,15 +409,20 @@ describe("flemma.usage driver", function()
     it("warns when buffer has no filepath", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_set_current_buf(bufnr)
+      local notify = require("flemma.notify")
       local warned = false
-      local orig = vim.notify
-      vim.notify = function(_, level)
-        if level == vim.log.levels.WARN then
+      notify._set_impl(function(notification)
+        if notification.level == vim.log.levels.WARN then
           warned = true
         end
-      end
+        return notification
+      end)
       usage.recall_last()
-      vim.notify = orig
+      -- notify.warn defers the dispatch via vim.schedule; let it run.
+      vim.wait(50, function()
+        return warned
+      end)
+      notify._reset_impl()
       assert.is_true(warned)
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
