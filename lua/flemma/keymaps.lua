@@ -8,6 +8,7 @@ local core = require("flemma.core")
 local cursor = require("flemma.cursor")
 local executor = require("flemma.tools.executor")
 local navigation = require("flemma.navigation")
+local notify = require("flemma.notify")
 local textobject = require("flemma.textobject")
 local folding = require("flemma.ui.folding")
 local ui = require("flemma.ui")
@@ -74,7 +75,7 @@ M.setup = function()
 
             local ok, err = executor.execute_at_cursor(bufnr)
             if not ok then
-              vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+              notify.error(err or "Execution failed")
             end
           end, { buffer = true, desc = "Execute Flemma tool at cursor" })
         end
@@ -84,7 +85,7 @@ M.setup = function()
             local bufnr = vim.api.nvim_get_current_buf()
 
             if not executor.cancel_for_buffer(bufnr) then
-              vim.notify("Flemma: Nothing to cancel", vim.log.levels.INFO)
+              notify.info("Nothing to cancel")
             end
           end, { buffer = true, desc = "Cancel Flemma Request or Tool" })
         end

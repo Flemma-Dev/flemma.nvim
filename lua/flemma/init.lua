@@ -6,6 +6,7 @@ local M = {}
 local config_facade = require("flemma.config")
 local schema_definition = require("flemma.config.schema")
 local log = require("flemma.logging")
+local notify = require("flemma.notify")
 local core = require("flemma.core")
 local presets = require("flemma.presets")
 local state = require("flemma.state")
@@ -60,10 +61,7 @@ M.setup = function(user_opts)
   local _, apply_errors, deferred =
     config_facade.apply(config_facade.LAYERS.SETUP, user_opts, { defer_discover = true })
   if apply_errors then
-    local msg = "Flemma: " .. table.concat(apply_errors, "; ")
-    vim.schedule(function()
-      vim.notify(msg, vim.log.levels.WARN)
-    end)
+    notify.warn(table.concat(apply_errors, "; "))
   end
 
   -- Early materialize for consumers during module registration. DISCOVER
@@ -126,19 +124,14 @@ M.setup = function(user_opts)
       local d = diagnostic_format.from_validation_failure(failure)
       table.insert(messages, d.error)
     end
-    vim.schedule(function()
-      vim.notify("Flemma: " .. table.concat(messages, "; "), vim.log.levels.ERROR)
-    end)
+    notify.error(table.concat(messages, "; "))
   end
   if failures then
     local paths = {}
     for _, f in ipairs(failures) do
       table.insert(paths, f.path)
     end
-    local msg = "Flemma: unknown config keys: " .. table.concat(paths, ", ")
-    vim.schedule(function()
-      vim.notify(msg, vim.log.levels.WARN)
-    end)
+    notify.warn("unknown config keys: " .. table.concat(paths, ", "))
   end
 
   -- Re-materialize with complete config: DISCOVER defaults, deferred user
@@ -151,9 +144,7 @@ M.setup = function(user_opts)
   -- Resolve preset reference in model field (e.g., model = "$gemini-3-pro")
   local resolved_preset, preset_error = presets.resolve_default(config.model, user_opts.provider)
   if preset_error then
-    vim.schedule(function()
-      vim.notify(preset_error, vim.log.levels.ERROR)
-    end)
+    notify.error(preset_error)
     return
   end
   if resolved_preset then
@@ -253,10 +244,9 @@ M.setup = function(user_opts)
           local ok, err = sandbox.validate_backend()
           if not ok then
             if backend_mode == "required" then
-              vim.notify(
-                "Flemma: Tool execution is not sandboxed -- no compatible backend found. "
-                  .. "Run :Flemma sandbox:status for details, or set sandbox.enabled = false to disable.",
-                vim.log.levels.WARN
+              notify.warn(
+                "Tool execution is not sandboxed -- no compatible backend found. "
+                  .. "Run :Flemma sandbox:status for details, or set sandbox.enabled = false to disable."
               )
             else
               -- "auto" mode: log quietly, don't bother the user

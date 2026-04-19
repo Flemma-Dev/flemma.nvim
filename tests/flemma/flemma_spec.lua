@@ -1,20 +1,19 @@
 local config_facade = require("flemma.config")
+local notify = require("flemma.notify")
 
 describe("flemma.setup with preset model", function()
-  local notifications = {}
-  local original_notify
+  local captured = {}
 
   before_each(function()
-    notifications = {}
-    original_notify = vim.notify
-    ---@diagnostic disable-next-line: duplicate-set-field
-    vim.notify = function(msg, level)
-      table.insert(notifications, { msg = msg, level = level })
-    end
+    captured = {}
+    notify._set_impl(function(notification)
+      table.insert(captured, notification)
+      return notification
+    end)
   end)
 
   after_each(function()
-    vim.notify = original_notify
+    notify._reset_impl()
   end)
 
   it("resolves preset as default provider and model", function()
@@ -83,8 +82,8 @@ describe("flemma.setup with preset model", function()
 
     -- Should have an error notification about the conflict
     local found_error = false
-    for _, n in ipairs(notifications) do
-      if n.msg and n.msg:match("conflicts") then
+    for _, n in ipairs(captured) do
+      if n.message and n.message:match("conflicts") then
         found_error = true
       end
     end
@@ -103,8 +102,8 @@ describe("flemma.setup with preset model", function()
 
     -- Should have an error notification
     local found_error = false
-    for _, n in ipairs(notifications) do
-      if n.msg and n.msg:match("not found") then
+    for _, n in ipairs(captured) do
+      if n.message and n.message:match("not found") then
         found_error = true
       end
     end

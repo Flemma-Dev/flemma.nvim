@@ -5,6 +5,7 @@
 local M = {}
 
 local log = require("flemma.logging")
+local notify = require("flemma.notify")
 local presets = require("flemma.presets")
 local registry = require("flemma.provider.registry")
 
@@ -126,14 +127,8 @@ function M.resolve_max_tokens(provider_name, model_name, parameters)
   if type(value) == "number" then
     local model_info = registry.get_model_info(provider_name, model_name)
     if model_info and model_info.max_output_tokens and value > model_info.max_output_tokens then
-      vim.notify(
-        string.format(
-          "Flemma: max_tokens %d exceeds %s limit (%d), clamping.",
-          value,
-          model_name,
-          model_info.max_output_tokens
-        ),
-        vim.log.levels.WARN
+      notify.warn(
+        string.format("max_tokens %d exceeds %s limit (%d), clamping.", value, model_name, model_info.max_output_tokens)
       )
       parameters.max_tokens = model_info.max_output_tokens
     end

@@ -79,7 +79,7 @@ All `require()` calls go at the top of the file, before any function definition.
 
 ### Error handling
 
-- `vim.notify()` for user-facing errors and warnings
+- `flemma.notify` for user-facing errors and warnings
 - `log` module for debug/trace logging
 - Return tuples `value, err` for operational results (e.g., `secrets.resolve()`)
 - Never `error()` for recoverable situations

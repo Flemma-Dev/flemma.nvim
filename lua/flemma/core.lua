@@ -6,6 +6,7 @@ local M = {}
 local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
 local log = require("flemma.logging")
+local notify = require("flemma.notify")
 local secrets = require("flemma.secrets")
 local state = require("flemma.state")
 local normalize = require("flemma.provider.normalize")
@@ -111,12 +112,12 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
   -- Validate provider
   if not registry.has(provider_name) then
     local err = string.format(
-      "Flemma: Unknown provider '%s'. Supported providers are: %s",
+      "Unknown provider '%s'. Supported providers are: %s",
       tostring(provider_name),
       table.concat(registry.supported_providers(), ", ")
     )
     log.error("initialize_provider(): " .. err)
-    vim.notify(err, vim.log.levels.ERROR)
+    notify.error(err)
     return false, {}
   end
 
@@ -182,16 +183,14 @@ function M.initialize_provider(provider_name, model_name, explicit_params, layer
     local resolved = registry.resolve(provider_name) or provider_name
     local validated_model = config_facade.get().model
     local model_desc = validated_model and (" with model '" .. validated_model .. "'") or ""
-    local lines = { "Flemma: Initialized '" .. resolved .. "'" .. model_desc }
+    local lines = { "Initialized '" .. resolved .. "'" .. model_desc }
     if model_fallback then
       table.insert(lines, "  ⚠ " .. model_fallback)
     end
     for _, w in ipairs(param_warnings) do
       table.insert(lines, "  • " .. w)
     end
-    vim.schedule(function()
-      vim.notify(table.concat(lines, "\n"), vim.log.levels.WARN)
-    end)
+    notify.warn(table.concat(lines, "\n"))
   end
   return success
 end
@@ -206,7 +205,7 @@ end
 ---@return true|nil success True on success, nil on failure
 function M.switch_provider(provider_name, model_name, parameters, opts)
   if not provider_name then
-    vim.notify("Flemma: Provider name is required", vim.log.levels.ERROR)
+    notify.error("Provider name is required")
     return
   end
 
@@ -244,7 +243,7 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
   local global_config = config_facade.get()
   local buffer_config = config_facade.get(bufnr)
   local model_info = global_config.model and (" with model '" .. global_config.model .. "'") or ""
-  local header = "Flemma: Switched to '" .. global_config.provider .. "'" .. model_info
+  local header = "Switched to '" .. global_config.provider .. "'" .. model_info
   ---@type string[]
   local lines = {}
   local notify_level = vim.log.levels.INFO
@@ -296,7 +295,7 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
     header = header .. "."
   end
   table.insert(lines, 1, header)
-  vim.notify(table.concat(lines, "\n"), notify_level)
+  notify.notify(table.concat(lines, "\n"), notify_level)
 
   hooks.dispatch("config:updated")
 
@@ -356,11 +355,11 @@ function M.cancel_request(opts)
       -- Disarm autopilot on cancellation
       autopilot.disarm(bufnr)
 
-      local msg = "Flemma: Request cancelled"
+      local msg = "Request cancelled"
       if log.is_enabled() then
         msg = msg .. ". See " .. log.get_path() .. " for details"
       end
-      vim.notify(msg, vim.log.levels.INFO)
+      notify.info(msg)
       -- Force UI update after cancellation
       ui.update_ui(bufnr)
       hooks.dispatch("request:finished", { bufnr = bufnr, status = "cancelled" })
@@ -450,16 +449,15 @@ local function advance_phase2(opts)
     end
     local ok, err = executor.execute(bufnr, ctx)
     if not ok then
-      vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+      notify.error(err or "Execution failed")
     else
       executed_count = executed_count + 1
     end
   end
 
   if throttled and opts.user_initiated then
-    vim.notify(
-      "Flemma: Executing " .. executed_count .. "/" .. #approved .. " tools (max_concurrent=" .. max_concurrent .. ")",
-      vim.log.levels.INFO
+    notify.info(
+      "Executing " .. executed_count .. "/" .. #approved .. " tools (max_concurrent=" .. max_concurrent .. ")"
     )
   end
 
@@ -558,7 +556,7 @@ function M.send_or_execute(opts)
   -- Early guard: reject immediately if a provider request is already in flight.
   local buffer_state = state.get_buffer_state(bufnr)
   if buffer_state.current_request then
-    vim.notify("Flemma: A request is already in progress. Use <C-c> to cancel it first.", vim.log.levels.WARN)
+    notify.warn("A request is already in progress. Use <C-c> to cancel it first.")
     return
   end
 
@@ -668,20 +666,20 @@ function M.send_to_provider(opts)
 
   -- Check if there's already a request in progress
   if buffer_state.current_request then
-    vim.notify("Flemma: A request is already in progress. Use <C-c> to cancel it first.", vim.log.levels.WARN)
+    notify.warn("A request is already in progress. Use <C-c> to cancel it first.")
     return
   end
 
   -- Check if tool executions are in progress (mutually exclusive with API requests)
   local pending_tools = executor.get_pending(bufnr)
   if #pending_tools > 0 then
-    vim.notify("Flemma: Cannot send while tool execution is in progress.", vim.log.levels.WARN)
+    notify.warn("Cannot send while tool execution is in progress.")
     return
   end
 
   -- Gate on async tool sources being ready
   if not tools_module.is_ready() then
-    vim.notify("Flemma: Waiting for tool definitions to load…", vim.log.levels.WARN)
+    notify.warn("Waiting for tool definitions to load…")
     if buffer_state.waiting_for_tools then
       return -- already queued
     end
@@ -716,7 +714,7 @@ function M.send_to_provider(opts)
   -- Verify a provider is configured (instance is created later, after frontmatter evaluation)
   if not config_facade.get(bufnr).provider then
     log.error("send_to_provider(): No provider configured")
-    vim.notify("Flemma: No provider configured. Use :Flemma switch to select one.", vim.log.levels.ERROR)
+    notify.error("No provider configured. Use :Flemma switch to select one.")
     state.unlock_buffer(bufnr)
     return
   end
@@ -733,7 +731,7 @@ function M.send_to_provider(opts)
 
   if #prompt.history == 0 then
     log.warn("send_to_provider(): No messages found in buffer")
-    vim.notify("Flemma: No messages found in buffer.", vim.log.levels.WARN)
+    notify.warn("No messages found in buffer.")
     state.unlock_buffer(bufnr)
     return
   end
@@ -794,7 +792,7 @@ function M.send_to_provider(opts)
     end
 
     local level = has_errors and vim.log.levels.ERROR or vim.log.levels.WARN
-    vim.notify("Flemma diagnostics:\n" .. table.concat(diagnostic_lines, "\n"), level)
+    notify.notify(table.concat(diagnostic_lines, "\n"), level)
     log.warn("send_to_provider(): Diagnostics occurred: " .. #diagnostics .. " total")
 
     -- Block request if there are critical errors (frontmatter parsing failures)
@@ -822,7 +820,7 @@ function M.send_to_provider(opts)
     local provider_module_path = registry.get(provider_key)
     if not provider_module_path then
       log.error("send_to_provider(): Unknown provider: " .. tostring(provider_key))
-      vim.notify("Flemma: Unknown provider '" .. tostring(provider_key) .. "'.", vim.log.levels.ERROR)
+      notify.error("Unknown provider '" .. tostring(provider_key) .. "'.")
       state.unlock_buffer(bufnr)
       return
     end
@@ -865,7 +863,7 @@ function M.send_to_provider(opts)
   end)
 
   if not prep_ok then
-    vim.notify("Flemma: " .. tostring(prep_result), vim.log.levels.ERROR)
+    notify.error(tostring(prep_result))
     state.unlock_buffer(bufnr)
     return
   end
@@ -927,7 +925,7 @@ function M.send_to_provider(opts)
         -- Auto-write on error if enabled
         editing.auto_write(bufnr)
 
-        local notify_msg = "Flemma: " .. msg
+        local notify_msg = msg
         if current_provider:is_context_overflow(msg) then
           notify_msg = notify_msg
             .. "\n\nYour conversation is too long for this model."
@@ -946,7 +944,7 @@ function M.send_to_provider(opts)
         if log.is_enabled() then
           notify_msg = notify_msg .. "\nSee " .. log.get_path() .. " for details"
         end
-        vim.notify(notify_msg, vim.log.levels.ERROR)
+        notify.error(notify_msg)
       end)
     end,
 
@@ -1222,7 +1220,7 @@ function M.send_to_provider(opts)
             log.warn(
               "send_to_provider(): on_request_complete: cURL success (code 0), no API error, but no response content was processed."
             )
-            vim.notify("Flemma: Request completed but no response was received.", vim.log.levels.WARN)
+            notify.warn("Request completed but no response was received.")
           end
 
           -- Add new "@You:" prompt for the next message (buffer is already modifiable)
@@ -1263,28 +1261,25 @@ function M.send_to_provider(opts)
 
           local error_msg
           if code == 6 then -- CURLE_COULDNT_RESOLVE_HOST
-            error_msg =
-              string.format("Flemma: cURL could not resolve host (exit code %d). Check network or hostname.", code)
+            error_msg = string.format("cURL could not resolve host (exit code %d). Check network or hostname.", code)
           elseif code == 7 then -- CURLE_COULDNT_CONNECT
-            error_msg = string.format(
-              "Flemma: cURL could not connect to host (exit code %d). Check network or if the host is up.",
-              code
-            )
+            error_msg =
+              string.format("cURL could not connect to host (exit code %d). Check network or if the host is up.", code)
           elseif code == 28 then -- cURL timeout error
             local timeout_value = effective_timeout -- Captured before async callback
             error_msg = string.format(
-              "Flemma: cURL request timed out (exit code %d). Timeout is %s seconds.",
+              "cURL request timed out (exit code %d). Timeout is %s seconds.",
               code,
               tostring(timeout_value)
             )
           else -- Other cURL errors
-            error_msg = string.format("Flemma: cURL request failed (exit code %d).", code)
+            error_msg = string.format("cURL request failed (exit code %d).", code)
           end
 
           if log.is_enabled() then
             error_msg = error_msg .. " See " .. log.get_path() .. " for details."
           end
-          vim.notify(error_msg, vim.log.levels.ERROR)
+          notify.error(error_msg)
 
           editing.auto_write(bufnr) -- Auto-write if enabled, even on error
           ui.update_ui(bufnr) -- Update UI to remove any artifacts

@@ -5,6 +5,7 @@ local M = {}
 
 local config_facade = require("flemma.config")
 local log = require("flemma.logging")
+local notify = require("flemma.notify")
 local bridge = require("flemma.bridge")
 local cursor = require("flemma.cursor")
 local parser = require("flemma.parser")
@@ -128,7 +129,7 @@ function M.on_response_complete(bufnr)
 
   if bs.iteration > max_turns then
     bs.state = "idle"
-    vim.notify("Flemma: Autopilot stopped – exceeded " .. max_turns .. " consecutive turns.", vim.log.levels.WARN)
+    notify.warn("Autopilot stopped – exceeded " .. max_turns .. " consecutive turns.")
     log.warn("autopilot: exceeded max_turns (" .. max_turns .. ") for buffer " .. bufnr)
     return
   end

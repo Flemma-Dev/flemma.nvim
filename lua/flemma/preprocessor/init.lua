@@ -7,6 +7,7 @@
 local M = {}
 
 local context_module = require("flemma.preprocessor.context")
+local notify = require("flemma.notify")
 local registry = require("flemma.preprocessor.registry")
 local runner = require("flemma.preprocessor.runner")
 local state = require("flemma.state")
@@ -279,10 +280,7 @@ function M.setup()
   for _, module_path in ipairs(BUILTIN_REWRITERS) do
     local load_ok, load_err = pcall(M.register, module_path)
     if not load_ok then
-      vim.notify(
-        "Flemma: Failed to load built-in rewriter " .. module_path .. ": " .. tostring(load_err),
-        vim.log.levels.WARN
-      )
+      notify.warn("Failed to load built-in rewriter " .. module_path .. ": " .. tostring(load_err))
     end
   end
 

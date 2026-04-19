@@ -80,11 +80,12 @@ describe("Highlight", function()
     end)
 
     it("should warn on invalid role_style with 'Did you mean' suggestion", function()
+      local notify = require("flemma.notify")
       local notifications = {}
-      local original_notify_once = vim.notify_once
-      vim.notify_once = function(msg, level)
-        table.insert(notifications, { msg = msg, level = level })
-      end
+      notify._set_impl(function(notification)
+        table.insert(notifications, notification)
+        return notification
+      end)
 
       flemma.setup({
         role_style = "bold,italics",
@@ -97,12 +98,20 @@ describe("Highlight", function()
 
       highlight.apply_syntax()
 
-      vim.notify_once = original_notify_once
+      vim.wait(10, function()
+        return false
+      end)
+      notify._reset_impl()
 
       -- Should have warned about 'italics' and suggested 'italic'
       local found = false
       for _, n in ipairs(notifications) do
-        if n.msg:match("invalid role_style 'italics'") and n.msg:match("Did you mean 'italic'") then
+        if
+          n.message:match("invalid role_style 'italics'")
+          and n.message:match("Did you mean 'italic'")
+          and n.opts
+          and n.opts.once == true
+        then
           found = true
           break
         end
