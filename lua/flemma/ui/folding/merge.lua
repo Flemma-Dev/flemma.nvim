@@ -1,5 +1,5 @@
 --- Shared utilities for fold rule implementations
----@class flemma.utilities.Folding
+---@class flemma.ui.folding.Merge
 local M = {}
 
 ---Extract the numeric fold level from a fold expression string.
