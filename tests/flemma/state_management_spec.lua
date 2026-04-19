@@ -515,48 +515,6 @@ describe("State Management", function()
       notifications.cleanup_buffer(buf1)
     end)
 
-    it("should maintain separate notification stacks per buffer", function()
-      -- Create two windows
-      vim.cmd("vnew")
-      local win1 = vim.api.nvim_get_current_win()
-      vim.cmd("vertical resize 40")
-
-      vim.cmd("wincmd l")
-      local win2 = vim.api.nvim_get_current_win()
-
-      -- Create buffers
-      local buf1 = vim.api.nvim_create_buf(false, false)
-      vim.api.nvim_win_set_buf(win1, buf1)
-
-      local buf2 = vim.api.nvim_create_buf(false, false)
-      vim.api.nvim_win_set_buf(win2, buf2)
-
-      -- Show multiple notifications for buf1
-      notifications.show(make_test_segments(), buf1)
-      notifications.show(make_test_segments(), buf1)
-
-      -- Show notification for buf2
-      notifications.show(make_test_segments(), buf2)
-
-      -- Wait for vim.schedule
-      vim.wait(20, function()
-        return false
-      end)
-
-      -- Count notifications per window
-      local notif_count_win1 = count_notification_windows(win1)
-      local notif_count_win2 = count_notification_windows(win2)
-
-      -- buf1's window should have 2 notifications
-      assert.equals(2, notif_count_win1)
-      -- buf2's window should have 1 notification
-      assert.equals(1, notif_count_win2)
-
-      -- Clean up
-      notifications.cleanup_buffer(buf1)
-      notifications.cleanup_buffer(buf2)
-    end)
-
     it("should cleanup notifications when buffer is deleted", function()
       -- Create window and buffer
       local buf = vim.api.nvim_create_buf(false, false)

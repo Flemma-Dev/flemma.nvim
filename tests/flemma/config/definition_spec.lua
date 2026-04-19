@@ -80,18 +80,13 @@ describe("config.schema.definition", function()
 
     it("materializes notifications defaults", function()
       local cfg = config_facade.get()
-      assert.is_true(cfg.notifications.enabled)
-      assert.equals(10000, cfg.notifications.timeout)
-      assert.equals(1, cfg.notifications.limit)
-      assert.equals("overlay", cfg.notifications.position)
-      assert.equals(30, cfg.notifications.zindex)
-      assert.is_false(cfg.notifications.border)
+      assert.is_true(cfg.ui.usage.enabled)
+      assert.equals(10000, cfg.ui.usage.timeout)
     end)
 
     it("materializes progress defaults", function()
       local cfg = config_facade.get()
-      assert.equals("StatusLine", cfg.progress.highlight)
-      assert.equals(50, cfg.progress.zindex)
+      assert.equals("StatusLine", cfg.ui.progress.highlight)
     end)
 
     it("materializes pricing defaults", function()
@@ -318,14 +313,6 @@ describe("config.schema.definition", function()
       assert.is_false(cfg.keymaps.normal.fold_toggle)
     end)
 
-    it("accepts notification border string override", function()
-      config_facade.apply(config_facade.LAYERS.SETUP, {
-        notifications = { border = "underline" },
-      })
-      local cfg = config_facade.get()
-      assert.equals("underline", cfg.notifications.border)
-    end)
-
     it("rejects unknown top-level key", function()
       local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, { nonexistent = true })
       assert.is_true(ok)
@@ -445,8 +432,7 @@ describe("config.schema.definition", function()
         "ruler",
         "turns",
         "line_highlights",
-        "notifications",
-        "progress",
+        "ui",
         "pricing",
         "statusline",
         "provider",

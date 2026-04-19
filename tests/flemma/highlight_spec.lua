@@ -407,13 +407,6 @@ describe("notification bar highlights", function()
     assert.are.equal(bar_hl.bg, muted_hl.bg)
   end)
 
-  it("should define FlemmaNotificationsBottom with underline", function()
-    setup_and_apply()
-    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsBottom", link = false })
-    assert.is_true(hl.underline, "FlemmaNotificationsBottom should have underline")
-    assert.is_not_nil(hl.sp, "FlemmaNotificationsBottom should have sp")
-  end)
-
   it("should define FlemmaNotificationsCacheGood with sufficient contrast", function()
     setup_and_apply()
     local hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsCacheGood", link = false })

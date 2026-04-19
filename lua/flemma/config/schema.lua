@@ -105,22 +105,31 @@ return s.object({
     assistant = highlight({ dark = "Normal+bg:#102020", light = "Normal-bg:#102020" }),
   }),
 
-  notifications = s.object({
-    enabled = s.boolean(true),
-    timeout = s.integer(10000),
-    limit = s.integer(1),
-    position = s.enum({ "overlay" }, "overlay"),
-    zindex = s.integer(30),
-    highlight = s.string("@text.note,PmenuSel"),
-    border = s.union(
-      s.literal(false),
-      s.enum({ "underline", "underdouble", "undercurl", "underdotted", "underdashed" })
-    ),
-  }),
-
-  progress = s.object({
-    highlight = s.string("StatusLine"),
-    zindex = s.integer(50),
+  ui = s.object({
+    usage = s.object({
+      enabled = s.boolean(true),
+      timeout = s.integer(10000),
+      position = s.enum({
+        "top",
+        "bottom",
+        "top left",
+        "top right",
+        "bottom left",
+        "bottom right",
+      }, "top"),
+      highlight = s.string("@text.note,PmenuSel"),
+    }),
+    progress = s.object({
+      position = s.enum({
+        "top",
+        "bottom",
+        "top left",
+        "top right",
+        "bottom left",
+        "bottom right",
+      }, "bottom left"),
+      highlight = s.string("StatusLine"),
+    }),
   }),
 
   pricing = s.object({

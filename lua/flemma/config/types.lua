@@ -20,11 +20,9 @@
 ---@field logging flemma.logging.Config
 ---@field lsp flemma.config.Lsp
 ---@field model? string
----@field notifications flemma.config.Notifications
 ---@field parameters flemma.config.Parameters
 ---@field presets table<string, string|{  }|{ auto_approve: string[], model: string, parameters: {  }, provider: string }>
 ---@field pricing flemma.config.Pricing
----@field progress flemma.config.Progress
 ---@field provider string
 ---@field role_style string
 ---@field ruler flemma.config.Ruler
@@ -35,6 +33,7 @@
 ---@field text_object string|false
 ---@field tools flemma.config.Tools
 ---@field turns flemma.config.Turns
+---@field ui flemma.config.Ui
 
 ---@class flemma.config.Defaults
 ---@field dark flemma.config.DefaultsDark
@@ -92,15 +91,6 @@
 ---@class flemma.config.Lsp
 ---@field enabled boolean
 
----@class flemma.config.Notifications
----@field border false|"underline"|"underdouble"|"undercurl"|"underdotted"|"underdashed"
----@field enabled boolean
----@field highlight string
----@field limit integer
----@field position "overlay"
----@field timeout integer
----@field zindex integer
-
 ---@class flemma.config.Parameters
 ---@field anthropic? flemma.config.ParametersAnthropic
 ---@field cache_retention "short"|"long"|"none"
@@ -117,10 +107,6 @@
 ---@class flemma.config.Pricing
 ---@field enabled boolean
 ---@field high_cost_threshold integer
-
----@class flemma.config.Progress
----@field highlight string
----@field zindex integer
 
 ---@class flemma.config.Ruler
 ---@field char string
@@ -164,6 +150,10 @@
 ---@field enabled boolean
 ---@field hl string
 ---@field padding { left: integer, right: integer }|integer
+
+---@class flemma.config.Ui
+---@field progress flemma.config.UiProgress
+---@field usage flemma.config.UiUsage
 
 ---@class flemma.config.DefaultsDark
 ---@field bg string
@@ -252,6 +242,16 @@
 
 ---@class flemma.config.ToolsTruncate
 ---@field output_path_format string
+
+---@class flemma.config.UiProgress
+---@field highlight string
+---@field position "top"|"bottom"|"top left"|"top right"|"bottom left"|"bottom right"
+
+---@class flemma.config.UiUsage
+---@field enabled boolean
+---@field highlight string
+---@field position "top"|"bottom"|"top left"|"top right"|"bottom left"|"bottom right"
+---@field timeout integer
 
 ---@class flemma.config.SandboxBackendsBwrap
 ---@field extra_args string[]

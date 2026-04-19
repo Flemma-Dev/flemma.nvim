@@ -461,7 +461,7 @@ M.apply_syntax = function()
 
   -- Notification bar highlight groups
   -- Derived from the first group in notifications.highlight that provides both fg and bg
-  local notification_base_group = M.resolve_first_complete(syntax_config.notifications.highlight)
+  local notification_base_group = M.resolve_first_complete(syntax_config.ui.usage.highlight)
   local bar_bg_hex = notification_base_group and get_hl_color(notification_base_group, "bg") or nil
   local bar_fg_hex = notification_base_group and get_hl_color(notification_base_group, "fg") or nil
 
@@ -504,15 +504,6 @@ M.apply_syntax = function()
     else
       vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheBad", { link = "DiagnosticWarn", default = true })
     end
-
-    -- Bottom border: sp matches the muted fg so │ separators and border look uniform
-    local border_style = syntax_config.notifications.border
-    if border_style then
-      local muted_fg = get_hl_color("FlemmaNotificationsMuted", "fg")
-      if muted_fg then
-        vim.api.nvim_set_hl(0, "FlemmaNotificationsBottom", { [border_style] = true, sp = muted_fg, default = true })
-      end
-    end
   else
     -- Fallback when no candidate group provides both bg and fg: link to StatusLine
     vim.api.nvim_set_hl(0, "FlemmaNotificationsBar", { link = "StatusLine", default = true })
@@ -520,20 +511,11 @@ M.apply_syntax = function()
     vim.api.nvim_set_hl(0, "FlemmaNotificationsMuted", { link = "Comment", default = true })
     vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheGood", { link = "DiagnosticOk", default = true })
     vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheBad", { link = "DiagnosticWarn", default = true })
-    local fallback_border_style = syntax_config.notifications.border
-    if fallback_border_style then
-      local muted_fallback = vim.api.nvim_get_hl(0, { name = "Comment", link = false })
-      vim.api.nvim_set_hl(
-        0,
-        "FlemmaNotificationsBottom",
-        { [fallback_border_style] = true, sp = muted_fallback.fg, default = true }
-      )
-    end
   end
 
   -- Progress bar highlight groups
   -- Derived from the first group in progress.highlight that provides both fg and bg
-  local progress_config = syntax_config.progress or { highlight = "@text.note,PmenuSel" }
+  local progress_config = syntax_config.ui and syntax_config.ui.progress or { highlight = "StatusLine" }
   local progress_base = M.resolve_first_complete(progress_config.highlight or "")
   local progress_bg_hex = progress_base and get_hl_color(progress_base, "bg") or nil
   local progress_fg_hex = progress_base and get_hl_color(progress_base, "fg") or nil

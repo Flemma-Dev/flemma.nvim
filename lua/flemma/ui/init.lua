@@ -58,6 +58,8 @@ local thinking_ns = vim.api.nvim_create_namespace("flemma_thinking_tags")
 local tool_exec_ns = vim.api.nvim_create_namespace("flemma_tool_execution")
 local tool_preview_ns = vim.api.nvim_create_namespace("flemma_tool_preview")
 
+local PROGRESS_ZINDEX = 50
+
 ---@class flemma.ui.ToolIndicator
 ---@field extmark_id integer
 ---@field timer integer|nil
@@ -264,8 +266,6 @@ end
 ---@param row integer Row offset from window top
 ---@param spinner_char string Current spinner character
 local function update_progress_gutter_icon(buffer_state, parent_winid, gutter_width, row, spinner_char)
-  local progress_config = config_facade.get().progress
-
   -- Build icon text: spinner right-aligned in the gutter with a trailing space
   local icon_text = string.rep(" ", math.max(0, gutter_width - SPINNER_PREFIX_DISPLAY_WIDTH)) .. spinner_char .. " "
 
@@ -304,7 +304,7 @@ local function update_progress_gutter_icon(buffer_state, parent_winid, gutter_wi
       focusable = false,
       style = "minimal",
       noautocmd = true,
-      zindex = progress_config.zindex,
+      zindex = PROGRESS_ZINDEX,
     })
     if ok then
       buffer_state.progress_gutter_icon_winid = icon_winid
@@ -324,7 +324,6 @@ end
 ---@param highlight? string Override highlight group (for timeout warnings)
 local function show_progress_float(bufnr, parent_winid, progress_text, spinner_char, highlight)
   local buffer_state = state.get_buffer_state(bufnr)
-  local progress_config = config_facade.get().progress
   local win_width = vim.api.nvim_win_get_width(parent_winid)
   local win_height = vim.api.nvim_win_get_height(parent_winid)
   local gutter_width = get_gutter_width(parent_winid)
@@ -389,7 +388,7 @@ local function show_progress_float(bufnr, parent_winid, progress_text, spinner_c
       style = "minimal",
       focusable = false,
       noautocmd = true,
-      zindex = progress_config.zindex,
+      zindex = PROGRESS_ZINDEX,
     })
     if ok then
       buffer_state.progress_float_winid = float_winid

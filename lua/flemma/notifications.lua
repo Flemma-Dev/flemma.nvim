@@ -11,6 +11,8 @@ local usage = require("flemma.usage")
 local ns_id = vim.api.nvim_create_namespace("flemma_notifications_bar")
 local border_ns_id = vim.api.nvim_create_namespace("flemma_notifications_border")
 
+local ZINDEX = 50 -- Bar will own this when notifications.lua is removed
+
 ---@class flemma.notifications.Notification
 ---@field win_id integer Floating window ID
 ---@field bufnr integer Scratch buffer ID
@@ -96,9 +98,9 @@ local function get_gutter_width(winid)
 end
 
 --- Get notification config from state
----@return flemma.config.Notifications
+---@return flemma.config.UiUsage
 local function get_config()
-  return config_facade.get().notifications
+  return config_facade.get().ui.usage
 end
 
 --- Check whether the gutter is wide enough to hold the prefix icon
@@ -124,8 +126,6 @@ end
 ---@param gutter_width integer Gutter width in columns
 ---@param row integer Row offset from window top
 local function update_gutter_icon(notif, winid, gutter_width, row)
-  local config = get_config()
-
   -- Build icon text: emoji right-aligned in the gutter with a trailing space
   local icon_text = string.rep(" ", math.max(0, gutter_width - layout.PREFIX_DISPLAY_WIDTH)) .. layout.PREFIX
 
@@ -163,7 +163,7 @@ local function update_gutter_icon(notif, winid, gutter_width, row)
       focusable = false,
       style = "minimal",
       noautocmd = true,
-      zindex = config.zindex,
+      zindex = ZINDEX,
     })
     vim.wo[notif.gutter_icon_win].winhighlight = "NormalFloat:FlemmaNotificationsBar"
   end
@@ -253,8 +253,6 @@ local function update_bottom_border(target_bufnr, winid, gutter_width)
 
   -- Extend underline into the gutter area via a separate floating window
   if gutter_width > 0 then
-    local config = get_config()
-
     if not buf.gutter_border_bufnr or not vim.api.nvim_buf_is_valid(buf.gutter_border_bufnr) then
       buf.gutter_border_bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(buf.gutter_border_bufnr, 0, -1, false, { "" })
@@ -292,7 +290,7 @@ local function update_bottom_border(target_bufnr, winid, gutter_width)
         focusable = false,
         style = "minimal",
         noautocmd = true,
-        zindex = config.zindex,
+        zindex = ZINDEX,
       })
       vim.wo[buf.gutter_border_win].winhighlight = "NormalFloat:Normal"
     end
@@ -443,7 +441,7 @@ local function create_notification(target_bufnr, segments, item_widths)
     focusable = false,
     style = "minimal",
     noautocmd = true,
-    zindex = config.zindex,
+    zindex = ZINDEX,
   })
 
   -- Set window highlight for distinct background
@@ -584,8 +582,7 @@ local function show_pending_for_buffer(bufnr)
       end
 
       -- Enforce limit early so dismissed notifications don't inflate item padding
-      local notif_config = get_config()
-      enforce_limit(bufnr, math.max(0, notif_config.limit - 1))
+      enforce_limit(bufnr, 0)
 
       -- Compute aligned widths across surviving + new notification
       local item_widths = compute_aligned_widths(bufnr, notif_data.segments)
@@ -640,7 +637,7 @@ function M.show(segments, bufnr)
 
     -- Enforce limit early: dismiss excess before computing widths,
     -- so old notifications don't inflate item padding
-    enforce_limit(bufnr, math.max(0, config.limit - 1))
+    enforce_limit(bufnr, 0)
 
     -- Compute aligned widths across surviving notifications + the new one
     local item_widths = compute_aligned_widths(bufnr, segments)
