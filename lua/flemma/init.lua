@@ -16,7 +16,6 @@ local keymaps = require("flemma.keymaps")
 local highlight = require("flemma.highlight")
 local provider_registry = require("flemma.provider.registry")
 local loader = require("flemma.loader")
-local notifications = require("flemma.notifications")
 local personalities = require("flemma.personalities")
 local secrets = require("flemma.secrets")
 local tools = require("flemma.tools")
@@ -197,9 +196,6 @@ M.setup = function(user_opts)
 
   -- Set up highlighting
   highlight.setup()
-
-  -- Set up notifications
-  notifications.setup()
 
   -- Set up chat filetype handling
   ui.setup_chat_filetype_autocmds()

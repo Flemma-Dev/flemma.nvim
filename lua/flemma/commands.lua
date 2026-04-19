@@ -437,11 +437,11 @@ local function setup_commands()
     },
   }
 
-  command_tree.children.notification = {
+  command_tree.children.usage = {
     children = {
       recall = {
         action = function()
-          require("flemma.notifications").recall_last()
+          require("flemma.usage").recall_last()
         end,
       },
     },
