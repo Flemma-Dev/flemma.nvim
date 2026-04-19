@@ -12,7 +12,7 @@ describe("flemma.usage segment building", function()
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.pricing"] = nil
     package.loaded["flemma.session"] = nil
-    package.loaded["flemma.bar"] = nil
+    package.loaded["flemma.ui.bar.layout"] = nil
 
     config_facade = require("flemma.config")
     local schema = require("flemma.config.schema")

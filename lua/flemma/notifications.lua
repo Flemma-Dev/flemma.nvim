@@ -2,7 +2,7 @@
 ---@class flemma.Notifications
 local M = {}
 
-local bar = require("flemma.bar")
+local layout = require("flemma.ui.bar.layout")
 local config_facade = require("flemma.config")
 local notify = require("flemma.notify")
 local state = require("flemma.state")
@@ -17,8 +17,8 @@ local border_ns_id = vim.api.nvim_create_namespace("flemma_notifications_border"
 ---@field target_bufnr integer Chat buffer this notification belongs to
 ---@field timer integer|nil Timer ID for auto-dismiss (nil when persistent)
 ---@field dismissed boolean Whether the notification has been dismissed
----@field render_result flemma.bar.RenderResult Stored for recall and resize re-rendering
----@field segments flemma.bar.Segment[] Source segments for re-rendering on resize
+---@field render_result flemma.ui.bar.layout.RenderResult Stored for recall and resize re-rendering
+---@field segments flemma.ui.bar.layout.Segment[] Source segments for re-rendering on resize
 ---@field gutter_icon_win? integer Floating window for the gutter icon
 ---@field gutter_icon_bufnr? integer Scratch buffer for the gutter icon
 
@@ -33,7 +33,7 @@ local border_ns_id = vim.api.nvim_create_namespace("flemma_notifications_border"
 local buffer_state = {}
 
 --- Pending notifications for buffers not currently visible
----@type table<integer, { segments: flemma.bar.Segment[] }[]>
+---@type table<integer, { segments: flemma.ui.bar.layout.Segment[] }[]>
 local pending_notifications = {}
 
 --- Merge multiple item width maps, taking the maximum width per key
@@ -52,7 +52,7 @@ end
 --- Compute aligned item widths across all active notifications for a buffer
 --- Optionally includes new segments that are about to be added.
 ---@param target_bufnr integer
----@param new_segments? flemma.bar.Segment[] Segments being added (not yet in buffer_state)
+---@param new_segments? flemma.ui.bar.layout.Segment[] Segments being added (not yet in buffer_state)
 ---@return table<string, integer>
 local function compute_aligned_widths(target_bufnr, new_segments)
   local widths_list = {} ---@type table<string, integer>[]
@@ -61,13 +61,13 @@ local function compute_aligned_widths(target_bufnr, new_segments)
   if buf then
     for _, notif in ipairs(buf.notifications) do
       if not notif.dismissed then
-        table.insert(widths_list, bar.measure_item_widths(notif.segments))
+        table.insert(widths_list, layout.measure_item_widths(notif.segments))
       end
     end
   end
 
   if new_segments then
-    table.insert(widths_list, bar.measure_item_widths(new_segments))
+    table.insert(widths_list, layout.measure_item_widths(new_segments))
   end
 
   return merge_item_widths(widths_list)
@@ -105,7 +105,7 @@ end
 ---@param gutter_width integer
 ---@return boolean
 local function gutter_fits_icon(gutter_width)
-  return gutter_width >= bar.PREFIX_DISPLAY_WIDTH
+  return gutter_width >= layout.PREFIX_DISPLAY_WIDTH
 end
 
 --- Close the gutter icon window for a notification
@@ -127,7 +127,7 @@ local function update_gutter_icon(notif, winid, gutter_width, row)
   local config = get_config()
 
   -- Build icon text: emoji right-aligned in the gutter with a trailing space
-  local icon_text = string.rep(" ", math.max(0, gutter_width - bar.PREFIX_DISPLAY_WIDTH)) .. bar.PREFIX
+  local icon_text = string.rep(" ", math.max(0, gutter_width - layout.PREFIX_DISPLAY_WIDTH)) .. layout.PREFIX
 
   if not notif.gutter_icon_bufnr or not vim.api.nvim_buf_is_valid(notif.gutter_icon_bufnr) then
     notif.gutter_icon_bufnr = vim.api.nvim_create_buf(false, true)
@@ -171,7 +171,7 @@ end
 
 --- Apply extmark highlights to a notification buffer
 ---@param notification_bufnr integer
----@param highlights flemma.bar.RenderedHighlight[]
+---@param highlights flemma.ui.bar.layout.RenderedHighlight[]
 local function apply_highlights(notification_bufnr, highlights)
   vim.api.nvim_buf_clear_namespace(notification_bufnr, ns_id, 0, -1)
   for _, hl in ipairs(highlights) do
@@ -399,7 +399,7 @@ end
 --- Create a notification bar window
 --- Always re-renders segments at the current text area width.
 ---@param target_bufnr integer
----@param segments flemma.bar.Segment[]
+---@param segments flemma.ui.bar.layout.Segment[]
 ---@param item_widths? table<string, integer> Optional minimum display widths per item key
 ---@return flemma.notifications.Notification
 local function create_notification(target_bufnr, segments, item_widths)
@@ -417,7 +417,7 @@ local function create_notification(target_bufnr, segments, item_widths)
 
   -- Render for text area width (excludes gutter); skip prefix when icon is in gutter
   local render_opts = use_gutter_icon and { skip_prefix = true } or nil
-  local render_result = bar.render(segments, text_width, item_widths, render_opts)
+  local render_result = layout.render(segments, text_width, item_widths, render_opts)
 
   -- Create scratch buffer
   local notification_bufnr = vim.api.nvim_create_buf(false, true)
@@ -490,13 +490,13 @@ end
 ---@param notif flemma.notifications.Notification
 ---@param win_width integer
 ---@param item_widths? table<string, integer> Optional minimum display widths per item key
----@param render_opts? flemma.bar.RenderOpts Optional render options (e.g. skip_prefix)
+---@param render_opts? flemma.ui.bar.layout.RenderOpts Optional render options (e.g. skip_prefix)
 local function rerender_notification(notif, win_width, item_widths, render_opts)
   if notif.dismissed or not vim.api.nvim_buf_is_valid(notif.bufnr) then
     return
   end
 
-  local new_result = bar.render(notif.segments, win_width, item_widths, render_opts)
+  local new_result = layout.render(notif.segments, win_width, item_widths, render_opts)
   notif.render_result = new_result
 
   vim.bo[notif.bufnr].modifiable = true
@@ -615,7 +615,7 @@ local function show_pending_for_buffer(bufnr)
 end
 
 --- Show a notification bar for a buffer
----@param segments flemma.bar.Segment[] Segments from usage.build_segments()
+---@param segments flemma.ui.bar.layout.Segment[] Segments from usage.build_segments()
 ---@param bufnr integer Target buffer number
 function M.show(segments, bufnr)
   local config = get_config()

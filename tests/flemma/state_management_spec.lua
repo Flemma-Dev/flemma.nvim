@@ -428,7 +428,7 @@ describe("State Management", function()
 
     before_each(function()
       package.loaded["flemma.notifications"] = nil
-      package.loaded["flemma.bar"] = nil
+      package.loaded["flemma.ui.bar.layout"] = nil
       notifications = require("flemma.notifications")
 
       -- Override limit to allow stacking for isolation tests

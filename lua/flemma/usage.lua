@@ -4,7 +4,7 @@
 ---@class flemma.Usage
 local M = {}
 
-local bar = require("flemma.bar")
+local layout = require("flemma.ui.bar.layout")
 local config_facade = require("flemma.config")
 local provider_registry = require("flemma.provider.registry")
 local str = require("flemma.utilities.string")
@@ -47,16 +47,16 @@ end
 --- Build structured segments from request and session data for bar rendering
 ---@param request? flemma.session.Request Most recent completed request
 ---@param session? flemma.session.Session Session instance
----@return flemma.bar.Segment[]
+---@return flemma.ui.bar.layout.Segment[]
 function M.build_segments(request, session)
   local config = config_facade.get()
   local pricing_enabled = config.pricing.enabled
 
-  local segments = {} ---@type flemma.bar.Segment[]
+  local segments = {} ---@type flemma.ui.bar.layout.Segment[]
 
   -- Identity segment (from request)
   if request then
-    local identity_items = {} ---@type flemma.bar.Item[]
+    local identity_items = {} ---@type flemma.ui.bar.layout.Item[]
 
     table.insert(identity_items, {
       key = "model_name",
@@ -80,7 +80,7 @@ function M.build_segments(request, session)
 
   -- Request segment
   if request then
-    local request_items = {} ---@type flemma.bar.Item[]
+    local request_items = {} ---@type flemma.ui.bar.layout.Item[]
 
     -- Cost
     if pricing_enabled then
@@ -156,7 +156,7 @@ function M.build_segments(request, session)
 
   -- Session segment
   if session and session:get_request_count() > 0 then
-    local session_items = {} ---@type flemma.bar.Item[]
+    local session_items = {} ---@type flemma.ui.bar.layout.Item[]
 
     -- Session cost
     if pricing_enabled then
@@ -201,13 +201,13 @@ end
 ---@param request? flemma.session.Request Most recent completed request
 ---@param session? flemma.session.Session Session instance
 ---@param available_width integer Window width in display characters
----@return flemma.bar.RenderResult
+---@return flemma.ui.bar.layout.RenderResult
 function M.format_notification(request, session, available_width)
   local segments = M.build_segments(request, session)
   if #segments == 0 then
     return { text = "", highlights = {} }
   end
-  return bar.render(segments, available_width)
+  return layout.render(segments, available_width)
 end
 
 return M
