@@ -34,10 +34,6 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field progress_timeout integer|nil Effective timeout (seconds) for the current request
 ---@field progress_extmark_id integer|nil Stable extmark ID for timer updates
 ---@field progress_last_line integer|nil 0-indexed last content line (set by writequeue callbacks)
----@field progress_float_winid integer|nil Window ID for the off-screen progress float
----@field progress_float_bufnr integer|nil Buffer ID for the off-screen progress float
----@field progress_gutter_icon_winid integer|nil Window ID for the progress gutter icon float
----@field progress_gutter_icon_bufnr integer|nil Buffer ID for the progress gutter icon float
 ---@field auto_closed_folds? table<string, boolean>
 ---@field pending_folds? table<string, boolean> Fold IDs that were attempted but failed to close (eligible for retry)
 ---@field fold_completed_tick? integer Last changedtick processed by fold_completed_blocks (prevents redundant folding)
@@ -102,10 +98,6 @@ local function init_buffer(bufnr)
     progress_timeout = nil,
     progress_extmark_id = nil,
     progress_last_line = nil,
-    progress_float_winid = nil,
-    progress_float_bufnr = nil,
-    progress_gutter_icon_winid = nil,
-    progress_gutter_icon_bufnr = nil,
     inflight_usage = {
       input_tokens = 0,
       output_tokens = 0,
@@ -162,14 +154,8 @@ function M.cleanup_buffer_state(bufnr)
     if st.progress_timer then
       vim.fn.timer_stop(st.progress_timer)
     end
-    if st.progress_float_winid and vim.api.nvim_win_is_valid(st.progress_float_winid) then
-      vim.api.nvim_win_close(st.progress_float_winid, true)
-    end
-    if st.progress_gutter_icon_winid and vim.api.nvim_win_is_valid(st.progress_gutter_icon_winid) then
-      vim.api.nvim_win_close(st.progress_gutter_icon_winid, true)
-    end
   end
-  -- Run registered cleanup hooks (executor, notifications) before clearing state.
+  -- Run registered cleanup hooks (executor, usage) before clearing state.
   -- Hooks may access buffer state (e.g., executor), so this runs before nil.
   for _, fn in pairs(cleanup_hooks) do
     pcall(fn, bufnr)
