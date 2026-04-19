@@ -581,7 +581,7 @@ function M.send_or_execute(opts)
   local evaluated_frontmatter = processor.evaluate_frontmatter(doc, context, bufnr)
   buffer_state.frontmatter_eval_code = evaluated_frontmatter.frontmatter_code
   -- Validation failures are merged into diagnostics below for unified rendering
-  -- (they flow through the same vim.notify formatter as other diagnostics).
+  -- (they flow through the same flemma.notify formatter as other diagnostics).
 
   -- Phase 1: Categorize — find tool_use blocks without matching tool_result
   local pending = tool_context.resolve_all_pending(bufnr)

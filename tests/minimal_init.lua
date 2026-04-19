@@ -1,7 +1,4 @@
--- Add the project root and the current working directory to the runtime path
--- so that 'lua/' modules are found. The CWD prepend ensures worktree lua/
--- modules shadow any stale copies in the main-repo PROJECT_ROOT.
-vim.opt.rtp:prepend(vim.uv.cwd())
+-- Add the project root to the runtime path to find the 'lua' directory
 vim.opt.rtp:append(os.getenv("PROJECT_ROOT"))
 
 -- Turn off swapfile during tests
