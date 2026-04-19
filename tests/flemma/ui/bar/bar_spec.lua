@@ -464,5 +464,134 @@ describe("flemma.ui.bar", function()
       bar:dismiss()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
+
+    it("WinEnter re-renders when our buffer is still visible", function()
+      local bufnr = open_visible_bufnr()
+      local bar = Bar.new({
+        bufnr = bufnr,
+        position = "top",
+        segments = { { key = "s", items = { { key = "i", text = "x", priority = 1 } } } },
+      })
+      local winid1 = bar._float_winid
+      assert.is_true(vim.api.nvim_win_is_valid(winid1))
+      vim.api.nvim_exec_autocmds("WinEnter", {})
+      -- Re-render reuses the same float winid (nvim_win_set_config path).
+      assert.equals(winid1, bar._float_winid)
+      assert.is_true(vim.api.nvim_win_is_valid(winid1))
+      bar:dismiss()
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("BufWinLeave closes the float but keeps the bar undismissed", function()
+      local bufnr = open_visible_bufnr()
+      local bar = Bar.new({
+        bufnr = bufnr,
+        position = "top",
+        segments = { { key = "s", items = { { key = "i", text = "x", priority = 1 } } } },
+      })
+      local winid1 = bar._float_winid
+      assert.is_true(vim.api.nvim_win_is_valid(winid1))
+
+      vim.api.nvim_exec_autocmds("BufWinLeave", { buffer = bufnr })
+
+      assert.is_false(bar:is_dismissed(), "BufWinLeave must NOT dismiss the bar (state is preserved)")
+      assert.is_true(
+        bar._float_winid == nil or not vim.api.nvim_win_is_valid(bar._float_winid),
+        "float must be closed after BufWinLeave"
+      )
+
+      bar:dismiss()
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("WinClosed reopens float when our float winid is the closed one", function()
+      local bufnr = open_visible_bufnr()
+      local bar = Bar.new({
+        bufnr = bufnr,
+        position = "top",
+        segments = { { key = "s", items = { { key = "i", text = "x", priority = 1 } } } },
+      })
+      local winid1 = bar._float_winid
+      assert.is_true(vim.api.nvim_win_is_valid(winid1))
+
+      -- Externally close the float — Bar's WinClosed callback should nil
+      -- _float_winid and schedule a re-render.
+      vim.api.nvim_win_close(winid1, true)
+      vim.wait(50, function()
+        return bar._float_winid ~= nil and vim.api.nvim_win_is_valid(bar._float_winid)
+      end)
+
+      assert.is_truthy(bar._float_winid, "WinClosed must schedule a re-render")
+      assert.is_true(vim.api.nvim_win_is_valid(bar._float_winid))
+      assert.is_not.equals(winid1, bar._float_winid, "re-render opens a NEW winid (old was closed)")
+
+      bar:dismiss()
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("CursorHold re-renders when gutter width changed", function()
+      local bufnr = open_visible_bufnr()
+      local winid = vim.fn.bufwinid(bufnr)
+      vim.wo[winid].number = false
+      vim.wo[winid].signcolumn = "no"
+      vim.wo[winid].foldcolumn = "0"
+      vim.cmd("redraw")
+      -- Use icon_in_gutter path: with icon set and G≥3, main_col == G.
+      -- That makes col observably depend on the gutter width.
+      local bar = Bar.new({
+        bufnr = bufnr,
+        position = "top left",
+        segments = { { key = "s", items = { { key = "i", text = "abc", priority = 1 } } } },
+        icon = "ℹ",
+      })
+      local last_g_before = bar._last_gutter_width
+
+      vim.wo[winid].number = true
+      vim.wo[winid].numberwidth = 4
+      vim.cmd("redraw")
+      vim.api.nvim_exec_autocmds("CursorHold", { buffer = bufnr })
+
+      vim.wait(200, function()
+        return bar._last_gutter_width ~= last_g_before
+      end)
+
+      assert.is_not.equals(
+        last_g_before,
+        bar._last_gutter_width,
+        "CursorHold must re-measure gutter width and re-render when it changes"
+      )
+      local col_after = vim.api.nvim_win_get_config(bar._float_winid).col
+      assert.equals(bar._last_gutter_width, col_after, "main float col should track new G after CursorHold")
+
+      bar:dismiss()
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
+  -- Regression: when the displacement loop in M.new dismisses the only bar
+  -- on a buffer, Bar:dismiss clears bars[bufnr] to nil. Subsequent
+  -- iterations of the loop must not index that nil — common trigger is
+  -- usage.show being called twice with the same position, where iter 1
+  -- dismisses the prior bar (collapsing the registry) and iter 2 looks
+  -- for a sibling position.
+  describe("registry collapse during displacement", function()
+    it("M.new at the same position twice does not crash", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "x" })
+      vim.api.nvim_set_current_buf(bufnr)
+
+      local first = Bar.new({ bufnr = bufnr, position = "top", segments = {} })
+      assert.is_false(first:is_dismissed())
+
+      -- Without the bars[opts.bufnr] re-check inside the displacement loop,
+      -- this call would crash at "attempt to index a nil value" because
+      -- iter 1 (conflict="top") dismisses `first` and clears bars[bufnr].
+      local second = Bar.new({ bufnr = bufnr, position = "top", segments = {} })
+      assert.is_true(first:is_dismissed())
+      assert.is_false(second:is_dismissed())
+
+      second:dismiss()
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
   end)
 end)

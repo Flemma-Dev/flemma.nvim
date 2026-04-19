@@ -211,10 +211,15 @@ function M.new(opts)
     return dismissed_handle()
   end
 
-  -- Displace conflicting bars on the same buffer.
+  -- Displace conflicting bars on the same buffer. existing:dismiss() may
+  -- clear bars[opts.bufnr] entirely (when the last position drops out),
+  -- so re-check on each iteration — otherwise the next iteration indexes
+  -- nil and crashes Bar.new. This bites usage.show in particular: it is
+  -- called repeatedly with the same position, and the displacement loop
+  -- visits siblings of that position even after the registry collapses.
   if bars[opts.bufnr] then
     for _, conflict in ipairs(CONFLICTS[opts.position]) do
-      local existing = bars[opts.bufnr][conflict]
+      local existing = bars[opts.bufnr] and bars[opts.bufnr][conflict]
       if existing then
         existing:dismiss()
       end
