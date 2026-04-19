@@ -254,12 +254,13 @@ local function timeout_pressure(bs, base_text)
   return base_text, nil
 end
 
----Produce the single-line progress text shown inline and in the float.
----Covers all four phases and picks the phase-appropriate label.
+---Produce the progress body (label + elapsed, optionally char count) without
+---the leading spinner glyph. The spinner is the Bar's `icon` or a prepended
+---chunk on the inline virt_text path — it is never baked into the body so the
+---two rendering paths can share one source of truth without duplicating glyphs.
 ---@param bs flemma.state.BufferState
----@param spinner_char string
 ---@return string
-local function format_progress_text(bs, spinner_char)
+local function format_progress_body(bs)
   local phase = bs.progress_phase or "waiting"
   local elapsed_seconds = 0
   if bs.progress_started_at then
@@ -268,12 +269,12 @@ local function format_progress_text(bs, spinner_char)
   local elapsed_str = str.format_elapsed(elapsed_seconds)
 
   if phase == "waiting" then
-    return spinner_char .. " " .. WAITING_LABEL .. MIDDLE_DOT .. elapsed_str
+    return WAITING_LABEL .. MIDDLE_DOT .. elapsed_str
   else
     local count = bs.progress_char_count or 0
     local suffix = count == 1 and " character" or " characters"
     local count_str = str.format_text_length(count) .. suffix
-    return spinner_char .. " " .. count_str .. MIDDLE_DOT .. elapsed_str
+    return count_str .. MIDDLE_DOT .. elapsed_str
   end
 end
 
@@ -379,11 +380,13 @@ local function advance_progress(bufnr)
   local speed = spinners.SPEED[phase] or 1
   local frame = frames[(math.floor(bs.progress_tick / speed) % #frames) + 1]
 
-  local base_text = format_progress_text(bs, frame)
-  local text, warn_hl = timeout_pressure(bs, base_text)
+  local base_body = format_progress_body(bs)
+  local body, warn_hl = timeout_pressure(bs, base_body)
 
   if phase == "waiting" or phase == "thinking" then
-    update_inline_waiting_extmark(bufnr, text, warn_hl)
+    -- Inline virt_text is a flat chunk list with no icon slot; prepend the
+    -- spinner to the body so the `@Assistant:` line shows `<spinner> <body>`.
+    update_inline_waiting_extmark(bufnr, frame .. " " .. body, warn_hl)
 
     local winid = vim.fn.bufwinid(bufnr)
     local off_screen = winid ~= -1
@@ -393,7 +396,7 @@ local function advance_progress(bufnr)
     if off_screen then
       ensure_progress_bar(bufnr):update({
         icon = frame,
-        segments = progress_segments(text, warn_hl),
+        segments = progress_segments(body, warn_hl),
       })
     else
       dismiss_progress_bar(bufnr)
@@ -409,7 +412,7 @@ local function advance_progress(bufnr)
 
   ensure_progress_bar(bufnr):update({
     icon = frame,
-    segments = progress_segments(text, warn_hl),
+    segments = progress_segments(body, warn_hl),
   })
 end
 

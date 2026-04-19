@@ -153,4 +153,78 @@ describe("progress line", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
   end)
+
+  describe("progress bar icon / segment-text split", function()
+    local bar_mock
+
+    before_each(function()
+      package.loaded["flemma.ui.bar"] = nil
+      bar_mock = require("tests.utilities.bar_mock").install_as_flemma_ui_bar()
+      package.loaded["flemma.ui"] = nil
+      ui = require("flemma.ui")
+    end)
+
+    -- Regression guard. Earlier the spinner was baked into the progress body
+    -- returned by format_progress_text AND passed as Bar's `icon`. With a
+    -- wide gutter the gutter-icon float and the main float then showed the
+    -- spinner twice; with a narrow gutter the inline-icon prepend did the
+    -- same. The icon and the text must come from separate slots.
+    it("never carries the spinner glyph in both Bar.icon and segment text", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "hi", "", "@Assistant:" })
+      vim.api.nvim_set_current_buf(bufnr)
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.current_request = 1
+
+      ui.start_progress(bufnr, { timeout = 30 })
+
+      vim.wait(200, function()
+        return buffer_state.progress_extmark_id ~= nil
+      end)
+
+      -- Streaming phase routes every tick through the Bar (inline virt_text
+      -- is cleared), so a Bar handle must be created.
+      buffer_state.progress_phase = "streaming"
+      buffer_state.progress_char_count = 100
+
+      vim.wait(400, function()
+        return #bar_mock._handles > 0
+      end)
+
+      assert.is_true(#bar_mock._handles > 0, "progress bar was not created")
+
+      local handle = bar_mock._handles[1]
+
+      -- Collapse constructor opts with every recorded update() into the
+      -- latest logical view — the values Bar.render would see on screen.
+      local icon = handle.opts.icon
+      local segments = handle.opts.segments
+      for _, call in ipairs(handle.calls) do
+        if call.method == "update" and call.args[1] then
+          if call.args[1].icon ~= nil then
+            icon = call.args[1].icon
+          end
+          if call.args[1].segments ~= nil then
+            segments = call.args[1].segments
+          end
+        end
+      end
+
+      assert.is_truthy(icon, "Bar should carry an icon (spinner lives in icon slot)")
+      assert.is_truthy(
+        segments and segments[1] and segments[1].items[1],
+        "Bar should have a segment text body"
+      )
+      local text = segments[1].items[1].text or ""
+      assert.is_false(
+        text:sub(1, #icon) == icon,
+        "segment text must not begin with the icon; this duplicates the spinner "
+          .. "either in the gutter float (wide gutter) or inline prepend (narrow gutter). "
+          .. "icon=" .. vim.inspect(icon) .. " text=" .. vim.inspect(text)
+      )
+
+      ui.cleanup_progress(bufnr)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
 end)
