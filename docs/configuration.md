@@ -116,18 +116,17 @@ require("flemma").setup({
     user = { dark = "Normal", light = "Normal" },
     assistant = { dark = "Normal+bg:#102020", light = "Normal-bg:#102020" },
   },
-  notifications = {
-    enabled = true,                            -- Set false to suppress all notifications
-    timeout = 10000,                           -- Milliseconds before auto-dismiss (0 = persistent)
-    limit = 1,                                 -- Maximum stacked notifications per buffer
-    position = "overlay",                      -- "overlay" (pinned to window top)
-    zindex = 30,                               -- Floating window z-index (above nvim-treesitter-context)
-    highlight = "@text.note,PmenuSel",         -- Highlight group(s) for bar colours; first with both fg+bg wins
-    border = false,                            -- Bottom border style, or false to disable
-  },
-  progress = {
-    highlight = "StatusLine",                  -- Highlight group(s) for the progress bar; first with both fg+bg is used
-    zindex = 50,                               -- Progress bar sits above notifications (zindex 30)
+  ui = {
+    usage = {
+      enabled = true,                          -- Show the usage bar after each request
+      timeout = 10000,                         -- Milliseconds before auto-dismiss (0 = persistent)
+      position = "top",                        -- "top" | "bottom" | "top left" | "top right" | "bottom left" | "bottom right"
+      highlight = "@text.note,PmenuSel",       -- Highlight group(s) for bar colours; first with both fg+bg wins
+    },
+    progress = {
+      position = "bottom left",                -- Same anchor enum as ui.usage.position
+      highlight = "StatusLine",                -- Highlight group(s) for the progress bar; first with both fg+bg wins
+    },
   },
   pricing = { enabled = true },
   statusline = {
@@ -205,7 +204,7 @@ require("flemma").setup({
 
 ## Option details
 
-This section explains options that benefit from more context than an inline comment provides. For UI-related options (highlights, line highlights, turns, ruler, notifications), see [docs/ui.md](ui.md) for detailed explanations and examples.
+This section explains options that benefit from more context than an inline comment provides. For UI-related options (highlights, line highlights, turns, ruler, usage bar, progress bar), see [docs/ui.md](ui.md) for detailed explanations and examples.
 
 ### Thinking parameter mapping
 
@@ -247,19 +246,18 @@ This lets you set `thinking = "high"` as a cross-provider default and fine-tune 
 | `editing.foldlevel`         | `1`     | Initial fold level: `0` = all folds closed, `1` = thinking blocks and frontmatter collapsed, `99` = all folds open.                                                                                                   |
 | `editing.auto_close.*`      | varies  | Auto-close (fold) blocks when they reach a terminal state. See [Auto-close behaviour](#auto-close-behaviour) below.                                                                                                   |
 
-### Notification options
+### Usage bar options
 
-The `notifications` key accepts a table with these fields:
+The `ui.usage` key accepts a table with these fields:
 
 | Key         | Default                 | Effect                                                                                                                                                    |
 | ----------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `enabled`   | `true`                  | Set `false` to suppress all notification bars.                                                                                                            |
-| `timeout`   | `10000`                 | Milliseconds before auto-dismiss. Set `0` for persistent notifications.                                                                                   |
-| `limit`     | `1`                     | Maximum stacked notifications per buffer. Oldest are dismissed when the limit is exceeded.                                                                |
-| `position`  | `"overlay"`             | Notification placement. Currently only `"overlay"` (pinned to the top of the chat window).                                                                |
-| `zindex`    | `30`                    | Floating window z-index for notification bars (above nvim-treesitter-context).                                                                            |
+| `enabled`   | `true`                  | Set `false` to suppress the usage bar entirely.                                                                                                           |
+| `timeout`   | `10000`                 | Milliseconds before auto-dismiss. Set `0` for a persistent bar.                                                                                           |
+| `position`  | `"top"`                 | Anchor edge of the chat window. One of `"top"`, `"bottom"`, `"top left"`, `"top right"`, `"bottom left"`, or `"bottom right"`.                            |
 | `highlight` | `"@text.note,PmenuSel"` | Comma-separated highlight groups to derive bar colours from. The first group that provides both `fg` and `bg` is used; remaining groups act as fallbacks. |
-| `border`    | `false`                 | Bottom border style: `"underline"`, `"underdouble"`, `"undercurl"`, `"underdotted"`, `"underdashed"`, or `false` to disable.                              |
+
+**Migration from 0.10 and earlier:** the top-level `notifications` and `progress` config keys moved under `ui`. Rename `notifications.*` keys to `ui.usage.*` (drop the removed `limit`, `border`, `zindex` keys, and replace the old `position = "overlay"` with the new anchor enum — e.g. `"top"`). Rename `progress.*` to `ui.progress.*` (drop `zindex`; add `position` to pick an anchor edge). The `:Flemma notification:recall` command is now `:Flemma usage:recall`, and the `FlemmaNotifications*` highlight groups are renamed to `FlemmaUsageBar*` (see [docs/ui.md](ui.md#usage-bar)). Stacking and the bottom-border feature were removed — each buffer now owns at most one active usage bar.
 
 ### Keymaps and hybrid dispatch
 
@@ -378,12 +376,12 @@ Override per-buffer via `flemma.opt.tools.max_concurrent` in frontmatter.
 
 ### Progress bar
 
-A persistent progress indicator appears as a floating bar while a request is streaming. It shows the current phase (thinking, streaming text, tool input) and repositions automatically if the target line scrolls off-screen.
+A persistent progress indicator appears as a floating bar while a request is streaming. It shows the current phase (thinking, streaming text, tool input) and re-renders automatically on window resize.
 
-| Key                  | Default        | Effect                                                                  |
-| -------------------- | -------------- | ----------------------------------------------------------------------- |
-| `progress.highlight` | `"StatusLine"` | Highlight group(s) for the progress bar; first with both fg+bg is used. |
-| `progress.zindex`    | `50`           | Floating window z-index (above notifications at 30).                    |
+| Key                     | Default         | Effect                                                                                                                         |
+| ----------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `ui.progress.position`  | `"bottom left"` | Anchor edge of the chat window. One of `"top"`, `"bottom"`, `"top left"`, `"top right"`, `"bottom left"`, or `"bottom right"`. |
+| `ui.progress.highlight` | `"StatusLine"`  | Highlight group(s) for the progress bar; first with both fg+bg is used.                                                        |
 
 ### Diagnostics
 
