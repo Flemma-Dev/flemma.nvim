@@ -31,6 +31,9 @@ describe("Highlight", function()
     }) do
       vim.api.nvim_set_hl(0, group, {})
     end
+    -- Defensive reset: tests in this describe may install a notify capture impl
+    -- inline; ensure it doesn't leak if the test fails before its own reset runs.
+    require("flemma.notify")._reset_impl()
   end)
 
   describe("role marker highlights", function()

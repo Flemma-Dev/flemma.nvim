@@ -1,5 +1,5 @@
 ---
-"@flemma-dev/flemma.nvim": minor
+"@flemma-dev/flemma.nvim": patch
 ---
 
-Route all user-facing notifications through the new `flemma.notify` module, centralising dispatch, implicit `vim.schedule` wrapping, `once`-dedup, and lazy nvim-notify backend detection. All `vim.notify` callsites across 23 production files are migrated; spec files updated to use `notify._set_impl`/`_reset_impl` for test isolation.
+Routed all internal notifications through the new `flemma.notify` module — centralising dispatch, implicit `vim.schedule` wrapping, `once`-dedup, and lazy nvim-notify backend detection. Users with rcarriga/nvim-notify installed automatically get rich notifications (titles, icons, replace-in-place, dedup); users on vanilla `vim.notify` see no behavior change.
