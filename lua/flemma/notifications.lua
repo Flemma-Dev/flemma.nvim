@@ -165,7 +165,7 @@ local function update_gutter_icon(notif, winid, gutter_width, row)
       noautocmd = true,
       zindex = ZINDEX,
     })
-    vim.wo[notif.gutter_icon_win].winhighlight = "NormalFloat:FlemmaNotificationsBar"
+    vim.wo[notif.gutter_icon_win].winhighlight = "NormalFloat:FlemmaUsageBar"
   end
 end
 
@@ -234,24 +234,10 @@ local function update_bottom_border(target_bufnr, winid, gutter_width)
     return
   end
 
-  -- Apply underline extmark on the bottom notification buffer
-  vim.api.nvim_buf_set_extmark(bottom_notif.bufnr, border_ns_id, 0, 0, {
-    end_line = 1,
-    hl_group = "FlemmaNotificationsBottom",
-    hl_eol = true,
-  })
+  -- Bottom border underline removed along with the border feature.
+  -- Gutter border window plumbing kept (this whole file is scheduled
+  -- for deletion in a later refactor task).
 
-  -- Apply underline to the bottom notification's gutter icon buffer if present
-  -- (gutter icon window overlaps gutter_border_win at same zindex, so it needs its own extmark)
-  if bottom_notif.gutter_icon_bufnr and vim.api.nvim_buf_is_valid(bottom_notif.gutter_icon_bufnr) then
-    vim.api.nvim_buf_set_extmark(bottom_notif.gutter_icon_bufnr, border_ns_id, 0, 0, {
-      end_line = 1,
-      hl_group = "FlemmaNotificationsBottom",
-      hl_eol = true,
-    })
-  end
-
-  -- Extend underline into the gutter area via a separate floating window
   if gutter_width > 0 then
     if not buf.gutter_border_bufnr or not vim.api.nvim_buf_is_valid(buf.gutter_border_bufnr) then
       buf.gutter_border_bufnr = vim.api.nvim_create_buf(false, true)
@@ -262,13 +248,7 @@ local function update_bottom_border(target_bufnr, winid, gutter_width)
       vim.bo[buf.gutter_border_bufnr].undolevels = -1
     end
 
-    -- Apply the same underline extmark on the gutter buffer
     vim.api.nvim_buf_clear_namespace(buf.gutter_border_bufnr, border_ns_id, 0, -1)
-    vim.api.nvim_buf_set_extmark(buf.gutter_border_bufnr, border_ns_id, 0, 0, {
-      end_line = 1,
-      hl_group = "FlemmaNotificationsBottom",
-      hl_eol = true,
-    })
 
     if buf.gutter_border_win and vim.api.nvim_win_is_valid(buf.gutter_border_win) then
       vim.api.nvim_win_set_config(buf.gutter_border_win, {
@@ -445,7 +425,7 @@ local function create_notification(target_bufnr, segments, item_widths)
   })
 
   -- Set window highlight for distinct background
-  vim.wo[notification_win_id].winhighlight = "Normal:FlemmaNotificationsBar"
+  vim.wo[notification_win_id].winhighlight = "Normal:FlemmaUsageBar"
 
   -- Build notification object
   ---@type flemma.notifications.Notification
@@ -734,7 +714,7 @@ end
 
 --- Setup autocmds for notification management
 function M.setup()
-  local augroup = vim.api.nvim_create_augroup("FlemmaNotifications", { clear = true })
+  local augroup = vim.api.nvim_create_augroup("FlemmaUsageNotifications", { clear = true })
 
   -- Show pending notifications when buffer becomes visible
   vim.api.nvim_create_autocmd("WinEnter", {

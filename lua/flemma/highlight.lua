@@ -467,7 +467,7 @@ M.apply_syntax = function()
 
   if bar_bg_hex and bar_fg_hex then
     -- Primary tier: base group fg + bg as-is (model name, cost)
-    vim.api.nvim_set_hl(0, "FlemmaNotificationsBar", { bg = bar_bg_hex, fg = bar_fg_hex, default = true })
+    vim.api.nvim_set_hl(0, "FlemmaUsageBar", { bg = bar_bg_hex, fg = bar_fg_hex, default = true })
 
     -- Secondary tier: slightly dimmed fg (cache label, token counts, request count)
     local is_dark = vim.o.background == "dark"
@@ -476,7 +476,7 @@ M.apply_syntax = function()
     if secondary_resolved and secondary_resolved.fg then
       vim.api.nvim_set_hl(
         0,
-        "FlemmaNotificationsSecondary",
+        "FlemmaUsageBarSecondary",
         { bg = bar_bg_hex, fg = secondary_resolved.fg, default = true }
       )
     end
@@ -485,32 +485,32 @@ M.apply_syntax = function()
     local muted_expr = notification_base_group .. (is_dark and "-fg:#444444" or "+fg:#444444")
     local muted_resolved = parse_highlight_expression(muted_expr)
     if muted_resolved and muted_resolved.fg then
-      vim.api.nvim_set_hl(0, "FlemmaNotificationsMuted", { bg = bar_bg_hex, fg = muted_resolved.fg, default = true })
+      vim.api.nvim_set_hl(0, "FlemmaUsageBarMuted", { bg = bar_bg_hex, fg = muted_resolved.fg, default = true })
     end
 
     -- Semantic cache highlights with contrast enforcement
     local cache_good_fg = get_hl_color("DiagnosticOk", "fg")
     if cache_good_fg then
       cache_good_fg = color.ensure_contrast(cache_good_fg, bar_bg_hex, 4.5)
-      vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheGood", { bg = bar_bg_hex, fg = cache_good_fg, default = true })
+      vim.api.nvim_set_hl(0, "FlemmaUsageBarCacheGood", { bg = bar_bg_hex, fg = cache_good_fg, default = true })
     else
-      vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheGood", { link = "DiagnosticOk", default = true })
+      vim.api.nvim_set_hl(0, "FlemmaUsageBarCacheGood", { link = "DiagnosticOk", default = true })
     end
 
     local cache_bad_fg = get_hl_color("DiagnosticWarn", "fg")
     if cache_bad_fg then
       cache_bad_fg = color.ensure_contrast(cache_bad_fg, bar_bg_hex, 4.5)
-      vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheBad", { bg = bar_bg_hex, fg = cache_bad_fg, default = true })
+      vim.api.nvim_set_hl(0, "FlemmaUsageBarCacheBad", { bg = bar_bg_hex, fg = cache_bad_fg, default = true })
     else
-      vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheBad", { link = "DiagnosticWarn", default = true })
+      vim.api.nvim_set_hl(0, "FlemmaUsageBarCacheBad", { link = "DiagnosticWarn", default = true })
     end
   else
     -- Fallback when no candidate group provides both bg and fg: link to StatusLine
-    vim.api.nvim_set_hl(0, "FlemmaNotificationsBar", { link = "StatusLine", default = true })
-    vim.api.nvim_set_hl(0, "FlemmaNotificationsSecondary", { link = "StatusLine", default = true })
-    vim.api.nvim_set_hl(0, "FlemmaNotificationsMuted", { link = "Comment", default = true })
-    vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheGood", { link = "DiagnosticOk", default = true })
-    vim.api.nvim_set_hl(0, "FlemmaNotificationsCacheBad", { link = "DiagnosticWarn", default = true })
+    vim.api.nvim_set_hl(0, "FlemmaUsageBar", { link = "StatusLine", default = true })
+    vim.api.nvim_set_hl(0, "FlemmaUsageBarSecondary", { link = "StatusLine", default = true })
+    vim.api.nvim_set_hl(0, "FlemmaUsageBarMuted", { link = "Comment", default = true })
+    vim.api.nvim_set_hl(0, "FlemmaUsageBarCacheGood", { link = "DiagnosticOk", default = true })
+    vim.api.nvim_set_hl(0, "FlemmaUsageBarCacheBad", { link = "DiagnosticWarn", default = true })
   end
 
   -- Progress bar highlight groups

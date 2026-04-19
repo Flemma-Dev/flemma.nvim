@@ -233,7 +233,7 @@ describe("flemma.usage", function()
       assert.has_match("80%%", result.text)
       local found_good = false
       for _, highlight in ipairs(result.highlights) do
-        if highlight.group == "FlemmaNotificationsCacheGood" then
+        if highlight.group == "FlemmaUsageBarCacheGood" then
           found_good = true
         end
       end
@@ -256,7 +256,7 @@ describe("flemma.usage", function()
       assert.has_match("20%%", result.text)
       local found_bad = false
       for _, highlight in ipairs(result.highlights) do
-        if highlight.group == "FlemmaNotificationsCacheBad" then
+        if highlight.group == "FlemmaUsageBarCacheBad" then
           found_bad = true
         end
       end

@@ -96,7 +96,7 @@ describe("flemma.usage segment building", function()
       assert.is_not_nil(keys["cache_percent"])
       assert.has_match("80%%", keys["cache_percent"].text)
       assert.is_not_nil(keys["cache_percent"].highlight)
-      assert.are.equal("FlemmaNotificationsCacheGood", keys["cache_percent"].highlight.group)
+      assert.are.equal("FlemmaUsageBarCacheGood", keys["cache_percent"].highlight.group)
     end)
 
     it("should not include cost items when pricing disabled", function()

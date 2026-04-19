@@ -196,7 +196,7 @@ describe("flemma.ui.bar.layout", function()
               text = "Cache 75%",
               priority = 75,
               highlight = {
-                group = "FlemmaNotificationsCacheGood",
+                group = "FlemmaUsageBarCacheGood",
                 offset = 6, -- byte offset of "75%" within "Cache 75%"
                 length = 3, -- byte length of "75%"
               },
@@ -208,7 +208,7 @@ describe("flemma.ui.bar.layout", function()
       local result = layout.render(segments, 120)
 
       assert.are.equal(1, #result.highlights)
-      assert.are.equal("FlemmaNotificationsCacheGood", result.highlights[1].group)
+      assert.are.equal("FlemmaUsageBarCacheGood", result.highlights[1].group)
       -- The highlight should point to "75%" in the rendered line
       local highlighted_text = result.text:sub(result.highlights[1].col_start + 1, result.highlights[1].col_end)
       assert.are.equal("75%", highlighted_text)
@@ -279,7 +279,7 @@ describe("flemma.ui.bar.layout", function()
               text = "Cache 75%",
               priority = 75,
               highlight = {
-                group = "FlemmaNotificationsCacheGood",
+                group = "FlemmaUsageBarCacheGood",
                 offset = 6,
                 length = 3,
               },
@@ -292,7 +292,7 @@ describe("flemma.ui.bar.layout", function()
       local result = layout.render(segments, 120, { input_tokens = 12 })
 
       assert.are.equal(1, #result.highlights)
-      assert.are.equal("FlemmaNotificationsCacheGood", result.highlights[1].group)
+      assert.are.equal("FlemmaUsageBarCacheGood", result.highlights[1].group)
       -- The highlight should still point to "75%" in the rendered line
       local highlighted_text = result.text:sub(result.highlights[1].col_start + 1, result.highlights[1].col_end)
       assert.are.equal("75%", highlighted_text)
@@ -477,7 +477,7 @@ describe("flemma.ui.bar.layout", function()
               text = "Cache 75%",
               priority = 75,
               highlight = {
-                group = "FlemmaNotificationsCacheGood",
+                group = "FlemmaUsageBarCacheGood",
                 offset = 6,
                 length = 3,
               },
@@ -489,7 +489,7 @@ describe("flemma.ui.bar.layout", function()
       local result = layout.render(segments, 120, nil, { skip_prefix = true })
 
       assert.are.equal(1, #result.highlights)
-      assert.are.equal("FlemmaNotificationsCacheGood", result.highlights[1].group)
+      assert.are.equal("FlemmaUsageBarCacheGood", result.highlights[1].group)
       -- Highlight should still point to "75%" — byte offset starts at 0 (no prefix)
       local highlighted_text = result.text:sub(result.highlights[1].col_start + 1, result.highlights[1].col_end)
       assert.are.equal("75%", highlighted_text)
