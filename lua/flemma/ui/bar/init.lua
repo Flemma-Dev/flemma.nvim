@@ -387,12 +387,19 @@ function Bar:_render()
 
   local geom = compute_geometry(self.position, W, H, G, T, icon_width, icon_in_gutter)
 
+  -- Order matters: icon FIRST (next to the body), then G_pad in front of
+  -- both. The pre-refactor narrow-gutter code rendered
+  --   <G spaces> + <spinner> + " " + <body>
+  -- so the icon glyph landed at col G (right at the gutter/buffer boundary).
+  -- Prepending the icon AFTER the G_pad would put it at col 0 instead — a
+  -- visible regression for users with line-numbers narrow enough to fall
+  -- through to this branch (G in (0, icon_width+1)).
   local text = natural_text
-  if geom.pad_text then
-    text = string.rep(" ", G) .. text
-  end
   if icon_normalized and not geom.gutter_col then
     text = icon_normalized .. text
+  end
+  if geom.pad_text then
+    text = string.rep(" ", G) .. text
   end
   if geom.lead_pad_for_right then
     text = " " .. text

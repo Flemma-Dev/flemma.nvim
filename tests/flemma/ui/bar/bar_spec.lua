@@ -215,6 +215,51 @@ describe("flemma.ui.bar", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
+    -- Narrow-gutter inline-icon ordering. The pre-refactor narrow-gutter
+    -- branch rendered `<G spaces> + <spinner> + " " + <body>`, so the spinner
+    -- glyph landed at col G — right at the gutter / buffer-text boundary.
+    -- The post-refactor _render initially prepended the icon AFTER the G_pad,
+    -- placing it at col 0 instead. Visible regression for users with
+    -- line numbers narrow enough (G in 1..icon_width) to fall through to the
+    -- narrow-gutter fallback.
+    it("places inline icon at col G, not col 0, when narrow gutter forces fallback", function()
+      local bufnr = make_visible_buf()
+      local winid = vim.fn.bufwinid(bufnr)
+      vim.wo[winid].signcolumn = "no"
+      vim.wo[winid].foldcolumn = "0"
+      vim.wo[winid].relativenumber = false
+      vim.wo[winid].number = true
+      vim.wo[winid].numberwidth = 2
+      vim.cmd("redraw")
+
+      local G = require("flemma.utilities.buffer").get_gutter_width(winid)
+      -- numberwidth=2 with single-digit line numbers should give G=2.
+      -- If the environment ends up with a wider gutter (e.g. signcolumn
+      -- forced on by other tests' state), the icon would route through the
+      -- gutter-float branch and bypass the inline-prepend code path this
+      -- test is meant to guard. Skip in that case rather than asserting
+      -- on a different code path.
+      if G < 1 or G > 2 then
+        bufnr = bufnr -- noop, just keep the buffer for cleanup
+      else
+        local bar = Bar.new({
+          bufnr = bufnr,
+          position = "bottom left",
+          segments = segments_with("body"),
+          icon = "X", -- normalize_icon → "X " (2 display cols)
+        })
+        local text = vim.api.nvim_buf_get_lines(bar._float_bufnr, 0, -1, false)[1] or ""
+        local expected_prefix = string.rep(" ", G) .. "X "
+        assert.equals(
+          expected_prefix,
+          text:sub(1, #expected_prefix),
+          ("G=%d expected text to start with %q (G_pad + icon); got %q"):format(G, expected_prefix, text)
+        )
+        bar:dismiss()
+      end
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
     -- Right-anchored breathing-room mirror. Left-anchored bars get one
     -- column of trailing FlemmaProgressBar bg between content and any buffer
     -- text continuing to their right (the +1 in the width formula). Right-
