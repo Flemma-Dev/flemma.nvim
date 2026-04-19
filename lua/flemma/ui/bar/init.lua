@@ -114,9 +114,13 @@ local function compute_geometry(position, W, H, G, T, icon_width, icon_in_gutter
     }
   end
 
-  -- Narrow-gutter fallback: main float at col 0, text padded with G leading spaces.
+  -- Narrow-gutter fallback: main float at col 0. The displayed line is
+  --   <G leading spaces> + <inline-prepended icon> + <body text>
+  -- so the float must be wide enough to fit all three plus one column of
+  -- breathing room. The icon_width term is critical — without it, a
+  -- 2-column icon clips the trailing character of the body.
   local is_full = position == "top" or position == "bottom"
-  local main_width = is_full and W or math.min(T + G + 1, W)
+  local main_width = is_full and W or math.min(T + G + icon_width + 1, W)
   return {
     row = row,
     main_col = 0,
