@@ -5,6 +5,11 @@
 ---@class flemma.ui.bar
 local M = {}
 
+local layout = require("flemma.ui.bar.layout")
+local buffer = require("flemma.utilities.buffer")
+local highlight = require("flemma.highlight")
+local str = require("flemma.utilities.string")
+
 ---@alias flemma.ui.bar.Position
 ---| "top"
 ---| "bottom"
@@ -36,6 +41,89 @@ local CONFLICTS = {
   ["bottom left"] = { "bottom", "bottom left" },
   ["bottom right"] = { "bottom", "bottom right" },
 }
+
+local ZINDEX = 50
+local NS = vim.api.nvim_create_namespace("flemma_ui_bar")
+
+local ICON_TRAILING_SPACE = " "
+
+---Normalise an icon string: trim any trailing space, re-append exactly one.
+---@param icon string
+---@return string
+local function normalize_icon(icon)
+  local trimmed = icon:gsub("%s+$", "")
+  return trimmed .. ICON_TRAILING_SPACE
+end
+
+---@type table<flemma.ui.bar.Position, string>
+local DEFAULT_CHAIN = {
+  ["top"] = "TabLine,StatusLine",
+  ["top left"] = "TabLine,StatusLine",
+  ["top right"] = "TabLine,StatusLine",
+  ["bottom"] = "StatusLine",
+  ["bottom left"] = "StatusLine",
+  ["bottom right"] = "StatusLine",
+}
+
+---Resolve the winhighlight group name for a Bar, falling back by position.
+---@param bar flemma.ui.bar.Bar
+---@return string group
+local function resolve_winhighlight(bar)
+  local caller_hit = bar.highlight and highlight.resolve_first_complete(bar.highlight) or nil
+  return caller_hit or highlight.resolve_first_complete(DEFAULT_CHAIN[bar.position]) or "StatusLine"
+end
+
+---@class flemma.ui.bar.Geometry
+---@field row integer
+---@field main_col integer
+---@field main_width integer
+---@field gutter_col? integer
+---@field gutter_width? integer
+---@field pad_text boolean
+
+---Compute geometry for the bar given window dimensions and text width.
+---Returns a table with row, main_col, main_width, gutter (nil or { col, width }).
+---@param position flemma.ui.bar.Position
+---@param W integer Window width
+---@param H integer Window height
+---@param G integer Gutter width
+---@param T integer Rendered text display width (from layout.render)
+---@param icon_width integer Icon display width (0 if no icon)
+---@param icon_in_gutter boolean Whether the icon rides in a separate gutter float
+---@return flemma.ui.bar.Geometry
+local function compute_geometry(position, W, H, G, T, icon_width, icon_in_gutter)
+  local is_bottom = position:find("^bottom") ~= nil
+  local is_right = position:find("right$") ~= nil
+  local row = is_bottom and (H - 1) or 0
+
+  if is_right then
+    local width = math.min(T + icon_width + 1, W)
+    return { row = row, main_col = W - width, main_width = width, pad_text = false }
+  end
+
+  if icon_in_gutter then
+    local is_full = position == "top" or position == "bottom"
+    local main_width = is_full and (W - G) or math.min(T + 1, W - G)
+    return {
+      row = row,
+      main_col = G,
+      main_width = main_width,
+      gutter_col = 0,
+      gutter_width = G,
+      pad_text = false,
+    }
+  end
+
+  -- Narrow-gutter fallback: main float at col 0, text padded with G leading spaces.
+  local is_full = position == "top" or position == "bottom"
+  local main_width = is_full and W or math.min(T + G + 1, W)
+  return {
+    row = row,
+    main_col = 0,
+    main_width = main_width,
+    pad_text = true,
+  }
+end
 
 ---@class flemma.ui.bar.Bar
 ---@field id integer
@@ -143,7 +231,7 @@ function M.new(opts)
   bars[opts.bufnr] = bars[opts.bufnr] or {}
   bars[opts.bufnr][opts.position] = self
 
-  -- TODO(Task 10): register autocmds, call self:_render()
+  self:_render()
 
   return self
 end
@@ -162,7 +250,10 @@ function Bar:dismiss()
   end
   self.dismissed = true
 
-  -- TODO(Task 10): clear extmarks, close floats, delete augroup
+  if self._float_bufnr and vim.api.nvim_buf_is_valid(self._float_bufnr) then
+    pcall(vim.api.nvim_buf_clear_namespace, self._float_bufnr, NS, 0, -1)
+  end
+  self:_close_floats()
 
   if bars[self.bufnr] and bars[self.bufnr][self.position] == self then
     bars[self.bufnr][self.position] = nil
@@ -177,10 +268,6 @@ function Bar:dismiss()
   return self
 end
 
--- Method stubs so dismissed-handle no-op semantics work before the full
--- implementation lands in later tasks. Each method is a no-op when
--- dismissed; full behaviour is added in Task 11.
-
 ---Update the icon shown before the bar content.
 ---@param icon string|nil
 ---@return flemma.ui.bar.Bar
@@ -189,6 +276,7 @@ function Bar:set_icon(icon)
     return self
   end
   self.icon = icon
+  self:_render()
   return self
 end
 
@@ -200,6 +288,7 @@ function Bar:set_segments(segments)
     return self
   end
   self.segments = segments or {}
+  self:_render()
   return self
 end
 
@@ -211,6 +300,7 @@ function Bar:set_highlight(hl)
     return self
   end
   self.highlight = hl
+  self:_render()
   return self
 end
 
@@ -230,7 +320,200 @@ function Bar:update(partial)
   if partial.highlight ~= nil then
     self.highlight = partial.highlight
   end
+  self:_render()
   return self
+end
+
+---Render the bar to its floating window(s). Creates or reconfigures floats,
+---applies highlight extmarks, and manages the optional gutter-icon float.
+---No-ops when dismissed or when the host buffer is not visible in any window.
+function Bar:_render()
+  if self.dismissed then
+    return
+  end
+
+  local winid = vim.fn.bufwinid(self.bufnr)
+  if winid == -1 then
+    -- Buffer not visible; close floats but preserve state.
+    self:_close_floats()
+    return
+  end
+
+  local W = vim.api.nvim_win_get_width(winid)
+  local H = vim.api.nvim_win_get_height(winid)
+  local G = buffer.get_gutter_width(winid)
+
+  local icon_normalized = self.icon and normalize_icon(self.icon) or nil
+  local icon_width = icon_normalized and str.strwidth(icon_normalized) or 0
+
+  -- Determine whether the icon fits in the gutter, then choose the layout
+  -- engine's available-width upper bound accordingly. Left/full positions
+  -- reserve the gutter; right-anchored positions use the full window.
+  local is_right = self.position:find("right$") ~= nil
+  local icon_in_gutter = icon_width > 0 and G >= (icon_width + 1) and not is_right
+  local text_area_width = (icon_in_gutter and (W - G)) or W
+
+  -- Render segments with layout engine; Bar always skips the built-in prefix.
+  local rendered = layout.render(self.segments, text_area_width, nil, { skip_prefix = true })
+  local T = str.strwidth(rendered.text)
+
+  local geom = compute_geometry(self.position, W, H, G, T, icon_width, icon_in_gutter)
+
+  local text = rendered.text
+  if geom.pad_text then
+    text = string.rep(" ", G) .. text
+  end
+  if icon_normalized and not geom.gutter_col then
+    text = icon_normalized .. text
+  end
+
+  -- Ensure main float buffer.
+  if not self._float_bufnr or not vim.api.nvim_buf_is_valid(self._float_bufnr) then
+    self._float_bufnr = buffer.create_scratch_buffer()
+  end
+  vim.bo[self._float_bufnr].modifiable = true
+  vim.api.nvim_buf_set_lines(self._float_bufnr, 0, -1, false, { text })
+  vim.bo[self._float_bufnr].modifiable = false
+
+  local winhl = resolve_winhighlight(self)
+  local winhl_str = ("Normal:%s,NormalFloat:%s"):format(winhl, winhl)
+
+  -- Open or reconfigure the main float.
+  if self._float_winid and vim.api.nvim_win_is_valid(self._float_winid) then
+    pcall(vim.api.nvim_win_set_config, self._float_winid, {
+      relative = "win",
+      win = winid,
+      row = geom.row,
+      col = geom.main_col,
+      width = geom.main_width,
+      height = 1,
+    })
+  else
+    local ok, new_winid = pcall(vim.api.nvim_open_win, self._float_bufnr, false, {
+      relative = "win",
+      win = winid,
+      row = geom.row,
+      col = geom.main_col,
+      width = geom.main_width,
+      height = 1,
+      focusable = false,
+      style = "minimal",
+      noautocmd = true,
+      zindex = ZINDEX,
+    })
+    if ok then
+      self._float_winid = new_winid
+      vim.api.nvim_set_option_value("winhighlight", winhl_str, { win = new_winid })
+    else
+      return
+    end
+  end
+
+  -- Always re-apply winhighlight (in case the group resolved differently).
+  pcall(vim.api.nvim_set_option_value, "winhighlight", winhl_str, { win = self._float_winid })
+
+  -- Apply per-item extmarks via layout's helper.
+  -- Rendered highlights assume the text starts at col 0; when we padded or
+  -- prefixed the icon inline, shift offsets by that prefix length.
+  local leading = 0
+  if geom.pad_text then
+    leading = leading + #string.rep(" ", G)
+  end
+  if icon_normalized and not geom.gutter_col then
+    leading = leading + #icon_normalized
+  end
+  ---@type flemma.ui.bar.layout.RenderedHighlight[]
+  local shifted = {}
+  for _, hl in ipairs(rendered.highlights) do
+    table.insert(shifted, {
+      group = hl.group,
+      col_start = hl.col_start + leading,
+      col_end = hl.col_end + leading,
+    })
+  end
+  layout.apply_rendered_highlights(self._float_bufnr, NS, shifted)
+
+  -- Gutter-icon float management.
+  if geom.gutter_col and geom.gutter_width and icon_normalized then
+    self:_render_gutter(winid, geom.row, geom.gutter_width, icon_normalized, winhl_str)
+  else
+    self:_close_gutter()
+  end
+
+  self._last_gutter_width = G
+
+  -- Fire on_shown the first time floats actually open.
+  if not self._shown then
+    self._shown = true
+    if self.on_shown then
+      pcall(self.on_shown)
+    end
+  end
+end
+
+---Render (create or reconfigure) the separate gutter-icon float.
+---@param parent_winid integer Parent window the float is anchored to
+---@param row integer Zero-based row in parent window
+---@param width integer Gutter width in columns
+---@param icon_normalized string Normalised icon text (with trailing space)
+---@param winhl_str string Fully-qualified winhighlight option value
+function Bar:_render_gutter(parent_winid, row, width, icon_normalized, winhl_str)
+  if not self._gutter_bufnr or not vim.api.nvim_buf_is_valid(self._gutter_bufnr) then
+    self._gutter_bufnr = buffer.create_scratch_buffer()
+  end
+  local icon_display = str.strwidth(icon_normalized)
+  local pad = math.max(0, width - icon_display)
+  local text = string.rep(" ", pad) .. icon_normalized
+  vim.bo[self._gutter_bufnr].modifiable = true
+  vim.api.nvim_buf_set_lines(self._gutter_bufnr, 0, -1, false, { text })
+  vim.bo[self._gutter_bufnr].modifiable = false
+
+  if self._gutter_winid and vim.api.nvim_win_is_valid(self._gutter_winid) then
+    pcall(vim.api.nvim_win_set_config, self._gutter_winid, {
+      relative = "win",
+      win = parent_winid,
+      row = row,
+      col = 0,
+      width = width,
+      height = 1,
+    })
+  else
+    local ok, new_winid = pcall(vim.api.nvim_open_win, self._gutter_bufnr, false, {
+      relative = "win",
+      win = parent_winid,
+      row = row,
+      col = 0,
+      width = width,
+      height = 1,
+      focusable = false,
+      style = "minimal",
+      noautocmd = true,
+      zindex = ZINDEX,
+    })
+    if ok then
+      self._gutter_winid = new_winid
+    end
+  end
+  if self._gutter_winid then
+    pcall(vim.api.nvim_set_option_value, "winhighlight", winhl_str, { win = self._gutter_winid })
+  end
+end
+
+---Close the gutter-icon float if it exists, leaving the buffer handle intact for reuse.
+function Bar:_close_gutter()
+  if self._gutter_winid and vim.api.nvim_win_is_valid(self._gutter_winid) then
+    pcall(vim.api.nvim_win_close, self._gutter_winid, true)
+  end
+  self._gutter_winid = nil
+end
+
+---Close both main and gutter floats if open. Buffers are preserved for reuse.
+function Bar:_close_floats()
+  if self._float_winid and vim.api.nvim_win_is_valid(self._float_winid) then
+    pcall(vim.api.nvim_win_close, self._float_winid, true)
+  end
+  self._float_winid = nil
+  self:_close_gutter()
 end
 
 return M
