@@ -221,4 +221,39 @@ describe("flemma.ui.bar", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
   end)
+
+  describe("lifecycle autocmds", function()
+    local function open_visible_bufnr()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "hello" })
+      vim.api.nvim_set_current_buf(bufnr)
+      return bufnr
+    end
+
+    it("BufWipeout auto-dismisses", function()
+      local bufnr = open_visible_bufnr()
+      local bar = Bar.new({
+        bufnr = bufnr,
+        position = "top",
+        segments = { { key = "s", items = { { key = "i", text = "x", priority = 1 } } } },
+      })
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+      assert.is_true(bar:is_dismissed())
+    end)
+
+    it("re-renders on WinResized", function()
+      local bufnr = open_visible_bufnr()
+      local bar = Bar.new({
+        bufnr = bufnr,
+        position = "top",
+        segments = { { key = "s", items = { { key = "i", text = "x", priority = 1 } } } },
+      })
+      local winid1 = bar._float_winid
+      vim.api.nvim_exec_autocmds("VimResized", {})
+      assert.equals(winid1, bar._float_winid)
+      assert.is_true(vim.api.nvim_win_is_valid(winid1))
+      bar:dismiss()
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
 end)

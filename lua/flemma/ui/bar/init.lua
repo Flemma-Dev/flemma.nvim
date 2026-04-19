@@ -231,6 +231,7 @@ function M.new(opts)
   bars[opts.bufnr] = bars[opts.bufnr] or {}
   bars[opts.bufnr][opts.position] = self
 
+  self:_install_autocmds()
   self:_render()
 
   return self
@@ -249,6 +250,11 @@ function Bar:dismiss()
     return self
   end
   self.dismissed = true
+
+  if self._autocmd_group then
+    pcall(vim.api.nvim_del_augroup_by_id, self._autocmd_group)
+    self._autocmd_group = nil
+  end
 
   if self._float_bufnr and vim.api.nvim_buf_is_valid(self._float_bufnr) then
     pcall(vim.api.nvim_buf_clear_namespace, self._float_bufnr, NS, 0, -1)
@@ -514,6 +520,108 @@ function Bar:_close_floats()
   end
   self._float_winid = nil
   self:_close_gutter()
+end
+
+---Install per-bar autocmd group for lifecycle events.
+function Bar:_install_autocmds()
+  local group = vim.api.nvim_create_augroup(string.format("FlemmaBar_%d", self.id), { clear = true })
+  self._autocmd_group = group
+  local bar = self -- upvalue captured by the callbacks below
+
+  vim.api.nvim_create_autocmd({ "BufWipeout", "BufUnload" }, {
+    group = group,
+    buffer = self.bufnr,
+    callback = function()
+      bar:dismiss()
+    end,
+  })
+
+  vim.api.nvim_create_autocmd({ "WinResized", "VimResized" }, {
+    group = group,
+    callback = function()
+      if not bar.dismissed then
+        bar:_render()
+      end
+    end,
+  })
+
+  -- BufWinEnter can be scoped to a buffer; WinEnter cannot (it is a
+  -- window-level event and silently no-ops when `buffer` is passed).
+  -- Register them separately, matching the pattern in the now-deleted
+  -- notifications.lua (lines 742–755).
+  vim.api.nvim_create_autocmd("BufWinEnter", {
+    group = group,
+    buffer = self.bufnr,
+    callback = function()
+      if not bar.dismissed then
+        bar:_render()
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("WinEnter", {
+    group = group,
+    callback = function()
+      if bar.dismissed then
+        return
+      end
+      if vim.fn.bufwinid(bar.bufnr) ~= -1 then
+        bar:_render()
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("BufWinLeave", {
+    group = group,
+    buffer = self.bufnr,
+    callback = function()
+      if not bar.dismissed then
+        bar:_close_floats()
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("WinClosed", {
+    group = group,
+    callback = function(ev)
+      if bar.dismissed then
+        return
+      end
+      local closed = tonumber(ev.match)
+      if closed == bar._float_winid or closed == bar._gutter_winid then
+        bar._float_winid = nil
+        bar._gutter_winid = nil
+        vim.schedule(function()
+          if not bar.dismissed then
+            bar:_render()
+          end
+        end)
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("CursorHold", {
+    group = group,
+    buffer = self.bufnr,
+    callback = function()
+      if bar.dismissed then
+        return
+      end
+      vim.defer_fn(function()
+        if bar.dismissed then
+          return
+        end
+        local winid = vim.fn.bufwinid(bar.bufnr)
+        if winid == -1 then
+          return
+        end
+        local g = buffer.get_gutter_width(winid)
+        if bar._last_gutter_width ~= g then
+          bar:_render()
+        end
+      end, 50)
+    end,
+  })
 end
 
 return M
