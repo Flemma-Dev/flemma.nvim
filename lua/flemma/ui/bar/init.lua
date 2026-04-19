@@ -80,6 +80,7 @@ end
 ---@field gutter_col? integer
 ---@field gutter_width? integer
 ---@field pad_text boolean
+---@field lead_pad_for_right? boolean Prepend a leading space so right-anchored bars get breathing room against buffer text on the LEFT (the float's right edge sits against the window border, so the trailing breathing in `width` would otherwise be wasted)
 
 ---Compute geometry for the bar given window dimensions and text width.
 ---Returns a table with row, main_col, main_width, gutter (nil or { col, width }).
@@ -97,8 +98,18 @@ local function compute_geometry(position, W, H, G, T, icon_width, icon_in_gutter
   local row = is_bottom and (H - 1) or 0
 
   if is_right then
+    -- Width = leading-pad(1) + icon_width + body(T). Mirrors the trailing
+    -- breathing of left-anchored bars: instead of wasting the +1 against
+    -- the window's right border, we put it on the left so the icon does
+    -- not sit flush against buffer text at col W-width-1.
     local width = math.min(T + icon_width + 1, W)
-    return { row = row, main_col = W - width, main_width = width, pad_text = false }
+    return {
+      row = row,
+      main_col = W - width,
+      main_width = width,
+      pad_text = false,
+      lead_pad_for_right = true,
+    }
   end
 
   if icon_in_gutter then
@@ -383,6 +394,9 @@ function Bar:_render()
   if icon_normalized and not geom.gutter_col then
     text = icon_normalized .. text
   end
+  if geom.lead_pad_for_right then
+    text = " " .. text
+  end
 
   -- Ensure main float buffer.
   if not self._float_bufnr or not vim.api.nvim_buf_is_valid(self._float_bufnr) then
@@ -438,6 +452,9 @@ function Bar:_render()
   end
   if icon_normalized and not geom.gutter_col then
     leading = leading + #icon_normalized
+  end
+  if geom.lead_pad_for_right then
+    leading = leading + 1
   end
   ---@type flemma.ui.bar.layout.RenderedHighlight[]
   local shifted = {}

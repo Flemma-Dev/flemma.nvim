@@ -215,6 +215,32 @@ describe("flemma.ui.bar", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
+    -- Right-anchored breathing-room mirror. Left-anchored bars get one
+    -- column of trailing FlemmaProgressBar bg between content and any buffer
+    -- text continuing to their right (the +1 in the width formula). Right-
+    -- anchored bars are flush against the window's right border, so the
+    -- equivalent breathing room must instead sit on the LEFT — between the
+    -- icon/content and any buffer text continuing to the float's left side.
+    it("right-anchored floats start with a leading space (mirror breathing)", function()
+      for _, position in ipairs({ "top right", "bottom right" }) do
+        local bufnr = make_visible_buf()
+        local bar = Bar.new({
+          bufnr = bufnr,
+          position = position,
+          segments = segments_with("hello"),
+          icon = "⣯",
+        })
+        local text = vim.api.nvim_buf_get_lines(bar._float_bufnr, 0, -1, false)[1] or ""
+        assert.equals(
+          " ",
+          text:sub(1, 1),
+          ("position=%q: right-anchored float should start with a leading space; got %q"):format(position, text)
+        )
+        bar:dismiss()
+        vim.api.nvim_buf_delete(bufnr, { force = true })
+      end
+    end)
+
     -- Parametric no-clipping invariant. Caught a real bug: narrow-gutter
     -- corner positions sized the float to T+G+1 (omitting icon_width), so a
     -- 2-col inline icon prefix clipped the trailing character of the body.
