@@ -214,6 +214,75 @@ describe("flemma.ui.bar", function()
       bar:dismiss()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
+
+    -- Parametric no-clipping invariant. Caught a real bug: narrow-gutter
+    -- corner positions sized the float to T+G+1 (omitting icon_width), so a
+    -- 2-col inline icon prefix clipped the trailing character of the body.
+    -- For every position × gutter × icon combination, every visible glyph in
+    -- the displayed line must fit inside the float's width.
+    --
+    -- Explicit gutter control matters: prior tests in this file set
+    -- vim.wo[winid].number = true and the window state leaks into later
+    -- tests. Without an explicit gutter reset, this assertion silently
+    -- exercises only the wide-gutter branch and misses the narrow-gutter
+    -- bug it is meant to guard against.
+    it("never clips the displayed line across positions, gutters, and icons", function()
+      local positions = {
+        "top",
+        "bottom",
+        "top left",
+        "top right",
+        "bottom left",
+        "bottom right",
+      }
+      local gutter_widths = { 0, 4 }
+      local icons = { false, "⣯" } -- two-column inline icon when set
+      for _, position in ipairs(positions) do
+        for _, gutter in ipairs(gutter_widths) do
+          for _, icon in ipairs(icons) do
+            local bufnr = make_visible_buf()
+            local winid = vim.fn.bufwinid(bufnr)
+            -- Reset window state so the previous test's `number = true`
+            -- can't leak in and mask the narrow-gutter code path.
+            vim.wo[winid].number = false
+            vim.wo[winid].relativenumber = false
+            vim.wo[winid].signcolumn = "no"
+            vim.wo[winid].foldcolumn = "0"
+            if gutter > 0 then
+              vim.wo[winid].number = true
+              vim.wo[winid].numberwidth = gutter
+            end
+            vim.cmd("redraw")
+
+            local opts = {
+              bufnr = bufnr,
+              position = position,
+              segments = segments_with("100 characters · 1s"),
+            }
+            if icon then
+              opts.icon = icon
+            end
+            local bar = Bar.new(opts)
+            local cfg = vim.api.nvim_win_get_config(bar._float_winid)
+            local text = vim.api.nvim_buf_get_lines(bar._float_bufnr, 0, -1, false)[1] or ""
+            local text_width = vim.api.nvim_strwidth(text)
+            assert.is_true(
+              cfg.width >= text_width,
+              ("position=%q gutter=%d icon=%q: float width (%d) clips text width (%d): %q"):format(
+                position,
+                gutter,
+                tostring(icon),
+                cfg.width,
+                text_width,
+                text
+              )
+            )
+            bar:dismiss()
+            vim.api.nvim_buf_delete(bufnr, { force = true })
+          end
+        end
+      end
+    end)
   end)
 
   describe("on_shown firing rule", function()
