@@ -279,6 +279,20 @@ describe("flemma.notify", function()
       assert.are.equal("fake", replace_seen)
     end)
 
+    it("integration module loads cleanly when nvim-notify is not installed", function()
+      -- Required by external require-checkers (nixpkgs' nvimRequireCheck, lazy.nvim
+      -- eager loaders) that validate every lua/flemma/**/*.lua without installing
+      -- optional runtime deps. The module must survive a missing `notify` and
+      -- simply not expose M.impl so flemma.notify falls back to vim.notify.
+      package.loaded["flemma.integrations.nvim_notify"] = nil
+      package.loaded["notify"] = nil
+      -- before_each's preload["notify"] errors, mimicking a missing plugin.
+      local ok, integration = pcall(require, "flemma.integrations.nvim_notify")
+      assert.is_true(ok, "expected module to load cleanly; got error: " .. tostring(integration))
+      assert.is_table(integration)
+      assert.is_nil(integration.impl)
+    end)
+
     it("integration adapter survives pcall failure inside nvim-notify", function()
       package.loaded["flemma.notify"] = nil
       package.loaded["flemma.integrations.nvim_notify"] = nil

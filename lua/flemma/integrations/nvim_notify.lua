@@ -3,11 +3,18 @@
 --- callable module, with a pcall guard for runtime edge cases (e.g. a replace
 --- handle whose underlying record came from a tabpage that has since closed).
 ---
---- Lazy-loaded by flemma.notify on first dispatch when require("notify") succeeds.
+--- Lazy-loaded by flemma.notify on first dispatch. When nvim-notify is not
+--- installed, this module still loads cleanly but omits M.impl — flemma.notify
+--- then falls back to vim.notify. Loading in isolation without the optional
+--- dep is required by external require-checkers (e.g. nixpkgs'
+--- nvimRequireCheck) that validate every lua/flemma/**/*.lua at build time.
 ---@class flemma.integrations.NvimNotify
 local M = {}
 
-local nvim_notify = require("notify")
+local loaded, nvim_notify = pcall(require, "notify")
+if not loaded then
+  return M
+end
 
 ---@type flemma.notify.Impl
 function M.impl(notification)
