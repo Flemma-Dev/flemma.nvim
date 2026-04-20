@@ -625,15 +625,29 @@ function Bar:_install_autocmds()
         return
       end
       local closed = tonumber(ev.match)
-      if closed == bar._float_winid or closed == bar._gutter_winid then
+      -- Floats are independent: Neovim can close one (e.g. via :close on the
+      -- winid, parent-win policy) without closing the other. Release only the
+      -- handle whose window actually closed, then tear down the twin so the
+      -- scheduled re-render opens from a clean slate. Nilling both handles at
+      -- once orphans the still-open twin — the root of the ghost gutter icon
+      -- that survives subsequent renders and dismiss().
+      if closed == bar._float_winid then
         bar._float_winid = nil
+        bar:_close_gutter()
+      elseif closed == bar._gutter_winid then
         bar._gutter_winid = nil
-        vim.schedule(function()
-          if not bar.dismissed then
-            bar:_render()
-          end
-        end)
+        if bar._float_winid and vim.api.nvim_win_is_valid(bar._float_winid) then
+          pcall(vim.api.nvim_win_close, bar._float_winid, true)
+        end
+        bar._float_winid = nil
+      else
+        return
       end
+      vim.schedule(function()
+        if not bar.dismissed then
+          bar:_render()
+        end
+      end)
     end,
   })
 

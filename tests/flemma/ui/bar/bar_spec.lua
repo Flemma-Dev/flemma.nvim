@@ -529,6 +529,84 @@ describe("flemma.ui.bar", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
+    -- Regression: ghost gutter float. Before the fix, WinClosed handler nilled
+    -- BOTH _float_winid and _gutter_winid when only the main float closed —
+    -- orphaning the still-open gutter float. The scheduled re-render would then
+    -- open a NEW gutter float beside the original, and bar:dismiss could only
+    -- close the new one. The orphaned original persisted as a ghost icon in
+    -- the gutter that no subsequent render or dismiss could reach.
+    it("does not leak the gutter float when only the main float is closed externally", function()
+      local bufnr = open_visible_bufnr()
+      local winid = vim.fn.bufwinid(bufnr)
+      vim.wo[winid].number = true
+      vim.wo[winid].numberwidth = 4
+      vim.cmd("redraw")
+      local bar = Bar.new({
+        bufnr = bufnr,
+        position = "top left",
+        segments = { { key = "s", items = { { key = "i", text = "x", priority = 1 } } } },
+        icon = "ℹ",
+      })
+      local original_main = bar._float_winid
+      local original_gutter = bar._gutter_winid
+      assert.is_truthy(original_main, "setup: main float should be open")
+      assert.is_truthy(original_gutter, "setup: gutter float should be open (G≥icon+1 with icon set)")
+
+      -- Externally close ONLY the main float. Neovim keeps the independent
+      -- gutter float alive. Bar's WinClosed handler should release the stale
+      -- main reference AND close the still-open gutter before re-rendering.
+      vim.api.nvim_win_close(original_main, true)
+      vim.wait(100, function()
+        return bar._float_winid ~= nil
+          and vim.api.nvim_win_is_valid(bar._float_winid)
+          and bar._float_winid ~= original_main
+      end)
+
+      assert.is_false(
+        vim.api.nvim_win_is_valid(original_gutter),
+        "original gutter float must be closed (not leaked) after the main float is re-created"
+      )
+
+      bar:dismiss()
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    -- Symmetric to the main-closed-externally test: closing only the gutter
+    -- float must not orphan the main float. Guards the second branch of the
+    -- WinClosed handler.
+    it("does not leak the main float when only the gutter float is closed externally", function()
+      local bufnr = open_visible_bufnr()
+      local winid = vim.fn.bufwinid(bufnr)
+      vim.wo[winid].number = true
+      vim.wo[winid].numberwidth = 4
+      vim.cmd("redraw")
+      local bar = Bar.new({
+        bufnr = bufnr,
+        position = "top left",
+        segments = { { key = "s", items = { { key = "i", text = "x", priority = 1 } } } },
+        icon = "ℹ",
+      })
+      local original_main = bar._float_winid
+      local original_gutter = bar._gutter_winid
+      assert.is_truthy(original_main, "setup: main float should be open")
+      assert.is_truthy(original_gutter, "setup: gutter float should be open")
+
+      vim.api.nvim_win_close(original_gutter, true)
+      vim.wait(100, function()
+        return bar._float_winid ~= nil
+          and vim.api.nvim_win_is_valid(bar._float_winid)
+          and bar._float_winid ~= original_main
+      end)
+
+      assert.is_false(
+        vim.api.nvim_win_is_valid(original_main),
+        "original main float must be closed (not leaked) after the gutter float is re-created"
+      )
+
+      bar:dismiss()
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
     it("CursorHold re-renders when gutter width changed", function()
       local bufnr = open_visible_bufnr()
       local winid = vim.fn.bufwinid(bufnr)
