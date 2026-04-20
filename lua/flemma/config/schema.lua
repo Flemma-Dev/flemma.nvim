@@ -258,6 +258,10 @@ return s.object({
     auto_write = s.boolean(false),
     manage_updatetime = s.boolean(true),
     foldlevel = s.integer(1),
+    -- Compact `{conceallevel}{concealcursor}` format, e.g. "2n" = conceallevel 2, concealcursor "n".
+    -- false disables the override and leaves the user's own window settings untouched.
+    -- See docs/conceal.md.
+    conceal = s.optional(s.union(s.string("2n"), s.integer(), s.literal(false))),
     auto_close = s.object({
       thinking = s.boolean(true),
       tool_use = s.boolean(true),

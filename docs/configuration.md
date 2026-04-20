@@ -139,6 +139,7 @@ require("flemma").setup({
     auto_write = false,                      -- Write buffer after each request
     manage_updatetime = true,                -- Lower updatetime in chat buffers
     foldlevel = 1,                           -- 0=all closed, 1=thinking collapsed, 99=all open
+    conceal = "2n",                          -- "{level}{cursor}" — hide markdown syntax by default; false/nil to opt out
     auto_close = {
       thinking = true,                       -- Auto-close thinking blocks when they become terminal
       tool_use = true,                       -- Auto-close tool_use blocks when completed
@@ -244,6 +245,7 @@ This lets you set `thinking = "high"` as a cross-provider default and fine-tune 
 | `editing.auto_write`        | `false` | When `true`, automatically writes the buffer to disk after each completed request.                                                                                                                                    |
 | `editing.manage_updatetime` | `true`  | Lowers `updatetime` to 100ms while a chat buffer is focused (enables responsive `CursorHold` events for UI updates). The original value is restored on `BufLeave`, with reference counting for multiple chat buffers. |
 | `editing.foldlevel`         | `1`     | Initial fold level: `0` = all folds closed, `1` = thinking blocks and frontmatter collapsed, `99` = all folds open.                                                                                                   |
+| `editing.conceal`           | `"2n"`  | Compact `{conceallevel}{concealcursor}` override applied to chat windows. See [docs/conceal.md](conceal.md) for format and the `line_highlights` interaction caveat.                                                  |
 | `editing.auto_close.*`      | varies  | Auto-close (fold) blocks when they reach a terminal state. See [Auto-close behaviour](#auto-close-behaviour) below.                                                                                                   |
 
 ### Usage bar options

@@ -28,6 +28,13 @@ std = "luajit+nvim"
 cache = true
 max_line_length = false
 
+-- Skip vendored reference clones in contrib/ (e.g. neovim source, plugin repos) —
+-- they aren't part of Flemma and include non-UTF-8 legacy fixtures
+-- and intentionally-broken test samples that break parsers.
+exclude_files = {
+  "contrib/**/*.lua",
+}
+
 -- Allow unused `self` everywhere — Lua OOP convention for base class and
 -- interface methods that define the signature but don't use `self`.
 -- Allow `_`-prefixed variables to be unused (standard Lua convention for

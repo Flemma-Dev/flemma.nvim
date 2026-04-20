@@ -723,7 +723,43 @@ local function count_active_chat_buffers()
   return count
 end
 
----Apply buffer-local settings for chat files
+---Parse the `editing.conceal` format `{conceallevel}{concealcursor}` into a
+---pair. Accepts string (`"2n"`), integer (`2`), or boolean/nil (skip).
+---Returns nil when parsing should skip the override (unset/false/malformed).
+---@param value string|integer|boolean|nil
+---@return { level: integer, cursor: string }|nil
+local function parse_conceal_override(value)
+  if value == nil or value == false then
+    return nil
+  end
+  local spec = tostring(value)
+  local level_str, cursor_chars = spec:match("^(%d)(.*)$")
+  if not level_str then
+    return nil
+  end
+  return { level = tonumber(level_str), cursor = cursor_chars or "" }
+end
+
+---Apply window-local settings for a chat buffer displayed in a window.
+---Sets `conceallevel` and `concealcursor` from `editing.conceal`. A nil/false
+---value leaves whatever the user/colorscheme has configured alone.
+---@param winid integer Window ID
+---@param bufnr integer Buffer displayed in the window
+function M.apply_chat_window_settings(winid, bufnr)
+  if not vim.api.nvim_win_is_valid(winid) then
+    return
+  end
+  local cfg = config_facade.get(bufnr)
+  local parsed = cfg and cfg.editing and parse_conceal_override(cfg.editing.conceal)
+  if not parsed then
+    return
+  end
+  vim.api.nvim_set_option_value("conceallevel", parsed.level, { win = winid })
+  vim.api.nvim_set_option_value("concealcursor", parsed.cursor, { win = winid })
+end
+
+---Apply buffer-local settings for chat files, plus window-local settings for
+---whatever window currently hosts the buffer.
 ---@param bufnr integer Buffer number
 local function apply_chat_buffer_settings(bufnr)
   folding.setup_folding(bufnr)
@@ -741,6 +777,14 @@ local function apply_chat_buffer_settings(bufnr)
     vim.opt_local.isfname:append(character)
   end
   vim.bo[bufnr].includeexpr = 'v:lua.require("flemma.navigation").resolve_include_path_expr()'
+
+  -- Apply window-scoped options (conceal) to whichever window currently shows
+  -- the buffer. Our BufRead/BufNewFile and FileType callbacks always fire in
+  -- that window, so bufwinid resolves correctly.
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid ~= -1 then
+    M.apply_chat_window_settings(winid, bufnr)
+  end
 end
 
 ---Set up chat filetype autocmds
@@ -758,6 +802,7 @@ function M.setup_chat_filetype_autocmds()
   vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
     group = augroup,
     pattern = "*.chat",
+    desc = "Flemma: migrate legacy .chat, set filetype, apply buffer+window settings",
     callback = function(ev)
       -- Clear any orphaned cursorline extmark from a prior session.
       -- :e reload fires BufUnload first, which calls cleanup_buffer_state() and
@@ -778,6 +823,7 @@ function M.setup_chat_filetype_autocmds()
   vim.api.nvim_create_autocmd("FileType", {
     group = augroup,
     pattern = "chat",
+    desc = "Flemma: apply buffer+window settings on filetype=chat",
     callback = function(ev)
       apply_chat_buffer_settings(ev.buf)
     end,
