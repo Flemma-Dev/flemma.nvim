@@ -8,6 +8,7 @@ local config_facade = require("flemma.config")
 local state = require("flemma.state")
 local log = require("flemma.logging")
 local loader = require("flemma.loader")
+local notify = require("flemma.notify")
 local parser = require("flemma.parser")
 local roles = require("flemma.utilities.roles")
 local str = require("flemma.utilities.string")
@@ -497,10 +498,19 @@ function M.toggle_message_fold()
     return
   end
 
-  -- No message at cursor — check frontmatter
+  -- No message at cursor — check frontmatter. The AST-provided range is what
+  -- proves the cursor is inside frontmatter; the conceallevel check below is
+  -- then the specific reason we know there is no fold to toggle (rather than,
+  -- say, a stale fold map).
   local fm = doc.frontmatter
   if fm and lnum >= fm.position.start_line and lnum <= fm.position.end_line then
     local fm_start = fm.position.start_line
+    if vim.wo.conceallevel >= 1 then
+      notify.info(
+        string.format("frontmatter isn't foldable with conceallevel=%d. This is a Neovim limitation.", vim.wo.conceallevel)
+      )
+      return
+    end
     if vim.fn.foldclosed(fm_start) ~= -1 then
       vim.cmd(fm_start .. " foldopen")
     else

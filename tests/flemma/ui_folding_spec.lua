@@ -2191,5 +2191,58 @@ describe("UI Folding", function()
       -- Should not error
       folding.toggle_message_fold()
     end)
+
+    it("should notify (not error) when toggling frontmatter at conceallevel>=1", function()
+      local notify = require("flemma.notify")
+      local captured = {}
+      notify._set_impl(function(notification)
+        table.insert(captured, notification)
+        return notification
+      end)
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "```lua",
+        "-- config",
+        "```",
+        "@System:",
+        "prompt",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.conceallevel = 2
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99
+
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+
+      -- Must not throw Vim(foldclose):E490
+      assert.has_no.errors(function()
+        folding.toggle_message_fold()
+      end)
+
+      -- Give the scheduled dispatch time to run
+      vim.wait(10, function()
+        return false
+      end)
+
+      assert.are.equal(1, #captured, "expected one notify dispatch")
+      assert.are.equal(vim.log.levels.INFO, captured[1].level)
+      assert.is_truthy(
+        captured[1].message:find("conceallevel=2"),
+        "notify message should cite the active conceallevel: " .. captured[1].message
+      )
+      assert.is_truthy(
+        captured[1].message:find("Neovim limitation"),
+        "notify message should attribute to Neovim: " .. captured[1].message
+      )
+
+      notify._reset_impl()
+    end)
   end)
 end)
