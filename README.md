@@ -2,7 +2,7 @@
 
 **An AI workspace inside Neovim where every conversation is a document you own.**
 
-https://github.com/user-attachments/assets/cd1c509d-faea-48e1-bd4d-d01e234d6856
+https://github.com/user-attachments/assets/4bed291e-66c7-4a99-b53f-705c95bcae9b
 
 > [!IMPORTANT]
 > **Actively Evolving.** [See the roadmap](ROADMAP.md) for what's coming next. Pin a tag if you need a stable target.
