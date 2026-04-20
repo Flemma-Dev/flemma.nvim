@@ -292,6 +292,29 @@ describe("flemma.provider.base", function()
       provider:process_response_line("not an sse line", {})
     end)
 
+    it("does not double-emit on_error when non-SSE JSON error is re-checked in finalize_response", function()
+      local provider = make_provider()
+      function provider:_process_data() end
+      local error_calls = {}
+      local callbacks = {
+        on_error = function(msg)
+          table.insert(error_calls, msg)
+        end,
+      }
+
+      -- Simulate a single-line non-SSE JSON error body (e.g. Anthropic 429)
+      provider:process_response_line(
+        '{"type":"error","error":{"type":"rate_limit_error","message":"rate limit exceeded"}}',
+        callbacks
+      )
+
+      -- After streaming, finalize_response runs _check_buffered_response. Since
+      -- the error was already emitted from the non-SSE line, it must not fire again.
+      base.finalize_response(provider, 0, callbacks)
+
+      assert.equals(1, #error_calls, "on_error should fire exactly once, got " .. #error_calls)
+    end)
+
     it("handles [DONE] gracefully", function()
       local provider = make_provider()
       local process_called = false

@@ -636,11 +636,6 @@ end
 ---@param callbacks flemma.provider.Callbacks Table of callback functions
 ---@return boolean handled True if the line was successfully parsed as an error
 function M._handle_non_sse_line(self, line, callbacks)
-  log.trace("base.handle_non_sse_line(): Received non-SSE line, buffering: " .. line)
-
-  -- Buffer the line for later analysis
-  self:_buffer_response_line(line)
-
   -- Try parsing as a direct JSON error response (for single-line errors)
   local ok, error_data = pcall(json.decode, line)
   if ok and error_data and type(error_data) == "table" then
@@ -652,6 +647,10 @@ function M._handle_non_sse_line(self, line, callbacks)
     end
   end
 
+  -- Couldn't emit from this line alone — buffer it so _check_buffered_response
+  -- can analyse the accumulated body (e.g. multi-line JSON) during finalize.
+  log.trace("base.handle_non_sse_line(): Received non-SSE line, buffering: " .. line)
+  self:_buffer_response_line(line)
   return false
 end
 
