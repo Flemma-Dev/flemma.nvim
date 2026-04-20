@@ -753,7 +753,10 @@ function M.send_to_provider(opts)
       end
     end
 
-    local diagnostic_lines = {}
+    -- Leading blank so the first entry sits below the "Flemma:" title prefix
+    -- that vim.notify's default adapter prepends; multi-line diagnostics
+    -- otherwise collapse onto the prefix line.
+    local diagnostic_lines = { "" }
     local MAX_DIAGNOSTICS = 10
     local sorted = diagnostic_format.sort(diagnostics)
 
