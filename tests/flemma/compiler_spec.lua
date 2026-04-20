@@ -374,7 +374,6 @@ describe("flemma.templating.compiler", function()
         ast.tool_result("id_cap", {
           segments = inner,
           content = "captured text",
-          is_error = false,
           start_line = 1,
           end_line = 3,
         }),
@@ -388,7 +387,7 @@ describe("flemma.templating.compiler", function()
       assert.equals(1, #parts)
       assert.equals("tool_result", parts[1].kind)
       assert.equals("id_cap", parts[1].tool_use_id)
-      assert.is_false(parts[1].is_error)
+      assert.is_nil(parts[1].status)
       assert.equals("captured text", parts[1].content)
       assert.equals(1, #parts[1].parts)
       assert.equals("text", parts[1].parts[1].kind)

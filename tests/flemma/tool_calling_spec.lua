@@ -238,13 +238,13 @@ describe("AST Tool Nodes", function()
     assert.equals("tool_result", node.kind)
     assert.equals("toolu_123", node.tool_use_id)
     assert.equals("42", node.content)
-    assert.equals(false, node.is_error)
+    assert.is_nil(node.status)
   end)
 
   it("creates tool_result error node", function()
-    local node = ast.tool_result("toolu_123", { content = "Division by zero", is_error = true, start_line = 10 })
+    local node = ast.tool_result("toolu_123", { content = "Division by zero", status = "error", start_line = 10 })
     assert.equals("tool_result", node.kind)
-    assert.equals(true, node.is_error)
+    assert.equals("error", node.status)
   end)
 end)
 
@@ -288,7 +288,7 @@ describe("Parser Tool Blocks", function()
     assert.is_not_nil(tool_result, "Should have tool_result segment")
     assert.equals("toolu_01A09q90qw90lq917835lgs0", tool_result.tool_use_id)
     assert.equals("105", tool_result.content)
-    assert.equals(false, tool_result.is_error)
+    assert.is_nil(tool_result.status)
   end)
 
   it("parses tool_result with JSON code block", function()
@@ -324,7 +324,7 @@ describe("Parser Tool Blocks", function()
 
     assert.is_not_nil(tool_result)
     assert.equals("toolu_01PLAIN123", tool_result.tool_use_id)
-    assert.equals(false, tool_result.is_error)
+    assert.is_nil(tool_result.status)
     assert.equals("this is a result of a tool\nwith multiple lines", tool_result.content)
   end)
 
@@ -343,7 +343,7 @@ describe("Parser Tool Blocks", function()
 
     assert.is_not_nil(tool_result)
     assert.equals("toolu_01ERROR123", tool_result.tool_use_id)
-    assert.equals(true, tool_result.is_error)
+    assert.equals("error", tool_result.status)
     assert.is_true(tool_result.content:match("Division by zero") ~= nil)
   end)
 
@@ -450,7 +450,7 @@ describe("Processor Tool Parts", function()
         has_tool_result = true
         assert.equals("toolu_01A09q90qw90lq917835lgs0", p.tool_use_id)
         assert.equals("105", p.content)
-        assert.equals(false, p.is_error)
+        assert.is_nil(p.status)
       end
     end
     assert.is_true(has_tool_result, "Should have tool_result part")

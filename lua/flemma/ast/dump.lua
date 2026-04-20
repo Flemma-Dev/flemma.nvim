@@ -213,9 +213,11 @@ local function inline_fields(seg)
   elseif kind == "tool_result" then
     ---@cast seg flemma.ast.ToolResultSegment
     table.insert(parts, 'tool_use_id="' .. seg.tool_use_id .. '"')
-    table.insert(parts, "is_error=" .. tostring(seg.is_error))
     if seg.status then
       table.insert(parts, 'status="' .. seg.status .. '"')
+    end
+    if seg.meta then
+      table.insert(parts, "meta=" .. vim.inspect(seg.meta, { newline = " ", indent = "" }))
     end
   elseif kind == "expression" then
     ---@cast seg flemma.ast.ExpressionSegment

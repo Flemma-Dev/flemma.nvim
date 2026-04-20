@@ -82,7 +82,7 @@ describe("Aborted response handling", function()
       end
     end)
 
-    it("parses flemma:tool status=aborted fence correctly", function()
+    it("parses (aborted) header suffix correctly", function()
       local lines = {
         "@Assistant:",
         "Hello",
@@ -92,9 +92,9 @@ describe("Aborted response handling", function()
         '{"command": "ls"}',
         "```",
         "@You:",
-        "**Tool Result:** `tool_123`",
+        "**Tool Result:** `tool_123` (aborted)",
         "",
-        "```flemma:tool status=aborted",
+        "```",
         "```",
       }
       local doc = parser.parse_lines(lines)

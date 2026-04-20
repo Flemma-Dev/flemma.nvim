@@ -404,9 +404,9 @@ describe("UI Folding", function()
         "",
         "@You:",
         "",
-        "**Tool Result:** `toolu_01`",
+        "**Tool Result:** `toolu_01` (pending)",
         "",
-        "```flemma:tool status=pending",
+        "```",
         "```",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
@@ -431,9 +431,9 @@ describe("UI Folding", function()
         "",
         "@You:",
         "",
-        "**Tool Result:** `toolu_01`",
+        "**Tool Result:** `toolu_01` (approved)",
         "",
-        "```flemma:tool status=approved",
+        "```",
         "```",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
@@ -457,9 +457,9 @@ describe("UI Folding", function()
         "",
         "@You:",
         "",
-        "**Tool Result:** `toolu_01`",
+        "**Tool Result:** `toolu_01` (denied)",
         "",
-        "```flemma:tool status=denied",
+        "```",
         "```",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
@@ -484,9 +484,36 @@ describe("UI Folding", function()
         "",
         "@You:",
         "",
-        "**Tool Result:** `toolu_01`",
+        "**Tool Result:** `toolu_01` (rejected)",
         "",
-        "```flemma:tool status=rejected",
+        "```",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      assert.are.equal(">2", folding.get_fold_level(11))
+    end)
+
+    it("should fold tool_result with error status", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Running a tool.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "bad_cmd" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (error)",
+        "",
+        "```",
+        "command not found: bad_cmd",
         "```",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
@@ -1196,9 +1223,9 @@ describe("UI Folding", function()
         "",
         "@You:",
         "",
-        "**Tool Result:** `toolu_01`",
+        "**Tool Result:** `toolu_01` (pending)",
         "",
-        "```flemma:tool status=pending",
+        "```",
         "```",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)

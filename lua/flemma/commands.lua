@@ -533,6 +533,30 @@ local function setup_commands()
           end
         end,
       },
+      approve = {
+        action = function()
+          local bufnr = vim.api.nvim_get_current_buf()
+
+          local ok, err = require("flemma.tools.executor").approve_at_cursor(bufnr)
+          if not ok then
+            notify.error(err or "Approve failed")
+          end
+        end,
+      },
+      reject = {
+        action = function(context)
+          local bufnr = vim.api.nvim_get_current_buf()
+          local message = nil
+          if context.extra_args and #context.extra_args > 0 then
+            message = table.concat(context.extra_args, " ")
+          end
+
+          local ok, err = require("flemma.tools.executor").reject_at_cursor(bufnr, message)
+          if not ok then
+            notify.error(err or "Reject failed")
+          end
+        end,
+      },
       cancel = {
         action = function()
           local bufnr = vim.api.nvim_get_current_buf()

@@ -266,7 +266,7 @@ The `ui.usage` key accepts a table with these fields:
 The `send` keymap (<kbd>Ctrl-]</kbd>) is a hybrid dispatch with a three-phase cycle:
 
 1. **Inject:** If the response contains `**Tool Use:**` blocks without corresponding results, insert empty `**Tool Result:**` placeholders for review.
-2. **Execute:** If there are tool result placeholders with a `flemma:tool` status (`approved`, `denied`, `rejected`), process them accordingly. `pending` blocks pause the cycle for user review.
+2. **Execute:** If there are tool result placeholders with a lifecycle status suffix (`approved`, `denied`, `rejected`), process them accordingly. `pending` blocks pause the cycle for user review.
 3. **Send:** If no tools are pending, send the conversation to the provider.
 
 Each press of <kbd>Ctrl-]</kbd> advances to the next applicable phase. In insert mode, <kbd>Ctrl-]</kbd> behaves identically but re-enters insert mode when the operation finishes.
@@ -290,7 +290,7 @@ Autopilot turns Flemma into an autonomous agent. After each LLM response contain
 | `tools.autopilot.enabled`   | `true`  | Enable the autonomous execute-and-resend loop. Set `false` to restore the manual three-phase <kbd>Ctrl-]</kbd> cycle.                                                 |
 | `tools.autopilot.max_turns` | `100`   | Maximum consecutive LLM turns before autopilot stops and emits a warning. Prevents runaway loops when a model repeatedly calls tools without converging on an answer. |
 
-When a tool requires user approval, autopilot injects a `flemma:tool status=pending` placeholder and pauses the loop. The buffer is unlocked at this point, so you can review the tool call. Press <kbd>Ctrl-]</kbd> to approve and resume. If you paste output inside a `pending` block, <kbd>Ctrl-]</kbd> treats it as a user-provided result – the `flemma:tool` fence is stripped and your content is sent to the model. If you edit the content of an `approved` block, Flemma detects your changes, skips execution to protect your edits, and warns so you can review.
+When a tool requires user approval, autopilot injects a tool_result placeholder with a `(pending)` header suffix and pauses the loop. The buffer is unlocked at this point, so you can review the tool call. Press <kbd>Ctrl-]</kbd> to approve and resume. If you paste output inside a `(pending)` block, <kbd>Ctrl-]</kbd> treats it as a user-provided result – the `(pending)` suffix is cleared from the header and your content is sent to the model. If you edit the content of an `(approved)` block, Flemma detects your changes, skips execution to protect your edits, and warns so you can review.
 
 Press <kbd>Ctrl-C</kbd> at any point to cancel the active request or tool execution. Cancellation fully disarms autopilot, so pressing <kbd>Ctrl-]</kbd> afterwards starts a fresh send rather than resuming the interrupted loop.
 

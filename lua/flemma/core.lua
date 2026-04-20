@@ -373,7 +373,7 @@ function M.cancel_request(opts)
   end
 end
 
----Phase 2 (Execute): Process flemma:tool blocks by status.
+---Phase 2 (Execute): Process tool_result blocks by lifecycle status.
 ---Called from Phase 1 via vim.schedule (undo boundary) or directly when Phase 1 has nothing.
 ---@param opts { on_request_complete?: fun(), bufnr: integer, evaluated_frontmatter?: flemma.processor.EvaluatedFrontmatter, user_initiated?: boolean }
 local function advance_phase2(opts)
@@ -395,14 +395,14 @@ local function advance_phase2(opts)
   local tool_blocks = tool_context.resolve_all_tool_blocks(bufnr)
 
   -- Resolve user-filled pending blocks: the user pasted output into a
-  -- flemma:tool status=pending block. Strip the fence info string so the
-  -- content becomes a normal resolved tool_result sent to the provider.
+  -- (pending) tool_result placeholder. Clear the header status suffix so
+  -- the content becomes a normal resolved tool_result sent to the provider.
   local pending = tool_blocks["pending"] or {}
   for _, ctx in ipairs(pending) do
     if ctx.has_content then
-      local ok, err = injector.strip_fence_info_string(bufnr, ctx.tool_id)
+      local ok, err = injector.clear_header_status(bufnr, ctx.tool_id)
       if not ok then
-        log.warn("Failed to strip fence info string for " .. ctx.tool_id .. ": " .. (err or "unknown"))
+        log.warn("Failed to clear header status for " .. ctx.tool_id .. ": " .. (err or "unknown"))
       end
     end
   end
@@ -533,7 +533,7 @@ local function advance_phase2(opts)
     return
   end
 
-  -- Phase 3: No flemma:tool blocks remain and no unmatched tool_uses → send to provider
+  -- Phase 3: No lifecycle-status tool_result blocks remain and no unmatched tool_uses → send to provider
   M.send_to_provider({
     on_request_complete = opts.on_request_complete,
     bufnr = opts.bufnr,
@@ -543,9 +543,9 @@ local function advance_phase2(opts)
 end
 
 ---Unified dispatch: three-phase advance algorithm.
----Phase 1 (Categorize): Find unmatched tool_use blocks → run approval → inject flemma:tool placeholders.
----Phase 2 (Execute): Process flemma:tool blocks by status (approved/denied/rejected/pending).
----Phase 3 (Continue): No tool blocks remain → send to provider.
+---Phase 1 (Categorize): Find unmatched tool_use blocks → run approval → inject tool_result placeholders with a (status) suffix.
+---Phase 2 (Execute): Process tool_result blocks by lifecycle status (approved/denied/rejected/pending).
+---Phase 3 (Continue): No lifecycle-status blocks remain → send to provider.
 ---Both <C-]> and autopilot call this same function.
 ---@param opts? { on_request_complete?: fun(), bufnr?: integer, user_initiated?: boolean }
 function M.send_or_execute(opts)
@@ -647,7 +647,7 @@ function M.send_or_execute(opts)
   end
 
   -- Phase 1 had nothing to categorize — run Phase 2 directly
-  -- (handles existing flemma:tool blocks from a previous Phase 1)
+  -- (handles existing lifecycle-status tool_result blocks from a previous Phase 1)
   advance_phase2({
     on_request_complete = opts.on_request_complete,
     bufnr = bufnr,

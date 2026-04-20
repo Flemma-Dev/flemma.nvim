@@ -154,8 +154,9 @@ function M.on_response_complete(bufnr)
 end
 
 ---Called from executor when all pending tool executions complete (count_pending == 0).
----Checks for remaining flemma:tool blocks or unprocessed tool_uses. If clear,
----sets sending and schedules send_or_execute. If pending remain, sets paused.
+---Checks for remaining tool result blocks with a lifecycle status or unprocessed
+---tool_uses. If clear, sets sending and schedules send_or_execute. If pending
+---remain, sets paused.
 ---@param bufnr integer
 function M.on_tools_complete(bufnr)
   local bs = get_state(bufnr)
@@ -173,7 +174,7 @@ function M.on_tools_complete(bufnr)
     return
   end
 
-  -- Check for flemma:tool blocks by status
+  -- Check for tool_result blocks by lifecycle status
   local tool_blocks = tool_context.resolve_all_tool_blocks(bufnr)
   -- Only pause for empty pending blocks — user-filled ones will be resolved on send
   local first_empty_pending = nil
@@ -193,7 +194,7 @@ function M.on_tools_complete(bufnr)
     -- defers approved tools, those must execute before we pause for user-facing pending
     -- blocks (otherwise the deferred approved tools are skipped entirely).
     bs.state = "sending"
-    log.debug("autopilot: actionable flemma:tool blocks remain, scheduling send for buffer " .. bufnr)
+    log.debug("autopilot: actionable tool_result blocks remain, scheduling send for buffer " .. bufnr)
     vim.schedule(function()
       if not vim.api.nvim_buf_is_valid(bufnr) then
         return
@@ -215,7 +216,7 @@ function M.on_tools_complete(bufnr)
 
   if first_empty_pending then
     bs.state = "paused"
-    log.debug("autopilot: flemma:tool status=pending blocks remain, pausing")
+    log.debug("autopilot: tool_result (pending) blocks remain, pausing")
     cursor.request_move(bufnr, { line = first_empty_pending.tool_result.start_line, reason = "autopilot/pending-tool" })
     return
   end

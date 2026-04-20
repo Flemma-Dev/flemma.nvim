@@ -393,17 +393,17 @@ function M.execute(bufnr, context)
   end
   pending[tool_id].placeholder_modified = placeholder_opts ~= nil and placeholder_opts.modified
 
-  -- Strip any flemma:tool status fence when the placeholder already existed.
+  -- Clear any (status) header suffix when the placeholder already existed.
   -- Phase 1 injects placeholders with status=approved; the executor's
   -- inject_placeholder call above finds that existing block and returns early
-  -- (modified=false), leaving the flemma:tool fence in the buffer.
-  -- Without stripping it, on_tools_complete → resolve_all_tool_blocks
+  -- (modified=false), leaving the (approved) suffix in the header.
+  -- Without clearing it, on_tools_complete → resolve_all_tool_blocks
   -- rediscovers this tool as "approved" and schedules a duplicate execution
   -- attempt (race: sync tool completing inline during Phase 2's for loop triggers
   -- on_tools_complete while the autopilot state is already "armed").
-  -- strip_fence_info_string is a no-op when no flemma:tool fence exists.
+  -- clear_header_status is a no-op when the header has no suffix.
   if placeholder_opts and not placeholder_opts.modified then
-    injector.strip_fence_info_string(bufnr, tool_id)
+    injector.clear_header_status(bufnr, tool_id)
   end
 
   -- Show execution indicator
@@ -605,6 +605,80 @@ function M.cancel_at_cursor(bufnr)
     return M.cancel(pending[1].tool_id)
   end
   return false
+end
+
+---Locate the tool_result placeholder for the tool at the cursor position. Returns
+---the parsed `ctx` and the matching `flemma.ast.ToolResultSegment` when the tool
+---has a lifecycle status suffix (pending/approved/denied/rejected/aborted). Errors
+---out if there's no tool at cursor, no matching result placeholder, or the tool
+---has already completed (status=nil or status="error").
+---@param bufnr integer
+---@return flemma.tools.ToolContext|nil ctx
+---@return flemma.ast.ToolResultSegment|nil result_seg
+---@return string|nil error
+local function resolve_lifecycle_tool_at_cursor(bufnr)
+  local cursor_pos = vim.api.nvim_win_get_cursor(0)
+  local ctx, err = tool_context.resolve(bufnr, { row = cursor_pos[1], col = cursor_pos[2] })
+  if not ctx then
+    return nil, nil, err or "No tool call found"
+  end
+
+  local doc = parser.get_parsed_document(bufnr)
+  local result_seg = ast.find_tool_sibling(doc, ctx.node)
+  if not result_seg or result_seg.kind ~= "tool_result" then
+    return nil, nil, "No tool result placeholder for " .. ctx.tool_id
+  end
+  ---@cast result_seg flemma.ast.ToolResultSegment
+
+  if not result_seg.status or result_seg.status == "error" then
+    return nil, nil, "Tool " .. ctx.tool_id .. " has already completed"
+  end
+
+  return ctx, result_seg, nil
+end
+
+---Set the `(approved)` header suffix on the tool_result placeholder at cursor.
+---The tool is not executed here — the next `<C-]>` advances the cycle.
+---@param bufnr integer
+---@return boolean success
+---@return string|nil error
+function M.approve_at_cursor(bufnr)
+  local ctx, _, err = resolve_lifecycle_tool_at_cursor(bufnr)
+  if not ctx then
+    return false, err
+  end
+  local ok, update_err = injector.set_header_status(bufnr, ctx.tool_id, "approved")
+  if not ok then
+    return false, update_err
+  end
+  editing.auto_write(bufnr)
+  return true, nil
+end
+
+---Set the `(rejected)` header suffix on the tool_result placeholder at cursor,
+---optionally replacing the fence body with a user-supplied message that the
+---model will see as the rejection reason.
+---@param bufnr integer
+---@param message string|nil Optional rejection message written into the fence
+---@return boolean success
+---@return string|nil error
+function M.reject_at_cursor(bufnr, message)
+  local ctx, _, err = resolve_lifecycle_tool_at_cursor(bufnr)
+  if not ctx then
+    return false, err
+  end
+  local ok, update_err = injector.set_header_status(bufnr, ctx.tool_id, "rejected")
+  if not ok then
+    return false, update_err
+  end
+  if message and message ~= "" then
+    local content_ok, content_err = injector.set_fence_content(bufnr, ctx.tool_id, message)
+    if not content_ok then
+      return false, content_err
+    end
+  end
+  editing.auto_write(bufnr)
+  return true, nil
 end
 
 ---Resolve and execute the tool at cursor position.

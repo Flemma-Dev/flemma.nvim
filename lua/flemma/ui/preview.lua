@@ -437,7 +437,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       end
       local name_result_width = str.strwidth(tool_name)
       local prefix_width = name_result_width + #": "
-      if result_seg.is_error then
+      if result_seg.status == "error" then
         prefix_width = prefix_width + #"(error) "
       end
 
@@ -447,7 +447,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       table.insert(entry_chunks, { ": ", "FlemmaFoldPreview" })
       entry_width = entry_width + #": "
 
-      if result_seg.is_error then
+      if result_seg.status == "error" then
         table.insert(entry_chunks, { "(error) ", "FlemmaToolResultError" })
         entry_width = entry_width + #"(error) "
       end
@@ -471,7 +471,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       else
         -- No label: show content only (backward-compat highlight)
         local body = M.format_content_preview(result_seg.content, remaining)
-        if body ~= "" or result_seg.is_error then
+        if body ~= "" or result_seg.status == "error" then
           if body ~= "" then
             table.insert(entry_chunks, { body, "FlemmaFoldPreview" })
             entry_width = entry_width + str.strwidth(body)

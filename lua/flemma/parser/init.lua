@@ -18,8 +18,8 @@ local post_parse_hook = nil
 ---@field resume_line integer 1-indexed buffer line where incremental parsing resumes (first line NOT in snapshot)
 
 local TOOL_USE_PATTERN = "^%*%*Tool Use:%*%*%s*`([^`]+)`%s*%(`([^)]+)`%)"
-local TOOL_RESULT_PATTERN = "^%*%*Tool Result:%*%*%s*`([^`]+)`"
-local TOOL_RESULT_ERROR_PATTERN = "%s*%(error%)%s*$"
+local TOOL_RESULT_PATTERN = "^%*%*Tool Result:%*%*%s*`([^`]+)`(.*)$"
+local TOOL_RESULT_SUFFIX_PATTERN = "^%s*%((.*)%)%s*$"
 local ABORTED_PATTERN = "^<!%-%-%s*flemma:aborted:%s*(.-)%s*%-%->$"
 
 ---@type table<string, flemma.ast.ToolStatus>
@@ -29,9 +29,52 @@ local TOOL_STATUS_MAP = {
   rejected = "rejected",
   denied = "denied",
   aborted = "aborted",
+  error = "error",
   reject = "rejected",
   deny = "denied",
 }
+
+--- Extract a known `flemma.ast.ToolStatus` from parsed header-suffix tokens,
+--- returning the remainder as meta for round-tripping. Explicit `status=<known>`
+--- wins over positional upgrade; unrecognized keys/positionals are preserved.
+---@param tokens flemma.utilities.modeline.ParsedTokens|nil
+---@return flemma.ast.ToolStatus|nil status
+---@return table<string, any>|nil meta nil when no extras remain
+local function extract_status(tokens)
+  if not tokens then
+    return nil, nil
+  end
+
+  local status = nil
+  if type(tokens.status) == "string" and TOOL_STATUS_MAP[tokens.status] then
+    status = TOOL_STATUS_MAP[tokens.status]
+  end
+
+  local meta = {}
+  for key, value in pairs(tokens) do
+    if type(key) == "string" and not (key == "status" and status) then
+      meta[key] = value
+    end
+  end
+
+  local meta_positional = 0
+  local index = 1
+  while tokens[index] ~= nil do
+    local value = tokens[index]
+    if not status and type(value) == "string" and TOOL_STATUS_MAP[value] then
+      status = TOOL_STATUS_MAP[value]
+    else
+      meta_positional = meta_positional + 1
+      meta[meta_positional] = value
+    end
+    index = index + 1
+  end
+
+  if next(meta) == nil then
+    return status, nil
+  end
+  return status, meta
+end
 
 --- Unified segment parser: parse text for {{ }} expressions
 --- Returns array of AST segments (text, expression)
@@ -217,10 +260,12 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
     local current_line_num = base_line_num + i - 1
 
     -- Check for **Tool Result:** marker
-    local tool_use_id = line:match(TOOL_RESULT_PATTERN)
+    local tool_use_id, raw_suffix = line:match(TOOL_RESULT_PATTERN)
     if tool_use_id then
       flush_accum()
-      local is_error = line:match(TOOL_RESULT_ERROR_PATTERN) ~= nil
+      local suffix_inner = raw_suffix and raw_suffix:match(TOOL_RESULT_SUFFIX_PATTERN)
+      local suffix_tokens = suffix_inner and modeline.parse(suffix_inner) or nil
+      local result_status, result_meta = extract_status(suffix_tokens)
       local result_start_line = current_line_num
 
       -- Skip blank lines to find content
@@ -234,40 +279,24 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
       local block, block_end = codeblock.parse_fenced_block(lines, content_start)
 
       if block then
-        if block.language == "flemma:tool" then
-          -- Tool status placeholder — parse info string for status
-          local parsed = modeline.parse(block.info or "")
-          local tool_status = TOOL_STATUS_MAP[parsed.status] or "pending"
+        -- Lifecycle placeholders (pending/approved/denied/rejected/aborted) skip
+        -- template-segment parsing; normal results (status=nil or status="error")
+        -- get `{{ expressions }}` inside their fence parsed.
+        local parse_inner = result_status == nil or result_status == "error"
+        local inner_segments = parse_inner and parse_segments(block.content, base_line_num + content_start) or {}
 
-          table.insert(
-            segments,
-            ast.tool_result(tool_use_id, {
-              segments = {},
-              content = block.content,
-              is_error = is_error,
-              status = tool_status,
-              start_line = result_start_line,
-              end_line = base_line_num + block_end - 1,
-              fence_line = base_line_num + content_start - 1,
-            })
-          )
-          i = block_end + 1
-        else
-          -- Regular fenced block: parse fence content as template segments
-          local inner_segments = parse_segments(block.content, base_line_num + content_start)
-
-          table.insert(
-            segments,
-            ast.tool_result(tool_use_id, {
-              segments = inner_segments,
-              content = block.content,
-              is_error = is_error,
-              start_line = result_start_line,
-              end_line = base_line_num + block_end - 1,
-            })
-          )
-          i = block_end + 1
-        end
+        table.insert(
+          segments,
+          ast.tool_result(tool_use_id, {
+            segments = inner_segments,
+            content = block.content,
+            status = result_status,
+            meta = result_meta,
+            start_line = result_start_line,
+            end_line = base_line_num + block_end - 1,
+          })
+        )
+        i = block_end + 1
       elseif has_fence_opener then
         -- Started a fence but didn't close it properly - this is an error
         table.insert(diagnostics, {

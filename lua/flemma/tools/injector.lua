@@ -129,7 +129,7 @@ end
 --- which is required for correct multi-tool ordering on subsequent injections.
 --- @param bufnr integer
 --- @param tool_id string
---- @param inject_opts? { status?: flemma.ast.ToolStatus } When status is set, uses ```flemma:tool status=X fence
+--- @param inject_opts? { status?: flemma.ast.ToolStatus } When status is set, header gets a `(status)` suffix
 --- @return integer|nil header_line 1-based line number where header was inserted, or nil on error
 --- @return string|nil error message
 --- @return { modified: boolean }|nil opts Metadata about the injection (e.g., whether buffer was modified)
@@ -176,12 +176,10 @@ function M.inject_placeholder(bufnr, tool_id, inject_opts)
   local you_msg = find_you_message_after(doc, assistant_idx)
 
   local header_text = ("**Tool Result:** `%s`"):format(tool_id)
-  local fence_open
   if inject_opts and inject_opts.status then
-    fence_open = "```flemma:tool status=" .. inject_opts.status
-  else
-    fence_open = "```"
+    header_text = header_text .. " (" .. inject_opts.status .. ")"
   end
+  local fence_open = "```"
 
   if you_msg then
     -- @You: message exists - find where to insert our placeholder
@@ -323,14 +321,16 @@ function M.inject_or_replace(bufnr, tool_id, result)
   return M.inject_result(bufnr, tool_id, result)
 end
 
----Strip the `flemma:tool` info string from a fence opener, converting a pending
----tool_result block into a normal resolved tool_result while preserving the
----user's content intact. Uses the AST's `fence_line` field to locate the fence.
+---Rewrite the `(status)` suffix on a tool_result header. Passing `nil` clears
+---the suffix, converting a placeholder into a normal resolved tool_result while
+---preserving the user's fence content intact. Meta extras (if any) are dropped
+---— they would need a proper modeline serializer to survive this transition.
 ---@param bufnr integer
 ---@param tool_id string
+---@param status flemma.ast.ToolStatus|nil
 ---@return boolean success
 ---@return string|nil error_message
-function M.strip_fence_info_string(bufnr, tool_id)
+function M.set_header_status(bufnr, tool_id, status)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return false, "Buffer is no longer valid"
   end
@@ -344,20 +344,58 @@ function M.strip_fence_info_string(bufnr, tool_id)
   end
   ---@cast seg flemma.ast.ToolResultSegment
 
-  if not seg.fence_line then
-    return false, "Tool result has no flemma:tool fence: " .. tool_id
+  local header_line_0 = seg.position.start_line - 1
+  local header_text = ("**Tool Result:** `%s`"):format(tool_id)
+  if status then
+    header_text = header_text .. " (" .. status .. ")"
+  end
+  set_lines(bufnr, header_line_0, header_line_0 + 1, { header_text })
+  return true, nil
+end
+
+---Clear the `(status)` suffix from a tool_result header.
+---@param bufnr integer
+---@param tool_id string
+---@return boolean success
+---@return string|nil error_message
+function M.clear_header_status(bufnr, tool_id)
+  return M.set_header_status(bufnr, tool_id, nil)
+end
+
+---Replace the fenced body of a tool_result block with new content, leaving the
+---`**Tool Result:**` header (and its `(status)` suffix) untouched. Fence size
+---is recomputed for the new content so nested backticks stay safe.
+---@param bufnr integer
+---@param tool_id string
+---@param content string
+---@return boolean success
+---@return string|nil error_message
+function M.set_fence_content(bufnr, tool_id, content)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return false, "Buffer is no longer valid"
   end
 
-  -- Read the fence line identified by the AST and extract the backtick prefix
-  local fence_line_0 = seg.fence_line - 1
-  local line = vim.api.nvim_buf_get_lines(bufnr, fence_line_0, fence_line_0 + 1, false)[1]
-  local backticks = line:match("^(`+)")
-  if not backticks then
-    return false, "Unexpected fence line content for " .. tool_id
-  end
+  local doc = parser.get_parsed_document(bufnr)
 
-  -- Replace the flemma:tool fence with a plain fence, preserving backtick count
-  set_lines(bufnr, fence_line_0, fence_line_0 + 1, { backticks })
+  local tool_use_seg = find_tool_use_by_id(doc, tool_id)
+  local seg = tool_use_seg and ast.find_tool_sibling(doc, tool_use_seg) or nil
+  if not seg or seg.kind ~= "tool_result" then
+    return false, "Tool result not found: " .. tool_id
+  end
+  ---@cast seg flemma.ast.ToolResultSegment
+
+  local fence = codeblock.get_fence(content)
+  local new_lines = { "", fence }
+  if content ~= "" then
+    for _, line in ipairs(vim.split(content, "\n", { plain = true })) do
+      table.insert(new_lines, line)
+    end
+  end
+  table.insert(new_lines, fence)
+
+  local header_line_0 = seg.position.start_line - 1
+  local end_line = seg.position.end_line --[[@as integer]]
+  set_lines(bufnr, header_line_0 + 1, end_line, new_lines)
   return true, nil
 end
 

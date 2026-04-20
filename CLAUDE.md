@@ -91,9 +91,9 @@ All `require()` calls go at the top of the file, before any function definition.
 
 - **Role markers**: `@System:`, `@You:`, `@Assistant:` at the start of a line; content extends until the next marker
 - **Tool Use** (`@Assistant` messages): ``**Tool Use:** `tool_name` (`tool_id`)`` followed by a fenced JSON code block with the tool input
-- **Tool Result** (`@You` messages): `` **Tool Result:** `tool_id` `` with optional ` (error)` suffix, followed by a fenced code block with the result
+- **Tool Result** (`@You` messages): `` **Tool Result:** `tool_id` `` optionally followed by a modeline-parseable `(...)` suffix, then a fenced code block with the result
+- **Tool status suffix**: `(pending)` / `(approved)` / `(denied)` / `(rejected)` / `(aborted)` / `(error)` on the tool_result header, or explicit `(status=pending sandbox=false)` for mixed metadata — unrecognized tokens round-trip via the `meta` field on the tool_result AST node
 - **Thinking blocks** (`@Assistant` messages): `<thinking>` / `</thinking>` tags, optionally with `provider:signature="base64"` attribute or `redacted` flag
-- **Tool status blocks**: `` `flemma:tool status=<status>` `` fence tag on tool_result placeholders (`pending`, `approved`, `denied`, `rejected`)
 - **Expressions**: `{{ lua_expression }}` in `@System`/`@You` messages (sandboxed environment with `math`, `string`, `table`, `utf8`, select `vim.fn`/`vim.fs` functions, and essential globals)
 - **File references**: `@./path/to/file` or `@./file;type=mime/type` in `@You` messages
 

@@ -38,11 +38,14 @@ describe("UI Tool Previews", function()
   end
 
   --- Helper: set up a buffer with a tool use + tool result placeholder
-  ---@param opts? { fence?: string }
+  ---@param opts? { status?: string }
   ---@return integer bufnr
   local function setup_buffer(opts)
     opts = opts or {}
-    local fence = opts.fence or "```"
+    local header = "**Tool Result:** `tool_123`"
+    if opts.status then
+      header = header .. " (" .. opts.status .. ")"
+    end
 
     local bufnr = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_set_current_buf(bufnr)
@@ -60,9 +63,9 @@ describe("UI Tool Previews", function()
       "",
       "@You:",
       "",
-      "**Tool Result:** `tool_123`",
+      header,
       "",
-      fence,
+      "```",
       "```",
     })
 
@@ -83,7 +86,7 @@ describe("UI Tool Previews", function()
 
   describe("add_tool_previews", function()
     it("shows preview for pending status blocks", function()
-      local bufnr = setup_buffer({ fence = "```flemma:tool status=pending" })
+      local bufnr = setup_buffer({ status = "pending" })
       local doc = parser.get_parsed_document(bufnr)
 
       ui.add_tool_previews(bufnr, doc)
@@ -96,10 +99,11 @@ describe("UI Tool Previews", function()
       assert.is_truthy(virt_text:find("bash"), "preview should contain tool name")
     end)
 
-    it("shows preview when tool has active execution indicator but no status fence", function()
-      -- This is the key scenario: fence info was stripped at execution start
-      -- but the tool is still executing — preview must remain visible.
-      local bufnr = setup_buffer({ fence = "```" })
+    it("shows preview when tool has active execution indicator but no status suffix", function()
+      -- This is the key scenario: the header status suffix was cleared at
+      -- execution start but the tool is still executing — preview must
+      -- remain visible.
+      local bufnr = setup_buffer()
       simulate_execution_indicator(bufnr, "tool_123")
 
       local doc = parser.get_parsed_document(bufnr)

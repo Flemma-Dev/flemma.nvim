@@ -220,9 +220,9 @@ describe("ast.query", function()
         '{"command": "rm -rf /"}',
         "```",
         "@You:",
-        "**Tool Result:** `call_pending`",
+        "**Tool Result:** `call_pending` (pending)",
         "",
-        "```flemma:tool status=pending",
+        "```",
         "```",
       })
 
@@ -442,9 +442,9 @@ describe("ast.query", function()
         '{"command": "rm /"}',
         "```",
         "@You:",
-        "**Tool Result:** `call_status`",
+        "**Tool Result:** `call_status` (pending)",
         "",
-        "```flemma:tool status=pending",
+        "```",
         "```",
       })
 

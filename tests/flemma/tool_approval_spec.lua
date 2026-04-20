@@ -1,5 +1,5 @@
 --- Tests for tool execution approval flow
---- Covers: approval resolver registry, priority chain, flemma:tool status blocks,
+--- Covers: approval resolver registry, priority chain, tool_result status suffixes,
 --- awaiting execution detection
 
 -- Clear module caches for clean state
@@ -25,19 +25,12 @@ local parser = require("flemma.parser")
 local processor = require("flemma.processor")
 local schema = require("flemma.config.schema")
 
---- Helper: get pending non-error tool blocks awaiting execution
+--- Helper: get pending tool blocks awaiting execution
 ---@param bufnr integer
 ---@return flemma.tools.ToolBlockContext[]
 local function get_awaiting_execution(bufnr)
   local groups = context.resolve_all_tool_blocks(bufnr)
-  local pending = groups["pending"] or {}
-  local awaiting = {}
-  for _, ctx in ipairs(pending) do
-    if not ctx.is_error then
-      table.insert(awaiting, ctx)
-    end
-  end
-  return awaiting
+  return groups["pending"] or {}
 end
 
 --- Helper: create a scratch buffer with given lines
@@ -732,7 +725,7 @@ describe("Approval Third-Party Composition", function()
 end)
 
 -- ============================================================================
--- Parser: tool_result without flemma:tool (plain fenced blocks)
+-- Parser: tool_result with no status suffix (plain fenced blocks)
 -- ============================================================================
 
 describe("Parser plain tool_result support", function()
@@ -801,7 +794,7 @@ describe("Awaiting Execution Resolver", function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("finds tool_use with flemma:tool status=pending tool_result", function()
+  it("finds tool_use with (pending) status tool_result", function()
     local bufnr = create_buffer({
       "@Assistant:",
       "Running tool",
@@ -812,9 +805,9 @@ describe("Awaiting Execution Resolver", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "```",
     })
 
@@ -881,7 +874,8 @@ describe("Awaiting Execution Resolver", function()
       "@You:",
       "**Tool Result:** `toolu_01` (error)",
       "",
-      "```flemma:tool status=pending",
+      "```",
+      "command not found",
       "```",
     })
 
@@ -905,9 +899,9 @@ describe("Awaiting Execution Resolver", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "```",
       "",
       "**Tool Result:** `toolu_02`",
@@ -967,14 +961,14 @@ describe("Awaiting Execution Resolver", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "```",
       "",
-      "**Tool Result:** `toolu_02`",
+      "**Tool Result:** `toolu_02` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "```",
     })
 
@@ -994,7 +988,7 @@ describe("Approval Placeholder Injection", function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("inject_placeholder with status=pending uses flemma:tool fence", function()
+  it("inject_placeholder with status=pending writes (pending) header suffix", function()
     local bufnr = create_buffer({
       "@Assistant:",
       "Here is the tool:",
@@ -1009,16 +1003,15 @@ describe("Approval Placeholder Injection", function()
     assert.is_nil(err)
     assert.is_not_nil(header_line)
 
-    -- Verify the flemma:tool fence marker is in the buffer
     local lines = get_lines(bufnr)
-    local found_tool = false
+    local found_header = false
     for _, line in ipairs(lines) do
-      if line == "```flemma:tool status=pending" then
-        found_tool = true
+      if line == "**Tool Result:** `toolu_approval` (pending)" then
+        found_header = true
         break
       end
     end
-    assert.is_true(found_tool, "Expected ```flemma:tool status=pending in buffer")
+    assert.is_true(found_header, "Expected header with (pending) suffix in buffer")
 
     -- Verify resolve_all_pending no longer finds it (it has a tool_result now)
     local pending = context.resolve_all_pending(bufnr)
@@ -1031,7 +1024,7 @@ describe("Approval Placeholder Injection", function()
     assert.equals("calculator", awaiting[1].tool_name)
   end)
 
-  it("inject_placeholder without status option uses plain fence", function()
+  it("inject_placeholder without status writes a bare header", function()
     local bufnr = create_buffer({
       "@Assistant:",
       "Here is the tool:",
@@ -1044,10 +1037,9 @@ describe("Approval Placeholder Injection", function()
 
     injector.inject_placeholder(bufnr, "toolu_plain")
 
-    -- Verify no flemma:tool fence marker
     local lines = get_lines(bufnr)
     for _, line in ipairs(lines) do
-      assert.is_falsy(line:match("^```flemma:"))
+      assert.is_falsy(line:match("^%*%*Tool Result:%*%* `toolu_plain` %(.+%)$"))
     end
 
     -- Should NOT be detected as awaiting (no status marker)
@@ -1055,7 +1047,7 @@ describe("Approval Placeholder Injection", function()
     assert.equals(0, #awaiting)
   end)
 
-  it("user overriding flemma:tool by editing the fence removes pending detection", function()
+  it("user clearing the header status suffix removes pending detection", function()
     local bufnr = create_buffer({
       "@Assistant:",
       "Here is the tool:",
@@ -1066,29 +1058,25 @@ describe("Approval Placeholder Injection", function()
       "```",
     })
 
-    -- Inject pending placeholder
     injector.inject_placeholder(bufnr, "toolu_manual", { status = "pending" })
 
-    -- Verify it's awaiting execution
     local awaiting = get_awaiting_execution(bufnr)
     assert.equals(1, #awaiting)
 
-    -- Simulate user replacing the flemma:tool fence with plain content
+    -- Simulate user editing the header to strip the (pending) suffix
     local lines = get_lines(bufnr)
     for i, line in ipairs(lines) do
-      if line:match("^```flemma:tool") then
-        -- Replace the tool fence + closing fence with user content
-        vim.api.nvim_buf_set_lines(bufnr, i - 1, i + 1, false, { "```", "I refused to run this", "```" })
+      if line:match("%(pending%)") then
+        vim.api.nvim_buf_set_lines(bufnr, i - 1, i, false, { "**Tool Result:** `toolu_manual`" })
         break
       end
     end
 
-    -- Now it should no longer be awaiting
     awaiting = get_awaiting_execution(bufnr)
     assert.equals(0, #awaiting)
   end)
 
-  it("inject_result replaces flemma:tool marker with actual content", function()
+  it("inject_result clears the header status suffix when writing content", function()
     local bufnr = create_buffer({
       "@Assistant:",
       "Here is the tool:",
@@ -1099,30 +1087,25 @@ describe("Approval Placeholder Injection", function()
       "```",
     })
 
-    -- Inject pending placeholder
     injector.inject_placeholder(bufnr, "toolu_exec", { status = "pending" })
 
-    -- Verify flemma:tool is present
     local lines = get_lines(bufnr)
-    local found_tool = false
+    local found_pending = false
     for _, line in ipairs(lines) do
-      if line:match("^```flemma:tool") then
-        found_tool = true
+      if line:match("%(pending%)") then
+        found_pending = true
         break
       end
     end
-    assert.is_true(found_tool)
+    assert.is_true(found_pending)
 
-    -- Inject actual result (simulating what executor does after tool runs)
     injector.inject_result(bufnr, "toolu_exec", { success = true, output = "25" })
 
-    -- Verify flemma:tool is gone
     lines = get_lines(bufnr)
     for _, line in ipairs(lines) do
-      assert.is_falsy(line:match("^```flemma:tool"))
+      assert.is_falsy(line:match("%(pending%)"))
     end
 
-    -- Verify result content is present
     local found_result = false
     for _, line in ipairs(lines) do
       if line == "25" then
@@ -1132,7 +1115,6 @@ describe("Approval Placeholder Injection", function()
     end
     assert.is_true(found_result, "Expected result '25' in buffer")
 
-    -- No longer awaiting
     local awaiting = get_awaiting_execution(bufnr)
     assert.equals(0, #awaiting)
   end)
@@ -1464,15 +1446,15 @@ describe("Frontmatter Approval", function()
 end)
 
 -- ============================================================================
--- Parser: flemma:tool Marker Tests
+-- Parser: Header Status Suffix Tests
 -- ============================================================================
 
-describe("Parser flemma:tool support", function()
+describe("Parser header status suffix support", function()
   after_each(function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("parses status=pending from flemma:tool info string", function()
+  it("parses status=pending from header suffix", function()
     local bufnr = create_buffer({
       "@Assistant:",
       "Running tool",
@@ -1483,9 +1465,9 @@ describe("Parser flemma:tool support", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "```",
     })
 
@@ -1499,11 +1481,9 @@ describe("Parser flemma:tool support", function()
     assert.equals("toolu_01", seg.tool_use_id)
     assert.equals("", seg.content)
     assert.equals("pending", seg.status)
-    assert.equals("", seg.content)
-    assert.is_false(seg.is_error)
   end)
 
-  it("parses status=approved from flemma:tool info string", function()
+  it("parses status=approved from header suffix", function()
     local bufnr = create_buffer({
       "@Assistant:",
       "Running tool",
@@ -1514,9 +1494,9 @@ describe("Parser flemma:tool support", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (approved)",
       "",
-      "```flemma:tool status=approved",
+      "```",
       "```",
     })
 
@@ -1539,9 +1519,9 @@ describe("Parser flemma:tool support", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (rejected)",
       "",
-      "```flemma:tool status=rejected",
+      "```",
       "I don't want to run this dangerous command.",
       "```",
     })
@@ -1565,9 +1545,9 @@ describe("Parser flemma:tool support", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (denied)",
       "",
-      "```flemma:tool status=denied",
+      "```",
       "```",
     })
 
@@ -1579,7 +1559,7 @@ describe("Parser flemma:tool support", function()
     assert.equals("", seg.content)
   end)
 
-  it("defaults to status=pending when no info string", function()
+  it("has status=nil when no header suffix is present", function()
     local bufnr = create_buffer({
       "@Assistant:",
       "Running tool",
@@ -1592,7 +1572,7 @@ describe("Parser flemma:tool support", function()
       "@You:",
       "**Tool Result:** `toolu_01`",
       "",
-      "```flemma:tool",
+      "```",
       "```",
     })
 
@@ -1600,10 +1580,11 @@ describe("Parser flemma:tool support", function()
     local you_msg = doc.messages[2]
     local seg = you_msg.segments[1]
     assert.equals("tool_result", seg.kind)
-    assert.equals("pending", seg.status)
+    assert.is_nil(seg.status)
+    assert.is_nil(seg.meta)
   end)
 
-  it("falls back to pending for invalid status values", function()
+  it("preserves an unrecognized positional in meta without assigning status", function()
     local bufnr = create_buffer({
       "@Assistant:",
       "Running tool",
@@ -1614,9 +1595,9 @@ describe("Parser flemma:tool support", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (xyz)",
       "",
-      "```flemma:tool status=xyz",
+      "```",
       "```",
     })
 
@@ -1624,7 +1605,8 @@ describe("Parser flemma:tool support", function()
     local you_msg = doc.messages[2]
     local seg = you_msg.segments[1]
     assert.equals("tool_result", seg.kind)
-    assert.equals("pending", seg.status)
+    assert.is_nil(seg.status)
+    assert.are.same({ "xyz" }, seg.meta)
   end)
 
   it("coerces 'reject' to 'rejected'", function()
@@ -1638,9 +1620,9 @@ describe("Parser flemma:tool support", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (reject)",
       "",
-      "```flemma:tool status=reject",
+      "```",
       "```",
     })
 
@@ -1660,9 +1642,9 @@ describe("Parser flemma:tool support", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (deny)",
       "",
-      "```flemma:tool status=deny",
+      "```",
       "```",
     })
 
@@ -1673,15 +1655,15 @@ describe("Parser flemma:tool support", function()
 end)
 
 -- ============================================================================
--- Pipeline: flemma:tool blocks not counted as resolved
+-- Pipeline: tool_result placeholders with status are not counted as resolved
 -- ============================================================================
 
-describe("Pipeline flemma:tool exclusion", function()
+describe("Pipeline tool_result placeholder exclusion", function()
   after_each(function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("flemma:tool blocks do not clear pending_tool_uses in validation", function()
+  it("(pending) tool_result does not clear pending_tool_uses in validation", function()
     local lines = {
       "@Assistant:",
       "Running tool",
@@ -1692,9 +1674,9 @@ describe("Pipeline flemma:tool exclusion", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "```",
     }
     local doc = parser.parse_lines(lines)
@@ -1702,7 +1684,7 @@ describe("Pipeline flemma:tool exclusion", function()
     local ctx = require("flemma.context")
     local prompt = pipeline.run(doc, ctx.from_file("test.chat"), { bufnr = 0 })
 
-    -- The tool should still be in pending_tool_calls because flemma:tool is a placeholder
+    -- The tool should still be in pending_tool_calls because the (pending) suffix marks it as a placeholder
     assert.equals(1, #prompt.pending_tool_calls)
     assert.equals("toolu_01", prompt.pending_tool_calls[1].id)
   end)
@@ -1734,15 +1716,15 @@ describe("Pipeline flemma:tool exclusion", function()
 end)
 
 -- ============================================================================
--- Processor: flemma:tool blocks excluded from API parts
+-- Processor: placeholder tool_result blocks excluded from API parts
 -- ============================================================================
 
-describe("Processor flemma:tool exclusion", function()
+describe("Processor placeholder tool_result exclusion", function()
   after_each(function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("flemma:tool blocks are not included in evaluated parts", function()
+  it("(approved) placeholder tool_result is not included in evaluated parts", function()
     local lines = {
       "@Assistant:",
       "Running tool",
@@ -1753,9 +1735,9 @@ describe("Processor flemma:tool exclusion", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (approved)",
       "",
-      "```flemma:tool status=approved",
+      "```",
       "```",
     }
     local doc = parser.parse_lines(lines)
@@ -1771,7 +1753,7 @@ describe("Processor flemma:tool exclusion", function()
       end
     end
 
-    -- The flemma:tool block should not produce any tool_result parts
+    -- The (approved) placeholder should not produce any tool_result parts
     assert.is_not_nil(you_msg)
     local tool_result_count = 0
     for _, part in ipairs(you_msg.parts) do
@@ -1813,19 +1795,19 @@ describe("Context resolve_all_tool_blocks", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (approved)",
       "",
-      "```flemma:tool status=approved",
+      "```",
       "```",
       "",
-      "**Tool Result:** `toolu_02`",
+      "**Tool Result:** `toolu_02` (denied)",
       "",
-      "```flemma:tool status=denied",
+      "```",
       "```",
       "",
-      "**Tool Result:** `toolu_03`",
+      "**Tool Result:** `toolu_03` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "```",
     })
 
@@ -1862,9 +1844,9 @@ describe("Context resolve_all_tool_blocks", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (approved)",
       "",
-      "```flemma:tool status=approved",
+      "```",
       "User edited this content",
       "```",
     })
@@ -1885,9 +1867,9 @@ describe("Context resolve_all_tool_blocks", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (rejected)",
       "",
-      "```flemma:tool status=rejected",
+      "```",
       "I refuse to run this command.",
       "```",
     })
@@ -1920,14 +1902,14 @@ describe("Context resolve_all_tool_blocks", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_denied`",
+      "**Tool Result:** `toolu_denied` (denied)",
       "",
-      "```flemma:tool status=denied",
+      "```",
       "```",
       "",
-      "**Tool Result:** `toolu_pending`",
+      "**Tool Result:** `toolu_pending` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "```",
     })
 
@@ -1996,9 +1978,9 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "hello",
       "```",
     })
@@ -2021,9 +2003,9 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "```",
     })
 
@@ -2049,15 +2031,15 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "user output here",
       "```",
       "",
-      "**Tool Result:** `toolu_02`",
+      "**Tool Result:** `toolu_02` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "```",
     })
 
@@ -2085,9 +2067,9 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (approved)",
       "",
-      "```flemma:tool status=approved",
+      "```",
       "User edited content",
       "```",
     })
@@ -2098,15 +2080,15 @@ describe("Context resolve_all_tool_blocks user-provided content", function()
 end)
 
 -- ============================================================================
--- Injector: strip_fence_info_string Tests
+-- Injector: clear_header_status Tests
 -- ============================================================================
 
-describe("Injector strip_fence_info_string", function()
+describe("Injector clear_header_status", function()
   after_each(function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("strips flemma:tool info string, preserving user content", function()
+  it("clears the (status) suffix from the header, preserving user content", function()
     local bufnr = create_buffer({
       "@Assistant:",
       "Tool call",
@@ -2117,34 +2099,32 @@ describe("Injector strip_fence_info_string", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "total 42",
       "drwxr-xr-x 2 user user 4096 Jan  1 00:00 .",
       "```",
     })
 
-    local ok, err = injector.strip_fence_info_string(bufnr, "toolu_01")
+    local ok, err = injector.clear_header_status(bufnr, "toolu_01")
     assert.is_true(ok)
     assert.is_nil(err)
 
     local lines = get_lines(bufnr)
-    -- Fence opener should now be plain backticks (no flemma:tool)
-    local found_plain_fence = false
-    local found_flemma_fence = false
+    local found_plain_header = false
+    local found_suffixed_header = false
     for _, line in ipairs(lines) do
-      if line == "```" then
-        found_plain_fence = true
+      if line == "**Tool Result:** `toolu_01`" then
+        found_plain_header = true
       end
-      if line:match("flemma:tool") then
-        found_flemma_fence = true
+      if line:match("%(pending%)") then
+        found_suffixed_header = true
       end
     end
-    assert.is_true(found_plain_fence)
-    assert.is_false(found_flemma_fence)
+    assert.is_true(found_plain_header)
+    assert.is_false(found_suffixed_header)
 
-    -- Content should be preserved
     local content_found = false
     for _, line in ipairs(lines) do
       if line:match("total 42") then
@@ -2165,16 +2145,15 @@ describe("Injector strip_fence_info_string", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "hi",
       "```",
     })
 
-    injector.strip_fence_info_string(bufnr, "toolu_01")
+    injector.clear_header_status(bufnr, "toolu_01")
 
-    -- Re-parse: the tool_result should now have no status
     local doc = parser.get_parsed_document(bufnr)
     for _, msg in ipairs(doc.messages) do
       if msg.role == "You" then
@@ -2203,16 +2182,15 @@ describe("Injector strip_fence_info_string", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "hi",
       "```",
     })
 
-    injector.strip_fence_info_string(bufnr, "toolu_01")
+    injector.clear_header_status(bufnr, "toolu_01")
 
-    -- Evaluate through processor — the tool_result should produce a part
     local doc = parser.get_parsed_document(bufnr)
     local evaluated = processor.evaluate(doc)
     local tool_result_parts = {}
@@ -2228,61 +2206,28 @@ describe("Injector strip_fence_info_string", function()
     assert.equals("hi", tool_result_parts[1].content)
   end)
 
-  it("preserves (error) suffix on header", function()
-    local bufnr = create_buffer({
-      "@Assistant:",
-      "Tool call",
-      "",
-      "**Tool Use:** `bash` (`toolu_01`)",
-      "```json",
-      '{ "command": "bad_cmd" }',
-      "```",
-      "",
-      "@You:",
-      "**Tool Result:** `toolu_01` (error)",
-      "",
-      "```flemma:tool status=pending",
-      "command not found: bad_cmd",
-      "```",
-    })
-
-    injector.strip_fence_info_string(bufnr, "toolu_01")
-
-    local doc = parser.get_parsed_document(bufnr)
-    for _, msg in ipairs(doc.messages) do
-      if msg.role == "You" then
-        for _, seg in ipairs(msg.segments) do
-          if seg.kind == "tool_result" then
-            assert.is_true(seg.is_error)
-            assert.equals("command not found: bad_cmd", seg.content)
-          end
-        end
-      end
-    end
-  end)
-
   it("returns error for non-existent tool_id", function()
     local bufnr = create_buffer({
       "@You:",
       "Hello",
     })
 
-    local ok, err = injector.strip_fence_info_string(bufnr, "nonexistent")
+    local ok, err = injector.clear_header_status(bufnr, "nonexistent")
     assert.is_false(ok)
     assert.is_truthy(err)
   end)
 end)
 
 -- ============================================================================
--- Placeholder Injection with flemma:tool Tests
+-- Placeholder Injection with header-suffix status
 -- ============================================================================
 
-describe("Approval Placeholder Injection with flemma:tool", function()
+describe("Approval Placeholder Injection with header status", function()
   after_each(function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("inject_placeholder with status=pending uses flemma:tool fence", function()
+  it("inject_placeholder with status=pending writes (pending) header suffix", function()
     local bufnr = create_buffer({
       "@Assistant:",
       "Here is the tool:",
@@ -2297,19 +2242,18 @@ describe("Approval Placeholder Injection with flemma:tool", function()
     assert.is_nil(err)
     assert.is_not_nil(header_line)
 
-    -- Verify the flemma:tool fence marker is in the buffer
     local lines = get_lines(bufnr)
-    local found_tool = false
+    local found_header = false
     for _, line in ipairs(lines) do
-      if line == "```flemma:tool status=pending" then
-        found_tool = true
+      if line == "**Tool Result:** `toolu_approval` (pending)" then
+        found_header = true
         break
       end
     end
-    assert.is_true(found_tool, "Expected ```flemma:tool status=pending in buffer")
+    assert.is_true(found_header, "Expected header with (pending) suffix in buffer")
   end)
 
-  it("inject_placeholder with status=approved uses flemma:tool fence", function()
+  it("inject_placeholder with status=approved writes (approved) header suffix", function()
     local bufnr = create_buffer({
       "@Assistant:",
       "Here is the tool:",
@@ -2325,15 +2269,15 @@ describe("Approval Placeholder Injection with flemma:tool", function()
     local lines = get_lines(bufnr)
     local found = false
     for _, line in ipairs(lines) do
-      if line == "```flemma:tool status=approved" then
+      if line == "**Tool Result:** `toolu_auto` (approved)" then
         found = true
         break
       end
     end
-    assert.is_true(found, "Expected ```flemma:tool status=approved in buffer")
+    assert.is_true(found, "Expected header with (approved) suffix in buffer")
   end)
 
-  it("inject_placeholder with status=denied uses flemma:tool fence", function()
+  it("inject_placeholder with status=denied writes (denied) header suffix", function()
     local bufnr = create_buffer({
       "@Assistant:",
       "Here is the tool:",
@@ -2349,15 +2293,15 @@ describe("Approval Placeholder Injection with flemma:tool", function()
     local lines = get_lines(bufnr)
     local found = false
     for _, line in ipairs(lines) do
-      if line == "```flemma:tool status=denied" then
+      if line == "**Tool Result:** `toolu_deny` (denied)" then
         found = true
         break
       end
     end
-    assert.is_true(found, "Expected ```flemma:tool status=denied in buffer")
+    assert.is_true(found, "Expected header with (denied) suffix in buffer")
   end)
 
-  it("inject_result replaces flemma:tool marker with actual content", function()
+  it("inject_result clears the header status suffix when writing content", function()
     local bufnr = create_buffer({
       "@Assistant:",
       "Here is the tool:",
@@ -2368,30 +2312,25 @@ describe("Approval Placeholder Injection with flemma:tool", function()
       "```",
     })
 
-    -- Inject approved placeholder
     injector.inject_placeholder(bufnr, "toolu_exec", { status = "approved" })
 
-    -- Verify flemma:tool is present
     local lines = get_lines(bufnr)
-    local found_tool = false
+    local found_pending_header = false
     for _, line in ipairs(lines) do
-      if line:match("^```flemma:tool") then
-        found_tool = true
+      if line:match("%(approved%)") then
+        found_pending_header = true
         break
       end
     end
-    assert.is_true(found_tool)
+    assert.is_true(found_pending_header)
 
-    -- Inject actual result
     injector.inject_result(bufnr, "toolu_exec", { success = true, output = "25" })
 
-    -- Verify flemma:tool is gone
     lines = get_lines(bufnr)
     for _, line in ipairs(lines) do
-      assert.is_false(line:match("^```flemma:tool") ~= nil, "flemma:tool fence should be replaced")
+      assert.is_false(line:match("%(approved%)") ~= nil, "status suffix should be cleared")
     end
 
-    -- Verify result content is present
     local found_result = false
     for _, line in ipairs(lines) do
       if line == "25" then
@@ -2457,7 +2396,7 @@ describe("Codeblock info string parsing", function()
     assert.is_nil(block.info)
   end)
 
-  it("captures content inside flemma:tool block", function()
+  it("captures content inside a fenced block with an info string", function()
     local lines = {
       "```flemma:tool status=rejected",
       "User rejection message here",
@@ -2541,9 +2480,9 @@ describe("advance_phase2 current_request guard", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_race_guard`",
+      "**Tool Result:** `toolu_race_guard` (approved)",
       "",
-      "```flemma:tool status=approved",
+      "```",
       "```",
     })
 
@@ -2555,16 +2494,16 @@ describe("advance_phase2 current_request guard", function()
     local core = require("flemma.core")
     core.send_or_execute({ bufnr = bufnr })
 
-    -- The flemma:tool block should still be present — it was not executed.
+    -- The (approved) header suffix should still be present — it was not executed.
     local lines = get_lines(bufnr)
     local found_tool_block = false
     for _, line in ipairs(lines) do
-      if line:match("flemma:tool status=approved") then
+      if line:match("%(approved%)") then
         found_tool_block = true
         break
       end
     end
-    assert.is_true(found_tool_block, "flemma:tool block should survive when current_request is set")
+    assert.is_true(found_tool_block, "(approved) header suffix should survive when current_request is set")
 
     -- Clean up
     st.set_buffer_state(bufnr, "current_request", nil)

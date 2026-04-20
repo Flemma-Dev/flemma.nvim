@@ -164,7 +164,7 @@ During tool execution, an animated braille spinner appears next to the `**Tool R
 
 ### Tool previews
 
-When tool calls are pending approval, Flemma renders a virtual line inside each empty `flemma:tool` placeholder showing a compact summary of what the tool will do. This lets you review and approve tools without scrolling back to the `**Tool Use:**` block.
+When tool calls are pending approval, Flemma renders a virtual line inside each empty tool_result placeholder fence showing a compact summary of what the tool will do. This lets you review and approve tools without scrolling back to the `**Tool Use:**` block.
 
 Previews dynamically size to the editor's text area width (window width minus sign, number, and fold columns) and truncate with `…` when the content exceeds available space. Built-in tools return structured previews with a **label** (the LLM's stated intent, shown italic) and **detail** (the raw command or path, shown dimmer), separated by an em-dash: `bash: running tests — $ make test`. When width is limited, detail truncates first to preserve the label. Custom tools can provide their own via `format_preview` on the tool definition. Tools without a custom formatter get a generic key-value summary.
 

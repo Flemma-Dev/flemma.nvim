@@ -349,7 +349,7 @@ function M.get_fold_text()
         + str.strwidth(": ")
         + str.strwidth(" ") -- trailing space before suffix
         + str.strwidth(suffix)
-      if tool_seg.is_error then
+      if tool_seg.status == "error" then
         fixed_chrome = fixed_chrome + str.strwidth("(error) ")
       end
       local result_separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
@@ -359,7 +359,7 @@ function M.get_fold_text()
       local available = text_width - fixed_chrome
 
       table.insert(chunks, { ": ", "FlemmaFoldPreview" })
-      if tool_seg.is_error then
+      if tool_seg.status == "error" then
         table.insert(chunks, { "(error) ", "FlemmaToolResultError" })
       end
 

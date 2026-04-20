@@ -1,4 +1,4 @@
---- Tests for tool use preview virtual lines in empty flemma:tool blocks
+--- Tests for tool use preview virtual lines inside empty tool_result placeholder fences
 --- Covers: format_tool_preview formatting and add_tool_previews extmark placement
 
 -- Clear module caches for clean state
@@ -330,9 +330,9 @@ describe("Tool Preview", function()
         "",
         "@You:",
         "",
-        "**Tool Result:** `toolu_01`",
+        "**Tool Result:** `toolu_01` (pending)",
         "",
-        "```flemma:tool status=pending",
+        "```",
         "```",
       })
 
@@ -360,9 +360,9 @@ describe("Tool Preview", function()
         "",
         "@You:",
         "",
-        "**Tool Result:** `toolu_01`",
+        "**Tool Result:** `toolu_01` (pending)",
         "",
-        "```flemma:tool status=pending",
+        "```",
         "some user content here",
         "```",
       })
@@ -392,14 +392,14 @@ describe("Tool Preview", function()
         "",
         "@You:",
         "",
-        "**Tool Result:** `toolu_01`",
+        "**Tool Result:** `toolu_01` (pending)",
         "",
-        "```flemma:tool status=pending",
+        "```",
         "```",
         "",
-        "**Tool Result:** `toolu_02`",
+        "**Tool Result:** `toolu_02` (approved)",
         "",
-        "```flemma:tool status=approved",
+        "```",
         "```",
       })
 
@@ -423,9 +423,9 @@ describe("Tool Preview", function()
         "",
         "@You:",
         "",
-        "**Tool Result:** `toolu_01`",
+        "**Tool Result:** `toolu_01` (pending)",
         "",
-        "```flemma:tool status=pending",
+        "```",
         "```",
       })
 
@@ -1221,7 +1221,7 @@ describe("format_message_fold_preview with tool results", function()
       ast.tool_use("t1", "bash", { command = "bad_cmd" }, { start_line = 2, end_line = 5 }),
     })
     local you_msg = make_message("You", {
-      ast.tool_result("t1", { content = "command not found", is_error = true, start_line = 7, end_line = 12 }),
+      ast.tool_result("t1", { content = "command not found", status = "error", start_line = 7, end_line = 12 }),
     })
     local doc = make_doc({ assistant_msg, you_msg })
 
@@ -1234,7 +1234,7 @@ describe("format_message_fold_preview with tool results", function()
       ast.tool_use("t1", "bash", { command = "bad_cmd" }, { start_line = 2, end_line = 5 }),
     })
     local you_msg = make_message("You", {
-      ast.tool_result("t1", { content = "command not found", is_error = true, start_line = 7, end_line = 12 }),
+      ast.tool_result("t1", { content = "command not found", status = "error", start_line = 7, end_line = 12 }),
     })
     local doc = make_doc({ assistant_msg, you_msg })
 

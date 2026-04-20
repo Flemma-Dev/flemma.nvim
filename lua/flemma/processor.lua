@@ -51,7 +51,7 @@ end
 ---@field tool_use_id string
 ---@field content string
 ---@field parts? table[] Child parts from capture (file/text); populated only for opted-in tools
----@field is_error boolean
+---@field status? flemma.ast.ToolStatus
 
 -- Part types unique to the processor stage (pre-conversion)
 ---@class flemma.processor.FilePart
@@ -306,12 +306,12 @@ function M.evaluate(doc, base_context, opts)
             input = seg.input,
           })
         elseif seg.kind == "tool_result" then
-          if not seg.status then
+          if not seg.status or seg.status == "error" then
             table.insert(parts, {
               kind = "tool_result",
               tool_use_id = seg.tool_use_id,
               content = seg.content,
-              is_error = seg.is_error,
+              status = seg.status,
             })
           end
         elseif seg.kind == "aborted" then
@@ -337,8 +337,8 @@ function M.evaluate(doc, base_context, opts)
               ast.tool_result(seg.tool_use_id, {
                 segments = {},
                 content = seg.content,
-                is_error = seg.is_error,
                 status = seg.status,
+                meta = seg.meta,
                 start_line = seg.position and seg.position.start_line,
                 end_line = seg.position and seg.position.end_line,
               })

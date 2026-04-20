@@ -156,21 +156,22 @@ function M.compile(segments)
           "__emit_part({ kind = 'tool_result', tool_use_id = "
             .. var
             .. ".tool_use_id, "
-            .. "is_error = "
+            .. "status = "
             .. var
-            .. ".is_error, content = "
+            .. ".status, content = "
             .. var
             .. ".content, "
             .. "parts = __capture_end() }) end",
           lnum
         )
       else
+        local status_literal = segment.status and ("'" .. escape_lua_string(segment.status) .. "'") or "nil"
         add_line_fn(
           "__emit_part({ kind = 'tool_result', tool_use_id = '"
             .. escape_lua_string(segment.tool_use_id)
             .. "', "
-            .. "is_error = "
-            .. tostring(segment.is_error)
+            .. "status = "
+            .. status_literal
             .. ", content = '"
             .. escape_lua_string(segment.content)
             .. "', "
@@ -234,12 +235,12 @@ end
 local function structural_segment_to_part(segment)
   if segment.kind == "tool_result" then
     ---@cast segment flemma.ast.ToolResultSegment
-    if not segment.status then
+    if not segment.status or segment.status == "error" then
       return {
         kind = "tool_result",
         tool_use_id = segment.tool_use_id,
         content = segment.content,
-        is_error = segment.is_error,
+        status = segment.status,
       }
     end
   elseif segment.kind == "tool_use" then

@@ -971,9 +971,10 @@ function M.setup_chat_filetype_autocmds()
   end
 end
 
----Add virtual line previews inside empty flemma:tool fenced blocks
----Shows a compact summary of the tool call (name + input) so users can see
----what they're approving/rejecting without the content being editable.
+---Add virtual line previews inside empty tool_result fences that carry a
+---lifecycle (status) suffix in the header. Shows a compact summary of the
+---tool call (name + input) so users can see what they're approving/rejecting
+---without the content being editable.
 ---@param bufnr integer
 ---@param doc flemma.ast.DocumentNode
 function M.add_tool_previews(bufnr, doc)
@@ -1000,9 +1001,9 @@ function M.add_tool_previews(bufnr, doc)
   local line_count = vim.api.nvim_buf_line_count(bufnr)
 
   -- Show previews for tool_result blocks with empty content that are either
-  -- pending/approved (have status fence) or currently executing (have active indicator).
-  -- Without the indicator check, the preview disappears when the executor strips
-  -- the flemma:tool fence info at execution start.
+  -- pending/approved (have a lifecycle status suffix) or currently executing (have active indicator).
+  -- Without the indicator check, the preview disappears when the executor
+  -- clears the header status suffix at execution start.
   local indicators = get_tool_indicators(bufnr)
 
   for _, msg in ipairs(doc.messages) do
