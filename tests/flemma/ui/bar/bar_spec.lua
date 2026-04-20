@@ -607,6 +607,64 @@ describe("flemma.ui.bar", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
+    -- Regression: even with the WinClosed-twin-close fix, the bar can still
+    -- end up with a live gutter window and a nilled handle if a close path
+    -- doesn't fire WinClosed for it (close inside a non-nested autocmd,
+    -- :tabclose cascade silence) or pcall(nvim_win_close) silently failed.
+    -- dismiss() retains _gutter_bufnr through every render cycle, so
+    -- force-deleting the scratch buffer reaches the orphan window via
+    -- Neovim's "wipe a buffer → close every window showing it" rule.
+    it("dismiss closes an orphaned gutter window whose winid handle was lost", function()
+      local bufnr = open_visible_bufnr()
+      local winid = vim.fn.bufwinid(bufnr)
+      vim.wo[winid].number = true
+      vim.wo[winid].numberwidth = 4
+      vim.cmd("redraw")
+      local bar = Bar.new({
+        bufnr = bufnr,
+        position = "top left",
+        segments = { { key = "s", items = { { key = "i", text = "x", priority = 1 } } } },
+        icon = "ℹ",
+      })
+      local orphan_winid = bar._gutter_winid
+      assert.is_truthy(orphan_winid, "setup: gutter float must be open")
+      assert.is_true(vim.api.nvim_win_is_valid(orphan_winid))
+
+      -- Simulate the lost-handle bug: window stays alive, bar's pointer is gone.
+      bar._gutter_winid = nil
+
+      bar:dismiss()
+
+      assert.is_false(
+        vim.api.nvim_win_is_valid(orphan_winid),
+        "dismiss must close the orphaned gutter window even after its handle was lost"
+      )
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    -- Symmetric: lost main-float handle must also be cleaned up by dismiss.
+    it("dismiss closes an orphaned main float whose winid handle was lost", function()
+      local bufnr = open_visible_bufnr()
+      local bar = Bar.new({
+        bufnr = bufnr,
+        position = "top left",
+        segments = { { key = "s", items = { { key = "i", text = "x", priority = 1 } } } },
+      })
+      local orphan_winid = bar._float_winid
+      assert.is_truthy(orphan_winid, "setup: main float must be open")
+      assert.is_true(vim.api.nvim_win_is_valid(orphan_winid))
+
+      bar._float_winid = nil
+
+      bar:dismiss()
+
+      assert.is_false(
+        vim.api.nvim_win_is_valid(orphan_winid),
+        "dismiss must close the orphaned main float even after its handle was lost"
+      )
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
     it("CursorHold re-renders when gutter width changed", function()
       local bufnr = open_visible_bufnr()
       local winid = vim.fn.bufwinid(bufnr)

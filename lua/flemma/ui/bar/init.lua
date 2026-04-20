@@ -274,10 +274,22 @@ function Bar:dismiss()
     self._autocmd_group = nil
   end
 
-  if self._float_bufnr and vim.api.nvim_buf_is_valid(self._float_bufnr) then
-    pcall(vim.api.nvim_buf_clear_namespace, self._float_bufnr, NS, 0, -1)
+  -- Force-delete the scratch buffers. Neovim closes every window showing a
+  -- wiped buffer, which reaches orphan floats whose winid handles we lost —
+  -- scenarios the WinClosed handler can't catch: pcall(nvim_win_close)
+  -- silently failing, close happening inside a non-nested autocmd (events
+  -- suppressed), or :tabclose's cascade close firing WinClosed only for the
+  -- tab's current window. Clearing the namespace is redundant: buf_delete
+  -- discards extmarks with the buffer.
+  for _, scratch_bufnr in ipairs({ self._float_bufnr, self._gutter_bufnr }) do
+    if scratch_bufnr and vim.api.nvim_buf_is_valid(scratch_bufnr) then
+      pcall(vim.api.nvim_buf_delete, scratch_bufnr, { force = true })
+    end
   end
-  self:_close_floats()
+  self._float_bufnr = nil
+  self._gutter_bufnr = nil
+  self._float_winid = nil
+  self._gutter_winid = nil
 
   if bars[self.bufnr] and bars[self.bufnr][self.position] == self then
     bars[self.bufnr][self.position] = nil
