@@ -27,7 +27,7 @@ describe("UI conceal override", function()
     return bufnr, vim.api.nvim_get_current_win()
   end
 
-  it("applies the default '2n' when unset in user config", function()
+  it("applies the default '2nv' when unset in user config", function()
     flemma.setup({})
     local bufnr, winid = open_chat_in_current_win()
     vim.api.nvim_set_option_value("conceallevel", 0, { win = winid })
@@ -36,7 +36,7 @@ describe("UI conceal override", function()
     ui.apply_chat_window_settings(winid, bufnr)
 
     assert.are.equal(2, vim.api.nvim_get_option_value("conceallevel", { win = winid }))
-    assert.are.equal("n", vim.api.nvim_get_option_value("concealcursor", { win = winid }))
+    assert.are.equal("nv", vim.api.nvim_get_option_value("concealcursor", { win = winid }))
   end)
 
   it("parses a string '0i' into conceallevel=0 concealcursor='i'", function()
@@ -86,7 +86,7 @@ describe("UI conceal override", function()
     flemma.setup({})
     local bufnr, winid = open_chat_in_current_win()
     local config = require("flemma.config")
-    -- Clear the default "2n" via runtime writer
+    -- Clear the default "2nv" via runtime writer
     local writer = config.writer(bufnr, config.LAYERS.RUNTIME)
     writer.editing.conceal = nil
     vim.api.nvim_set_option_value("conceallevel", 3, { win = winid })

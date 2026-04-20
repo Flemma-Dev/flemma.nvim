@@ -6,13 +6,14 @@ Flemma ships with Markdown syntax hidden by default so assistant responses read 
 
 Accepts a compact `{conceallevel}{concealcursor}` spec that is applied to every chat window:
 
-| Value           | `conceallevel` | `concealcursor` | Effect                                                                    |
-| --------------- | -------------- | --------------- | ------------------------------------------------------------------------- |
-| `"2n"`          | `2`            | `"n"`           | Default. Hide Markdown in Normal mode; reveal in Insert/Visual/Command.   |
-| `"1nvic"`       | `1`            | `"nvic"`        | Replace concealed markup with a placeholder; keep concealed in all modes. |
-| `"0"` / `0`     | `0`            | `""`            | Show everything raw.                                                      |
-| `"3"` / `3`     | `3`            | `""`            | Hide concealed text entirely, even its placeholder.                       |
-| `false` / `nil` | —              | —               | Opt out — Flemma leaves your window options untouched.                    |
+| Value           | `conceallevel` | `concealcursor` | Effect                                                                       |
+| --------------- | -------------- | --------------- | ---------------------------------------------------------------------------- |
+| `"2nv"`         | `2`            | `"nv"`          | Default. Hide Markdown in Normal and Visual modes; reveal in Insert/Command. |
+| `"2n"`          | `2`            | `"n"`           | Hide Markdown in Normal mode; reveal in Insert/Visual/Command.               |
+| `"1nvic"`       | `1`            | `"nvic"`        | Replace concealed markup with a placeholder; keep concealed in all modes.    |
+| `"0"` / `0`     | `0`            | `""`            | Show everything raw.                                                         |
+| `"3"` / `3`     | `3`            | `""`            | Hide concealed text entirely, even its placeholder.                          |
+| `false` / `nil` | —              | —               | Opt out — Flemma leaves your window options untouched.                       |
 
 The leading digit is parsed as `conceallevel` (`0`–`3`). Any characters that follow populate `concealcursor` — `n`, `v`, `i`, `c` per `:h 'concealcursor'`. Malformed values are silently ignored so a typo doesn't break your buffer.
 
@@ -20,7 +21,7 @@ The override applies on `BufWinEnter` and `FileType chat`, so splitting or re-di
 
 ## Why Markdown is concealed by default
 
-Flemma's chat buffer already carries a lot of signal — role markers, tool-use blocks, thinking blocks, folding indicators, rulers, usage bars. Adding visible `**`, `_`, ` ``` `, and similar markup on top makes assistant prose noisier than it needs to be. The `2n` default hides the markup while reading, and reveals it whenever you move the cursor onto the line in Insert or Visual mode so you can still edit precisely.
+Flemma's chat buffer already carries a lot of signal — role markers, tool-use blocks, thinking blocks, folding indicators, rulers, usage bars. Adding visible `**`, `_`, ` ``` `, and similar markup on top makes assistant prose noisier than it needs to be. The `2nv` default hides the markup while reading and while selecting, and reveals it whenever you move the cursor onto the line in Insert or Command mode so you can still edit precisely.
 
 If you prefer raw Markdown always, `editing.conceal = false` restores the pre-v0.11 behaviour.
 
@@ -52,7 +53,7 @@ We investigated:
 
 - Moving the fold range to skip the fence (start at line 2) — salvages the placeholder but leaves the fold boundaries off-by-one from the AST, and degenerates on 1-line bodies.
 - Emitting a `virt_lines_above` banner on the first non-concealed line below the frontmatter — works, but introduces a new navigation surface area (the banner can't be cursor-landed on) and duplicates the existing fold-preview affordance.
-- Shipping a `queries/chat/highlights.scm` override that inherits markdown without `conceal_lines` — restores the fence lines globally in `.chat`, which defeats the point of `editing.conceal = "2n"` (the fences are the noise you wanted hidden).
+- Shipping a `queries/chat/highlights.scm` override that inherits markdown without `conceal_lines` — restores the fence lines globally in `.chat`, which defeats the point of `editing.conceal = "2nv"` (the fences are the noise you wanted hidden).
 
 **What we ship:** at `conceallevel >= 1`, the frontmatter fold rule (`lua/flemma/ui/folding/rules/frontmatter.lua`) returns no fold entries. The frontmatter body renders inline with its `@Lua`/`@JSON` treesitter highlighting, the two delimiter lines stay concealed as intended, and there is no collapsed placeholder to disappear. At `conceallevel = 0` the fold is emitted as before. The window's live `vim.wo.conceallevel` is also part of the fold map cache key, so toggling it at runtime re-evaluates without a manual `:edit`.
 

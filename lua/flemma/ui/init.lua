@@ -724,7 +724,7 @@ local function count_active_chat_buffers()
 end
 
 ---Parse the `editing.conceal` format `{conceallevel}{concealcursor}` into a
----pair. Accepts string (`"2n"`), integer (`2`), or boolean/nil (skip).
+---pair. Accepts string (`"2nv"`), integer (`2`), or boolean/nil (skip).
 ---Returns nil when parsing should skip the override (unset/false/malformed).
 ---@param value string|integer|boolean|nil
 ---@return { level: integer, cursor: string }|nil
