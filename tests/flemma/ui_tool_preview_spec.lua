@@ -150,7 +150,7 @@ describe("UI Tool Previews", function()
     it("does not show preview for empty result without status or indicator", function()
       -- A plain empty fenced block with no status and no active indicator —
       -- this represents a completed tool with empty output, not a pending one.
-      local bufnr = setup_buffer({ fence = "```" })
+      local bufnr = setup_buffer()
 
       local doc = parser.get_parsed_document(bufnr)
       ui.add_tool_previews(bufnr, doc)
@@ -162,7 +162,7 @@ describe("UI Tool Previews", function()
     it("anchors on opening fence at conceallevel=0", function()
       -- Default case: tree-sitter does not conceal anything. Anchoring on the
       -- opening fence places the virt_line visually inside the fenced block.
-      local bufnr = setup_buffer({ fence = "```flemma:tool status=pending" })
+      local bufnr = setup_buffer({ status = "pending" })
       vim.api.nvim_set_option_value("conceallevel", 0, { win = vim.api.nvim_get_current_win() })
 
       local doc = parser.get_parsed_document(bufnr)
@@ -173,7 +173,7 @@ describe("UI Tool Previews", function()
 
       local anchor_row = marks[1][2]
       local lines = vim.api.nvim_buf_get_lines(bufnr, anchor_row, anchor_row + 1, false)
-      assert.are.equal("```flemma:tool status=pending", lines[1])
+      assert.are.equal("```", lines[1])
     end)
 
     it("anchors on blank line before fence at conceallevel>=1", function()
@@ -182,7 +182,7 @@ describe("UI Tool Previews", function()
       -- closing fence lines are hidden entirely. An extmark anchored there
       -- would go invisible with them. Anchor on the preceding blank line
       -- instead so the virt_line survives.
-      local bufnr = setup_buffer({ fence = "```flemma:tool status=pending" })
+      local bufnr = setup_buffer({ status = "pending" })
       vim.api.nvim_set_option_value("conceallevel", 2, { win = vim.api.nvim_get_current_win() })
 
       local doc = parser.get_parsed_document(bufnr)
@@ -197,7 +197,7 @@ describe("UI Tool Previews", function()
 
       -- And the NEXT line is the opening fence — confirms we are one above it.
       local next_line = vim.api.nvim_buf_get_lines(bufnr, anchor_row + 1, anchor_row + 2, false)[1]
-      assert.are.equal("```flemma:tool status=pending", next_line)
+      assert.are.equal("```", next_line)
     end)
 
     it("falls back to the Tool Result header when the blank is collapsed", function()
@@ -222,8 +222,8 @@ describe("UI Tool Previews", function()
         "```",
         "",
         "@You:",
-        "**Tool Result:** `tool_123`",
-        "```flemma:tool status=pending",
+        "**Tool Result:** `tool_123` (pending)",
+        "```",
         "```",
       })
       vim.api.nvim_set_option_value("conceallevel", 2, { win = vim.api.nvim_get_current_win() })
@@ -236,7 +236,7 @@ describe("UI Tool Previews", function()
 
       local anchor_row = marks[1][2]
       local anchor_line = vim.api.nvim_buf_get_lines(bufnr, anchor_row, anchor_row + 1, false)[1]
-      assert.are.equal("**Tool Result:** `tool_123`", anchor_line)
+      assert.are.equal("**Tool Result:** `tool_123` (pending)", anchor_line)
     end)
   end)
 end)
