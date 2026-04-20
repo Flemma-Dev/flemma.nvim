@@ -63,4 +63,13 @@ syntax region FlemmaThinkingBlock start="^<thinking\(\s.*[^/>]\)\?>$" end="^</th
 " Assistant region contains role markers, markdown, thinking blocks, and tool use
 syntax region FlemmaAssistant start='^@Assistant:\s*$' end='\(^@\(System\|You\):\s*$\)\@=\|\%$' contains=FlemmaRoleAssistant,@Markdown
 
+" Anchor sync on role markers so regions are found correctly when Vim parses any
+" window. Without these, default sync (maxlines=60) can leave the outer role
+" region unmatched after a contained fenced code block terminates, so
+" **Tool Use:** / **Tool Result:** headers past the first one lose their
+" FlemmaToolUseTitle / FlemmaToolResultTitle match.
+syntax sync match FlemmaSyncSystem    grouphere FlemmaSystem    "^@System:\s*$"
+syntax sync match FlemmaSyncUser      grouphere FlemmaUser      "^@You:\s*$"
+syntax sync match FlemmaSyncAssistant grouphere FlemmaAssistant "^@Assistant:\s*$"
+
 let b:current_syntax = "chat"
