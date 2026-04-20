@@ -25,14 +25,21 @@ syntax match FlemmaThinkingTag "^</thinking>$" contained
 syntax match FlemmaToolUseTitle "\*\*Tool Use:\*\*" contained
 " Tool Result title: **Tool Result:**
 syntax match FlemmaToolResultTitle "\*\*Tool Result:\*\*" contained
-" Error marker: (error)
-syntax match FlemmaToolResultError "(error)" contained
+" Concise-form status suffixes on the tool_result header. The explicit
+" modeline form "(status=approved sandbox=false)" intentionally stays plain —
+" only bare-word suffixes are decorated.
+syntax match FlemmaToolResultError    "(error)"    contained
+syntax match FlemmaToolResultPending  "(pending)"  contained
+syntax match FlemmaToolResultApproved "(approved)" contained
+syntax match FlemmaToolResultRejected "(rejected)" contained
+syntax match FlemmaToolResultDenied   "(denied)"   contained
+syntax match FlemmaToolResultAborted  "(aborted)"  contained
 
 " Tool Use region (in assistant messages): **Tool Use:** `name` (`id`)
 " Note: Tool names and IDs in backticks are handled by treesitter markdown_inline as inline code
 syntax region FlemmaToolUse start="\*\*Tool Use:\*\*" end="$" oneline contained containedin=FlemmaAssistant contains=FlemmaToolUseTitle
-" Tool Result region (in user messages): **Tool Result:** `id` (optional: (error))
-syntax region FlemmaToolResult start="\*\*Tool Result:\*\*" end="$" oneline contained containedin=FlemmaUser contains=FlemmaToolResultTitle,FlemmaToolResultError
+" Tool Result region (in user messages): **Tool Result:** `id` (optional concise status)
+syntax region FlemmaToolResult start="\*\*Tool Result:\*\*" end="$" oneline contained containedin=FlemmaUser contains=FlemmaToolResultTitle,FlemmaToolResultError,FlemmaToolResultPending,FlemmaToolResultApproved,FlemmaToolResultRejected,FlemmaToolResultDenied,FlemmaToolResultAborted
 
 " Note: Signature concealment is now handled via extmarks in ui.lua highlight_thinking_tags()
 " This avoids needing conceallevel which affects the whole buffer (including frontmatter)

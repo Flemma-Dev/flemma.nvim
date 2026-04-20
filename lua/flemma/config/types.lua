@@ -68,7 +68,12 @@
 ---@field tool_icon flemma.config.HighlightValue
 ---@field tool_name flemma.config.HighlightValue
 ---@field tool_preview flemma.config.HighlightValue
+---@field tool_result_aborted flemma.config.HighlightValue
+---@field tool_result_approved flemma.config.HighlightValue
+---@field tool_result_denied flemma.config.HighlightValue
 ---@field tool_result_error flemma.config.HighlightValue
+---@field tool_result_pending flemma.config.HighlightValue
+---@field tool_result_rejected flemma.config.HighlightValue
 ---@field tool_result_title flemma.config.HighlightValue
 ---@field tool_use_title flemma.config.HighlightValue
 ---@field user flemma.config.HighlightValue

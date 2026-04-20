@@ -433,6 +433,11 @@ M.apply_syntax = function()
   set_highlight("FlemmaToolUseTitle", syntax_config.highlights.tool_use_title)
   set_highlight("FlemmaToolResultTitle", syntax_config.highlights.tool_result_title)
   set_highlight("FlemmaToolResultError", syntax_config.highlights.tool_result_error)
+  set_highlight("FlemmaToolResultPending", syntax_config.highlights.tool_result_pending)
+  set_highlight("FlemmaToolResultApproved", syntax_config.highlights.tool_result_approved)
+  set_highlight("FlemmaToolResultRejected", syntax_config.highlights.tool_result_rejected)
+  set_highlight("FlemmaToolResultDenied", syntax_config.highlights.tool_result_denied)
+  set_highlight("FlemmaToolResultAborted", syntax_config.highlights.tool_result_aborted)
   set_highlight("FlemmaToolPreview", syntax_config.highlights.tool_preview)
 
   -- Set highlight for fold text segments

@@ -91,7 +91,12 @@ require("flemma").setup({
     tool_name = "Function",
     tool_use_title = "Function",
     tool_result_title = "Function",
-    tool_result_error = "DiagnosticError",
+    tool_result_error    = "DiagnosticError", -- concise `(error)` suffix on tool_result headers
+    tool_result_pending  = "DiagnosticInfo",  -- concise `(pending)` suffix
+    tool_result_approved = "DiagnosticOk",    -- concise `(approved)` suffix
+    tool_result_rejected = "DiagnosticWarn",  -- concise `(rejected)` suffix
+    tool_result_denied   = "DiagnosticError", -- concise `(denied)` suffix
+    tool_result_aborted  = "DiagnosticError", -- concise `(aborted)` suffix
     tool_preview = "Comment",
     tool_detail = "Comment",                 -- Raw technical detail in structured tool previews
     fold_preview = "Comment",

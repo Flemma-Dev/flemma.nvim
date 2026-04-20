@@ -102,4 +102,52 @@ describe("chat syntax sync", function()
       )
     end
   end)
+
+  it("applies a distinct FlemmaToolResult* highlight for every concise status suffix", function()
+    local cases = {
+      { suffix = "(pending)", group = "FlemmaToolResultPending" },
+      { suffix = "(approved)", group = "FlemmaToolResultApproved" },
+      { suffix = "(rejected)", group = "FlemmaToolResultRejected" },
+      { suffix = "(denied)", group = "FlemmaToolResultDenied" },
+      { suffix = "(aborted)", group = "FlemmaToolResultAborted" },
+      { suffix = "(error)", group = "FlemmaToolResultError" },
+    }
+
+    local lines = { "@You:", "" }
+    for _, case in ipairs(cases) do
+      table.insert(lines, "**Tool Result:** `t` " .. case.suffix)
+      table.insert(lines, "")
+    end
+
+    local bufnr = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.bo[bufnr].filetype = "chat"
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+    highlight.apply_syntax()
+
+    for index, case in ipairs(cases) do
+      local lnum = 2 + (index - 1) * 2 + 1 -- skip header (2 lines) + preceding case blocks
+      local header = vim.fn.getline(lnum)
+      local suffix_col = header:find(case.suffix:sub(1, 1), 1, true) -- find "(" byte-1-indexed
+      assert.is_truthy(suffix_col, "missing suffix on line " .. lnum .. ": " .. header)
+      local stack = synstack_at(lnum)
+      -- synstack_at probes col 1; widen check by also probing inside the suffix.
+      local inside = {}
+      for _, id in ipairs(vim.fn.synstack(lnum, suffix_col + 1)) do
+        table.insert(inside, vim.fn.synIDattr(id, "name"))
+      end
+      assert.is_truthy(
+        vim.tbl_contains(inside, case.group),
+        string.format(
+          "line %d missing %s at col %d; stack=[%s] header_stack=[%s]",
+          lnum,
+          case.group,
+          suffix_col + 1,
+          table.concat(inside, ","),
+          table.concat(stack, ",")
+        )
+      )
+    end
+  end)
 end)
