@@ -154,5 +154,85 @@ describe("UI Tool Previews", function()
       local marks = get_preview_extmarks(bufnr)
       assert.are.equal(0, #marks, "should not show preview for empty result without status or indicator")
     end)
+
+    it("anchors on opening fence at conceallevel=0", function()
+      -- Default case: tree-sitter does not conceal anything. Anchoring on the
+      -- opening fence places the virt_line visually inside the fenced block.
+      local bufnr = setup_buffer({ fence = "```flemma:tool status=pending" })
+      vim.api.nvim_set_option_value("conceallevel", 0, { win = vim.api.nvim_get_current_win() })
+
+      local doc = parser.get_parsed_document(bufnr)
+      ui.add_tool_previews(bufnr, doc)
+
+      local marks = get_preview_extmarks(bufnr)
+      assert.are.equal(1, #marks)
+
+      local anchor_row = marks[1][2]
+      local lines = vim.api.nvim_buf_get_lines(bufnr, anchor_row, anchor_row + 1, false)
+      assert.are.equal("```flemma:tool status=pending", lines[1])
+    end)
+
+    it("anchors on blank line before fence at conceallevel>=1", function()
+      -- Tree-sitter's markdown query sets `conceal_lines = ""` on the
+      -- fenced_code_block_delimiter, so at conceallevel>=1 the opening and
+      -- closing fence lines are hidden entirely. An extmark anchored there
+      -- would go invisible with them. Anchor on the preceding blank line
+      -- instead so the virt_line survives.
+      local bufnr = setup_buffer({ fence = "```flemma:tool status=pending" })
+      vim.api.nvim_set_option_value("conceallevel", 2, { win = vim.api.nvim_get_current_win() })
+
+      local doc = parser.get_parsed_document(bufnr)
+      ui.add_tool_previews(bufnr, doc)
+
+      local marks = get_preview_extmarks(bufnr)
+      assert.are.equal(1, #marks)
+
+      local anchor_row = marks[1][2]
+      local lines = vim.api.nvim_buf_get_lines(bufnr, anchor_row, anchor_row + 1, false)
+      assert.are.equal("", lines[1], "anchor row should be the blank line before the opening fence")
+
+      -- And the NEXT line is the opening fence — confirms we are one above it.
+      local next_line = vim.api.nvim_buf_get_lines(bufnr, anchor_row + 1, anchor_row + 2, false)[1]
+      assert.are.equal("```flemma:tool status=pending", next_line)
+    end)
+
+    it("falls back to the Tool Result header when the blank is collapsed", function()
+      -- The parser accepts zero blank lines between the `**Tool Result:**`
+      -- header and the opening fence (codeblock.skip_blank_lines tolerates 0).
+      -- In that case `opening_fence - 1` lands on the header line itself,
+      -- which has no `conceal_lines` metadata — only per-character conceal on
+      -- `**` and backticks — so the line survives and the virt_line renders
+      -- just below the header.
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@You:",
+        "Hello",
+        "",
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_123`)",
+        "",
+        "```json",
+        '{"command":"echo hi","label":"print greeting"}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_123`",
+        "```flemma:tool status=pending",
+        "```",
+      })
+      vim.api.nvim_set_option_value("conceallevel", 2, { win = vim.api.nvim_get_current_win() })
+
+      local doc = parser.get_parsed_document(bufnr)
+      ui.add_tool_previews(bufnr, doc)
+
+      local marks = get_preview_extmarks(bufnr)
+      assert.are.equal(1, #marks)
+
+      local anchor_row = marks[1][2]
+      local anchor_line = vim.api.nvim_buf_get_lines(bufnr, anchor_row, anchor_row + 1, false)[1]
+      assert.are.equal("**Tool Result:** `tool_123`", anchor_line)
+    end)
   end)
 end)

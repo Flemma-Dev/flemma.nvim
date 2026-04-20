@@ -969,6 +969,18 @@ function M.add_tool_previews(bufnr, doc)
   local winid = vim.fn.bufwinid(bufnr)
   local max_length = preview.get_text_area_width(winid)
 
+  -- At conceallevel>=1, tree-sitter's markdown highlights query hides the
+  -- fenced_code_block_delimiter lines entirely via `#set! conceal_lines ""`,
+  -- taking any extmarks anchored to those lines (including our virt_lines)
+  -- with them. Anchor one line higher — on the blank line between the
+  -- `**Tool Result:**` header and the opening fence, which carries no conceal
+  -- metadata — so the preview survives. At conceallevel=0 the fences render
+  -- normally and we keep the original inside-the-fence position.
+  local conceal_level = 0
+  if winid ~= -1 then
+    conceal_level = vim.api.nvim_get_option_value("conceallevel", { win = winid })
+  end
+
   local line_count = vim.api.nvim_buf_line_count(bufnr)
 
   -- Show previews for tool_result blocks with empty content that are either
@@ -986,7 +998,12 @@ function M.add_tool_previews(bufnr, doc)
           if tool_use then
             -- Opening fence is one line before closing fence (empty content)
             local opening_fence_line = seg.position.end_line - 1
-            local line_idx = opening_fence_line - 1 -- 0-indexed
+            local line_idx
+            if conceal_level >= 1 then
+              line_idx = opening_fence_line - 2 -- 0-indexed: blank line before fence
+            else
+              line_idx = opening_fence_line - 1 -- 0-indexed: opening fence line
+            end
 
             if line_idx >= 0 and line_idx < line_count then
               local preview_text = preview.format_tool_preview(tool_use.name, tool_use.input, max_length)
