@@ -40,12 +40,18 @@ local BUILTIN_RULES = {
 -- Fold Map Cache
 -- ============================================================================
 
----@type { changedtick: integer, bufnr: integer, map: table<integer, string> }
-local fold_map_cache = { changedtick = -1, bufnr = -1, map = {} }
+---The frontmatter rule reads `vim.wo.conceallevel` in its populate() to decide
+---whether to emit fold entries (see lua/flemma/ui/folding/rules/frontmatter.lua
+---and docs/conceal.md "Folds and `conceal_lines`"). Include it in the cache
+---key so a conceallevel toggle self-invalidates — the OptionSet autocmd in
+---ui/init.lua handles the on-screen refold, but the cache key is what keeps
+---get_fold_level() correct between eager triggers.
+---@type { changedtick: integer, bufnr: integer, conceallevel: integer, map: table<integer, string> }
+local fold_map_cache = { changedtick = -1, bufnr = -1, conceallevel = -1, map = {} }
 
 ---Invalidate the fold map cache so the next get_fold_level rebuilds it.
 local function invalidate_cache()
-  fold_map_cache = { changedtick = -1, bufnr = -1, map = {} }
+  fold_map_cache = { changedtick = -1, bufnr = -1, conceallevel = -1, map = {} }
 end
 
 -- ============================================================================
@@ -167,9 +173,10 @@ end
 function M.get_fold_level(lnum)
   local bufnr = vim.api.nvim_get_current_buf()
   local tick = vim.api.nvim_buf_get_changedtick(bufnr)
-  if fold_map_cache.changedtick ~= tick or fold_map_cache.bufnr ~= bufnr then
+  local conceal = vim.wo.conceallevel
+  if fold_map_cache.changedtick ~= tick or fold_map_cache.bufnr ~= bufnr or fold_map_cache.conceallevel ~= conceal then
     local doc = parser.get_parsed_document(bufnr)
-    fold_map_cache = { changedtick = tick, bufnr = bufnr, map = build_fold_map(doc) }
+    fold_map_cache = { changedtick = tick, bufnr = bufnr, conceallevel = conceal, map = build_fold_map(doc) }
   end
   return fold_map_cache.map[lnum] or "="
 end

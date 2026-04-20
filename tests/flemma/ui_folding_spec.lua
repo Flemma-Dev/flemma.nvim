@@ -227,6 +227,7 @@ describe("UI Folding", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
+      vim.wo.conceallevel = 0
 
       local lines = {
         "```lua",
@@ -244,6 +245,7 @@ describe("UI Folding", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
+      vim.wo.conceallevel = 0
 
       local lines = {
         "```lua",
@@ -255,6 +257,47 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       assert.are.equal("<2", folding.get_fold_level(3))
+    end)
+
+    it("should skip frontmatter fold when conceallevel >= 1", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.wo.conceallevel = 2
+
+      local lines = {
+        "```lua",
+        "x = 5",
+        "```",
+        "@You:",
+        "question",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      assert.are.equal("=", folding.get_fold_level(1), "opening fence should not start a fold when conceallevel>=1")
+      assert.are.equal("=", folding.get_fold_level(3), "closing fence should not end a fold when conceallevel>=1")
+    end)
+
+    it("should invalidate fold cache when conceallevel toggles", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.wo.conceallevel = 0
+
+      local lines = {
+        "```lua",
+        "x = 5",
+        "```",
+        "@You:",
+        "question",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      assert.are.equal(">2", folding.get_fold_level(1), "sanity: fold present at conceallevel=0")
+
+      vim.wo.conceallevel = 2
+
+      assert.are.equal("=", folding.get_fold_level(1), "fold should disappear once conceallevel flips to 2")
     end)
 
     it("should return >2 for completed tool_use block start", function()
@@ -1527,6 +1570,7 @@ describe("UI Folding", function()
 
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.conceallevel = 0
       vim.wo.foldmethod = "expr"
       vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 1
@@ -2113,6 +2157,7 @@ describe("UI Folding", function()
 
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.conceallevel = 0
       vim.wo.foldmethod = "expr"
       vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 99

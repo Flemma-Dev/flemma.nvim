@@ -829,6 +829,22 @@ function M.setup_chat_filetype_autocmds()
     end,
   })
 
+  -- The frontmatter fold rule reads `vim.wo.conceallevel` to decide whether
+  -- to fold (see lua/flemma/ui/folding/rules/frontmatter.lua). The fold map
+  -- cache is keyed on changedtick + bufnr, so a bare conceallevel flip
+  -- wouldn't invalidate it. Rebuild on conceallevel changes in chat windows.
+  vim.api.nvim_create_autocmd("OptionSet", {
+    group = augroup,
+    pattern = "conceallevel",
+    desc = "Flemma: rebuild fold map when conceallevel changes in a chat buffer",
+    callback = function()
+      local bufnr = vim.api.nvim_get_current_buf()
+      if vim.bo[bufnr].filetype == "chat" then
+        folding.invalidate_folds(bufnr)
+      end
+    end,
+  })
+
   -- Handle updatetime management for chat buffers
   local editing_config = config_facade.get()
   if editing_config and editing_config.editing and editing_config.editing.manage_updatetime then
