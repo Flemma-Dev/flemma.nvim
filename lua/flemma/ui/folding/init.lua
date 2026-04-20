@@ -507,7 +507,10 @@ function M.toggle_message_fold()
     local fm_start = fm.position.start_line
     if vim.wo.conceallevel >= 1 then
       notify.info(
-        string.format("frontmatter isn't foldable with conceallevel=%d. This is a Neovim limitation.", vim.wo.conceallevel)
+        string.format(
+          "frontmatter isn't foldable with conceallevel=%d. This is a Neovim limitation.",
+          vim.wo.conceallevel
+        )
       )
       return
     end
