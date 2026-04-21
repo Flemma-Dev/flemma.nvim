@@ -1,12 +1,15 @@
 --- Anthropic provider for Flemma
 --- Implements the Anthropic (Claude) API integration
 local base = require("flemma.provider.base")
+local bridge = require("flemma.bridge")
+local client = require("flemma.client")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local notify = require("flemma.notify")
 local normalize = require("flemma.provider.normalize")
 local s = require("flemma.schema")
 local sink = require("flemma.sink")
+local str = require("flemma.utilities.string")
 local tools_module = require("flemma.tools")
 local provider_registry = require("flemma.provider.registry")
 
@@ -752,6 +755,102 @@ function M.try_import_from_buffer(lines)
   -- Generate chat content
   local chat_content = import_generate_chat(data)
   return chat_content
+end
+
+---Query Anthropic's /v1/messages/count_tokens endpoint for the current buffer
+---and report input token count + estimated cost via `notify.info`. Delegates
+---prompt/provider construction to `core.build_prompt_and_provider` (via the
+---bridge) so the probe reflects exactly what a real `send` would produce.
+---@param bufnr integer
+function M.try_estimate_usage(bufnr)
+  local prompt, context, provider, _evaluated, failure = bridge.build_prompt_and_provider(bufnr)
+  if failure then
+    notify.warn(failure.message)
+    return
+  end
+  ---@cast prompt flemma.pipeline.Prompt
+  ---@cast context flemma.Context
+  ---@cast provider flemma.provider.Anthropic
+
+  local endpoint = "https://api.anthropic.com/v1/messages/count_tokens"
+  local fixture_path = client.find_fixture_for_endpoint(endpoint)
+
+  local headers
+  if fixture_path then
+    headers = { "content-type: application/json" }
+  else
+    local api_key, api_key_diagnostics = provider:get_api_key()
+    if not api_key then
+      local msg = "No API key available for Anthropic."
+      if api_key_diagnostics then
+        for _, d in ipairs(api_key_diagnostics) do
+          msg = msg .. "\n  [" .. d.resolver .. "] " .. d.message
+        end
+      end
+      notify.error(msg)
+      return
+    end
+    headers = provider:get_request_headers()
+  end
+
+  local build_ok, body = pcall(provider.build_request, provider, prompt, context)
+  if not build_ok then
+    notify.error("Estimate failed: " .. tostring(body))
+    return
+  end
+
+  -- Strip fields not accepted by count_tokens.
+  -- Accepted: messages, model, system, tools, tool_choice, thinking,
+  -- output_config, cache_control (top-level).
+  -- Rejected: max_tokens, stream, temperature.
+  body.max_tokens = nil
+  body.stream = nil
+  body.temperature = nil
+
+  local request_opts = {
+    endpoint = endpoint,
+    headers = headers,
+    request_body = body,
+    parameters = provider.parameters,
+    trailing_keys = provider:get_trailing_keys(),
+  }
+
+  client.send_json_request(request_opts, function(response_body, exit_code, curl_err)
+    if curl_err or exit_code ~= 0 or not response_body or response_body == "" then
+      local reason = curl_err or ("curl exit code " .. tostring(exit_code))
+      notify.error("Estimate failed: " .. reason)
+      return
+    end
+
+    local parse_ok, parsed = pcall(json.decode, response_body)
+    if not parse_ok or type(parsed) ~= "table" then
+      notify.error("Estimate failed: could not parse response")
+      return
+    end
+
+    if parsed.type == "error" then
+      local err_type = parsed.error and parsed.error.type
+      local err_message = parsed.error and parsed.error.message
+      local detail
+      if err_type and err_message then
+        detail = err_type .. " — " .. err_message
+      else
+        detail = err_type or err_message or "unknown error"
+      end
+      notify.error("Estimate failed: " .. detail)
+      return
+    end
+
+    if type(parsed.input_tokens) ~= "number" then
+      notify.error("Estimate failed: missing input_tokens in response")
+      return
+    end
+
+    local model = provider.parameters.model
+    local model_info = provider_registry.get_model_info("anthropic", model)
+    local pricing = model_info and model_info.pricing
+    notify.info(str.format_estimate(parsed.input_tokens, model, pricing))
+  end)
 end
 
 return M

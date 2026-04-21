@@ -45,6 +45,51 @@ describe("client.prepare_curl_command()", function()
   end)
 end)
 
+-- ─── unit: send_json_request against a fixture ────────────────────────────
+
+describe("client.send_json_request()", function()
+  after_each(function()
+    client.clear_fixtures()
+  end)
+
+  it("delivers the fixture body verbatim to on_body with exit_code=0", function()
+    local fixture = "tests/fixtures/anthropic/count_tokens_response.txt"
+    client.register_fixture("messages/count_tokens", fixture)
+
+    local received_body, received_code, received_err
+    local done = false
+
+    client.send_json_request({
+      endpoint = "https://api.anthropic.com/v1/messages/count_tokens",
+      headers = { "content-type: application/json" },
+      request_body = { messages = {}, model = "claude-sonnet-4-6" },
+      parameters = {},
+    }, function(body, code, err)
+      received_body = body
+      received_code = code
+      received_err = err
+      done = true
+    end)
+
+    assert.is_true(
+      vim.wait(2000, function()
+        return done
+      end, 10),
+      "on_body should fire within the timeout"
+    )
+
+    assert.is_nil(received_err, "on_body should not receive an err for a fixture hit")
+    assert.equals(0, received_code, "fixture exit code should be 0")
+
+    -- The fixture file contains a single-line JSON body terminated with a
+    -- newline. Framing may strip or preserve the trailing newline; assert
+    -- only that the JSON payload survives intact.
+    local expected_prefix = '{"input_tokens":5432}'
+    assert.is_not_nil(received_body, "on_body should receive a body string")
+    assert.equals(expected_prefix, vim.trim(received_body --[[@as string]]))
+  end)
+end)
+
 -- ─── integration: header capture via socat ─────────────────────────────────
 
 describe("client.send_request() header wire format", function()

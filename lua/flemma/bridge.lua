@@ -8,7 +8,8 @@
 --- For everything else, require the owning module directly.
 ---
 --- Registrants: flemma.core, flemma.buffer.editing
---- Callers:     flemma.autopilot, flemma.tools.executor, flemma.ui
+--- Callers:     flemma.autopilot, flemma.tools.executor, flemma.ui,
+---              flemma.provider.adapters.anthropic
 ---@class flemma.Bridge
 local M = {}
 
@@ -26,6 +27,18 @@ end
 function M.send_or_execute(opts)
   assert(handlers.send_or_execute, "bridge: send_or_execute not registered")
   handlers.send_or_execute(opts)
+end
+
+---@param bufnr integer
+---@param opts? { evaluated_frontmatter?: flemma.processor.EvaluatedFrontmatter }
+---@return flemma.pipeline.Prompt|nil prompt
+---@return flemma.Context|nil context
+---@return flemma.provider.Base|nil provider
+---@return flemma.processor.EvaluatedResult|nil evaluated
+---@return flemma.core.BuildPromptFailure|nil failure
+function M.build_prompt_and_provider(bufnr, opts)
+  assert(handlers.build_prompt_and_provider, "bridge: build_prompt_and_provider not registered")
+  return handlers.build_prompt_and_provider(bufnr, opts)
 end
 
 ---@param opts? { bufnr: integer }

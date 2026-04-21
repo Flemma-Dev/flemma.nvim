@@ -223,6 +223,8 @@ All commands live under `:Flemma` with tab completion. Misspelled commands get d
 | `switch ...`                             | Change provider, model, or parameters                                       |
 | `status [verbose]`                       | Show runtime status and resolved configuration                              |
 | `import`                                 | Import from Claude Workbench format (see [importing.md](docs/importing.md)) |
+| `usage:estimate`                         | Estimate input tokens and cost for the next send                            |
+| `usage:recall`                           | Re-show the most recent usage bar                                           |
 | `autopilot:enable\|disable\|status`      | Toggle or inspect autonomous mode                                           |
 | `sandbox:enable\|disable\|status`        | Toggle or inspect sandboxing                                                |
 | `tool:execute\|cancel\|cancel-all\|list` | Manage tool executions                                                      |

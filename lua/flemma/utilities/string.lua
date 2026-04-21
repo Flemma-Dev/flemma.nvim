@@ -118,6 +118,37 @@ function M.format_money(amount)
   return (s:gsub("(%.%d%d)(%d-)0+$", "%1%2"))
 end
 
+---Format the per-MTok pricing fragment used by the high-cost warning and
+---`:Flemma usage:estimate`. Input is a pricing table with `input` and `output`
+---rates in dollars per million tokens.
+---@param pricing { input: number, output: number }
+---@return string
+function M.format_pricing_suffix(pricing)
+  return M.format_money(pricing.input) .. " input / " .. M.format_money(pricing.output) .. " output per MTok"
+end
+
+---Build the single-line estimate string shown by `:Flemma usage:estimate`.
+---Pure formatter — caller supplies the pricing table (nil if unavailable); no
+---registry lookup happens here. Falls back to a tokens-only message when
+---`pricing` is nil.
+---@param input_tokens integer
+---@param model string
+---@param pricing? { input: number, output: number }
+---@return string
+function M.format_estimate(input_tokens, model, pricing)
+  if not pricing then
+    return M.format_number(input_tokens) .. " input tokens \xc2\xb7 " .. model
+  end
+  local cost = input_tokens * pricing.input / 1000000
+  return string.format(
+    "%s input tokens \xc2\xb7 %s \xc2\xb7 %s (%s)",
+    M.format_number(input_tokens),
+    M.format_money(cost),
+    model,
+    M.format_pricing_suffix(pricing)
+  )
+end
+
 ---Format a byte size for human-readable display using binary divisors.
 ---No space between number and unit suffix.
 ---@param bytes number

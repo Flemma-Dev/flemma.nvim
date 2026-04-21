@@ -221,6 +221,10 @@ Cache hit percentage uses semantic colours through `FlemmaUsageBarCacheGood` (li
 
 Each `.chat` buffer owns at most one active usage bar — a new request dismisses the previous bar before rendering the next. Bars re-render automatically on window resize to reflow content for the new width. Recall the most recent usage bar with `:Flemma usage:recall`.
 
+Before sending, preview the cost of the next request with `:Flemma usage:estimate`. The command delegates to the active provider — currently only the Anthropic adapter implements it, querying `POST /v1/messages/count_tokens` with the exact body a real send would produce and reporting input tokens, estimated cost, and the model's per-MTok rates as a single `notify.info` line. Output cost is intentionally not projected: we have no way to know how long the model will talk before it starts.
+
+Anthropic bills nothing for the token-count call and applies a separate rate limit to it, so estimating as often as you like does not eat into your Messages quota.
+
 See `lua/flemma/usage.lua` for the driver and `lua/flemma/ui/bar/` for the shared Bar rendering class.
 
 ## Extmark priority

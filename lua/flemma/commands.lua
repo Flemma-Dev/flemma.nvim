@@ -200,20 +200,20 @@ local function setup_commands()
 
   command_tree.children.import = {
     action = function()
-      local cfg = require("flemma.config").get()
+      local bufnr = vim.api.nvim_get_current_buf()
+      local cfg = require("flemma.config").get(bufnr)
       local provider_module_path = require("flemma.provider.registry").get(cfg.provider)
       if not provider_module_path then
-        notify.error("No provider configured")
+        notify.error("No provider configured. Use :Flemma switch to select one.")
         return
       end
 
       local provider_module = require("flemma.loader").load(provider_module_path)
       if not provider_module or not provider_module.try_import_from_buffer then
-        notify.error("Current provider does not support importing")
+        notify.error("Current provider does not support chat imports.")
         return
       end
 
-      local bufnr = vim.api.nvim_get_current_buf()
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
       local chat_content = provider_module.try_import_from_buffer(lines)
@@ -442,6 +442,25 @@ local function setup_commands()
       recall = {
         action = function()
           require("flemma.usage").recall_last()
+        end,
+      },
+      estimate = {
+        action = function()
+          local bufnr = vim.api.nvim_get_current_buf()
+          local cfg = require("flemma.config").get(bufnr)
+          local provider_module_path = require("flemma.provider.registry").get(cfg.provider)
+          if not provider_module_path then
+            notify.error("No provider configured. Use :Flemma switch to select one.")
+            return
+          end
+
+          local provider_module = require("flemma.loader").load(provider_module_path)
+          if not provider_module or not provider_module.try_estimate_usage then
+            notify.error("Current provider does not support usage estimates.")
+            return
+          end
+
+          provider_module.try_estimate_usage(bufnr)
         end,
       },
     },

@@ -261,14 +261,7 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
     and model_entry.pricing
     and model_entry.pricing.input + model_entry.pricing.output > high_cost_threshold
   then
-    table.insert(
-      lines,
-      "  ⚠ Billed at "
-        .. str.format_money(model_entry.pricing.input)
-        .. " input / "
-        .. str.format_money(model_entry.pricing.output)
-        .. " output per MTok"
-    )
+    table.insert(lines, "  ⚠ Billed at " .. str.format_pricing_suffix(model_entry.pricing))
     notify_level = vim.log.levels.WARN
   end
 
@@ -656,6 +649,70 @@ function M.send_or_execute(opts)
   })
 end
 
+---@class flemma.core.BuildPromptFailure
+---@field code "empty_buffer"|"no_provider"|"no_messages"|"unknown_provider"
+---@field message string
+
+---Build the prompt, context, and request-scoped provider for a buffer.
+---Pure — no buffer lock, no progress UI, no HTTP side effects. Callers decide
+---how to surface failures. `send_to_provider` uses this for the per-request
+---build chain; `try_estimate_usage` uses the same helper for the count-tokens
+---probe so both produce an identical request body.
+---@param bufnr integer
+---@param opts? { evaluated_frontmatter?: flemma.processor.EvaluatedFrontmatter }
+---@return flemma.pipeline.Prompt|nil prompt
+---@return flemma.Context|nil context
+---@return flemma.provider.Base|nil provider
+---@return flemma.processor.EvaluatedResult|nil evaluated
+---@return flemma.core.BuildPromptFailure|nil failure
+function M.build_prompt_and_provider(bufnr, opts)
+  opts = opts or {}
+
+  local doc = parser.get_parsed_document(bufnr)
+  if #doc.messages == 0 and not doc.frontmatter then
+    return nil, nil, nil, nil, { code = "empty_buffer", message = "Empty buffer — nothing to send." }
+  end
+
+  if not config_facade.get(bufnr).provider then
+    return nil,
+      nil,
+      nil,
+      nil,
+      { code = "no_provider", message = "No provider configured. Use :Flemma switch to select one." }
+  end
+
+  local context = context_module.from_buffer(bufnr)
+  local prompt, evaluated = pipeline.run(doc, context, {
+    evaluated_frontmatter = opts.evaluated_frontmatter,
+    bufnr = bufnr,
+  })
+
+  if #prompt.history == 0 then
+    return nil, nil, nil, nil, { code = "no_messages", message = "No messages found in buffer." }
+  end
+
+  local effective_bufnr = prompt.bufnr
+  local cfg = normalize.resolve_preset(config_facade.materialize(effective_bufnr))
+  local provider_key = cfg.provider
+  local flat_params = normalize.flatten_parameters(provider_key, cfg)
+  normalize.resolve_max_tokens(provider_key, cfg.model, flat_params)
+
+  local provider_module_path = registry.get(provider_key)
+  if not provider_module_path then
+    return nil,
+      nil,
+      nil,
+      nil,
+      {
+        code = "unknown_provider",
+        message = "Unknown provider '" .. tostring(provider_key) .. "'.",
+      }
+  end
+
+  local provider = loader.load(provider_module_path).new(flat_params)
+  return prompt, context, provider, evaluated, nil
+end
+
 ---Handle the AI provider interaction
 ---@param opts? { on_request_complete?: fun(), bufnr?: integer, evaluated_frontmatter?: flemma.processor.EvaluatedFrontmatter, user_initiated?: boolean }
 function M.send_to_provider(opts)
@@ -700,40 +757,30 @@ function M.send_to_provider(opts)
   -- Make the buffer non-modifiable to prevent user edits during request
   state.lock_buffer(bufnr)
 
-  -- Parse buffer via cached AST (single buffer read + parse, reused below)
-  local doc = parser.get_parsed_document(bufnr)
-
-  -- Check if buffer has content
-  if #doc.messages == 0 and not doc.frontmatter then
-    log.warn("send_to_provider(): Empty buffer - nothing to send")
-    state.unlock_buffer(bufnr)
-    return
-  end
-
-  -- Verify a provider is configured (instance is created later, after frontmatter evaluation)
-  if not config_facade.get(bufnr).provider then
-    log.error("send_to_provider(): No provider configured")
-    notify.error("No provider configured. Use :Flemma switch to select one.")
-    state.unlock_buffer(bufnr)
-    return
-  end
-
-  -- Create context ONCE for the entire pipeline (used by frontmatter, @./file refs, etc.)
-  local context = context_module.from_buffer(bufnr)
-
-  -- Run the pipeline with the pre-parsed document. If frontmatter was already
-  -- evaluated by send_or_execute, reuse it to avoid re-executing frontmatter code.
-  local prompt, evaluated = pipeline.run(doc, context, {
+  local prompt, context, current_provider, evaluated, build_failure = M.build_prompt_and_provider(bufnr, {
     evaluated_frontmatter = opts.evaluated_frontmatter,
-    bufnr = bufnr,
   })
 
-  if #prompt.history == 0 then
-    log.warn("send_to_provider(): No messages found in buffer")
-    notify.warn("No messages found in buffer.")
+  if build_failure then
     state.unlock_buffer(bufnr)
+    if build_failure.code == "empty_buffer" then
+      log.warn("send_to_provider(): " .. build_failure.message)
+    elseif build_failure.code == "no_provider" then
+      log.error("send_to_provider(): No provider configured")
+      notify.error(build_failure.message)
+    elseif build_failure.code == "no_messages" then
+      log.warn("send_to_provider(): No messages found in buffer")
+      notify.warn(build_failure.message)
+    elseif build_failure.code == "unknown_provider" then
+      log.error("send_to_provider(): " .. build_failure.message)
+      notify.error(build_failure.message)
+    end
     return
   end
+  ---@cast prompt flemma.pipeline.Prompt
+  ---@cast context flemma.Context
+  ---@cast current_provider flemma.provider.Base
+  ---@cast evaluated flemma.processor.EvaluatedResult
 
   log.debug("send_to_provider(): Processed messages count: " .. #prompt.history)
 
@@ -807,27 +854,6 @@ function M.send_to_provider(opts)
 
   log.debug("send_to_provider(): Prompt history for provider: " .. log.inspect(prompt.history))
   log.debug("send_to_provider(): System instruction: " .. log.inspect(prompt.system))
-
-  -- Create a request-scoped provider with per-buffer params (includes frontmatter layer).
-  -- The provider lives only for this request — captured in closures, GC'd after completion.
-  ---@type flemma.provider.Base
-  local current_provider
-  do
-    local effective_bufnr = prompt.bufnr
-    local cfg = normalize.resolve_preset(config_facade.materialize(effective_bufnr))
-    local provider_key = cfg.provider
-    local flat_params = normalize.flatten_parameters(provider_key, cfg)
-    normalize.resolve_max_tokens(provider_key, cfg.model, flat_params)
-
-    local provider_module_path = registry.get(provider_key)
-    if not provider_module_path then
-      log.error("send_to_provider(): Unknown provider: " .. tostring(provider_key))
-      notify.error("Unknown provider '" .. tostring(provider_key) .. "'.")
-      state.unlock_buffer(bufnr)
-      return
-    end
-    current_provider = loader.load(provider_module_path).new(flat_params)
-  end
 
   -- Validate provider (endpoint, API key, headers) and build request body.
   -- Wrapped in pcall so any provider error unlocks the buffer cleanly.
@@ -1350,5 +1376,6 @@ end
 bridge.register("send_or_execute", M.send_or_execute)
 bridge.register("cancel_request", M.cancel_request)
 bridge.register("update_ui", M.update_ui)
+bridge.register("build_prompt_and_provider", M.build_prompt_and_provider)
 
 return M
