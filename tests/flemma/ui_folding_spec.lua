@@ -1007,9 +1007,10 @@ describe("UI Folding", function()
       assert.is_truthy(text:match("%(4 lines%)"), "Fold text should show line count")
 
       -- Verify highlight groups
-      local icon_chunk = find_chunk(chunks, "◉")
-      assert.is_not_nil(icon_chunk, "Should have icon chunk")
+      local icon_chunk = find_chunk(chunks, "⬡")
+      assert.is_not_nil(icon_chunk, "Should have tool_use icon chunk")
       assert.are.equal("FlemmaToolIcon", icon_chunk[2])
+      assert.is_nil(find_chunk(chunks, "⬢"), "tool_use should not use the tool_result icon")
 
       local title_chunk = find_chunk(chunks, "Tool Use:")
       assert.is_not_nil(title_chunk, "Should have title chunk")
@@ -1071,9 +1072,10 @@ describe("UI Folding", function()
       assert.is_truthy(text:match("%(6 lines%)"), "Fold text should show line count")
 
       -- Verify highlight groups
-      local icon_chunk = find_chunk(chunks, "◉")
-      assert.is_not_nil(icon_chunk, "Should have icon chunk")
+      local icon_chunk = find_chunk(chunks, "⬢")
+      assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
       assert.are.equal("FlemmaToolIcon", icon_chunk[2])
+      assert.is_nil(find_chunk(chunks, "⬡"), "tool_result should not use the tool_use icon")
 
       local title_chunk = find_chunk(chunks, "Tool Result:")
       assert.is_not_nil(title_chunk, "Should have title chunk")

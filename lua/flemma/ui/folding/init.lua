@@ -17,6 +17,8 @@ local query = require("flemma.ast.query")
 
 local CONTENT_PREVIEW_TRUNCATION_MARKER = "…"
 local LABEL_DETAIL_SEPARATOR = " — "
+local TOOL_USE_ICON = "⬡"
+local TOOL_RESULT_ICON = "⬢"
 
 ---@class flemma.ui.folding.FoldRule
 ---@field name string
@@ -282,7 +284,7 @@ function M.get_fold_text()
       ---@cast tool_seg flemma.ast.ToolUseSegment
       ---@type {[1]:string, [2]:string}[]
       local chunks = {
-        { "◉ ", "FlemmaToolIcon" },
+        { TOOL_USE_ICON .. " ", "FlemmaToolIcon" },
         { "Tool Use: ", "FlemmaToolUseTitle" },
       }
 
@@ -292,7 +294,7 @@ function M.get_fold_text()
       local label = structured.label
       local detail = structured.detail
 
-      local fixed_chrome = str.strwidth("◉ ")
+      local fixed_chrome = str.strwidth(TOOL_USE_ICON .. " ")
         + str.strwidth("Tool Use: ")
         + str.strwidth(tool_seg.name)
         + str.strwidth(": ")
@@ -338,12 +340,12 @@ function M.get_fold_text()
 
       ---@type {[1]:string, [2]:string}[]
       local chunks = {
-        { "◉ ", "FlemmaToolIcon" },
+        { TOOL_RESULT_ICON .. " ", "FlemmaToolIcon" },
         { "Tool Result: ", "FlemmaToolResultTitle" },
         { tool_name, "FlemmaToolName" },
       }
 
-      local fixed_chrome = str.strwidth("◉ ")
+      local fixed_chrome = str.strwidth(TOOL_RESULT_ICON .. " ")
         + str.strwidth("Tool Result: ")
         + str.strwidth(tool_name)
         + str.strwidth(": ")
