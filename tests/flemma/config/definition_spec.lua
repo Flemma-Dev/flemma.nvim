@@ -45,8 +45,8 @@ describe("config.schema.definition", function()
 
     it("materializes highlight defaults (string)", function()
       local cfg = config_facade.get()
-      assert.equals("Special", cfg.highlights.system)
-      assert.equals("Normal", cfg.highlights.user)
+      assert.equals("Special+bg:#101112", cfg.highlights.system)
+      assert.equals("Normal+bg:#202122", cfg.highlights.user)
       assert.equals("Function", cfg.highlights.tool_name)
     end)
 
@@ -54,8 +54,8 @@ describe("config.schema.definition", function()
       local cfg = config_facade.get()
       local tb = cfg.highlights.thinking_block
       assert.is_table(tb)
-      assert.equals("Comment+bg:#102020-fg:#111111", tb.dark)
-      assert.equals("Comment-bg:#102020+fg:#111111", tb.light)
+      assert.equals("Comment+bg:#000000-fg:#333333", tb.dark)
+      assert.equals("Comment-bg:#000000+fg:#333333", tb.light)
     end)
 
     it("materializes ruler defaults", function()

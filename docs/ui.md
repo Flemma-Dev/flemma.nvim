@@ -19,7 +19,7 @@ Configuration keys map to dedicated highlight groups:
 | `highlights.user_file_reference` | `@./path` fragments                                                      |
 | `highlights.thinking_tag`        | `<thinking>` / `</thinking>` tags                                        |
 | `highlights.thinking_block`      | Content inside thinking blocks                                           |
-| `highlights.tool_icon`           | `◆`/`◇` icon in tool fold text (`FlemmaToolIcon`)                        |
+| `highlights.tool_icon`           | `◉` icon in tool fold text (`FlemmaToolIcon`)                            |
 | `highlights.tool_name`           | Tool name in tool fold text (`FlemmaToolName`)                           |
 | `highlights.tool_use_title`      | `**Tool Use:**` title line (`FlemmaToolUseTitle`)                        |
 | `highlights.tool_result_title`   | `**Tool Result:**` title line (`FlemmaToolResultTitle`)                  |
@@ -186,8 +186,8 @@ The initial fold level is controlled by `editing.foldlevel` (default: `1`, which
 Collapsed folds show a preview of their content with per-segment syntax highlighting. Neovim's `foldtext` returns `{text, hl_group}` tuples so each part of the fold line uses its own highlight group. The format varies by content type:
 
 - **Messages:** `─ Role preview... (N lines)` when rulers are enabled (default), or `@Role: preview... (N lines)` otherwise – role name uses `FlemmaRole{Role}Name`, preview uses `FlemmaFoldPreview`, line count uses `FlemmaFoldMeta`, ruler char uses `FlemmaRuler`.
-- **Tool Use:** `◆ Tool Use: name: label — detail (N lines)` – icon uses `FlemmaToolIcon`, title uses `FlemmaToolUseTitle`, name uses `FlemmaToolName`, label uses `FlemmaToolLabel` (italic), detail uses `FlemmaToolDetail`, meta uses `FlemmaFoldMeta`. When the tool's `format_preview` returns a structured `{ label, detail }`, the label shows the LLM's stated intent and detail shows the raw technical summary. When only detail is available, it falls back to the previous format.
-- **Tool Result:** `◆ Tool Result: name: label — detail (N lines)` – same structure as tool use but with `FlemmaToolResultTitle`. Errors show `(error)` with `FlemmaToolResultError`.
+- **Tool Use:** `◉ Tool Use: name: label — detail (N lines)` – icon uses `FlemmaToolIcon`, title uses `FlemmaToolUseTitle`, name uses `FlemmaToolName`, label uses `FlemmaToolLabel` (italic), detail uses `FlemmaToolDetail`, meta uses `FlemmaFoldMeta`. When the tool's `format_preview` returns a structured `{ label, detail }`, the label shows the LLM's stated intent and detail shows the raw technical summary. When only detail is available, it falls back to the previous format.
+- **Tool Result:** `◉ Tool Result: name: label — detail (N lines)` – same structure as tool use but with `FlemmaToolResultTitle`. Errors show `(error)` with `FlemmaToolResultError`.
 - **Thinking blocks:** `<thinking preview...> (N lines)` – shows `<thinking redacted>` for redacted blocks, or `<thinking provider>` for blocks with a provider signature. Uses `FlemmaThinkingTag` for delimiters and `FlemmaThinkingFoldPreview` for content (fg-only, so the background comes from the line highlight extmark and correctly blends with CursorLine).
 - **Frontmatter:** ` ```language preview... ``` (N lines) ` – uses `FlemmaFoldMeta` for fences and `FlemmaFoldPreview` for content.
 

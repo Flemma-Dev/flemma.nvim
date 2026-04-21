@@ -1007,7 +1007,7 @@ describe("UI Folding", function()
       assert.is_truthy(text:match("%(4 lines%)"), "Fold text should show line count")
 
       -- Verify highlight groups
-      local icon_chunk = find_chunk(chunks, "◆")
+      local icon_chunk = find_chunk(chunks, "◉")
       assert.is_not_nil(icon_chunk, "Should have icon chunk")
       assert.are.equal("FlemmaToolIcon", icon_chunk[2])
 
@@ -1071,7 +1071,7 @@ describe("UI Folding", function()
       assert.is_truthy(text:match("%(6 lines%)"), "Fold text should show line count")
 
       -- Verify highlight groups
-      local icon_chunk = find_chunk(chunks, "◆")
+      local icon_chunk = find_chunk(chunks, "◉")
       assert.is_not_nil(icon_chunk, "Should have icon chunk")
       assert.are.equal("FlemmaToolIcon", icon_chunk[2])
 

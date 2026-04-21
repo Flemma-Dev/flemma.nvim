@@ -134,7 +134,7 @@ describe("flemma.setup", function()
     assert.are.equal("#ff0000", config.highlights.user)
 
     -- Check that default values are preserved
-    assert.are.equal("Special", config.highlights.system)
+    assert.are.equal("Special+bg:#101112", config.highlights.system)
     assert.are.equal(true, config.pricing.enabled)
   end)
 

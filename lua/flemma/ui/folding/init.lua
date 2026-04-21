@@ -282,7 +282,7 @@ function M.get_fold_text()
       ---@cast tool_seg flemma.ast.ToolUseSegment
       ---@type {[1]:string, [2]:string}[]
       local chunks = {
-        { "◆ ", "FlemmaToolIcon" },
+        { "◉ ", "FlemmaToolIcon" },
         { "Tool Use: ", "FlemmaToolUseTitle" },
       }
 
@@ -292,7 +292,7 @@ function M.get_fold_text()
       local label = structured.label
       local detail = structured.detail
 
-      local fixed_chrome = str.strwidth("◆ ")
+      local fixed_chrome = str.strwidth("◉ ")
         + str.strwidth("Tool Use: ")
         + str.strwidth(tool_seg.name)
         + str.strwidth(": ")
@@ -338,12 +338,12 @@ function M.get_fold_text()
 
       ---@type {[1]:string, [2]:string}[]
       local chunks = {
-        { "◆ ", "FlemmaToolIcon" },
+        { "◉ ", "FlemmaToolIcon" },
         { "Tool Result: ", "FlemmaToolResultTitle" },
         { tool_name, "FlemmaToolName" },
       }
 
-      local fixed_chrome = str.strwidth("◆ ")
+      local fixed_chrome = str.strwidth("◉ ")
         + str.strwidth("Tool Result: ")
         + str.strwidth(tool_name)
         + str.strwidth(": ")

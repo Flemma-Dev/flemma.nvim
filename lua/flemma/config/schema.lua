@@ -45,8 +45,8 @@ return s.object({
   }),
 
   highlights = s.object({
-    system = highlight("Special"),
-    user = highlight("Normal"),
+    system = highlight("Special+bg:#101112"),
+    user = highlight("Normal+bg:#202122"),
     assistant = highlight("Normal"),
     lua_expression = highlight("PreProc"),
     lua_code_block = highlight("PreProc"),
@@ -54,8 +54,8 @@ return s.object({
     user_file_reference = highlight("Include"),
     thinking_tag = highlight("Comment"),
     thinking_block = highlight({
-      dark = "Comment+bg:#102020-fg:#111111",
-      light = "Comment-bg:#102020+fg:#111111",
+      dark = "Comment+bg:#000000-fg:#333333",
+      light = "Comment-bg:#000000+fg:#333333",
     }),
     tool_icon = highlight("FlemmaToolUseTitle"),
     tool_name = highlight("Function"),
@@ -104,10 +104,10 @@ return s.object({
 
   line_highlights = s.object({
     enabled = s.boolean(true),
-    frontmatter = highlight({ dark = "Normal+bg:#201020", light = "Normal-bg:#201020" }),
-    system = highlight({ dark = "Normal+bg:#201000", light = "Normal-bg:#201000" }),
-    user = highlight({ dark = "Normal", light = "Normal" }),
-    assistant = highlight({ dark = "Normal+bg:#102020", light = "Normal-bg:#102020" }),
+    frontmatter = highlight({ dark = "Normal+bg:#18111a", light = "Normal-bg:#18111a" }),
+    system = highlight({ dark = "Normal+bg:#101112", light = "Normal-bg:#101112" }),
+    user = highlight({ dark = "Normal+bg:#202122", light = "Normal-bg:#202122" }),
+    assistant = highlight({ dark = "Normal", light = "Normal" }),
   }),
 
   ui = s.object({
