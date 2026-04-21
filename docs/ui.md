@@ -133,7 +133,7 @@ Turn indicators use the statuscolumn to visually group contiguous request/respon
 ```lua
 turns = {
   enabled = true,
-  padding = { left = 1, right = 0 },   -- also accepts a number (left only) or tuple {L, R}
+  padding = { left = 0, right = 1 },   -- also accepts a number (left only) or tuple {L, R}
   hl = "FlemmaTurn",                   -- links to FlemmaRuler by default
 }
 ```

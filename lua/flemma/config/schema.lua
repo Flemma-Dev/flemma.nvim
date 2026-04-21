@@ -86,8 +86,8 @@ return s.object({
     enabled = s.boolean(true),
     padding = s.union(
       s.object({
-        left = s.integer(1),
-        right = s.integer(0),
+        left = s.integer(0),
+        right = s.integer(1),
       }),
       s.integer()
     ):coerce(function(value, _ctx)

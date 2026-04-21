@@ -111,7 +111,7 @@ require("flemma").setup({
   },
   turns = {
     enabled = true,
-    padding = { left = 1, right = 0 },
+    padding = { left = 0, right = 1 },
     hl = "FlemmaTurn",
   },
   line_highlights = {
