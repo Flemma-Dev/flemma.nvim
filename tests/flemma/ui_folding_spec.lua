@@ -1121,6 +1121,79 @@ describe("UI Folding", function()
       assert.are.equal("FlemmaFoldMeta", meta_chunk[2])
     end)
 
+    it("uses fg-only role highlight for content chunks so line_hl_group bg shows through", function()
+      -- Rationale: FlemmaUser/FlemmaSystem/FlemmaAssistant link to Normal/Special/Normal
+      -- and inherit Normal's bg. Using them on fold-text chunks would stamp Normal bg
+      -- over FlemmaLineUser/System/Assistant, creating visual discontinuity across a
+      -- folded message. The fg-only FlemmaRole* variants let line_hl_group provide
+      -- a uniform tint. Mirror of the pattern used by FlemmaThinkingFoldPreview.
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "Hello, who are you?",
+        "@Assistant:",
+        "I am Claude.",
+        "@System:",
+        "You are a helpful assistant.",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      ---Collect the hl groups of every chunk except the role name and the (N lines) suffix
+      ---@param foldstart integer
+      ---@param foldend integer
+      ---@return string[]
+      local function content_hls(foldstart, foldend)
+        vim.v.foldstart = foldstart
+        vim.v.foldend = foldend
+        local chunks = folding.get_fold_text()
+        local hls = {}
+        for i, chunk in ipairs(chunks) do
+          -- Skip ruler (i==1), role name (i==2), and final (N lines) suffix
+          if i > 2 and i < #chunks then
+            table.insert(hls, chunk[2])
+          end
+        end
+        return hls
+      end
+
+      local you_hls = content_hls(1, 2)
+      assert.is_true(#you_hls > 0, "@You fold should produce content chunks")
+      for _, hl in ipairs(you_hls) do
+        assert.are_not.equal("FlemmaUser", hl, "@You content must not use FlemmaUser (brings in Normal bg)")
+      end
+      assert.is_true(
+        vim.tbl_contains(you_hls, "FlemmaRoleUser"),
+        "@You fold should use fg-only FlemmaRoleUser for content chunks"
+      )
+
+      local asst_hls = content_hls(3, 4)
+      for _, hl in ipairs(asst_hls) do
+        assert.are_not.equal("FlemmaAssistant", hl, "@Assistant content must not use FlemmaAssistant")
+      end
+      assert.is_true(
+        vim.tbl_contains(asst_hls, "FlemmaRoleAssistant"),
+        "@Assistant fold should use fg-only FlemmaRoleAssistant for content chunks"
+      )
+
+      local sys_hls = content_hls(5, 6)
+      for _, hl in ipairs(sys_hls) do
+        assert.are_not.equal("FlemmaSystem", hl, "@System content must not use FlemmaSystem")
+      end
+      assert.is_true(
+        vim.tbl_contains(sys_hls, "FlemmaRoleSystem"),
+        "@System fold should use fg-only FlemmaRoleSystem for content chunks"
+      )
+    end)
+
     it("should return chunk list for folded thinking block", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.bo[bufnr].filetype = "chat"

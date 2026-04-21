@@ -45,8 +45,8 @@ return s.object({
   }),
 
   highlights = s.object({
-    system = highlight("Special+bg:#101112"),
-    user = highlight("Normal+bg:#202122"),
+    system = highlight("Special"),
+    user = highlight("Normal"),
     assistant = highlight("Normal"),
     lua_expression = highlight("PreProc"),
     lua_code_block = highlight("PreProc"),

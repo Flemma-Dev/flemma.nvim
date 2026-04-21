@@ -389,7 +389,10 @@ function M.get_fold_text()
   if msg then
     local role_hl = roles.highlight_group("FlemmaRole", msg.role)
     local role_name_hl = role_hl .. "Name"
-    local content_hl = roles.highlight_group("Flemma", msg.role)
+    -- FlemmaRole* is fg-only (highlight.lua), so line_hl_group's tint shows through
+    -- uniformly across the fold. Using FlemmaUser/System/Assistant here would stamp
+    -- Normal's bg (via link) over FlemmaLineUser/System/Assistant, creating stripes.
+    local content_hl = role_hl
 
     -- When rulers are enabled, match the unfolded visual: ─ Role content (N lines)
     -- Otherwise fall back to the standard @Role: prefix

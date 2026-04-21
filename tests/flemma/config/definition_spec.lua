@@ -45,8 +45,8 @@ describe("config.schema.definition", function()
 
     it("materializes highlight defaults (string)", function()
       local cfg = config_facade.get()
-      assert.equals("Special+bg:#101112", cfg.highlights.system)
-      assert.equals("Normal+bg:#202122", cfg.highlights.user)
+      assert.equals("Special", cfg.highlights.system)
+      assert.equals("Normal", cfg.highlights.user)
       assert.equals("Function", cfg.highlights.tool_name)
     end)
 
