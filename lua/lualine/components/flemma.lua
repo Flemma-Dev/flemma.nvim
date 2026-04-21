@@ -5,6 +5,7 @@
 local lualine_component = require("lualine.component")
 local config_facade = require("flemma.config")
 local normalize = require("flemma.provider.normalize")
+local prefetch = require("flemma.usage.prefetch")
 local registry = require("flemma.provider.registry")
 local format = require("flemma.utilities.format")
 local session = require("flemma.session")
@@ -29,14 +30,7 @@ function flemma_component:init(options)
 
   vim.api.nvim_create_autocmd("User", {
     group = group,
-    pattern = "FlemmaBootComplete",
-    once = true,
-    callback = refresh_lualine,
-  })
-
-  vim.api.nvim_create_autocmd("User", {
-    group = group,
-    pattern = "FlemmaConfigUpdated",
+    pattern = { "FlemmaBootComplete", "FlemmaConfigUpdated", "FlemmaUsageEstimated" },
     callback = refresh_lualine,
   })
 end
@@ -142,6 +136,14 @@ local function make_resolvers(config)
       end
       local total = request:get_total_output_tokens()
       return total > 0 and str.format_tokens(total) or ""
+    end,
+
+    -- Buffer estimate
+    ["buffer.tokens.input"] = function()
+      local bufnr = vim.api.nvim_get_current_buf()
+      prefetch.start_tracking(bufnr)
+      local n = prefetch.get_tokens(bufnr)
+      return n and str.format_number(n) or ""
     end,
   }
 end

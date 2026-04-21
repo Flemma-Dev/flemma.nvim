@@ -505,6 +505,71 @@ describe("Lualine component", function()
     end)
   end)
 
+  describe("buffer.tokens.input variable", function()
+    local client = require("flemma.client")
+
+    before_each(function()
+      -- Add a @You: message so build_prompt_and_provider does not bail early.
+      local bufnr = vim.api.nvim_get_current_buf()
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@You:", "Hello" })
+      -- Reset prefetch state so prior test entries do not bleed across.
+      package.loaded["flemma.usage.prefetch"] = nil
+    end)
+
+    after_each(function()
+      client.clear_fixtures()
+      local prefetch = require("flemma.usage.prefetch")
+      prefetch._reset_for_tests()
+    end)
+
+    it("renders empty before the fetch completes", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-6", { thinking = false })
+      -- No fixture registered — fetch hasn't landed yet.
+
+      flemma_component.options = { format = "#{buffer.tokens.input}" }
+      local status = flemma_component:update_status()
+
+      assert.equals("", status)
+    end)
+
+    it("renders the formatted token count after a successful fetch", function()
+      client.register_fixture("messages/count_tokens", "tests/fixtures/anthropic/count_tokens_response.txt")
+      core.switch_provider("anthropic", "claude-sonnet-4-6", { thinking = false })
+
+      flemma_component.options = { format = "#{buffer.tokens.input}" }
+      -- First call installs tracking; wait for the fetch to populate the cache.
+      flemma_component:update_status()
+      local prefetch = require("flemma.usage.prefetch")
+      vim.wait(2000, function()
+        return prefetch.get_tokens(vim.api.nvim_get_current_buf()) ~= nil
+      end, 10)
+
+      local status = flemma_component:update_status()
+      assert.equals("5,432", status)
+    end)
+
+    it("refreshes lualine on FlemmaUsageEstimated", function()
+      local refresh_count = 0
+      package.loaded["lualine"] = {
+        refresh = function()
+          refresh_count = refresh_count + 1
+        end,
+      }
+
+      package.loaded["lualine.components.flemma"] = nil
+      flemma_component = require("lualine.components.flemma")
+      if flemma_component.init then
+        flemma_component:init({})
+      end
+
+      vim.api.nvim_exec_autocmds("User", { pattern = "FlemmaUsageEstimated" })
+      vim.api.nvim_exec_autocmds("User", { pattern = "FlemmaUsageEstimated" })
+
+      assert.are.equal(2, refresh_count)
+      package.loaded["lualine"] = nil
+    end)
+  end)
+
   describe("parameter changes via switch reflect in display", function()
     it("should reflect reasoning level from config facade", function()
       -- Start with base config: default thinking="high" applies

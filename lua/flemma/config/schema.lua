@@ -143,7 +143,9 @@ return s.object({
   }),
 
   statusline = s.object({
-    format = s.string("#{model}#{?#{thinking}, (#{thinking}),}#{?#{booting}, \u{23f3},}"),
+    format = s.string(
+      "#{model}#{?#{thinking}, (#{thinking}),}#{?#{booting}, \u{23f3},}#{?#{buffer.tokens.input}, #{buffer.tokens.input}\u{2191},}"
+    ),
   }),
 
   provider = s.string("anthropic"),

@@ -1,14 +1,12 @@
---- Tests for :Flemma usage:estimate (Anthropic adapter's try_estimate_usage)
-
-local notify = require("flemma.notify")
+--- Tests for the Anthropic adapter's try_estimate_usage callback contract.
 
 describe("anthropic.try_estimate_usage", function()
   local client = require("flemma.client")
+  local notify = require("flemma.notify")
   local flemma, anthropic
-  local captured
+  local notify_count
 
   before_each(function()
-    -- Force a fresh setup so each test starts from known defaults.
     package.loaded["flemma"] = nil
     package.loaded["flemma.commands"] = nil
     package.loaded["flemma.state"] = nil
@@ -22,9 +20,9 @@ describe("anthropic.try_estimate_usage", function()
 
     flemma.setup({ parameters = { thinking = false } })
 
-    captured = {}
+    notify_count = 0
     notify._set_impl(function(notification)
-      table.insert(captured, notification)
+      notify_count = notify_count + 1
       return notification
     end)
   end)
@@ -35,9 +33,7 @@ describe("anthropic.try_estimate_usage", function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  ---Create a chat buffer seeded with a minimal user message.
   ---@param lines? string[]
-  ---@return integer bufnr
   local function make_chat_buffer(lines)
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
@@ -45,130 +41,89 @@ describe("anthropic.try_estimate_usage", function()
     return bufnr
   end
 
-  ---Poll captured notifications for one matching the predicate.
-  ---@param predicate fun(n: flemma.notify.Notification): boolean
-  ---@return flemma.notify.Notification|nil
-  local function wait_for_notification(predicate)
+  ---@param predicate fun(result: flemma.usage.EstimateResult): boolean
+  local function wait_for_result(captured, predicate)
     vim.wait(2000, function()
-      for _, n in ipairs(captured) do
-        if predicate(n) then
-          return true
-        end
-      end
-      return false
+      return captured.result and predicate(captured.result)
     end, 10, false)
-    for _, n in ipairs(captured) do
-      if predicate(n) then
-        return n
-      end
-    end
-    return nil
+    return captured.result
   end
 
-  it("reports input tokens, cost, model, and per-MTok pricing on success", function()
+  it("delivers tokens, cache_key, and model on success", function()
     client.register_fixture("messages/count_tokens", "tests/fixtures/anthropic/count_tokens_response.txt")
     local bufnr = make_chat_buffer()
 
-    anthropic.try_estimate_usage(bufnr)
-
-    local info = wait_for_notification(function(n)
-      return n.level == vim.log.levels.INFO
+    local captured = {}
+    anthropic.try_estimate_usage(bufnr, function(result)
+      captured.result = result
     end)
 
-    assert.is_not_nil(info, "Expected an INFO notification after estimate")
-    -- claude-sonnet-4-6 pricing: input=3.0, output=15.0.
-    -- 5432 input tokens × $3/MTok ≈ $0.016296 → "$0.016".
-    local middot = "\xc2\xb7"
-    local expected = "5,432 input tokens "
-      .. middot
-      .. " $0.016 "
-      .. middot
-      .. " claude-sonnet-4-6 ($3 input / $15 output per MTok)"
-    assert.are.equal(expected, info.message)
-  end)
-
-  it("falls back to tokens-only output when model pricing is unavailable", function()
-    client.register_fixture("messages/count_tokens", "tests/fixtures/anthropic/count_tokens_response.txt")
-
-    -- Remove pricing from the current model to exercise the fallback branch.
-    -- Every registered anthropic model has pricing, so mutate a known one and
-    -- restore in the `ok,err` pcall wrapper below.
-    local registry = require("flemma.provider.registry")
-    local model_info = registry.get_model_info("anthropic", "claude-sonnet-4-6")
-    assert.is_not_nil(model_info, "Fixture model must exist")
-    local saved_pricing = model_info.pricing
-    model_info.pricing = nil
-
-    local ok, err = pcall(function()
-      local bufnr = make_chat_buffer()
-
-      anthropic.try_estimate_usage(bufnr)
-
-      local info = wait_for_notification(function(n)
-        return n.level == vim.log.levels.INFO
-      end)
-
-      assert.is_not_nil(info, "Expected an INFO notification after estimate")
-      local middot = "\xc2\xb7"
-      assert.are.equal("5,432 input tokens " .. middot .. " claude-sonnet-4-6", info.message)
+    local result = wait_for_result(captured, function(r)
+      return r.response ~= nil
     end)
 
-    model_info.pricing = saved_pricing
-
-    if not ok then
-      error(err)
-    end
+    assert.is_not_nil(result, "Expected callback to fire with a response")
+    assert.is_nil(result.err)
+    assert.is_not_nil(result.response)
+    assert.equals(5432, result.response.tokens)
+    assert.equals("claude-sonnet-4-6", result.response.model)
+    assert.equals("anthropic:claude-sonnet-4-6", result.response.cache_key)
+    assert.equals(0, notify_count, "Adapter must not call notify directly")
   end)
 
-  it("surfaces API error responses via notify.error", function()
+  it("delivers err for API error responses", function()
     client.register_fixture("messages/count_tokens", "tests/fixtures/anthropic/count_tokens_error.txt")
     local bufnr = make_chat_buffer()
 
-    anthropic.try_estimate_usage(bufnr)
-
-    local err = wait_for_notification(function(n)
-      return n.level == vim.log.levels.ERROR and n.message:find("Estimate failed", 1, true) ~= nil
+    local captured = {}
+    anthropic.try_estimate_usage(bufnr, function(result)
+      captured.result = result
     end)
 
-    assert.is_not_nil(err, "Expected an ERROR notification for API error")
-    -- Both the error type and message should be surfaced so "not_found_error",
-    -- "authentication_error", etc. make the cause legible at a glance.
-    assert.is_truthy(err.message:find("authentication_error", 1, true), "Expected error type in notification")
-    assert.is_truthy(err.message:find("invalid x%-api%-key"), "Expected error message in notification")
+    local result = wait_for_result(captured, function(r)
+      return r.err ~= nil
+    end)
+
+    assert.is_not_nil(result)
+    assert.is_nil(result.response)
+    assert.is_truthy(result.err:find("authentication_error", 1, true))
+    assert.is_truthy(result.err:find("invalid x%-api%-key"))
+    assert.equals(0, notify_count, "Adapter must not call notify directly")
   end)
 
-  it("warns when the buffer is empty", function()
+  it("delivers err for empty buffer (build failure)", function()
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
-    -- Intentionally do not register a fixture — the empty-buffer path
-    -- must short-circuit before any HTTP call would fire.
 
-    anthropic.try_estimate_usage(bufnr)
-
-    local warn = wait_for_notification(function(n)
-      return n.level == vim.log.levels.WARN
+    local captured = {}
+    anthropic.try_estimate_usage(bufnr, function(result)
+      captured.result = result
     end)
 
-    assert.is_not_nil(warn, "Expected a WARN notification for empty buffer")
-    assert.is_truthy(warn.message:find("Empty buffer", 1, true), "Expected empty-buffer warning text")
+    local result = wait_for_result(captured, function(r)
+      return r.err ~= nil
+    end)
 
-    -- No INFO notification should have been emitted.
-    for _, n in ipairs(captured) do
-      assert.are_not.equal(vim.log.levels.INFO, n.level)
-    end
+    assert.is_not_nil(result)
+    assert.is_truthy(result.err:find("Empty buffer", 1, true))
+    assert.equals(0, notify_count, "Adapter must not call notify directly")
   end)
 
-  it("surfaces an error when the response is not parseable JSON", function()
+  it("delivers err for unparseable response", function()
     client.register_fixture("messages/count_tokens", "tests/fixtures/anthropic/count_tokens_unparseable.txt")
     local bufnr = make_chat_buffer()
 
-    anthropic.try_estimate_usage(bufnr)
-
-    local err = wait_for_notification(function(n)
-      return n.level == vim.log.levels.ERROR
+    local captured = {}
+    anthropic.try_estimate_usage(bufnr, function(result)
+      captured.result = result
     end)
 
-    assert.is_not_nil(err, "Expected an ERROR notification for unparseable response")
-    assert.is_truthy(err.message:find("could not parse response", 1, true))
+    local result = wait_for_result(captured, function(r)
+      return r.err ~= nil
+    end)
+
+    assert.is_not_nil(result)
+    assert.is_truthy(result.err:find("could not parse response", 1, true))
+    assert.equals(0, notify_count)
   end)
 end)

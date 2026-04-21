@@ -9,7 +9,6 @@ local notify = require("flemma.notify")
 local normalize = require("flemma.provider.normalize")
 local s = require("flemma.schema")
 local sink = require("flemma.sink")
-local str = require("flemma.utilities.string")
 local tools_module = require("flemma.tools")
 local provider_registry = require("flemma.provider.registry")
 
@@ -757,15 +756,16 @@ function M.try_import_from_buffer(lines)
   return chat_content
 end
 
----Query Anthropic's /v1/messages/count_tokens endpoint for the current buffer
----and report input token count + estimated cost via `notify.info`. Delegates
----prompt/provider construction to `core.build_prompt_and_provider` (via the
----bridge) so the probe reflects exactly what a real `send` would produce.
+---Query Anthropic's /v1/messages/count_tokens endpoint and report the result
+---via on_result. Caller owns formatting + notifying. Builds the request body
+---via the same bridge-backed pipeline a real send would use, minus fields
+---count_tokens rejects (max_tokens, stream, temperature).
 ---@param bufnr integer
-function M.try_estimate_usage(bufnr)
+---@param on_result flemma.usage.EstimateCallback
+function M.try_estimate_usage(bufnr, on_result)
   local prompt, context, provider, _evaluated, failure = bridge.build_prompt_and_provider(bufnr)
   if failure then
-    notify.warn(failure.message)
+    on_result({ err = failure.message })
     return
   end
   ---@cast prompt flemma.pipeline.Prompt
@@ -787,7 +787,7 @@ function M.try_estimate_usage(bufnr)
           msg = msg .. "\n  [" .. d.resolver .. "] " .. d.message
         end
       end
-      notify.error(msg)
+      on_result({ err = msg })
       return
     end
     headers = provider:get_request_headers()
@@ -795,14 +795,11 @@ function M.try_estimate_usage(bufnr)
 
   local build_ok, body = pcall(provider.build_request, provider, prompt, context)
   if not build_ok then
-    notify.error("Estimate failed: " .. tostring(body))
+    on_result({ err = tostring(body) })
     return
   end
 
-  -- Strip fields not accepted by count_tokens.
-  -- Accepted: messages, model, system, tools, tool_choice, thinking,
-  -- output_config, cache_control (top-level).
-  -- Rejected: max_tokens, stream, temperature.
+  -- count_tokens rejects these fields.
   body.max_tokens = nil
   body.stream = nil
   body.temperature = nil
@@ -818,13 +815,13 @@ function M.try_estimate_usage(bufnr)
   client.send_json_request(request_opts, function(response_body, exit_code, curl_err)
     if curl_err or exit_code ~= 0 or not response_body or response_body == "" then
       local reason = curl_err or ("curl exit code " .. tostring(exit_code))
-      notify.error("Estimate failed: " .. reason)
+      on_result({ err = reason })
       return
     end
 
     local parse_ok, parsed = pcall(json.decode, response_body)
     if not parse_ok or type(parsed) ~= "table" then
-      notify.error("Estimate failed: could not parse response")
+      on_result({ err = "could not parse response" })
       return
     end
 
@@ -837,19 +834,23 @@ function M.try_estimate_usage(bufnr)
       else
         detail = err_type or err_message or "unknown error"
       end
-      notify.error("Estimate failed: " .. detail)
+      on_result({ err = detail })
       return
     end
 
     if type(parsed.input_tokens) ~= "number" then
-      notify.error("Estimate failed: missing input_tokens in response")
+      on_result({ err = "missing input_tokens in response" })
       return
     end
 
     local model = provider.parameters.model
-    local model_info = provider_registry.get_model_info("anthropic", model)
-    local pricing = model_info and model_info.pricing
-    notify.info(str.format_estimate(parsed.input_tokens, model, pricing))
+    on_result({
+      response = {
+        tokens = parsed.input_tokens,
+        cache_key = "anthropic:" .. model,
+        model = model,
+      },
+    })
   end)
 end
 

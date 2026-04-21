@@ -1,6 +1,17 @@
 --- Usage and pricing functionality for Flemma plugin
 --- Centralizes the usage bar display for request and session costs
 
+---@class flemma.usage.EstimateResponse
+---@field tokens integer
+---@field cache_key string
+---@field model string
+
+---@class flemma.usage.EstimateResult
+---@field response? flemma.usage.EstimateResponse
+---@field err? string
+
+---@alias flemma.usage.EstimateCallback fun(result: flemma.usage.EstimateResult)
+
 ---@class flemma.Usage
 local M = {}
 

@@ -33,10 +33,10 @@ The display format uses a tmux-style syntax and can be set in two places:
 The lualine option is useful when you include the component multiple times or want to keep all display config in one place. The default format is:
 
 ```
-#{model}#{?#{thinking}, (#{thinking}),}#{?#{booting}, ⏳,}
+#{model}#{?#{thinking}, (#{thinking}),}#{?#{booting}, ⏳,}#{?#{buffer.tokens.input}, #{buffer.tokens.input}↑,}
 ```
 
-Which produces `claude-sonnet-4-6 (high)` when thinking is active, `claude-sonnet-4-6 ⏳` while async tool sources are loading, or just `claude-sonnet-4-6` when idle.
+Which produces `claude-sonnet-4-6 (high)` when thinking is active, `claude-sonnet-4-6 8,670↑` when a token estimate is available, `claude-sonnet-4-6 ⏳` while async tool sources are loading, or just `claude-sonnet-4-6` when idle.
 
 #### Variables
 
@@ -67,6 +67,14 @@ Variables are lazy-evaluated — only variables referenced by the format string 
 | `#{last.cost}`          | `$0.38` | Cost of the most recent request          |
 | `#{last.tokens.input}`  | `100K`  | Input tokens of the most recent request  |
 | `#{last.tokens.output}` | `5K`    | Output tokens of the most recent request |
+
+**Current buffer** (projected for the _next_ request):
+
+| Variable                 | Example | Description                                          |
+| ------------------------ | ------- | ---------------------------------------------------- |
+| `#{buffer.tokens.input}` | `8,670` | Projected input tokens for the next request (opt-in) |
+
+The buffer estimate is **opt-in** — referencing `#{buffer.tokens.input}` in the format string is what installs the subsystem. No request fires unless the variable is in active use. Fetches are debounced 2.5 s after the user pauses editing and dispatch against the buffer's active provider. Today only the Anthropic adapter implements the underlying `try_estimate_usage` hook (the call is free and uses a separate rate limit from Messages); other providers silently render the segment empty. Failures clear the cache rather than showing a stale number.
 
 All session/request variables return empty when no requests have been made, so they work naturally with conditionals.
 

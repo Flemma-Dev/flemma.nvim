@@ -448,7 +448,8 @@ local function setup_commands()
         action = function()
           local bufnr = vim.api.nvim_get_current_buf()
           local cfg = require("flemma.config").get(bufnr)
-          local provider_module_path = require("flemma.provider.registry").get(cfg.provider)
+          local provider_registry = require("flemma.provider.registry")
+          local provider_module_path = provider_registry.get(cfg.provider)
           if not provider_module_path then
             notify.error("No provider configured. Use :Flemma switch to select one.")
             return
@@ -460,7 +461,16 @@ local function setup_commands()
             return
           end
 
-          provider_module.try_estimate_usage(bufnr)
+          provider_module.try_estimate_usage(bufnr, function(result)
+            if result.err then
+              notify.error("Estimate failed: " .. result.err)
+              return
+            end
+            local response = result.response
+            local model_info = provider_registry.get_model_info(cfg.provider, response.model)
+            local pricing = model_info and model_info.pricing
+            notify.info(string_utils.format_estimate(response.tokens, response.model, pricing))
+          end)
         end,
       },
     },

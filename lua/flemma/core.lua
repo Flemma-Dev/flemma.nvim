@@ -936,6 +936,12 @@ function M.send_to_provider(opts)
   -- Capture request start time for duration tracking (before callbacks so closures can see it)
   local request_started_at = session_module.now()
 
+  -- Populated by on_response_complete once the session entry is recorded,
+  -- then read by on_request_complete so the request:finished hook can carry
+  -- the just-recorded request in its payload.
+  ---@type flemma.session.Request|nil
+  local latest_request = nil
+
   -- Set up callbacks for the provider
   local callbacks = {
     on_error = function(msg)
@@ -1033,7 +1039,7 @@ function M.send_to_provider(opts)
           })
 
           -- Use the just-created Request for the usage bar
-          local latest_request = session:get_latest_request()
+          latest_request = session:get_latest_request()
           usage.show(bufnr, latest_request)
         end
 
@@ -1278,7 +1284,7 @@ function M.send_to_provider(opts)
           -- Hook autopilot: check if assistant response contains tool_use
           autopilot.on_response_complete(bufnr)
 
-          hooks.dispatch("request:finished", { bufnr = bufnr, status = "completed" })
+          hooks.dispatch("request:finished", { bufnr = bufnr, status = "completed", request = latest_request })
         else
           -- cURL request failed (exit code ~= 0)
           -- Buffer is already set to modifiable = true
