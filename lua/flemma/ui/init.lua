@@ -743,6 +743,12 @@ end
 ---Apply window-local settings for a chat buffer displayed in a window.
 ---Sets `conceallevel` and `concealcursor` from `editing.conceal`. A nil/false
 ---value leaves whatever the user/colorscheme has configured alone.
+---
+---Uses `scope = "local"` explicitly: `nvim_set_option_value` with only `win`
+---specified mutates BOTH window-local and global values (equivalent to
+---`:set`, not `:setlocal`). Without the scope hint we would pollute the
+---user's global `conceallevel`/`concealcursor` every time a chat buffer is
+---opened.
 ---@param winid integer Window ID
 ---@param bufnr integer Buffer displayed in the window
 function M.apply_chat_window_settings(winid, bufnr)
@@ -754,8 +760,8 @@ function M.apply_chat_window_settings(winid, bufnr)
   if not parsed then
     return
   end
-  vim.api.nvim_set_option_value("conceallevel", parsed.level, { win = winid })
-  vim.api.nvim_set_option_value("concealcursor", parsed.cursor, { win = winid })
+  vim.api.nvim_set_option_value("conceallevel", parsed.level, { win = winid, scope = "local" })
+  vim.api.nvim_set_option_value("concealcursor", parsed.cursor, { win = winid, scope = "local" })
 end
 
 ---Apply buffer-local settings for chat files, plus window-local settings for
@@ -826,6 +832,41 @@ function M.setup_chat_filetype_autocmds()
     desc = "Flemma: apply buffer+window settings on filetype=chat",
     callback = function(ev)
       apply_chat_buffer_settings(ev.buf)
+    end,
+  })
+
+  -- `conceallevel` / `concealcursor` are window-local, not buffer-local, and
+  -- Neovim copies window-local options to new windows on :split/:tabedit. That
+  -- means a sibling window opened from a chat window inherits Flemma's
+  -- conceal override even though the sibling isn't a chat buffer. When a
+  -- non-chat buffer lands in a window whose conceal values still match
+  -- Flemma's chat fingerprint, restore the global defaults so filetype-
+  -- specific ftplugins (or the user's init) decide what conceal means for
+  -- that buffer.
+  vim.api.nvim_create_autocmd("BufWinEnter", {
+    group = augroup,
+    desc = "Flemma: restore global conceal when a non-chat buffer enters a window carrying chat's conceal fingerprint",
+    callback = function(ev)
+      local bufnr = ev.buf
+      if not vim.api.nvim_buf_is_valid(bufnr) or vim.bo[bufnr].filetype == "chat" then
+        return
+      end
+      local winid = vim.fn.bufwinid(bufnr)
+      if winid == -1 then
+        return
+      end
+      local cfg = config_facade.get(bufnr)
+      local parsed = cfg and cfg.editing and parse_conceal_override(cfg.editing.conceal)
+      if not parsed then
+        return
+      end
+      local current_level = vim.api.nvim_get_option_value("conceallevel", { win = winid, scope = "local" })
+      local current_cursor = vim.api.nvim_get_option_value("concealcursor", { win = winid, scope = "local" })
+      if current_level ~= parsed.level or current_cursor ~= parsed.cursor then
+        return
+      end
+      vim.api.nvim_set_option_value("conceallevel", vim.go.conceallevel, { win = winid, scope = "local" })
+      vim.api.nvim_set_option_value("concealcursor", vim.go.concealcursor, { win = winid, scope = "local" })
     end,
   })
 

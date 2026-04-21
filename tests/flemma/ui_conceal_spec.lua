@@ -16,6 +16,7 @@ describe("UI conceal override", function()
   end)
 
   after_each(function()
+    vim.cmd("silent! only")
     vim.cmd("silent! %bdelete!")
   end)
 
@@ -106,5 +107,54 @@ describe("UI conceal override", function()
     ui.apply_chat_window_settings(winid, bufnr)
 
     assert.are.equal(3, vim.api.nvim_get_option_value("conceallevel", { win = winid }))
+  end)
+
+  it("does not leak chat conceal to a sibling window opened from a chat window", function()
+    -- Repro: open a .chat buffer, then `:vsplit` (or `:tabedit`) to open a
+    -- non-chat file. Neovim copies window-local options to the new window, so
+    -- the sibling inherits Flemma's conceallevel=2 / concealcursor="nv"
+    -- even though it's not a chat buffer. The new window should instead
+    -- carry the global conceal values, letting the non-chat filetype's own
+    -- ftplugins decide conceal behaviour.
+    flemma.setup({})
+
+    local expected_level = vim.go.conceallevel
+    local expected_cursor = vim.go.concealcursor
+
+    -- 1) Open a chat buffer; FileType autocmd applies Flemma's conceal
+    local chat_bufnr = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_set_current_buf(chat_bufnr)
+    vim.bo[chat_bufnr].filetype = "chat"
+    local chat_winid = vim.api.nvim_get_current_win()
+
+    assert.are.equal(2, vim.api.nvim_get_option_value("conceallevel", { win = chat_winid }))
+    assert.are.equal("nv", vim.api.nvim_get_option_value("concealcursor", { win = chat_winid }))
+
+    -- 2) :vsplit — Neovim creates a new window that inherits window-local
+    --    options from the chat window (this is the leak).
+    vim.cmd("vsplit")
+    local new_winid = vim.api.nvim_get_current_win()
+    assert.are_not.equal(chat_winid, new_winid)
+
+    -- 3) Load a non-chat buffer (e.g., :edit IDEAS.md after the split)
+    local md_bufnr = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_set_current_buf(md_bufnr)
+    vim.bo[md_bufnr].filetype = "markdown"
+
+    -- 4) The sibling window should NOT carry chat's conceal values
+    assert.are.equal(
+      expected_level,
+      vim.api.nvim_get_option_value("conceallevel", { win = new_winid }),
+      "sibling window must not inherit chat conceallevel"
+    )
+    assert.are.equal(
+      expected_cursor,
+      vim.api.nvim_get_option_value("concealcursor", { win = new_winid }),
+      "sibling window must not inherit chat concealcursor"
+    )
+
+    -- 5) The original chat window is untouched
+    assert.are.equal(2, vim.api.nvim_get_option_value("conceallevel", { win = chat_winid }))
+    assert.are.equal("nv", vim.api.nvim_get_option_value("concealcursor", { win = chat_winid }))
   end)
 end)
