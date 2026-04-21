@@ -1,4 +1,4 @@
-<h1><img src="https://images.weserv.nl/?url=avatars.githubusercontent.com%2Fu%2F231013899%3Fs%3D400%26v%3D4&mask=circle" width="38" height="38" valign="bottom" alt="Flemma's logo"> Flemma</h1>
+<h1><img src="https://images.weserv.nl/?url=avatars.githubusercontent.com%2Fu%2F231013899%3Fs%3D400%26v%3D4&mask=circle" width="38" height="38" align="left" valign="bottom" alt="Flemma's logo"> Flemma</h1>
 
 **An AI workspace inside Neovim where every conversation is a document you own.**
 
