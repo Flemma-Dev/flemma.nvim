@@ -154,3 +154,26 @@ require("flemma").setup({
   },
 })
 ```
+
+## nvim-treesitter-context
+
+`.chat` buffers are structurally a sequence of role-delimited messages, not one long Markdown document. [nvim-treesitter-context](https://github.com/nvim-treesitter/nvim-treesitter-context)'s sticky context window otherwise picks up stray `#` headings from earlier messages and shows misleading results. Wire Flemma's helper into your `treesitter-context` config to skip the context window on `.chat` buffers only:
+
+```lua
+require("treesitter-context").setup({
+  on_attach = require("flemma.integrations.nvim-treesitter-context").on_attach,
+})
+```
+
+If you already have an `on_attach` callback, compose with `.wrap(existing)`:
+
+```lua
+require("treesitter-context").setup({
+  on_attach = require("flemma.integrations.nvim-treesitter-context").wrap(function(bufnr)
+    -- your existing filter
+    return vim.bo[bufnr].buftype == ""
+  end),
+})
+```
+
+The helper keys off `vim.bo[bufnr].filetype == "chat"` — it has no dependency on treesitter-context itself and is inert unless you wire it up.

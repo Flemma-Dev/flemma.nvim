@@ -13,7 +13,7 @@ describe("flemma.notify", function()
 
   before_each(function()
     package.loaded["flemma.notify"] = nil
-    package.loaded["flemma.integrations.nvim_notify"] = nil
+    package.loaded["flemma.integrations.nvim-notify"] = nil
     package.loaded["notify"] = nil
     -- Block real nvim-notify from loading so detect logic defaults to default_impl.
     -- Individual backend-selection tests override this with their own preload.
@@ -32,7 +32,7 @@ describe("flemma.notify", function()
     notify._reset_impl()
     package.preload["notify"] = nil
     package.loaded["notify"] = nil
-    package.loaded["flemma.integrations.nvim_notify"] = nil
+    package.loaded["flemma.integrations.nvim-notify"] = nil
   end)
 
   describe("level methods", function()
@@ -211,7 +211,7 @@ describe("flemma.notify", function()
   describe("backend selection", function()
     it("falls back to default_impl when nvim-notify is not on the runtimepath", function()
       package.loaded["flemma.notify"] = nil
-      package.loaded["flemma.integrations.nvim_notify"] = nil
+      package.loaded["flemma.integrations.nvim-notify"] = nil
       package.loaded["notify"] = nil
       -- Prevent real nvim-notify from loading so the integration cannot be detected.
       package.preload["notify"] = function()
@@ -232,7 +232,7 @@ describe("flemma.notify", function()
 
     it("uses integration adapter when nvim-notify is on the runtimepath", function()
       package.loaded["flemma.notify"] = nil
-      package.loaded["flemma.integrations.nvim_notify"] = nil
+      package.loaded["flemma.integrations.nvim-notify"] = nil
       package.loaded["notify"] = nil
       local nvim_notify_calls = {}
       package.preload["notify"] = function()
@@ -258,7 +258,7 @@ describe("flemma.notify", function()
 
     it("integration adapter passes replace handle's _native through", function()
       package.loaded["flemma.notify"] = nil
-      package.loaded["flemma.integrations.nvim_notify"] = nil
+      package.loaded["flemma.integrations.nvim-notify"] = nil
       package.loaded["notify"] = nil
       local replace_seen
       package.preload["notify"] = function()
@@ -284,10 +284,10 @@ describe("flemma.notify", function()
       -- eager loaders) that validate every lua/flemma/**/*.lua without installing
       -- optional runtime deps. The module must survive a missing `notify` and
       -- simply not expose M.impl so flemma.notify falls back to vim.notify.
-      package.loaded["flemma.integrations.nvim_notify"] = nil
+      package.loaded["flemma.integrations.nvim-notify"] = nil
       package.loaded["notify"] = nil
       -- before_each's preload["notify"] errors, mimicking a missing plugin.
-      local ok, integration = pcall(require, "flemma.integrations.nvim_notify")
+      local ok, integration = pcall(require, "flemma.integrations.nvim-notify")
       assert.is_true(ok, "expected module to load cleanly; got error: " .. tostring(integration))
       assert.is_table(integration)
       assert.is_nil(integration.impl)
@@ -295,7 +295,7 @@ describe("flemma.notify", function()
 
     it("integration adapter survives pcall failure inside nvim-notify", function()
       package.loaded["flemma.notify"] = nil
-      package.loaded["flemma.integrations.nvim_notify"] = nil
+      package.loaded["flemma.integrations.nvim-notify"] = nil
       package.loaded["notify"] = nil
       local nvim_notify_calls = 0
       package.preload["notify"] = function()

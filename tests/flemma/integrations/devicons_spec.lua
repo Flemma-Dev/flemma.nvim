@@ -1,12 +1,12 @@
-package.loaded["flemma.integrations.devicons"] = nil
+package.loaded["flemma.integrations.nvim-web-devicons"] = nil
 
 local devicons
 
-describe("flemma.integrations.devicons", function()
+describe("flemma.integrations.nvim-web-devicons", function()
   before_each(function()
-    package.loaded["flemma.integrations.devicons"] = nil
+    package.loaded["flemma.integrations.nvim-web-devicons"] = nil
     package.loaded["nvim-web-devicons"] = nil
-    devicons = require("flemma.integrations.devicons")
+    devicons = require("flemma.integrations.nvim-web-devicons")
   end)
 
   describe("setup()", function()

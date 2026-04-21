@@ -26,7 +26,7 @@ local diagnostic_format = require("flemma.utilities.diagnostic")
 local cursor = require("flemma.cursor")
 local sandbox = require("flemma.sandbox")
 local lsp = require("flemma.lsp")
-local devicons_integration = require("flemma.integrations.devicons")
+local devicons_integration = require("flemma.integrations.nvim-web-devicons")
 
 ---Setup function to initialize the plugin
 ---@param user_opts? flemma.Config.Opts User configuration overrides (merged with defaults)

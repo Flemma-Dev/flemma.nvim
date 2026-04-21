@@ -30,7 +30,7 @@ local function ensure_impl()
   if current_impl then
     return
   end
-  local ok, integration = pcall(require, "flemma.integrations.nvim_notify")
+  local ok, integration = pcall(require, "flemma.integrations.nvim-notify")
   if ok and integration and integration.impl then
     detected_default = integration.impl
   else

@@ -41,6 +41,7 @@ Explore `lua/flemma/` to understand the codebase — module files are named desc
 - `utilities/` — stateless shared infrastructure: `json.lua`, `roles.lua`, `modeline.lua`, `truncate.lua`, `display.lua`, `registry.lua`, `buffer.lua`, `bash/`
 - `core.lua` — main orchestration (provider construction inline per-request); `state.lua` — ephemeral per-buffer state (no config or provider — those live in the config facade)
 - Production file names prefer single words; multi-word descriptive names use snake_case (`secret_tool.lua`, `coding_assistant.lua`), while established domain concepts are concatenated (`writequeue.lua`, `textobject.lua`). Test files use `_spec.lua` suffix.
+- **Integration module filenames** (`lua/flemma/integrations/*.lua`) are an exception: they mirror the plugin's repo name with any `.nvim` suffix dropped, and hyphens are preserved (e.g. `nvim-treesitter-context.lua`, `nvim-web-devicons.lua`). Internal type identifiers and public config keys are **not** renamed when a filename changes — user-facing config stays stable across internal refactors.
 - Tests live in `tests/flemma/*_spec.lua` with fixtures in `tests/fixtures/`.
 
 ## Coding Conventions

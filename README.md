@@ -284,7 +284,7 @@ Flemma is designed to be extended. Everything plugs in through clean registries:
 - **Template system** -- Lua/JSON per-file configuration, inline expressions, file includes, composable system prompts. Read more in [templates.md](docs/templates.md).
 - **Personalities** -- dynamic system prompt generators that assemble tools, environment, and project context (reads `CLAUDE.md`, `.cursorrules`, etc.). Read more in [personalities.md](docs/personalities.md).
 
-Integrations with lualine and bufferline.nvim are documented in [integrations.md](docs/integrations.md). nvim-web-devicons gets a `.chat` file icon automatically.
+Integrations with lualine, bufferline.nvim, and nvim-treesitter-context are documented in [integrations.md](docs/integrations.md). nvim-web-devicons gets a `.chat` file icon automatically.
 
 ---
 
@@ -294,7 +294,7 @@ After each response, a floating notification shows the model name, token counts,
 
 Messages fold cleanly: thinking blocks and tool calls collapse automatically so you can focus on the conversation. Press <kbd>Space</kbd> to toggle a message fold, `za` for individual blocks. Rulers separate messages visually, and line highlights give each role a subtle background tint. Everything adapts to your colour scheme.
 
-Flemma ships integrations for lualine (model and cost in the statusline) and bufferline (busy indicator on `.chat` tabs). Read more in [ui.md](docs/ui.md) and [integrations.md](docs/integrations.md).
+Flemma ships integrations for lualine (model and cost in the statusline), bufferline (busy indicator on `.chat` tabs), and nvim-treesitter-context (skip the sticky-context window on `.chat` buffers). Read more in [ui.md](docs/ui.md) and [integrations.md](docs/integrations.md).
 
 ---
 
