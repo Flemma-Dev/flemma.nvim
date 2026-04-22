@@ -143,7 +143,7 @@ Launch a sub-agent to search `contrib/pi-mono.git` for how Pi maps thinking/reas
 Cross-reference the Pi findings with provider docs:
 
 - **OpenAI**: Check the reasoning effort docs for each model family — which values (`minimal`, `low`, `medium`, `high`, `xhigh`) each model accepts. Map Flemma levels to valid API values, clamping unsupported ones to the nearest valid value.
-- **Anthropic**: Models with adaptive thinking (`thinking.type = "adaptive"`) need a map + `supports_adaptive_thinking = true`. Check which effort levels each model accepts (e.g., `max` may be restricted to certain models). Models using only budget-based thinking do not need a map.
+- **Anthropic**: Models with adaptive thinking (`thinking.type = "adaptive"`) need a map + `meta = { adaptive_thinking = true }`. Check which effort levels each model accepts (e.g., `max` may be restricted to certain models). Models using only budget-based thinking do not need a map.
 - **Vertex**: Gemini models using `thinkingLevel` (discrete enum like `MINIMAL`, `LOW`, `MEDIUM`, `HIGH`) need a map. Check which enum values each model family supports — some may lack `MINIMAL` or `MEDIUM`. Budget-based models (`thinkingBudget`) do not need a map.
 
 #### Rules
@@ -163,7 +163,7 @@ Cross-reference the Pi findings with provider docs:
 
 ### OpenAI reasoning effort
 
-Models with `supports_reasoning_effort = true`:
+Models with `meta = { reasoning_effort = true }`:
 - All gpt-5.x models (except gpt-5-pro variants)
 - o1, o3, o3-mini, o4-mini, o4-mini-deep-research, o3-deep-research
 

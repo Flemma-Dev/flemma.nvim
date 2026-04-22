@@ -46,9 +46,10 @@ local function resolve_thinking(config)
   end
 
   -- For effort-based providers (OpenAI), check per-model reasoning support
+  -- via meta.reasoning_effort on the model info.
   if capabilities.supports_reasoning and config.model then
     local model_info = registry.get_model_info(config.provider, config.model)
-    if not model_info or not model_info.supports_reasoning_effort then
+    if not model_info or not (model_info.meta and model_info.meta.reasoning_effort) then
       return ""
     end
   end

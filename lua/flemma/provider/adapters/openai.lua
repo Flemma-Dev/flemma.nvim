@@ -626,10 +626,10 @@ function M.validate_parameters(model_name, parameters)
     end
   end
 
-  -- Check for reasoning parameter support
+  -- Check for reasoning parameter support (flagged via meta.reasoning_effort)
   if reasoning_value ~= nil and reasoning_value ~= "" then
     local model_info = provider_registry.get_model_info("openai", model_name)
-    local supports_reasoning_effort = model_info and model_info.supports_reasoning_effort == true
+    local supports_reasoning_effort = model_info and model_info.meta and model_info.meta.reasoning_effort == true
 
     if not supports_reasoning_effort then
       table.insert(

@@ -14,7 +14,7 @@ return {
       },
       max_input_tokens = 922000,
       max_output_tokens = 128000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
     },
     ["gpt-5.4-2026-03-05"] = {
@@ -25,7 +25,7 @@ return {
       },
       max_input_tokens = 922000,
       max_output_tokens = 128000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
     },
     ["gpt-5.4-pro"] = {
@@ -45,7 +45,7 @@ return {
       },
       max_input_tokens = 272000,
       max_output_tokens = 128000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
     },
     ["gpt-5.4-nano"] = {
@@ -56,7 +56,7 @@ return {
       },
       max_input_tokens = 272000,
       max_output_tokens = 128000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
     },
 
@@ -69,7 +69,7 @@ return {
       },
       max_input_tokens = 272000,
       max_output_tokens = 128000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
     },
     ["gpt-5.3-codex"] = {
@@ -80,7 +80,7 @@ return {
       },
       max_input_tokens = 272000,
       max_output_tokens = 128000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
     },
     ["gpt-5.3-codex-spark"] = {
@@ -91,7 +91,7 @@ return {
       },
       max_input_tokens = 100000,
       max_output_tokens = 32000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
     },
 
@@ -104,7 +104,7 @@ return {
       },
       max_input_tokens = 272000,
       max_output_tokens = 128000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
     },
     ["gpt-5.2-chat-latest"] = {
@@ -115,7 +115,7 @@ return {
       },
       max_input_tokens = 128000,
       max_output_tokens = 16384,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
     },
     ["gpt-5.2-codex"] = {
@@ -126,7 +126,7 @@ return {
       },
       max_input_tokens = 272000,
       max_output_tokens = 128000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
     },
     ["gpt-5.2-pro"] = {
@@ -148,7 +148,7 @@ return {
       },
       max_input_tokens = 272000,
       max_output_tokens = 128000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
     ["gpt-5.1-chat-latest"] = {
@@ -159,7 +159,7 @@ return {
       },
       max_input_tokens = 128000,
       max_output_tokens = 16384,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
     ["gpt-5.1-codex"] = {
@@ -170,7 +170,7 @@ return {
       },
       max_input_tokens = 272000,
       max_output_tokens = 128000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
     ["gpt-5.1-codex-max"] = {
@@ -181,7 +181,7 @@ return {
       },
       max_input_tokens = 272000,
       max_output_tokens = 128000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
     ["gpt-5.1-codex-mini"] = {
@@ -192,7 +192,7 @@ return {
       },
       max_input_tokens = 272000,
       max_output_tokens = 128000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
 
@@ -205,7 +205,7 @@ return {
       },
       max_input_tokens = 272000,
       max_output_tokens = 128000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "minimal", low = "low", medium = "medium", high = "high", max = "high" },
     },
     ["gpt-5-chat-latest"] = {
@@ -216,7 +216,7 @@ return {
       },
       max_input_tokens = 272000,
       max_output_tokens = 128000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "minimal", low = "low", medium = "medium", high = "high", max = "high" },
     },
     ["gpt-5-codex"] = {
@@ -227,7 +227,7 @@ return {
       },
       max_input_tokens = 272000,
       max_output_tokens = 128000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "minimal", low = "low", medium = "medium", high = "high", max = "high" },
     },
     ["gpt-5-mini"] = {
@@ -238,7 +238,7 @@ return {
       },
       max_input_tokens = 272000,
       max_output_tokens = 128000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "minimal", low = "low", medium = "medium", high = "high", max = "high" },
     },
     ["gpt-5-nano"] = {
@@ -249,7 +249,7 @@ return {
       },
       max_input_tokens = 272000,
       max_output_tokens = 128000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "minimal", low = "low", medium = "medium", high = "high", max = "high" },
     },
     ["gpt-5-pro"] = {
@@ -392,7 +392,7 @@ return {
       },
       max_input_tokens = 200000,
       max_output_tokens = 100000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
     ["o1-pro"] = {
@@ -412,7 +412,7 @@ return {
       },
       max_input_tokens = 200000,
       max_output_tokens = 100000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
     ["o3-pro"] = {
@@ -432,7 +432,7 @@ return {
       },
       max_input_tokens = 200000,
       max_output_tokens = 100000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
     ["o3-mini"] = {
@@ -443,7 +443,7 @@ return {
       },
       max_input_tokens = 200000,
       max_output_tokens = 100000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
     ["o4-mini"] = {
@@ -454,7 +454,7 @@ return {
       },
       max_input_tokens = 200000,
       max_output_tokens = 100000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
     ["o4-mini-deep-research"] = {
@@ -465,7 +465,7 @@ return {
       },
       max_input_tokens = 200000,
       max_output_tokens = 100000,
-      supports_reasoning_effort = true,
+      meta = { reasoning_effort = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
 
