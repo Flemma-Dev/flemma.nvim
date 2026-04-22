@@ -41,8 +41,8 @@ local M = {}
 ---@field pricing flemma.models.Pricing
 ---@field min_cache_tokens? integer Minimum tokens for cache prefix to be accepted (informational)
 --- Token limits
----@field max_input_tokens? integer Maximum context window size (input tokens)
----@field max_output_tokens? integer Maximum tokens the model can generate in a single response
+---@field max_input_tokens integer Maximum context window size (input tokens)
+---@field max_output_tokens integer Maximum tokens the model can generate in a single response
 ---@field min_output_tokens? integer Minimum max_tokens the API accepts for this model
 --- Thinking / reasoning
 ---@field thinking_budgets? flemma.models.ThinkingBudgets Per-model token budgets for each thinking level
