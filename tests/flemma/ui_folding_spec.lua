@@ -2073,6 +2073,172 @@ describe("UI Folding", function()
     end)
   end)
 
+  describe("fold re-close after undo/redo", function()
+    -- KNOWN ISSUE (unfixed): when a user edits lines overlapping a folded
+    -- region and then undoes, Neovim reopens the fold — its open/closed
+    -- state cannot survive structural edits to the boundary lines. The
+    -- auto_closed_folds tracker then blocks the re-close because the fold
+    -- ID is still marked as "already closed once" for this buffer session.
+    --
+    -- A naive "clear tracker on undo/redo" fix was explored and rejected:
+    -- the tracker exists specifically to remember user `zo` intent, and
+    -- clearing it causes ALL user-opened folds to snap shut on the next
+    -- CursorHold — worse than the original bug. A correct fix needs to
+    -- distinguish "Neovim reopened this specific fold because undo touched
+    -- its boundary" from "user opened this with zo earlier." Neovim offers
+    -- no FoldToggled autocmd, so the distinction requires either diffing
+    -- per-fold state across the undo, or tracking user-open intent via
+    -- keymap overrides on zo/zc/zO/zM/zR/etc. Both are larger changes.
+    --
+    -- These tests document the desired behavior and are marked `pending`
+    -- until the proper fix lands.
+
+    local function skip_until_fix()
+      pending("requires per-fold user-intent tracking; see describe block comment")
+      return true
+    end
+
+    it("should re-close a fold that was reopened by undo", function()
+      if skip_until_fix() then
+        return
+      end
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "Hello",
+        "",
+        "@Assistant:",
+        "answer",
+        "",
+        '<thinking vertex:signature="sig2">',
+        "</thinking>",
+        "",
+        "@You:",
+        "follow",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      folding.setup_folding()
+      vim.wo.foldlevel = 99
+      vim.bo[bufnr].undolevels = 1000
+
+      -- Baseline: thinking fold at line 7 auto-closes.
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(7, vim.fn.foldclosed(7), "Thinking fold should be closed initially")
+
+      -- Destructive edit inside the fold: dd the <thinking> open line.
+      -- Neovim reopens the fold because its boundary was touched.
+      vim.api.nvim_win_set_cursor(0, { 7, 0 })
+      vim.cmd("normal! dd")
+      vim.cmd("silent! undo")
+      assert.are.equal(-1, vim.fn.foldclosed(7), "Neovim reopens fold after undo (precondition)")
+
+      -- fold_completed_blocks must re-close: the tracker should have been
+      -- cleared once undo regression was detected.
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(7, vim.fn.foldclosed(7), "Thinking fold should be re-closed after undo")
+    end)
+
+    it("should re-close a fold that was reopened by redo", function()
+      if skip_until_fix() then
+        return
+      end
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "Hello",
+        "",
+        "@Assistant:",
+        "answer",
+        "",
+        '<thinking vertex:signature="sig2">',
+        "</thinking>",
+        "",
+        "@You:",
+        "follow",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      folding.setup_folding()
+      vim.wo.foldlevel = 99
+      vim.bo[bufnr].undolevels = 1000
+
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(7, vim.fn.foldclosed(7), "Thinking fold should be closed initially")
+
+      -- Make an edit that Neovim can redo.
+      vim.api.nvim_win_set_cursor(0, { 7, 0 })
+      vim.cmd("normal! dd")
+      -- After dd the fold is gone; re-close it via the fix path first.
+      folding.fold_completed_blocks(bufnr)
+      vim.cmd("silent! undo")
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(7, vim.fn.foldclosed(7), "Sanity: fold re-closed after undo")
+
+      -- Now redo — fold gets reopened again.
+      vim.cmd("silent! redo")
+      vim.cmd("silent! undo")
+      assert.are.equal(-1, vim.fn.foldclosed(7), "Undo after redo reopens the fold (precondition)")
+
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(7, vim.fn.foldclosed(7), "Thinking fold should be re-closed after redo path")
+    end)
+
+    it("should not clear the tracker on a normal forward edit", function()
+      -- Guard: on normal typing, the tracker must persist so that a
+      -- user-opened fold (via zo) is NOT re-closed on the next pass.
+      local state = require("flemma.state")
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "Hello",
+        "",
+        "@Assistant:",
+        "answer",
+        "",
+        '<thinking vertex:signature="sig2">',
+        "</thinking>",
+        "",
+        "@You:",
+        "follow",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      folding.setup_folding()
+      vim.wo.foldlevel = 99
+      vim.bo[bufnr].undolevels = 1000
+
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(7, vim.fn.foldclosed(7), "Fold should be closed initially")
+
+      -- User opens the fold, then types far away. Tracker must NOT clear.
+      vim.cmd("7 foldopen")
+      vim.api.nvim_win_set_cursor(0, { 11, 7 })
+      vim.cmd("normal! aabc")
+
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(-1, vim.fn.foldclosed(7), "Fold should remain user-opened across forward edits")
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      assert.is_truthy(
+        buffer_state.auto_closed_folds and buffer_state.auto_closed_folds["thinking:2"],
+        "Tracker must retain the fold ID across forward edits"
+      )
+    end)
+  end)
+
   describe("toggle_message_fold", function()
     it("should close the message fold when cursor is inside an open message", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
