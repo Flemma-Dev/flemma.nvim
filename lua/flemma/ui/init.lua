@@ -1065,8 +1065,21 @@ function M.add_tool_previews(bufnr, doc)
 
             if line_idx >= 0 and line_idx < line_count then
               local preview_text = preview.format_tool_preview(tool_use.name, tool_use.input, max_length)
+              -- `line_hl_group` on the covering range extmark does not propagate to
+              -- virt_lines, so the role's line bg would stop at the virt_line and
+              -- reappear on the next buffer line — a visible stripe against tinted
+              -- backgrounds. Paint the bg manually: combine FlemmaToolPreview fg
+              -- with the role's line bg on the text chunk, then pad to the text
+              -- area width so the bg extends like a real line_hl_group would.
+              local role_hl = roles.highlight_group("FlemmaLine", msg.role)
+              local pad_width = math.max(0, max_length - str.strwidth(preview_text))
+              ---@type {[1]:string, [2]:string|string[]}[]
+              local chunks = { { preview_text, { "FlemmaToolPreview", role_hl } } }
+              if pad_width > 0 then
+                table.insert(chunks, { string.rep(" ", pad_width), role_hl })
+              end
               vim.api.nvim_buf_set_extmark(bufnr, tool_preview_ns, line_idx, 0, {
-                virt_lines = { { { preview_text, "FlemmaToolPreview" } } },
+                virt_lines = { chunks },
               })
             end
           end

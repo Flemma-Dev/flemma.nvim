@@ -238,5 +238,37 @@ describe("UI Tool Previews", function()
       local anchor_line = vim.api.nvim_buf_get_lines(bufnr, anchor_row, anchor_row + 1, false)[1]
       assert.are.equal("**Tool Result:** `tool_123` (pending)", anchor_line)
     end)
+
+    it("paints role line bg across the virt_line text and padding", function()
+      -- line_hl_group on the covering @You range extmark does not propagate to
+      -- virt_lines, so without explicit bg chunks the preview row would show
+      -- Normal bg and create a visible stripe against tinted role backgrounds.
+      -- The fix combines FlemmaToolPreview fg with FlemmaLineUser bg on the
+      -- text chunk, then pads to the text area width with FlemmaLineUser so the
+      -- role bg extends like a real line_hl_group would.
+      local bufnr = setup_buffer({ status = "pending" })
+      local doc = parser.get_parsed_document(bufnr)
+
+      ui.add_tool_previews(bufnr, doc)
+
+      local marks = get_preview_extmarks(bufnr)
+      assert.are.equal(1, #marks)
+
+      local chunks = marks[1][4].virt_lines[1]
+      assert.is_truthy(#chunks >= 1, "expected at least the text chunk")
+
+      -- Text chunk: combined [FlemmaToolPreview, FlemmaLineUser] so fg comes
+      -- from the preview group and bg from the role's line highlight.
+      local text_hl = chunks[1][2]
+      assert.same({ "FlemmaToolPreview", "FlemmaLineUser" }, text_hl)
+
+      -- Padding chunk (when the preview is shorter than the text area): spaces
+      -- highlighted with FlemmaLineUser alone to extend the role bg to the
+      -- right edge.
+      if #chunks > 1 then
+        assert.are.equal("FlemmaLineUser", chunks[2][2])
+        assert.is_truthy(chunks[2][1]:match("^ +$"), "padding chunk should be spaces only")
+      end
+    end)
   end)
 end)
