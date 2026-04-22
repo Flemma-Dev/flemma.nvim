@@ -92,7 +92,8 @@ function M.resolve_max_tokens(provider_name, model_name, parameters)
       local model_info = registry.get_model_info(provider_name, model_name)
       if model_info and model_info.max_output_tokens then
         local resolved = math.floor(model_info.max_output_tokens * pct / 100)
-        parameters.max_tokens = math.max(resolved, MIN_MAX_TOKENS)
+        local floor = math.max(MIN_MAX_TOKENS, model_info.min_output_tokens or 0)
+        parameters.max_tokens = math.max(resolved, floor)
         log.debug(
           "resolve_max_tokens(): "
             .. value
@@ -126,11 +127,16 @@ function M.resolve_max_tokens(provider_name, model_name, parameters)
 
   if type(value) == "number" then
     local model_info = registry.get_model_info(provider_name, model_name)
-    if model_info and model_info.max_output_tokens and value > model_info.max_output_tokens then
-      notify.warn(
-        string.format("max_tokens %d exceeds %s limit (%d), clamping.", value, model_name, model_info.max_output_tokens)
-      )
-      parameters.max_tokens = model_info.max_output_tokens
+    if model_info then
+      local max = model_info.max_output_tokens
+      local min = model_info.min_output_tokens
+      if max and value > max then
+        notify.warn(string.format("max_tokens %d exceeds %s limit (%d), clamping.", value, model_name, max))
+        parameters.max_tokens = max
+      elseif min and value < min then
+        notify.warn(string.format("max_tokens %d below %s minimum (%d), raising.", value, model_name, min))
+        parameters.max_tokens = min
+      end
     end
   end
 end
