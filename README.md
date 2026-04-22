@@ -124,7 +124,7 @@ Four built-in providers. Switch at any time -- even mid-conversation:
 | **Anthropic** | `claude-sonnet-4-6`      |
 | **OpenAI**    | `gpt-5.4`                |
 | **Vertex AI** | `gemini-3.1-pro-preview` |
-| **Moonshot**  | `kimi-k2.5`              |
+| **Moonshot**  | `kimi-k2.6`              |
 
 All four support extended thinking/reasoning through a single `thinking` parameter that Flemma maps to each provider's native format. Set `thinking = "high"` once and it works everywhere -- see the [full mapping table](docs/configuration.md#thinking-parameter-mapping) in configuration.md. Prompt caching is handled automatically -- read more in [prompt-caching.md](docs/prompt-caching.md).
 

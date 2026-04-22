@@ -69,9 +69,9 @@ develop:
 			model = \"\$$haiku\",														\
 			parameters = { thinking = \"minimal\" },									\
 			presets = {																	\
-				[\"\$$gpt\"] = \"openai gpt-5.4\",										\
+				[\"\$$gpt\"] = \"openai gpt-5.4-mini\",									\
 				[\"\$$haiku\"] = \"anthropic claude-haiku-4-5\",						\
-				[\"\$$kimi\"] = \"moonshot kimi-k2.5\",									\
+				[\"\$$kimi\"] = \"moonshot kimi-k2.6\",									\
 			},																			\
 			diagnostics = { enabled = true },											\
 			logging = { enabled = true, level = \"TRACE\" },							\
