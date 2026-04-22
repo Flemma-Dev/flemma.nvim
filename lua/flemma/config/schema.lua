@@ -143,8 +143,15 @@ return s.object({
   }),
 
   statusline = s.object({
-    format = s.string(
-      "#{model}#{?#{thinking}, (#{thinking}),}#{?#{booting}, \u{23f3},}#{?#{buffer.tokens.input}, #{buffer.tokens.input}\u{2191},}"
+    format = s.union(
+      s.string(),
+      s.list(s.string(), {
+        "#{model}",
+        "#{?#{thinking}, (#{thinking}),}",
+        "#{?#{session.cost}, %#FlemmaStatusTextMuted#\u{2571}%* \u{03a3}#{session.requests} #{session.cost},}",
+        "#{?#{buffer.tokens.input}, %#FlemmaStatusTextMuted#\u{2571}%* #{buffer.tokens.input}\u{2191},}",
+        "#{?#{booting}, %#FlemmaStatusTextMuted#\u{23f3}%*,}",
+      })
     ),
   }),
 

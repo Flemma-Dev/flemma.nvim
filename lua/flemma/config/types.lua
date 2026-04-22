@@ -129,7 +129,7 @@
 ---@field gcloud flemma.config.SecretsGcloud
 
 ---@class flemma.config.Statusline
----@field format string
+---@field format string|string[]
 
 ---@class flemma.config.Templating
 ---@field modules string[]

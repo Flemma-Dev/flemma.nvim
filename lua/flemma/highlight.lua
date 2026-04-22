@@ -528,6 +528,25 @@ M.apply_syntax = function()
     vim.api.nvim_set_hl(0, "FlemmaProgressBar", { link = "StatusLine", default = true })
   end
 
+  -- FlemmaStatusTextMuted: theme-neutral dim variant of StatusLine.
+  -- Keeps StatusLine's bg so %#FlemmaStatusTextMuted# embedded in a raw vim
+  -- statusline preserves background continuity; blends fg toward black (dark
+  -- bg) or white (light bg) at the same strength as FlemmaUsageBarMuted.
+  -- NOTE: This group's bg is StatusLine.bg, which is correct for raw statusline
+  -- use only. When rendered via lualine, section tints (lualine_c_normal etc.)
+  -- differ from StatusLine, so the lualine component rewrites occurrences to
+  -- FlemmaStatusTextMuted2 at render time — see lua/lualine/components/flemma.lua.
+  local is_dark_bg = vim.o.background == "dark"
+  local muted_expr = "StatusLine" .. (is_dark_bg and "-fg:#666666" or "+fg:#666666")
+  local muted_resolved = parse_highlight_expression(muted_expr)
+  local statusline_bg_hex = get_hl_color("StatusLine", "bg")
+  if muted_resolved and muted_resolved.fg and statusline_bg_hex then
+    vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted", { bg = statusline_bg_hex, fg = muted_resolved.fg, default = true })
+  else
+    -- Fallback when StatusLine is incomplete: link to Comment
+    vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted", { link = "Comment", default = true })
+  end
+
   -- Create CursorLine blend variants after all base groups are defined
   setup_cursorline_highlights()
 end

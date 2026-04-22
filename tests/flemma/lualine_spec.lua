@@ -231,6 +231,22 @@ describe("Lualine component", function()
       -- Assert
       assert.are.equal("A: claude-sonnet-4-5", status)
     end)
+
+    it("should concatenate list format entries", function()
+      -- Arrange: provide format as a list of pieces (concat with "")
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+      local config_facade = require("flemma.config")
+      config_facade.apply(
+        config_facade.LAYERS.RUNTIME,
+        { statusline = { format = { "#{provider}", ":", "#{model}" } } }
+      )
+
+      -- Act
+      local status = flemma_component:update_status()
+
+      -- Assert
+      assert.are.equal("anthropic:claude-sonnet-4-5", status)
+    end)
   end)
 
   describe("session variables", function()
@@ -567,6 +583,202 @@ describe("Lualine component", function()
 
       assert.are.equal(2, refresh_count)
       package.loaded["lualine"] = nil
+    end)
+  end)
+
+  describe("%* rewrite for lualine section default", function()
+    after_each(function()
+      flemma_component.options = nil
+      flemma_component.get_default_hl = nil
+    end)
+
+    it("should rewrite %* to section default hl when rendered via lualine", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+      flemma_component.options = { format = "pre%*post" }
+      flemma_component.get_default_hl = function()
+        return "%#lualine_c_normal#"
+      end
+
+      local status = flemma_component:update_status()
+
+      assert.are.equal("pre%#lualine_c_normal#post", status)
+    end)
+
+    it("should leave %* untouched when get_default_hl is absent (raw statusline)", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+      flemma_component.options = { format = "pre%*post" }
+
+      local status = flemma_component:update_status()
+
+      assert.are.equal("pre%*post", status)
+    end)
+
+    it("should rewrite multiple %* occurrences", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+      flemma_component.options = { format = "%*a%*b%*" }
+      flemma_component.get_default_hl = function()
+        return "%#X#"
+      end
+
+      local status = flemma_component:update_status()
+
+      assert.are.equal("%#X#a%#X#b%#X#", status)
+    end)
+
+    it("should leave %* untouched when get_default_hl returns empty string", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+      flemma_component.options = { format = "pre%*post" }
+      flemma_component.get_default_hl = function()
+        return ""
+      end
+
+      local status = flemma_component:update_status()
+
+      assert.are.equal("pre%*post", status)
+    end)
+  end)
+
+  describe("FlemmaStatusTextMuted rewrite for lualine section bg", function()
+    after_each(function()
+      flemma_component.options = nil
+      flemma_component.get_default_hl = nil
+      flemma_component._muted_section_bg = nil
+      flemma_component._muted_fg = nil
+      vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted", {})
+      vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted2", {})
+      vim.api.nvim_set_hl(0, "lualine_c_normal", {})
+    end)
+
+    it("should rewrite %#FlemmaStatusTextMuted# to render group with section bg", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+      vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted", { bg = 0x202020, fg = 0x9c9c9c })
+      vim.api.nvim_set_hl(0, "lualine_c_normal", { bg = 0x303040, fg = 0xe0e0e0 })
+      flemma_component.options = { format = "pre%#FlemmaStatusTextMuted#post" }
+      flemma_component.get_default_hl = function()
+        return "%#lualine_c_normal#"
+      end
+
+      local status = flemma_component:update_status()
+
+      assert.are.equal("pre%#FlemmaStatusTextMuted2#post", status)
+      local render_hl = vim.api.nvim_get_hl(0, { name = "FlemmaStatusTextMuted2", link = false })
+      assert.are.equal(0x303040, render_hl.bg)
+      assert.are.equal(0x9c9c9c, render_hl.fg)
+    end)
+
+    it("should leave %#FlemmaStatusTextMuted# untouched when get_default_hl is absent", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+      vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted", { bg = 0x202020, fg = 0x9c9c9c })
+      flemma_component.options = { format = "pre%#FlemmaStatusTextMuted#post" }
+
+      local status = flemma_component:update_status()
+
+      assert.are.equal("pre%#FlemmaStatusTextMuted#post", status)
+    end)
+
+    it("should not touch FlemmaStatusTextMuted2 when the escape is absent from the format", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+      vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted", { bg = 0x202020, fg = 0x9c9c9c })
+      vim.api.nvim_set_hl(0, "lualine_c_normal", { bg = 0x303040, fg = 0xe0e0e0 })
+      -- Pre-set FlemmaStatusTextMuted2 to a sentinel; the gate should leave it alone.
+      vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted2", { bg = 0xaabbcc, fg = 0x112233 })
+      flemma_component.options = { format = "#{model}" }
+      flemma_component.get_default_hl = function()
+        return "%#lualine_c_normal#"
+      end
+
+      flemma_component:update_status()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaStatusTextMuted2", link = false })
+      assert.are.equal(0xaabbcc, hl.bg)
+      assert.are.equal(0x112233, hl.fg)
+    end)
+
+    it("should skip rewrite when default_hl is not a lualine_ escape", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+      vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted", { bg = 0x202020, fg = 0x9c9c9c })
+      flemma_component.options = { format = "pre%#FlemmaStatusTextMuted#post" }
+      flemma_component.get_default_hl = function()
+        return "%#StatusLine#"
+      end
+
+      local status = flemma_component:update_status()
+
+      assert.are.equal("pre%#FlemmaStatusTextMuted#post", status)
+    end)
+
+    it("should skip rewrite when section hl lacks bg", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+      vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted", { bg = 0x202020, fg = 0x9c9c9c })
+      vim.api.nvim_set_hl(0, "lualine_c_normal", { fg = 0xe0e0e0 })
+      flemma_component.options = { format = "pre%#FlemmaStatusTextMuted#post" }
+      flemma_component.get_default_hl = function()
+        return "%#lualine_c_normal#"
+      end
+
+      local status = flemma_component:update_status()
+
+      assert.are.equal("pre%#FlemmaStatusTextMuted#post", status)
+    end)
+
+    it("should not re-set FlemmaStatusTextMuted2 when inputs are unchanged", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+      vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted", { bg = 0x202020, fg = 0x9c9c9c })
+      vim.api.nvim_set_hl(0, "lualine_c_normal", { bg = 0x303040, fg = 0xe0e0e0 })
+      flemma_component.options = { format = "%#FlemmaStatusTextMuted#" }
+      flemma_component.get_default_hl = function()
+        return "%#lualine_c_normal#"
+      end
+
+      -- First call populates the cache and sets FlemmaStatusTextMuted2
+      flemma_component:update_status()
+      assert.are.equal(0x303040, vim.api.nvim_get_hl(0, { name = "FlemmaStatusTextMuted2", link = false }).bg)
+
+      -- Tamper with the render group to detect whether the next call rewrites it.
+      -- If the cache is working, identical inputs short-circuit nvim_set_hl and
+      -- the tampered values survive.
+      vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted2", { bg = 0xaabbcc, fg = 0x112233 })
+      flemma_component:update_status()
+
+      local hl = vim.api.nvim_get_hl(0, { name = "FlemmaStatusTextMuted2", link = false })
+      assert.are.equal(0xaabbcc, hl.bg)
+      assert.are.equal(0x112233, hl.fg)
+    end)
+
+    it("should re-set FlemmaStatusTextMuted2 when section bg changes (mode switch)", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+      vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted", { bg = 0x202020, fg = 0x9c9c9c })
+      vim.api.nvim_set_hl(0, "lualine_c_normal", { bg = 0x303040, fg = 0xe0e0e0 })
+      flemma_component.options = { format = "%#FlemmaStatusTextMuted#" }
+      flemma_component.get_default_hl = function()
+        return "%#lualine_c_normal#"
+      end
+
+      flemma_component:update_status()
+
+      -- Simulate mode change: section bg shifts to a different value
+      vim.api.nvim_set_hl(0, "lualine_c_normal", { bg = 0x404050, fg = 0xe0e0e0 })
+      flemma_component:update_status()
+
+      assert.are.equal(0x404050, vim.api.nvim_get_hl(0, { name = "FlemmaStatusTextMuted2", link = false }).bg)
+    end)
+
+    it("should re-set FlemmaStatusTextMuted2 when muted fg changes (colorscheme)", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+      vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted", { bg = 0x202020, fg = 0x9c9c9c })
+      vim.api.nvim_set_hl(0, "lualine_c_normal", { bg = 0x303040, fg = 0xe0e0e0 })
+      flemma_component.options = { format = "%#FlemmaStatusTextMuted#" }
+      flemma_component.get_default_hl = function()
+        return "%#lualine_c_normal#"
+      end
+
+      flemma_component:update_status()
+
+      -- Simulate colorscheme change: muted fg shifts
+      vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted", { bg = 0x202020, fg = 0x7a7a7a })
+      flemma_component:update_status()
+
+      assert.are.equal(0x7a7a7a, vim.api.nvim_get_hl(0, { name = "FlemmaStatusTextMuted2", link = false }).fg)
     end)
   end)
 

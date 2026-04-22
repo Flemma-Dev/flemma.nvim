@@ -186,8 +186,65 @@ function flemma_component:update_status()
   end
 
   local fmt = (self.options and self.options.format) or config.statusline.format
+  if type(fmt) == "table" then
+    fmt = table.concat(fmt, "")
+  end
 
-  return format.expand(fmt, build_vars(config))
+  local status = format.expand(fmt, build_vars(config))
+
+  -- When rendered via lualine, rewrite escapes so they anchor to the active
+  -- section hl (which differs from StatusLine when lualine tints sections):
+  --
+  --   %*                       → section's default hl (restores section tint)
+  --   %#FlemmaStatusTextMuted# → %#FlemmaStatusTextMuted2#, a render-time
+  --                              group combining the section's bg with
+  --                              FlemmaStatusTextMuted's fg, so embedded
+  --                              muted text keeps bg continuity
+  --
+  -- Outside lualine, `self.get_default_hl` is absent and both escapes pass
+  -- through: vim handles `%*` natively and the static FlemmaStatusTextMuted
+  -- group (anchored to StatusLine.bg) is used directly.
+  if self.get_default_hl then
+    local default_hl = self:get_default_hl()
+    if default_hl and default_hl ~= "" then
+      status = status:gsub("%%%*", function()
+        return default_hl
+      end)
+
+      -- The FlemmaStatusTextMuted → FlemmaStatusTextMuted2 rewrite is the only
+      -- reason we parse default_hl and touch the hl API here. Short-circuit
+      -- when the escape isn't in the format so redraws pay nothing for it.
+      if status:find("%#FlemmaStatusTextMuted#", 1, true) then
+        -- default_hl is always a lualine section escape — "%#lualine_c_normal#",
+        -- "%#lualine_x_insert#", etc. Anchoring to the lualine_ prefix both
+        -- self-documents the intent and lets unexpected shapes fall through to
+        -- the no-op path instead of feeding a garbage name to nvim_get_hl.
+        local section_group = default_hl:match("^%%#(lualine_[%w_]+)#$")
+        if section_group then
+          local section_hl = vim.api.nvim_get_hl(0, { name = section_group, link = false })
+          local muted_hl = vim.api.nvim_get_hl(0, { name = "FlemmaStatusTextMuted", link = false })
+          if section_hl and section_hl.bg and muted_hl and muted_hl.fg then
+            -- Lualine redraws the statusline on every CursorMoved / ModeChanged
+            -- etc., so update_status runs frequently. Skip nvim_set_hl unless the
+            -- inputs have actually changed (only on mode switch or colorscheme).
+            if self._muted_section_bg ~= section_hl.bg or self._muted_fg ~= muted_hl.fg then
+              vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted2", {
+                bg = section_hl.bg,
+                fg = muted_hl.fg,
+              })
+              self._muted_section_bg = section_hl.bg
+              self._muted_fg = muted_hl.fg
+            end
+            status = status:gsub("%%#FlemmaStatusTextMuted#", function()
+              return "%#FlemmaStatusTextMuted2#"
+            end)
+          end
+        end
+      end
+    end
+  end
+
+  return status
 end
 
 return flemma_component

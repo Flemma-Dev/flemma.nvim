@@ -425,6 +425,72 @@ describe("usage bar highlights", function()
   end)
 end)
 
+describe("FlemmaStatusTextMuted highlight", function()
+  local highlight
+  local original_background
+
+  before_each(function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.highlight"] = nil
+    package.loaded["flemma.utilities.color"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.core"] = nil
+    original_background = vim.o.background
+    vim.cmd("highlight clear FlemmaStatusTextMuted")
+    require("flemma").setup({})
+    highlight = require("flemma.highlight")
+  end)
+
+  after_each(function()
+    vim.o.background = original_background
+    vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted", {})
+    vim.api.nvim_set_hl(0, "StatusLine", {})
+  end)
+
+  local function setup_and_apply()
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.bo[bufnr].filetype = "chat"
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant:", "test" })
+    highlight.apply_syntax()
+  end
+
+  it("should preserve StatusLine's bg so embedded use stays continuous", function()
+    vim.o.background = "dark"
+    vim.api.nvim_set_hl(0, "StatusLine", { bg = 0x202020, fg = 0xe0e0e0 })
+    setup_and_apply()
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaStatusTextMuted", link = false })
+    assert.are.equal(0x202020, hl.bg)
+  end)
+
+  it("should dim fg by #666666 in dark mode (subtract)", function()
+    vim.o.background = "dark"
+    vim.api.nvim_set_hl(0, "StatusLine", { bg = 0x202020, fg = 0xe0e0e0 })
+    setup_and_apply()
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaStatusTextMuted", link = false })
+    -- 0xe0 - 0x66 = 0x7a per channel
+    assert.are.equal(0x7a7a7a, hl.fg)
+  end)
+
+  it("should dim fg by #666666 in light mode (add)", function()
+    vim.o.background = "light"
+    vim.api.nvim_set_hl(0, "StatusLine", { bg = 0xe0e0e0, fg = 0x202020 })
+    setup_and_apply()
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaStatusTextMuted", link = false })
+    -- 0x20 + 0x66 = 0x86 per channel
+    assert.are.equal(0x868686, hl.fg)
+  end)
+
+  it("should fall back to Comment when StatusLine lacks bg", function()
+    vim.api.nvim_set_hl(0, "StatusLine", { fg = 0xe0e0e0 })
+    setup_and_apply()
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaStatusTextMuted" })
+    assert.are.equal("Comment", hl.link)
+  end)
+end)
+
 describe("CursorLine overlay highlights", function()
   local highlight
 

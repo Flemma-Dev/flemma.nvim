@@ -30,13 +30,13 @@ The display format uses a tmux-style syntax and can be set in two places:
   ```
 - **Flemma config** (global default, via `statusline.format` in the [configuration reference](configuration.md))
 
-The lualine option is useful when you include the component multiple times or want to keep all display config in one place. The default format is:
+The lualine option is useful when you include the component multiple times or want to keep all display config in one place. The shipped default shows the model name, optional thinking level, session stats (request count + cost) once a request lands, projected input tokens for the next request, and a `⏳` indicator while async tool sources are loading. Muted separators (`╱`) are wrapped with `%#FlemmaStatusTextMuted#…%*` so they dim without breaking the statusline background. See [`lua/flemma/config/schema.lua`](../lua/flemma/config/schema.lua) for the literal list.
 
-```
-#{model}#{?#{thinking}, (#{thinking}),}#{?#{booting}, ⏳,}#{?#{buffer.tokens.input}, #{buffer.tokens.input}↑,}
-```
+Typical renderings:
 
-Which produces `claude-sonnet-4-6 (high)` when thinking is active, `claude-sonnet-4-6 8,670↑` when a token estimate is available, `claude-sonnet-4-6 ⏳` while async tool sources are loading, or just `claude-sonnet-4-6` when idle.
+- `claude-sonnet-4-6 (high)` — thinking active, no requests yet
+- `claude-sonnet-4-6 (high) ╱ Σ3 $0.12 ╱ 8,670↑` — session history and buffer estimate
+- `claude-sonnet-4-6 ⏳` — async tool sources still loading
 
 #### Variables
 
@@ -91,6 +91,25 @@ All session/request variables return empty when no requests have been made, so t
 | `#,`                             | Literal comma                   | `a#,b` → `a,b`                                    |
 
 A value is **truthy** if it is non-empty and not `"0"`. Expressions nest freely — each branch of a conditional is expanded recursively.
+
+#### Highlights
+
+Vim's raw statusline escapes pass through Flemma's template engine unchanged, so you can mix highlight groups inline:
+
+| Escape                     | Purpose                                                               |
+| -------------------------- | --------------------------------------------------------------------- |
+| `%#GroupName#`             | Switch the active highlight to `GroupName` for following text         |
+| `%*`                       | Restore the statusline's default highlight (see `:help statusline`)   |
+| `%#FlemmaStatusTextMuted#` | Theme-neutral dim fg anchored to `StatusLine.bg` — provided by Flemma |
+
+When rendered through the bundled lualine component, `%*` and `%#FlemmaStatusTextMuted#` are auto-rewritten so they anchor to the active section hl (`lualine_c_normal`, `lualine_c_insert`, …) instead of plain `StatusLine`. This means you can write a format string once and it renders correctly in both raw statusline and lualine contexts:
+
+```lua
+-- Model name followed by a dimmed divider and session cost
+format = '#{model} %#FlemmaStatusTextMuted#╱%* #{session.cost}'
+```
+
+Any Vim-registered statusline group works (`%#Comment#`, `%#WarningMsg#`, …) but most carry their own background, producing a visible step against the statusline. `FlemmaStatusTextMuted` is deliberately constructed to avoid that.
 
 #### Examples
 

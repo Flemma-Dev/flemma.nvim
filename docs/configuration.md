@@ -135,7 +135,7 @@ require("flemma").setup({
   },
   pricing = { enabled = true },
   statusline = {
-    format = '#{model}#{?#{thinking}, (#{thinking}),}#{?#{booting}, ⏳,}#{?#{buffer.tokens.input}, #{buffer.tokens.input}↑,}', -- tmux-style format string (see docs/integrations.md)
+    format = { "#{model}", ... },            -- tmux-style format string or list; see docs/integrations.md for variables/syntax and lua/flemma/config/schema.lua for the shipped default
   },
   text_object = "m",                         -- "m" or false to disable
   editing = {
