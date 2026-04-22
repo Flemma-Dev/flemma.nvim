@@ -338,8 +338,14 @@ function M.extract_json_response_error(self, data)
 
   -- Try common error patterns in order of likelihood
 
-  -- Pattern 1: { error: { message: "..." } } (OpenAI, Anthropic style)
+  -- Pattern 1: { error: { message: "..." } } (OpenAI, Anthropic style).
+  -- When `error.type` is also present (e.g. "authentication_error",
+  -- "invalid_request_error") prefix it so the caller can distinguish auth
+  -- from validation at a glance without reaching into the raw payload.
   if data.error and type(data.error) == "table" and data.error.message then
+    if type(data.error.type) == "string" and data.error.type ~= "" then
+      return data.error.type .. " — " .. data.error.message
+    end
     return data.error.message
   end
 

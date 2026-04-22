@@ -220,7 +220,8 @@ describe(":Flemma send command", function()
     local fixture_content = file:read("*a")
     file:close()
     local error_data = vim.json.decode(fixture_content)
-    local expected_error_message = error_data.error.message
+    -- extract_json_response_error prefixes the error type when present.
+    local expected_error_message = error_data.error.type .. " — " .. error_data.error.message
 
     vim.cmd("Flemma send")
 

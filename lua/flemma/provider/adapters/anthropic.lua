@@ -826,16 +826,8 @@ function M.try_estimate_usage(bufnr, on_result)
       return
     end
 
-    if parsed.type == "error" then
-      local err_type = parsed.error and parsed.error.type
-      local err_message = parsed.error and parsed.error.message
-      local detail
-      if err_type and err_message then
-        detail = err_type .. " — " .. err_message
-      else
-        detail = err_type or err_message or "unknown error"
-      end
-      on_result({ err = detail })
+    if parsed.type == "error" or parsed.error then
+      on_result({ err = provider:extract_json_response_error(parsed) or "unknown Anthropic error" })
       return
     end
 

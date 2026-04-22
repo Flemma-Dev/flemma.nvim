@@ -9,7 +9,7 @@
 ---
 --- Registrants: flemma.core, flemma.buffer.editing
 --- Callers:     flemma.autopilot, flemma.tools.executor, flemma.ui,
----              flemma.provider.adapters.anthropic
+---              flemma.provider.adapters.{anthropic,vertex,moonshot}
 ---@class flemma.Bridge
 local M = {}
 

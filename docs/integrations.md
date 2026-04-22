@@ -74,7 +74,7 @@ Variables are lazy-evaluated — only variables referenced by the format string 
 | ------------------------ | ------- | ---------------------------------------------------- |
 | `#{buffer.tokens.input}` | `8,670` | Projected input tokens for the next request (opt-in) |
 
-The buffer estimate is **opt-in** — referencing `#{buffer.tokens.input}` in the format string is what installs the subsystem. No request fires unless the variable is in active use. Fetches are debounced 2.5 s after the user pauses editing and dispatch against the buffer's active provider. Today only the Anthropic adapter implements the underlying `try_estimate_usage` hook (the call is free and uses a separate rate limit from Messages); other providers silently render the segment empty. Failures clear the cache rather than showing a stale number.
+The buffer estimate is **opt-in** — referencing `#{buffer.tokens.input}` in the format string is what installs the subsystem. No request fires unless the variable is in active use. Fetches are debounced 2.5 s after the user pauses editing and dispatch against the buffer's active provider. Anthropic, Google Vertex AI, and Moonshot adapters implement the underlying `try_estimate_usage` hook (all three use free endpoints with separate rate limits from generation); other providers silently render the segment empty. Failures clear the cache rather than showing a stale number.
 
 All session/request variables return empty when no requests have been made, so they work naturally with conditionals.
 
