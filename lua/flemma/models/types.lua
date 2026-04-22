@@ -50,7 +50,6 @@ local M = {}
 ---@field max_thinking_budget? integer Maximum thinking budget the API accepts
 ---@field thinking_effort_map? table<string, string> Maps Flemma canonical levels to provider API values
 ---@field supports_reasoning_effort? boolean Whether the model supports reasoning_effort parameter
----@field supports_adaptive_thinking? boolean True for 4.6 models that use thinking.type="adaptive" (vs budget-based)
 --- Provider-specific extension point. Keys are documented by the owning adapter;
 --- absence on a model means "not applicable." Mirrors the `meta` pattern used on
 --- tool_result AST nodes for round-tripping unrecognized tokens.
