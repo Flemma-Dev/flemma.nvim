@@ -37,17 +37,24 @@ local M = {}
 ---@field cache_write? number USD per million cache-write tokens
 
 ---@class flemma.models.ModelInfo
+--- Pricing and cache constraints
 ---@field pricing flemma.models.Pricing
+---@field min_cache_tokens? integer Minimum tokens for cache prefix to be accepted (informational)
+--- Token limits
 ---@field max_input_tokens? integer Maximum context window size (input tokens)
 ---@field max_output_tokens? integer Maximum tokens the model can generate in a single response
 ---@field min_output_tokens? integer Minimum max_tokens the API accepts for this model
----@field supports_reasoning_effort? boolean Whether the model supports reasoning_effort parameter
+--- Thinking / reasoning
 ---@field thinking_budgets? flemma.models.ThinkingBudgets Per-model token budgets for each thinking level
 ---@field min_thinking_budget? integer Minimum thinking budget the API accepts
 ---@field max_thinking_budget? integer Maximum thinking budget the API accepts
 ---@field thinking_effort_map? table<string, string> Maps Flemma canonical levels to provider API values
+---@field supports_reasoning_effort? boolean Whether the model supports reasoning_effort parameter
 ---@field supports_adaptive_thinking? boolean True for 4.6 models that use thinking.type="adaptive" (vs budget-based)
----@field min_cache_tokens? integer Minimum tokens for cache prefix to be accepted (informational)
+--- Provider-specific extension point. Keys are documented by the owning adapter;
+--- absence on a model means "not applicable." Mirrors the `meta` pattern used on
+--- tool_result AST nodes for round-tripping unrecognized tokens.
+---@field meta? table<string, any> Provider-specific metadata; see owning adapter for accepted keys
 
 ---@class flemma.models.ProviderModels
 ---@field default string Default model name for this provider
