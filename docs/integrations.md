@@ -10,7 +10,7 @@ Add the bundled component to show the active model and thinking level:
 require("lualine").setup({
   sections = {
     lualine_x = {
-      { "flemma", icon = "🧠" },
+      { "flemma", icon = "∴" },
       "encoding",
       "filetype",
     },

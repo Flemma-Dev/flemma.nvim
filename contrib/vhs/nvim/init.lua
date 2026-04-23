@@ -102,7 +102,7 @@ require("lualine").setup({
       },
     },
     lualine_x = {
-      { "flemma", icon = "🧠" },
+      { "flemma", icon = "∴" },
     },
     lualine_y = {},
     lualine_z = {},

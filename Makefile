@@ -105,25 +105,7 @@ screencast: .vapor/catppuccin/nvim.git .vapor/NStefan002/screenkey.nvim.git
 	 export XDG_STATE_HOME=`pwd`/.vapor/state ;\
 	 nvim --headless +"TSInstallSync markdown markdown_inline lua json" +qa && \
 	 vhs contrib/vhs/flemma_cast.tape
-	ffmpeg -hide_banner -y \
-		-ss 00:00:14 \
-		-i assets/flemma_cast.mp4 \
-		-vframes 1 -q:v 2 \
-		.vapor/poster.jpg
-	ffmpeg -hide_banner -y \
-		-loop 1 \
-		-i .vapor/poster.jpg \
-		-vframes 1 -r 60 \
-		-c:v libx264 -pix_fmt yuv420p \
-		.vapor/poster.mp4
-	printf 'file $(CURDIR)/.vapor/poster.mp4\nfile $(CURDIR)/assets/flemma_cast.mp4\n' \
-		> .vapor/concat_list.txt
-	ffmpeg -hide_banner -y \
-		-f concat -safe 0 \
-		-i .vapor/concat_list.txt \
-		-c copy \
-		.vapor/flemma_cast_with_poster.mp4
-	mv .vapor/flemma_cast_with_poster.mp4 assets/flemma_cast.mp4
+	@contrib/scripts/screencast-poster.sh assets/flemma_cast.mp4
 
 .vapor/catppuccin/nvim.git .vapor/NStefan002/screenkey.nvim.git:
 	@mkdir -p $(dir $@)
