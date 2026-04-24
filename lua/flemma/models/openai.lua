@@ -36,6 +36,8 @@ return {
       },
       max_input_tokens = 922000,
       max_output_tokens = 128000,
+      meta = { reasoning_effort = true },
+      thinking_effort_map = { minimal = "medium", low = "medium", medium = "medium", high = "high", max = "xhigh" },
     },
     ["gpt-5.4-mini"] = {
       pricing = {
@@ -137,6 +139,8 @@ return {
       },
       max_input_tokens = 272000,
       max_output_tokens = 128000,
+      meta = { reasoning_effort = true },
+      thinking_effort_map = { minimal = "medium", low = "medium", medium = "medium", high = "high", max = "xhigh" },
     },
 
     -- GPT-5.1 models
@@ -260,6 +264,8 @@ return {
       },
       max_input_tokens = 272000,
       max_output_tokens = 272000,
+      meta = { reasoning_effort = true },
+      thinking_effort_map = { minimal = "high", low = "high", medium = "high", high = "high", max = "high" },
     },
     ["gpt-5-search-api"] = {
       pricing = {

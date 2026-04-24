@@ -168,6 +168,82 @@ describe("OpenAI Provider", function()
       assert.equals("low", request_body.reasoning.effort)
     end)
 
+    it("should omit reasoning for non-reasoning models even when configured", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1000,
+        temperature = 0.5,
+        reasoning = "high",
+        thinking = "high",
+      })
+
+      local messages = {
+        { type = "You", content = "Hello" },
+      }
+
+      local prompt = make_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.equals(1000, request_body.max_output_tokens)
+      assert.equals(0.5, request_body.temperature)
+      assert.is_nil(request_body.reasoning)
+      assert.is_nil(request_body.include)
+    end)
+
+    it("should clamp gpt-5-pro reasoning to high", function()
+      local provider = openai.new({
+        model = "gpt-5-pro",
+        max_tokens = 4000,
+        reasoning = "low",
+      })
+
+      local messages = {
+        { type = "You", content = "Solve this problem" },
+      }
+
+      local prompt = make_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.is_not_nil(request_body.reasoning)
+      assert.equals("high", request_body.reasoning.effort)
+    end)
+
+    it("should clamp low reasoning to medium for pro models without low support", function()
+      local provider = openai.new({
+        model = "gpt-5.4-pro",
+        max_tokens = 4000,
+        thinking = "low",
+      })
+
+      local messages = {
+        { type = "You", content = "Solve this problem" },
+      }
+
+      local prompt = make_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.is_not_nil(request_body.reasoning)
+      assert.equals("medium", request_body.reasoning.effort)
+    end)
+
+    it("should map max reasoning to xhigh for pro models with xhigh support", function()
+      local provider = openai.new({
+        model = "gpt-5.2-pro",
+        max_tokens = 4000,
+        thinking = "max",
+      })
+
+      local messages = {
+        { type = "You", content = "Solve this problem" },
+      }
+
+      local prompt = make_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.is_not_nil(request_body.reasoning)
+      assert.equals("xhigh", request_body.reasoning.effort)
+    end)
+
     it("should use custom reasoning_summary when configured", function()
       local provider = openai.new({
         model = "o3",

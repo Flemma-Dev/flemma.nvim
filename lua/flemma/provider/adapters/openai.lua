@@ -33,6 +33,12 @@ local NOOP_EVENTS = {
   ["response.reasoning_summary_text.done"]  = true, -- final reasoning summary; redundant with accumulated deltas
 }
 
+---@param model_info? flemma.models.ModelInfo
+---@return boolean
+local function supports_reasoning_effort(model_info)
+  return model_info ~= nil and model_info.meta ~= nil and model_info.meta.reasoning_effort == true
+end
+
 ---@type flemma.provider.Metadata
 M.metadata = {
   name = "openai",
@@ -343,9 +349,12 @@ function M.build_request(self, prompt, context)
 
   -- Add reasoning configuration using unified resolution
   local model_info = provider_registry.get_model_info("openai", self.parameters.model)
-  local thinking = normalize.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
+  local supports_reasoning = supports_reasoning_effort(model_info)
+  local thinking = supports_reasoning
+      and normalize.resolve_thinking(self.parameters, M.metadata.capabilities, model_info)
+    or { enabled = false }
 
-  if thinking.enabled and thinking.effort then
+  if supports_reasoning and thinking.enabled and thinking.effort then
     -- effort is already mapped to provider API value by resolve_thinking via thinking_effort_map
     local reasoning_summary = self.parameters.reasoning_summary or "auto"
     request_body.reasoning = {
@@ -703,42 +712,6 @@ function M._process_data(self, data, _parsed, callbacks)
 
   -- Truly unknown events get logged for debugging
   log.warn("openai._process_data(): Ignoring unknown event type: " .. event_type)
-end
-
----Validate provider-specific parameters
----@param model_name string The model name
----@param parameters table<string, any> The parameters to validate
----@return boolean success Always true (warnings don't fail validation)
----@return string[]|nil warnings Human-readable warning strings, or nil when clean
-function M.validate_parameters(model_name, parameters)
-  local warnings = {}
-
-  -- Resolve effective reasoning: provider-specific `reasoning` > unified `thinking`
-  local reasoning_value = parameters.reasoning
-  if (reasoning_value == nil or reasoning_value == "") and parameters.thinking ~= nil then
-    local thinking = parameters.thinking
-    if thinking ~= false and thinking ~= 0 then
-      reasoning_value = type(thinking) == "string" and thinking or "medium"
-    end
-  end
-
-  -- Check for reasoning parameter support (flagged via meta.reasoning_effort)
-  if reasoning_value ~= nil and reasoning_value ~= "" then
-    local model_info = provider_registry.get_model_info("openai", model_name)
-    local supports_reasoning_effort = model_info and model_info.meta and model_info.meta.reasoning_effort == true
-
-    if not supports_reasoning_effort then
-      table.insert(
-        warnings,
-        string.format("'reasoning' is not supported by '%s' and may be ignored or cause an API error", model_name)
-      )
-    end
-  end
-
-  if #warnings > 0 then
-    return true, warnings
-  end
-  return true
 end
 
 return M

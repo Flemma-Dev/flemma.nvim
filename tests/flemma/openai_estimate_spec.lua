@@ -124,6 +124,41 @@ describe("openai.try_estimate_usage", function()
     assert.equals("low", captured_body.reasoning.effort)
   end)
 
+  it("omits reasoning for non-reasoning models while estimating", function()
+    flemma.setup({
+      provider = "openai",
+      model = "gpt-4o",
+      parameters = {
+        thinking = "high",
+        temperature = 0.2,
+      },
+    })
+    client.register_fixture("responses/input_tokens", "tests/fixtures/openai/count_tokens_response.txt")
+    local bufnr = make_chat_buffer()
+
+    local captured_body
+    local original_send = client.send_json_request
+    client.send_json_request = function(opts, cb)
+      captured_body = opts.request_body
+      return original_send(opts, cb)
+    end
+
+    local captured = {}
+    openai.try_estimate_usage(bufnr, function(result)
+      captured.result = result
+    end)
+    wait_for_result(captured, function(r)
+      return r.response ~= nil
+    end)
+
+    client.send_json_request = original_send
+
+    assert.is_not_nil(captured_body)
+    assert.is_nil(captured_body.reasoning)
+    assert.is_nil(captured_body.include)
+    assert.is_nil(captured_body.temperature)
+  end)
+
   it("delivers err for auth error responses", function()
     client.register_fixture("responses/input_tokens", "tests/fixtures/openai/count_tokens_error.txt")
     local bufnr = make_chat_buffer()
