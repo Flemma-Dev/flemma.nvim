@@ -92,8 +92,43 @@ describe(":Flemma usage:estimate dispatcher", function()
     assert.is_truthy(err.message:find("authentication_error", 1, true))
   end)
 
+  it("reports OpenAI estimates through the same dispatcher path", function()
+    flemma.setup({ provider = "openai", model = "gpt-5", parameters = { thinking = false } })
+    client.register_fixture("responses/input_tokens", "tests/fixtures/openai/count_tokens_response.txt")
+    make_chat_buffer()
+
+    run_estimate()
+
+    local info = wait_for(function(n)
+      return n.level == vim.log.levels.INFO
+    end)
+    assert.is_not_nil(info)
+    assert.is_truthy(info.message:find("9 input tokens", 1, true))
+    assert.is_truthy(info.message:find("gpt-5", 1, true))
+    assert.is_truthy(info.message:find("$1.25 input / $10 output per MTok", 1, true))
+  end)
+
   it("notifies when the current provider does not implement try_estimate_usage", function()
-    flemma.setup({ provider = "openai", parameters = { thinking = false } })
+    local module_path = "flemma.test.unsupported_estimate_provider"
+    package.preload[module_path] = function()
+      return {}
+    end
+    local provider_registry = require("flemma.provider.registry")
+    provider_registry.register("unsupported-estimate", {
+      module = module_path,
+      capabilities = {
+        supports_reasoning = false,
+        supports_thinking_budget = false,
+        outputs_thinking = false,
+      },
+      display_name = "Unsupported Estimate",
+      default_model = "unsupported-model",
+      models = {
+        ["unsupported-model"] = {},
+      },
+    })
+    local config = require("flemma.config")
+    config.apply(config.LAYERS.RUNTIME, { provider = "unsupported-estimate", model = "unsupported-model" })
     make_chat_buffer()
 
     run_estimate()

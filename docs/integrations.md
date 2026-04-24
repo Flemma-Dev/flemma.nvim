@@ -70,11 +70,14 @@ Variables are lazy-evaluated — only variables referenced by the format string 
 
 **Current buffer** (projected for the _next_ request):
 
-| Variable                 | Example | Description                                          |
-| ------------------------ | ------- | ---------------------------------------------------- |
-| `#{buffer.tokens.input}` | `8,670` | Projected input tokens for the next request (opt-in) |
+| Variable                 | Example | Description                                 |
+| ------------------------ | ------- | ------------------------------------------- |
+| `#{buffer.tokens.input}` | `8,670` | Projected input tokens for the next request |
 
-The buffer estimate is **opt-in** — referencing `#{buffer.tokens.input}` in the format string is what installs the subsystem. No request fires unless the variable is in active use. Fetches are debounced 2.5 s after the user pauses editing and dispatch against the buffer's active provider. Anthropic, Google Vertex AI, and Moonshot adapters implement the underlying `try_estimate_usage` hook (all three use free endpoints with separate rate limits from generation); other providers silently render the segment empty. Failures clear the cache rather than showing a stale number.
+The buffer estimate is resolver-driven: referencing `#{buffer.tokens.input}` in the format string is what installs the subsystem. The default statusline format includes it, so default users get debounced estimates automatically; users with custom formats only get estimates if they include the variable. Fetches run 2.5 s after the user pauses editing and dispatch against the buffer's active provider. Anthropic, OpenAI, Google Vertex AI, and Moonshot adapters implement the underlying `try_estimate_usage` hook; other providers silently render the segment empty. Failures clear the cache rather than showing a stale number.
+
+> [!NOTE]
+> For OpenAI, Flemma uses `POST /v1/responses/input_tokens`. OpenAI's docs and live probe responses observed during implementation did not expose cost, rate-limit, or quota metadata for that endpoint, so treat each estimate conservatively as a real API request that may count against account limits.
 
 All session/request variables return empty when no requests have been made, so they work naturally with conditionals.
 

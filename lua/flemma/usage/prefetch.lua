@@ -6,8 +6,8 @@
 --- a state cleanup hook. Subsequent fetches (added in later commits) are
 --- debounced 2.5s after the user stops editing.
 ---
---- This module is the only consumer of the Anthropic adapter's
---- try_estimate_usage that isn't the :Flemma usage:estimate command.
+--- This module is the only consumer of provider try_estimate_usage hooks that
+--- isn't the :Flemma usage:estimate command.
 ---@class flemma.usage.Prefetch
 local M = {}
 

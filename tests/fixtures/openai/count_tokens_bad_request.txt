@@ -1,0 +1,8 @@
+{
+  "error": {
+    "message": "Invalid type for 'input': expected one of a string or array of input items, but got an object instead.",
+    "type": "invalid_request_error",
+    "param": "input",
+    "code": "invalid_type"
+  }
+}

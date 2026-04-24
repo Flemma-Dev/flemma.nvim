@@ -141,7 +141,26 @@ describe("flemma.usage.prefetch (debounce + fetch)", function()
   end)
 
   it("does not dispatch a fetch when the provider lacks try_estimate_usage", function()
-    require("flemma").setup({ provider = "openai", parameters = { thinking = false } })
+    local module_path = "flemma.test.prefetch_unsupported_estimate_provider"
+    package.preload[module_path] = function()
+      return {}
+    end
+    local provider_registry = require("flemma.provider.registry")
+    provider_registry.register("prefetch-unsupported-estimate", {
+      module = module_path,
+      capabilities = {
+        supports_reasoning = false,
+        supports_thinking_budget = false,
+        outputs_thinking = false,
+      },
+      display_name = "Prefetch Unsupported Estimate",
+      default_model = "unsupported-model",
+      models = {
+        ["unsupported-model"] = {},
+      },
+    })
+    local config = require("flemma.config")
+    config.apply(config.LAYERS.RUNTIME, { provider = "prefetch-unsupported-estimate", model = "unsupported-model" })
     local fires = count_autocmd_fires()
 
     prefetch.start_tracking(bufnr)
