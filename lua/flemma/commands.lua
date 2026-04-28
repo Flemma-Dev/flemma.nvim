@@ -449,6 +449,7 @@ local function setup_commands()
           local bufnr = vim.api.nvim_get_current_buf()
           local cfg = require("flemma.config").get(bufnr)
           local provider_registry = require("flemma.provider.registry")
+          local readiness = require("flemma.readiness")
           local provider_module_path = provider_registry.get(cfg.provider)
           if not provider_module_path then
             notify.error("No provider configured. Use :Flemma switch to select one.")
@@ -461,7 +462,7 @@ local function setup_commands()
             return
           end
 
-          provider_module.try_estimate_usage(bufnr, function(result)
+          local function on_result(result)
             if result.err then
               notify.error("Estimate failed: " .. result.err)
               return
@@ -470,7 +471,29 @@ local function setup_commands()
             local model_info = provider_registry.get_model_info(cfg.provider, response.model)
             local pricing = model_info and model_info.pricing
             notify.info(string_utils.format_estimate(response.tokens, response.model, pricing))
-          end)
+          end
+
+          local format_diagnostics = require("flemma.core")._format_diagnostics
+
+          local function attempt()
+            local ok, err = pcall(provider_module.try_estimate_usage, bufnr, on_result)
+            if ok then return end
+            if not readiness.is_suspense(err) then
+              notify.error("Estimate failed: " .. tostring(err))
+              return
+            end
+            ---@cast err flemma.readiness.Suspense
+            notify.info(err.message)
+            err.boundary:subscribe(function(boundary_result)
+              if not boundary_result or not boundary_result.ok then
+                local diag_msg = format_diagnostics(boundary_result and boundary_result.diagnostics)
+                notify.error("Estimate failed: " .. (diag_msg or err.message))
+                return
+              end
+              attempt()
+            end)
+          end
+          attempt()
         end,
       },
     },
