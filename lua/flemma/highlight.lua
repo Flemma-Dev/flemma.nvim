@@ -523,9 +523,15 @@ M.apply_syntax = function()
 
   if progress_bg_hex and progress_fg_hex then
     vim.api.nvim_set_hl(0, "FlemmaProgressBar", { bg = progress_bg_hex, fg = progress_fg_hex, default = true })
+    vim.api.nvim_set_hl(
+      0,
+      "FlemmaProgressBarAccent",
+      { bg = progress_bg_hex, fg = progress_fg_hex, bold = true, default = true }
+    )
   else
     -- Fallback: link to StatusLine
     vim.api.nvim_set_hl(0, "FlemmaProgressBar", { link = "StatusLine", default = true })
+    vim.api.nvim_set_hl(0, "FlemmaProgressBarAccent", { link = "StatusLine", bold = true, default = true })
   end
 
   -- FlemmaStatusTextMuted: theme-neutral dim variant of StatusLine.

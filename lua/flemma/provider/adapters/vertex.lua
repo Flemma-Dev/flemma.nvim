@@ -458,6 +458,9 @@ function M._process_data(self, data, _parsed, callbacks)
           local generated_id = string.format("urn:flemma:tool:%s:%s", fc.name, unique_suffix)
 
           local json_str = json.encode(fc.args or {})
+          if callbacks.on_tool_call_start then
+            callbacks.on_tool_call_start(fc.name)
+          end
           -- Notify progress tracking with the complete tool input (Vertex delivers
           -- args in one shot, not streamed incrementally like Anthropic)
           if callbacks.on_tool_input then

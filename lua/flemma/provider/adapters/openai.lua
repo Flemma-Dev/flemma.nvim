@@ -531,6 +531,9 @@ function M._process_data(self, data, _parsed, callbacks)
           .. (data.item.call_id or "")
           .. ")"
       )
+      if callbacks.on_tool_call_start then
+        callbacks.on_tool_call_start(data.item.name or "")
+      end
     elseif data.item and data.item.type == "reasoning" then
       self._response_buffer.extra.reasoning_sink:destroy()
       self._response_buffer.extra.reasoning_sink = sink.create({

@@ -257,7 +257,8 @@ end
 ---chunk on the inline virt_text path — it is never baked into the body so the
 ---two rendering paths can share one source of truth without duplicating glyphs.
 ---@param bs flemma.state.BufferState
----@return string
+---@return string body
+---@return integer|nil tool_name_len Byte length of the tool name prefix (nil when absent)
 local function format_progress_body(bs)
   local phase = bs.progress_phase or "waiting"
   local elapsed_seconds = 0
@@ -267,12 +268,16 @@ local function format_progress_body(bs)
   local elapsed_str = str.format_elapsed(elapsed_seconds)
 
   if phase == "waiting" then
-    return WAITING_LABEL .. MIDDLE_DOT .. elapsed_str
+    return WAITING_LABEL .. MIDDLE_DOT .. elapsed_str, nil
   else
     local count = bs.progress_char_count or 0
     local suffix = count == 1 and " character" or " characters"
     local count_str = str.format_text_length(count) .. suffix
-    return count_str .. MIDDLE_DOT .. elapsed_str
+    if phase == "buffering" and bs.progress_tool_name then
+      local name = bs.progress_tool_name
+      return name .. MIDDLE_DOT .. count_str .. MIDDLE_DOT .. elapsed_str, #name
+    end
+    return count_str .. MIDDLE_DOT .. elapsed_str, nil
   end
 end
 
@@ -301,11 +306,20 @@ end
 
 ---Wrap a flat progress text into a minimal single-item segment list.
 ---warn_hl is nil in neutral state (no extmark emitted) or a diagnostic
----group name during timeout pressure.
+---group name during timeout pressure. tool_name_len, when set, applies
+---a bold accent highlight to the leading tool-name span.
 ---@param text string
 ---@param warn_hl string|nil
+---@param tool_name_len integer|nil
 ---@return flemma.ui.bar.layout.Segment[]
-local function progress_segments(text, warn_hl)
+local function progress_segments(text, warn_hl, tool_name_len)
+  ---@type flemma.ui.bar.layout.ItemHighlight|nil
+  local hl
+  if warn_hl then
+    hl = { group = warn_hl }
+  elseif tool_name_len then
+    hl = { group = "FlemmaProgressBarAccent", offset = 0, length = tool_name_len }
+  end
   return {
     {
       key = "progress",
@@ -314,7 +328,7 @@ local function progress_segments(text, warn_hl)
           key = "text",
           text = text,
           priority = 1,
-          highlight = warn_hl and { group = warn_hl } or nil,
+          highlight = hl,
         },
       },
     },
@@ -378,7 +392,7 @@ local function advance_progress(bufnr)
   local speed = spinners.SPEED[phase] or 1
   local frame = frames[(math.floor(bs.progress_tick / speed) % #frames) + 1]
 
-  local base_body = format_progress_body(bs)
+  local base_body, tool_name_len = format_progress_body(bs)
   local body, warn_hl = timeout_pressure(bs, base_body)
 
   if phase == "waiting" or phase == "thinking" then
@@ -408,7 +422,7 @@ local function advance_progress(bufnr)
 
   ensure_progress_bar(bufnr):update({
     icon = frame,
-    segments = progress_segments(body, warn_hl),
+    segments = progress_segments(body, warn_hl, tool_name_len),
   })
 end
 
@@ -429,6 +443,7 @@ function M.start_progress(bufnr, progress_opts)
   buffer_state.progress_timeout = progress_opts.timeout
   buffer_state.progress_extmark_id = nil
   buffer_state.progress_last_line = nil
+  buffer_state.progress_tool_name = nil
   buffer_state.progress_tick = 0
 
   writequeue.schedule(bufnr, function()

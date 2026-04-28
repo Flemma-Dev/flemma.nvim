@@ -550,6 +550,9 @@ function M._process_data(self, data, _parsed, callbacks)
             .. data.content_block.id
             .. ")"
         )
+        if callbacks.on_tool_call_start then
+          callbacks.on_tool_call_start(data.content_block.name)
+        end
       end
     end
   end

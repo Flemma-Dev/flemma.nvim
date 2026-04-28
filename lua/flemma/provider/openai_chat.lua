@@ -503,6 +503,9 @@ function M._process_data(self, data, _parsed, callbacks)
                 .. ": "
                 .. (tc["function"] and tc["function"].name or "")
             )
+            if callbacks.on_tool_call_start and tc["function"] and tc["function"].name then
+              callbacks.on_tool_call_start(tc["function"].name)
+            end
           else
             -- Subsequent chunks: only function.arguments
             local existing = self._response_buffer.extra.tool_calls[index]

@@ -1220,6 +1220,12 @@ function M._run_send_pipeline(bufnr, opts)
       end)
     end,
 
+    on_tool_call_start = function(name)
+      vim.schedule(function()
+        buffer_state.progress_tool_name = name
+      end)
+    end,
+
     on_tool_input = function(delta)
       vim.schedule(function()
         buffer_state.progress_phase = "buffering"

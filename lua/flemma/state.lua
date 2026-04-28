@@ -58,6 +58,7 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field usage_bar? flemma.ui.bar.Bar Active usage bar handle, if any
 ---@field usage_timer? integer Timer ID for auto-dismissing the usage bar
 ---@field progress_bar? flemma.ui.bar.Bar Active progress bar handle, if any
+---@field progress_tool_name? string Name of the currently streaming tool call (shown in progress bar)
 ---@field progress_tick? integer Monotonic 100ms tick counter across progress phases
 
 ---@type table<integer, flemma.state.BufferState>

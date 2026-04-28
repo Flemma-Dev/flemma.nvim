@@ -101,6 +101,7 @@ local tool_names = require("flemma.utilities.tools")
 ---@field on_response_complete fun() Called when the AI response content is complete
 ---@field on_content fun(text: string) Called when response content is received
 ---@field on_thinking? fun(text: string) Called when thinking/reasoning content is received (optional)
+---@field on_tool_call_start? fun(name: string) Called when a tool call block begins (optional, for progress display)
 ---@field on_tool_input? fun(delta: string) Called when tool input JSON delta is received (optional, for progress tracking)
 
 ---@class flemma.provider.ProviderState
