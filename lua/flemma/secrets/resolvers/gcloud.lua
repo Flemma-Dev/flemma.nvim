@@ -31,99 +31,6 @@ function M.supports(_self, credential, ctx)
   return true
 end
 
---- Run gcloud auth print-access-token with the given binary path and optional env.
----@param path string Binary path or name (e.g. "gcloud" or "/nix/store/.../bin/gcloud")
----@param env? table<string, string>
----@return string|nil token, integer|nil exit_code
-local function run_gcloud(path, env)
-  local cmd = { path, "auth", "print-access-token" }
-  local opts = { text = true }
-  if env then
-    opts.env = env
-  end
-
-  local proc = vim.system(cmd, opts)
-  local result = proc:wait()
-
-  if result.code ~= 0 then
-    log.debug("gcloud: command failed with code " .. tostring(result.code))
-    return nil, result.code
-  end
-
-  local token = result.stdout
-  if not token then
-    return nil
-  end
-
-  token = token:gsub("%s+$", "")
-  if #token == 0 then
-    return nil
-  end
-
-  return token
-end
-
----@param _self flemma.secrets.resolvers.Gcloud
----@param credential flemma.secrets.Credential
----@param ctx flemma.secrets.Context
----@return flemma.secrets.Result|nil
-function M.resolve(_self, credential, ctx)
-  local cfg = ctx:get_config()
-  local path = (cfg and cfg.path) or "gcloud"
-
-  -- Try to get a service account for this service
-  local service_account = secrets.resolve({
-    kind = "service_account",
-    service = credential.service,
-  })
-
-  if service_account and service_account.value:match("service_account") then
-    -- Write service account JSON to temp file
-    local tmp = vim.fn.tempname()
-    local file = io.open(tmp, "w")
-    if not file then
-      log.error("gcloud: failed to create temp file for service account")
-      ctx:diagnostic("failed to create temp file for service account")
-      return nil
-    end
-    file:write(service_account.value)
-    file:close()
-
-    local token, exit_code = run_gcloud(path, { GOOGLE_APPLICATION_CREDENTIALS = tmp })
-
-    -- Delete temp file immediately
-    os.remove(tmp)
-
-    if token then
-      log.debug("gcloud: generated access token from service account")
-      return { value = token, ttl = TOKEN_TTL_SECONDS }
-    end
-
-    if exit_code then
-      ctx:diagnostic("auth failed (exit code " .. tostring(exit_code) .. ")")
-    else
-      ctx:diagnostic("returned empty token")
-    end
-    log.debug("gcloud: failed to generate token from service account")
-    return nil
-  end
-
-  -- Fallback: try default gcloud credentials
-  log.debug("gcloud: trying default credentials")
-  local token, exit_code = run_gcloud(path)
-  if token then
-    return { value = token, ttl = TOKEN_TTL_SECONDS }
-  end
-
-  if exit_code then
-    ctx:diagnostic("auth failed (exit code " .. tostring(exit_code) .. ")")
-  else
-    ctx:diagnostic("returned empty token")
-  end
-
-  return nil
-end
-
 ---@param path string
 ---@param env table<string, string>|nil
 ---@param ctx flemma.secrets.Context
@@ -159,35 +66,32 @@ function M.resolve_async(_self, credential, ctx, callback)
   local cfg = ctx:get_config()
   local path = (cfg and cfg.path) or "gcloud"
 
-  secrets.resolve_async(
-    { kind = "service_account", service = credential.service },
-    function(service_account)
-      if service_account and service_account.value:match("service_account") then
-        local tmp = vim.fn.tempname()
-        local file = io.open(tmp, "w")
-        if not file then
-          log.error("gcloud: failed to create temp file for service account")
-          ctx:diagnostic("failed to create temp file for service account")
-          callback(nil)
-          return
-        end
-        file:write(service_account.value)
-        file:close()
-
-        run_gcloud_async(path, { GOOGLE_APPLICATION_CREDENTIALS = tmp }, ctx, function(result)
-          os.remove(tmp)
-          if result then
-            log.debug("gcloud: generated access token from service account (async)")
-          end
-          callback(result)
-        end)
+  secrets.resolve_async({ kind = "service_account", service = credential.service }, function(service_account)
+    if service_account and service_account.value:match("service_account") then
+      local tmp = vim.fn.tempname()
+      local file = io.open(tmp, "w")
+      if not file then
+        log.error("gcloud: failed to create temp file for service account")
+        ctx:diagnostic("failed to create temp file for service account")
+        callback(nil)
         return
       end
+      file:write(service_account.value)
+      file:close()
 
-      log.debug("gcloud: trying default credentials (async)")
-      run_gcloud_async(path, nil, ctx, callback)
+      run_gcloud_async(path, { GOOGLE_APPLICATION_CREDENTIALS = tmp }, ctx, function(result)
+        os.remove(tmp)
+        if result then
+          log.debug("gcloud: generated access token from service account (async)")
+        end
+        callback(result)
+      end)
+      return
     end
-  )
+
+    log.debug("gcloud: trying default credentials (async)")
+    run_gcloud_async(path, nil, ctx, callback)
+  end)
 end
 
 return M

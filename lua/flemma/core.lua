@@ -780,7 +780,9 @@ end
 ---@param diagnostics flemma.secrets.ResolverDiagnostic[]|nil
 ---@return string|nil
 function M._format_diagnostics(diagnostics)
-  if not diagnostics or #diagnostics == 0 then return nil end
+  if not diagnostics or #diagnostics == 0 then
+    return nil
+  end
   local lines = {}
   for _, d in ipairs(diagnostics) do
     table.insert(lines, "  [" .. d.resolver .. "] " .. d.message)
@@ -910,10 +912,7 @@ function M._run_send_pipeline(bufnr, opts)
 
     local headers
     if not fixture_path then
-      local api_key = current_provider:get_api_key()
-      if not api_key then
-        error("No API key available for provider '" .. config_facade.get(bufnr).provider .. "'.", 0)
-      end
+      current_provider:get_api_key()
       headers = current_provider:get_request_headers()
       if not headers then
         error("Provider did not return request headers.", 0)

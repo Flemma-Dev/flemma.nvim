@@ -867,18 +867,16 @@ function M.send_count_tokens(spec, on_result)
   if fixture_path then
     headers = { "content-type: application/json" }
   else
-    local api_key = provider:get_api_key()
-    if not api_key then
-      on_result({ err = "No API key available for " .. spec.error_label .. "." })
-      return
-    end
+    provider:get_api_key()
     headers = provider:get_request_headers()
   end
   ---@cast headers string[]
 
   local build_ok, body = pcall(provider.build_request, provider, prompt, context)
   if not build_ok then
-    if readiness.is_suspense(body) then error(body) end
+    if readiness.is_suspense(body) then
+      error(body)
+    end
     on_result({ err = "Build request failed: " .. tostring(body) })
     return
   end

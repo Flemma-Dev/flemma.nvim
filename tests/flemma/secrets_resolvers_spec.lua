@@ -28,14 +28,17 @@ describe("flemma.secrets.resolvers.environment", function()
     end)
   end)
 
-  describe("resolve", function()
+  describe("resolve_async", function()
     it("resolves using SERVICE_KIND convention", function()
       vim.env.ANTHROPIC_API_KEY = "sk-test-123"
 
-      local result = environment:resolve({ kind = "api_key", service = "anthropic" }, make_env_ctx())
+      local got
+      environment:resolve_async({ kind = "api_key", service = "anthropic" }, make_env_ctx(), function(result)
+        got = result
+      end)
 
-      assert.is_not_nil(result)
-      assert.equals("sk-test-123", result.value)
+      assert.is_not_nil(got)
+      assert.equals("sk-test-123", got.value)
 
       vim.env.ANTHROPIC_API_KEY = nil
     end)
@@ -43,17 +46,23 @@ describe("flemma.secrets.resolvers.environment", function()
     it("returns nil when env var is not set", function()
       vim.env.NONEXISTENT_API_KEY = nil
 
-      local result = environment:resolve({ kind = "api_key", service = "nonexistent" }, make_env_ctx())
+      local got
+      environment:resolve_async({ kind = "api_key", service = "nonexistent" }, make_env_ctx(), function(result)
+        got = result
+      end)
 
-      assert.is_nil(result)
+      assert.is_nil(got)
     end)
 
     it("returns nil for empty env var", function()
       vim.env.EMPTY_API_KEY = ""
 
-      local result = environment:resolve({ kind = "api_key", service = "empty" }, make_env_ctx())
+      local got
+      environment:resolve_async({ kind = "api_key", service = "empty" }, make_env_ctx(), function(result)
+        got = result
+      end)
 
-      assert.is_nil(result)
+      assert.is_nil(got)
 
       vim.env.EMPTY_API_KEY = nil
     end)
@@ -62,14 +71,17 @@ describe("flemma.secrets.resolvers.environment", function()
       vim.env.VERTEX_ACCESS_TOKEN = nil
       vim.env.VERTEX_AI_ACCESS_TOKEN = "ya29.from-alias"
 
-      local result = environment:resolve({
+      local got
+      environment:resolve_async({
         kind = "access_token",
         service = "vertex",
         aliases = { "VERTEX_AI_ACCESS_TOKEN" },
-      }, make_env_ctx())
+      }, make_env_ctx(), function(result)
+        got = result
+      end)
 
-      assert.is_not_nil(result)
-      assert.equals("ya29.from-alias", result.value)
+      assert.is_not_nil(got)
+      assert.equals("ya29.from-alias", got.value)
 
       vim.env.VERTEX_AI_ACCESS_TOKEN = nil
     end)
@@ -78,14 +90,17 @@ describe("flemma.secrets.resolvers.environment", function()
       vim.env.VERTEX_ACCESS_TOKEN = "ya29.from-convention"
       vim.env.VERTEX_AI_ACCESS_TOKEN = "ya29.from-alias"
 
-      local result = environment:resolve({
+      local got
+      environment:resolve_async({
         kind = "access_token",
         service = "vertex",
         aliases = { "VERTEX_AI_ACCESS_TOKEN" },
-      }, make_env_ctx())
+      }, make_env_ctx(), function(result)
+        got = result
+      end)
 
-      assert.is_not_nil(result)
-      assert.equals("ya29.from-convention", result.value)
+      assert.is_not_nil(got)
+      assert.equals("ya29.from-convention", got.value)
 
       vim.env.VERTEX_ACCESS_TOKEN = nil
       vim.env.VERTEX_AI_ACCESS_TOKEN = nil
@@ -95,14 +110,17 @@ describe("flemma.secrets.resolvers.environment", function()
       vim.env.FIRST_ALIAS = nil
       vim.env.SECOND_ALIAS = "from-second"
 
-      local result = environment:resolve({
+      local got
+      environment:resolve_async({
         kind = "api_key",
         service = "test",
         aliases = { "FIRST_ALIAS", "SECOND_ALIAS" },
-      }, make_env_ctx())
+      }, make_env_ctx(), function(result)
+        got = result
+      end)
 
-      assert.is_not_nil(result)
-      assert.equals("from-second", result.value)
+      assert.is_not_nil(got)
+      assert.equals("from-second", got.value)
 
       vim.env.SECOND_ALIAS = nil
     end)
@@ -123,7 +141,7 @@ describe("flemma.secrets.resolvers.environment", function()
         end,
       }
 
-      environment:resolve({ kind = "api_key", service = "nonexistent" }, ctx)
+      environment:resolve_async({ kind = "api_key", service = "nonexistent" }, ctx, function() end)
 
       assert.equals(1, #diags)
       assert.truthy(diags[1]:match("NONEXISTENT_API_KEY"))
@@ -147,11 +165,11 @@ describe("flemma.secrets.resolvers.environment", function()
         end,
       }
 
-      environment:resolve({
+      environment:resolve_async({
         kind = "access_token",
         service = "vertex",
         aliases = { "VERTEX_AI_ACCESS_TOKEN" },
-      }, ctx)
+      }, ctx, function() end)
 
       assert.equals(1, #diags)
       assert.truthy(diags[1]:match("VERTEX_ACCESS_TOKEN"))
@@ -208,7 +226,7 @@ describe("flemma.secrets.resolvers.secret_tool", function()
     end)
   end)
 
-  describe("resolve", function()
+  describe("resolve_async", function()
     local original_system
 
     before_each(function()
@@ -222,19 +240,21 @@ describe("flemma.secrets.resolvers.secret_tool", function()
     it("calls secret-tool with service and kind", function()
       local captured_cmd
       ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(cmd, _)
+      vim.system = function(cmd, _, on_exit)
         captured_cmd = cmd
-        return {
-          wait = function()
-            return { code = 0, stdout = "sk-from-keyring\n" }
-          end,
-        }
+        vim.schedule(function()
+          on_exit({ code = 0, stdout = "sk-from-keyring\n", stderr = "" })
+        end)
       end
 
-      local result = secret_tool:resolve({ kind = "api_key", service = "anthropic" }, make_st_ctx())
+      local got
+      secret_tool:resolve_async({ kind = "api_key", service = "anthropic" }, make_st_ctx(), function(result)
+        got = result
+      end)
 
-      assert.is_not_nil(result)
-      assert.equals("sk-from-keyring", result.value)
+      vim.wait(100, function() return got ~= nil end)
+      assert.is_not_nil(got)
+      assert.equals("sk-from-keyring", got.value)
       assert.is_not_nil(captured_cmd)
       assert.equals("secret-tool", captured_cmd[1])
       assert.equals("lookup", captured_cmd[2])
@@ -247,101 +267,109 @@ describe("flemma.secrets.resolvers.secret_tool", function()
     it("falls back to legacy key=api when convention fails", function()
       local calls = {}
       ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(cmd, _)
+      vim.system = function(cmd, _, on_exit)
         table.insert(calls, vim.deepcopy(cmd))
         local key_value = cmd[6]
-        if key_value == "api" then
-          return {
-            wait = function()
-              return { code = 0, stdout = "sk-legacy\n" }
-            end,
-          }
-        end
-        return {
-          wait = function()
-            return { code = 1, stdout = "" }
-          end,
-        }
+        vim.schedule(function()
+          if key_value == "api" then
+            on_exit({ code = 0, stdout = "sk-legacy\n", stderr = "" })
+          else
+            on_exit({ code = 1, stdout = "", stderr = "" })
+          end
+        end)
       end
 
-      local result = secret_tool:resolve({ kind = "api_key", service = "anthropic" }, make_st_ctx())
+      local got
+      secret_tool:resolve_async({ kind = "api_key", service = "anthropic" }, make_st_ctx(), function(result)
+        got = result
+      end)
 
-      assert.is_not_nil(result)
-      assert.equals("sk-legacy", result.value)
+      vim.wait(200, function() return got ~= nil end)
+      assert.is_not_nil(got)
+      assert.equals("sk-legacy", got.value)
       assert.equals(2, #calls)
     end)
 
     it("skips legacy fallback for access_token kind", function()
       local calls = {}
       ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(cmd, _)
+      vim.system = function(cmd, _, on_exit)
         table.insert(calls, vim.deepcopy(cmd))
-        return {
-          wait = function()
-            return { code = 1, stdout = "" }
-          end,
-        }
+        vim.schedule(function()
+          on_exit({ code = 1, stdout = "", stderr = "" })
+        end)
       end
 
-      local result = secret_tool:resolve({ kind = "access_token", service = "vertex" }, make_st_ctx())
+      local done = false
+      secret_tool:resolve_async({ kind = "access_token", service = "vertex" }, make_st_ctx(), function(_result)
+        done = true
+      end)
 
-      assert.is_nil(result)
-      -- Should only try convention (key=access_token), not legacy (key=api)
+      vim.wait(100, function() return done end)
       assert.equals(1, #calls)
     end)
 
     it("prefers convention over legacy", function()
       ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(_, _)
-        return {
-          wait = function()
-            return { code = 0, stdout = "sk-from-convention\n" }
-          end,
-        }
+      vim.system = function(_, _, on_exit)
+        vim.schedule(function()
+          on_exit({ code = 0, stdout = "sk-from-convention\n", stderr = "" })
+        end)
       end
 
-      local result = secret_tool:resolve({ kind = "api_key", service = "anthropic" }, make_st_ctx())
-      assert.is_not_nil(result)
-      assert.equals("sk-from-convention", result.value)
+      local got
+      secret_tool:resolve_async({ kind = "api_key", service = "anthropic" }, make_st_ctx(), function(result)
+        got = result
+      end)
+
+      vim.wait(100, function() return got ~= nil end)
+      assert.is_not_nil(got)
+      assert.equals("sk-from-convention", got.value)
     end)
 
     it("trims trailing whitespace from result", function()
       ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(_, _)
-        return {
-          wait = function()
-            return { code = 0, stdout = "sk-test-key  \n\n" }
-          end,
-        }
+      vim.system = function(_, _, on_exit)
+        vim.schedule(function()
+          on_exit({ code = 0, stdout = "sk-test-key  \n\n", stderr = "" })
+        end)
       end
 
-      local result = secret_tool:resolve({ kind = "api_key", service = "test" }, make_st_ctx())
-      assert.is_not_nil(result)
-      assert.equals("sk-test-key", result.value)
+      local got
+      secret_tool:resolve_async({ kind = "api_key", service = "test" }, make_st_ctx(), function(result)
+        got = result
+      end)
+
+      vim.wait(100, function() return got ~= nil end)
+      assert.is_not_nil(got)
+      assert.equals("sk-test-key", got.value)
     end)
 
     it("returns nil when both convention and legacy fail", function()
       ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(_, _)
-        return {
-          wait = function()
-            return { code = 1, stdout = "" }
-          end,
-        }
+      vim.system = function(_, _, on_exit)
+        vim.schedule(function()
+          on_exit({ code = 1, stdout = "", stderr = "" })
+        end)
       end
 
-      local result = secret_tool:resolve({ kind = "api_key", service = "test" }, make_st_ctx())
-      assert.is_nil(result)
+      local done = false
+      local got = "untouched"
+      secret_tool:resolve_async({ kind = "api_key", service = "test" }, make_st_ctx(), function(result)
+        got = result
+        done = true
+      end)
+
+      vim.wait(200, function() return done end)
+      assert.is_nil(got)
     end)
 
     it("emits diagnostic when lookup fails", function()
       ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(_, _)
-        return {
-          wait = function()
-            return { code = 1, stdout = "" }
-          end,
-        }
+      vim.system = function(_, _, on_exit)
+        vim.schedule(function()
+          on_exit({ code = 1, stdout = "", stderr = "" })
+        end)
       end
 
       local diags = {}
@@ -357,8 +385,12 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         end,
       }
 
-      secret_tool:resolve({ kind = "api_key", service = "anthropic" }, ctx)
+      local done = false
+      secret_tool:resolve_async({ kind = "api_key", service = "anthropic" }, ctx, function()
+        done = true
+      end)
 
+      vim.wait(200, function() return done end)
       assert.is_true(#diags > 0)
       assert.truthy(diags[1]:match("no entry found"))
     end)
@@ -455,152 +487,128 @@ describe("flemma.secrets.resolvers.gcloud", function()
     end)
   end)
 
-  describe("resolve", function()
+  describe("resolve_async", function()
     local original_system
-    local original_resolve
 
     before_each(function()
       original_system = vim.system
       local secrets_mod = require("flemma.secrets")
-      original_resolve = secrets_mod.resolve
+      secrets_mod.setup()
     end)
 
     after_each(function()
       vim.system = original_system
-      local secrets_mod = require("flemma.secrets")
-      secrets_mod.resolve = original_resolve
     end)
 
     it("derives access token from service account via gcloud", function()
-      local secrets_mod = require("flemma.secrets")
-      ---@diagnostic disable-next-line: duplicate-set-field
-      secrets_mod.resolve = function(credential)
-        if credential.kind == "service_account" then
-          return { value = '{"type":"service_account","project_id":"test"}' }
-        end
-        return nil
-      end
+      vim.env.VERTEX_SERVICE_ACCOUNT = '{"type":"service_account","project_id":"test"}'
 
       ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(_, _)
-        return {
-          wait = function()
-            return { code = 0, stdout = "ya29.generated-token\n" }
-          end,
-        }
+      vim.system = function(_, _, on_exit)
+        vim.schedule(function()
+          on_exit({ code = 0, stdout = "ya29.generated-token\n", stderr = "" })
+        end)
       end
 
-      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, make_ctx(nil))
+      local got
+      gcloud:resolve_async({ kind = "access_token", service = "vertex" }, make_ctx(nil), function(result)
+        got = result
+      end)
 
-      assert.is_not_nil(result)
-      assert.equals("ya29.generated-token", result.value)
-      assert.equals(3600, result.ttl)
+      vim.wait(200, function() return got ~= nil end)
+      assert.is_not_nil(got)
+      assert.equals("ya29.generated-token", got.value)
+      assert.equals(3600, got.ttl)
+
+      vim.env.VERTEX_SERVICE_ACCOUNT = nil
     end)
 
     it("falls back to default credentials when no service account", function()
-      local secrets_mod = require("flemma.secrets")
-      ---@diagnostic disable-next-line: duplicate-set-field
-      secrets_mod.resolve = function(_)
-        return nil
-      end
-
       local captured_cmd
       ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(cmd, _)
+      vim.system = function(cmd, _, on_exit)
         captured_cmd = cmd
-        return {
-          wait = function()
-            return { code = 0, stdout = "ya29.default-token\n" }
-          end,
-        }
+        vim.schedule(function()
+          on_exit({ code = 0, stdout = "ya29.default-token\n", stderr = "" })
+        end)
       end
 
-      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, make_ctx(nil))
+      local got
+      gcloud:resolve_async({ kind = "access_token", service = "vertex" }, make_ctx(nil), function(result)
+        got = result
+      end)
 
-      assert.is_not_nil(result)
-      assert.equals("ya29.default-token", result.value)
+      vim.wait(200, function() return got ~= nil end)
+      assert.is_not_nil(got)
+      assert.equals("ya29.default-token", got.value)
       assert.is_not_nil(captured_cmd)
     end)
 
     it("returns nil when gcloud fails", function()
-      local secrets_mod = require("flemma.secrets")
       ---@diagnostic disable-next-line: duplicate-set-field
-      secrets_mod.resolve = function(_)
-        return nil
+      vim.system = function(_, _, on_exit)
+        vim.schedule(function()
+          on_exit({ code = 1, stdout = "", stderr = "ERROR: not authenticated" })
+        end)
       end
 
-      ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(_, _)
-        return {
-          wait = function()
-            return { code = 1, stdout = "", stderr = "ERROR: not authenticated" }
-          end,
-        }
-      end
+      local done = false
+      local got = "untouched"
+      gcloud:resolve_async({ kind = "access_token", service = "vertex" }, make_ctx(nil), function(result)
+        got = result
+        done = true
+      end)
 
-      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, make_ctx(nil))
-      assert.is_nil(result)
+      vim.wait(200, function() return done end)
+      assert.is_nil(got)
     end)
 
     it("validates token is non-empty", function()
-      local secrets_mod = require("flemma.secrets")
       ---@diagnostic disable-next-line: duplicate-set-field
-      secrets_mod.resolve = function(_)
-        return nil
+      vim.system = function(_, _, on_exit)
+        vim.schedule(function()
+          on_exit({ code = 0, stdout = "\n", stderr = "" })
+        end)
       end
 
-      ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(_, _)
-        return {
-          wait = function()
-            return { code = 0, stdout = "\n" }
-          end,
-        }
-      end
+      local done = false
+      local got = "untouched"
+      gcloud:resolve_async({ kind = "access_token", service = "vertex" }, make_ctx(nil), function(result)
+        got = result
+        done = true
+      end)
 
-      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, make_ctx(nil))
-      assert.is_nil(result)
+      vim.wait(200, function() return done end)
+      assert.is_nil(got)
     end)
 
     it("uses configured gcloud path in command", function()
-      local secrets_mod = require("flemma.secrets")
-      ---@diagnostic disable-next-line: duplicate-set-field
-      secrets_mod.resolve = function(_)
-        return nil
-      end
-
       local captured_cmd
       ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(cmd, _)
+      vim.system = function(cmd, _, on_exit)
         captured_cmd = cmd
-        return {
-          wait = function()
-            return { code = 0, stdout = "ya29.token\n" }
-          end,
-        }
+        vim.schedule(function()
+          on_exit({ code = 0, stdout = "ya29.token\n", stderr = "" })
+        end)
       end
 
       local ctx = make_ctx({ path = "/nix/store/abc123/bin/gcloud" })
-      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, ctx)
+      local got
+      gcloud:resolve_async({ kind = "access_token", service = "vertex" }, ctx, function(result)
+        got = result
+      end)
 
-      assert.is_not_nil(result)
+      vim.wait(200, function() return got ~= nil end)
+      assert.is_not_nil(got)
       assert.equals("/nix/store/abc123/bin/gcloud", captured_cmd[1])
     end)
 
     it("emits diagnostic when gcloud command fails", function()
-      local secrets_mod = require("flemma.secrets")
       ---@diagnostic disable-next-line: duplicate-set-field
-      secrets_mod.resolve = function(_)
-        return nil
-      end
-
-      ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(_, _)
-        return {
-          wait = function()
-            return { code = 2, stdout = "", stderr = "ERROR" }
-          end,
-        }
+      vim.system = function(_, _, on_exit)
+        vim.schedule(function()
+          on_exit({ code = 2, stdout = "", stderr = "ERROR" })
+        end)
       end
 
       local diags = {}
@@ -616,27 +624,23 @@ describe("flemma.secrets.resolvers.gcloud", function()
         end,
       }
 
-      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, ctx)
-      assert.is_nil(result)
+      local done = false
+      gcloud:resolve_async({ kind = "access_token", service = "vertex" }, ctx, function()
+        done = true
+      end)
+
+      vim.wait(200, function() return done end)
       assert.is_true(#diags > 0)
       assert.truthy(diags[1]:match("auth failed"))
       assert.truthy(diags[1]:match("exit code 2"))
     end)
 
     it("emits diagnostic when token is empty", function()
-      local secrets_mod = require("flemma.secrets")
       ---@diagnostic disable-next-line: duplicate-set-field
-      secrets_mod.resolve = function(_)
-        return nil
-      end
-
-      ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(_, _)
-        return {
-          wait = function()
-            return { code = 0, stdout = "\n" }
-          end,
-        }
+      vim.system = function(_, _, on_exit)
+        vim.schedule(function()
+          on_exit({ code = 0, stdout = "\n", stderr = "" })
+        end)
       end
 
       local diags = {}
@@ -652,8 +656,12 @@ describe("flemma.secrets.resolvers.gcloud", function()
         end,
       }
 
-      local result = gcloud:resolve({ kind = "access_token", service = "vertex" }, ctx)
-      assert.is_nil(result)
+      local done = false
+      gcloud:resolve_async({ kind = "access_token", service = "vertex" }, ctx, function()
+        done = true
+      end)
+
+      vim.wait(200, function() return done end)
       assert.is_true(#diags > 0)
       assert.truthy(diags[1]:match("returned empty token"))
     end)
@@ -708,7 +716,7 @@ describe("flemma.secrets.resolvers.keychain", function()
     end)
   end)
 
-  describe("resolve", function()
+  describe("resolve_async", function()
     local original_system
 
     before_each(function()
@@ -722,19 +730,21 @@ describe("flemma.secrets.resolvers.keychain", function()
     it("calls security find-generic-password with service and kind", function()
       local captured_cmd
       ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(cmd, _)
+      vim.system = function(cmd, _, on_exit)
         captured_cmd = cmd
-        return {
-          wait = function()
-            return { code = 0, stdout = "sk-from-keychain\n" }
-          end,
-        }
+        vim.schedule(function()
+          on_exit({ code = 0, stdout = "sk-from-keychain\n", stderr = "" })
+        end)
       end
 
-      local result = keychain:resolve({ kind = "api_key", service = "anthropic" }, make_kc_ctx())
+      local got
+      keychain:resolve_async({ kind = "api_key", service = "anthropic" }, make_kc_ctx(), function(result)
+        got = result
+      end)
 
-      assert.is_not_nil(result)
-      assert.equals("sk-from-keychain", result.value)
+      vim.wait(100, function() return got ~= nil end)
+      assert.is_not_nil(got)
+      assert.equals("sk-from-keychain", got.value)
       assert.equals("security", captured_cmd[1])
       assert.equals("find-generic-password", captured_cmd[2])
     end)
@@ -742,86 +752,91 @@ describe("flemma.secrets.resolvers.keychain", function()
     it("falls back to legacy account=api when convention fails", function()
       local calls = {}
       ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(cmd, _)
+      vim.system = function(cmd, _, on_exit)
         table.insert(calls, vim.deepcopy(cmd))
         local account = cmd[6]
-        if account == "api" then
-          return {
-            wait = function()
-              return { code = 0, stdout = "sk-legacy\n" }
-            end,
-          }
-        end
-        return {
-          wait = function()
-            return { code = 44, stdout = "" }
-          end,
-        }
+        vim.schedule(function()
+          if account == "api" then
+            on_exit({ code = 0, stdout = "sk-legacy\n", stderr = "" })
+          else
+            on_exit({ code = 44, stdout = "", stderr = "" })
+          end
+        end)
       end
 
-      local result = keychain:resolve({ kind = "api_key", service = "anthropic" }, make_kc_ctx())
+      local got
+      keychain:resolve_async({ kind = "api_key", service = "anthropic" }, make_kc_ctx(), function(result)
+        got = result
+      end)
 
-      assert.is_not_nil(result)
-      assert.equals("sk-legacy", result.value)
+      vim.wait(200, function() return got ~= nil end)
+      assert.is_not_nil(got)
+      assert.equals("sk-legacy", got.value)
       assert.equals(2, #calls)
     end)
 
     it("skips legacy fallback for access_token kind", function()
       local calls = {}
       ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(cmd, _)
+      vim.system = function(cmd, _, on_exit)
         table.insert(calls, vim.deepcopy(cmd))
-        return {
-          wait = function()
-            return { code = 44, stdout = "" }
-          end,
-        }
+        vim.schedule(function()
+          on_exit({ code = 44, stdout = "", stderr = "" })
+        end)
       end
 
-      local result = keychain:resolve({ kind = "access_token", service = "vertex" }, make_kc_ctx())
+      local done = false
+      keychain:resolve_async({ kind = "access_token", service = "vertex" }, make_kc_ctx(), function(_result)
+        done = true
+      end)
 
-      assert.is_nil(result)
-      -- Should only try convention (-a access_token), not legacy (-a api)
+      vim.wait(100, function() return done end)
       assert.equals(1, #calls)
     end)
 
     it("trims trailing whitespace", function()
       ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(_, _)
-        return {
-          wait = function()
-            return { code = 0, stdout = "sk-key  \n" }
-          end,
-        }
+      vim.system = function(_, _, on_exit)
+        vim.schedule(function()
+          on_exit({ code = 0, stdout = "sk-key  \n", stderr = "" })
+        end)
       end
 
-      local result = keychain:resolve({ kind = "api_key", service = "test" }, make_kc_ctx())
-      assert.is_not_nil(result)
-      assert.equals("sk-key", result.value)
+      local got
+      keychain:resolve_async({ kind = "api_key", service = "test" }, make_kc_ctx(), function(result)
+        got = result
+      end)
+
+      vim.wait(100, function() return got ~= nil end)
+      assert.is_not_nil(got)
+      assert.equals("sk-key", got.value)
     end)
 
     it("returns nil when both convention and legacy fail", function()
       ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(_, _)
-        return {
-          wait = function()
-            return { code = 44, stdout = "" }
-          end,
-        }
+      vim.system = function(_, _, on_exit)
+        vim.schedule(function()
+          on_exit({ code = 44, stdout = "", stderr = "" })
+        end)
       end
 
-      local result = keychain:resolve({ kind = "api_key", service = "test" }, make_kc_ctx())
-      assert.is_nil(result)
+      local done = false
+      local got = "untouched"
+      keychain:resolve_async({ kind = "api_key", service = "test" }, make_kc_ctx(), function(result)
+        got = result
+        done = true
+      end)
+
+      vim.wait(200, function() return done end)
+      assert.is_nil(got)
     end)
 
     it("emits diagnostic when lookup fails", function()
       ---@diagnostic disable-next-line: duplicate-set-field
-      vim.system = function(_, _)
-        return {
-          wait = function()
-            return { code = 44, stdout = "" }
-          end,
-        }
+      vim.system = function(_, _, on_exit)
+        vim.schedule(function()
+          on_exit({ code = 44, stdout = "", stderr = "" })
+        end)
       end
 
       local diags = {}
@@ -837,8 +852,12 @@ describe("flemma.secrets.resolvers.keychain", function()
         end,
       }
 
-      keychain:resolve({ kind = "api_key", service = "anthropic" }, ctx)
+      local done = false
+      keychain:resolve_async({ kind = "api_key", service = "anthropic" }, ctx, function()
+        done = true
+      end)
 
+      vim.wait(200, function() return done end)
       assert.is_true(#diags > 0)
       assert.truthy(diags[1]:match("no entry found"))
     end)
