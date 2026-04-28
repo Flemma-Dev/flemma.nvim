@@ -128,7 +128,7 @@ local tool_names = require("flemma.utilities.tools")
 ---@field api_version? string
 ---@field metadata? flemma.provider.Metadata
 ---@field get_credential fun(self): flemma.secrets.Credential Credential descriptor (providers must override)
----@field get_api_key fun(self): string|nil, flemma.secrets.ResolverDiagnostic[]|nil Resolve credentials via secrets module
+---@field get_api_key fun(self): string|nil Resolve credentials via secrets module
 ---@field _response_buffer? flemma.provider.ResponseBuffer
 ---@field _response_headers? table<string, string[]>
 local M = {}
@@ -173,15 +173,11 @@ function M.get_credential(self)
   error("get_credential() must be implemented by provider")
 end
 
---- Resolve credentials via the secrets module using the provider's credential descriptor.
 ---@param self flemma.provider.Base
----@return string|nil value, flemma.secrets.ResolverDiagnostic[]|nil diagnostics
+---@return string|nil
 function M.get_api_key(self)
-  local result, diagnostics = secrets.resolve(self:get_credential())
-  if result then
-    return result.value
-  end
-  return nil, diagnostics
+  local result = secrets.resolve(self:get_credential())
+  return result and result.value or nil
 end
 
 --- @abstract
@@ -871,15 +867,9 @@ function M.send_count_tokens(spec, on_result)
   if fixture_path then
     headers = { "content-type: application/json" }
   else
-    local api_key, api_key_diagnostics = provider:get_api_key()
+    local api_key = provider:get_api_key()
     if not api_key then
-      local msg = "No API key available for " .. spec.error_label .. "."
-      if api_key_diagnostics then
-        for _, d in ipairs(api_key_diagnostics) do
-          msg = msg .. "\n  [" .. d.resolver .. "] " .. d.message
-        end
-      end
-      on_result({ err = msg })
+      on_result({ err = "No API key available for " .. spec.error_label .. "." })
       return
     end
     headers = provider:get_request_headers()

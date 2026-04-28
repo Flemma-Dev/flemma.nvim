@@ -3,11 +3,12 @@
 --- registered resolvers compete (in priority order) to fulfill them.
 local M = {}
 
-local registry = require("flemma.secrets.registry")
 local cache = require("flemma.secrets.cache")
+local context = require("flemma.secrets.context")
 local log = require("flemma.logging")
 local notify = require("flemma.notify")
-local context = require("flemma.secrets.context")
+local readiness = require("flemma.readiness")
+local registry = require("flemma.secrets.registry")
 
 ---@class flemma.secrets.Credential
 ---@field kind string
@@ -32,9 +33,8 @@ local function cache_key(kind, service)
   return kind .. ":" .. service
 end
 
---- Resolve a credential. Checks cache first, then tries resolvers in priority order.
 ---@param credential flemma.secrets.Credential
----@return flemma.secrets.Result|nil result, flemma.secrets.ResolverDiagnostic[]|nil diagnostics
+---@return flemma.secrets.Result
 function M.resolve(credential)
   local key = cache_key(credential.kind, credential.service)
 
@@ -44,26 +44,20 @@ function M.resolve(credential)
     return cached
   end
 
-  local all_diagnostics = {}
-  local sorted = registry.get_all_sorted()
-  for _, resolver in ipairs(sorted) do
-    local ctx = context.new(resolver.name)
-    if resolver:supports(credential, ctx) then
-      log.debug("secrets.resolve(): trying resolver " .. resolver.name .. " for " .. key)
-      local result = resolver:resolve(credential, ctx)
+  local boundary = readiness.get_or_create_boundary("secrets:" .. key, function(done)
+    M.resolve_async(credential, function(result, diagnostics)
       if result then
-        log.debug("secrets.resolve(): resolved by " .. resolver.name)
-        cache.set(key, result, credential)
-        return result
+        done({ ok = true })
+      else
+        done({ ok = false, diagnostics = diagnostics })
       end
-    end
-    vim.list_extend(all_diagnostics, ctx:get_diagnostics())
-  end
+    end)
+  end)
 
-  local description = credential.description or (credential.kind .. " for " .. credential.service)
-  log.debug("secrets.resolve(): no resolver could fulfill: " .. description)
-
-  return nil, #all_diagnostics > 0 and all_diagnostics or nil
+  error(readiness.Suspense.new(
+    "Resolving " .. (credential.description or (credential.kind .. " for " .. credential.service)),
+    boundary
+  ))
 end
 
 ---@param credential flemma.secrets.Credential

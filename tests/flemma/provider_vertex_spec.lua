@@ -689,18 +689,18 @@ describe("Vertex AI Provider", function()
 
   describe("get_api_key via secrets module", function()
     local secrets_module = require("flemma.secrets")
+    local secrets_cache = require("flemma.secrets.cache")
 
     before_each(function()
       secrets_module.invalidate_all()
     end)
 
     after_each(function()
-      vim.env.VERTEX_AI_ACCESS_TOKEN = nil
       secrets_module.invalidate_all()
     end)
 
-    it("should resolve access token from environment via secrets", function()
-      vim.env.VERTEX_AI_ACCESS_TOKEN = "ya29.env-token"
+    it("should resolve access token from cache via secrets", function()
+      secrets_cache.set("access_token:vertex", { value = "ya29.env-token" }, { kind = "access_token", service = "vertex" })
       local provider = vertex.new({
         model = "gemini-2.5-pro",
         project_id = "test-project",
@@ -712,7 +712,7 @@ describe("Vertex AI Provider", function()
     end)
 
     it("should use cached secret on subsequent calls", function()
-      vim.env.VERTEX_AI_ACCESS_TOKEN = "ya29.cached-token"
+      secrets_cache.set("access_token:vertex", { value = "ya29.cached-token" }, { kind = "access_token", service = "vertex" })
       local provider = vertex.new({
         model = "gemini-2.5-pro",
         project_id = "test-project",
@@ -722,8 +722,6 @@ describe("Vertex AI Provider", function()
       local first = provider:get_api_key()
       assert.equals("ya29.cached-token", first)
 
-      -- Change the env var; the secrets cache should return the cached value
-      vim.env.VERTEX_AI_ACCESS_TOKEN = "ya29.different-token"
       local second = provider:get_api_key()
       assert.equals("ya29.cached-token", second)
     end)
