@@ -99,7 +99,6 @@ local function read_file(path, opts)
   return data, nil
 end
 
-
 --- Build the include() closure for a given environment.
 --- The include_stack is threaded through closures — not stored on the env.
 ---@param env flemma.templating.eval.Environment The environment where include() will be installed
@@ -217,7 +216,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
     -- Create isolated child environment (does NOT inherit user variables)
     local child_env = create_env_fn()
     child_env.__filename = target_path
-    child_env.__dirname = vim.fn.fnamemodify(target_path, ":h")
+    child_env.__dirname = path_util.dirname(target_path)
 
     -- Inject caller-provided arguments: only string keys are template variables.
     -- Symbol keys (BINARY, MIME) are include() control flags, not variables.

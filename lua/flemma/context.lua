@@ -4,6 +4,7 @@
 ---@class flemma.ContextUtil
 local M = {}
 
+local path_util = require("flemma.utilities.path")
 local symbols = require("flemma.symbols")
 
 --- Context carries document identity: file path, frontmatter options, and user
@@ -28,7 +29,7 @@ end
 ---@return string|nil dirname The directory path
 function Context:get_dirname()
   if self.__filename then
-    return vim.fn.fnamemodify(self.__filename, ":h")
+    return path_util.dirname(self.__filename)
   end
   return nil
 end

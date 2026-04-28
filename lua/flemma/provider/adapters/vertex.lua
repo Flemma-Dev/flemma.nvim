@@ -3,6 +3,7 @@
 local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local path_util = require("flemma.utilities.path")
 local normalize = require("flemma.provider.normalize")
 local s = require("flemma.schema")
 local sink = require("flemma.sink")
@@ -191,7 +192,7 @@ function M.build_request(self, prompt, _context)
             inlineData = {
               mimeType = part.mime_type,
               data = part.data,
-              displayName = part.filename and vim.fn.fnamemodify(part.filename, ":t") or "file",
+              displayName = part.filename and path_util.basename(part.filename) or "file",
             },
           })
           log.debug(

@@ -4,6 +4,7 @@ local M = {}
 
 local json = require("flemma.utilities.json")
 local display = require("flemma.utilities.display")
+local path_util = require("flemma.utilities.path")
 -- NOTE: require("flemma.ast.query") directly instead of the barrel require("flemma.ast")
 -- because dump.lua is itself part of the ast/ package and imported by the barrel — using
 -- the barrel here would create a circular require.
@@ -374,14 +375,14 @@ function M.open_diff(bufnr)
     vim.bo[buf].filetype = "flemma-ast"
   end
 
-  local source_name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ":t")
+  local source_name = path_util.basename(vim.api.nvim_buf_get_name(bufnr))
   local raw_name = "ast:raw (" .. source_name .. ")"
   local rewritten_name = "ast:rewritten (" .. source_name .. ")"
   -- Wipe any existing ast:diff buffers for this file to avoid E95
   -- Cannot use vim.fn.bufnr() here — it interprets the name as a pattern
   -- and the parentheses break matching.
   for _, b in ipairs(vim.api.nvim_list_bufs()) do
-    local bname = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(b), ":t")
+    local bname = path_util.basename(vim.api.nvim_buf_get_name(b))
     if bname == raw_name or bname == rewritten_name then
       vim.api.nvim_buf_delete(b, { force = true })
     end

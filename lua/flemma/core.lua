@@ -24,6 +24,7 @@ local diagnostic_format = require("flemma.utilities.diagnostic")
 local diagnostics_module = require("flemma.diagnostics")
 local executor = require("flemma.tools.executor")
 local injector = require("flemma.tools.injector")
+local path_util = require("flemma.utilities.path")
 local parser = require("flemma.parser")
 local pipeline = require("flemma.pipeline")
 local processor = require("flemma.processor")
@@ -1036,7 +1037,7 @@ function M._run_send_pipeline(bufnr, opts)
         local bufname = vim.api.nvim_buf_get_name(bufnr)
         if bufname and bufname ~= "" then
           -- Resolve to canonical path (handles symlinks, .. etc.)
-          filepath = vim.loop.fs_realpath(bufname) or bufname
+          filepath = path_util.realpath(bufname)
         end
 
         -- Add request to session with pricing snapshot

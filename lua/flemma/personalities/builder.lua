@@ -71,7 +71,7 @@ function M.build_environment(bufnr)
   local current_file = nil
   local buffer_name = vim.api.nvim_buf_get_name(bufnr)
   if buffer_name ~= "" then
-    local relative = vim.fn.fnamemodify(buffer_name, ":.")
+    local relative = path_util.relative(buffer_name, vim.fn.getcwd())
     if relative ~= buffer_name then
       current_file = relative
     else

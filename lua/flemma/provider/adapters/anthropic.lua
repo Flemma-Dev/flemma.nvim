@@ -3,6 +3,7 @@
 local base = require("flemma.provider.base")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local path_util = require("flemma.utilities.path")
 local notify = require("flemma.notify")
 local normalize = require("flemma.provider.normalize")
 local s = require("flemma.schema")
@@ -110,7 +111,7 @@ function M.build_request(self, prompt, _context)
               table.insert(blocks, {
                 type = "document",
                 source = { type = "base64", media_type = rp.mime_type, data = rp.data },
-                title = rp.filename and vim.fn.fnamemodify(rp.filename, ":t"),
+                title = rp.filename and path_util.basename(rp.filename),
               })
             elseif rp.kind == "text_file" then
               table.insert(blocks, { type = "text", text = rp.text })
@@ -170,7 +171,7 @@ function M.build_request(self, prompt, _context)
               media_type = part.mime_type,
               data = part.data,
             },
-            title = part.filename and vim.fn.fnamemodify(part.filename, ":t"),
+            title = part.filename and path_util.basename(part.filename),
           })
           log.debug(
             'anthropic.build_request: Added document part for "'

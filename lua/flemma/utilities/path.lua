@@ -1,6 +1,6 @@
---- Centralized file-path resolution
---- Tilde expansion, absolute passthrough, relative joining, and normalization
---- in one place so every consumer resolves paths consistently.
+--- Centralized file-path utilities
+--- Resolve, decompose, and canonicalize paths in one place so every
+--- consumer handles paths consistently.
 ---@class flemma.utilities.Path
 local M = {}
 
@@ -23,6 +23,47 @@ function M.resolve(path, base_dir)
   end
   if base_dir then
     return vim.fs.normalize(base_dir .. "/" .. path)
+  end
+  return path
+end
+
+---Canonical absolute path with symlink resolution.
+---Makes `path` absolute via `:p`, then resolves symlinks.
+---Works for non-existent paths (returns the textual absolute form).
+---@param path string
+---@return string
+function M.realpath(path)
+  return vim.fn.resolve(vim.fn.fnamemodify(path, ":p"))
+end
+
+---Parent directory of a path.
+---@param path string
+---@return string
+function M.dirname(path)
+  return vim.fn.fnamemodify(path, ":h")
+end
+
+---Filename component of a path (tail).
+---@param path string
+---@return string
+function M.basename(path)
+  return vim.fn.fnamemodify(path, ":t")
+end
+
+---Make a path relative to a base directory.
+---If `path` starts with `base_dir/`, the prefix is replaced with `./`.
+---If `path` equals `base_dir`, returns `"."`.
+---Otherwise returns `path` unchanged.
+---@param path string Absolute path to relativize
+---@param base_dir string Base directory to strip
+---@return string
+function M.relative(path, base_dir)
+  if path == base_dir then
+    return "."
+  end
+  local prefix = base_dir .. "/"
+  if vim.startswith(path, prefix) then
+    return "." .. path:sub(#base_dir + 1)
   end
   return path
 end

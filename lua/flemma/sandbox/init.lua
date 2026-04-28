@@ -7,6 +7,7 @@ local M = {}
 local bwrap = require("flemma.sandbox.backends.bwrap")
 local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
+local path_util = require("flemma.utilities.path")
 local registry_utils = require("flemma.utilities.registry")
 local variables = require("flemma.utilities.variables")
 
@@ -341,14 +342,14 @@ variables.register("urn:flemma:buffer:path", function(context)
   if bufname == "" then
     return nil
   end
-  return vim.fn.fnamemodify(bufname, ":p:h")
+  return path_util.dirname(path_util.realpath(bufname))
 end)
 
 --- Normalize a path to absolute, resolving symlinks
 ---@param path string
 ---@return string
 local function normalize(path)
-  return vim.fn.resolve(vim.fn.fnamemodify(path, ":p"))
+  return path_util.realpath(path)
 end
 
 --- Expand path variables and normalize all paths in a policy.

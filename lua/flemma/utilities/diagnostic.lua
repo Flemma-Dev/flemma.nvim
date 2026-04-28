@@ -2,6 +2,8 @@
 ---@class flemma.utilities.Diagnostic
 local M = {}
 
+local path_util = require("flemma.utilities.path")
+
 local ICON_ERROR = "⊘"
 local ICON_WARN = "⚠"
 
@@ -26,7 +28,7 @@ function M.format_path(path)
   if not path or path == "N/A" then
     return ""
   end
-  return vim.fn.fnamemodify(path, ":.")
+  return path_util.relative(path, vim.fn.getcwd())
 end
 
 ---Format a position as `:line` or `:line:col`.

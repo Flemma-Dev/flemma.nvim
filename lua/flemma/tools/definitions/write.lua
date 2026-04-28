@@ -2,6 +2,7 @@
 --- Write/create files with automatic parent directory creation
 --- Ported from pi by Mario Zechner (https://github.com/badlogic/pi-mono)
 --- Original: MIT License, Copyright (c) 2025 Mario Zechner
+local path_util = require("flemma.utilities.path")
 local s = require("flemma.schema")
 local str = require("flemma.utilities.string")
 
@@ -58,7 +59,7 @@ M.definitions = {
       end
 
       -- Create parent directories
-      local parent = vim.fn.fnamemodify(path, ":h")
+      local parent = path_util.dirname(path)
       vim.fn.mkdir(parent, "p")
 
       -- Write the file
