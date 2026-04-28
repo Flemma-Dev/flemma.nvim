@@ -8,6 +8,7 @@ local M = {}
 local ast = require("flemma.ast")
 local buffer_util = require("flemma.utilities.buffer")
 local context_module = require("flemma.preprocessor.context")
+local readiness = require("flemma.readiness")
 
 --------------------------------------------------------------------------------
 -- Types
@@ -393,6 +394,9 @@ local function run_text_handlers(text_segment, handlers, rewriter_state, opts, m
         local handler_ok, emission = pcall(accepted.handler, accepted.match, ctx)
 
         if not handler_ok then
+          if readiness.is_suspense(emission) then
+            error(emission)
+          end
           -- Check if this is a Confirmation throw (re-throw it)
           if context_module.is_confirmation(emission) then
             error(emission)
@@ -497,6 +501,9 @@ local function run_segment_handlers(segment, handlers, rewriter_state, opts, mes
         local handler_ok, emission = pcall(entry.handler, seg, ctx)
 
         if not handler_ok then
+          if readiness.is_suspense(emission) then
+            error(emission)
+          end
           if context_module.is_confirmation(emission) then
             error(emission)
           end

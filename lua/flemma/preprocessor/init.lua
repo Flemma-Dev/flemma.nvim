@@ -8,6 +8,7 @@ local M = {}
 
 local context_module = require("flemma.preprocessor.context")
 local notify = require("flemma.notify")
+local readiness = require("flemma.readiness")
 local registry = require("flemma.preprocessor.registry")
 local runner = require("flemma.preprocessor.runner")
 local state = require("flemma.state")
@@ -250,6 +251,9 @@ function M.run(doc, bufnr, opts)
   local ok, result_or_err, result_diagnostics = pcall(runner.run_pipeline, doc, bufnr, run_opts)
 
   if not ok then
+    if readiness.is_suspense(result_or_err) then
+      error(result_or_err)
+    end
     -- Check if this is a Confirmation suspension
     if context_module.is_confirmation(result_or_err) then
       -- Store the pending confirmation in buffer state for the UI to present

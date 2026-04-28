@@ -1,5 +1,6 @@
 local compiler = require("flemma.templating.compiler")
 local config = require("flemma.config")
+local readiness = require("flemma.readiness")
 local config_store = require("flemma.config.store")
 local ctxutil = require("flemma.context")
 local eval = require("flemma.templating.eval")
@@ -130,6 +131,9 @@ local function evaluate_frontmatter_internal(doc, base_context, bufnr)
           table.insert(diagnostics, diagnostic_format.from_validation_failure(failure, fm_defaults))
         end
       else
+        if readiness.is_suspense(result) then
+          error(result)
+        end
         table.insert(
           diagnostics,
           error_to_diagnostic(result, {

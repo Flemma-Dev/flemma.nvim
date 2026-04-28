@@ -7,6 +7,7 @@ local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
 local log = require("flemma.logging")
 local notify = require("flemma.notify")
+local readiness = require("flemma.readiness")
 local secrets = require("flemma.secrets")
 local state = require("flemma.state")
 local normalize = require("flemma.provider.normalize")
@@ -891,6 +892,10 @@ function M.send_to_provider(opts)
   end)
 
   if not prep_ok then
+    if readiness.is_suspense(prep_result) then
+      state.unlock_buffer(bufnr)
+      error(prep_result)
+    end
     notify.error(tostring(prep_result))
     state.unlock_buffer(bufnr)
     return
