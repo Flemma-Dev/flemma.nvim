@@ -77,9 +77,12 @@ Capabilities contract (registered via `registry.register`)
 Missing boolean capabilities default to `false` at registration time.
 ]]
 
+local bridge = require("flemma.bridge")
+local client = require("flemma.client")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local notify = require("flemma.notify")
+local readiness = require("flemma.readiness")
 local secrets = require("flemma.secrets")
 local sink = require("flemma.sink")
 local tool_names = require("flemma.utilities.tools")
@@ -834,6 +837,101 @@ function M._inject_orphan_results(self, pending, format_fn)
     )
   end
   return results
+end
+
+-- ============================================================================
+-- Shared count-tokens orchestration
+-- ============================================================================
+
+---@class flemma.provider.CountTokensSpec
+---@field bufnr integer
+---@field endpoint string|fun(provider: flemma.provider.Base): string
+---@field transform_body fun(body: table): table
+---@field parse_response fun(parsed: table): integer|nil, string|nil
+---@field cache_key_prefix string
+---@field error_label string
+
+---@param spec flemma.provider.CountTokensSpec
+---@param on_result flemma.usage.EstimateCallback
+function M.send_count_tokens(spec, on_result)
+  local prompt, context, provider, _evaluated, failure = bridge.build_prompt_and_provider(spec.bufnr)
+  if failure then
+    on_result({ err = failure.message })
+    return
+  end
+  ---@cast prompt flemma.pipeline.Prompt
+  ---@cast context flemma.Context
+  ---@cast provider flemma.provider.Base
+
+  local endpoint = type(spec.endpoint) == "function" and spec.endpoint(provider) or spec.endpoint
+  ---@cast endpoint string
+
+  local fixture_path = client.find_fixture_for_endpoint(endpoint)
+  local headers
+  if fixture_path then
+    headers = { "content-type: application/json" }
+  else
+    local api_key, api_key_diagnostics = provider:get_api_key()
+    if not api_key then
+      local msg = "No API key available for " .. spec.error_label .. "."
+      if api_key_diagnostics then
+        for _, d in ipairs(api_key_diagnostics) do
+          msg = msg .. "\n  [" .. d.resolver .. "] " .. d.message
+        end
+      end
+      on_result({ err = msg })
+      return
+    end
+    headers = provider:get_request_headers()
+  end
+  ---@cast headers string[]
+
+  local build_ok, body = pcall(provider.build_request, provider, prompt, context)
+  if not build_ok then
+    if readiness.is_suspense(body) then error(body) end
+    on_result({ err = "Build request failed: " .. tostring(body) })
+    return
+  end
+  body = spec.transform_body(body)
+
+  client.send_json_request({
+    endpoint = endpoint,
+    headers = headers,
+    request_body = body,
+    parameters = provider.parameters,
+    trailing_keys = provider:get_trailing_keys(),
+  }, function(response_body, exit_code, curl_err)
+    if curl_err or exit_code ~= 0 or not response_body or response_body == "" then
+      on_result({ err = curl_err or ("curl exit code " .. tostring(exit_code)) })
+      return
+    end
+    local ok_p, parsed = pcall(json.decode, response_body)
+    if not ok_p or type(parsed) ~= "table" then
+      on_result({ err = "could not parse response" })
+      return
+    end
+    if parsed.error or parsed.type == "error" or (vim.islist(parsed) and parsed[1] and parsed[1].error) then
+      on_result({ err = provider:extract_json_response_error(parsed) or ("unknown " .. spec.error_label .. " error") })
+      return
+    end
+    local tokens, perr = spec.parse_response(parsed)
+    if perr then
+      on_result({ err = perr })
+      return
+    end
+    if type(tokens) ~= "number" then
+      on_result({ err = "missing token count in response" })
+      return
+    end
+    local model = provider.parameters.model
+    on_result({
+      response = {
+        tokens = tokens,
+        cache_key = spec.cache_key_prefix .. ":" .. model,
+        model = model,
+      },
+    })
+  end)
 end
 
 return M
