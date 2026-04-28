@@ -72,13 +72,17 @@ describe("flemma.secrets.resolvers.environment", function()
       vim.env.VERTEX_AI_ACCESS_TOKEN = "ya29.from-alias"
 
       local got
-      environment:resolve_async({
-        kind = "access_token",
-        service = "vertex",
-        aliases = { "VERTEX_AI_ACCESS_TOKEN" },
-      }, make_env_ctx(), function(result)
-        got = result
-      end)
+      environment:resolve_async(
+        {
+          kind = "access_token",
+          service = "vertex",
+          aliases = { "VERTEX_AI_ACCESS_TOKEN" },
+        },
+        make_env_ctx(),
+        function(result)
+          got = result
+        end
+      )
 
       assert.is_not_nil(got)
       assert.equals("ya29.from-alias", got.value)
@@ -91,13 +95,17 @@ describe("flemma.secrets.resolvers.environment", function()
       vim.env.VERTEX_AI_ACCESS_TOKEN = "ya29.from-alias"
 
       local got
-      environment:resolve_async({
-        kind = "access_token",
-        service = "vertex",
-        aliases = { "VERTEX_AI_ACCESS_TOKEN" },
-      }, make_env_ctx(), function(result)
-        got = result
-      end)
+      environment:resolve_async(
+        {
+          kind = "access_token",
+          service = "vertex",
+          aliases = { "VERTEX_AI_ACCESS_TOKEN" },
+        },
+        make_env_ctx(),
+        function(result)
+          got = result
+        end
+      )
 
       assert.is_not_nil(got)
       assert.equals("ya29.from-convention", got.value)
@@ -111,13 +119,17 @@ describe("flemma.secrets.resolvers.environment", function()
       vim.env.SECOND_ALIAS = "from-second"
 
       local got
-      environment:resolve_async({
-        kind = "api_key",
-        service = "test",
-        aliases = { "FIRST_ALIAS", "SECOND_ALIAS" },
-      }, make_env_ctx(), function(result)
-        got = result
-      end)
+      environment:resolve_async(
+        {
+          kind = "api_key",
+          service = "test",
+          aliases = { "FIRST_ALIAS", "SECOND_ALIAS" },
+        },
+        make_env_ctx(),
+        function(result)
+          got = result
+        end
+      )
 
       assert.is_not_nil(got)
       assert.equals("from-second", got.value)
@@ -252,7 +264,9 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         got = result
       end)
 
-      vim.wait(100, function() return got ~= nil end)
+      vim.wait(100, function()
+        return got ~= nil
+      end)
       assert.is_not_nil(got)
       assert.equals("sk-from-keyring", got.value)
       assert.is_not_nil(captured_cmd)
@@ -284,7 +298,9 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         got = result
       end)
 
-      vim.wait(200, function() return got ~= nil end)
+      vim.wait(200, function()
+        return got ~= nil
+      end)
       assert.is_not_nil(got)
       assert.equals("sk-legacy", got.value)
       assert.equals(2, #calls)
@@ -305,7 +321,9 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         done = true
       end)
 
-      vim.wait(100, function() return done end)
+      vim.wait(100, function()
+        return done
+      end)
       assert.equals(1, #calls)
     end)
 
@@ -322,7 +340,9 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         got = result
       end)
 
-      vim.wait(100, function() return got ~= nil end)
+      vim.wait(100, function()
+        return got ~= nil
+      end)
       assert.is_not_nil(got)
       assert.equals("sk-from-convention", got.value)
     end)
@@ -340,7 +360,9 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         got = result
       end)
 
-      vim.wait(100, function() return got ~= nil end)
+      vim.wait(100, function()
+        return got ~= nil
+      end)
       assert.is_not_nil(got)
       assert.equals("sk-test-key", got.value)
     end)
@@ -360,7 +382,9 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         done = true
       end)
 
-      vim.wait(200, function() return done end)
+      vim.wait(200, function()
+        return done
+      end)
       assert.is_nil(got)
     end)
 
@@ -390,7 +414,9 @@ describe("flemma.secrets.resolvers.secret_tool", function()
         done = true
       end)
 
-      vim.wait(200, function() return done end)
+      vim.wait(200, function()
+        return done
+      end)
       assert.is_true(#diags > 0)
       assert.truthy(diags[1]:match("no entry found"))
     end)
@@ -515,7 +541,9 @@ describe("flemma.secrets.resolvers.gcloud", function()
         got = result
       end)
 
-      vim.wait(200, function() return got ~= nil end)
+      vim.wait(200, function()
+        return got ~= nil
+      end)
       assert.is_not_nil(got)
       assert.equals("ya29.generated-token", got.value)
       assert.equals(3600, got.ttl)
@@ -538,7 +566,9 @@ describe("flemma.secrets.resolvers.gcloud", function()
         got = result
       end)
 
-      vim.wait(200, function() return got ~= nil end)
+      vim.wait(200, function()
+        return got ~= nil
+      end)
       assert.is_not_nil(got)
       assert.equals("ya29.default-token", got.value)
       assert.is_not_nil(captured_cmd)
@@ -559,7 +589,9 @@ describe("flemma.secrets.resolvers.gcloud", function()
         done = true
       end)
 
-      vim.wait(200, function() return done end)
+      vim.wait(200, function()
+        return done
+      end)
       assert.is_nil(got)
     end)
 
@@ -578,7 +610,9 @@ describe("flemma.secrets.resolvers.gcloud", function()
         done = true
       end)
 
-      vim.wait(200, function() return done end)
+      vim.wait(200, function()
+        return done
+      end)
       assert.is_nil(got)
     end)
 
@@ -598,7 +632,9 @@ describe("flemma.secrets.resolvers.gcloud", function()
         got = result
       end)
 
-      vim.wait(200, function() return got ~= nil end)
+      vim.wait(200, function()
+        return got ~= nil
+      end)
       assert.is_not_nil(got)
       assert.equals("/nix/store/abc123/bin/gcloud", captured_cmd[1])
     end)
@@ -629,7 +665,9 @@ describe("flemma.secrets.resolvers.gcloud", function()
         done = true
       end)
 
-      vim.wait(200, function() return done end)
+      vim.wait(200, function()
+        return done
+      end)
       assert.is_true(#diags > 0)
       assert.truthy(diags[1]:match("auth failed"))
       assert.truthy(diags[1]:match("exit code 2"))
@@ -661,7 +699,9 @@ describe("flemma.secrets.resolvers.gcloud", function()
         done = true
       end)
 
-      vim.wait(200, function() return done end)
+      vim.wait(200, function()
+        return done
+      end)
       assert.is_true(#diags > 0)
       assert.truthy(diags[1]:match("returned empty token"))
     end)
@@ -742,7 +782,9 @@ describe("flemma.secrets.resolvers.keychain", function()
         got = result
       end)
 
-      vim.wait(100, function() return got ~= nil end)
+      vim.wait(100, function()
+        return got ~= nil
+      end)
       assert.is_not_nil(got)
       assert.equals("sk-from-keychain", got.value)
       assert.equals("security", captured_cmd[1])
@@ -769,7 +811,9 @@ describe("flemma.secrets.resolvers.keychain", function()
         got = result
       end)
 
-      vim.wait(200, function() return got ~= nil end)
+      vim.wait(200, function()
+        return got ~= nil
+      end)
       assert.is_not_nil(got)
       assert.equals("sk-legacy", got.value)
       assert.equals(2, #calls)
@@ -790,7 +834,9 @@ describe("flemma.secrets.resolvers.keychain", function()
         done = true
       end)
 
-      vim.wait(100, function() return done end)
+      vim.wait(100, function()
+        return done
+      end)
       assert.equals(1, #calls)
     end)
 
@@ -807,7 +853,9 @@ describe("flemma.secrets.resolvers.keychain", function()
         got = result
       end)
 
-      vim.wait(100, function() return got ~= nil end)
+      vim.wait(100, function()
+        return got ~= nil
+      end)
       assert.is_not_nil(got)
       assert.equals("sk-key", got.value)
     end)
@@ -827,7 +875,9 @@ describe("flemma.secrets.resolvers.keychain", function()
         done = true
       end)
 
-      vim.wait(200, function() return done end)
+      vim.wait(200, function()
+        return done
+      end)
       assert.is_nil(got)
     end)
 
@@ -857,7 +907,9 @@ describe("flemma.secrets.resolvers.keychain", function()
         done = true
       end)
 
-      vim.wait(200, function() return done end)
+      vim.wait(200, function()
+        return done
+      end)
       assert.is_true(#diags > 0)
       assert.truthy(diags[1]:match("no entry found"))
     end)

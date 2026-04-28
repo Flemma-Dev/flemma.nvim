@@ -91,7 +91,12 @@ function Boundary:_complete(result)
   self._subscribers = {}
   for _, sub in ipairs(subs) do
     if not sub.cancelled then
-      sub.on_complete(result)
+      local ok, err = pcall(sub.on_complete, result)
+      if not ok then
+        vim.schedule(function()
+          error("readiness: subscriber callback error: " .. tostring(err))
+        end)
+      end
     end
   end
 end
@@ -173,6 +178,7 @@ function M.get_or_create_boundary(key, runner)
   return boundary
 end
 
+---@private
 function M._reset_for_tests()
   boundaries = {}
 end

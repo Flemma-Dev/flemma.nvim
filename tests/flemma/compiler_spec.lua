@@ -123,7 +123,9 @@ describe("flemma.templating.compiler", function()
     it("re-raises readiness suspense from expression evaluation", function()
       local readiness = require("flemma.readiness")
       readiness._reset_for_tests()
-      local boundary = readiness.get_or_create_boundary("test:expr", function(done) done() end)
+      local boundary = readiness.get_or_create_boundary("test:expr", function(done)
+        done()
+      end)
 
       local segments = {
         ast.expression(" raise_suspense() ", { start_line = 1 }),

@@ -473,7 +473,7 @@ local function setup_commands()
             notify.info(string_utils.format_estimate(response.tokens, response.model, pricing))
           end
 
-          local format_diagnostics = require("flemma.core")._format_diagnostics
+          local diagnostic_format = require("flemma.utilities.diagnostic")
 
           local function attempt()
             local ok, err = pcall(provider_module.try_estimate_usage, bufnr, on_result)
@@ -488,7 +488,8 @@ local function setup_commands()
             notify.info(err.message)
             err.boundary:subscribe(function(boundary_result)
               if not boundary_result or not boundary_result.ok then
-                local diag_msg = format_diagnostics(boundary_result and boundary_result.diagnostics)
+                local diag_msg =
+                  diagnostic_format.format_resolver_diagnostics(boundary_result and boundary_result.diagnostics)
                 notify.error("Estimate failed: " .. (diag_msg or err.message))
                 return
               end

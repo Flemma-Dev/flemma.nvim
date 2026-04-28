@@ -765,7 +765,7 @@ function M.send_to_provider(opts)
       if not result or not result.ok then
         buffer_state.pending_send = nil
         state.unlock_buffer(bufnr)
-        local diag_msg = M._format_diagnostics(result and result.diagnostics)
+        local diag_msg = diagnostic_format.format_resolver_diagnostics(result and result.diagnostics)
         notify.error("Could not satisfy dependency: " .. (diag_msg or err.message))
         return
       end
@@ -775,19 +775,6 @@ function M.send_to_provider(opts)
   end
 
   attempt()
-end
-
----@param diagnostics flemma.secrets.ResolverDiagnostic[]|nil
----@return string|nil
-function M._format_diagnostics(diagnostics)
-  if not diagnostics or #diagnostics == 0 then
-    return nil
-  end
-  local lines = {}
-  for _, d in ipairs(diagnostics) do
-    table.insert(lines, "  [" .. d.resolver .. "] " .. d.message)
-  end
-  return table.concat(lines, "\n")
 end
 
 ---@param bufnr integer

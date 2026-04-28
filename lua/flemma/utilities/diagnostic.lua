@@ -153,4 +153,17 @@ function M.sort(diagnostics)
   return sorted
 end
 
+---@param diagnostics flemma.secrets.ResolverDiagnostic[]|nil
+---@return string|nil
+function M.format_resolver_diagnostics(diagnostics)
+  if not diagnostics or #diagnostics == 0 then
+    return nil
+  end
+  local lines = {}
+  for _, d in ipairs(diagnostics) do
+    table.insert(lines, "  [" .. d.resolver .. "] " .. d.message)
+  end
+  return table.concat(lines, "\n")
+end
+
 return M

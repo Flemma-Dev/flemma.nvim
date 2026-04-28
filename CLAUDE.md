@@ -85,7 +85,7 @@ All `require()` calls go at the top of the file, before any function definition.
 
 - `flemma.notify` for user-facing errors and warnings
 - `log` module for debug/trace logging
-- Return tuples `value, err` for operational results (e.g., `secrets.resolve()`)
+- Return tuples `value, err` for operational results where the caller handles failures inline
 - Never `error()` for recoverable situations
 
 ## Buffer Format Reference
