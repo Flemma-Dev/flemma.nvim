@@ -27,6 +27,8 @@ qa:
 		>"$$d/imports" 2>&1 & gate[$$!]=imports; \
 	bash contrib/scripts/lint-no-vim-notify.sh \
 		>"$$d/notify" 2>&1 & gate[$$!]=notify; \
+	bash contrib/scripts/lint-pcall-rethrow.sh \
+		>"$$d/pcall-rethrow" 2>&1 & gate[$$!]=pcall-rethrow; \
 	PROJECT_ROOT=$(PROJECT_ROOT) nvim --headless --noplugin -u tests/minimal.vim \
 		-c "PlenaryBustedDirectory tests/flemma/ {minimal_init = 'tests/minimal_init.lua'}" \
 		>"$$d/test" 2>&1 & gate[$$!]=test; \
