@@ -24,11 +24,10 @@ for f in "${WATCHED_FILES[@]}"; do
     continue
   fi
 
-  stripped=$(sed 's/--.*$//' "$f")
   has_pcall=0
   has_is_suspense=0
-  echo "$stripped" | grep -qE '\bpcall\(' && has_pcall=1
-  echo "$stripped" | grep -qE '\bis_suspense\b' && has_is_suspense=1
+  if grep -qE '\bpcall\(' "$f"; then has_pcall=1; fi
+  if grep -qE '\bis_suspense\b' "$f"; then has_is_suspense=1; fi
 
   if [ "$has_pcall" = "1" ] && [ "$has_is_suspense" = "0" ]; then
     echo "  $f: contains pcall() but no readiness.is_suspense reference"
