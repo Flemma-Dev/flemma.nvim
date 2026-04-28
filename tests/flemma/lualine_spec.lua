@@ -782,6 +782,125 @@ describe("Lualine component", function()
     end)
   end)
 
+  describe("suspense handling", function()
+    local readiness
+
+    before_each(function()
+      readiness = require("flemma.readiness")
+      core.switch_provider("anthropic", "claude-sonnet-4-6", { thinking = false })
+    end)
+
+    after_each(function()
+      flemma_component._reset_pending_refreshes()
+      readiness._reset_for_tests()
+    end)
+
+    it("returns empty string when _do_update_status raises suspense", function()
+      local boundary = readiness.get_or_create_boundary("test:lualine", function() end)
+      local original = flemma_component._do_update_status
+      flemma_component._do_update_status = function()
+        error(readiness.Suspense.new("Resolving\u{2026}", boundary))
+      end
+
+      local status = flemma_component:update_status()
+
+      assert.are.equal("", status)
+      flemma_component._do_update_status = original
+    end)
+
+    it("subscribes to the boundary and refreshes lualine on success", function()
+      local captured_done
+      local boundary = readiness.get_or_create_boundary("test:lualine:refresh", function(done)
+        captured_done = done
+      end)
+
+      local original = flemma_component._do_update_status
+      flemma_component._do_update_status = function()
+        error(readiness.Suspense.new("Resolving\u{2026}", boundary))
+      end
+
+      flemma_component:update_status()
+      flemma_component._do_update_status = original
+
+      vim.wait(100, function()
+        return captured_done ~= nil
+      end, 10)
+
+      local refresh_count = 0
+      package.loaded["lualine"] = {
+        refresh = function()
+          refresh_count = refresh_count + 1
+        end,
+      }
+      captured_done({ ok = true })
+
+      assert.are.equal(1, refresh_count)
+      package.loaded["lualine"] = nil
+    end)
+
+    it("does not refresh on boundary failure", function()
+      local captured_done
+      local boundary = readiness.get_or_create_boundary("test:lualine:fail", function(done)
+        captured_done = done
+      end)
+
+      local original = flemma_component._do_update_status
+      flemma_component._do_update_status = function()
+        error(readiness.Suspense.new("Resolving\u{2026}", boundary))
+      end
+
+      flemma_component:update_status()
+      flemma_component._do_update_status = original
+
+      vim.wait(100, function()
+        return captured_done ~= nil
+      end, 10)
+
+      local refresh_count = 0
+      package.loaded["lualine"] = {
+        refresh = function()
+          refresh_count = refresh_count + 1
+        end,
+      }
+      captured_done({ ok = false })
+
+      assert.are.equal(0, refresh_count)
+      package.loaded["lualine"] = nil
+    end)
+
+    it("deduplicates subscriptions for the same boundary", function()
+      local captured_done
+      local boundary = readiness.get_or_create_boundary("test:lualine:dedup", function(done)
+        captured_done = done
+      end)
+
+      local original = flemma_component._do_update_status
+      flemma_component._do_update_status = function()
+        error(readiness.Suspense.new("Resolving\u{2026}", boundary))
+      end
+
+      flemma_component:update_status()
+      flemma_component:update_status()
+      flemma_component:update_status()
+      flemma_component._do_update_status = original
+
+      vim.wait(100, function()
+        return captured_done ~= nil
+      end, 10)
+
+      local refresh_count = 0
+      package.loaded["lualine"] = {
+        refresh = function()
+          refresh_count = refresh_count + 1
+        end,
+      }
+      captured_done({ ok = true })
+
+      assert.are.equal(1, refresh_count)
+      package.loaded["lualine"] = nil
+    end)
+  end)
+
   describe("parameter changes via switch reflect in display", function()
     it("should reflect reasoning level from config facade", function()
       -- Start with base config: default thinking="high" applies

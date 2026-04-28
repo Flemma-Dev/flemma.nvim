@@ -6,6 +6,7 @@ local lualine_component = require("lualine.component")
 local config_facade = require("flemma.config")
 local normalize = require("flemma.provider.normalize")
 local prefetch = require("flemma.usage.prefetch")
+local readiness = require("flemma.readiness")
 local registry = require("flemma.provider.registry")
 local format = require("flemma.utilities.format")
 local session = require("flemma.session")
@@ -15,18 +16,21 @@ local tools = require("flemma.tools")
 -- Create a new component for displaying Flemma status
 local flemma_component = lualine_component:extend()
 
+---@type table<string, true>
+local pending_refreshes = {}
+
+local function refresh_lualine()
+  local ok, lualine = pcall(require, "lualine")
+  if ok then
+    lualine.refresh()
+  end
+end
+
 ---@param options table Lualine component options
 function flemma_component:init(options)
   lualine_component.init(self, options)
 
   local group = vim.api.nvim_create_augroup("FlemmaLualineIntegration", { clear = true })
-
-  local function refresh_lualine()
-    local ok, lualine = pcall(require, "lualine")
-    if ok then
-      lualine.refresh()
-    end
-  end
 
   vim.api.nvim_create_autocmd("User", {
     group = group,
@@ -168,14 +172,8 @@ local function build_vars(config)
   })
 end
 
----Updates the status of the component.
----Called by lualine to get the text to display.
 ---@return string
-function flemma_component:update_status()
-  if vim.bo.filetype ~= "chat" then
-    return ""
-  end
-
+function flemma_component:_do_update_status()
   -- materialize(bufnr) returns a plain table with per-buffer resolution —
   -- required because flatten_parameters uses pairs() and make_resolvers
   -- accesses dynamic keys. bufnr ensures frontmatter overrides are visible.
@@ -245,6 +243,40 @@ function flemma_component:update_status()
   end
 
   return status
+end
+
+---@return string
+function flemma_component:update_status()
+  if vim.bo.filetype ~= "chat" then
+    return ""
+  end
+
+  local ok, result = pcall(self._do_update_status, self)
+  if ok then
+    return result
+  end
+
+  local err = result --[[@as any]]
+  if readiness.is_suspense(err) then
+    ---@cast err flemma.readiness.Suspense
+    local key = err.boundary.key
+    if not pending_refreshes[key] then
+      pending_refreshes[key] = true
+      err.boundary:subscribe(function(boundary_result)
+        pending_refreshes[key] = nil
+        if boundary_result and boundary_result.ok then
+          refresh_lualine()
+        end
+      end)
+    end
+  end
+
+  return ""
+end
+
+---@private
+function flemma_component._reset_pending_refreshes()
+  pending_refreshes = {}
 end
 
 return flemma_component
