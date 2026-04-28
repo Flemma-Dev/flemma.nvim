@@ -16,6 +16,7 @@ local hooks = require("flemma.hooks")
 local loader = require("flemma.loader")
 local log = require("flemma.logging")
 local provider_registry = require("flemma.provider.registry")
+local readiness = require("flemma.readiness")
 local state = require("flemma.state")
 
 ---@type integer Debounce window in milliseconds. Exposed for tests.
@@ -156,21 +157,42 @@ local function fire_fetch(bufnr)
 
   log.debug("prefetch: fire_fetch dispatching bufnr=" .. bufnr .. " provider=" .. cfg.provider)
   entry.in_flight = true
-  provider_module.try_estimate_usage(bufnr, function(result)
-    local e = entries[bufnr]
-    if not e then
-      return -- buffer wiped mid-flight
-    end
-    e.in_flight = false
-    if result.err then
-      log.debug("prefetch: fetch returned err for bufnr=" .. bufnr .. ": " .. tostring(result.err))
+
+  local function attempt()
+    local ok, err = pcall(provider_module.try_estimate_usage, bufnr, function(result)
+      local e = entries[bufnr]
+      if not e then
+        return
+      end
+      e.in_flight = false
+      if result.err then
+        log.debug("prefetch: fetch returned err for bufnr=" .. bufnr .. ": " .. tostring(result.err))
+        clear_cache(bufnr)
+        return
+      end
+      if result.response then
+        write_cache(bufnr, result.response)
+      end
+    end)
+    if ok then return end
+    if not readiness.is_suspense(err) then
+      entry.in_flight = false
       clear_cache(bufnr)
+      log.debug("prefetch: non-suspense error " .. tostring(err))
       return
     end
-    if result.response then
-      write_cache(bufnr, result.response)
-    end
-  end)
+    ---@cast err flemma.readiness.Suspense
+    err.boundary:subscribe(function(result)
+      if not entries[bufnr] then return end
+      if not result or result.ok == false then
+        entries[bufnr].in_flight = false
+        clear_cache(bufnr)
+        return
+      end
+      attempt()
+    end)
+  end
+  attempt()
 end
 
 ---@param bufnr integer
