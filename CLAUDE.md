@@ -98,7 +98,7 @@ All `require()` calls go at the top of the file, before any function definition.
 - **Tool status suffix**: `(pending)` / `(approved)` / `(denied)` / `(rejected)` / `(aborted)` / `(error)` on the tool_result header, or explicit `(status=pending sandbox=false)` for mixed metadata — unrecognized tokens round-trip via the `meta` field on the tool_result AST node
 - **Thinking blocks** (`@Assistant` messages): `<thinking>` / `</thinking>` tags, optionally with `provider:signature="base64"` attribute or `redacted` flag
 - **Expressions**: `{{ lua_expression }}` in `@System`/`@You` messages (sandboxed environment with `math`, `string`, `table`, `utf8`, select `vim.fn`/`vim.fs` functions, and essential globals)
-- **File references**: `@./path/to/file` or `@./file;type=mime/type` in `@You` messages
+- **File references**: `@./path`, `@../path`, `@~/path`, or `@//absolute/path` (with optional `;type=mime/type` suffix) in `@You` messages
 
 All tool IDs and metadata are embedded in buffer text so `.chat` files are portable and re-parseable.
 

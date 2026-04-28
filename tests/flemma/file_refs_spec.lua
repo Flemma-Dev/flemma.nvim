@@ -396,6 +396,64 @@ describe("File References and Path Parsing", function()
     end)
   end)
 
+  describe("absolute path references (@//)", function()
+    it("resolves @// references as absolute paths", function()
+      local filereadable_stub = create_stub(vim.fn, "filereadable")
+      filereadable_stub.returns(1)
+
+      local mime_util = require("flemma.mime")
+      local mime_stub = create_stub(mime_util, "get_mime_type")
+      mime_stub.returns("image/png", nil)
+
+      local mock_file = {
+        read = function(self, mode)
+          if mode == "*a" then
+            return "fake_png_data"
+          end
+        end,
+        close = function(self) end,
+      }
+      local io_open_stub = create_stub(io, "open")
+      io_open_stub.returns(mock_file)
+
+      local test_content = "See @//tmp/image.png"
+      local file_parts = parse_and_get_file_parts(test_content)
+
+      assert.equals(1, #file_parts)
+      local file_part = file_parts[1]
+      assert.equals("file", file_part.kind)
+      assert.equals("/tmp/image.png", file_part.filename)
+    end)
+
+    it("handles @// with ;type= option", function()
+      local filereadable_stub = create_stub(vim.fn, "filereadable")
+      filereadable_stub.returns(1)
+
+      local mime_util = require("flemma.mime")
+      local mime_stub = create_stub(mime_util, "get_mime_type")
+      mime_stub.returns("image/png", nil)
+
+      local mock_file = {
+        read = function(self, mode)
+          if mode == "*a" then
+            return "fake_png_data"
+          end
+        end,
+        close = function(self) end,
+      }
+      local io_open_stub = create_stub(io, "open")
+      io_open_stub.returns(mock_file)
+
+      local test_content = "See @//tmp/image.png;type=image/png"
+      local file_parts = parse_and_get_file_parts(test_content)
+
+      assert.equals(1, #file_parts)
+      local file_part = file_parts[1]
+      assert.equals("/tmp/image.png", file_part.filename)
+      assert.equals("image/png", file_part.mime_type)
+    end)
+  end)
+
   describe("combined URL decoding and punctuation handling", function()
     it("correctly handles URL-encoded filename with trailing punctuation", function()
       -- Mock vim.fn.filereadable to return success

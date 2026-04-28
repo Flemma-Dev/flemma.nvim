@@ -425,7 +425,7 @@ All diagnostics include position information (line and column) for precise error
 
 ## Referencing local files
 
-Embed local context with `@./relative/path` (or `@../up-one/path`). Flemma handles:
+Embed local context with `@./relative/path` (or `@../up-one/path`, `@~/home/path`, `@//absolute/path`). Flemma handles:
 
 1. Resolving the path against the `.chat` file's directory.
 2. Detecting the MIME type via the `file` CLI or the extension fallback (see `lua/flemma/mime.lua` for the full extension map).
@@ -440,10 +440,14 @@ OCR this screenshot @./artifacts/failure.png.
 
 @You:
 Compare these specs: @./specs/v1.pdf and @./specs/v2.pdf.
+
+@You:
+Check the logs at @//var/log/app.log.
 ```
 
 ### Syntax details
 
+- **Path prefixes:** `@./` and `@../` resolve relative to the `.chat` file's directory. `@~/` resolves relative to `$HOME`. `@//` denotes an absolute path (`@//tmp/file` resolves to `/tmp/file`).
 - **Trailing punctuation** (`.`, `)`, `,`, etc.) is stripped automatically so you can write natural prose around references.
 - **MIME override:** append `;type=<mime>` to force a specific MIME type, as in the Lua example above.
 - **URL-encoded paths:** percent-encoded characters are decoded before file resolution. `@./my%20report.txt` resolves to `my report.txt`.

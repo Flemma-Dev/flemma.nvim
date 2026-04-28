@@ -199,6 +199,16 @@ describe("Read Tool", function()
       assert.is_truthy(result.output:match(";type=image/png$"))
     end)
 
+    it("emits @// prefix for absolute path in file reference", function()
+      local result = read_def.execute({ label = "test", path = png_fixture }, ctx)
+      assert.is_true(result.success)
+      assert.is_truthy(
+        result.output:match("^@//"),
+        "expected @// prefix for absolute path, got: " .. tostring(result.output)
+      )
+      assert.is_truthy(result.output:match(";type=image/png$"))
+    end)
+
     it("URL-encodes spaces in file reference path", function()
       local spaced_png = test_dir .. "/image (1).png"
       vim.fn.system("cp " .. vim.fn.shellescape(png_fixture) .. " " .. vim.fn.shellescape(spaced_png))
@@ -260,8 +270,11 @@ describe("Read Tool", function()
       -- a ~/ input path should be emitted as @~/ directly (not computed relative)
       local result = read_def.execute({ label = "test", path = png_fixture }, tilde_ctx)
       assert.is_true(result.success)
-      -- Non-tilde paths get @./ prefix
-      assert.is_truthy(result.output:match("^@%./"))
+      -- Absolute paths get @// prefix (the // convention signals absolute)
+      assert.is_truthy(
+        result.output:match("^@//"),
+        "expected @// prefix for absolute path, got: " .. tostring(result.output)
+      )
 
       -- Verify that ~/ paths would be preserved: the code checks vim.startswith(ref_path, "~/")
       -- and skips the ./ prefix. We test this by checking the code path exists
