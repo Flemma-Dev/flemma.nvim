@@ -867,7 +867,6 @@ function M.send_count_tokens(spec, on_result)
   if fixture_path then
     headers = { "content-type: application/json" }
   else
-    provider:get_api_key()
     headers = provider:get_request_headers()
   end
   ---@cast headers string[]

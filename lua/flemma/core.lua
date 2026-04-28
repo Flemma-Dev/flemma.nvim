@@ -912,7 +912,6 @@ function M._run_send_pipeline(bufnr, opts)
 
     local headers
     if not fixture_path then
-      current_provider:get_api_key()
       headers = current_provider:get_request_headers()
       if not headers then
         error("Provider did not return request headers.", 0)
