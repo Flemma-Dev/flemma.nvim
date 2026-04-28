@@ -300,6 +300,14 @@ function M.cancel_request(opts)
   local bufnr = (opts and opts.bufnr) or vim.api.nvim_get_current_buf()
   local buffer_state = state.get_buffer_state(bufnr)
 
+  if buffer_state.pending_send then
+    buffer_state.pending_send.subscription:cancel()
+    buffer_state.pending_send = nil
+    state.unlock_buffer(bufnr)
+    notify.info("Cancelled queued send.")
+    return
+  end
+
   if buffer_state.current_request then
     log.info("cancel_request(): job_id = " .. tostring(buffer_state.current_request))
 

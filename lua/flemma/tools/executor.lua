@@ -574,6 +574,10 @@ function M.cancel_for_buffer(bufnr)
     bridge.cancel_request({ bufnr = bufnr })
     return true
   end
+  if buffer_state.pending_send then
+    bridge.cancel_request({ bufnr = bufnr })
+    return true
+  end
   local pending = M.get_pending(bufnr)
   if #pending > 0 then
     table.sort(pending, function(a, b)
