@@ -151,6 +151,12 @@ describe("Ls Tool", function()
     assert.is_truthy(result.output:match("nested%.txt"))
   end)
 
+  it("expands tilde paths", function()
+    local home = vim.fn.expand("~")
+    local result = ls_def.execute({ label = "test", path = "~", max_depth = 1, limit = 5 }, ctx)
+    assert.is_true(result.success, "expected ~ to resolve to " .. home)
+  end)
+
   it("handles absolute paths", function()
     local result = ls_def.execute({ label = "test", path = fixture_dir .. "/alpha", max_depth = 1, limit = 500 }, ctx)
     assert.is_true(result.success)

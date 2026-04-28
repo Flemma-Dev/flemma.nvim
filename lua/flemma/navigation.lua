@@ -8,6 +8,7 @@ local ctxutil = require("flemma.context")
 local cursor = require("flemma.cursor")
 local diagnostic_format = require("flemma.utilities.diagnostic")
 local eval = require("flemma.templating.eval")
+local path_util = require("flemma.utilities.path")
 local templating = require("flemma.templating")
 local log = require("flemma.logging")
 local notify = require("flemma.notify")
@@ -118,7 +119,7 @@ function M.resolve_include_path(bufnr, lnum, col)
     if relative_path:sub(1, #eval.URN_PREFIX) == eval.URN_PREFIX then
       return nil
     end
-    return { [symbols.SOURCE_PATH] = eval.resolve_include_target(relative_path, env.__dirname) }
+    return { [symbols.SOURCE_PATH] = path_util.resolve(relative_path, env.__dirname) }
   end
 
   -- Evaluate the expression — our path-only include() returns a table tagged

@@ -18,6 +18,7 @@ local parser = require("flemma.parser")
 local ast = require("flemma.ast")
 local sandbox_module = require("flemma.sandbox")
 local tool_context = require("flemma.tools.context")
+local path_util = require("flemma.utilities.path")
 local truncate_module = require("flemma.tools.truncate")
 local ui = require("flemma.ui")
 local variables = require("flemma.utilities.variables")
@@ -309,15 +310,8 @@ function M.build_execution_context(params)
       elseif key == "path" then
         ---@type flemma.tools.PathContext
         local path_namespace = {
-          resolve = function(path)
-            if vim.startswith(path, "~/") or path == "~" then
-              path = vim.fn.expand(path)
-            end
-            if vim.startswith(path, "/") then
-              return path
-            end
-            local base = dirname or vim.fn.getcwd()
-            return base .. "/" .. path
+          resolve = function(p)
+            return path_util.resolve(p, dirname or vim.fn.getcwd())
           end,
         }
         rawset(self, "path", path_namespace)
