@@ -164,6 +164,7 @@ describe("config.schema.definition", function()
       assert.equals("]m", cfg.keymaps.normal.message_next)
       assert.equals("[m", cfg.keymaps.normal.message_prev)
       assert.equals("<Space>", cfg.keymaps.normal.fold_toggle)
+      assert.equals("<Space><Space>", cfg.keymaps.normal.conceal_toggle)
       assert.equals("<C-]>", cfg.keymaps.insert.send)
     end)
 

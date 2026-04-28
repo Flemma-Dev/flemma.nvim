@@ -25,6 +25,20 @@ Flemma's chat buffer already carries a lot of signal — role markers, tool-use 
 
 If you prefer raw Markdown always, `editing.conceal = false` restores the pre-v0.11 behaviour.
 
+## Toggling conceal at runtime
+
+Press `<Space><Space>` (double-tap Space) in a chat buffer to toggle `conceallevel` between the configured level and `0`. This lets you peek at raw Markdown without leaving the buffer or changing your config.
+
+The toggle is bound by default to `keymaps.normal.conceal_toggle`. You can remap it, disable it with `false`, or ignore it entirely — it is only registered when `editing.conceal` is active. When `<Space>` is your `mapleader`, neither the fold toggle nor the conceal toggle are registered (see [configuration.md](configuration.md) for details).
+
+If you manage your own keymaps (`keymaps.enabled = false`), a one-liner does the same thing:
+
+```vim
+:nnoremap <Space><Space> :setlocal conceallevel=<C-R>=&conceallevel == 0 ? '2' : '0'<CR><CR>
+```
+
+Note that this hard-codes level `2` — if your `editing.conceal` uses a different level, adjust accordingly.
+
 ## Limitations
 
 These are live interactions between `conceallevel` and other Neovim subsystems that we've chosen to live with rather than paper over. Each one is a Neovim drawing/layering choice, not a Flemma bug.

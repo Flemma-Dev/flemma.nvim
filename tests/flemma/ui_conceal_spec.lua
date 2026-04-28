@@ -109,6 +109,98 @@ describe("UI conceal override", function()
     assert.are.equal(3, vim.api.nvim_get_option_value("conceallevel", { win = winid }))
   end)
 
+  describe("toggle_conceal", function()
+    it("flips conceallevel from configured to 0", function()
+      flemma.setup({ editing = { conceal = "2nv" } })
+      local _, winid = open_chat_in_current_win()
+      vim.api.nvim_set_option_value("conceallevel", 2, { win = winid, scope = "local" })
+
+      ui.toggle_conceal()
+
+      assert.are.equal(0, vim.api.nvim_get_option_value("conceallevel", { win = winid }))
+    end)
+
+    it("flips conceallevel from 0 back to configured", function()
+      flemma.setup({ editing = { conceal = "2nv" } })
+      local _, winid = open_chat_in_current_win()
+      vim.api.nvim_set_option_value("conceallevel", 0, { win = winid, scope = "local" })
+
+      ui.toggle_conceal()
+
+      assert.are.equal(2, vim.api.nvim_get_option_value("conceallevel", { win = winid }))
+    end)
+
+    it("respects non-default configured level", function()
+      flemma.setup({ editing = { conceal = "1n" } })
+      local _, winid = open_chat_in_current_win()
+      vim.api.nvim_set_option_value("conceallevel", 1, { win = winid, scope = "local" })
+
+      ui.toggle_conceal()
+      assert.are.equal(0, vim.api.nvim_get_option_value("conceallevel", { win = winid }))
+
+      ui.toggle_conceal()
+      assert.are.equal(1, vim.api.nvim_get_option_value("conceallevel", { win = winid }))
+    end)
+
+    it("is a no-op when conceal is false", function()
+      flemma.setup({ editing = { conceal = false } })
+      local _, winid = open_chat_in_current_win()
+      vim.api.nvim_set_option_value("conceallevel", 3, { win = winid, scope = "local" })
+
+      ui.toggle_conceal()
+
+      assert.are.equal(3, vim.api.nvim_get_option_value("conceallevel", { win = winid }))
+    end)
+
+    it("keeps frontmatter fold open when toggling to conceallevel 0", function()
+      package.loaded["flemma.ui.folding"] = nil
+      package.loaded["flemma.ui.folding.merge"] = nil
+      package.loaded["flemma.ui.folding.rules.frontmatter"] = nil
+      package.loaded["flemma.ui.folding.rules.thinking"] = nil
+      package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
+      package.loaded["flemma.ui.folding.rules.messages"] = nil
+      package.loaded["flemma.parser"] = nil
+      package.loaded["flemma.ast"] = nil
+      package.loaded["flemma.ast.nodes"] = nil
+      package.loaded["flemma.ast.query"] = nil
+
+      flemma.setup({ editing = { conceal = "2nv" } })
+      ui = require("flemma.ui")
+      local folding = require("flemma.ui.folding")
+
+      local bufnr, winid = open_chat_in_current_win()
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "```lua",
+        "model = 'claude-sonnet-4-20250514'",
+        "```",
+        "",
+        "@You:",
+        "Hello",
+      })
+
+      -- Set up folding with conceallevel=2 (frontmatter fold suppressed)
+      vim.api.nvim_set_option_value("conceallevel", 2, { win = winid, scope = "local" })
+      folding.setup_folding(bufnr)
+
+      -- Toggle to conceallevel=0 — frontmatter fold appears but should stay open
+      ui.toggle_conceal()
+
+      assert.are.equal(0, vim.api.nvim_get_option_value("conceallevel", { win = winid }))
+      assert.are.equal(-1, vim.fn.foldclosed(1), "frontmatter should not be folded after toggle")
+    end)
+
+    it("does not touch concealcursor", function()
+      flemma.setup({ editing = { conceal = "2nv" } })
+      local _, winid = open_chat_in_current_win()
+      vim.api.nvim_set_option_value("conceallevel", 2, { win = winid, scope = "local" })
+      vim.api.nvim_set_option_value("concealcursor", "nv", { win = winid, scope = "local" })
+
+      ui.toggle_conceal()
+
+      assert.are.equal("nv", vim.api.nvim_get_option_value("concealcursor", { win = winid }))
+    end)
+  end)
+
   it("does not leak chat conceal to a sibling window opened from a chat window", function()
     -- Repro: open a .chat buffer, then `:vsplit` (or `:tabedit`) to open a
     -- non-chat file. Neovim copies window-local options to the new window, so

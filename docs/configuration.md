@@ -196,6 +196,7 @@ require("flemma").setup({
       message_next = "]m",
       message_prev = "[m",
       fold_toggle = "<Space>",               -- Toggle fold; false to disable
+      conceal_toggle = "<Space><Space>",     -- Toggle conceal level; false to disable
     },
     insert = {
       send = "<C-]>",                        -- Same hybrid behaviour, re-enters insert after

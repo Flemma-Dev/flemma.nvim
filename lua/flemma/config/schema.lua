@@ -305,6 +305,7 @@ return s.object({
       message_next = s.string("]m"),
       message_prev = s.string("[m"),
       fold_toggle = s.union(s.string("<Space>"), s.literal(false)),
+      conceal_toggle = s.union(s.string("<Space><Space>"), s.literal(false)),
     }),
     insert = s.object({
       send = s.string("<C-]>"),

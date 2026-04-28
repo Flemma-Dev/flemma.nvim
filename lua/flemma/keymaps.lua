@@ -123,6 +123,25 @@ M.setup = function()
           end
         end
 
+        -- Conceal toggle keymap (skip when the key starts with mapleader,
+        -- or when editing.conceal is not configured)
+        local conceal_toggle_key = config.keymaps.normal.conceal_toggle
+        if conceal_toggle_key then
+          local leader = vim.g.mapleader or "\\"
+          if not vim.startswith(vim.keycode(conceal_toggle_key), vim.keycode(leader)) then
+            local cfg = config_facade.get()
+            local has_conceal = cfg and cfg.editing and cfg.editing.conceal ~= nil and cfg.editing.conceal ~= false
+            if has_conceal then
+              vim.keymap.set(
+                "n",
+                conceal_toggle_key,
+                ui.toggle_conceal,
+                { buffer = true, desc = "Toggle conceal level" }
+              )
+            end
+          end
+        end
+
         -- Set up text objects with configured key
         textobject.setup({ text_object = config.text_object })
 
