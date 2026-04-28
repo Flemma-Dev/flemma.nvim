@@ -65,4 +65,12 @@ function M.resolve(_self, credential, ctx)
   return nil
 end
 
+---@param self flemma.secrets.resolvers.Environment
+---@param credential flemma.secrets.Credential
+---@param ctx flemma.secrets.Context
+---@param callback fun(result: flemma.secrets.Result|nil)
+function M.resolve_async(self, credential, ctx, callback)
+  callback(M.resolve(self, credential, ctx))
+end
+
 return M

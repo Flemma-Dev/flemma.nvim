@@ -10,6 +10,7 @@ local registry_utils = require("flemma.utilities.registry")
 ---@field priority integer
 ---@field supports fun(self: flemma.secrets.Resolver, credential: flemma.secrets.Credential, ctx: flemma.config.ConfigAware<table>): boolean
 ---@field resolve fun(self: flemma.secrets.Resolver, credential: flemma.secrets.Credential, ctx: flemma.config.ConfigAware<table>): flemma.secrets.Result|nil
+---@field resolve_async? fun(self: flemma.secrets.Resolver, credential: flemma.secrets.Credential, ctx: flemma.secrets.Context, callback: fun(result: flemma.secrets.Result|nil))
 
 ---@type table<string, flemma.secrets.Resolver>
 local resolvers = {}

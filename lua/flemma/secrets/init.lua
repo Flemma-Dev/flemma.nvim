@@ -66,6 +66,54 @@ function M.resolve(credential)
   return nil, #all_diagnostics > 0 and all_diagnostics or nil
 end
 
+---@param credential flemma.secrets.Credential
+---@param callback fun(result: flemma.secrets.Result|nil, diagnostics: flemma.secrets.ResolverDiagnostic[]|nil)
+function M.resolve_async(credential, callback)
+  local key = cache_key(credential.kind, credential.service)
+  local cached = cache.get(key)
+  if cached then
+    vim.schedule(function() callback(cached, nil) end)
+    return
+  end
+  local all_diagnostics = {}
+  local sorted = registry.get_all_sorted()
+  local index = 1
+
+  local function try_next()
+    while index <= #sorted do
+      local resolver = sorted[index]
+      index = index + 1
+      local ctx = context.new(resolver.name)
+      if resolver:supports(credential, ctx) then
+        if type(resolver.resolve_async) == "function" then
+          resolver:resolve_async(credential, ctx, function(result)
+            vim.list_extend(all_diagnostics, ctx:get_diagnostics())
+            if result then
+              cache.set(key, result, credential)
+              callback(result, nil)
+            else
+              try_next()
+            end
+          end)
+          return
+        end
+        local result = resolver:resolve(credential, ctx)
+        vim.list_extend(all_diagnostics, ctx:get_diagnostics())
+        if result then
+          cache.set(key, result, credential)
+          callback(result, nil)
+          return
+        end
+      else
+        vim.list_extend(all_diagnostics, ctx:get_diagnostics())
+      end
+    end
+    callback(nil, #all_diagnostics > 0 and all_diagnostics or nil)
+  end
+
+  try_next()
+end
+
 --- Invalidate a specific cached credential.
 ---@param kind string
 ---@param service string
