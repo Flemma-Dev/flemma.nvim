@@ -11,6 +11,7 @@ WATCHED_FILES=(
   lua/flemma/preprocessor/runner.lua
   lua/flemma/processor.lua
   lua/flemma/provider/base.lua
+  lua/flemma/templating/compiler.lua
   lua/flemma/usage/prefetch.lua
   lua/flemma/commands.lua
 )
