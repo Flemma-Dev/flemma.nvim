@@ -292,6 +292,7 @@ function M.build_request(self, prompt, _context)
       name = base.encode_tool_name(def.name),
       description = tools_module.build_description(def),
       input_schema = tools_module.to_json_schema(def),
+      eager_input_streaming = true,
     })
   end
 
