@@ -9,7 +9,9 @@ describe("flemma.readiness", function()
 
   describe("Suspense + is_suspense", function()
     it("error(Suspense.new(...)) is caught by pcall and identified by is_suspense", function()
-      local boundary = readiness.get_or_create_boundary("k1", function(done) done() end)
+      local boundary = readiness.get_or_create_boundary("k1", function(done)
+        done()
+      end)
       local ok, err = pcall(function()
         error(readiness.Suspense.new("test", boundary))
       end)
@@ -37,14 +39,20 @@ describe("flemma.readiness", function()
         error("must not be called")
       end)
       assert.equals(b1, b2)
-      vim.wait(50, function() return runner_calls > 0 end)
+      vim.wait(50, function()
+        return runner_calls > 0
+      end)
       assert.equals(1, runner_calls)
     end)
 
     it("creates fresh boundary after previous one completed", function()
       local first_done
-      readiness.get_or_create_boundary("k", function(done) first_done = done end)
-      vim.wait(20, function() return first_done ~= nil end)
+      readiness.get_or_create_boundary("k", function(done)
+        first_done = done
+      end)
+      vim.wait(20, function()
+        return first_done ~= nil
+      end)
       first_done({ ok = true })
       vim.wait(20)
       local second_runner_called = false
@@ -52,7 +60,9 @@ describe("flemma.readiness", function()
         second_runner_called = true
         done()
       end)
-      vim.wait(20, function() return second_runner_called end)
+      vim.wait(20, function()
+        return second_runner_called
+      end)
       assert.is_true(second_runner_called)
     end)
   end)
@@ -60,20 +70,30 @@ describe("flemma.readiness", function()
   describe("Boundary:subscribe", function()
     it("fires on_complete with runner's result", function()
       local b = readiness.get_or_create_boundary("s1", function(done)
-        vim.schedule(function() done({ ok = true, value = 42 }) end)
+        vim.schedule(function()
+          done({ ok = true, value = 42 })
+        end)
       end)
       local received
-      b:subscribe(function(result) received = result end)
-      vim.wait(50, function() return received ~= nil end)
+      b:subscribe(function(result)
+        received = result
+      end)
+      vim.wait(50, function()
+        return received ~= nil
+      end)
       assert.same({ ok = true, value = 42 }, received)
     end)
 
     it("does not fire when subscription is cancelled", function()
       local b = readiness.get_or_create_boundary("s2", function(done)
-        vim.schedule(function() done({ ok = true }) end)
+        vim.schedule(function()
+          done({ ok = true })
+        end)
       end)
       local fired = false
-      local sub = b:subscribe(function() fired = true end)
+      local sub = b:subscribe(function()
+        fired = true
+      end)
       sub:cancel()
       vim.wait(50)
       assert.is_false(fired)
@@ -82,24 +102,40 @@ describe("flemma.readiness", function()
 
     it("multiple subscribers all fire", function()
       local b = readiness.get_or_create_boundary("s3", function(done)
-        vim.schedule(function() done({ ok = true }) end)
+        vim.schedule(function()
+          done({ ok = true })
+        end)
       end)
       local count = 0
-      b:subscribe(function() count = count + 1 end)
-      b:subscribe(function() count = count + 1 end)
-      vim.wait(50, function() return count == 2 end)
+      b:subscribe(function()
+        count = count + 1
+      end)
+      b:subscribe(function()
+        count = count + 1
+      end)
+      vim.wait(50, function()
+        return count == 2
+      end)
       assert.equals(2, count)
     end)
 
     it("fires immediately (via schedule) when subscribing after boundary completed", function()
       local captured_done
-      local b = readiness.get_or_create_boundary("late", function(done) captured_done = done end)
-      vim.wait(20, function() return captured_done ~= nil end)
+      local b = readiness.get_or_create_boundary("late", function(done)
+        captured_done = done
+      end)
+      vim.wait(20, function()
+        return captured_done ~= nil
+      end)
       captured_done({ ok = true, late = true })
       vim.wait(20)
       local received
-      b:subscribe(function(result) received = result end)
-      vim.wait(50, function() return received ~= nil end)
+      b:subscribe(function(result)
+        received = result
+      end)
+      vim.wait(50, function()
+        return received ~= nil
+      end)
       assert.same({ ok = true, late = true }, received)
     end)
   end)
@@ -110,7 +146,9 @@ describe("flemma.readiness", function()
       local function make_runner(done_on_invoke)
         return function(done)
           runner_invocations = runner_invocations + 1
-          vim.schedule(function() done(done_on_invoke) end)
+          vim.schedule(function()
+            done(done_on_invoke)
+          end)
         end
       end
 
@@ -119,10 +157,16 @@ describe("flemma.readiness", function()
       assert.equals(b1, b2)
 
       local results = {}
-      b1:subscribe(function(r) table.insert(results, r) end)
-      b2:subscribe(function(r) table.insert(results, r) end)
+      b1:subscribe(function(r)
+        table.insert(results, r)
+      end)
+      b2:subscribe(function(r)
+        table.insert(results, r)
+      end)
 
-      vim.wait(50, function() return #results == 2 end)
+      vim.wait(50, function()
+        return #results == 2
+      end)
       assert.equals(1, runner_invocations)
       assert.equals(2, #results)
       assert.equals("first", results[1].who)
@@ -136,8 +180,12 @@ describe("flemma.readiness", function()
         error("boom")
       end)
       local result
-      b:subscribe(function(r) result = r end)
-      vim.wait(50, function() return result ~= nil end)
+      b:subscribe(function(r)
+        result = r
+      end)
+      vim.wait(50, function()
+        return result ~= nil
+      end)
       assert.is_false(result.ok)
       assert.equals("readiness", result.diagnostics[1].resolver)
       assert.matches("runner panic", result.diagnostics[1].message)
@@ -149,7 +197,9 @@ describe("flemma.readiness", function()
         done({ ok = true, value = 1 })
         error("boom after done")
       end)
-      b:subscribe(function() complete_count = complete_count + 1 end)
+      b:subscribe(function()
+        complete_count = complete_count + 1
+      end)
       vim.wait(50)
       assert.equals(1, complete_count)
     end)

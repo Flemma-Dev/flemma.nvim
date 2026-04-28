@@ -771,7 +771,9 @@ function M.try_estimate_usage(bufnr, on_result)
       body.temperature = nil
       return body
     end,
-    parse_response = function(parsed) return parsed.input_tokens end,
+    parse_response = function(parsed)
+      return parsed.input_tokens
+    end,
     cache_key_prefix = "anthropic",
     error_label = "Anthropic",
   }, on_result)

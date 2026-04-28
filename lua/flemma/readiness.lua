@@ -73,7 +73,9 @@ function Boundary:subscribe(on_complete)
   local sub = Subscription.new(on_complete)
   if self._status == "done" then
     vim.schedule(function()
-      if not sub.cancelled then sub.on_complete(self._result) end
+      if not sub.cancelled then
+        sub.on_complete(self._result)
+      end
     end)
   else
     table.insert(self._subscribers, sub)

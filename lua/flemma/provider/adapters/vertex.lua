@@ -650,13 +650,21 @@ function M.try_estimate_usage(bufnr, on_result)
     endpoint = function(provider)
       local project_id = provider.parameters.project_id
       if not project_id or project_id == "" then
-        error("Vertex AI project_id is required. Configure it in `parameters.vertex.project_id` or via :Flemma switch.", 0)
+        error(
+          "Vertex AI project_id is required. Configure it in `parameters.vertex.project_id` or via :Flemma switch.",
+          0
+        )
       end
       local location = provider.parameters.location or "global"
-      local hostname = location == "global" and "aiplatform.googleapis.com" or (location .. "-aiplatform.googleapis.com")
+      local hostname = location == "global" and "aiplatform.googleapis.com"
+        or (location .. "-aiplatform.googleapis.com")
       return string.format(
         "https://%s/%s/projects/%s/locations/%s/publishers/google/models/%s:countTokens",
-        hostname, provider.api_version, project_id, location, provider.parameters.model
+        hostname,
+        provider.api_version,
+        project_id,
+        location,
+        provider.parameters.model
       )
     end,
     transform_body = function(body)
@@ -664,7 +672,9 @@ function M.try_estimate_usage(bufnr, on_result)
       body.toolConfig = nil
       return body
     end,
-    parse_response = function(parsed) return parsed.totalTokens end,
+    parse_response = function(parsed)
+      return parsed.totalTokens
+    end,
     cache_key_prefix = "vertex",
     error_label = "Vertex",
   }, on_result)

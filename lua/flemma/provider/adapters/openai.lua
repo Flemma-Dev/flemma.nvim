@@ -426,7 +426,9 @@ function M.try_estimate_usage(bufnr, on_result)
       body.prompt_cache_retention = nil
       return body
     end,
-    parse_response = function(parsed) return parsed.input_tokens end,
+    parse_response = function(parsed)
+      return parsed.input_tokens
+    end,
     cache_key_prefix = "openai",
     error_label = "OpenAI",
   }, on_result)

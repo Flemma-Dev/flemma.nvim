@@ -174,7 +174,9 @@ local function fire_fetch(bufnr)
         write_cache(bufnr, result.response)
       end
     end)
-    if ok then return end
+    if ok then
+      return
+    end
     if not readiness.is_suspense(err) then
       entry.in_flight = false
       clear_cache(bufnr)
@@ -183,7 +185,9 @@ local function fire_fetch(bufnr)
     end
     ---@cast err flemma.readiness.Suspense
     err.boundary:subscribe(function(result)
-      if not entries[bufnr] then return end
+      if not entries[bufnr] then
+        return
+      end
       if not result or result.ok == false then
         entries[bufnr].in_flight = false
         clear_cache(bufnr)

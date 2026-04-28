@@ -477,7 +477,9 @@ local function setup_commands()
 
           local function attempt()
             local ok, err = pcall(provider_module.try_estimate_usage, bufnr, on_result)
-            if ok then return end
+            if ok then
+              return
+            end
             if not readiness.is_suspense(err) then
               notify.error("Estimate failed: " .. tostring(err))
               return

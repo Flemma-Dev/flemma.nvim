@@ -54,10 +54,12 @@ function M.resolve(credential)
     end)
   end)
 
-  error(readiness.Suspense.new(
-    "Resolving " .. (credential.description or (credential.kind .. " for " .. credential.service)),
-    boundary
-  ))
+  error(
+    readiness.Suspense.new(
+      "Resolving " .. (credential.description or (credential.kind .. " for " .. credential.service)),
+      boundary
+    )
+  )
 end
 
 ---@param credential flemma.secrets.Credential
@@ -66,7 +68,9 @@ function M.resolve_async(credential, callback)
   local key = cache_key(credential.kind, credential.service)
   local cached = cache.get(key)
   if cached then
-    vim.schedule(function() callback(cached, nil) end)
+    vim.schedule(function()
+      callback(cached, nil)
+    end)
     return
   end
   local all_diagnostics = {}

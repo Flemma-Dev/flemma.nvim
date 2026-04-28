@@ -700,7 +700,11 @@ describe("Vertex AI Provider", function()
     end)
 
     it("should resolve access token from cache via secrets", function()
-      secrets_cache.set("access_token:vertex", { value = "ya29.env-token" }, { kind = "access_token", service = "vertex" })
+      secrets_cache.set(
+        "access_token:vertex",
+        { value = "ya29.env-token" },
+        { kind = "access_token", service = "vertex" }
+      )
       local provider = vertex.new({
         model = "gemini-2.5-pro",
         project_id = "test-project",
@@ -712,7 +716,11 @@ describe("Vertex AI Provider", function()
     end)
 
     it("should use cached secret on subsequent calls", function()
-      secrets_cache.set("access_token:vertex", { value = "ya29.cached-token" }, { kind = "access_token", service = "vertex" })
+      secrets_cache.set(
+        "access_token:vertex",
+        { value = "ya29.cached-token" },
+        { kind = "access_token", service = "vertex" }
+      )
       local provider = vertex.new({
         model = "gemini-2.5-pro",
         project_id = "test-project",

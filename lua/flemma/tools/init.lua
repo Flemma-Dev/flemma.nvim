@@ -246,7 +246,9 @@ end
 function M.get_for_prompt(bufnr)
   if pending_sources > 0 then
     local boundary = readiness.get_or_create_boundary("tools:loaded", function(done)
-      M.on_ready(function() done({ ok = true }) end)
+      M.on_ready(function()
+        done({ ok = true })
+      end)
     end)
     error(readiness.Suspense.new("Waiting for tool definitions to load\u{2026}", boundary))
   end

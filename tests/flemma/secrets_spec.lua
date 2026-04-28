@@ -63,7 +63,9 @@ describe("flemma.secrets", function()
       secrets.resolve_async({ kind = "api_key", service = "anthropic" }, function(r)
         result = r
       end)
-      vim.wait(100, function() return result ~= nil end)
+      vim.wait(100, function()
+        return result ~= nil
+      end)
       assert.equals("sk-from-env", result.value)
     end)
 
@@ -71,9 +73,15 @@ describe("flemma.secrets", function()
       local failing_resolver = {
         name = "failing",
         priority = 100,
-        supports = function(_, _) return true end,
-        resolve = function(_, _) return nil end,
-        resolve_async = function(_, _credential, _ctx, callback) callback(nil) end,
+        supports = function(_, _)
+          return true
+        end,
+        resolve = function(_, _)
+          return nil
+        end,
+        resolve_async = function(_, _credential, _ctx, callback)
+          callback(nil)
+        end,
       }
       registry.register("failing", failing_resolver)
       registry.register("keyring", make_resolver("keyring", 50, { "api_key" }, "sk-from-keyring"))
@@ -82,7 +90,9 @@ describe("flemma.secrets", function()
       secrets.resolve_async({ kind = "api_key", service = "anthropic" }, function(r)
         result = r
       end)
-      vim.wait(100, function() return result ~= nil end)
+      vim.wait(100, function()
+        return result ~= nil
+      end)
       assert.equals("sk-from-keyring", result.value)
     end)
 
@@ -94,7 +104,9 @@ describe("flemma.secrets", function()
       secrets.resolve_async({ kind = "access_token", service = "vertex" }, function(r)
         result = r
       end)
-      vim.wait(100, function() return result ~= nil end)
+      vim.wait(100, function()
+        return result ~= nil
+      end)
       assert.equals("ya29.token", result.value)
     end)
 
@@ -103,17 +115,33 @@ describe("flemma.secrets", function()
       local counting_resolver = {
         name = "counting",
         priority = 100,
-        supports = function(_, _) return true end,
-        resolve = function(_, _) call_count = call_count + 1; return { value = "sk-test" } end,
-        resolve_async = function(_, _cred, _ctx, callback) call_count = call_count + 1; callback({ value = "sk-test" }) end,
+        supports = function(_, _)
+          return true
+        end,
+        resolve = function(_, _)
+          call_count = call_count + 1
+          return { value = "sk-test" }
+        end,
+        resolve_async = function(_, _cred, _ctx, callback)
+          call_count = call_count + 1
+          callback({ value = "sk-test" })
+        end,
       }
       registry.register("counting", counting_resolver)
 
       local done1, done2 = false, false
-      secrets.resolve_async({ kind = "api_key", service = "anthropic" }, function() done1 = true end)
-      vim.wait(100, function() return done1 end)
-      secrets.resolve_async({ kind = "api_key", service = "anthropic" }, function() done2 = true end)
-      vim.wait(100, function() return done2 end)
+      secrets.resolve_async({ kind = "api_key", service = "anthropic" }, function()
+        done1 = true
+      end)
+      vim.wait(100, function()
+        return done1
+      end)
+      secrets.resolve_async({ kind = "api_key", service = "anthropic" }, function()
+        done2 = true
+      end)
+      vim.wait(100, function()
+        return done2
+      end)
       assert.equals(1, call_count)
     end)
 
@@ -122,17 +150,33 @@ describe("flemma.secrets", function()
       local counting_resolver = {
         name = "counting",
         priority = 100,
-        supports = function(_, _) return true end,
-        resolve = function(_, credential) call_count = call_count + 1; return { value = credential.service .. "-key" } end,
-        resolve_async = function(_, credential, _ctx, callback) call_count = call_count + 1; callback({ value = credential.service .. "-key" }) end,
+        supports = function(_, _)
+          return true
+        end,
+        resolve = function(_, credential)
+          call_count = call_count + 1
+          return { value = credential.service .. "-key" }
+        end,
+        resolve_async = function(_, credential, _ctx, callback)
+          call_count = call_count + 1
+          callback({ value = credential.service .. "-key" })
+        end,
       }
       registry.register("counting", counting_resolver)
 
       local r1, r2
-      secrets.resolve_async({ kind = "api_key", service = "anthropic" }, function(r) r1 = r end)
-      vim.wait(100, function() return r1 ~= nil end)
-      secrets.resolve_async({ kind = "api_key", service = "openai" }, function(r) r2 = r end)
-      vim.wait(100, function() return r2 ~= nil end)
+      secrets.resolve_async({ kind = "api_key", service = "anthropic" }, function(r)
+        r1 = r
+      end)
+      vim.wait(100, function()
+        return r1 ~= nil
+      end)
+      secrets.resolve_async({ kind = "api_key", service = "openai" }, function(r)
+        r2 = r
+      end)
+      vim.wait(100, function()
+        return r2 ~= nil
+      end)
       assert.equals(2, call_count)
       assert.equals("anthropic-key", r1.value)
       assert.equals("openai-key", r2.value)
@@ -142,8 +186,13 @@ describe("flemma.secrets", function()
       local resolver_with_diag = {
         name = "mock_diag",
         priority = 100,
-        supports = function(_, _, ctx) ctx:diagnostic("not available on this platform"); return false end,
-        resolve = function(_, _, _) return nil end,
+        supports = function(_, _, ctx)
+          ctx:diagnostic("not available on this platform")
+          return false
+        end,
+        resolve = function(_, _, _)
+          return nil
+        end,
       }
       registry.register("mock_diag", resolver_with_diag)
 
@@ -151,7 +200,9 @@ describe("flemma.secrets", function()
       secrets.resolve_async({ kind = "api_key", service = "test" }, function(r, d)
         result, diagnostics = r, d
       end)
-      vim.wait(100, function() return diagnostics ~= nil or result ~= nil end)
+      vim.wait(100, function()
+        return diagnostics ~= nil or result ~= nil
+      end)
       assert.is_nil(result)
       assert.equals(1, #diagnostics)
       assert.equals("mock_diag", diagnostics[1].resolver)
@@ -162,15 +213,28 @@ describe("flemma.secrets", function()
       local resolver_a = {
         name = "resolver_a",
         priority = 100,
-        supports = function(_, _, ctx) ctx:diagnostic("reason A"); return false end,
-        resolve = function(_, _, _) return nil end,
+        supports = function(_, _, ctx)
+          ctx:diagnostic("reason A")
+          return false
+        end,
+        resolve = function(_, _, _)
+          return nil
+        end,
       }
       local resolver_b = {
         name = "resolver_b",
         priority = 50,
-        supports = function(_, _, _) return true end,
-        resolve = function(_, _, ctx) ctx:diagnostic("reason B"); return nil end,
-        resolve_async = function(_, _cred, ctx, callback) ctx:diagnostic("reason B"); callback(nil) end,
+        supports = function(_, _, _)
+          return true
+        end,
+        resolve = function(_, _, ctx)
+          ctx:diagnostic("reason B")
+          return nil
+        end,
+        resolve_async = function(_, _cred, ctx, callback)
+          ctx:diagnostic("reason B")
+          callback(nil)
+        end,
       }
       registry.register("resolver_a", resolver_a)
       registry.register("resolver_b", resolver_b)
@@ -179,7 +243,9 @@ describe("flemma.secrets", function()
       secrets.resolve_async({ kind = "api_key", service = "test" }, function(r, d)
         result, diagnostics = r, d
       end)
-      vim.wait(100, function() return diagnostics ~= nil or result ~= nil end)
+      vim.wait(100, function()
+        return diagnostics ~= nil or result ~= nil
+      end)
       assert.is_nil(result)
       assert.equals(2, #diagnostics)
       assert.equals("reason A", diagnostics[1].message)
@@ -193,7 +259,9 @@ describe("flemma.secrets", function()
       secrets.resolve_async({ kind = "api_key", service = "test" }, function(r, d)
         result, diagnostics = r, d
       end)
-      vim.wait(100, function() return result ~= nil end)
+      vim.wait(100, function()
+        return result ~= nil
+      end)
       assert.is_not_nil(result)
       assert.is_nil(diagnostics)
     end)
@@ -205,7 +273,9 @@ describe("flemma.secrets", function()
         result = r
         done = true
       end)
-      vim.wait(100, function() return done end)
+      vim.wait(100, function()
+        return done
+      end)
       assert.is_nil(result)
     end)
   end)
@@ -220,8 +290,12 @@ describe("flemma.secrets", function()
       assert.is_true(readiness.is_suspense(err))
 
       local sub_result
-      err.boundary:subscribe(function(r) sub_result = r end)
-      vim.wait(200, function() return sub_result ~= nil end)
+      err.boundary:subscribe(function(r)
+        sub_result = r
+      end)
+      vim.wait(200, function()
+        return sub_result ~= nil
+      end)
       assert.is_true(sub_result.ok)
 
       local cached = secrets.resolve({ kind = "api_key", service = "mock_svc" })
