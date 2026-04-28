@@ -9,6 +9,7 @@ local emittable = require("flemma.emittable")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local preproc_utils = require("flemma.preprocessor.utilities")
+local readiness = require("flemma.readiness")
 
 ---@class flemma.templating.compiler.LineMapEntry
 ---@field lnum integer Buffer line number (1-based)
@@ -406,6 +407,9 @@ function M.execute(result, env)
   ---@param err any
   ---@param segment_index integer
   local function emit_expr_error(err, segment_index)
+    if readiness.is_suspense(err) then
+      error(err)
+    end
     local segment = result.segments[segment_index]
     local defaults = {
       position = segment and segment.position or nil,
@@ -486,6 +490,9 @@ function M.execute(result, env)
   -- Execute
   local ok, err = pcall(chunk)
   if not ok then
+    if readiness.is_suspense(err) then
+      error(err)
+    end
     if type(err) == "table" and err.type then
       -- Structured error (from include, config proxy, etc.): preserve as-is
       if not err.severity then

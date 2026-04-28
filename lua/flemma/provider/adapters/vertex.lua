@@ -1,8 +1,6 @@
 --- Google Vertex AI provider for Flemma
 --- Implements the Google Vertex AI API integration
 local base = require("flemma.provider.base")
-local bridge = require("flemma.bridge")
-local client = require("flemma.client")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local normalize = require("flemma.provider.normalize")
@@ -647,114 +645,39 @@ end
 ---@param bufnr integer
 ---@param on_result flemma.usage.EstimateCallback
 function M.try_estimate_usage(bufnr, on_result)
-  local prompt, context, provider, _evaluated, failure = bridge.build_prompt_and_provider(bufnr)
-  if failure then
-    on_result({ err = failure.message })
-    return
-  end
-  ---@cast prompt flemma.pipeline.Prompt
-  ---@cast context flemma.Context
-  ---@cast provider flemma.provider.Vertex
-
-  -- countTokens endpoint: same base as streamGenerateContent but different verb, no SSE.
-  local project_id = provider.parameters.project_id
-  if not project_id or project_id == "" then
-    on_result({
-      err = "Vertex AI project_id is required. Configure it in `parameters.vertex.project_id` or via :Flemma switch.",
-    })
-    return
-  end
-  local location = provider.parameters.location or "global"
-  local hostname
-  if location == "global" then
-    hostname = "aiplatform.googleapis.com"
-  else
-    hostname = location .. "-aiplatform.googleapis.com"
-  end
-  local model = provider.parameters.model
-  local endpoint = string.format(
-    "https://%s/%s/projects/%s/locations/%s/publishers/google/models/%s:countTokens",
-    hostname,
-    provider.api_version,
-    project_id,
-    location,
-    model
-  )
-
-  local fixture_path = client.find_fixture_for_endpoint(endpoint)
-  local headers
-  if fixture_path then
-    headers = { "content-type: application/json" }
-  else
-    local api_key, api_key_diagnostics = provider:get_api_key()
-    if not api_key then
-      local msg = "No Vertex AI access token available."
-      if api_key_diagnostics then
-        for _, d in ipairs(api_key_diagnostics) do
-          msg = msg .. "\n  [" .. d.resolver .. "] " .. d.message
-        end
+  base.send_count_tokens({
+    bufnr = bufnr,
+    endpoint = function(provider)
+      local project_id = provider.parameters.project_id
+      if not project_id or project_id == "" then
+        error(
+          "Vertex AI project_id is required. Configure it in `parameters.vertex.project_id` or via :Flemma switch.",
+          0
+        )
       end
-      on_result({ err = msg })
-      return
-    end
-    headers = provider:get_request_headers()
-  end
-
-  local build_ok, body = pcall(provider.build_request, provider, prompt, context)
-  if not build_ok then
-    on_result({ err = tostring(body) })
-    return
-  end
-
-  -- countTokens accepts: model, instances, contents, tools, systemInstruction,
-  -- generationConfig (per the v1beta1 REST reference). Anything else — notably
-  -- `toolConfig` — is rejected with a 400 INVALID_ARGUMENT. Strip the disallowed
-  -- field and drop generationConfig too since counting doesn't generate.
-  body.generationConfig = nil
-  body.toolConfig = nil
-
-  local request_opts = {
-    endpoint = endpoint,
-    headers = headers,
-    request_body = body,
-    parameters = provider.parameters,
-    trailing_keys = provider:get_trailing_keys(),
-  }
-
-  client.send_json_request(request_opts, function(response_body, exit_code, curl_err)
-    if curl_err or exit_code ~= 0 or not response_body or response_body == "" then
-      local reason = curl_err or ("curl exit code " .. tostring(exit_code))
-      on_result({ err = reason })
-      return
-    end
-
-    local parse_ok, parsed = pcall(json.decode, response_body)
-    if not parse_ok or type(parsed) ~= "table" then
-      on_result({ err = "could not parse response" })
-      return
-    end
-
-    -- Vertex returns `{error: {...}}` for both auth and validation failures;
-    -- extract_json_response_error already handles the array- and object-forms.
-    if parsed.error or (vim.islist(parsed) and parsed[1] and parsed[1].error) then
-      local err_msg = M.extract_json_response_error(provider, parsed) or "unknown Vertex error"
-      on_result({ err = err_msg })
-      return
-    end
-
-    if type(parsed.totalTokens) ~= "number" then
-      on_result({ err = "missing totalTokens in response" })
-      return
-    end
-
-    on_result({
-      response = {
-        tokens = parsed.totalTokens,
-        cache_key = "vertex:" .. model,
-        model = model,
-      },
-    })
-  end)
+      local location = provider.parameters.location or "global"
+      local hostname = location == "global" and "aiplatform.googleapis.com"
+        or (location .. "-aiplatform.googleapis.com")
+      return string.format(
+        "https://%s/%s/projects/%s/locations/%s/publishers/google/models/%s:countTokens",
+        hostname,
+        provider.api_version,
+        project_id,
+        location,
+        provider.parameters.model
+      )
+    end,
+    transform_body = function(body)
+      body.generationConfig = nil
+      body.toolConfig = nil
+      return body
+    end,
+    parse_response = function(parsed)
+      return parsed.totalTokens
+    end,
+    cache_key_prefix = "vertex",
+    error_label = "Vertex",
+  }, on_result)
 end
 
 return M

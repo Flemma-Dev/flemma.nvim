@@ -8,6 +8,7 @@ local hooks = require("flemma.hooks")
 local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
 local notify = require("flemma.notify")
+local readiness = require("flemma.readiness")
 local registry = require("flemma.tools.registry")
 
 local BUILTIN_TOOLS = {
@@ -243,6 +244,14 @@ end
 ---@param bufnr? integer Buffer number for per-buffer config resolution
 ---@return table<string, flemma.tools.ToolDefinition>
 function M.get_for_prompt(bufnr)
+  if pending_sources > 0 then
+    local boundary = readiness.get_or_create_boundary("tools:loaded", function(done)
+      M.on_ready(function()
+        done({ ok = true })
+      end)
+    end)
+    error(readiness.Suspense.new("Waiting for tool definitions to load\u{2026}", boundary))
+  end
   ensure_modules_loaded()
   if bufnr then
     local tools_info = config_facade.inspect(bufnr, "tools")

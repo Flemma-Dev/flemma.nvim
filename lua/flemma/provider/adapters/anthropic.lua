@@ -1,8 +1,6 @@
 --- Anthropic provider for Flemma
 --- Implements the Anthropic (Claude) API integration
 local base = require("flemma.provider.base")
-local bridge = require("flemma.bridge")
-local client = require("flemma.client")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local notify = require("flemma.notify")
@@ -764,87 +762,21 @@ end
 ---@param bufnr integer
 ---@param on_result flemma.usage.EstimateCallback
 function M.try_estimate_usage(bufnr, on_result)
-  local prompt, context, provider, _evaluated, failure = bridge.build_prompt_and_provider(bufnr)
-  if failure then
-    on_result({ err = failure.message })
-    return
-  end
-  ---@cast prompt flemma.pipeline.Prompt
-  ---@cast context flemma.Context
-  ---@cast provider flemma.provider.Anthropic
-
-  local endpoint = "https://api.anthropic.com/v1/messages/count_tokens"
-  local fixture_path = client.find_fixture_for_endpoint(endpoint)
-
-  local headers
-  if fixture_path then
-    headers = { "content-type: application/json" }
-  else
-    local api_key, api_key_diagnostics = provider:get_api_key()
-    if not api_key then
-      local msg = "No API key available for Anthropic."
-      if api_key_diagnostics then
-        for _, d in ipairs(api_key_diagnostics) do
-          msg = msg .. "\n  [" .. d.resolver .. "] " .. d.message
-        end
-      end
-      on_result({ err = msg })
-      return
-    end
-    headers = provider:get_request_headers()
-  end
-
-  local build_ok, body = pcall(provider.build_request, provider, prompt, context)
-  if not build_ok then
-    on_result({ err = tostring(body) })
-    return
-  end
-
-  -- count_tokens rejects these fields.
-  body.max_tokens = nil
-  body.stream = nil
-  body.temperature = nil
-
-  local request_opts = {
-    endpoint = endpoint,
-    headers = headers,
-    request_body = body,
-    parameters = provider.parameters,
-    trailing_keys = provider:get_trailing_keys(),
-  }
-
-  client.send_json_request(request_opts, function(response_body, exit_code, curl_err)
-    if curl_err or exit_code ~= 0 or not response_body or response_body == "" then
-      local reason = curl_err or ("curl exit code " .. tostring(exit_code))
-      on_result({ err = reason })
-      return
-    end
-
-    local parse_ok, parsed = pcall(json.decode, response_body)
-    if not parse_ok or type(parsed) ~= "table" then
-      on_result({ err = "could not parse response" })
-      return
-    end
-
-    if parsed.type == "error" or parsed.error then
-      on_result({ err = provider:extract_json_response_error(parsed) or "unknown Anthropic error" })
-      return
-    end
-
-    if type(parsed.input_tokens) ~= "number" then
-      on_result({ err = "missing input_tokens in response" })
-      return
-    end
-
-    local model = provider.parameters.model
-    on_result({
-      response = {
-        tokens = parsed.input_tokens,
-        cache_key = "anthropic:" .. model,
-        model = model,
-      },
-    })
-  end)
+  base.send_count_tokens({
+    bufnr = bufnr,
+    endpoint = "https://api.anthropic.com/v1/messages/count_tokens",
+    transform_body = function(body)
+      body.max_tokens = nil
+      body.stream = nil
+      body.temperature = nil
+      return body
+    end,
+    parse_response = function(parsed)
+      return parsed.input_tokens
+    end,
+    cache_key_prefix = "anthropic",
+    error_label = "Anthropic",
+  }, on_result)
 end
 
 return M

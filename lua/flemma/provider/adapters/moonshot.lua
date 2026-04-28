@@ -6,9 +6,6 @@
 ---
 --- Metatable chain: moonshot -> openai_chat -> base
 local base = require("flemma.provider.base")
-local bridge = require("flemma.bridge")
-local client = require("flemma.client")
-local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
 local normalize = require("flemma.provider.normalize")
 local openai_chat = require("flemma.provider.openai_chat")
@@ -257,96 +254,27 @@ end
 ---@param bufnr integer
 ---@param on_result flemma.usage.EstimateCallback
 function M.try_estimate_usage(bufnr, on_result)
-  local prompt, context, provider, _evaluated, failure = bridge.build_prompt_and_provider(bufnr)
-  if failure then
-    on_result({ err = failure.message })
-    return
-  end
-  ---@cast prompt flemma.pipeline.Prompt
-  ---@cast context flemma.Context
-  ---@cast provider flemma.provider.Moonshot
-
-  local endpoint = "https://api.moonshot.ai/v1/tokenizers/estimate-token-count"
-  local fixture_path = client.find_fixture_for_endpoint(endpoint)
-
-  local headers
-  if fixture_path then
-    headers = { "content-type: application/json" }
-  else
-    local api_key, api_key_diagnostics = provider:get_api_key()
-    if not api_key then
-      local msg = "No API key available for Moonshot."
-      if api_key_diagnostics then
-        for _, d in ipairs(api_key_diagnostics) do
-          msg = msg .. "\n  [" .. d.resolver .. "] " .. d.message
-        end
+  base.send_count_tokens({
+    bufnr = bufnr,
+    endpoint = "https://api.moonshot.ai/v1/tokenizers/estimate-token-count",
+    transform_body = function(body)
+      body.stream = nil
+      body.stream_options = nil
+      body.max_tokens = nil
+      body.max_completion_tokens = nil
+      body.temperature = nil
+      body.thinking = nil
+      return body
+    end,
+    parse_response = function(parsed)
+      if not parsed.data or type(parsed.data.total_tokens) ~= "number" then
+        return nil, "missing data.total_tokens in response"
       end
-      on_result({ err = msg })
-      return
-    end
-    headers = provider:get_request_headers()
-  end
-
-  local build_ok, body = pcall(provider.build_request, provider, prompt, context)
-  if not build_ok then
-    on_result({ err = tostring(body) })
-    return
-  end
-
-  -- Count endpoint takes the chat-completions shape but these fields are
-  -- irrelevant to tokenization; strip them to keep the payload minimal.
-  body.stream = nil
-  body.stream_options = nil
-  body.max_tokens = nil
-  body.max_completion_tokens = nil
-  body.temperature = nil
-  body.thinking = nil
-
-  local request_opts = {
-    endpoint = endpoint,
-    headers = headers,
-    request_body = body,
-    parameters = provider.parameters,
-    trailing_keys = provider:get_trailing_keys(),
-  }
-
-  client.send_json_request(request_opts, function(response_body, exit_code, curl_err)
-    if curl_err or exit_code ~= 0 or not response_body or response_body == "" then
-      local reason = curl_err or ("curl exit code " .. tostring(exit_code))
-      on_result({ err = reason })
-      return
-    end
-
-    local parse_ok, parsed = pcall(json.decode, response_body)
-    if not parse_ok or type(parsed) ~= "table" then
-      on_result({ err = "could not parse response" })
-      return
-    end
-
-    -- Moonshot's error shape is not uniform:
-    --   auth errors    → {error: {message, type}}                            (object)
-    --   validation     → {code, error: "...", message: "非法输入", ...}     (string)
-    -- Base's extract_json_response_error handles both (Pattern 1 for the
-    -- object form with `error.type` prefix, Pattern 2 for the string form).
-    if parsed.error ~= nil then
-      on_result({ err = provider:extract_json_response_error(parsed) or "unknown Moonshot error" })
-      return
-    end
-
-    if type(parsed.data) ~= "table" or type(parsed.data.total_tokens) ~= "number" then
-      on_result({ err = "missing data.total_tokens in response" })
-      return
-    end
-
-    local model = provider.parameters.model
-    on_result({
-      response = {
-        tokens = parsed.data.total_tokens,
-        cache_key = "moonshot:" .. model,
-        model = model,
-      },
-    })
-  end)
+      return parsed.data.total_tokens
+    end,
+    cache_key_prefix = "moonshot",
+    error_label = "Moonshot",
+  }, on_result)
 end
 
 return M

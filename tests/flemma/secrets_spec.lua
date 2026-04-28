@@ -2,8 +2,9 @@
 
 local secrets
 local registry
+local cache
 
---- Create a mock resolver.
+--- Create a mock resolver with async support.
 local function make_resolver(name, priority, supported_kinds, value, ttl)
   return {
     name = name,
@@ -14,6 +15,13 @@ local function make_resolver(name, priority, supported_kinds, value, ttl)
     resolve = function(_, _)
       return { value = value, ttl = ttl }
     end,
+    resolve_async = function(_, credential, _ctx, callback)
+      if vim.tbl_contains(supported_kinds, credential.kind) then
+        callback({ value = value, ttl = ttl })
+      else
+        callback(nil)
+      end
+    end,
   }
 end
 
@@ -22,29 +30,42 @@ describe("flemma.secrets", function()
     package.loaded["flemma.secrets"] = nil
     package.loaded["flemma.secrets.registry"] = nil
     package.loaded["flemma.secrets.cache"] = nil
+    package.loaded["flemma.readiness"] = nil
     secrets = require("flemma.secrets")
     registry = require("flemma.secrets.registry")
-    require("flemma.secrets.cache")
+    cache = require("flemma.secrets.cache")
+    require("flemma.readiness")._reset_for_tests()
   end)
 
-  describe("resolve", function()
-    it("returns nil when no resolvers are registered", function()
-      local result = secrets.resolve({
-        kind = "api_key",
-        service = "anthropic",
-      })
-      assert.is_nil(result)
+  describe("resolve (sync cache hit)", function()
+    it("returns cached value sync without suspense", function()
+      cache.set("api_key:anthropic", { value = "sk-cached" }, { kind = "api_key", service = "anthropic" })
+      local result = secrets.resolve({ kind = "api_key", service = "anthropic" })
+      assert.equals("sk-cached", result.value)
     end)
 
+    it("raises suspense on cache miss", function()
+      local readiness = require("flemma.readiness")
+      local ok, err = pcall(secrets.resolve, { kind = "api_key", service = "missing_svc" })
+      assert.is_false(ok)
+      assert.is_true(readiness.is_suspense(err))
+      assert.is_not_nil(err.boundary)
+      assert.matches("missing_svc", err.message)
+    end)
+  end)
+
+  describe("resolve_async", function()
     it("resolves using the first matching resolver", function()
       registry.register("env", make_resolver("env", 100, { "api_key" }, "sk-from-env"))
       registry.register("keyring", make_resolver("keyring", 50, { "api_key" }, "sk-from-keyring"))
 
-      local result = secrets.resolve({
-        kind = "api_key",
-        service = "anthropic",
-      })
-      assert.is_not_nil(result)
+      local result
+      secrets.resolve_async({ kind = "api_key", service = "anthropic" }, function(r)
+        result = r
+      end)
+      vim.wait(100, function()
+        return result ~= nil
+      end)
       assert.equals("sk-from-env", result.value)
     end)
 
@@ -58,15 +79,20 @@ describe("flemma.secrets", function()
         resolve = function(_, _)
           return nil
         end,
+        resolve_async = function(_, _credential, _ctx, callback)
+          callback(nil)
+        end,
       }
       registry.register("failing", failing_resolver)
       registry.register("keyring", make_resolver("keyring", 50, { "api_key" }, "sk-from-keyring"))
 
-      local result = secrets.resolve({
-        kind = "api_key",
-        service = "anthropic",
-      })
-      assert.is_not_nil(result)
+      local result
+      secrets.resolve_async({ kind = "api_key", service = "anthropic" }, function(r)
+        result = r
+      end)
+      vim.wait(100, function()
+        return result ~= nil
+      end)
       assert.equals("sk-from-keyring", result.value)
     end)
 
@@ -74,11 +100,13 @@ describe("flemma.secrets", function()
       registry.register("gcloud", make_resolver("gcloud", 25, { "access_token" }, "ya29.token"))
       registry.register("env", make_resolver("env", 100, { "api_key" }, "sk-from-env"))
 
-      local result = secrets.resolve({
-        kind = "access_token",
-        service = "vertex",
-      })
-      assert.is_not_nil(result)
+      local result
+      secrets.resolve_async({ kind = "access_token", service = "vertex" }, function(r)
+        result = r
+      end)
+      vim.wait(100, function()
+        return result ~= nil
+      end)
       assert.equals("ya29.token", result.value)
     end)
 
@@ -94,12 +122,26 @@ describe("flemma.secrets", function()
           call_count = call_count + 1
           return { value = "sk-test" }
         end,
+        resolve_async = function(_, _cred, _ctx, callback)
+          call_count = call_count + 1
+          callback({ value = "sk-test" })
+        end,
       }
       registry.register("counting", counting_resolver)
 
-      secrets.resolve({ kind = "api_key", service = "anthropic" })
-      secrets.resolve({ kind = "api_key", service = "anthropic" })
-
+      local done1, done2 = false, false
+      secrets.resolve_async({ kind = "api_key", service = "anthropic" }, function()
+        done1 = true
+      end)
+      vim.wait(100, function()
+        return done1
+      end)
+      secrets.resolve_async({ kind = "api_key", service = "anthropic" }, function()
+        done2 = true
+      end)
+      vim.wait(100, function()
+        return done2
+      end)
       assert.equals(1, call_count)
     end)
 
@@ -115,18 +157,32 @@ describe("flemma.secrets", function()
           call_count = call_count + 1
           return { value = credential.service .. "-key" }
         end,
+        resolve_async = function(_, credential, _ctx, callback)
+          call_count = call_count + 1
+          callback({ value = credential.service .. "-key" })
+        end,
       }
       registry.register("counting", counting_resolver)
 
-      local r1 = secrets.resolve({ kind = "api_key", service = "anthropic" })
-      local r2 = secrets.resolve({ kind = "api_key", service = "openai" })
-
+      local r1, r2
+      secrets.resolve_async({ kind = "api_key", service = "anthropic" }, function(r)
+        r1 = r
+      end)
+      vim.wait(100, function()
+        return r1 ~= nil
+      end)
+      secrets.resolve_async({ kind = "api_key", service = "openai" }, function(r)
+        r2 = r
+      end)
+      vim.wait(100, function()
+        return r2 ~= nil
+      end)
       assert.equals(2, call_count)
       assert.equals("anthropic-key", r1.value)
       assert.equals("openai-key", r2.value)
     end)
 
-    it("returns diagnostics as second value when resolution fails", function()
+    it("collects diagnostics when no resolver succeeds", function()
       local resolver_with_diag = {
         name = "mock_diag",
         priority = 100,
@@ -140,12 +196,14 @@ describe("flemma.secrets", function()
       }
       registry.register("mock_diag", resolver_with_diag)
 
-      local result, diagnostics = secrets.resolve({
-        kind = "api_key",
-        service = "test",
-      })
+      local result, diagnostics
+      secrets.resolve_async({ kind = "api_key", service = "test" }, function(r, d)
+        result, diagnostics = r, d
+      end)
+      vim.wait(100, function()
+        return diagnostics ~= nil or result ~= nil
+      end)
       assert.is_nil(result)
-      assert.is_not_nil(diagnostics)
       assert.equals(1, #diagnostics)
       assert.equals("mock_diag", diagnostics[1].resolver)
       assert.equals("not available on this platform", diagnostics[1].message)
@@ -173,81 +231,106 @@ describe("flemma.secrets", function()
           ctx:diagnostic("reason B")
           return nil
         end,
+        resolve_async = function(_, _cred, ctx, callback)
+          ctx:diagnostic("reason B")
+          callback(nil)
+        end,
       }
       registry.register("resolver_a", resolver_a)
       registry.register("resolver_b", resolver_b)
 
-      local result, diagnostics = secrets.resolve({
-        kind = "api_key",
-        service = "test",
-      })
+      local result, diagnostics
+      secrets.resolve_async({ kind = "api_key", service = "test" }, function(r, d)
+        result, diagnostics = r, d
+      end)
+      vim.wait(100, function()
+        return diagnostics ~= nil or result ~= nil
+      end)
       assert.is_nil(result)
       assert.equals(2, #diagnostics)
       assert.equals("reason A", diagnostics[1].message)
       assert.equals("reason B", diagnostics[2].message)
     end)
 
-    it("returns no diagnostics on successful resolution", function()
+    it("returns nil diagnostics on successful resolution", function()
       registry.register("env", make_resolver("env", 100, { "api_key" }, "sk-test"))
 
-      local result, diagnostics = secrets.resolve({
-        kind = "api_key",
-        service = "test",
-      })
+      local result, diagnostics
+      secrets.resolve_async({ kind = "api_key", service = "test" }, function(r, d)
+        result, diagnostics = r, d
+      end)
+      vim.wait(100, function()
+        return result ~= nil
+      end)
       assert.is_not_nil(result)
       assert.is_nil(diagnostics)
+    end)
+
+    it("returns nil when no resolvers are registered", function()
+      local done = false
+      local result
+      secrets.resolve_async({ kind = "api_key", service = "anthropic" }, function(r)
+        result = r
+        done = true
+      end)
+      vim.wait(100, function()
+        return done
+      end)
+      assert.is_nil(result)
+    end)
+  end)
+
+  describe("suspense + boundary retry", function()
+    it("boundary runner walks resolvers and populates cache on success", function()
+      registry.register("env", make_resolver("env", 100, { "api_key" }, "from-env"))
+
+      local readiness = require("flemma.readiness")
+      local ok, err = pcall(secrets.resolve, { kind = "api_key", service = "mock_svc" })
+      assert.is_false(ok)
+      assert.is_true(readiness.is_suspense(err))
+
+      local sub_result
+      err.boundary:subscribe(function(r)
+        sub_result = r
+      end)
+      vim.wait(200, function()
+        return sub_result ~= nil
+      end)
+      assert.is_true(sub_result.ok)
+
+      local cached = secrets.resolve({ kind = "api_key", service = "mock_svc" })
+      assert.equals("from-env", cached.value)
     end)
   end)
 
   describe("invalidate", function()
     it("clears a specific cached credential", function()
-      local call_count = 0
-      local resolver = {
-        name = "env",
-        priority = 100,
-        supports = function(_, _)
-          return true
-        end,
-        resolve = function(_, _)
-          call_count = call_count + 1
-          return { value = "sk-test" }
-        end,
-      }
-      registry.register("env", resolver)
-
-      secrets.resolve({ kind = "api_key", service = "anthropic" })
-      assert.equals(1, call_count)
-
+      cache.set("api_key:anthropic", { value = "sk-test" }, { kind = "api_key", service = "anthropic" })
+      local result = secrets.resolve({ kind = "api_key", service = "anthropic" })
+      assert.equals("sk-test", result.value)
       secrets.invalidate("api_key", "anthropic")
-      secrets.resolve({ kind = "api_key", service = "anthropic" })
-      assert.equals(2, call_count)
+      local readiness = require("flemma.readiness")
+      local ok, err = pcall(secrets.resolve, { kind = "api_key", service = "anthropic" })
+      assert.is_false(ok)
+      assert.is_true(readiness.is_suspense(err))
     end)
   end)
 
   describe("invalidate_all", function()
     it("clears all cached credentials", function()
-      local call_count = 0
-      local resolver = {
-        name = "env",
-        priority = 100,
-        supports = function(_, _)
-          return true
-        end,
-        resolve = function(_, _)
-          call_count = call_count + 1
-          return { value = "sk-test" }
-        end,
-      }
-      registry.register("env", resolver)
-
-      secrets.resolve({ kind = "api_key", service = "anthropic" })
-      secrets.resolve({ kind = "api_key", service = "openai" })
-      assert.equals(2, call_count)
-
+      cache.set("api_key:anthropic", { value = "sk-a" }, { kind = "api_key", service = "anthropic" })
+      cache.set("api_key:openai", { value = "sk-o" }, { kind = "api_key", service = "openai" })
+      assert.equals("sk-a", secrets.resolve({ kind = "api_key", service = "anthropic" }).value)
+      assert.equals("sk-o", secrets.resolve({ kind = "api_key", service = "openai" }).value)
       secrets.invalidate_all()
-      secrets.resolve({ kind = "api_key", service = "anthropic" })
-      secrets.resolve({ kind = "api_key", service = "openai" })
-      assert.equals(4, call_count)
+      local readiness = require("flemma.readiness")
+      local ok = pcall(secrets.resolve, { kind = "api_key", service = "anthropic" })
+      assert.is_false(ok)
+      ok = pcall(secrets.resolve, { kind = "api_key", service = "openai" })
+      assert.is_false(ok)
+      -- Verify they raise suspense, not just error
+      local _, err = pcall(secrets.resolve, { kind = "api_key", service = "anthropic" })
+      assert.is_true(readiness.is_suspense(err))
     end)
   end)
 

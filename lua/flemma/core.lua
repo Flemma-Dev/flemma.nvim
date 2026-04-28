@@ -7,6 +7,7 @@ local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
 local log = require("flemma.logging")
 local notify = require("flemma.notify")
+local readiness = require("flemma.readiness")
 local secrets = require("flemma.secrets")
 local state = require("flemma.state")
 local normalize = require("flemma.provider.normalize")
@@ -29,7 +30,6 @@ local processor = require("flemma.processor")
 local session_module = require("flemma.session")
 local tool_approval = require("flemma.tools.approval")
 local tool_context = require("flemma.tools.context")
-local tools_module = require("flemma.tools")
 local cursor = require("flemma.cursor")
 local hooks = require("flemma.hooks")
 local preprocessor = require("flemma.preprocessor")
@@ -299,6 +299,14 @@ end
 function M.cancel_request(opts)
   local bufnr = (opts and opts.bufnr) or vim.api.nvim_get_current_buf()
   local buffer_state = state.get_buffer_state(bufnr)
+
+  if buffer_state.pending_send then
+    buffer_state.pending_send.subscription:cancel()
+    buffer_state.pending_send = nil
+    state.unlock_buffer(bufnr)
+    notify.info("Cancelled queued send.")
+    return
+  end
 
   if buffer_state.current_request then
     log.info("cancel_request(): job_id = " .. tostring(buffer_state.current_request))
@@ -733,22 +741,46 @@ function M.send_to_provider(opts)
     return
   end
 
-  -- Gate on async tool sources being ready
-  if not tools_module.is_ready() then
-    notify.warn("Waiting for tool definitions to load…")
-    if buffer_state.waiting_for_tools then
-      return -- already queued
-    end
-    buffer_state.waiting_for_tools = true
-    local target_bufnr = bufnr
-    tools_module.on_ready(function()
-      buffer_state.waiting_for_tools = false
-      if vim.api.nvim_buf_is_valid(target_bufnr) then
-        M.send_to_provider(opts)
-      end
-    end)
+  if buffer_state.pending_send then
+    buffer_state.pending_send.opts = opts
     return
   end
+
+  local function attempt()
+    local current_opts = buffer_state.pending_send and buffer_state.pending_send.opts or opts
+    local ok, err = pcall(M._run_send_pipeline, bufnr, current_opts)
+    if ok then
+      buffer_state.pending_send = nil
+      return
+    end
+    if not readiness.is_suspense(err) then
+      buffer_state.pending_send = nil
+      state.unlock_buffer(bufnr)
+      notify.error(tostring(err))
+      return
+    end
+    ---@cast err flemma.readiness.Suspense
+    notify.warn(err.message)
+    local sub = err.boundary:subscribe(function(result)
+      if not result or not result.ok then
+        buffer_state.pending_send = nil
+        state.unlock_buffer(bufnr)
+        local diag_msg = diagnostic_format.format_resolver_diagnostics(result and result.diagnostics)
+        notify.error("Could not satisfy dependency: " .. (diag_msg or err.message))
+        return
+      end
+      attempt()
+    end)
+    buffer_state.pending_send = { subscription = sub, opts = current_opts }
+  end
+
+  attempt()
+end
+
+---@param bufnr integer
+---@param opts table
+function M._run_send_pipeline(bufnr, opts)
+  local buffer_state = state.get_buffer_state(bufnr)
 
   log.info("send_to_provider(): Starting new request for buffer " .. bufnr)
   buffer_state.request_cancelled = false
@@ -867,16 +899,6 @@ function M.send_to_provider(opts)
 
     local headers
     if not fixture_path then
-      local api_key, api_key_diagnostics = current_provider:get_api_key()
-      if not api_key then
-        local msg = "No API key available for provider '" .. config_facade.get(bufnr).provider .. "'."
-        if api_key_diagnostics then
-          for _, d in ipairs(api_key_diagnostics) do
-            msg = msg .. "\n  [" .. d.resolver .. "] " .. d.message
-          end
-        end
-        error(msg, 0)
-      end
       headers = current_provider:get_request_headers()
       if not headers then
         error("Provider did not return request headers.", 0)
@@ -891,6 +913,10 @@ function M.send_to_provider(opts)
   end)
 
   if not prep_ok then
+    if readiness.is_suspense(prep_result) then
+      state.unlock_buffer(bufnr)
+      error(prep_result)
+    end
     notify.error(tostring(prep_result))
     state.unlock_buffer(bufnr)
     return
@@ -1383,5 +1409,13 @@ bridge.register("send_or_execute", M.send_or_execute)
 bridge.register("cancel_request", M.cancel_request)
 bridge.register("update_ui", M.update_ui)
 bridge.register("build_prompt_and_provider", M.build_prompt_and_provider)
+
+state.register_cleanup("core.pending_send", function(bufnr)
+  local bs = state.get_buffer_state(bufnr)
+  if bs.pending_send then
+    bs.pending_send.subscription:cancel()
+    bs.pending_send = nil
+  end
+end)
 
 return M
