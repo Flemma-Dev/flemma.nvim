@@ -8,7 +8,7 @@ local ast = require("flemma.ast")
 local emittable = require("flemma.emittable")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
-local preproc_utils = require("flemma.preprocessor.utilities")
+local encoding = require("flemma.utilities.encoding")
 local readiness = require("flemma.readiness")
 
 ---@class flemma.templating.compiler.LineMapEntry
@@ -24,7 +24,7 @@ local readiness = require("flemma.readiness")
 ---@param str string
 ---@return string
 local function escape_lua_string(str)
-  return preproc_utils.lua_string_escape(str)
+  return encoding.lua_string_escape(str)
 end
 
 --- Get the buffer line for a segment (best-effort).

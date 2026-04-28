@@ -10,7 +10,7 @@ describe("flemma.preprocessor.rewriters.file_references", function()
     package.loaded["flemma.preprocessor.registry"] = nil
     package.loaded["flemma.preprocessor.runner"] = nil
     package.loaded["flemma.preprocessor.context"] = nil
-    package.loaded["flemma.preprocessor.utilities"] = nil
+    package.loaded["flemma.utilities.encoding"] = nil
     package.loaded["flemma.preprocessor.rewriters.file_references"] = nil
     package.loaded["flemma.ast"] = nil
     package.loaded["flemma.ast.nodes"] = nil

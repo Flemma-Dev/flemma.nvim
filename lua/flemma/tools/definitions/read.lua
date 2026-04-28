@@ -11,6 +11,7 @@ local M = {}
 local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
 local mime = require("flemma.mime")
+local encoding = require("flemma.utilities.encoding")
 
 M.definitions = {
   {
@@ -77,6 +78,7 @@ M.definitions = {
         if not vim.startswith(ref_path, "~/") and not ref_path:match("^%.%.?/") then
           ref_path = "./" .. ref_path
         end
+        ref_path = encoding.url_encode_subset(ref_path)
         return {
           success = true,
           output = "@" .. ref_path .. ";type=" .. mime_type,

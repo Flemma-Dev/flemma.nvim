@@ -5,7 +5,7 @@
 local M = {}
 
 local preprocessor = require("flemma.preprocessor")
-local utilities = require("flemma.preprocessor.utilities")
+local utilities = require("flemma.utilities.encoding")
 
 local url_decode = utilities.url_decode
 local lua_string_escape = utilities.lua_string_escape

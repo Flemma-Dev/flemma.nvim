@@ -199,6 +199,24 @@ describe("Read Tool", function()
       assert.is_truthy(result.output:match(";type=image/png$"))
     end)
 
+    it("URL-encodes spaces in file reference path", function()
+      local spaced_png = test_dir .. "/image (1).png"
+      vim.fn.system("cp " .. vim.fn.shellescape(png_fixture) .. " " .. vim.fn.shellescape(spaced_png))
+
+      local test_ctx = require("flemma.tools.executor").build_execution_context({
+        bufnr = bufnr,
+        cwd = test_dir,
+        timeout = 30,
+        tool_name = "read",
+        __dirname = test_dir,
+      })
+
+      local result = read_def.execute({ label = "test", path = "image (1).png" }, test_ctx)
+      assert.is_true(result.success)
+      assert.is_truthy(result.output:match("%%20"), "expected URL-encoded space, got: " .. tostring(result.output))
+      assert.is_falsy(result.output:match(" "), "should not contain literal spaces in file reference")
+    end)
+
     it("returns normal text content for .lua file", function()
       local lua_file = test_dir .. "/test_script.lua"
       vim.fn.writefile({ "local x = 1", "return x" }, lua_file)

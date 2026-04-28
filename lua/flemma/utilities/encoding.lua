@@ -1,7 +1,7 @@
---- Shared utilities for the preprocessor subsystem
---- Provides URL decoding and Lua string escaping helpers used by both
---- the parser and preprocessor rewriters.
----@class flemma.preprocessor.Utilities
+--- URL and Lua-literal encoding helpers
+--- Provides URL percent-encoding/decoding and Lua string escaping used across
+--- the preprocessor, templating compiler, and tool definitions.
+---@class flemma.utilities.Encoding
 local M = {}
 
 ---URL-decode a percent-encoded string (e.g., %20 -> space).
@@ -29,6 +29,17 @@ function M.lua_string_escape(str)
   str = str:gsub("\t", "\\t")
   str = str:gsub("%z", "\\0")
   return str
+end
+
+---URL-encode characters that would break the file-reference `%S+` pattern.
+---Only encodes whitespace, `#`, `%`, `?`, and `;` (the minimum needed for
+---round-tripping through the preprocessor regex and options parser).
+---@param str string
+---@return string
+function M.url_encode_subset(str)
+  return (str:gsub("[%s#%%?;]", function(c)
+    return string.format("%%%02X", string.byte(c))
+  end))
 end
 
 return M
