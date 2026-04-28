@@ -23,7 +23,7 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field api_error_occurred boolean Whether an API error occurred during the last request
 ---@field inflight_usage flemma.state.InflightUsage Token counters accumulated during streaming
 ---@field locked boolean Whether the buffer is locked (non-modifiable) for request/tool execution
----@field waiting_for_tools? boolean Whether a send is queued waiting for async tool resolution
+---@field pending_send? { subscription: flemma.readiness.Subscription, opts: table } Queued send awaiting async readiness
 ---@field ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached parsed AST
 ---@field raw_ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached raw (pre-rewriter) AST
 ---@field ast_snapshot_before_send? flemma.parser.Snapshot Frozen AST for incremental parsing during streaming
@@ -90,7 +90,7 @@ local function init_buffer(bufnr)
     request_cancelled = false,
     api_error_occurred = false,
     locked = false,
-    waiting_for_tools = false,
+    pending_send = nil,
     progress_timer = nil,
     progress_phase = nil,
     progress_char_count = 0,

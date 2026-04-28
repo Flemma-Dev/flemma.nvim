@@ -30,7 +30,6 @@ local processor = require("flemma.processor")
 local session_module = require("flemma.session")
 local tool_approval = require("flemma.tools.approval")
 local tool_context = require("flemma.tools.context")
-local tools_module = require("flemma.tools")
 local cursor = require("flemma.cursor")
 local hooks = require("flemma.hooks")
 local preprocessor = require("flemma.preprocessor")
@@ -734,22 +733,57 @@ function M.send_to_provider(opts)
     return
   end
 
-  -- Gate on async tool sources being ready
-  if not tools_module.is_ready() then
-    notify.warn("Waiting for tool definitions to load…")
-    if buffer_state.waiting_for_tools then
-      return -- already queued
-    end
-    buffer_state.waiting_for_tools = true
-    local target_bufnr = bufnr
-    tools_module.on_ready(function()
-      buffer_state.waiting_for_tools = false
-      if vim.api.nvim_buf_is_valid(target_bufnr) then
-        M.send_to_provider(opts)
-      end
-    end)
+  if buffer_state.pending_send then
+    buffer_state.pending_send.opts = opts
     return
   end
+
+  local function attempt()
+    local current_opts = buffer_state.pending_send and buffer_state.pending_send.opts or opts
+    local ok, err = pcall(M._run_send_pipeline, bufnr, current_opts)
+    if ok then
+      buffer_state.pending_send = nil
+      return
+    end
+    if not readiness.is_suspense(err) then
+      buffer_state.pending_send = nil
+      state.unlock_buffer(bufnr)
+      notify.error(tostring(err))
+      return
+    end
+    ---@cast err flemma.readiness.Suspense
+    notify.warn(err.message)
+    local sub = err.boundary:subscribe(function(result)
+      if not result or not result.ok then
+        buffer_state.pending_send = nil
+        state.unlock_buffer(bufnr)
+        local diag_msg = M._format_diagnostics(result and result.diagnostics)
+        notify.error("Could not satisfy dependency: " .. (diag_msg or err.message))
+        return
+      end
+      attempt()
+    end)
+    buffer_state.pending_send = { subscription = sub, opts = current_opts }
+  end
+
+  attempt()
+end
+
+---@param diagnostics flemma.secrets.ResolverDiagnostic[]|nil
+---@return string|nil
+function M._format_diagnostics(diagnostics)
+  if not diagnostics or #diagnostics == 0 then return nil end
+  local lines = {}
+  for _, d in ipairs(diagnostics) do
+    table.insert(lines, "  [" .. d.resolver .. "] " .. d.message)
+  end
+  return table.concat(lines, "\n")
+end
+
+---@param bufnr integer
+---@param opts table
+function M._run_send_pipeline(bufnr, opts)
+  local buffer_state = state.get_buffer_state(bufnr)
 
   log.info("send_to_provider(): Starting new request for buffer " .. bufnr)
   buffer_state.request_cancelled = false
@@ -1382,5 +1416,13 @@ bridge.register("send_or_execute", M.send_or_execute)
 bridge.register("cancel_request", M.cancel_request)
 bridge.register("update_ui", M.update_ui)
 bridge.register("build_prompt_and_provider", M.build_prompt_and_provider)
+
+state.register_cleanup("core.pending_send", function(bufnr)
+  local bs = state.get_buffer_state(bufnr)
+  if bs.pending_send then
+    bs.pending_send.subscription:cancel()
+    bs.pending_send = nil
+  end
+end)
 
 return M
