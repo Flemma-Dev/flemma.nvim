@@ -56,7 +56,7 @@ function M.resolve(credential)
 
   error(
     readiness.Suspense.new(
-      "Resolving " .. (credential.description or (credential.kind .. " for " .. credential.service)),
+      "Resolving " .. (credential.description or (credential.kind .. " for " .. credential.service)) .. "\u{2026}",
       boundary
     )
   )
