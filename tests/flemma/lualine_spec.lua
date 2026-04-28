@@ -20,7 +20,8 @@ describe("Lualine component", function()
     package.loaded["flemma.config"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
-    package.loaded["flemma.utilities.format"] = nil
+    package.loaded["flemma.templating.builtins.format"] = nil
+    package.loaded["flemma.templating.renderer"] = nil
     package.loaded["lualine.components.flemma"] = nil
 
     -- Load the component to be tested
@@ -175,7 +176,10 @@ describe("Lualine component", function()
       -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       local config_facade = require("flemma.config")
-      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{provider}:#{model}" } })
+      config_facade.apply(
+        config_facade.LAYERS.RUNTIME,
+        { statusline = { format = "{{ provider.name }}:{{ model.name }}" } }
+      )
 
       -- Act
       local status = flemma_component:update_status()
@@ -190,7 +194,7 @@ describe("Lualine component", function()
       local config_facade = require("flemma.config")
       config_facade.apply(
         config_facade.LAYERS.RUNTIME,
-        { statusline = { format = "#{model}#{?#{thinking}, [#{thinking}],}" } }
+        { statusline = { format = "{{ model.name }}{% if thinking.enabled then %} [{{ thinking.level }}]{% end %}" } }
       )
 
       -- Act
@@ -205,7 +209,7 @@ describe("Lualine component", function()
       local config_facade = require("flemma.config")
       config_facade.apply(
         config_facade.LAYERS.RUNTIME,
-        { statusline = { format = "#{model}#{?#{thinking}, [#{thinking}],}" } }
+        { statusline = { format = "{{ model.name }}{% if thinking.enabled then %} [{{ thinking.level }}]{% end %}" } }
       )
       core.switch_provider("openai", "gpt-4o", {})
 
@@ -220,10 +224,9 @@ describe("Lualine component", function()
       -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       local config_facade = require("flemma.config")
-      config_facade.apply(
-        config_facade.LAYERS.RUNTIME,
-        { statusline = { format = "#{?#{==:#{provider},anthropic},A,O}: #{model}" } }
-      )
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        statusline = { format = "{% if provider.name == 'anthropic' then %}A{% else %}O{% end %}: {{ model.name }}" },
+      })
 
       -- Act
       local status = flemma_component:update_status()
@@ -232,32 +235,108 @@ describe("Lualine component", function()
       assert.are.equal("A: claude-sonnet-4-5", status)
     end)
 
-    it("should concatenate list format entries", function()
-      -- Arrange: provide format as a list of pieces (concat with "")
+    it("should trim incidental outer whitespace from multiline string formats", function()
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
       local config_facade = require("flemma.config")
-      config_facade.apply(
-        config_facade.LAYERS.RUNTIME,
-        { statusline = { format = { "#{provider}", ":", "#{model}" } } }
-      )
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        statusline = {
+          format = [[
+{{ model.name }}
+]],
+        },
+      })
 
-      -- Act
       local status = flemma_component:update_status()
 
-      -- Assert
+      assert.are.equal("claude-sonnet-4-5", status)
+    end)
+
+    it("should preserve non-breaking spaces at the edges of string formats", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+      local non_breaking_space = "\194\160"
+      local config_facade = require("flemma.config")
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        statusline = {
+          format = non_breaking_space .. "{{ model.name }}" .. non_breaking_space,
+        },
+      })
+
+      local status = flemma_component:update_status()
+
+      assert.are.equal(non_breaking_space .. "claude-sonnet-4-5" .. non_breaking_space, status)
+    end)
+
+    it("should support function formats", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+      local config_facade = require("flemma.config")
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        statusline = {
+          format = function(env)
+            return env.provider.name .. ":" .. env.model.name
+          end,
+        },
+      })
+
+      local status = flemma_component:update_status()
+
       assert.are.equal("anthropic:claude-sonnet-4-5", status)
+    end)
+
+    it("does not escape percent signs in function format output", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+      local config_facade = require("flemma.config")
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        statusline = {
+          format = function(env)
+            return env.model.name .. " 50%"
+          end,
+        },
+      })
+
+      local status = flemma_component:update_status()
+
+      assert.are.equal("claude-sonnet-4-5 50%", status)
+    end)
+
+    it("escapes percent signs in template expression output", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+      local config_facade = require("flemma.config")
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        statusline = {
+          format = "{{ model.name .. ' 50%' }}",
+        },
+      })
+
+      local status = flemma_component:update_status()
+
+      assert.are.equal("claude-sonnet-4-5 50%%", status)
+    end)
+
+    it("does not escape percent signs in template literal text", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
+      local config_facade = require("flemma.config")
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        statusline = {
+          format = "%#Comment#{{ model.name }}%*",
+        },
+      })
+
+      local status = flemma_component:update_status()
+
+      assert.are.equal("%#Comment#claude-sonnet-4-5%*", status)
     end)
   end)
 
   describe("session variables", function()
-    it("should display session cost when format includes #{session.cost}", function()
+    it("should display session cost when format includes session.cost", function()
       -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       local config_facade = require("flemma.config")
-      config_facade.apply(
-        config_facade.LAYERS.RUNTIME,
-        { statusline = { format = "#{model} #{?#{session.cost},#{session.cost},}" } }
-      )
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        statusline = {
+          format = "{{ model.name }}{% if session.cost then %} {{ format.money(session.cost) }}{% end %}",
+        },
+      })
 
       -- Add a request to the session
       local s = require("flemma.session").get()
@@ -282,7 +361,10 @@ describe("Lualine component", function()
       -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       local config_facade = require("flemma.config")
-      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{model} (#{session.requests})" } })
+      config_facade.apply(
+        config_facade.LAYERS.RUNTIME,
+        { statusline = { format = "{{ model.name }} ({{ session.requests }})" } }
+      )
 
       local s = require("flemma.session").get()
       s:reset()
@@ -314,10 +396,11 @@ describe("Lualine component", function()
       -- Arrange: switch first, then set format (switch_provider re-materializes state)
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       local config_facade = require("flemma.config")
-      config_facade.apply(
-        config_facade.LAYERS.RUNTIME,
-        { statusline = { format = "#{model}#{?#{session.cost}, #{session.cost},}" } }
-      )
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        statusline = {
+          format = "{{ model.name }}{% if session.cost then %} {{ format.money(session.cost) }}{% end %}",
+        },
+      })
 
       local s = require("flemma.session").get()
       s:reset()
@@ -333,10 +416,11 @@ describe("Lualine component", function()
       -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       local config_facade = require("flemma.config")
-      config_facade.apply(
-        config_facade.LAYERS.RUNTIME,
-        { statusline = { format = "↑#{session.tokens.input} ↓#{session.tokens.output}" } }
-      )
+      config_facade.apply(config_facade.LAYERS.RUNTIME, {
+        statusline = {
+          format = "↑{{ format.tokens(session.tokens.input) }} ↓{{ format.tokens(session.tokens.output) }}",
+        },
+      })
 
       local s = require("flemma.session").get()
       s:reset()
@@ -360,7 +444,10 @@ describe("Lualine component", function()
       -- Arrange: switch first, then set format (switch_provider re-materializes state)
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       local config_facade = require("flemma.config")
-      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{model} last:#{last.cost}" } })
+      config_facade.apply(
+        config_facade.LAYERS.RUNTIME,
+        { statusline = { format = "{{ model.name }} last:{{ format.money(last.cost) }}" } }
+      )
 
       local s = require("flemma.session").get()
       s:reset()
@@ -388,7 +475,7 @@ describe("Lualine component", function()
 
     it("should use format from lualine options when provided", function()
       -- Arrange: simulates { 'flemma', format = '...' } in lualine section config
-      flemma_component.options = { format = "#{provider}:#{model}" }
+      flemma_component.options = { format = "{{ provider.name }}:{{ model.name }}" }
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
 
       -- Act
@@ -414,8 +501,8 @@ describe("Lualine component", function()
       -- Arrange: conflicting formats — lualine option should win
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
       local config_facade = require("flemma.config")
-      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "config:#{model}" } })
-      flemma_component.options = { format = "options:#{model}" }
+      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "config:{{ model.name }}" } })
+      flemma_component.options = { format = "options:{{ model.name }}" }
 
       -- Act
       local status = flemma_component:update_status()
@@ -429,7 +516,10 @@ describe("Lualine component", function()
     it("should be truthy while async tool sources are pending", function()
       -- Arrange
       local config_facade = require("flemma.config")
-      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{?#{booting},booting,ready}" } })
+      config_facade.apply(
+        config_facade.LAYERS.RUNTIME,
+        { statusline = { format = "{% if booting then %}booting{% else %}ready{% end %}" } }
+      )
 
       local tools = require("flemma.tools")
       tools.clear()
@@ -508,7 +598,10 @@ describe("Lualine component", function()
     it("should be falsy once all async tool sources resolve", function()
       -- Arrange
       local config_facade = require("flemma.config")
-      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "#{?#{booting},booting,ready}" } })
+      config_facade.apply(
+        config_facade.LAYERS.RUNTIME,
+        { statusline = { format = "{% if booting then %}booting{% else %}ready{% end %}" } }
+      )
 
       local tools = require("flemma.tools")
       tools.clear()
@@ -538,11 +631,23 @@ describe("Lualine component", function()
       prefetch._reset_for_tests()
     end)
 
+    it("does not start token prefetch when buffer tokens are not referenced", function()
+      core.switch_provider("anthropic", "claude-sonnet-4-6", { thinking = false })
+      flemma_component.options = { format = "{{ model.name }}" }
+
+      local status = flemma_component:update_status()
+      local prefetch = require("flemma.usage.prefetch")
+
+      assert.equals("claude-sonnet-4-6", status)
+      assert.is_false(prefetch._is_tracked(vim.api.nvim_get_current_buf()))
+    end)
+
     it("renders empty before the fetch completes", function()
       core.switch_provider("anthropic", "claude-sonnet-4-6", { thinking = false })
       -- No fixture registered — fetch hasn't landed yet.
 
-      flemma_component.options = { format = "#{buffer.tokens.input}" }
+      flemma_component.options =
+        { format = "{% if buffer.tokens.input then %}{{ format.number(buffer.tokens.input) }}{% end %}" }
       local status = flemma_component:update_status()
 
       assert.equals("", status)
@@ -552,7 +657,8 @@ describe("Lualine component", function()
       client.register_fixture("messages/count_tokens", "tests/fixtures/anthropic/count_tokens_response.txt")
       core.switch_provider("anthropic", "claude-sonnet-4-6", { thinking = false })
 
-      flemma_component.options = { format = "#{buffer.tokens.input}" }
+      flemma_component.options =
+        { format = "{% if buffer.tokens.input then %}{{ format.number(buffer.tokens.input) }}{% end %}" }
       -- First call installs tracking; wait for the fetch to populate the cache.
       flemma_component:update_status()
       local prefetch = require("flemma.usage.prefetch")
@@ -562,6 +668,23 @@ describe("Lualine component", function()
 
       local status = flemma_component:update_status()
       assert.equals("5,432", status)
+    end)
+
+    it("can render context percentage from raw buffer and model token values", function()
+      client.register_fixture("messages/count_tokens", "tests/fixtures/anthropic/count_tokens_response.txt")
+      core.switch_provider("anthropic", "claude-sonnet-4-6", { thinking = false })
+
+      flemma_component.options = {
+        format = "{% if buffer.tokens.input and model.max_input_tokens then %}{{ format.percent(buffer.tokens.input / model.max_input_tokens, 1) }}{% end %}",
+      }
+      flemma_component:update_status()
+      local prefetch = require("flemma.usage.prefetch")
+      vim.wait(2000, function()
+        return prefetch.get_tokens(vim.api.nvim_get_current_buf()) ~= nil
+      end, 10)
+
+      local status = flemma_component:update_status()
+      assert.equals("0.5%%", status)
     end)
 
     it("refreshes lualine on FlemmaUsageEstimated", function()
@@ -682,7 +805,7 @@ describe("Lualine component", function()
       vim.api.nvim_set_hl(0, "lualine_c_normal", { bg = 0x303040, fg = 0xe0e0e0 })
       -- Pre-set FlemmaStatusTextMuted2 to a sentinel; the gate should leave it alone.
       vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted2", { bg = 0xaabbcc, fg = 0x112233 })
-      flemma_component.options = { format = "#{model}" }
+      flemma_component.options = { format = "{{ model.name }}" }
       flemma_component.get_default_hl = function()
         return "%#lualine_c_normal#"
       end

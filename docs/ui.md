@@ -156,7 +156,7 @@ When the model enters a thinking/reasoning phase, the spinner animation is repla
 
 ### Booting indicator
 
-When async tool sources (registered via `tools.modules` or `tools.register()` with a resolve function) are still loading, Flemma shows a booting state. The `#{booting}` statusline variable (default: `⏳`) is non-empty during this phase and clears once all sources resolve. A `FlemmaBootComplete` User autocmd fires when booting finishes. If you send a request while booting, the buffer shows "Waiting for tool definitions to load…" and auto-sends once everything resolves.
+When async tool sources (registered via `tools.modules` or `tools.register()` with a resolve function) are still loading, Flemma shows a booting state. The `booting` statusline variable is `true` during this phase and becomes `false` once all sources resolve. A `FlemmaBootComplete` User autocmd fires when booting finishes. If you send a request while booting, the buffer shows "Waiting for tool definitions to load…" and auto-sends once everything resolves.
 
 ### Tool execution indicators
 
@@ -223,7 +223,7 @@ Each `.chat` buffer owns at most one active usage bar — a new request dismisse
 
 Before sending, preview the cost of the next request with `:Flemma usage:estimate`. The command delegates to the active provider — Anthropic (`POST /v1/messages/count_tokens`), OpenAI (`POST /v1/responses/input_tokens`), Google Vertex AI (`{model}:countTokens`), and Moonshot (`POST /v1/tokenizers/estimate-token-count`) implement it today. Each sends the exact body a real request would produce, with provider-specific counting-only fields removed, and reports input tokens, estimated cost, and the model's per-MTok rates as a single `notify.info` line. Output cost is intentionally not projected: we have no way to know how long the model will talk before it starts.
 
-For OpenAI, neither the public token-counting/API docs nor live curl probes of successful responses exposed billing, quota, or rate-limit metadata for the token-count endpoint. Flemma therefore treats estimates conservatively as real API requests that may count against account limits. The default statusline includes these debounced estimates; custom statusline formats only get them if they include `#{buffer.tokens.input}`. Estimates are deduped and suppressed while a chat request is already in flight.
+For OpenAI, neither the public token-counting/API docs nor live curl probes of successful responses exposed billing, quota, or rate-limit metadata for the token-count endpoint. Flemma therefore treats estimates conservatively as real API requests that may count against account limits. The default statusline includes these debounced estimates; custom statusline formats only get them if they reference `buffer.tokens.input`. Estimates are deduped and suppressed while a chat request is already in flight.
 
 See `lua/flemma/usage.lua` for the driver and `lua/flemma/ui/bar/` for the shared Bar rendering class.
 

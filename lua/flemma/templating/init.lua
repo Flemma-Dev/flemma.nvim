@@ -15,6 +15,7 @@ local symbols = require("flemma.symbols")
 
 local BUILTIN_POPULATORS = {
   "flemma.templating.builtins.stdlib",
+  "flemma.templating.builtins.format",
   "flemma.templating.builtins.iterators",
 }
 
@@ -82,9 +83,14 @@ local FRAMEWORK_KEYS = {
   "__dirname",
   -- set/cleared by compiler.execute()
   "__emit",
+  "__emit_expr",
   "__emit_part",
   "__emit_expr_error",
   "__segments",
+  "__capture_start",
+  "__capture_end",
+  -- optional: set by callers that need output transformation (e.g., lualine % escaping)
+  "__expr_transform",
 }
 
 ---Create a new template environment by running all populators in priority order.

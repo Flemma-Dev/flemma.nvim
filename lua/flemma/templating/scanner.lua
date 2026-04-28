@@ -1,4 +1,4 @@
----@class flemma.parser.scanner
+---@class flemma.templating.Scanner
 ---
 --- Lexical scanner for finding closing delimiters in template expressions.
 --- Understands Lua string literals, comments, and brace nesting so that

@@ -908,7 +908,7 @@ describe("flemma.status", function()
 
       local result = status.format(data, false)
       local text = table.concat(result.lines, "\n")
-      assert.truthy(text:find("⏳"), "expected booting indicator")
+      assert.truthy(text:find("⧖"), "expected booting indicator")
       assert.truthy(text:find("loading async tool sources"), "expected booting message")
     end)
 
@@ -939,7 +939,7 @@ describe("flemma.status", function()
 
       local result = status.format(data, false)
       local text = table.concat(result.lines, "\n")
-      assert.falsy(text:find("⏳"), "expected no booting indicator")
+      assert.falsy(text:find("⧖"), "expected no booting indicator")
     end)
 
     it("shows denied tools in approval digest", function()

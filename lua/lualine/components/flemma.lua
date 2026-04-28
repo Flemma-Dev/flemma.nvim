@@ -1,4 +1,4 @@
---- Lualine component for Flemma status display with tmux-style format strings.
+--- Lualine component for Flemma status display with Lua template strings.
 ---
 --- Uses lazy-evaluated variable resolvers — only variables referenced by the
 --- format string trigger data lookups.  Variables are cached per render cycle.
@@ -8,16 +8,21 @@ local normalize = require("flemma.provider.normalize")
 local prefetch = require("flemma.usage.prefetch")
 local readiness = require("flemma.readiness")
 local registry = require("flemma.provider.registry")
-local format = require("flemma.utilities.format")
+local renderer = require("flemma.templating.renderer")
 local session = require("flemma.session")
-local str = require("flemma.utilities.string")
+local templating = require("flemma.templating")
 local tools = require("flemma.tools")
+
+---@alias flemma.statusline.FormatFunction fun(env: table): string
 
 -- Create a new component for displaying Flemma status
 local flemma_component = lualine_component:extend()
 
 ---@type table<string, true>
 local pending_refreshes = {}
+
+---@type table<string, flemma.templating.RenderFunction>
+local compiled_formats = {}
 
 local function refresh_lualine()
   local ok, lualine = pcall(require, "lualine")
@@ -72,104 +77,224 @@ local function resolve_thinking(config)
   return thinking.level or ""
 end
 
+---@alias flemma.lualine.Resolver fun(): any
+---@alias flemma.lualine.ResolverTree table<string, flemma.lualine.Resolver|flemma.lualine.ResolverTree>
+
+---Return nil for zero-like statusline counters so Lua conditionals stay concise.
+---@param value number
+---@return number|nil
+local function nonzero(value)
+  return value > 0 and value or nil
+end
+
 ---Build resolver functions that close over a single config snapshot.
 ---@param config flemma.Config
----@return table<string, fun(): string>
+---@return flemma.lualine.ResolverTree
 local function make_resolvers(config)
+  local model_info_loaded = false
+  local model_info = nil ---@type flemma.models.ModelInfo|nil
+  local thinking_loaded = false
+  local thinking_level = nil ---@type string|nil
+
+  ---@return flemma.models.ModelInfo|nil
+  local function get_model_info()
+    if not model_info_loaded then
+      model_info_loaded = true
+      if config.provider and config.model then
+        model_info = registry.get_model_info(config.provider, config.model)
+      end
+    end
+    return model_info
+  end
+
+  ---@return string|nil
+  local function get_thinking_level()
+    if not thinking_loaded then
+      thinking_loaded = true
+      local level = resolve_thinking(config)
+      thinking_level = level ~= "" and level or nil
+    end
+    return thinking_level
+  end
+
   return {
-    -- Boot state
-    booting = function()
-      return tools.is_ready() and "" or "1"
-    end,
+    model = {
+      name = function()
+        return config.model
+      end,
+      max_input_tokens = function()
+        local info = get_model_info()
+        return info and info.max_input_tokens or nil
+      end,
+      max_output_tokens = function()
+        local info = get_model_info()
+        return info and info.max_output_tokens or nil
+      end,
+    },
 
-    -- Identity
-    model = function()
-      return config.model or ""
-    end,
-    provider = function()
-      return config.provider or ""
-    end,
-    thinking = function()
-      return resolve_thinking(config)
-    end,
+    provider = {
+      name = function()
+        return config.provider
+      end,
+    },
 
-    -- Session totals
-    ["session.cost"] = function()
-      local s = session.get()
-      local total = s:get_total_cost()
-      return total > 0 and str.format_money(total) or ""
-    end,
-    ["session.requests"] = function()
-      local s = session.get()
-      local count = s:get_request_count()
-      return count > 0 and tostring(count) or ""
-    end,
-    ["session.tokens.input"] = function()
-      local s = session.get()
-      local total = s:get_total_input_tokens()
-      return total > 0 and str.format_tokens(total) or ""
-    end,
-    ["session.tokens.output"] = function()
-      local s = session.get()
-      local total = s:get_total_output_tokens()
-      return total > 0 and str.format_tokens(total) or ""
-    end,
+    thinking = {
+      enabled = function()
+        return get_thinking_level() ~= nil
+      end,
+      level = function()
+        return get_thinking_level()
+      end,
+    },
 
-    -- Last request
-    ["last.cost"] = function()
-      local s = session.get()
-      local request = s:get_latest_request()
-      if not request then
-        return ""
-      end
-      local total = request:get_total_cost()
-      return total > 0 and str.format_money(total) or ""
-    end,
-    ["last.tokens.input"] = function()
-      local s = session.get()
-      local request = s:get_latest_request()
-      if not request then
-        return ""
-      end
-      return request.input_tokens > 0 and str.format_tokens(request.input_tokens) or ""
-    end,
-    ["last.tokens.output"] = function()
-      local s = session.get()
-      local request = s:get_latest_request()
-      if not request then
-        return ""
-      end
-      local total = request:get_total_output_tokens()
-      return total > 0 and str.format_tokens(total) or ""
-    end,
+    session = {
+      cost = function()
+        return nonzero(session.get():get_total_cost())
+      end,
+      requests = function()
+        return nonzero(session.get():get_request_count())
+      end,
+      tokens = {
+        input = function()
+          return nonzero(session.get():get_total_input_tokens())
+        end,
+        output = function()
+          return nonzero(session.get():get_total_output_tokens())
+        end,
+      },
+    },
 
-    -- Buffer estimate
-    ["buffer.tokens.input"] = function()
-      local bufnr = vim.api.nvim_get_current_buf()
-      prefetch.start_tracking(bufnr)
-      local n = prefetch.get_tokens(bufnr)
-      return n and str.format_number(n) or ""
-    end,
+    last = {
+      cost = function()
+        local request = session.get():get_latest_request()
+        if not request then
+          return nil
+        end
+        return nonzero(request:get_total_cost())
+      end,
+      tokens = {
+        input = function()
+          local request = session.get():get_latest_request()
+          if not request then
+            return nil
+          end
+          return nonzero(request.input_tokens)
+        end,
+        output = function()
+          local request = session.get():get_latest_request()
+          if not request then
+            return nil
+          end
+          return nonzero(request:get_total_output_tokens())
+        end,
+      },
+    },
+
+    buffer = {
+      tokens = {
+        input = function()
+          local bufnr = vim.api.nvim_get_current_buf()
+          prefetch.start_tracking(bufnr)
+          return prefetch.get_tokens(bufnr)
+        end,
+      },
+    },
   }
+end
+
+---Build a lazy table node for a single render cycle.
+---@param resolvers flemma.lualine.ResolverTree
+---@return table
+local function make_lazy_table(resolvers)
+  local values = {}
+  local resolved = {}
+
+  return setmetatable({}, {
+    __index = function(_, key)
+      if type(key) ~= "string" then
+        return nil
+      end
+      if resolved[key] then
+        return values[key]
+      end
+      local resolver = resolvers[key]
+      if resolver == nil then
+        return nil
+      end
+      local value
+      if type(resolver) == "function" then
+        value = resolver()
+      else
+        value = make_lazy_table(resolver)
+      end
+      values[key] = value
+      resolved[key] = true
+      return value
+    end,
+  })
+end
+
+---Escape percent signs for Vim statusline context.
+---@param text string
+---@return string
+local function escape_statusline_percent(text)
+  return (text:gsub("%%", "%%%%"))
 end
 
 ---Build a lazy variable table for a single render cycle.
 ---Variables are resolved on first access and cached for the remainder of the cycle.
 ---@param config flemma.Config
 ---@return table
-local function build_vars(config)
-  local resolvers = make_resolvers(config)
-  return setmetatable({}, {
-    __index = function(self, key)
-      local resolver = resolvers[key]
-      if not resolver then
-        return ""
+local function build_env(config)
+  local env = templating.create_env()
+  local vars = make_lazy_table(make_resolvers(config))
+
+  env.booting = not tools.is_ready()
+  env.model = vars.model
+  env.provider = vars.provider
+  env.thinking = vars.thinking
+  env.session = vars.session
+  env.last = vars.last
+  env.buffer = vars.buffer
+  env.__expr_transform = escape_statusline_percent
+
+  return env
+end
+
+---Trim incidental outer whitespace from multiline statusline templates.
+---@param fmt string
+---@return string
+local function trim_statusline_format(fmt)
+  return fmt:match("^%s*(.-)%s*$") or ""
+end
+
+---Render a statusline format string or function.
+---@param fmt string|flemma.statusline.FormatFunction
+---@param env table
+---@return string
+local function render_statusline_format(fmt, env)
+  if type(fmt) == "function" then
+    local ok, result = pcall(fmt, env)
+    if not ok then
+      if readiness.is_suspense(result) then
+        error(result)
       end
-      local value = resolver()
-      rawset(self, key, value)
-      return value
-    end,
-  })
+      return ""
+    end
+    return result and tostring(result) or ""
+  end
+
+  if type(fmt) ~= "string" then
+    return ""
+  end
+
+  fmt = trim_statusline_format(fmt)
+  local render = compiled_formats[fmt]
+  if not render then
+    render = renderer.compile(fmt)
+    compiled_formats[fmt] = render
+  end
+  return renderer.parts_to_text(render(env))
 end
 
 ---@return string
@@ -184,11 +309,7 @@ function flemma_component:_do_update_status()
   end
 
   local fmt = (self.options and self.options.format) or config.statusline.format
-  if type(fmt) == "table" then
-    fmt = table.concat(fmt, "")
-  end
-
-  local status = format.expand(fmt, build_vars(config))
+  local status = render_statusline_format(fmt, build_env(config))
 
   -- When rendered via lualine, rewrite escapes so they anchor to the active
   -- section hl (which differs from StatusLine when lualine tints sections):
@@ -277,6 +398,11 @@ end
 ---@private
 function flemma_component._reset_pending_refreshes()
   pending_refreshes = {}
+end
+
+---@private
+function flemma_component._reset_compiled_formats()
+  compiled_formats = {}
 end
 
 return flemma_component

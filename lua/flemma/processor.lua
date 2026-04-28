@@ -1,9 +1,9 @@
-local compiler = require("flemma.templating.compiler")
 local config = require("flemma.config")
 local readiness = require("flemma.readiness")
 local config_store = require("flemma.config.store")
 local ctxutil = require("flemma.context")
 local eval = require("flemma.templating.eval")
+local renderer = require("flemma.templating.renderer")
 local templating = require("flemma.templating")
 local codeblock_parsers = require("flemma.codeblock.parsers")
 local log = require("flemma.logging")
@@ -353,8 +353,7 @@ function M.evaluate(doc, base_context, opts)
         end
       end
 
-      local compile_result = compiler.compile(prepared)
-      local exec_parts, exec_diagnostics = compiler.execute(compile_result, env)
+      local exec_parts, exec_diagnostics = renderer.render_segments(prepared, env)
       parts = exec_parts
       for _, d in ipairs(exec_diagnostics) do
         d.message_role = msg.role

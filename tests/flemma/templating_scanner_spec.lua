@@ -1,6 +1,6 @@
-local scanner = require("flemma.parser.scanner")
+local scanner = require("flemma.templating.scanner")
 
-describe("parser.scanner", function()
+describe("templating.scanner", function()
   -- Helpers: call find_closing with default start_pos=1
   local function scan_expr(s, start)
     return scanner.find_closing(s, start or 1, "expression")

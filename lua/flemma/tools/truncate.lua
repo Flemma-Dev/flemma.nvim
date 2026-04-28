@@ -8,7 +8,8 @@ local M = {}
 
 local base = require("flemma.utilities.truncate")
 local config_facade = require("flemma.config")
-local format = require("flemma.utilities.format")
+local renderer = require("flemma.templating.renderer")
+local templating = require("flemma.templating")
 local variables = require("flemma.utilities.variables")
 
 -- Re-export all primitives from the base module
@@ -53,16 +54,15 @@ end
 ---@param opts flemma.tools.TruncateOverflowOpts
 ---@return string
 local function resolve_output_path(format_str, opts)
-  local vars = {
-    source = opts.source or "",
-    id = opts.id or "",
-    path = opts.filename and normalize_path(opts.filename) or "",
-  }
+  local env = templating.create_env()
+  env.source = opts.source or ""
+  env.id = opts.id or ""
+  env.path = opts.filename and normalize_path(opts.filename) or ""
 
-  -- Order matters: format.expand resolves #{...} first, then expand_inline
+  -- Order matters: Lua template expansion resolves {{ ... }} first, then expand_inline
   -- handles ${...} in the result. Reversing would let bare $VAR inside
-  -- #{...} expressions get expanded prematurely.
-  local expanded = format.expand(format_str, vars)
+  -- template expressions get expanded prematurely.
+  local expanded = renderer.parts_to_text(renderer.render(format_str, env))
   expanded = variables.expand_inline(expanded)
 
   return expanded
@@ -177,7 +177,7 @@ function M.truncate_with_overflow(text, opts)
   if not format_str then
     local config = config_facade.materialize(opts.bufnr)
     format_str = config.tools and config.tools.truncate and config.tools.truncate.output_path_format
-      or "${TMPDIR:-/tmp}/flemma_#{source}_#{path}_#{id}.txt"
+      or "${TMPDIR:-/tmp}/flemma_{{ source }}_{{ path }}_{{ id }}.txt"
   end
 
   local output_path = resolve_output_path(format_str, opts)

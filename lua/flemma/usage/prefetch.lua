@@ -1,7 +1,7 @@
 --- Debounced per-buffer input-token estimate prefetch.
 ---
 --- Activation is resolver-driven: the lualine resolver for
---- `#{buffer.tokens.input}` calls `start_tracking(bufnr)` idempotently on
+--- `buffer.tokens.input` calls `start_tracking(bufnr)` idempotently on
 --- first access. That installs per-buffer TextChanged autocmds and registers
 --- a state cleanup hook. Subsequent fetches (added in later commits) are
 --- debounced 2.5s after the user stops editing.

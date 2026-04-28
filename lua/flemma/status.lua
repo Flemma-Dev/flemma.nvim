@@ -1238,7 +1238,7 @@ local function format_tools_section(b, data, is_last, verbose)
   -- booting indicator (kept stable across refreshes to avoid layout jumps)
   if t.booting then
     b:leaf(false)
-    b:put("⏳ loading async tool sources…", "FlemmaStatusBooting")
+    b:put("⧖ loading async tool sources…", "FlemmaStatusBooting")
     b:nl()
   elseif t.boot_completed then
     b:leaf(false)

@@ -22,78 +22,95 @@ The component only renders in `chat` buffers and returns an empty string otherwi
 
 ### Format string
 
-The display format uses a tmux-style syntax and can be set in two places:
+The display format uses the same Lua template syntax as `.chat` files (`{{ expression }}` and `{% lua %}`) and can be set in two places:
 
 - **Lualine section config** (per-component, takes precedence):
   ```lua
-  { "flemma", format = "#{provider}:#{model}" }
+  { "flemma", format = "{{ provider.name }}:{{ model.name }}" }
   ```
 - **Flemma config** (global default, via `statusline.format` in the [configuration reference](configuration.md))
 
-The lualine option is useful when you include the component multiple times or want to keep all display config in one place. The shipped default shows the model name, optional thinking level, session stats (request count + cost) once a request lands, projected input tokens for the next request, and a `⏳` indicator while async tool sources are loading. Muted separators (`╱`) are wrapped with `%#FlemmaStatusTextMuted#…%*` so they dim without breaking the statusline background. See [`lua/flemma/config/schema.lua`](../lua/flemma/config/schema.lua) for the literal list.
+The lualine option is useful when you include the component multiple times or want to keep all display config in one place. The shipped default shows the model name, optional thinking level, session stats (request count + cost) once a request lands, projected input tokens for the next request as a percentage of the model context window, and a `⧖` indicator while async tool sources are loading. Muted separators (`╱`) are wrapped with `%#FlemmaStatusTextMuted#…%*` so they dim without breaking the statusline background. See [`lua/flemma/config/schema.lua`](../lua/flemma/config/schema.lua) for the literal template.
+
+Leading and trailing ASCII whitespace is trimmed from string formats before rendering. This makes multiline Lua strings convenient:
+
+```lua
+format = [[
+{{ model.name }}
+]]
+```
+
+Use non-breaking spaces (`\u{00a0}`) at the edge if intentional leading or trailing spacing should remain visible.
 
 Typical renderings:
 
 - `claude-sonnet-4-6 (high)` — thinking active, no requests yet
 - `claude-sonnet-4-6 (high) ╱ Σ3 $0.12 ╱ 8,670↑` — session history and buffer estimate
-- `claude-sonnet-4-6 ⏳` — async tool sources still loading
+- `claude-sonnet-4-6 ⧖` — async tool sources still loading
 
 #### Variables
 
-Variables are lazy-evaluated — only variables referenced by the format string trigger data lookups.
+Variables are lazy-evaluated — only variables referenced by the format string trigger data lookups. Values are raw Lua values where possible; use `format.*` helpers for display formatting.
 
 **Config state:**
 
-| Variable      | Example                 | Description                                          |
-| ------------- | ----------------------- | ---------------------------------------------------- |
-| `#{model}`    | `claude-sonnet-4-6`     | Current model name                                   |
-| `#{provider}` | `anthropic`             | Current provider name                                |
-| `#{thinking}` | `high`, `medium`, `low` | Thinking/reasoning level (empty when inactive)       |
-| `#{booting}`  | `⏳`                    | Non-empty while async tool sources are still loading |
+| Expression                | Example                 | Description                                    |
+| ------------------------- | ----------------------- | ---------------------------------------------- |
+| `model.name`              | `claude-sonnet-4-6`     | Current model name                             |
+| `model.max_input_tokens`  | `1000000`               | Current model input context limit              |
+| `model.max_output_tokens` | `64000`                 | Current model output limit                     |
+| `provider.name`           | `anthropic`             | Current provider name                          |
+| `thinking.enabled`        | `true`                  | Whether thinking/reasoning is active           |
+| `thinking.level`          | `high`, `medium`, `low` | Thinking/reasoning level (`nil` when inactive) |
+| `booting`                 | `true`                  | True while async tool sources are loading      |
 
 **Session totals** (cumulative across all requests in this Neovim session):
 
-| Variable                   | Example | Description                   |
-| -------------------------- | ------- | ----------------------------- |
-| `#{session.cost}`          | `$1.23` | Total session cost            |
-| `#{session.requests}`      | `5`     | Number of completed requests  |
-| `#{session.tokens.input}`  | `15K`   | Total input tokens (compact)  |
-| `#{session.tokens.output}` | `2.5M`  | Total output tokens (compact) |
+| Expression              | Example | Description                  |
+| ----------------------- | ------- | ---------------------------- |
+| `session.cost`          | `1.23`  | Total session cost           |
+| `session.requests`      | `5`     | Number of completed requests |
+| `session.tokens.input`  | `15000` | Total input tokens           |
+| `session.tokens.output` | `25000` | Total output tokens          |
 
 **Last request:**
 
-| Variable                | Example | Description                              |
-| ----------------------- | ------- | ---------------------------------------- |
-| `#{last.cost}`          | `$0.38` | Cost of the most recent request          |
-| `#{last.tokens.input}`  | `100K`  | Input tokens of the most recent request  |
-| `#{last.tokens.output}` | `5K`    | Output tokens of the most recent request |
+| Expression           | Example | Description                              |
+| -------------------- | ------- | ---------------------------------------- |
+| `last.cost`          | `0.38`  | Cost of the most recent request          |
+| `last.tokens.input`  | `10000` | Input tokens of the most recent request  |
+| `last.tokens.output` | `5000`  | Output tokens of the most recent request |
 
 **Current buffer** (projected for the _next_ request):
 
-| Variable                 | Example | Description                                 |
-| ------------------------ | ------- | ------------------------------------------- |
-| `#{buffer.tokens.input}` | `8,670` | Projected input tokens for the next request |
+| Expression            | Example | Description                                 |
+| --------------------- | ------- | ------------------------------------------- |
+| `buffer.tokens.input` | `8670`  | Projected input tokens for the next request |
 
-The buffer estimate is resolver-driven: referencing `#{buffer.tokens.input}` in the format string is what installs the subsystem. The default statusline format includes it, so default users get debounced estimates automatically; users with custom formats only get estimates if they include the variable. Fetches run 2.5 s after the user pauses editing and dispatch against the buffer's active provider. Anthropic, OpenAI, Google Vertex AI, and Moonshot adapters implement the underlying `try_estimate_usage` hook; other providers silently render the segment empty. Failures clear the cache rather than showing a stale number.
+The buffer estimate is resolver-driven: referencing `buffer.tokens.input` in the format string is what installs the subsystem. The default statusline format includes it, so default users get debounced estimates automatically; users with custom formats only get estimates if they include the variable. Fetches run 2.5 s after the user pauses editing and dispatch against the buffer's active provider. Anthropic, OpenAI, Google Vertex AI, and Moonshot adapters implement the underlying `try_estimate_usage` hook; other providers silently render the segment empty. Failures clear the cache rather than showing a stale number.
 
 > [!NOTE]
 > For OpenAI, Flemma uses `POST /v1/responses/input_tokens`. OpenAI's docs and live probe responses observed during implementation did not expose cost, rate-limit, or quota metadata for that endpoint, so treat each estimate conservatively as a real API request that may count against account limits.
 
-All session/request variables return empty when no requests have been made, so they work naturally with conditionals.
+Session/request numeric values return `nil` when no requests have been made, so they work naturally with Lua conditionals.
 
 #### Syntax
 
-| Syntax                           | Purpose                         | Example                                           |
-| -------------------------------- | ------------------------------- | ------------------------------------------------- |
-| `#{name}`                        | Variable expansion              | `#{model}` → `o3`                                 |
-| `#{?cond,true,false}`            | Ternary conditional             | `#{?#{thinking},yes,no}`                          |
-| `#{==:a,b}`                      | String equality (returns 1/0)   | `#{==:#{provider},anthropic}`                     |
-| `#{!=:a,b}`                      | String inequality (returns 1/0) | `#{!=:#{provider},openai}`                        |
-| `#{&&:a,b}`                      | Logical AND (returns 1/0)       | `#{&&:#{thinking},#{model}}`                      |
-| <code>#{&#124;&#124;:a,b}</code> | Logical OR (returns 1/0)        | <code>#{&#124;&#124;:#{model},#{provider}}</code> |
-| `#,`                             | Literal comma                   | `a#,b` → `a,b`                                    |
+| Syntax       | Purpose               | Example                                      |
+| ------------ | --------------------- | -------------------------------------------- |
+| `{{ expr }}` | Expression output     | `{{ model.name }}` → `o3`                    |
+| `{% lua %}`  | Lua control flow/code | `{% if thinking.enabled then %}...{% end %}` |
+| `{{-`/`-}}`  | Trim around output    | `{{- model.name -}}`                         |
+| `{%-`/`-%}`  | Trim around code      | `{%- if booting then -%}`                    |
 
-A value is **truthy** if it is non-empty and not `"0"`. Expressions nest freely — each branch of a conditional is expanded recursively.
+#### Format helpers
+
+| Helper                                                            | Example | Description                 |
+| ----------------------------------------------------------------- | ------- | --------------------------- |
+| `format.number(session.requests)`                                 | `5`     | Comma-separated number      |
+| `format.tokens(session.tokens.input)`                             | `15K`   | Compact token count         |
+| `format.money(session.cost)`                                      | `$1.23` | USD display                 |
+| `format.percent(buffer.tokens.input / model.max_input_tokens, 1)` | `0.9%`  | Decimal ratio to percentage |
 
 #### Highlights
 
@@ -109,7 +126,7 @@ When rendered through the bundled lualine component, `%*` and `%#FlemmaStatusTex
 
 ```lua
 -- Model name followed by a dimmed divider and session cost
-format = '#{model} %#FlemmaStatusTextMuted#╱%* #{session.cost}'
+format = "{{ model.name }}{% if session.cost then %} %#FlemmaStatusTextMuted#╱%* {{ format.money(session.cost) }}{% end %}"
 ```
 
 Any Vim-registered statusline group works (`%#Comment#`, `%#WarningMsg#`, …) but most carry their own background, producing a visible step against the statusline. `FlemmaStatusTextMuted` is deliberately constructed to avoid that.
@@ -118,22 +135,22 @@ Any Vim-registered statusline group works (`%#Comment#`, `%#WarningMsg#`, …) b
 
 ```lua
 -- Default: "claude-sonnet-4-5 (high)" or "claude-sonnet-4-5"
-format = '#{model}#{?#{thinking}, (#{thinking}),}'
+format = "{{ model.name }}{% if thinking.enabled then %} ({{ thinking.level }}){% end %}"
 
 -- Provider prefix: "anthropic:claude-sonnet-4-5"
-format = '#{provider}:#{model}'
+format = "{{ provider.name }}:{{ model.name }}"
 
 -- Square brackets for thinking: "o3 [high]" or "o3"
-format = '#{model}#{?#{thinking}, [#{thinking}],}'
+format = "{{ model.name }}{% if thinking.enabled then %} [{{ thinking.level }}]{% end %}"
 
 -- Provider-conditional label: "A: claude-sonnet-4-5" or "O: o3"
-format = '#{?#{==:#{provider},anthropic},A,O}: #{model}'
+format = "{% if provider.name == 'anthropic' then %}A{% else %}O{% end %}: {{ model.name }}"
 
 -- Running session cost: "claude-sonnet-4-5 $1.23" or "claude-sonnet-4-5"
-format = '#{model}#{?#{session.cost}, #{session.cost},}'
+format = "{{ model.name }}{% if session.cost then %} {{ format.money(session.cost) }}{% end %}"
 
 -- Full dashboard: "claude-sonnet-4-5 (high) $1.23 [5]"
-format = '#{model}#{?#{thinking}, (#{thinking}),}#{?#{session.cost}, #{session.cost},}#{?#{session.requests}, [#{session.requests}],}'
+format = "{{ model.name }}{% if thinking.enabled then %} ({{ thinking.level }}){% end %}{% if session.cost then %} {{ format.money(session.cost) }}{% end %}{% if session.requests then %} [{{ session.requests }}]{% end %}"
 ```
 
 The component only shows data in `chat` buffers and respects per-buffer overrides from `flemma.opt` — if frontmatter changes the thinking level, the statusline reflects it.

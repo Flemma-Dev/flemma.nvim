@@ -135,7 +135,7 @@ require("flemma").setup({
   },
   pricing = { enabled = true },
   statusline = {
-    format = { "#{model}", ... },            -- tmux-style format string or list; see docs/integrations.md for variables/syntax and lua/flemma/config/schema.lua for the shipped default
+    format = "{{ model.name }}...",          -- Lua template string or function; see docs/integrations.md for variables/syntax and lua/flemma/config/schema.lua for the shipped default
   },
   text_object = "m",                         -- "m" or false to disable
   editing = {

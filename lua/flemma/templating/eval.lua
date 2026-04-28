@@ -12,7 +12,6 @@
 ---@class flemma.templating.Eval
 local M = {}
 
-local compiler = require("flemma.templating.compiler")
 local templating = require("flemma.templating")
 local emittable = require("flemma.emittable")
 local log = require("flemma.logging")
@@ -20,6 +19,7 @@ local mime_util = require("flemma.mime")
 local parser = require("flemma.parser")
 local personality_builder = require("flemma.personalities.builder")
 local personality_registry = require("flemma.personalities")
+local renderer = require("flemma.templating.renderer")
 local state = require("flemma.state")
 local path_util = require("flemma.utilities.path")
 local str = require("flemma.utilities.string")
@@ -253,12 +253,12 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
       return unpack(results)
     end
 
-    -- Compile and execute via compiler
-    local compile_result = compiler.compile(segments)
-    if compile_result.error then
-      log.debug("eval: include() compile error in " .. target_path .. ": " .. compile_result.error)
+    -- Compile and execute via the shared renderer
+    local render, render_result = renderer.compile_segments(segments)
+    if render_result.error then
+      log.debug("eval: include() compile error in " .. target_path .. ": " .. render_result.error)
     end
-    local compiled_parts, compile_diagnostics = compiler.execute(compile_result, child_env)
+    local compiled_parts, compile_diagnostics = render(child_env)
 
     -- Re-throw fatal diagnostics (severity "error") so include errors propagate
     -- to the caller. The custom pcall above ensures expression errors are promoted
@@ -339,12 +339,12 @@ function M.execute_frontmatter(code, env_param)
     initial_keys[k] = true
   end
 
-  local chunk, load_err = load(code, "frontmatter", "t", env)
-  if not chunk then
+  local compiled_fn, load_err = load(code, "frontmatter", "t", env)
+  if not compiled_fn then
     error({ type = "frontmatter", error = load_err })
   end
 
-  local ok, exec_err = pcall(chunk)
+  local ok, exec_err = pcall(compiled_fn)
   if not ok then
     if type(exec_err) == "table" and exec_err.type then
       error(exec_err)
@@ -381,12 +381,12 @@ function M.eval_expression(expr, env)
     expr = "return " .. expr
   end
 
-  local chunk, parse_err = load(expr, "expression", "t", env)
-  if not chunk then
+  local compiled_fn, parse_err = load(expr, "expression", "t", env)
+  if not compiled_fn then
     error(string.format("Parse error in '%s' for expression '{{%s}}': %s", (env.__filename or "N/A"), expr, parse_err))
   end
 
-  local ok, eval_result = pcall(chunk)
+  local ok, eval_result = pcall(compiled_fn)
   if not ok then
     if type(eval_result) == "table" and eval_result.type then
       error(eval_result)

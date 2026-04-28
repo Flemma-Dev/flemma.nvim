@@ -144,14 +144,14 @@ return s.object({
 
   statusline = s.object({
     format = s.union(
-      s.string(),
-      s.list(s.string(), {
-        "#{model}",
-        "#{?#{thinking}, (#{thinking}),}",
-        "#{?#{session.cost}, %#FlemmaStatusTextMuted#\u{2571}%* \u{03a3}#{session.requests} #{session.cost},}",
-        "#{?#{buffer.tokens.input}, %#FlemmaStatusTextMuted#\u{2571}%* #{buffer.tokens.input}\u{2191},}",
-        "#{?#{booting}, %#FlemmaStatusTextMuted#\u{23f3}%*,}",
-      })
+      s.string([[
+        {{ model.name }}
+        {%- if thinking.enabled then %} ({{ thinking.level }}){% end %}
+        {%- if session.cost then %} %#FlemmaStatusTextMuted#╱%* Σ{{ session.requests }} {{ format.money(session.cost) }}{% end %}
+        {%- if buffer.tokens.input and model.max_input_tokens then %} %#FlemmaStatusTextMuted#╱%* {{ format.percent(buffer.tokens.input / model.max_input_tokens, 0) }}{% end %}
+        {%- if booting then %} %#FlemmaStatusTextMuted#⧖%*{% end %}
+      ]]),
+      s.func():type_as("flemma.statusline.FormatFunction")
     ),
   }),
 
@@ -218,7 +218,7 @@ return s.object({
       exclude = s.list(s.string(), {}),
     }),
     truncate = s.object({
-      output_path_format = s.string("${TMPDIR:-/tmp}/flemma_#{source}_#{path}_#{id}.txt"),
+      output_path_format = s.string("${TMPDIR:-/tmp}/flemma_{{ source }}_{{ path }}_{{ id }}.txt"),
     }),
     -- Tool-specific config schemas (resolved lazily via tools registry)
     [symbols.DISCOVER] = function(key)

@@ -96,8 +96,8 @@ describe("config.schema.definition", function()
 
     it("materializes statusline defaults", function()
       local cfg = config_facade.get()
-      assert.is_table(cfg.statusline.format)
-      assert.truthy(table.concat(cfg.statusline.format, ""):find("#{model}"))
+      assert.is_string(cfg.statusline.format)
+      assert.truthy(cfg.statusline.format:find("model.name", 1, true))
     end)
 
     it("materializes tools auto_approve default as unexpanded preset", function()

@@ -1,198 +1,90 @@
-describe("format.expand", function()
+describe("flemma.templating.renderer", function()
+  local renderer
+
+  before_each(function()
+    package.loaded["flemma.templating.renderer"] = nil
+    renderer = require("flemma.templating.renderer")
+  end)
+
+  local function render_text(template, env)
+    return renderer.parts_to_text(renderer.render(template, env))
+  end
+
+  describe("template rendering", function()
+    it("renders expression variables", function()
+      assert.are.equal("hello", render_text("{{ greeting }}", { greeting = "hello" }))
+    end)
+
+    it("renders code block conditionals", function()
+      local template = "{% if active then %}yes{% else %}no{% end %}"
+      assert.are.equal("yes", render_text(template, { active = true }))
+      assert.are.equal("no", render_text(template, { active = false }))
+    end)
+
+    it("supports whitespace trimming for multiline strings", function()
+      local template = [[
+{{ model.name }}
+{%- if thinking.enabled then %} ({{ thinking.level }}){% end -%}
+]]
+      local env = {
+        model = { name = "claude-sonnet-4-5" },
+        thinking = { enabled = true, level = "high" },
+      }
+      assert.are.equal("claude-sonnet-4-5 (high)", render_text(template, env))
+    end)
+  end)
+
+  describe("lazy evaluation and explicit compilation", function()
+    it("only resolves accessed nested values", function()
+      local token_accesses = 0
+      local env = {
+        model = { name = "o3" },
+        buffer = {
+          tokens = setmetatable({}, {
+            __index = function(_, key)
+              if key == "input" then
+                token_accesses = token_accesses + 1
+                return 123
+              end
+              return nil
+            end,
+          }),
+        },
+      }
+
+      assert.are.equal("o3", render_text("{{ model.name }}", env))
+      assert.are.equal(0, token_accesses)
+    end)
+
+    it("returns reusable render functions without global caching", function()
+      local render = renderer.compile("{{ value }}")
+
+      assert.are.equal("one", renderer.parts_to_text(render({ value = "one" })))
+      assert.are.equal("two", renderer.parts_to_text(render({ value = "two" })))
+    end)
+  end)
+end)
+
+describe("flemma.templating.builtins.format", function()
   local format
 
   before_each(function()
-    package.loaded["flemma.utilities.format"] = nil
-    format = require("flemma.utilities.format")
+    package.loaded["flemma.templating.builtins.format"] = nil
+    format = require("flemma.templating.builtins.format")
   end)
 
-  describe("variable expansion", function()
-    it("expands a simple variable", function()
-      assert.are.equal("hello", format.expand("#{greeting}", { greeting = "hello" }))
-    end)
-
-    it("returns empty string for unknown variables", function()
-      assert.are.equal("", format.expand("#{unknown}", {}))
-    end)
-
-    it("leaves plain text unchanged", function()
-      assert.are.equal("plain text", format.expand("plain text", {}))
-    end)
-
-    it("expands multiple variables", function()
-      local vars = { provider = "anthropic", model = "claude-sonnet-4-5" }
-      assert.are.equal("anthropic:claude-sonnet-4-5", format.expand("#{provider}:#{model}", vars))
-    end)
-
-    it("handles variables adjacent to text", function()
-      assert.are.equal("[hello]", format.expand("[#{x}]", { x = "hello" }))
-    end)
+  it("exports display formatting functions", function()
+    assert.are.equal("12,345", format.exports.number(12345))
+    assert.are.equal("15K", format.exports.tokens(15000))
+    assert.are.equal("$0.375", format.exports.money(0.375))
+    assert.are.equal("17%", format.exports.percent(0.17, 0))
+    assert.are.equal("17.3%", format.exports.percent(0.1734, 1))
   end)
 
-  describe("comma escaping", function()
-    it("renders escaped commas as literal commas", function()
-      assert.are.equal("a,b", format.expand("a#,b", {}))
-    end)
-  end)
+  it("populates the template environment as format", function()
+    local env = {}
+    format.populate(env)
 
-  describe("ternary conditionals", function()
-    it("selects true branch when value is truthy", function()
-      assert.are.equal("yes", format.expand("#{?#{x},yes,no}", { x = "active" }))
-    end)
-
-    it("selects false branch when value is empty", function()
-      assert.are.equal("no", format.expand("#{?#{x},yes,no}", { x = "" }))
-    end)
-
-    it("selects false branch when value is 0", function()
-      assert.are.equal("no", format.expand("#{?#{x},yes,no}", { x = "0" }))
-    end)
-
-    it("handles empty true branch", function()
-      assert.are.equal("", format.expand("#{?#{x},,fallback}", { x = "active" }))
-    end)
-
-    it("handles empty false branch", function()
-      assert.are.equal("shown", format.expand("#{?#{x},shown,}", { x = "active" }))
-    end)
-
-    it("handles both branches empty", function()
-      assert.are.equal("", format.expand("#{?#{x},,}", { x = "active" }))
-    end)
-
-    it("expands variables inside branches", function()
-      local vars = { flag = "1", model = "o3" }
-      assert.are.equal("model: o3", format.expand("#{?#{flag},model: #{model},none}", vars))
-    end)
-  end)
-
-  describe("string comparisons", function()
-    it("returns 1 for equal strings", function()
-      assert.are.equal("1", format.expand("#{==:#{x},hello}", { x = "hello" }))
-    end)
-
-    it("returns 0 for unequal strings", function()
-      assert.are.equal("0", format.expand("#{==:#{x},hello}", { x = "world" }))
-    end)
-
-    it("returns 1 for not-equal when different", function()
-      assert.are.equal("1", format.expand("#{!=:#{x},hello}", { x = "world" }))
-    end)
-
-    it("returns 0 for not-equal when same", function()
-      assert.are.equal("0", format.expand("#{!=:#{x},hello}", { x = "hello" }))
-    end)
-  end)
-
-  describe("boolean operators", function()
-    it("&& returns 1 when both truthy", function()
-      assert.are.equal("1", format.expand("#{&&:#{a},#{b}}", { a = "1", b = "1" }))
-    end)
-
-    it("&& returns 0 when one is empty", function()
-      assert.are.equal("0", format.expand("#{&&:#{a},#{b}}", { a = "1", b = "" }))
-    end)
-
-    it("|| returns 1 when one is truthy", function()
-      assert.are.equal("1", format.expand("#{||:#{a},#{b}}", { a = "", b = "1" }))
-    end)
-
-    it("|| returns 0 when both empty", function()
-      assert.are.equal("0", format.expand("#{||:#{a},#{b}}", { a = "", b = "" }))
-    end)
-  end)
-
-  describe("nesting", function()
-    it("handles nested conditionals", function()
-      local vars = { provider = "anthropic", thinking = "high" }
-      local fmt = "#{?#{==:#{provider},anthropic},#{?#{thinking},A (#{thinking}),A},other}"
-      assert.are.equal("A (high)", format.expand(fmt, vars))
-    end)
-
-    it("handles nested conditional with empty inner", function()
-      local vars = { provider = "anthropic", thinking = "" }
-      local fmt = "#{?#{==:#{provider},anthropic},#{?#{thinking},A (#{thinking}),A},other}"
-      assert.are.equal("A", format.expand(fmt, vars))
-    end)
-
-    it("handles deeply nested expressions", function()
-      local vars = { a = "1", b = "1", value = "deep" }
-      local fmt = "#{?#{&&:#{a},#{b}},#{value},}"
-      assert.are.equal("deep", format.expand(fmt, vars))
-    end)
-  end)
-
-  describe("lazy evaluation", function()
-    it("only resolves referenced variables", function()
-      local call_count = 0
-      local vars = setmetatable({}, {
-        __index = function(self, key)
-          call_count = call_count + 1
-          local values = { model = "o3", thinking = "high", provider = "openai" }
-          local value = values[key] or ""
-          rawset(self, key, value)
-          return value
-        end,
-      })
-
-      format.expand("#{model}", vars)
-      assert.are.equal(1, call_count, "should only resolve 'model'")
-    end)
-
-    it("caches resolved values for repeated access", function()
-      local call_count = 0
-      local vars = setmetatable({}, {
-        __index = function(self, key)
-          call_count = call_count + 1
-          local value = key == "thinking" and "high" or ""
-          rawset(self, key, value)
-          return value
-        end,
-      })
-
-      format.expand("#{?#{thinking}, (#{thinking}),}", vars)
-      assert.are.equal(1, call_count, "should resolve 'thinking' only once")
-    end)
-  end)
-
-  describe("default lualine format", function()
-    local default_fmt = "#{model}#{?#{thinking}, (#{thinking}),}"
-
-    it("shows model with thinking level", function()
-      local vars = { model = "claude-sonnet-4-5", thinking = "high" }
-      assert.are.equal("claude-sonnet-4-5 (high)", format.expand(default_fmt, vars))
-    end)
-
-    it("shows model only when thinking is off", function()
-      local vars = { model = "claude-sonnet-4-5", thinking = "" }
-      assert.are.equal("claude-sonnet-4-5", format.expand(default_fmt, vars))
-    end)
-
-    it("returns empty when no model", function()
-      local vars = { model = "", thinking = "" }
-      assert.are.equal("", format.expand(default_fmt, vars))
-    end)
-  end)
-
-  describe("edge cases", function()
-    it("handles unmatched #{ gracefully", function()
-      assert.are.equal("#{broken", format.expand("#{broken", {}))
-    end)
-
-    it("handles empty format string", function()
-      assert.are.equal("", format.expand("", {}))
-    end)
-
-    it("handles format with only literals", function()
-      assert.are.equal("hello world", format.expand("hello world", {}))
-    end)
-
-    it("handles escaped comma inside conditional branch", function()
-      assert.are.equal("a,b", format.expand("#{?#{x},a#,b,c}", { x = "1" }))
-    end)
-
-    it("handles # followed by non-special character", function()
-      assert.are.equal("test#value", format.expand("test#value", {}))
-    end)
+    assert.are.equal(format.exports, env.format)
   end)
 end)
