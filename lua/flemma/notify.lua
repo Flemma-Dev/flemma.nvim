@@ -130,4 +130,61 @@ function M.notify(message, level, opts)
   return dispatch(level, message, opts)
 end
 
+--------------------------------------------------------------------------------
+-- Deferred dispatch — schedule a notification after a delay, cancellable
+--------------------------------------------------------------------------------
+
+---@class flemma.notify.Deferred
+---@field cancel fun()
+
+---@class flemma.notify.DelayedDispatcher
+---@field error fun(message: string, opts?: flemma.notify.Opts): flemma.notify.Deferred
+---@field warn fun(message: string, opts?: flemma.notify.Opts): flemma.notify.Deferred
+---@field info fun(message: string, opts?: flemma.notify.Opts): flemma.notify.Deferred
+---@field debug fun(message: string, opts?: flemma.notify.Opts): flemma.notify.Deferred
+---@field trace fun(message: string, opts?: flemma.notify.Opts): flemma.notify.Deferred
+
+---@param delay_ms integer
+---@return flemma.notify.DelayedDispatcher
+function M.delay(delay_ms)
+  ---@param level integer
+  ---@param message string
+  ---@param opts? flemma.notify.Opts
+  ---@return flemma.notify.Deferred
+  local function schedule(level, message, opts)
+    local fired = false
+    vim.defer_fn(function()
+      if not fired then
+        fired = true
+        dispatch(level, message, opts)
+      end
+    end, delay_ms)
+    ---@type flemma.notify.Deferred
+    return {
+      cancel = function()
+        fired = true
+      end,
+    }
+  end
+
+  ---@type flemma.notify.DelayedDispatcher
+  return {
+    error = function(message, opts)
+      return schedule(vim.log.levels.ERROR, message, opts)
+    end,
+    warn = function(message, opts)
+      return schedule(vim.log.levels.WARN, message, opts)
+    end,
+    info = function(message, opts)
+      return schedule(vim.log.levels.INFO, message, opts)
+    end,
+    debug = function(message, opts)
+      return schedule(vim.log.levels.DEBUG, message, opts)
+    end,
+    trace = function(message, opts)
+      return schedule(vim.log.levels.TRACE, message, opts)
+    end,
+  }
+end
+
 return M

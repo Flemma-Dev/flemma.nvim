@@ -485,8 +485,9 @@ local function setup_commands()
               return
             end
             ---@cast err flemma.readiness.Suspense
-            notify.info(err.message)
+            local deferred = notify.delay(600).info(err.message)
             err.boundary:subscribe(function(boundary_result)
+              deferred.cancel()
               if not boundary_result or not boundary_result.ok then
                 local diag_msg =
                   diagnostic_format.format_resolver_diagnostics(boundary_result and boundary_result.diagnostics)

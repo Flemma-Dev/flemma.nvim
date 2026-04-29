@@ -761,8 +761,9 @@ function M.send_to_provider(opts)
       return
     end
     ---@cast err flemma.readiness.Suspense
-    notify.warn(err.message)
+    local deferred = notify.delay(600).warn(err.message)
     local sub = err.boundary:subscribe(function(result)
+      deferred.cancel()
       if not result or not result.ok then
         buffer_state.pending_send = nil
         state.unlock_buffer(bufnr)
