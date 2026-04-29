@@ -5,6 +5,52 @@
 return {
   default = "gpt-5.4",
   models = {
+    -- GPT-5.5 models
+    ["gpt-5.5"] = {
+      pricing = {
+        input = 5.0,
+        output = 30.0,
+        cache_read = 0.50,
+      },
+      max_input_tokens = 922000,
+      max_output_tokens = 128000,
+      meta = { reasoning_effort = true },
+      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
+    },
+    ["gpt-5.5-2026-04-23"] = {
+      pricing = {
+        input = 5.0,
+        output = 30.0,
+        cache_read = 0.50,
+      },
+      max_input_tokens = 922000,
+      max_output_tokens = 128000,
+      meta = { reasoning_effort = true },
+      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "xhigh" },
+    },
+    ["gpt-5.5-pro"] = {
+      pricing = {
+        input = 30.0,
+        output = 180.0,
+        cache_read = 30.0,
+      },
+      max_input_tokens = 922000,
+      max_output_tokens = 128000,
+      meta = { reasoning_effort = true },
+      thinking_effort_map = { minimal = "medium", low = "medium", medium = "medium", high = "high", max = "xhigh" },
+    },
+    ["gpt-5.5-pro-2026-04-23"] = {
+      pricing = {
+        input = 30.0,
+        output = 180.0,
+        cache_read = 30.0,
+      },
+      max_input_tokens = 922000,
+      max_output_tokens = 128000,
+      meta = { reasoning_effort = true },
+      thinking_effort_map = { minimal = "medium", low = "medium", medium = "medium", high = "high", max = "xhigh" },
+    },
+
     -- GPT-5.4 models
     ["gpt-5.4"] = {
       pricing = {
