@@ -21,7 +21,7 @@ qa:
 	actionlint \
 		>"$$d/actionlint" 2>&1 & gate[$$!]=actionlint; \
 	VIMRUNTIME=$(VIMRUNTIME_PATH) \
-		lua-language-server --check lua/ --configpath ../.luarc-check.lua \
+		lua-language-server --check lua/ --configpath ../.luarc-check.lua --num_threads=4 \
 		>"$$d/types" 2>&1 & gate[$$!]=types; \
 	bash contrib/scripts/lint-inline-requires.sh \
 		>"$$d/imports" 2>&1 & gate[$$!]=imports; \

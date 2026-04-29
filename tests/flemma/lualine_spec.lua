@@ -1,51 +1,41 @@
 describe("Lualine component", function()
   local flemma_component, core
 
+  -- One-time expensive setup: mock lualine.component, load flemma, require modules.
+  -- Tests that need a full module reload do so in their own before_each.
+  package.preload["lualine.component"] = function()
+    local component = {}
+    component.init = function() end
+    component.extend = function()
+      return setmetatable({}, { __index = component })
+    end
+    return component
+  end
+
+  require("flemma").setup({})
+  core = require("flemma.core")
+  flemma_component = require("lualine.components.flemma")
+
+  local config_facade = require("flemma.config")
+  local store = require("flemma.config.store")
+  local session = require("flemma.session")
+
   before_each(function()
-    -- Clean up any buffers created during previous tests
     vim.cmd("silent! %bdelete!")
 
-    -- Mock lualine.component before requiring the flemma component
-    package.preload["lualine.component"] = function()
-      local component = {}
-      component.init = function() end
-      component.extend = function()
-        return setmetatable({}, { __index = component })
-      end
-      return component
-    end
+    store.clear(config_facade.LAYERS.RUNTIME)
+    session.get():reset()
 
-    -- Invalidate caches to ensure we get fresh modules
-    package.loaded["flemma"] = nil
-    package.loaded["flemma.config"] = nil
-    package.loaded["flemma.tools"] = nil
-    package.loaded["flemma.core"] = nil
-    package.loaded["flemma.templating.builtins.format"] = nil
-    package.loaded["flemma.templating.renderer"] = nil
-    package.loaded["lualine.components.flemma"] = nil
+    flemma_component.options = nil
+    flemma_component.get_default_hl = nil
 
-    -- Load the component to be tested
-    flemma_component = require("lualine.components.flemma")
-
-    -- Initialize flemma with default settings
-    local flemma = require("flemma")
-    core = require("flemma.core")
-    flemma.setup({})
-
-    -- Reset session to prevent leakage between tests
-    require("flemma.session").get():reset()
-
-    -- Set up a chat buffer
     local bufnr = vim.api.nvim_create_buf(false, false)
     vim.api.nvim_set_current_buf(bufnr)
     vim.bo[bufnr].filetype = "chat"
   end)
 
   after_each(function()
-    -- Clean up any buffers created during the test
     vim.cmd("silent! %bdelete!")
-    -- Clear the preload cache
-    package.preload["lualine.component"] = nil
   end)
 
   it("should display model and reasoning when applicable", function()
@@ -161,8 +151,7 @@ describe("Lualine component", function()
 
   it("should return an empty string if model is not set", function()
     -- Arrange: override model to nil at runtime layer (setup sets a default model)
-    local store = require("flemma.config.store")
-    store.record(require("flemma.config").LAYERS.RUNTIME, nil, "set", "model", nil)
+    store.record(config_facade.LAYERS.RUNTIME, nil, "set", "model", nil)
 
     -- Act
     local status = flemma_component:update_status()
@@ -175,7 +164,6 @@ describe("Lualine component", function()
     it("should use provider:model format when configured", function()
       -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
-      local config_facade = require("flemma.config")
       config_facade.apply(
         config_facade.LAYERS.RUNTIME,
         { statusline = { format = "{{ provider.name }}:{{ model.name }}" } }
@@ -191,7 +179,6 @@ describe("Lualine component", function()
     it("should handle conditionals in custom format", function()
       -- Arrange: switch first, then set format (switch_provider re-materializes state)
       core.switch_provider("openai", "o3", { reasoning = "high", temperature = 1 })
-      local config_facade = require("flemma.config")
       config_facade.apply(
         config_facade.LAYERS.RUNTIME,
         { statusline = { format = "{{ model.name }}{% if thinking.enabled then %} [{{ thinking.level }}]{% end %}" } }
@@ -206,7 +193,6 @@ describe("Lualine component", function()
 
     it("should collapse conditional when thinking is off", function()
       -- Arrange
-      local config_facade = require("flemma.config")
       config_facade.apply(
         config_facade.LAYERS.RUNTIME,
         { statusline = { format = "{{ model.name }}{% if thinking.enabled then %} [{{ thinking.level }}]{% end %}" } }
@@ -223,7 +209,6 @@ describe("Lualine component", function()
     it("should support provider-conditional format", function()
       -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
-      local config_facade = require("flemma.config")
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
         statusline = { format = "{% if provider.name == 'anthropic' then %}A{% else %}O{% end %}: {{ model.name }}" },
       })
@@ -237,7 +222,6 @@ describe("Lualine component", function()
 
     it("should trim incidental outer whitespace from multiline string formats", function()
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
-      local config_facade = require("flemma.config")
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
         statusline = {
           format = [[
@@ -254,7 +238,6 @@ describe("Lualine component", function()
     it("should preserve non-breaking spaces at the edges of string formats", function()
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
       local non_breaking_space = "\194\160"
-      local config_facade = require("flemma.config")
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
         statusline = {
           format = non_breaking_space .. "{{ model.name }}" .. non_breaking_space,
@@ -268,7 +251,6 @@ describe("Lualine component", function()
 
     it("should support function formats", function()
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
-      local config_facade = require("flemma.config")
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
         statusline = {
           format = function(env)
@@ -284,7 +266,6 @@ describe("Lualine component", function()
 
     it("does not escape percent signs in function format output", function()
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
-      local config_facade = require("flemma.config")
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
         statusline = {
           format = function(env)
@@ -300,7 +281,6 @@ describe("Lualine component", function()
 
     it("escapes percent signs in template expression output", function()
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
-      local config_facade = require("flemma.config")
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
         statusline = {
           format = "{{ model.name .. ' 50%' }}",
@@ -314,7 +294,6 @@ describe("Lualine component", function()
 
     it("does not escape percent signs in template literal text", function()
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
-      local config_facade = require("flemma.config")
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
         statusline = {
           format = "%#Comment#{{ model.name }}%*",
@@ -331,7 +310,6 @@ describe("Lualine component", function()
     it("should display session cost when format includes session.cost", function()
       -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
-      local config_facade = require("flemma.config")
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
         statusline = {
           format = "{{ model.name }}{% if session.cost then %} {{ format.money(session.cost) }}{% end %}",
@@ -339,7 +317,7 @@ describe("Lualine component", function()
       })
 
       -- Add a request to the session
-      local s = require("flemma.session").get()
+      local s = session.get()
       s:reset()
       s:add_request({
         provider = "anthropic",
@@ -360,13 +338,12 @@ describe("Lualine component", function()
     it("should display request count", function()
       -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
-      local config_facade = require("flemma.config")
       config_facade.apply(
         config_facade.LAYERS.RUNTIME,
         { statusline = { format = "{{ model.name }} ({{ session.requests }})" } }
       )
 
-      local s = require("flemma.session").get()
+      local s = session.get()
       s:reset()
       s:add_request({
         provider = "anthropic",
@@ -395,14 +372,13 @@ describe("Lualine component", function()
     it("should hide session variables when no requests exist", function()
       -- Arrange: switch first, then set format (switch_provider re-materializes state)
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
-      local config_facade = require("flemma.config")
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
         statusline = {
           format = "{{ model.name }}{% if session.cost then %} {{ format.money(session.cost) }}{% end %}",
         },
       })
 
-      local s = require("flemma.session").get()
+      local s = session.get()
       s:reset()
 
       -- Act
@@ -415,14 +391,13 @@ describe("Lualine component", function()
     it("should format tokens compactly", function()
       -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
-      local config_facade = require("flemma.config")
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
         statusline = {
           format = "↑{{ format.tokens(session.tokens.input) }} ↓{{ format.tokens(session.tokens.output) }}",
         },
       })
 
-      local s = require("flemma.session").get()
+      local s = session.get()
       s:reset()
       s:add_request({
         provider = "anthropic",
@@ -443,13 +418,12 @@ describe("Lualine component", function()
     it("should display last request cost", function()
       -- Arrange: switch first, then set format (switch_provider re-materializes state)
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
-      local config_facade = require("flemma.config")
       config_facade.apply(
         config_facade.LAYERS.RUNTIME,
         { statusline = { format = "{{ model.name }} last:{{ format.money(last.cost) }}" } }
       )
 
-      local s = require("flemma.session").get()
+      local s = session.get()
       s:reset()
       s:add_request({
         provider = "anthropic",
@@ -469,10 +443,6 @@ describe("Lualine component", function()
   end)
 
   describe("lualine options format override", function()
-    after_each(function()
-      flemma_component.options = nil
-    end)
-
     it("should use format from lualine options when provided", function()
       -- Arrange: simulates { 'flemma', format = '...' } in lualine section config
       flemma_component.options = { format = "{{ provider.name }}:{{ model.name }}" }
@@ -500,7 +470,6 @@ describe("Lualine component", function()
     it("should prefer lualine options format over flemma config format", function()
       -- Arrange: conflicting formats — lualine option should win
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
-      local config_facade = require("flemma.config")
       config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "config:{{ model.name }}" } })
       flemma_component.options = { format = "options:{{ model.name }}" }
 
@@ -515,7 +484,6 @@ describe("Lualine component", function()
   describe("booting variable", function()
     it("should be truthy while async tool sources are pending", function()
       -- Arrange
-      local config_facade = require("flemma.config")
       config_facade.apply(
         config_facade.LAYERS.RUNTIME,
         { statusline = { format = "{% if booting then %}booting{% else %}ready{% end %}" } }
@@ -597,7 +565,6 @@ describe("Lualine component", function()
 
     it("should be falsy once all async tool sources resolve", function()
       -- Arrange
-      local config_facade = require("flemma.config")
       config_facade.apply(
         config_facade.LAYERS.RUNTIME,
         { statusline = { format = "{% if booting then %}booting{% else %}ready{% end %}" } }
@@ -710,11 +677,6 @@ describe("Lualine component", function()
   end)
 
   describe("%* rewrite for lualine section default", function()
-    after_each(function()
-      flemma_component.options = nil
-      flemma_component.get_default_hl = nil
-    end)
-
     it("should rewrite %* to section default hl when rendered via lualine", function()
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
       flemma_component.options = { format = "pre%*post" }
@@ -763,8 +725,6 @@ describe("Lualine component", function()
 
   describe("FlemmaStatusTextMuted rewrite for lualine section bg", function()
     after_each(function()
-      flemma_component.options = nil
-      flemma_component.get_default_hl = nil
       flemma_component._muted_section_bg = nil
       flemma_component._muted_fg = nil
       vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted", {})

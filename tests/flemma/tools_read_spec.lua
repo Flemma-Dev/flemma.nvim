@@ -156,7 +156,7 @@ describe("Read Tool", function()
   end)
 
   describe("binary detection", function()
-    local png_fixture = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":h") .. "/../fixtures/sample.png"
+    local png_fixture = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h") .. "/../fixtures/sample.png"
 
     it("has template_tool_result capability", function()
       assert.is_not_nil(read_def.capabilities)

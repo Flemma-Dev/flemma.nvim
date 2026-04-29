@@ -1,5 +1,5 @@
 -- Add the project root to the runtime path to find the 'lua' directory
-vim.opt.rtp:append(os.getenv("PROJECT_ROOT"))
+vim.opt.rtp:prepend(os.getenv("PROJECT_ROOT"))
 
 -- Turn off swapfile during tests
 vim.opt.swapfile = false
