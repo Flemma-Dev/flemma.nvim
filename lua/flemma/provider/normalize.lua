@@ -147,6 +147,7 @@ end
 
 ---@class flemma.provider.ThinkingResolution
 ---@field enabled boolean Whether thinking/reasoning is active
+---@field explicit? boolean True when the user explicitly disabled thinking (false/0), absent when thinking was simply not configured
 ---@field budget? integer Token budget for budget-based providers (Anthropic, Vertex)
 ---@field effort? string Effort level for effort-based providers (OpenAI): "minimal"|"low"|"medium"|"high"|"max"
 ---@field level? string Canonical Flemma level: "minimal"|"low"|"medium"|"high"|"max" (always set when enabled)
@@ -302,8 +303,11 @@ function M.resolve_thinking(params, caps, model_info)
 
     -- Fall back to unified `thinking` parameter
     local thinking = params.thinking
-    if thinking == nil or thinking == false or thinking == 0 then
+    if thinking == nil then
       return { enabled = false }
+    end
+    if thinking == false or thinking == 0 then
+      return { enabled = false, explicit = true }
     end
     if type(thinking) == "string" then
       local mapped = map_effort(thinking, model_info)

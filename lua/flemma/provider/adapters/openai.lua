@@ -403,6 +403,9 @@ function M.build_request(self, prompt, context)
         .. " and reasoning.effort: "
         .. thinking.effort
     )
+  elseif supports_reasoning and not thinking.enabled and thinking.explicit then
+    request_body.reasoning = { effort = "none" }
+    log.debug("openai.build_request: Thinking disabled, sending reasoning.effort: none")
   else
     log.debug(
       "openai.build_request: Using max_output_tokens: "

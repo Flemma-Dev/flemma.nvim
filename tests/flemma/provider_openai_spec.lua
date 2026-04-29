@@ -190,6 +190,61 @@ describe("OpenAI Provider", function()
       assert.is_nil(request_body.include)
     end)
 
+    it("should send reasoning.effort='none' when thinking=false on reasoning models", function()
+      local provider = openai.new({
+        model = "gpt-5.5",
+        max_tokens = 4000,
+        thinking = false,
+      })
+
+      local messages = {
+        { type = "You", content = "Hello" },
+      }
+
+      local prompt = make_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.is_not_nil(request_body.reasoning, "Should include reasoning block even when disabled")
+      assert.equals("none", request_body.reasoning.effort)
+      assert.is_nil(request_body.reasoning.summary, "Disabled reasoning should not include summary")
+      assert.is_nil(request_body.include, "Disabled reasoning should not request encrypted content")
+    end)
+
+    it("should omit reasoning when thinking is nil on reasoning models", function()
+      local provider = openai.new({
+        model = "o3",
+        max_tokens = 4000,
+      })
+
+      local messages = {
+        { type = "You", content = "Hello" },
+      }
+
+      local prompt = make_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.is_nil(request_body.reasoning, "Nil thinking should omit reasoning (use model default)")
+    end)
+
+    it("should still omit reasoning for non-reasoning models when thinking=false", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1000,
+        temperature = 0.5,
+        thinking = false,
+      })
+
+      local messages = {
+        { type = "You", content = "Hello" },
+      }
+
+      local prompt = make_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.is_nil(request_body.reasoning, "Non-reasoning models should not get reasoning block")
+      assert.equals(0.5, request_body.temperature)
+    end)
+
     it("should clamp gpt-5-pro reasoning to high", function()
       local provider = openai.new({
         model = "gpt-5-pro",
