@@ -538,7 +538,10 @@ function M._process_data(self, data, _parsed, callbacks)
     if mapped == "length" then
       base._warn_truncated(self, callbacks)
     elseif mapped == "stop" then
-      -- STOP: normal completion
+      -- STOP: normal completion — mark successful even if no content was
+      -- emitted (Gemini can return an empty text response for trailing
+      -- empty user turns, which is valid but never calls _signal_content)
+      self:_mark_response_successful()
       if callbacks.on_response_complete then
         callbacks.on_response_complete()
       end

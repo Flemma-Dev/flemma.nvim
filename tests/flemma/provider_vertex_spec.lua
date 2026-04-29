@@ -215,6 +215,37 @@ describe("Vertex AI Provider", function()
       assert.is_nil(error_message, "STOP should not trigger on_error")
     end)
 
+    it("should not surface error on empty response with STOP finish reason", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+        max_tokens = 4000,
+      })
+
+      local error_message = nil
+      local callbacks = {
+        on_content = function() end,
+        on_usage = function() end,
+        on_response_complete = function() end,
+        on_error = function(msg)
+          error_message = msg
+        end,
+      }
+
+      -- Gemini returns empty text with STOP (e.g., trailing empty user turn)
+      local line = 'data: {"candidates":[{"content":{"parts":[{"text":""}],"role":"model"},"finishReason":"STOP"}]}'
+      provider:process_response_line(line, callbacks)
+
+      -- Simulate the trailing empty line that arrives after SSE data
+      provider:process_response_line("", callbacks)
+
+      -- finalize_response should NOT produce a spurious error
+      provider:finalize_response(0, callbacks)
+
+      assert.is_nil(error_message, "Empty STOP response should not trigger on_error during finalize")
+    end)
+
     it("should complete with warning on MAX_TOKENS finish reason", function()
       local provider = vertex.new({
         model = "gemini-2.5-pro",
