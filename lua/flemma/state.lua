@@ -44,9 +44,11 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field pending_executions? table<string, flemma.tools.PendingExecution> In-flight tool executions keyed by tool_id
 ---@field cursorline_prev_row? integer Last cursor row (0-indexed) where the CursorLine overlay was placed
 ---@field cursorline_extmark_id? integer Stable extmark ID for the CursorLine overlay
+---@field diagnostics_baseline_provider? string Provider that produced the current diagnostics baseline
 ---@field diagnostics_previous_request? string Raw JSON of the previous request sent from this buffer
 ---@field diagnostics_current_request? string Raw JSON of the most recent request sent from this buffer
----@field _diagnostics_raw_json? string Temporary storage for raw JSON during request lifecycle
+---@field diagnostics_baseline_extra? table Provider-owned metadata expected on the next request
+---@field diagnostics_current_extra_comparison? flemma.diagnostics.ExtraComparison Current request metadata compared against the baseline
 ---@field cursor_pending? flemma.cursor.PendingTarget Deferred cursor move waiting for user idle
 ---@field cursor_idle_timer? uv.uv_timer_t Per-buffer idle timer for cursor deferral
 ---@field file_reference_hashes? table<string, string> SHA256 hashes of included files from the last evaluation (keyed by absolute path)

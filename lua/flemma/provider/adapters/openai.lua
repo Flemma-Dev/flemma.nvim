@@ -31,6 +31,8 @@ local NOOP_EVENTS = {
   ["response.reasoning_summary_text.done"]  = true, -- final reasoning summary; redundant with accumulated deltas
 }
 
+local PHASE_DIAGNOSTIC_PATH = "openai.assistant_message_phases"
+
 ---@param model_info? flemma.models.ModelInfo
 ---@return boolean
 local function supports_reasoning_effort(model_info)
@@ -49,10 +51,34 @@ M.metadata = {
     output_has_thoughts = true,
   },
   config_schema = s.object({
+    experimental = s.optional(s.object({
+      phase = s.boolean(true),
+    })),
     reasoning_summary = s.optional(s.string("auto")),
     reasoning = s.optional(s.string()),
   }),
 }
+
+---@param self flemma.provider.OpenAI
+---@return boolean
+local function phase_labeling_enabled(self)
+  local experimental = self.parameters.experimental
+  if type(experimental) ~= "table" then
+    return true
+  end
+  return experimental.phase ~= false
+end
+
+---@param msg flemma.provider.HistoryMessage
+---@return boolean
+local function message_has_tool_use(msg)
+  for _, part in ipairs(msg.parts or {}) do
+    if part.kind == "tool_use" then
+      return true
+    end
+  end
+  return false
+end
 
 ---@param params flemma.provider.Parameters
 ---@return flemma.provider.OpenAI
@@ -84,6 +110,8 @@ end
 ---@return table<string, any> request_body The request body for the API
 function M.build_request(self, prompt, context)
   local input_items = {}
+  local phase_enabled = phase_labeling_enabled(self)
+  self:_diagnostics_start(phase_enabled)
 
   -- Add system message first if present
   if prompt.system and #prompt.system > 0 then
@@ -245,6 +273,7 @@ function M.build_request(self, prompt, context)
       -- Second pass: collect text and tool_use
       local text_parts = {}
       local item_index = 0
+      local phase = message_has_tool_use(msg) and "commentary" or "final_answer"
 
       for _, p in ipairs(msg.parts or {}) do
         if p.kind == "text" then
@@ -263,7 +292,11 @@ function M.build_request(self, prompt, context)
                 id = "msg_" .. tostring(msg_index) .. "_" .. tostring(item_index),
                 content = { { type = "output_text", text = text, annotations = {} } },
                 status = "completed",
+                phase = phase_enabled and phase or nil,
               })
+              if phase_enabled then
+                self:_diagnostics_append("actual", PHASE_DIAGNOSTIC_PATH, phase)
+              end
             end
             text_parts = {}
           end
@@ -292,7 +325,11 @@ function M.build_request(self, prompt, context)
             id = "msg_" .. tostring(msg_index) .. "_" .. tostring(item_index),
             content = { { type = "output_text", text = text, annotations = {} } },
             status = "completed",
+            phase = phase_enabled and phase or nil,
           })
+          if phase_enabled then
+            self:_diagnostics_append("actual", PHASE_DIAGNOSTIC_PATH, phase)
+          end
         end
       end
     end
@@ -564,6 +601,8 @@ function M._process_data(self, data, _parsed, callbacks)
       -- Store the full reasoning item for signature (includes encrypted_content)
       self._response_buffer.extra.reasoning_item = data.item
       log.debug("openai._process_data(): Reasoning item completed")
+    elseif data.item and data.item.type == "message" and data.item.phase then
+      self:_diagnostics_append("expected", PHASE_DIAGNOSTIC_PATH, data.item.phase)
     end
     return
   end

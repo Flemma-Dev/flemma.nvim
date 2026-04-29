@@ -364,6 +364,189 @@ describe("OpenAI Provider", function()
       assert.equals("Let me check that.", assistant_msg.content[1].text)
     end)
 
+    it("should label assistant messages with tool uses as commentary", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1000,
+        temperature = 0.7,
+      })
+
+      local prompt = {
+        system = nil,
+        history = {
+          { role = "user", parts = { { kind = "text", text = "Calculate 2+2" } } },
+          {
+            role = "assistant",
+            parts = {
+              { kind = "text", text = "Let me calculate that." },
+              { kind = "tool_use", id = "call_abc", name = "calculator", input = { expression = "2+2" } },
+            },
+          },
+        },
+      }
+
+      local request_body = provider:build_request(prompt)
+      local assistant_msg = nil
+      for _, item in ipairs(request_body.input) do
+        if item.type == "message" and item.role == "assistant" then
+          assistant_msg = item
+          break
+        end
+      end
+
+      assert.is_not_nil(assistant_msg)
+      assert.equals("commentary", assistant_msg.phase)
+    end)
+
+    it("should label assistant messages without tool uses as final_answer", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1000,
+        temperature = 0.7,
+      })
+
+      local prompt = {
+        system = nil,
+        history = {
+          { role = "user", parts = { { kind = "text", text = "Hello" } } },
+          {
+            role = "assistant",
+            parts = {
+              { kind = "text", text = "Hello there." },
+            },
+          },
+        },
+      }
+
+      local request_body = provider:build_request(prompt)
+      local assistant_msg = nil
+      for _, item in ipairs(request_body.input) do
+        if item.type == "message" and item.role == "assistant" then
+          assistant_msg = item
+          break
+        end
+      end
+
+      assert.is_not_nil(assistant_msg)
+      assert.equals("final_answer", assistant_msg.phase)
+    end)
+
+    it("should omit assistant message phases when experimental.phase=false", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1000,
+        temperature = 0.7,
+        experimental = { phase = false },
+      })
+
+      local prompt = {
+        system = nil,
+        history = {
+          { role = "user", parts = { { kind = "text", text = "Hello" } } },
+          {
+            role = "assistant",
+            parts = {
+              { kind = "text", text = "Hello there." },
+            },
+          },
+        },
+      }
+
+      local request_body = provider:build_request(prompt)
+      local assistant_msg = nil
+      for _, item in ipairs(request_body.input) do
+        if item.type == "message" and item.role == "assistant" then
+          assistant_msg = item
+          break
+        end
+      end
+
+      assert.is_not_nil(assistant_msg)
+      assert.is_nil(assistant_msg.phase)
+    end)
+
+    it("should label tool preambles and final answers across turns", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1000,
+        temperature = 0.7,
+      })
+
+      local prompt = {
+        system = nil,
+        history = {
+          { role = "user", parts = { { kind = "text", text = "Calculate 2+2" } } },
+          {
+            role = "assistant",
+            parts = {
+              { kind = "text", text = "I'll calculate it." },
+              { kind = "tool_use", id = "call_abc", name = "calculator", input = { expression = "2+2" } },
+            },
+          },
+          {
+            role = "user",
+            parts = {
+              {
+                kind = "tool_result",
+                tool_use_id = "call_abc",
+                parts = { { kind = "text", text = "4" } },
+                is_error = false,
+              },
+            },
+          },
+          {
+            role = "assistant",
+            parts = {
+              { kind = "text", text = "The answer is 4." },
+            },
+          },
+        },
+      }
+
+      local request_body = provider:build_request(prompt)
+      local phases = {}
+      for _, item in ipairs(request_body.input) do
+        if item.type == "message" and item.role == "assistant" then
+          table.insert(phases, item.phase)
+        end
+      end
+
+      assert.same({ "commentary", "final_answer" }, phases)
+    end)
+
+    it("should label all split assistant text segments as commentary when the source message uses tools", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1000,
+        temperature = 0.7,
+      })
+
+      local prompt = {
+        system = nil,
+        history = {
+          { role = "user", parts = { { kind = "text", text = "Calculate 2+2" } } },
+          {
+            role = "assistant",
+            parts = {
+              { kind = "text", text = "First text." },
+              { kind = "tool_use", id = "call_abc", name = "calculator", input = { expression = "2+2" } },
+              { kind = "text", text = "Second text." },
+            },
+          },
+        },
+      }
+
+      local request_body = provider:build_request(prompt)
+      local phases = {}
+      for _, item in ipairs(request_body.input) do
+        if item.type == "message" and item.role == "assistant" then
+          table.insert(phases, item.phase)
+        end
+      end
+
+      assert.same({ "commentary", "commentary" }, phases)
+    end)
+
     it("should add status=completed on function_call items", function()
       local provider = openai.new({
         model = "gpt-4o",
@@ -994,6 +1177,66 @@ describe("OpenAI Provider", function()
         accumulated_content:find(original_json, 1, true),
         "Original JSON formatting should be preserved in buffer output"
       )
+    end)
+
+    it("should capture response message phases in provider diagnostics", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1024,
+        temperature = 0,
+      })
+      provider:build_request({
+        system = nil,
+        history = {
+          { role = "user", parts = { { kind = "text", text = "Hello" } } },
+        },
+      })
+
+      local callbacks = {
+        on_content = function() end,
+        on_response_complete = function() end,
+        on_error = function() end,
+      }
+
+      provider:process_response_line(
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_123","phase":"final_answer","status":"completed"}}',
+        callbacks
+      )
+
+      assert.same({
+        {
+          op = "append",
+          path = "openai.assistant_message_phases",
+          value = "final_answer",
+        },
+      }, provider._response_buffer.extra.diagnostics.expected)
+    end)
+
+    it("should not capture response phases from function_call items", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1024,
+        temperature = 0,
+      })
+      provider:build_request({
+        system = nil,
+        history = {
+          { role = "user", parts = { { kind = "text", text = "Hello" } } },
+        },
+      })
+
+      local callbacks = {
+        on_content = function() end,
+        on_response_complete = function() end,
+        on_error = function() end,
+      }
+
+      provider:process_response_line(
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_abc","name":"calculator","arguments":"{}","status":"completed"}}',
+        callbacks
+      )
+
+      assert.same({}, provider._response_buffer.extra.diagnostics.expected)
     end)
   end)
 

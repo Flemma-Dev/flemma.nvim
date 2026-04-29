@@ -199,6 +199,7 @@
 ---@field prompt_cache_key? string
 
 ---@class flemma.config.ParametersOpenai
+---@field experimental? flemma.config.ParametersOpenaiExperimental
 ---@field reasoning? string
 ---@field reasoning_summary? string
 
@@ -259,6 +260,9 @@
 ---@field highlight string
 ---@field position "top"|"bottom"|"top left"|"top right"|"bottom left"|"bottom right"
 ---@field timeout integer
+
+---@class flemma.config.ParametersOpenaiExperimental
+---@field phase boolean
 
 ---@class flemma.config.SandboxBackendsBwrap
 ---@field extra_args string[]

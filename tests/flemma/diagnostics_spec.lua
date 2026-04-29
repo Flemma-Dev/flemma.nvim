@@ -263,6 +263,102 @@ describe("flemma.diagnostics", function()
     end)
   end)
 
+  describe("compare_extra", function()
+    it("compares expected and actual provider diagnostics recursively", function()
+      local comparison = diagnostics.compare_extra({
+        openai = {
+          assistant_message_phases = { "final_answer" },
+        },
+      }, {
+        openai = {
+          assistant_message_phases = { "commentary" },
+        },
+      })
+
+      assert.is_not_nil(comparison)
+      assert.is_false(comparison.ok)
+      assert.is_true(comparison.changes[1]:match("assistant_message_phases%[1%]") ~= nil)
+    end)
+
+    it("returns nil when either side is absent", function()
+      assert.is_nil(diagnostics.compare_extra({ openai = {} }, nil))
+      assert.is_nil(diagnostics.compare_extra(nil, { openai = {} }))
+    end)
+
+    it("returns nil when expected baseline is empty (no prior expectations)", function()
+      assert.is_nil(diagnostics.compare_extra({}, {
+        { op = "append", path = "openai.assistant_message_phases", value = "final_answer" },
+      }))
+    end)
+
+    it("materializes append-only diagnostic operation logs before comparing", function()
+      local comparison = diagnostics.compare_extra({
+        { op = "append", path = "openai.assistant_message_phases", value = "final_answer" },
+      }, {
+        { op = "append", path = "openai.assistant_message_phases", value = "final_answer" },
+      })
+
+      assert.is_not_nil(comparison)
+      assert.is_true(comparison.ok)
+      assert.same({
+        openai = {
+          assistant_message_phases = { "final_answer" },
+        },
+      }, comparison.actual)
+    end)
+
+    it("compares expected metadata against the current actual tail", function()
+      local comparison = diagnostics.compare_extra({
+        { op = "append", path = "openai.assistant_message_phases", value = "final_answer" },
+      }, {
+        { op = "append", path = "openai.assistant_message_phases", value = "commentary" },
+        { op = "append", path = "openai.assistant_message_phases", value = "final_answer" },
+      })
+
+      assert.is_not_nil(comparison)
+      assert.is_true(comparison.ok)
+      assert.same({
+        openai = {
+          assistant_message_phases = { "final_answer" },
+        },
+      }, comparison.actual)
+    end)
+
+    it("preserves actual keys not present in expected", function()
+      local comparison = diagnostics.compare_extra({
+        openai = {
+          assistant_message_phases = { "final_answer" },
+        },
+      }, {
+        openai = {
+          assistant_message_phases = { "final_answer" },
+          extra_field = "some_value",
+        },
+      })
+
+      assert.is_not_nil(comparison)
+      assert.is_false(comparison.ok)
+      assert.equals("some_value", comparison.actual.openai.extra_field)
+    end)
+  end)
+
+  describe("next_expected", function()
+    it("returns response expectations for the next request baseline", function()
+      local expected = diagnostics.next_expected({
+        actual = {
+          { op = "append", path = "openai.assistant_message_phases", value = "commentary" },
+        },
+        expected = {
+          { op = "append", path = "openai.assistant_message_phases", value = "final_answer" },
+        },
+      })
+
+      assert.same({
+        { op = "append", path = "openai.assistant_message_phases", value = "final_answer" },
+      }, expected)
+    end)
+  end)
+
   describe("map_byte_to_path", function()
     it("maps a byte offset inside a top-level key", function()
       local input = '{"model":"gpt-4","system":"hello"}'

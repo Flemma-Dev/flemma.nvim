@@ -46,6 +46,17 @@ local DEFAULT_MAX_CONCURRENT = 2
 -- For testing purposes
 local last_request_body_for_testing = nil
 
+---@param buffer_state flemma.state.BufferState
+local function clear_diagnostics(buffer_state)
+  -- Diagnostics baselines are provider-specific; comparing requests across
+  -- providers would produce spurious cache and metadata drift warnings.
+  buffer_state.diagnostics_baseline_provider = nil
+  buffer_state.diagnostics_previous_request = nil
+  buffer_state.diagnostics_current_request = nil
+  buffer_state.diagnostics_baseline_extra = nil
+  buffer_state.diagnostics_current_extra_comparison = nil
+end
+
 --- The parameters schema node, used to distinguish static (general) fields
 --- from DISCOVER-resolved (provider-specific) fields.
 ---@type flemma.schema.Node
@@ -228,10 +239,7 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
   -- Invalidate cached API keys — credentials don't carry across providers
   secrets.invalidate_all()
 
-  -- Clear diagnostics request history — cache state doesn't carry across providers,
-  -- so comparing requests from different providers would produce spurious warnings.
-  buffer_state.diagnostics_previous_request = nil
-  buffer_state.diagnostics_current_request = nil
+  clear_diagnostics(buffer_state)
 
   -- Evaluate frontmatter so L40 is populated before comparing. Without this,
   -- buffers that haven't sent yet would have empty L40 and the override check
@@ -928,6 +936,7 @@ function M._run_send_pipeline(bufnr, opts)
   local headers = prep_result.headers
   local request_body = prep_result.request_body
   local trailing_keys = prep_result.trailing_keys
+  local request_provider_name = config_facade.get(bufnr).provider
   last_request_body_for_testing = request_body -- Store for testing
 
   -- Capture timeout now so the on_request_complete closure doesn't read stale proxy state
@@ -936,7 +945,7 @@ function M._run_send_pipeline(bufnr, opts)
   -- Log the request details (using the provider's stored model)
   log.debug(
     "send_to_provider(): Sending request for provider "
-      .. log.inspect(config_facade.get(bufnr).provider)
+      .. log.inspect(request_provider_name)
       .. " with model "
       .. log.inspect(current_provider.parameters.model)
   )
@@ -951,7 +960,7 @@ function M._run_send_pipeline(bufnr, opts)
 
   -- Reset in-flight usage tracking for this buffer
   -- Include the provider's output_has_thoughts flag so usage.lua can display correctly
-  local provider_capabilities = registry.get_capabilities(config_facade.get(bufnr).provider)
+  local provider_capabilities = registry.get_capabilities(request_provider_name)
   buffer_state.inflight_usage = {
     input_tokens = 0,
     output_tokens = 0,
@@ -1071,12 +1080,13 @@ function M._run_send_pipeline(bufnr, opts)
           usage.show(bufnr, latest_request)
         end
 
-        -- Diagnostics: compare request with previous
+        -- Diagnostics: publish expectations for the next request only after
+        -- this response completes.
         if config.diagnostics and config.diagnostics.enabled then
-          local raw_json_str = buffer_state._diagnostics_raw_json
-          if raw_json_str then
-            diagnostics_module.record_and_compare(bufnr, raw_json_str)
-            buffer_state._diagnostics_raw_json = nil
+          local response_extra = current_provider._response_buffer and current_provider._response_buffer.extra
+          local response_diagnostics = response_extra and response_extra.diagnostics
+          if buffer_state.diagnostics_baseline_provider == request_provider_name then
+            buffer_state.diagnostics_baseline_extra = diagnostics_module.next_expected(response_diagnostics)
           end
         end
 
@@ -1376,10 +1386,15 @@ function M._run_send_pipeline(bufnr, opts)
       current_provider:set_response_headers(response_headers)
     end,
     on_raw_json = function(raw_json_str)
-      -- Store for diagnostics — will be compared after response completes
+      -- Compare diagnostics as soon as the exact request bytes are known.
       local cfg = config_facade.get(bufnr)
       if cfg.diagnostics and cfg.diagnostics.enabled then
-        buffer_state._diagnostics_raw_json = raw_json_str
+        if buffer_state.diagnostics_baseline_provider ~= request_provider_name then
+          clear_diagnostics(buffer_state)
+          buffer_state.diagnostics_baseline_provider = request_provider_name
+        end
+        local build_extra = current_provider._response_buffer and current_provider._response_buffer.extra
+        diagnostics_module.record_and_compare(bufnr, raw_json_str, build_extra and build_extra.diagnostics or nil)
       end
     end,
   })

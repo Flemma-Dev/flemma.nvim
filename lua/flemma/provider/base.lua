@@ -122,6 +122,15 @@ local tool_names = require("flemma.utilities.tools")
 ---@field extra table<string, any>
 ---@field content string
 
+---@class flemma.provider.DiagnosticOperation
+---@field op "append"
+---@field path string
+---@field value any
+
+---@class flemma.provider.Diagnostics
+---@field actual flemma.provider.DiagnosticOperation[]
+---@field expected flemma.provider.DiagnosticOperation[]
+
 ---@class flemma.provider.Base
 ---@field parameters flemma.provider.Parameters
 ---@field state flemma.provider.ProviderState
@@ -575,6 +584,36 @@ function M._new_response_buffer(self)
     extra = {},
     content = "", -- Accumulated content for spacing decisions
   }
+end
+
+---@param self flemma.provider.Base
+---@param enabled boolean
+function M._diagnostics_start(self, enabled)
+  if not self._response_buffer then
+    self:_new_response_buffer()
+  end
+  self._response_buffer.extra.diagnostics = enabled and {
+    actual = {},
+    expected = {},
+  } or nil
+end
+
+---@param self flemma.provider.Base
+---@param side "actual"|"expected"
+---@param path string
+---@param value any
+function M._diagnostics_append(self, side, path, value)
+  local diagnostics = self._response_buffer and self._response_buffer.extra and self._response_buffer.extra.diagnostics
+    or nil
+  if type(diagnostics) ~= "table" or type(diagnostics[side]) ~= "table" then
+    return
+  end
+
+  table.insert(diagnostics[side], {
+    op = "append",
+    path = path,
+    value = value,
+  })
 end
 
 --- Buffer a non-processable response line for later analysis
