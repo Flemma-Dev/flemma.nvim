@@ -106,9 +106,8 @@ All tool IDs and metadata are embedded in buffer text so `.chat` files are porta
 
 - **`make qa`** — run all quality gates (luacheck, type-check, imports, test). Silent on success; on failure, re-runs only the failed gate(s) with visible output. This is the single command to run before committing.
 - **`make types`** — regenerate `lua/flemma/config/types.lua` after any schema change. `make qa` type-checks but does not regenerate.
-- **`make changeset`** — interactive changeset creation (for human use; agents write changeset files directly).
 - **`make develop`** — launch Flemma from the working directory for manual testing.
-- `flemma-fmt` reformats the entire codebase.
+- **`make format`** — reformat the entire codebase via `treefmt` (stylua, shfmt, nixfmt, prettier, yamlfmt, taplo). Cached — only reformats changed files.
 
 ### `make qa` Only
 
@@ -192,6 +191,6 @@ When you resolve a non-obvious issue — something that required real investigat
 
 ## Session Closure Checklist
 
-- Run `flemma-fmt` to reformat the entire codebase.
+- Run `make format` to reformat the entire codebase.
 - Run `make qa` and confirm it passes.
 - Note outstanding follow-ups, failing tests, or context the next agent will need to resume work.

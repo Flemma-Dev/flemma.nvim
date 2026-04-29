@@ -1,4 +1,4 @@
-.PHONY: default changeset qa develop screencast types
+.PHONY: default format qa develop screencast types
 
 SHELL := $(shell which bash)
 VIMRUNTIME_PATH = $(shell dirname $(shell dirname $(shell readlink -f $(shell which nvim))))/share/nvim/runtime
@@ -8,9 +8,9 @@ default:
 	@echo "Usage: make [$(shell cat ${MAKEFILE_LIST} | grep -E '^[a-zA-Z_-]+:' | sed 's/:.*//g' | grep -v '^default' | tr '\n' '|' | sed 's/|$$//')]"
 	@cat ${MAKEFILE_LIST} | grep -B1 -E '^[a-zA-Z_-]+:' | sed 's/:.*//' | sed 's/^# *//' | tac | grep -v '^--' | sed 'N;s/\n/ - /' | grep -v '^default' | tac | sed 's/^/  /'
 
-# Create a new changeset
-changeset:
-	pnpm changeset
+# Format the entire codebase
+format:
+	treefmt
 
 # Run all quality gates — parallel, bail on first failure
 qa:

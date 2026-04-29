@@ -36,41 +36,12 @@ pkgs.mkShell rec {
       exec ${lib.getExe envchain} mcp_keys pnpm --silent --package=mcporter@latest dlx -- mcporter "$@"
     '')
 
-    (writeShellApplication {
-      name = "flemma-fmt";
-      runtimeInputs = [
-        nixfmt-tree
-        nodejs_lts.pkgs.prettier
-        shfmt
-        stylua
-      ];
-      text = ''
-        treefmt
-
-        find . -name "*.lua" -print0 | xargs -0 \
-        stylua
-
-        find . -name "*.sh" -print0 | xargs -0 \
-        shfmt -w -i 2 -ci
-
-        find . -type f \( -name "*.md" -o -name "*.yml" -o -name "*.yaml" \) -not -name 'pnpm-lock.yaml' -not -path '*/.claude/*' -not -path '*/contrib/*' -print0 | xargs -0 \
-        prettier --write
-      '';
-    })
-
-    (writeShellApplication {
-      name = "flemma-amp";
-      text = "exec pnpm --silent --package=@sourcegraph/amp@latest dlx -- amp \"$@\"";
-    })
-
-    (writeShellApplication {
-      name = "flemma-claude";
-      text = "exec pnpm --silent --package=@anthropic-ai/claude-code@latest dlx -- claude \"$@\"";
-    })
-
-    (writeShellApplication {
-      name = "flemma-codex";
-      text = "exec pnpm --silent --package=@openai/codex dlx -- codex \"$@\"";
-    })
+    nixfmt-rfc-style
+    nodejs_lts.pkgs.prettier
+    shfmt
+    stylua
+    taplo
+    treefmt
+    yamlfmt
   ];
 }

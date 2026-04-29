@@ -1,0 +1,34 @@
+on-unmatched = "info"
+
+[global]
+excludes = [".claude/**", "tests/fixtures/**"]
+
+[formatter.stylua]
+command = "stylua"
+includes = ["*.lua"]
+excludes = ["contrib/**"]
+
+[formatter.shfmt]
+command = "shfmt"
+options = ["-w", "-i", "2", "-ci"]
+includes = ["*.sh"]
+
+[formatter.nixfmt]
+command = "nixfmt"
+includes = ["*.nix"]
+
+[formatter.prettier]
+command = "prettier"
+options = ["--write"]
+includes = ["*.md", "*.json", "*.jsonc"]
+excludes = ["contrib/**"]
+
+[formatter.yamlfmt]
+command = "yamlfmt"
+includes = ["*.yml", "*.yaml"]
+excludes = ["pnpm-lock.yaml"]
+
+[formatter.taplo]
+command = "taplo"
+options = ["format"]
+includes = ["*.toml"]
