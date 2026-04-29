@@ -116,8 +116,8 @@ function M.build_request(self, prompt, _context)
       -- Tool results must come first in user messages (similar to Anthropic)
       for _, part in ipairs(msg.parts or {}) do
         if part.kind == "tool_result" then
-          -- Extract function name from the synthetic ID
-          local function_name = extract_function_name_from_id(part.tool_use_id)
+          -- Prefer the resolved name on the part; fall back to extracting from the ID
+          local function_name = part.name or extract_function_name_from_id(part.tool_use_id)
 
           -- Map .parts to Vertex functionResponse format.
           -- Text parts → output string; binary parts → inlineData.

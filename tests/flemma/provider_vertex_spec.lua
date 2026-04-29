@@ -400,6 +400,70 @@ describe("Vertex AI Provider", function()
     end)
   end)
 
+  describe("functionResponse name in build_request", function()
+    it("should use part.name for tool results with non-Vertex IDs", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        max_tokens = 4000,
+        project_id = "test-project",
+        location = "us-central1",
+      })
+
+      ---@type flemma.provider.Prompt
+      local prompt = {
+        history = {
+          {
+            role = "user",
+            parts = { { kind = "text", text = "run calc" } },
+          },
+          {
+            role = "assistant",
+            parts = {
+              {
+                kind = "tool_use",
+                name = "calculator_async",
+                id = "toolu_01ABC123",
+                input = { expression = "2+2", delay = 2000 },
+              },
+            },
+          },
+          {
+            role = "user",
+            parts = {
+              {
+                kind = "tool_result",
+                tool_use_id = "toolu_01ABC123",
+                name = "calculator_async",
+                is_error = false,
+                parts = { { kind = "text", text = "4" } },
+              },
+            },
+          },
+        },
+        system = "You are a calculator.",
+        pending_tool_calls = {},
+        bufnr = 0,
+      }
+
+      local req = provider:build_request(prompt)
+
+      -- Find the user message that contains the functionResponse
+      local function_response_name
+      for _, content in ipairs(req.contents) do
+        if content.role == "user" then
+          for _, part in ipairs(content.parts) do
+            if part.functionResponse then
+              function_response_name = part.functionResponse.name
+            end
+          end
+        end
+      end
+
+      assert.is_not_nil(function_response_name, "Expected a functionResponse in the request")
+      assert.equals("calculator_async", function_response_name)
+    end)
+  end)
+
   describe("thinkingConfig in build_request", function()
     local parser = require("flemma.parser")
     local pipeline = require("flemma.pipeline")
