@@ -528,7 +528,11 @@ describe("Anthropic Provider", function()
 
   describe("adaptive thinking", function()
     it("should use adaptive thinking for opus-4-6 models", function()
-      local p = anthropic.new({ model = "claude-opus-4-6", max_tokens = 4000, thinking = "high" })
+      local p = anthropic.new({
+        model = "claude-opus-4-6",
+        max_tokens = 4000,
+        thinking = { level = "high", foreign = "preserve" },
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
@@ -540,7 +544,11 @@ describe("Anthropic Provider", function()
     end)
 
     it("should use budget_tokens for non-opus models", function()
-      local p = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 4000, thinking = "high" })
+      local p = anthropic.new({
+        model = "claude-sonnet-4-5",
+        max_tokens = 4000,
+        thinking = { level = "high", foreign = "preserve" },
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
@@ -552,7 +560,11 @@ describe("Anthropic Provider", function()
     end)
 
     it("should map effort level from thinking parameter", function()
-      local p = anthropic.new({ model = "claude-opus-4-6", max_tokens = 4000, thinking = "low" })
+      local p = anthropic.new({
+        model = "claude-opus-4-6",
+        max_tokens = 4000,
+        thinking = { level = "low", foreign = "preserve" },
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
@@ -563,7 +575,11 @@ describe("Anthropic Provider", function()
     end)
 
     it("should map thinking='max' to effort='max' on opus-4-6", function()
-      local p = anthropic.new({ model = "claude-opus-4-6", max_tokens = 4000, thinking = "max" })
+      local p = anthropic.new({
+        model = "claude-opus-4-6",
+        max_tokens = 4000,
+        thinking = { level = "max", foreign = "preserve" },
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
@@ -574,7 +590,11 @@ describe("Anthropic Provider", function()
     end)
 
     it("should map thinking='minimal' to effort='low' on opus-4-6", function()
-      local p = anthropic.new({ model = "claude-opus-4-6", max_tokens = 4000, thinking = "minimal" })
+      local p = anthropic.new({
+        model = "claude-opus-4-6",
+        max_tokens = 4000,
+        thinking = { level = "minimal", foreign = "preserve" },
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
@@ -585,7 +605,11 @@ describe("Anthropic Provider", function()
     end)
 
     it("should use adaptive thinking for sonnet-4-6 models", function()
-      local p = anthropic.new({ model = "claude-sonnet-4-6", max_tokens = 4000, thinking = "high" })
+      local p = anthropic.new({
+        model = "claude-sonnet-4-6",
+        max_tokens = 4000,
+        thinking = { level = "high", foreign = "preserve" },
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
@@ -597,7 +621,11 @@ describe("Anthropic Provider", function()
     end)
 
     it("should clamp 'max' effort to 'high' on sonnet-4-6", function()
-      local p = anthropic.new({ model = "claude-sonnet-4-6", max_tokens = 4000, thinking = "max" })
+      local p = anthropic.new({
+        model = "claude-sonnet-4-6",
+        max_tokens = 4000,
+        thinking = { level = "max", foreign = "preserve" },
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
@@ -608,7 +636,11 @@ describe("Anthropic Provider", function()
     end)
 
     it("should clamp budget_tokens when budget >= max_tokens", function()
-      local p = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 4000, thinking = "max" })
+      local p = anthropic.new({
+        model = "claude-sonnet-4-5",
+        max_tokens = 4000,
+        thinking = { level = "max", foreign = "preserve" },
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
@@ -619,7 +651,11 @@ describe("Anthropic Provider", function()
     end)
 
     it("should use adaptive thinking for opus-4-7 with display='summarized'", function()
-      local p = anthropic.new({ model = "claude-opus-4-7", max_tokens = 16000, thinking = "high" })
+      local p = anthropic.new({
+        model = "claude-opus-4-7",
+        max_tokens = 16000,
+        thinking = { level = "high", foreign = "preserve" },
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
@@ -633,7 +669,11 @@ describe("Anthropic Provider", function()
     end)
 
     it("should map thinking='max' to effort='max' on opus-4-7", function()
-      local p = anthropic.new({ model = "claude-opus-4-7", max_tokens = 16000, thinking = "max" })
+      local p = anthropic.new({
+        model = "claude-opus-4-7",
+        max_tokens = 16000,
+        thinking = { level = "max", foreign = "preserve" },
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
@@ -658,7 +698,7 @@ describe("Anthropic Provider", function()
       local p = anthropic.new({
         model = "claude-opus-4-7",
         max_tokens = 16000,
-        thinking = "low",
+        thinking = { level = "low", foreign = "preserve" },
         effort = "xhigh",
       })
       local prompt = {
@@ -675,7 +715,7 @@ describe("Anthropic Provider", function()
       local p = anthropic.new({
         model = "claude-sonnet-4-5",
         max_tokens = 4000,
-        thinking = "high",
+        thinking = { level = "high", foreign = "preserve" },
         effort = "xhigh",
       })
       local prompt = {

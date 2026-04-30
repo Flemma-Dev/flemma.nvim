@@ -157,7 +157,7 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
   local param_warnings = {}
   if validated_model then
     local resolved_config = config_facade.materialize()
-    local flat_params = normalize.flatten_parameters(resolved_provider, resolved_config)
+    local flat_params = normalize.merge_parameters(resolved_provider, resolved_config)
     normalize.resolve_max_tokens(resolved_provider, validated_model, flat_params)
     local provider_module_path = registry.get(resolved_provider)
     if provider_module_path then
@@ -712,7 +712,7 @@ function M.build_prompt_and_provider(bufnr, opts)
   local effective_bufnr = prompt.bufnr
   local cfg = normalize.resolve_preset(config_facade.materialize(effective_bufnr))
   local provider_key = cfg.provider
-  local flat_params = normalize.flatten_parameters(provider_key, cfg)
+  local flat_params = normalize.merge_parameters(provider_key, cfg)
   normalize.resolve_max_tokens(provider_key, cfg.model, flat_params)
 
   local provider_module_path = registry.get(provider_key)

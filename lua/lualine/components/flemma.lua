@@ -63,8 +63,8 @@ local function resolve_thinking(config)
     end
   end
 
-  -- Flatten provider-specific + general params for resolve_thinking()
-  local params = normalize.flatten_parameters(config.provider, config)
+  -- Merge provider-specific + general params for resolve_thinking()
+  local params = normalize.merge_parameters(config.provider, config)
   if not params then
     return ""
   end
@@ -300,7 +300,7 @@ end
 ---@return string
 function flemma_component:_do_update_status()
   -- materialize(bufnr) returns a plain table with per-buffer resolution —
-  -- required because flatten_parameters uses pairs() and make_resolvers
+  -- required because merge_parameters uses pairs() and make_resolvers
   -- accesses dynamic keys. bufnr ensures frontmatter overrides are visible.
   local bufnr = vim.api.nvim_get_current_buf()
   local config = normalize.resolve_preset(config_facade.materialize(bufnr))

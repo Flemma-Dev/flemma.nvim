@@ -40,7 +40,7 @@ describe("config.schema.definition", function()
       assert.equals(600, cfg.parameters.timeout)
       assert.equals(10, cfg.parameters.connect_timeout)
       assert.equals("short", cfg.parameters.cache_retention)
-      assert.equals("high", cfg.parameters.thinking)
+      assert.are.same({ level = "high", foreign = "preserve" }, cfg.parameters.thinking)
     end)
 
     it("materializes highlight defaults (string)", function()

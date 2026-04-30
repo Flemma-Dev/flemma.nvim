@@ -348,7 +348,7 @@ function M.build_request(self, prompt, _context)
   -- models — `thinking`/`thinking_budget` continue to drive those.
   local raw_effort = self.parameters.effort
   if raw_effort and raw_effort ~= "" and is_adaptive then
-    thinking = { enabled = true, mapped_effort = raw_effort }
+    thinking = { enabled = true, mapped_effort = raw_effort, foreign = thinking.foreign }
   end
 
   if thinking.enabled then

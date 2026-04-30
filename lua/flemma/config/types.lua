@@ -99,7 +99,7 @@
 ---@field moonshot? flemma.config.ParametersMoonshot
 ---@field openai? flemma.config.ParametersOpenai
 ---@field temperature? number
----@field thinking "minimal"|"low"|"medium"|"high"|"max"|number|false
+---@field thinking { foreign: "preserve"|"drop", level: "minimal"|"low"|"medium"|"high"|"max"|number|false }|"minimal"|"low"|"medium"|"high"|"max"|number|false
 ---@field timeout integer
 ---@field vertex? flemma.config.ParametersVertex
 ---@field [string] table|nil

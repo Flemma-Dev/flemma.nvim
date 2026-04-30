@@ -41,21 +41,23 @@ function M.resolve_preset(config)
 end
 
 -- ============================================================================
--- flatten_parameters
+-- merge_parameters
 -- ============================================================================
 
----Flatten provider parameters from a materialized config into a single table.
----Copies general parameters from `config.parameters`, overlays provider-specific
----parameters from `config.parameters[provider_name]`, and adds `model`.
+---Merge provider parameters from a materialized config into a single table.
+---Copies general parameters from `config.parameters` (skipping provider
+---sub-tables identified via registry), overlays provider-specific parameters
+---from `config.parameters[provider_name]` with deep merge for table values,
+---and adds `model`.
 ---@param provider_name string Resolved provider name
 ---@param config table Materialized config from config_facade.materialize()
----@return table<string, any> flat Flattened parameter table for provider.new()
-function M.flatten_parameters(provider_name, config)
+---@return table<string, any> flat Merged parameter table for provider.new()
+function M.merge_parameters(provider_name, config)
   local flat = {}
   local params = config.parameters or {}
-  -- Copy general parameters (non-table scalar values)
+  -- Copy general parameters (skip provider sub-tables)
   for k, v in pairs(params) do
-    if type(v) ~= "table" then
+    if not registry.has(k) then
       flat[k] = v
     end
   end
@@ -63,7 +65,11 @@ function M.flatten_parameters(provider_name, config)
   local specific = params[provider_name]
   if type(specific) == "table" then
     for k, v in pairs(specific) do
-      flat[k] = v
+      if type(v) == "table" and type(flat[k]) == "table" then
+        flat[k] = vim.tbl_deep_extend("force", flat[k], v)
+      else
+        flat[k] = v
+      end
     end
   end
   flat.model = config.model
@@ -152,6 +158,7 @@ end
 ---@field effort? string Effort level for effort-based providers (OpenAI): "minimal"|"low"|"medium"|"high"|"max"
 ---@field level? string Canonical Flemma level: "minimal"|"low"|"medium"|"high"|"max" (always set when enabled)
 ---@field mapped_effort? string Provider-specific API value from thinking_effort_map (nil when model has no map)
+---@field foreign "preserve"|"drop" Whether to include foreign thinking blocks in requests
 
 --- Map a numeric budget to the closest named effort level
 ---@param budget number
@@ -236,6 +243,15 @@ end
 ---@param model_info? flemma.models.ModelInfo Per-model metadata for budget/clamping
 ---@return flemma.provider.ThinkingResolution
 function M.resolve_thinking(params, caps, model_info)
+  local thinking_table = params.thinking
+  ---@type "preserve"|"drop"
+  local foreign
+  if thinking_table and thinking_table.foreign then
+    foreign = thinking_table.foreign
+  else
+    foreign = "preserve"
+  end
+
   -- For budget-based providers (Anthropic, Vertex)
   if caps.supports_thinking_budget then
     local min = (model_info and model_info.min_thinking_budget) or caps.min_thinking_budget or 1
@@ -255,16 +271,22 @@ function M.resolve_thinking(params, caps, model_info)
           budget = budget,
           level = level,
           mapped_effort = map_effort_from_model(level, model_info),
+          foreign = foreign,
         }
       else
-        return { enabled = false }
+        return { enabled = false, foreign = foreign }
       end
     end
 
     -- Fall back to unified `thinking` parameter
-    local thinking = params.thinking
+    -- Use explicit if/else because `thinking_table.level` can be `false`,
+    -- which breaks the `a and b or c` ternary idiom.
+    local thinking
+    if thinking_table then
+      thinking = thinking_table.level
+    end
     if thinking == nil or thinking == false or thinking == 0 then
-      return { enabled = false }
+      return { enabled = false, foreign = foreign }
     end
     if type(thinking) == "string" then
       local budget = math.max(effort_to_budget(thinking, model_info), min)
@@ -278,6 +300,7 @@ function M.resolve_thinking(params, caps, model_info)
         budget = budget,
         level = thinking,
         mapped_effort = map_effort_from_model(thinking, model_info),
+        foreign = foreign,
       }
     end
     if type(thinking) == "number" and thinking > 0 then
@@ -287,9 +310,9 @@ function M.resolve_thinking(params, caps, model_info)
       end
       local level = budget_to_effort(budget)
       local mapped_effort = map_effort_from_model(level, model_info)
-      return { enabled = true, budget = budget, level = level, mapped_effort = mapped_effort }
+      return { enabled = true, budget = budget, level = level, mapped_effort = mapped_effort, foreign = foreign }
     end
-    return { enabled = false }
+    return { enabled = false, foreign = foreign }
   end
 
   -- For effort-based providers (OpenAI)
@@ -298,31 +321,36 @@ function M.resolve_thinking(params, caps, model_info)
     local raw_reasoning = params.reasoning
     if raw_reasoning ~= nil and raw_reasoning ~= "" then
       local mapped = map_effort(raw_reasoning, model_info)
-      return { enabled = true, effort = mapped, level = raw_reasoning }
+      return { enabled = true, effort = mapped, level = raw_reasoning, foreign = foreign }
     end
 
     -- Fall back to unified `thinking` parameter
-    local thinking = params.thinking
+    -- Use explicit if/else because `thinking_table.level` can be `false`,
+    -- which breaks the `a and b or c` ternary idiom.
+    local thinking
+    if thinking_table then
+      thinking = thinking_table.level
+    end
     if thinking == nil then
-      return { enabled = false }
+      return { enabled = false, foreign = foreign }
     end
     if thinking == false or thinking == 0 then
-      return { enabled = false, explicit = true }
+      return { enabled = false, explicit = true, foreign = foreign }
     end
     if type(thinking) == "string" then
       local mapped = map_effort(thinking, model_info)
-      return { enabled = true, effort = mapped, level = thinking }
+      return { enabled = true, effort = mapped, level = thinking, foreign = foreign }
     end
     if type(thinking) == "number" and thinking > 0 then
       local canonical = budget_to_effort(thinking)
       local mapped = map_effort(canonical, model_info)
-      return { enabled = true, effort = mapped, level = canonical }
+      return { enabled = true, effort = mapped, level = canonical, foreign = foreign }
     end
-    return { enabled = false }
+    return { enabled = false, foreign = foreign }
   end
 
   -- Provider supports neither
-  return { enabled = false }
+  return { enabled = false, foreign = foreign }
 end
 
 return M

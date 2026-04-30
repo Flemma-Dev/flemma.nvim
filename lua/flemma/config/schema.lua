@@ -31,6 +31,18 @@ local function highlight(default)
   return node:type_as("flemma.config.HighlightValue")
 end
 
+--- ThinkingLevel: the set of valid thinking value forms (enum | number | false).
+--- Used both for the top-level `thinking` field and for `thinking.level`.
+---@param default? string Default enum value
+---@return flemma.schema.Node[]
+local function thinking_level(default)
+  return {
+    s.enum({ "minimal", "low", "medium", "high", "max" }, default),
+    s.number(),
+    s.literal(false),
+  }
+end
+
 -- ---------------------------------------------------------------------------
 -- The config schema
 -- ---------------------------------------------------------------------------
@@ -50,7 +62,18 @@ return s.object({
     timeout = s.integer(600),
     connect_timeout = s.integer(10),
     cache_retention = s.enum({ "short", "long", "none" }, "short"),
-    thinking = s.union(s.enum({ "minimal", "low", "medium", "high", "max" }, "high"), s.number(), s.literal(false)),
+    thinking = s.union(
+      s.object({
+        level = s.union(unpack(thinking_level("high"))),
+        foreign = s.enum({ "preserve", "drop" }, "preserve"),
+      }),
+      unpack(thinking_level("high"))
+    ):coerce(function(value, _ctx)
+      if type(value) == "string" or type(value) == "number" or value == false then
+        return { level = value, foreign = "preserve" }
+      end
+      return value
+    end),
     -- All provider parameter schemas resolved via DISCOVER
     [symbols.DISCOVER] = function(key)
       return require("flemma.provider.registry").get_config_schema(key)

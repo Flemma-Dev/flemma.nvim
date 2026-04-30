@@ -106,7 +106,7 @@ local tool_names = require("flemma.utilities.tools")
 
 ---@class flemma.provider.ProviderState
 
---- Flattened per-provider parameters (result of normalize.flatten_parameters).
+--- Merged per-provider parameters (result of normalize.merge_parameters).
 --- Provider-specific sub-tables (e.g. `vertex`, `openai`) are merged to top level.
 ---@class flemma.provider.Parameters
 ---@field model string Model name (always present after initialization)

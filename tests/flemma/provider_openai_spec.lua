@@ -118,7 +118,7 @@ describe("OpenAI Provider", function()
       local provider = openai.new({
         model = "o3",
         max_tokens = 4000,
-        thinking = "max",
+        thinking = { level = "max", foreign = "preserve" },
       })
 
       local messages = {
@@ -136,7 +136,7 @@ describe("OpenAI Provider", function()
       local provider = openai.new({
         model = "gpt-5.2",
         max_tokens = 4000,
-        thinking = "max",
+        thinking = { level = "max", foreign = "preserve" },
       })
 
       local messages = {
@@ -154,7 +154,7 @@ describe("OpenAI Provider", function()
       local provider = openai.new({
         model = "o3",
         max_tokens = 4000,
-        thinking = "minimal",
+        thinking = { level = "minimal", foreign = "preserve" },
       })
 
       local messages = {
@@ -174,7 +174,7 @@ describe("OpenAI Provider", function()
         max_tokens = 1000,
         temperature = 0.5,
         reasoning = "high",
-        thinking = "high",
+        thinking = { level = "high", foreign = "preserve" },
       })
 
       local messages = {
@@ -194,7 +194,7 @@ describe("OpenAI Provider", function()
       local provider = openai.new({
         model = "gpt-5.5",
         max_tokens = 4000,
-        thinking = false,
+        thinking = { level = false, foreign = "preserve" },
       })
 
       local messages = {
@@ -231,7 +231,7 @@ describe("OpenAI Provider", function()
         model = "gpt-4o",
         max_tokens = 1000,
         temperature = 0.5,
-        thinking = false,
+        thinking = { level = false, foreign = "preserve" },
       })
 
       local messages = {
@@ -267,7 +267,7 @@ describe("OpenAI Provider", function()
       local provider = openai.new({
         model = "gpt-5.4-pro",
         max_tokens = 4000,
-        thinking = "low",
+        thinking = { level = "low", foreign = "preserve" },
       })
 
       local messages = {
@@ -285,7 +285,7 @@ describe("OpenAI Provider", function()
       local provider = openai.new({
         model = "gpt-5.2-pro",
         max_tokens = 4000,
-        thinking = "max",
+        thinking = { level = "max", foreign = "preserve" },
       })
 
       local messages = {

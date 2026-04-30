@@ -475,7 +475,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = "high",
+        thinking = { level = "high", foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -494,7 +494,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = "high",
+        thinking = { level = "high", foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -513,7 +513,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = "low",
+        thinking = { level = "low", foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -529,7 +529,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = "medium",
+        thinking = { level = "medium", foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -545,7 +545,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = "minimal",
+        thinking = { level = "minimal", foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -561,7 +561,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = "max",
+        thinking = { level = "max", foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -577,7 +577,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = "medium",
+        thinking = { level = "medium", foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -593,7 +593,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = "low",
+        thinking = { level = "low", foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -609,7 +609,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = "minimal",
+        thinking = { level = "minimal", foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -625,7 +625,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = 4096,
+        thinking = { level = 4096, foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -643,7 +643,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = 4096,
+        thinking = { level = 4096, foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
