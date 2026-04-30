@@ -56,6 +56,18 @@ function M.get_gutter_width(winid)
   return 0
 end
 
+---Execute a command in the context of a buffer's window.
+---No-op when the buffer is not displayed in any window.
+---@param bufnr integer Buffer handle
+---@param cmd string Command to execute
+function M.buffer_cmd(bufnr, cmd)
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid == -1 then
+    return
+  end
+  vim.fn.win_execute(winid, "noautocmd " .. cmd)
+end
+
 ---@class flemma.utilities.buffer.ScratchOpts
 ---@field bufhidden? "wipe"|"hide" Default "wipe"
 ---@field modifiable? boolean Default true

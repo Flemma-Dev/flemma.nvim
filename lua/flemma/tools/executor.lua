@@ -20,6 +20,7 @@ local sandbox_module = require("flemma.sandbox")
 local tool_context = require("flemma.tools.context")
 local path_util = require("flemma.utilities.path")
 local truncate_module = require("flemma.tools.truncate")
+local indicators = require("flemma.ui.indicators")
 local ui = require("flemma.ui")
 local variables = require("flemma.utilities.variables")
 local writequeue = require("flemma.buffer.writequeue")
@@ -182,10 +183,10 @@ local function do_completion(bufnr, tool_id, result, opts)
   end
 
   -- Result injection may have displaced other tools' extmarks
-  ui.reposition_tool_indicators(bufnr)
+  indicators.reposition_tool_indicators(bufnr)
 
   -- Update indicator
-  ui.update_tool_indicator(bufnr, tool_id, result.success)
+  indicators.update_tool_indicator(bufnr, tool_id, result.success)
 
   -- Free pending slot immediately so tool can be re-executed
   cleanup_pending(bufnr, tool_id)
@@ -196,7 +197,7 @@ local function do_completion(bufnr, tool_id, result, opts)
   maybe_unlock_buffer(bufnr)
 
   -- Auto-dismiss indicator after delay (or immediately on user edit)
-  ui.schedule_tool_indicator_clear(bufnr, tool_id, 1500)
+  indicators.schedule_tool_indicator_clear(bufnr, tool_id, 1500)
 
   ui.update_ui(bufnr)
 
@@ -403,12 +404,12 @@ function M.execute(bufnr, context)
   -- Show execution indicator
   local config = config_facade.materialize(bufnr)
   if not config.tools or config.tools.show_spinner ~= false then
-    ui.show_tool_indicator(bufnr, tool_id, header_line)
+    indicators.show_tool_indicator(bufnr, tool_id, header_line)
   end
 
   -- Placeholder injection may have displaced other tools' extmarks
   -- (e.g., when inserting before an existing placeholder via set_lines replacement)
-  ui.reposition_tool_indicators(bufnr)
+  indicators.reposition_tool_indicators(bufnr)
 
   -- Update UI to reflect changes
   ui.update_ui(bufnr)

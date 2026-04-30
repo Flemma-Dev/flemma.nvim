@@ -14,6 +14,7 @@ local normalize = require("flemma.provider.normalize")
 local buffer_utils = require("flemma.utilities.buffer")
 local editing = require("flemma.buffer.editing")
 local writequeue = require("flemma.buffer.writequeue")
+local activity = require("flemma.ui.activity")
 local ui = require("flemma.ui")
 local registry = require("flemma.provider.registry")
 local autopilot = require("flemma.autopilot")
@@ -340,14 +341,14 @@ function M.cancel_request(opts)
       if last_line_content == "@Assistant:" then
         -- No content received — clean up progress placeholder (empty @Assistant: block)
         log.debug("cancel_request(): ... Cleaning up empty @Assistant: progress placeholder")
-        ui.cleanup_progress(bufnr)
+        activity.cleanup_progress(bufnr, ui.update_ui)
       else
         -- Content was received — mark the response as aborted
-        ui.cleanup_progress(bufnr)
+        activity.cleanup_progress(bufnr, ui.update_ui)
         buffer_utils.with_modifiable(bufnr, function()
           local last_content, line_count = buffer_utils.get_last_line(bufnr)
           local separator = (last_content == "") and {} or { "" }
-          ui.buffer_cmd(bufnr, "undojoin")
+          buffer_utils.buffer_cmd(bufnr, "undojoin")
           vim.api.nvim_buf_set_lines(
             bufnr,
             line_count,
@@ -955,7 +956,8 @@ function M._run_send_pipeline(bufnr, opts)
   parser.create_ast_snapshot_before_send(bufnr)
 
   ---@type integer|nil
-  local progress_timer = ui.start_progress(bufnr, { force = opts.user_initiated, timeout = effective_timeout or 600 })
+  local progress_timer =
+    activity.start_progress(bufnr, { force = opts.user_initiated, timeout = effective_timeout or 600 }, ui.update_ui)
   local response_started = false
 
   -- Reset in-flight usage tracking for this buffer
@@ -986,7 +988,7 @@ function M._run_send_pipeline(bufnr, opts)
         if progress_timer then
           vim.fn.timer_stop(progress_timer)
         end
-        ui.cleanup_progress(bufnr)
+        activity.cleanup_progress(bufnr, ui.update_ui)
         buffer_state.current_request = nil
         parser.clear_ast_snapshot_before_send(bufnr)
         buffer_state.api_error_occurred = true -- Set flag indicating API error
@@ -1141,7 +1143,7 @@ function M._run_send_pipeline(bufnr, opts)
             if placeholder == "@Assistant:" then
               local lc = vim.api.nvim_buf_line_count(bufnr)
               local prev_content = lc > 1 and buffer_utils.get_line(bufnr, lc - 1) or nil
-              ui.buffer_cmd(bufnr, "undojoin")
+              buffer_utils.buffer_cmd(bufnr, "undojoin")
               if prev_content and prev_content:match("%S") then
                 vim.api.nvim_buf_set_lines(bufnr, lc - 1, lc, false, { "" })
               else
@@ -1161,23 +1163,23 @@ function M._run_send_pipeline(bufnr, opts)
 
               if content_lines[1]:match("^%*%*Tool Use:%*%*") then
                 -- Tool use header on its own line so the block is independently foldable
-                ui.buffer_cmd(bufnr, "undojoin")
+                buffer_utils.buffer_cmd(bufnr, "undojoin")
                 vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant:", "", content_lines[1] })
                 header_lines = 3
               elseif content_lines[1]:match("^```") then
                 -- Code fence on its own line (no blank separator needed)
-                ui.buffer_cmd(bufnr, "undojoin")
+                buffer_utils.buffer_cmd(bufnr, "undojoin")
                 vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant:", content_lines[1] })
                 header_lines = 2
               else
-                ui.buffer_cmd(bufnr, "undojoin")
+                buffer_utils.buffer_cmd(bufnr, "undojoin")
                 vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant:", content_lines[1] })
                 header_lines = 2
               end
 
               -- Add remaining lines if any
               if #content_lines > 1 then
-                ui.buffer_cmd(bufnr, "undojoin")
+                buffer_utils.buffer_cmd(bufnr, "undojoin")
                 vim.api.nvim_buf_set_lines(
                   bufnr,
                   last_line + header_lines,
@@ -1192,7 +1194,7 @@ function M._run_send_pipeline(bufnr, opts)
 
               if #content_lines == 1 then
                 -- Just append to the last line
-                ui.buffer_cmd(bufnr, "undojoin")
+                buffer_utils.buffer_cmd(bufnr, "undojoin")
                 vim.api.nvim_buf_set_lines(
                   bufnr,
                   last_line - 1,
@@ -1202,7 +1204,7 @@ function M._run_send_pipeline(bufnr, opts)
                 )
               else
                 -- First chunk goes to the end of the last line
-                ui.buffer_cmd(bufnr, "undojoin")
+                buffer_utils.buffer_cmd(bufnr, "undojoin")
                 vim.api.nvim_buf_set_lines(
                   bufnr,
                   last_line - 1,
@@ -1212,7 +1214,7 @@ function M._run_send_pipeline(bufnr, opts)
                 )
 
                 -- Remaining lines get added as new lines
-                ui.buffer_cmd(bufnr, "undojoin")
+                buffer_utils.buffer_cmd(bufnr, "undojoin")
                 vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { unpack(content_lines, 2) })
               end
             end
@@ -1277,7 +1279,7 @@ function M._run_send_pipeline(bufnr, opts)
             )
             buffer_state.api_error_occurred = false -- Reset flag for next request
             if not response_started then
-              ui.cleanup_progress(bufnr)
+              activity.cleanup_progress(bufnr, ui.update_ui)
             end
             editing.auto_write(bufnr) -- Still auto-write if configured
             ui.update_ui(bufnr) -- Update UI
@@ -1289,7 +1291,7 @@ function M._run_send_pipeline(bufnr, opts)
           -- On the happy path the @Assistant: placeholder has real content, so
           -- cleanup_progress won't remove any buffer lines — it only removes a
           -- bare "@Assistant:" placeholder.
-          ui.cleanup_progress(bufnr)
+          activity.cleanup_progress(bufnr, ui.update_ui)
 
           if not response_started then
             log.warn(
@@ -1311,7 +1313,7 @@ function M._run_send_pipeline(bufnr, opts)
             cursor_line_offset = 3
           end
 
-          ui.buffer_cmd(bufnr, "undojoin")
+          buffer_utils.buffer_cmd(bufnr, "undojoin")
           vim.api.nvim_buf_set_lines(bufnr, last_line_idx, last_line_idx, false, lines_to_insert)
 
           -- Position cursor on the blank content line after @You:
@@ -1332,7 +1334,7 @@ function M._run_send_pipeline(bufnr, opts)
         else
           -- cURL request failed (exit code ~= 0)
           -- Buffer is already set to modifiable = true
-          ui.cleanup_progress(bufnr)
+          activity.cleanup_progress(bufnr, ui.update_ui)
 
           local error_msg
           if code == 6 then -- CURLE_COULDNT_RESOLVE_HOST
@@ -1406,7 +1408,7 @@ function M._run_send_pipeline(bufnr, opts)
       vim.fn.timer_stop(progress_timer)
       buffer_state.progress_timer = nil
     end
-    ui.cleanup_progress(bufnr)
+    activity.cleanup_progress(bufnr, ui.update_ui)
     parser.clear_ast_snapshot_before_send(bufnr)
     state.unlock_buffer(bufnr)
     return

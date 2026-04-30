@@ -6,6 +6,8 @@ describe("UI Tool Previews", function()
 
   before_each(function()
     package.loaded["flemma"] = nil
+    package.loaded["flemma.ui.indicators"] = nil
+    package.loaded["flemma.ui.activity"] = nil
     package.loaded["flemma.ui"] = nil
     package.loaded["flemma.parser"] = nil
     package.loaded["flemma.config"] = nil

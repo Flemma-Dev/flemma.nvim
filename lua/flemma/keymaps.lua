@@ -10,6 +10,7 @@ local executor = require("flemma.tools.executor")
 local navigation = require("flemma.navigation")
 local notify = require("flemma.notify")
 local textobject = require("flemma.textobject")
+local buffer_utils = require("flemma.utilities.buffer")
 local folding = require("flemma.ui.folding")
 local ui = require("flemma.ui")
 
@@ -194,7 +195,7 @@ M.setup = function()
         if config.keymaps.insert.send then
           vim.keymap.set("i", config.keymaps.insert.send, function()
             local bufnr = vim.api.nvim_get_current_buf()
-            ui.buffer_cmd(bufnr, "stopinsert")
+            buffer_utils.buffer_cmd(bufnr, "stopinsert")
             -- Defer to next event loop iteration so stopinsert takes effect
             -- and we exit any textlock context (e.g., Copilot's keymap wrapper)
             vim.schedule(function()
@@ -202,7 +203,7 @@ M.setup = function()
                 bufnr = bufnr,
                 user_initiated = true,
                 on_request_complete = function()
-                  ui.buffer_cmd(bufnr, "startinsert!")
+                  buffer_utils.buffer_cmd(bufnr, "startinsert!")
                 end,
               })
             end)

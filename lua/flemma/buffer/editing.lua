@@ -5,8 +5,8 @@ local M = {}
 
 local bridge = require("flemma.bridge")
 local config_facade = require("flemma.config")
+local buffer_utils = require("flemma.utilities.buffer")
 local log = require("flemma.logging")
-local ui = require("flemma.ui")
 
 ---Auto-write buffer if configured and modified.
 ---Used by core.lua (request lifecycle) and executor.lua (tool completion) to
@@ -21,7 +21,7 @@ function M.auto_write(bufnr)
   end
   local config = config_facade.get(bufnr)
   if config.editing and config.editing.auto_write and vim.bo[bufnr].modified then
-    local ok, err = pcall(ui.buffer_cmd, bufnr, "silent! write!")
+    local ok, err = pcall(buffer_utils.buffer_cmd, bufnr, "silent! write!")
     if not ok then
       log.warn("auto_write: write failed: " .. tostring(err))
     end

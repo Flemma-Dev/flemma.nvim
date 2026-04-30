@@ -2,12 +2,15 @@
 
 describe("progress line", function()
   local state
+  local activity
   local ui
 
   before_each(function()
     package.loaded["flemma.state"] = nil
+    package.loaded["flemma.ui.activity"] = nil
     package.loaded["flemma.ui"] = nil
     state = require("flemma.state")
+    activity = require("flemma.ui.activity")
     ui = require("flemma.ui")
   end)
 
@@ -22,7 +25,7 @@ describe("progress line", function()
       local buffer_state = state.get_buffer_state(bufnr)
       buffer_state.current_request = 1 -- Simulate active request
 
-      ui.start_progress(bufnr, { timeout = 600 })
+      activity.start_progress(bufnr, { timeout = 600 }, ui.update_ui)
 
       -- Wait for writequeue to flush
       vim.wait(200, function()
@@ -35,7 +38,7 @@ describe("progress line", function()
       assert.is_not_nil(buffer_state.progress_started_at)
 
       -- Cleanup
-      ui.cleanup_progress(bufnr)
+      activity.cleanup_progress(bufnr, ui.update_ui)
 
       assert.is_nil(buffer_state.progress_phase)
       assert.is_nil(buffer_state.progress_timer)
@@ -78,7 +81,7 @@ describe("progress line", function()
       local buffer_state = state.get_buffer_state(bufnr)
       buffer_state.current_request = 1
 
-      ui.cleanup_progress(bufnr)
+      activity.cleanup_progress(bufnr, ui.update_ui)
 
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
       assert.same({ "@You:", "Hello", "" }, lines)
@@ -94,7 +97,7 @@ describe("progress line", function()
       local buffer_state = state.get_buffer_state(bufnr)
       buffer_state.current_request = 1
 
-      ui.cleanup_progress(bufnr)
+      activity.cleanup_progress(bufnr, ui.update_ui)
 
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
       assert.same({ "@You:", "Hello", "", "@Assistant:", "Some response" }, lines)
@@ -128,7 +131,9 @@ describe("progress line", function()
     before_each(function()
       package.loaded["flemma.ui.bar"] = nil
       bar_mock = require("tests.utilities.bar_mock").install_as_flemma_ui_bar()
+      package.loaded["flemma.ui.activity"] = nil
       package.loaded["flemma.ui"] = nil
+      activity = require("flemma.ui.activity")
       ui = require("flemma.ui")
     end)
 
@@ -145,7 +150,7 @@ describe("progress line", function()
         segments = {},
       })
 
-      ui.cleanup_progress(bufnr)
+      activity.cleanup_progress(bufnr, ui.update_ui)
 
       assert.is_true(bar_mock._handles[1]:is_dismissed())
       assert.is_nil(buffer_state.progress_bar)
@@ -160,7 +165,9 @@ describe("progress line", function()
     before_each(function()
       package.loaded["flemma.ui.bar"] = nil
       bar_mock = require("tests.utilities.bar_mock").install_as_flemma_ui_bar()
+      package.loaded["flemma.ui.activity"] = nil
       package.loaded["flemma.ui"] = nil
+      activity = require("flemma.ui.activity")
       ui = require("flemma.ui")
     end)
 
@@ -176,7 +183,7 @@ describe("progress line", function()
       local buffer_state = state.get_buffer_state(bufnr)
       buffer_state.current_request = 1
 
-      ui.start_progress(bufnr, { timeout = 30 })
+      activity.start_progress(bufnr, { timeout = 30 }, ui.update_ui)
 
       vim.wait(200, function()
         return buffer_state.progress_extmark_id ~= nil
@@ -223,7 +230,7 @@ describe("progress line", function()
           .. vim.inspect(text)
       )
 
-      ui.cleanup_progress(bufnr)
+      activity.cleanup_progress(bufnr, ui.update_ui)
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
   end)
