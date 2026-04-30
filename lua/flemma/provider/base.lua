@@ -790,7 +790,7 @@ function M.is_foreign_thinking(self, segment)
   if #vim.trim(segment.content or "") == 0 then
     return false
   end
-  return not M.is_native_thinking(self, segment)
+  return not self:is_native_thinking(segment)
 end
 
 ---Collect foreign thinking segments and wrap them in a single <thinking> block.

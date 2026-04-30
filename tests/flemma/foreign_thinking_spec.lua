@@ -5,10 +5,10 @@ describe("Base Provider Thinking Helpers", function()
   ---@param overrides? table
   ---@return flemma.provider.Base
   local function make_provider(overrides)
-    local provider = {
+    local provider = setmetatable({
       metadata = { name = "test_provider" },
       parameters = { thinking = { level = "high", foreign = "preserve" } },
-    }
+    }, { __index = base })
     if overrides then
       for k, v in pairs(overrides) do
         provider[k] = v
@@ -184,6 +184,47 @@ describe("Base Provider Thinking Helpers", function()
         { kind = "thinking", content = "redacted2", redacted = true },
       }
       assert.is_nil(base.wrap_foreign_thinking(provider, segments))
+    end)
+  end)
+
+  describe("OpenAI Chat is_native_thinking override", function()
+    local openai_chat = require("flemma.provider.openai_chat")
+
+    ---@return flemma.provider.OpenAIChat
+    local function make_chat_provider()
+      return setmetatable({
+        metadata = { name = "moonshot" },
+        parameters = { thinking = { level = "high", foreign = "preserve" } },
+      }, { __index = openai_chat }) --[[@as flemma.provider.OpenAIChat]]
+    end
+
+    it("treats unsigned thinking as native", function()
+      local provider = make_chat_provider()
+      local segment = { kind = "thinking", content = "unsigned reasoning" }
+      assert.is_true(provider:is_native_thinking(segment))
+      assert.is_false(base.is_foreign_thinking(provider, segment))
+    end)
+
+    it("treats matching-signature thinking as native", function()
+      local provider = make_chat_provider()
+      local segment = {
+        kind = "thinking",
+        content = "signed reasoning",
+        signature = { provider = "moonshot", value = "sig" },
+      }
+      assert.is_true(provider:is_native_thinking(segment))
+      assert.is_false(base.is_foreign_thinking(provider, segment))
+    end)
+
+    it("treats foreign-signature thinking as foreign", function()
+      local provider = make_chat_provider()
+      local segment = {
+        kind = "thinking",
+        content = "anthropic reasoning",
+        signature = { provider = "anthropic", value = "sig" },
+      }
+      assert.is_false(provider:is_native_thinking(segment))
+      assert.is_true(base.is_foreign_thinking(provider, segment))
     end)
   end)
 end)
