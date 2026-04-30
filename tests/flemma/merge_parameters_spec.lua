@@ -91,4 +91,39 @@ describe("normalize.merge_parameters", function()
     local flat = normalize.merge_parameters("anthropic", config)
     assert.are.equal("claude-sonnet-4-5", flat.model)
   end)
+
+  it("provider sub-table accepts general parameters through DISCOVER", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, {
+      parameters = {
+        thinking = { level = "high", foreign = "preserve" },
+        openai = { thinking = { level = "low", foreign = "drop" } },
+      },
+    })
+    local config = config_facade.materialize()
+    local flat = normalize.merge_parameters("openai", config)
+    assert.are.same({ level = "low", foreign = "drop" }, flat.thinking)
+  end)
+
+  it("provider sub-table accepts max_tokens override", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, {
+      parameters = {
+        openai = { max_tokens = 2048 },
+      },
+    })
+    local config = config_facade.materialize()
+    local flat = normalize.merge_parameters("openai", config)
+    assert.are.equal(2048, flat.max_tokens)
+  end)
+
+  it("provider sub-table retains adapter-specific keys alongside general parameters", function()
+    config_facade.apply(config_facade.LAYERS.SETUP, {
+      parameters = {
+        openai = { reasoning = "high", temperature = 0.5 },
+      },
+    })
+    local config = config_facade.materialize()
+    local flat = normalize.merge_parameters("openai", config)
+    assert.are.equal("high", flat.reasoning)
+    assert.are.equal(0.5, flat.temperature)
+  end)
 end)

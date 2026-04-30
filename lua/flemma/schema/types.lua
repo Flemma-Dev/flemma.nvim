@@ -781,6 +781,56 @@ function ObjectNode:get_list_item_schema()
   return self._list_schema
 end
 
+--- Create a new ObjectNode by cloning self and merging additional fields.
+--- Accepts an ObjectNode (merges its fields), a raw table (processed like
+--- the s.object() constructor argument, including symbol keys), or nil (clone).
+---@param other table?
+---@return flemma.schema.ObjectNode
+function ObjectNode:extend(other)
+  if other ~= nil and type(other) ~= "table" then
+    error("ObjectNode:extend(): expected ObjectNode, table, or nil — got " .. type(other), 2)
+  end
+  local node = setmetatable({}, ObjectNode)
+  -- Clone self
+  node._fields = {}
+  for k, v in pairs(self._fields) do
+    node._fields[k] = v
+  end
+  node._aliases = {}
+  for k, v in pairs(self._aliases) do
+    node._aliases[k] = v
+  end
+  node._discover = self._discover
+  node._discover_cache = {}
+  node._strict = self._strict
+  node._list_schema = self._list_schema
+  node._coerce = self._coerce
+  node._description = self._description
+  node._type_as = self._type_as
+  if other == nil then
+    return node
+  end
+  -- Merge other
+  if getmetatable(other) == ObjectNode then
+    for k, v in pairs(other._fields) do
+      node._fields[k] = v
+    end
+  else
+    for k, v in pairs(other) do
+      if k == symbols.ALIASES then
+        for ak, av in pairs(v) do
+          node._aliases[ak] = av
+        end
+      elseif k == symbols.DISCOVER then
+        node._discover = v
+      else
+        node._fields[k] = v
+      end
+    end
+  end
+  return node
+end
+
 --- Construct an ObjectNode from a fields table.
 --- The fields table may include symbol keys:
 ---   [symbols.ALIASES] = { alias = "canonical.path" }

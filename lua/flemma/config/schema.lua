@@ -43,20 +43,12 @@ local function thinking_level(default)
   }
 end
 
--- ---------------------------------------------------------------------------
--- The config schema
--- ---------------------------------------------------------------------------
-
----@type flemma.schema.ObjectNode
-return s.object({
-  -- ---------------------------------------------------------------------------
-  -- Provider & model — what to talk to and how
-  -- ---------------------------------------------------------------------------
-
-  provider = s.string("anthropic"),
-  model = s.optional(s.string()),
-
-  parameters = s.object({
+--- General parameter fields shared between the top-level `parameters` object
+--- and each provider sub-table (e.g. `parameters.openai`). The DISCOVER
+--- callback uses this to extend adapter schemas with the base fields.
+---@return table<string, flemma.schema.Node>
+local function general_parameters()
+  return {
     max_tokens = s.union(s.string("50%"), s.integer()),
     temperature = s.optional(s.number()),
     timeout = s.integer(600),
@@ -82,9 +74,29 @@ return s.object({
       end
       return value
     end),
-    -- All provider parameter schemas resolved via DISCOVER
+  }
+end
+
+-- ---------------------------------------------------------------------------
+-- The config schema
+-- ---------------------------------------------------------------------------
+
+---@type flemma.schema.ObjectNode
+return s.object({
+  -- ---------------------------------------------------------------------------
+  -- Provider & model — what to talk to and how
+  -- ---------------------------------------------------------------------------
+
+  provider = s.string("anthropic"),
+  model = s.optional(s.string()),
+
+  parameters = s.object(general_parameters()):extend({
     [symbols.DISCOVER] = function(key)
-      return require("flemma.provider.registry").get_config_schema(key)
+      local registry = require("flemma.provider.registry")
+      if not registry.has(key) then
+        return nil
+      end
+      return s.object(general_parameters()):extend(registry.get_config_schema(key))
     end,
   }),
 
@@ -101,7 +113,7 @@ return s.object({
       s.object({
         provider = s.optional(s.string()),
         model = s.optional(s.string()),
-        parameters = s.optional(s.object({}):passthrough()),
+        parameters = s.optional(s.object(general_parameters())),
         auto_approve = s.optional(s.list(s.string())),
       })
     ),

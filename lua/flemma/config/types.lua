@@ -20,7 +20,7 @@
 ---@field lsp flemma.config.Lsp
 ---@field model? string
 ---@field parameters flemma.config.Parameters
----@field presets table<string, string|{  }|{ auto_approve: string[], model: string, parameters: {  }, provider: string }>
+---@field presets table<string, string|{  }|{ auto_approve: string[], model: string, parameters: { cache_retention: "short"|"long"|"none", connect_timeout: integer, max_tokens: string|integer, temperature: number, thinking: { foreign: "preserve"|"drop", level: "minimal"|"low"|"medium"|"high"|"max"|number|false }|"minimal"|"low"|"medium"|"high"|"max"|number|false, timeout: integer }, provider: string }>
 ---@field provider string
 ---@field ruler flemma.config.Ruler
 ---@field sandbox flemma.config.Sandbox
@@ -177,21 +177,45 @@
 ---@field tool_execute string
 
 ---@class flemma.config.ParametersAnthropic
+---@field cache_retention "short"|"long"|"none"
+---@field connect_timeout integer
 ---@field effort? "low"|"medium"|"high"|"xhigh"|"max"
+---@field max_tokens string|integer
+---@field temperature? number
+---@field thinking { foreign: "preserve"|"drop", level: "minimal"|"low"|"medium"|"high"|"max"|number|false }|"minimal"|"low"|"medium"|"high"|"max"|number|false
 ---@field thinking_budget? integer
+---@field timeout integer
 
 ---@class flemma.config.ParametersMoonshot
+---@field cache_retention "short"|"long"|"none"
+---@field connect_timeout integer
+---@field max_tokens string|integer
 ---@field prompt_cache_key? string
+---@field temperature? number
+---@field thinking { foreign: "preserve"|"drop", level: "minimal"|"low"|"medium"|"high"|"max"|number|false }|"minimal"|"low"|"medium"|"high"|"max"|number|false
+---@field timeout integer
 
 ---@class flemma.config.ParametersOpenai
+---@field cache_retention "short"|"long"|"none"
+---@field connect_timeout integer
 ---@field experimental? flemma.config.ParametersOpenaiExperimental
+---@field max_tokens string|integer
 ---@field reasoning? string
 ---@field reasoning_summary? string
+---@field temperature? number
+---@field thinking { foreign: "preserve"|"drop", level: "minimal"|"low"|"medium"|"high"|"max"|number|false }|"minimal"|"low"|"medium"|"high"|"max"|number|false
+---@field timeout integer
 
 ---@class flemma.config.ParametersVertex
+---@field cache_retention "short"|"long"|"none"
+---@field connect_timeout integer
 ---@field location? string
+---@field max_tokens string|integer
 ---@field project_id? string
+---@field temperature? number
+---@field thinking { foreign: "preserve"|"drop", level: "minimal"|"low"|"medium"|"high"|"max"|number|false }|"minimal"|"low"|"medium"|"high"|"max"|number|false
 ---@field thinking_budget? integer
+---@field timeout integer
 
 ---@class flemma.config.SandboxBackends
 ---@field bwrap? flemma.config.SandboxBackendsBwrap
