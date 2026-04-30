@@ -216,7 +216,7 @@ function M.build_request(self, prompt, _context)
             data = p.content,
           })
           log.debug("anthropic.build_request: Added redacted_thinking block")
-        elseif p.kind == "thinking" and base.is_native_thinking(self, p) then
+        elseif p.kind == "thinking" and self:is_native_thinking(p) then
           table.insert(content_blocks, {
             type = "thinking",
             thinking = p.content,
@@ -227,7 +227,7 @@ function M.build_request(self, prompt, _context)
       end
 
       -- Inject foreign thinking as text (between native thinking and regular text)
-      local foreign = base.wrap_foreign_thinking(self, msg.parts)
+      local foreign = self:wrap_foreign_thinking(msg.parts)
       if foreign then
         table.insert(content_blocks, { type = "text", text = foreign })
       end

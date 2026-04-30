@@ -221,7 +221,7 @@ function M.build_request(self, prompt, _context)
 
       -- First pass: extract signature from thinking parts
       for _, p in ipairs(msg.parts or {}) do
-        if p.kind == "thinking" and base.is_native_thinking(self, p) then
+        if p.kind == "thinking" and self:is_native_thinking(p) then
           thought_signature = p.signature.value
           log.debug("vertex.build_request: Found thought signature in thinking part")
         end
@@ -252,7 +252,7 @@ function M.build_request(self, prompt, _context)
         end
       end
       -- Inject foreign thinking as a text part (before regular text)
-      local foreign = base.wrap_foreign_thinking(self, msg.parts)
+      local foreign = self:wrap_foreign_thinking(msg.parts)
       if foreign then
         table.insert(parts, { text = foreign })
       end

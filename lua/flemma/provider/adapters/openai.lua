@@ -260,7 +260,7 @@ function M.build_request(self, prompt, context)
 
       -- First pass: reconstruct reasoning items from thinking blocks with signatures
       for _, p in ipairs(msg.parts or {}) do
-        if p.kind == "thinking" and base.is_native_thinking(self, p) then
+        if p.kind == "thinking" and self:is_native_thinking(p) then
           local json_str = vim.base64.decode(p.signature.value)
           local decode_ok, reasoning_item = pcall(json.decode, json_str)
           if decode_ok and type(reasoning_item) == "table" then
@@ -271,7 +271,7 @@ function M.build_request(self, prompt, context)
       end
 
       -- Inject foreign thinking as text (between native reasoning and regular text)
-      local foreign = base.wrap_foreign_thinking(self, msg.parts)
+      local foreign = self:wrap_foreign_thinking(msg.parts)
 
       -- Second pass: collect text and tool_use
       local text_parts = {}

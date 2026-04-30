@@ -260,7 +260,7 @@ function M.build_request(self, prompt, context)
         elseif part.kind == "thinking" then
           -- Unsigned thinking blocks are the provider's own reasoning (Chat Completions
           -- doesn't sign thinking); treat them as native alongside explicitly signed ones.
-          if not part.signature or base.is_native_thinking(self, part) then
+          if not part.signature or self:is_native_thinking(part) then
             if part.content and #vim.trim(part.content) > 0 then
               reasoning_content = part.content
             end
@@ -279,7 +279,7 @@ function M.build_request(self, prompt, context)
         end
       end
       if #signed_parts > 0 then
-        local foreign = base.wrap_foreign_thinking(self, signed_parts)
+        local foreign = self:wrap_foreign_thinking(signed_parts)
         if foreign then
           table.insert(text_parts, 1, foreign)
         end
