@@ -265,7 +265,7 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
 
   -- High-cost warning
   local model_entry = global_config.model and registry.get_model_info(global_config.provider, global_config.model)
-  local high_cost_threshold = global_config.pricing.high_cost_threshold
+  local high_cost_threshold = global_config.ui.pricing.high_cost_threshold
   if
     model_entry
     and model_entry.pricing

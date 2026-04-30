@@ -166,7 +166,7 @@ describe("Lualine component", function()
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       config_facade.apply(
         config_facade.LAYERS.RUNTIME,
-        { statusline = { format = "{{ provider.name }}:{{ model.name }}" } }
+        { ui = { statusline = { format = "{{ provider.name }}:{{ model.name }}" } } }
       )
 
       -- Act
@@ -181,7 +181,11 @@ describe("Lualine component", function()
       core.switch_provider("openai", "o3", { reasoning = "high", temperature = 1 })
       config_facade.apply(
         config_facade.LAYERS.RUNTIME,
-        { statusline = { format = "{{ model.name }}{% if thinking.enabled then %} [{{ thinking.level }}]{% end %}" } }
+        {
+          ui = {
+            statusline = { format = "{{ model.name }}{% if thinking.enabled then %} [{{ thinking.level }}]{% end %}" },
+          },
+        }
       )
 
       -- Act
@@ -195,7 +199,11 @@ describe("Lualine component", function()
       -- Arrange
       config_facade.apply(
         config_facade.LAYERS.RUNTIME,
-        { statusline = { format = "{{ model.name }}{% if thinking.enabled then %} [{{ thinking.level }}]{% end %}" } }
+        {
+          ui = {
+            statusline = { format = "{{ model.name }}{% if thinking.enabled then %} [{{ thinking.level }}]{% end %}" },
+          },
+        }
       )
       core.switch_provider("openai", "gpt-4o", {})
 
@@ -210,7 +218,9 @@ describe("Lualine component", function()
       -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
-        statusline = { format = "{% if provider.name == 'anthropic' then %}A{% else %}O{% end %}: {{ model.name }}" },
+        ui = {
+          statusline = { format = "{% if provider.name == 'anthropic' then %}A{% else %}O{% end %}: {{ model.name }}" },
+        },
       })
 
       -- Act
@@ -223,11 +233,11 @@ describe("Lualine component", function()
     it("should trim incidental outer whitespace from multiline string formats", function()
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
-        statusline = {
+        ui = { statusline = {
           format = [[
 {{ model.name }}
 ]],
-        },
+        } },
       })
 
       local status = flemma_component:update_status()
@@ -239,8 +249,10 @@ describe("Lualine component", function()
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
       local non_breaking_space = "\194\160"
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
-        statusline = {
-          format = non_breaking_space .. "{{ model.name }}" .. non_breaking_space,
+        ui = {
+          statusline = {
+            format = non_breaking_space .. "{{ model.name }}" .. non_breaking_space,
+          },
         },
       })
 
@@ -252,10 +264,12 @@ describe("Lualine component", function()
     it("should support function formats", function()
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
-        statusline = {
-          format = function(env)
-            return env.provider.name .. ":" .. env.model.name
-          end,
+        ui = {
+          statusline = {
+            format = function(env)
+              return env.provider.name .. ":" .. env.model.name
+            end,
+          },
         },
       })
 
@@ -267,10 +281,12 @@ describe("Lualine component", function()
     it("does not escape percent signs in function format output", function()
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
-        statusline = {
-          format = function(env)
-            return env.model.name .. " 50%"
-          end,
+        ui = {
+          statusline = {
+            format = function(env)
+              return env.model.name .. " 50%"
+            end,
+          },
         },
       })
 
@@ -282,9 +298,9 @@ describe("Lualine component", function()
     it("escapes percent signs in template expression output", function()
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
-        statusline = {
+        ui = { statusline = {
           format = "{{ model.name .. ' 50%' }}",
-        },
+        } },
       })
 
       local status = flemma_component:update_status()
@@ -295,9 +311,9 @@ describe("Lualine component", function()
     it("does not escape percent signs in template literal text", function()
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
-        statusline = {
+        ui = { statusline = {
           format = "%#Comment#{{ model.name }}%*",
-        },
+        } },
       })
 
       local status = flemma_component:update_status()
@@ -311,8 +327,10 @@ describe("Lualine component", function()
       -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
-        statusline = {
-          format = "{{ model.name }}{% if session.cost then %} {{ format.money(session.cost) }}{% end %}",
+        ui = {
+          statusline = {
+            format = "{{ model.name }}{% if session.cost then %} {{ format.money(session.cost) }}{% end %}",
+          },
         },
       })
 
@@ -340,7 +358,7 @@ describe("Lualine component", function()
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       config_facade.apply(
         config_facade.LAYERS.RUNTIME,
-        { statusline = { format = "{{ model.name }} ({{ session.requests }})" } }
+        { ui = { statusline = { format = "{{ model.name }} ({{ session.requests }})" } } }
       )
 
       local s = session.get()
@@ -373,8 +391,10 @@ describe("Lualine component", function()
       -- Arrange: switch first, then set format (switch_provider re-materializes state)
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
-        statusline = {
-          format = "{{ model.name }}{% if session.cost then %} {{ format.money(session.cost) }}{% end %}",
+        ui = {
+          statusline = {
+            format = "{{ model.name }}{% if session.cost then %} {{ format.money(session.cost) }}{% end %}",
+          },
         },
       })
 
@@ -392,8 +412,10 @@ describe("Lualine component", function()
       -- Arrange: switch first, then set format
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       config_facade.apply(config_facade.LAYERS.RUNTIME, {
-        statusline = {
-          format = "↑{{ format.tokens(session.tokens.input) }} ↓{{ format.tokens(session.tokens.output) }}",
+        ui = {
+          statusline = {
+            format = "↑{{ format.tokens(session.tokens.input) }} ↓{{ format.tokens(session.tokens.output) }}",
+          },
         },
       })
 
@@ -420,7 +442,7 @@ describe("Lualine component", function()
       core.switch_provider("anthropic", "claude-sonnet-4-5", {})
       config_facade.apply(
         config_facade.LAYERS.RUNTIME,
-        { statusline = { format = "{{ model.name }} last:{{ format.money(last.cost) }}" } }
+        { ui = { statusline = { format = "{{ model.name }} last:{{ format.money(last.cost) }}" } } }
       )
 
       local s = session.get()
@@ -470,7 +492,10 @@ describe("Lualine component", function()
     it("should prefer lualine options format over flemma config format", function()
       -- Arrange: conflicting formats — lualine option should win
       core.switch_provider("anthropic", "claude-sonnet-4-5", { thinking = false })
-      config_facade.apply(config_facade.LAYERS.RUNTIME, { statusline = { format = "config:{{ model.name }}" } })
+      config_facade.apply(
+        config_facade.LAYERS.RUNTIME,
+        { ui = { statusline = { format = "config:{{ model.name }}" } } }
+      )
       flemma_component.options = { format = "options:{{ model.name }}" }
 
       -- Act
@@ -486,7 +511,7 @@ describe("Lualine component", function()
       -- Arrange
       config_facade.apply(
         config_facade.LAYERS.RUNTIME,
-        { statusline = { format = "{% if booting then %}booting{% else %}ready{% end %}" } }
+        { ui = { statusline = { format = "{% if booting then %}booting{% else %}ready{% end %}" } } }
       )
 
       local tools = require("flemma.tools")
@@ -567,7 +592,7 @@ describe("Lualine component", function()
       -- Arrange
       config_facade.apply(
         config_facade.LAYERS.RUNTIME,
-        { statusline = { format = "{% if booting then %}booting{% else %}ready{% end %}" } }
+        { ui = { statusline = { format = "{% if booting then %}booting{% else %}ready{% end %}" } } }
       )
 
       local tools = require("flemma.tools")

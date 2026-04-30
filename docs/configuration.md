@@ -72,11 +72,11 @@ require("flemma").setup({
   templating = {
     modules = {},                            -- Lua module paths for environment populators (see docs/templates.md)
   },
-  defaults = {
-    dark = { bg = "#000000", fg = "#ffffff" },
-    light = { bg = "#ffffff", fg = "#000000" },
-  },
   highlights = {
+    defaults = {
+      dark = { bg = "#000000", fg = "#ffffff" },
+      light = { bg = "#ffffff", fg = "#000000" },
+    },
     system = "Special",
     user = "Normal",
     assistant = "Normal",
@@ -102,8 +102,8 @@ require("flemma").setup({
     fold_preview = "Comment",
     fold_meta = "Comment",
     busy = "DiagnosticWarn",                 -- Busy indicator icon in integrations (e.g., bufferline)
+    role_style = "bold",                     -- Comma-separated GUI attributes for role names
   },
-  role_style = "bold",
   ruler = {
     enabled = true,
     char = "─",
@@ -132,12 +132,11 @@ require("flemma").setup({
       position = "bottom left",                -- Same anchor enum as ui.usage.position
       highlight = "StatusLine",                -- Highlight group(s) for the progress bar; first with both fg+bg wins
     },
+    pricing = { enabled = true },
+    statusline = {
+      format = "{{ model.name }}...",          -- Lua template string or function; see docs/integrations.md for variables/syntax and lua/flemma/config/schema.lua for the shipped default
+    },
   },
-  pricing = { enabled = true },
-  statusline = {
-    format = "{{ model.name }}...",          -- Lua template string or function; see docs/integrations.md for variables/syntax and lua/flemma/config/schema.lua for the shipped default
-  },
-  text_object = "m",                         -- "m" or false to disable
   editing = {
     auto_prompt = true,                      -- Prepend @You: to empty .chat buffers on open
     disable_textwidth = true,
@@ -201,6 +200,7 @@ require("flemma").setup({
     insert = {
       send = "<C-]>",                        -- Same hybrid behaviour, re-enters insert after
     },
+    text_object = "m",                       -- "m" or false to disable
   },
   experimental = {
     lsp = vim.lsp ~= nil,                   -- In-process LSP for .chat buffers (hover, go-to-definition)

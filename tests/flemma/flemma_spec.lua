@@ -135,7 +135,7 @@ describe("flemma.setup", function()
 
     -- Check that default values are preserved
     assert.are.equal("Special", config.highlights.system)
-    assert.are.equal(true, config.pricing.enabled)
+    assert.are.equal(true, config.ui.pricing.enabled)
   end)
 
   it("preserves nested defaults when user provides partial nested config", function()

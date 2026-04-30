@@ -37,14 +37,12 @@ end
 
 ---@type flemma.schema.ObjectNode
 return s.object({
-
-  -- Fallback colors used when highlight groups don't define fg/bg
-  defaults = s.object({
-    dark = s.object({ bg = s.string("#000000"), fg = s.string("#ffffff") }),
-    light = s.object({ bg = s.string("#ffffff"), fg = s.string("#000000") }),
-  }),
-
   highlights = s.object({
+    -- Fallback colors used when highlight groups don't define fg/bg
+    defaults = s.object({
+      dark = s.object({ bg = s.string("#000000"), fg = s.string("#ffffff") }),
+      light = s.object({ bg = s.string("#ffffff"), fg = s.string("#000000") }),
+    }),
     system = highlight("Special"),
     user = highlight("Normal"),
     assistant = highlight("Normal"),
@@ -72,9 +70,8 @@ return s.object({
     fold_meta = highlight("Comment"),
     tool_detail = highlight("Comment"),
     busy = highlight("DiagnosticWarn"),
+    role_style = s.string("bold"),
   }),
-
-  role_style = s.string("bold"),
 
   ruler = s.object({
     enabled = s.boolean(true),
@@ -135,24 +132,22 @@ return s.object({
       }, "bottom left"),
       highlight = s.string("StatusLine"),
     }),
-  }),
-
-  pricing = s.object({
-    enabled = s.boolean(true),
-    high_cost_threshold = s.integer(30),
-  }),
-
-  statusline = s.object({
-    format = s.union(
-      s.string([[
-        {{ model.name }}
-        {%- if thinking.enabled then %} ({{ thinking.level }}){% end %}
-        {%- if session.cost then %} %#FlemmaStatusTextMuted#╱%* Σ{{ session.requests }} {{ format.money(session.cost) }}{% end %}
-        {%- if buffer.tokens.input and model.max_input_tokens then %} %#FlemmaStatusTextMuted#╱%* {{ format.percent(buffer.tokens.input / model.max_input_tokens, 0) }}{% end %}
-        {%- if booting then %} %#FlemmaStatusTextMuted#⧖%*{% end %}
-      ]]),
-      s.func():type_as("flemma.statusline.FormatFunction")
-    ),
+    pricing = s.object({
+      enabled = s.boolean(true),
+      high_cost_threshold = s.integer(30),
+    }),
+    statusline = s.object({
+      format = s.union(
+        s.string([[
+          {{ model.name }}
+          {%- if thinking.enabled then %} ({{ thinking.level }}){% end %}
+          {%- if session.cost then %} %#FlemmaStatusTextMuted#╱%* Σ{{ session.requests }} {{ format.money(session.cost) }}{% end %}
+          {%- if buffer.tokens.input and model.max_input_tokens then %} %#FlemmaStatusTextMuted#╱%* {{ format.percent(buffer.tokens.input / model.max_input_tokens, 0) }}{% end %}
+          {%- if booting then %} %#FlemmaStatusTextMuted#⧖%*{% end %}
+        ]]),
+        s.func():type_as("flemma.statusline.FormatFunction")
+      ),
+    }),
   }),
 
   provider = s.string("anthropic"),
@@ -264,8 +259,6 @@ return s.object({
     {}
   ),
 
-  text_object = s.union(s.string("m"), s.literal(false)),
-
   editing = s.object({
     auto_prompt = s.boolean(true),
     disable_textwidth = s.boolean(true),
@@ -310,6 +303,7 @@ return s.object({
     insert = s.object({
       send = s.string("<C-]>"),
     }),
+    text_object = s.union(s.string("m"), s.literal(false)),
     enabled = s.boolean(true),
   }),
 

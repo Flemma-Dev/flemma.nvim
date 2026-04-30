@@ -91,13 +91,13 @@ describe("config.schema.definition", function()
 
     it("materializes pricing defaults", function()
       local cfg = config_facade.get()
-      assert.is_true(cfg.pricing.enabled)
+      assert.is_true(cfg.ui.pricing.enabled)
     end)
 
     it("materializes statusline defaults", function()
       local cfg = config_facade.get()
-      assert.is_string(cfg.statusline.format)
-      assert.truthy(cfg.statusline.format:find("model.name", 1, true))
+      assert.is_string(cfg.ui.statusline.format)
+      assert.truthy(cfg.ui.statusline.format:find("model.name", 1, true))
     end)
 
     it("materializes tools auto_approve default as unexpanded preset", function()
@@ -131,7 +131,7 @@ describe("config.schema.definition", function()
 
     it("materializes text_object default", function()
       local cfg = config_facade.get()
-      assert.equals("m", cfg.text_object)
+      assert.equals("m", cfg.keymaps.text_object)
     end)
 
     it("materializes editing defaults", function()
@@ -294,13 +294,13 @@ describe("config.schema.definition", function()
     end)
 
     it("accepts text_object = false", function()
-      config_facade.apply(config_facade.LAYERS.SETUP, { text_object = false })
+      config_facade.apply(config_facade.LAYERS.SETUP, { keymaps = { text_object = false } })
       local cfg = config_facade.get()
-      assert.is_false(cfg.text_object)
+      assert.is_false(cfg.keymaps.text_object)
     end)
 
     it("rejects text_object = true", function()
-      local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, { text_object = true })
+      local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, { keymaps = { text_object = true } })
       assert.is_true(ok)
       assert.is_truthy(errors)
       assert.truthy(errors[1]:find("no union branch matched"))
@@ -427,23 +427,19 @@ describe("config.schema.definition", function()
 
     it("all top-level fields are navigable", function()
       local expected_fields = {
-        "defaults",
         "highlights",
-        "role_style",
         "ruler",
         "turns",
         "line_highlights",
         "ui",
-        "pricing",
-        "statusline",
         "provider",
         "model",
         "parameters",
         "tools",
         "templating",
         "presets",
-        "text_object",
         "editing",
+        "integrations",
         "logging",
         "keymaps",
         "diagnostics",

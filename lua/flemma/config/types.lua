@@ -9,7 +9,6 @@
 ---@field get_config fun(self): T|nil
 
 ---@class flemma.Config
----@field defaults flemma.config.Defaults
 ---@field diagnostics flemma.config.Diagnostics
 ---@field editing flemma.config.Editing
 ---@field experimental flemma.config.Experimental
@@ -22,22 +21,14 @@
 ---@field model? string
 ---@field parameters flemma.config.Parameters
 ---@field presets table<string, string|{  }|{ auto_approve: string[], model: string, parameters: {  }, provider: string }>
----@field pricing flemma.config.Pricing
 ---@field provider string
----@field role_style string
 ---@field ruler flemma.config.Ruler
 ---@field sandbox flemma.config.Sandbox
 ---@field secrets flemma.config.Secrets
----@field statusline flemma.config.Statusline
 ---@field templating flemma.config.Templating
----@field text_object string|false
 ---@field tools flemma.config.Tools
 ---@field turns flemma.config.Turns
 ---@field ui flemma.config.Ui
-
----@class flemma.config.Defaults
----@field dark flemma.config.DefaultsDark
----@field light flemma.config.DefaultsLight
 
 ---@class flemma.config.Diagnostics
 ---@field enabled boolean
@@ -56,11 +47,13 @@
 ---@class flemma.config.Highlights
 ---@field assistant flemma.config.HighlightValue
 ---@field busy flemma.config.HighlightValue
+---@field defaults flemma.config.HighlightsDefaults
 ---@field fold_meta flemma.config.HighlightValue
 ---@field fold_preview flemma.config.HighlightValue
 ---@field lua_code_block flemma.config.HighlightValue
 ---@field lua_delimiter flemma.config.HighlightValue
 ---@field lua_expression flemma.config.HighlightValue
+---@field role_style string
 ---@field system flemma.config.HighlightValue
 ---@field thinking_block flemma.config.HighlightValue
 ---@field thinking_tag flemma.config.HighlightValue
@@ -86,6 +79,7 @@
 ---@field enabled boolean
 ---@field insert flemma.config.KeymapsInsert
 ---@field normal flemma.config.KeymapsNormal
+---@field text_object string|false
 
 ---@class flemma.config.LineHighlights
 ---@field assistant flemma.config.HighlightValue
@@ -110,10 +104,6 @@
 ---@field vertex? flemma.config.ParametersVertex
 ---@field [string] table|nil
 
----@class flemma.config.Pricing
----@field enabled boolean
----@field high_cost_threshold integer
-
 ---@class flemma.config.Ruler
 ---@field char string
 ---@field enabled boolean
@@ -127,9 +117,6 @@
 
 ---@class flemma.config.Secrets
 ---@field gcloud flemma.config.SecretsGcloud
-
----@class flemma.config.Statusline
----@field format string|flemma.statusline.FormatFunction
 
 ---@class flemma.config.Templating
 ---@field modules string[]
@@ -158,22 +145,20 @@
 ---@field padding { left: integer, right: integer }|integer
 
 ---@class flemma.config.Ui
+---@field pricing flemma.config.UiPricing
 ---@field progress flemma.config.UiProgress
+---@field statusline flemma.config.UiStatusline
 ---@field usage flemma.config.UiUsage
-
----@class flemma.config.DefaultsDark
----@field bg string
----@field fg string
-
----@class flemma.config.DefaultsLight
----@field bg string
----@field fg string
 
 ---@class flemma.config.EditingAutoClose
 ---@field frontmatter boolean
 ---@field thinking boolean
 ---@field tool_result boolean
 ---@field tool_use boolean
+
+---@class flemma.config.HighlightsDefaults
+---@field dark flemma.config.HighlightsDefaultsDark
+---@field light flemma.config.HighlightsDefaultsLight
 
 ---@class flemma.config.IntegrationsDevicons
 ---@field enabled boolean
@@ -251,15 +236,30 @@
 ---@class flemma.config.ToolsTruncate
 ---@field output_path_format string
 
+---@class flemma.config.UiPricing
+---@field enabled boolean
+---@field high_cost_threshold integer
+
 ---@class flemma.config.UiProgress
 ---@field highlight string
 ---@field position "top"|"bottom"|"top left"|"top right"|"bottom left"|"bottom right"
+
+---@class flemma.config.UiStatusline
+---@field format string|flemma.statusline.FormatFunction
 
 ---@class flemma.config.UiUsage
 ---@field enabled boolean
 ---@field highlight string
 ---@field position "top"|"bottom"|"top left"|"top right"|"bottom left"|"bottom right"
 ---@field timeout integer
+
+---@class flemma.config.HighlightsDefaultsDark
+---@field bg string
+---@field fg string
+
+---@class flemma.config.HighlightsDefaultsLight
+---@field bg string
+---@field fg string
 
 ---@class flemma.config.ParametersOpenaiExperimental
 ---@field phase boolean

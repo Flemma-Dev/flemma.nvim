@@ -308,7 +308,7 @@ function flemma_component:_do_update_status()
     return ""
   end
 
-  local fmt = (self.options and self.options.format) or config.statusline.format
+  local fmt = (self.options and self.options.format) or config.ui.statusline.format
   local status = render_statusline_format(fmt, build_env(config))
 
   -- When rendered via lualine, rewrite escapes so they anchor to the active

@@ -61,7 +61,7 @@ describe("Highlight", function()
 
     it("should apply role_style as gui attributes", function()
       flemma.setup({
-        role_style = "bold,underline",
+        highlights = { role_style = "bold,underline" },
       })
 
       local bufnr = vim.api.nvim_create_buf(false, false)
@@ -91,7 +91,7 @@ describe("Highlight", function()
       end)
 
       flemma.setup({
-        role_style = "bold,italics",
+        highlights = { role_style = "bold,italics" },
       })
 
       local bufnr = vim.api.nvim_create_buf(false, false)

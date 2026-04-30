@@ -199,7 +199,7 @@ describe("flemma.usage", function()
     it("should not include cost items when pricing disabled", function()
       config_facade.init(require("flemma.config.schema"))
       config_facade.apply(config_facade.LAYERS.SETUP, {
-        pricing = { enabled = false },
+        ui = { pricing = { enabled = false } },
       })
 
       local request = session_module.Request.new({

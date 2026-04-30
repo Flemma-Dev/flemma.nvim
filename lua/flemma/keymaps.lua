@@ -144,7 +144,7 @@ M.setup = function()
         end
 
         -- Set up text objects with configured key
-        textobject.setup({ text_object = config.text_object })
+        textobject.setup({ text_object = config.keymaps.text_object })
 
         -- Insert-mode : auto-newline for role markers
         vim.keymap.set("i", ":", function()

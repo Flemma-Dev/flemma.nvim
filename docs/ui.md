@@ -87,12 +87,14 @@ Composes with blend operations – blends are applied first, then contrast is en
 "FooBar+bg:#201020,Normal+bg:#101010"
 ```
 
-The `defaults` table provides the ultimate fallback values:
+The `highlights.defaults` table provides the ultimate fallback values:
 
 ```lua
-defaults = {
-  dark = { bg = "#000000", fg = "#ffffff" },
-  light = { bg = "#ffffff", fg = "#000000" },
+highlights = {
+  defaults = {
+    dark = { bg = "#000000", fg = "#ffffff" },
+    light = { bg = "#ffffff", fg = "#000000" },
+  },
 }
 ```
 
@@ -110,7 +112,7 @@ line_highlights = {
 }
 ```
 
-Role markers (`@You:`, `@System:`, `@Assistant:`) must appear on their own line – content starts on the next line. The `role_style` option (comma-separated GUI attributes such as `"bold,underline"`, default `"bold"`) applies styling to the role name text only (not the ruler), and Flemma validates the attributes on startup, warning on invalid values with typo suggestions.
+Role markers (`@You:`, `@System:`, `@Assistant:`) must appear on their own line – content starts on the next line. The `highlights.role_style` option (comma-separated GUI attributes such as `"bold,underline"`, default `"bold"`) applies styling to the role name text only (not the ruler), and Flemma validates the attributes on startup, warning on invalid values with typo suggestions.
 
 ## Rulers
 

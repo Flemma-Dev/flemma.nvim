@@ -64,7 +64,7 @@ end
 ---@return flemma.ui.bar.layout.Segment[]
 function M.build_segments(request, session)
   local config = config_facade.get()
-  local pricing_enabled = config.pricing.enabled
+  local pricing_enabled = config.ui.pricing.enabled
 
   local segments = {} ---@type flemma.ui.bar.layout.Segment[]
 

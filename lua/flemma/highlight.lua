@@ -70,14 +70,14 @@ local function get_default_color(attr)
   -- Fall back to config defaults
   local config = config_facade.get()
   local is_dark = vim.o.background == "dark"
-  local defaults = config.defaults
+  local defaults = config.highlights and config.highlights.defaults
   if defaults then
     local theme_defaults = is_dark and defaults.dark or defaults.light
     if theme_defaults and theme_defaults[attr] then
       return theme_defaults[attr]
     end
   end
-  -- Hardcoded fallback if config.defaults is missing
+  -- Hardcoded fallback if config.highlights.defaults is missing
   if attr == "bg" then
     return is_dark and "#000000" or "#ffffff"
   else
@@ -397,7 +397,7 @@ M.apply_syntax = function()
     { source = "FlemmaUser", target = "FlemmaRoleUser" },
     { source = "FlemmaAssistant", target = "FlemmaRoleAssistant" },
   }
-  local role_style_attrs = validate_role_style(syntax_config.role_style)
+  local role_style_attrs = validate_role_style(syntax_config.highlights.role_style)
   for _, role in ipairs(role_groups) do
     local fg = get_hl_color(role.source, "fg") or get_default_color("fg")
     -- Syntax group: fg-only (covers whole @Role: line; style would bleed into ruler via hl_mode=combine)

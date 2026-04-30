@@ -165,13 +165,13 @@ describe("flemma.models", function()
   describe("high_cost_threshold", function()
     it("is available via config", function()
       local config = require("flemma.config")
-      local threshold = config.materialize().pricing.high_cost_threshold
+      local threshold = config.materialize().ui.pricing.high_cost_threshold
       assert.is_number(threshold)
     end)
 
     it("claude-opus-4-6 sits exactly at the boundary and does not exceed it", function()
       local config = require("flemma.config")
-      local threshold = config.materialize().pricing.high_cost_threshold
+      local threshold = config.materialize().ui.pricing.high_cost_threshold
       local pricing = registry.get_model_info("anthropic", "claude-opus-4-6").pricing
       local combined = pricing.input + pricing.output
       assert.are.equal(30, combined)
@@ -180,7 +180,7 @@ describe("flemma.models", function()
 
     it("expensive models exceed the threshold", function()
       local config = require("flemma.config")
-      local threshold = config.materialize().pricing.high_cost_threshold
+      local threshold = config.materialize().ui.pricing.high_cost_threshold
       local pricing = registry.get_model_info("openai", "gpt-5.4-pro").pricing
       local combined = pricing.input + pricing.output
       assert.is_true(combined > threshold)
