@@ -43,12 +43,12 @@ local function thinking_level(default)
   }
 end
 
---- General parameter fields shared between the top-level `parameters` object
---- and each provider sub-table (e.g. `parameters.openai`). The DISCOVER
---- callback uses this to extend adapter schemas with the base fields.
----@return table<string, flemma.schema.Node>
-local function general_parameters()
-  return {
+--- General parameter schema shared between the top-level `parameters` object,
+--- preset parameters, and each provider sub-table (e.g. `parameters.openai`).
+--- The DISCOVER callback extends this object with adapter-specific fields.
+---@return flemma.schema.ObjectNode
+local function general_parameters_schema()
+  return s.object({
     max_tokens = s.union(s.string("50%"), s.integer()),
     temperature = s.optional(s.number()),
     timeout = s.integer(600),
@@ -74,7 +74,7 @@ local function general_parameters()
       end
       return value
     end),
-  }
+  }):class_as("flemma.config.ParametersBase")
 end
 
 -- ---------------------------------------------------------------------------
@@ -90,13 +90,13 @@ return s.object({
   provider = s.string("anthropic"),
   model = s.optional(s.string()),
 
-  parameters = s.object(general_parameters()):extend({
+  parameters = general_parameters_schema():extend({
     [symbols.DISCOVER] = function(key)
       local registry = require("flemma.provider.registry")
       if not registry.has(key) then
         return nil
       end
-      return s.object(general_parameters()):extend(registry.get_config_schema(key))
+      return general_parameters_schema():extend(registry.get_config_schema(key))
     end,
   }),
 
@@ -113,7 +113,7 @@ return s.object({
       s.object({
         provider = s.optional(s.string()),
         model = s.optional(s.string()),
-        parameters = s.optional(s.object(general_parameters())),
+        parameters = s.optional(general_parameters_schema()),
         auto_approve = s.optional(s.list(s.string())),
       })
     ),

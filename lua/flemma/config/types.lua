@@ -20,7 +20,7 @@
 ---@field lsp flemma.config.Lsp
 ---@field model? string
 ---@field parameters flemma.config.Parameters
----@field presets table<string, string|{  }|{ auto_approve: string[], model: string, parameters: { cache_retention: "short"|"long"|"none", connect_timeout: integer, max_tokens: string|integer, temperature: number, thinking: { foreign: "preserve"|"drop", level: "minimal"|"low"|"medium"|"high"|"max"|number|false }|"minimal"|"low"|"medium"|"high"|"max"|number|false, timeout: integer }, provider: string }>
+---@field presets table<string, string|{  }|{ auto_approve: string[], model: string, parameters: flemma.config.ParametersBase, provider: string }>
 ---@field provider string
 ---@field ruler flemma.config.Ruler
 ---@field sandbox flemma.config.Sandbox
@@ -91,16 +91,18 @@
 ---@class flemma.config.Lsp
 ---@field enabled boolean
 
----@class flemma.config.Parameters
----@field anthropic? flemma.config.ParametersAnthropic
+---@class flemma.config.ParametersBase
 ---@field cache_retention "short"|"long"|"none"
 ---@field connect_timeout integer
 ---@field max_tokens string|integer
----@field moonshot? flemma.config.ParametersMoonshot
----@field openai? flemma.config.ParametersOpenai
 ---@field temperature? number
 ---@field thinking { foreign: "preserve"|"drop", level: "minimal"|"low"|"medium"|"high"|"max"|number|false }|"minimal"|"low"|"medium"|"high"|"max"|number|false
 ---@field timeout integer
+
+---@class flemma.config.Parameters : flemma.config.ParametersBase
+---@field anthropic? flemma.config.ParametersAnthropic
+---@field moonshot? flemma.config.ParametersMoonshot
+---@field openai? flemma.config.ParametersOpenai
 ---@field vertex? flemma.config.ParametersVertex
 ---@field [string] table|nil
 
@@ -176,46 +178,22 @@
 ---@field send string
 ---@field tool_execute string
 
----@class flemma.config.ParametersAnthropic
----@field cache_retention "short"|"long"|"none"
----@field connect_timeout integer
+---@class flemma.config.ParametersAnthropic : flemma.config.ParametersBase
 ---@field effort? "low"|"medium"|"high"|"xhigh"|"max"
----@field max_tokens string|integer
----@field temperature? number
----@field thinking { foreign: "preserve"|"drop", level: "minimal"|"low"|"medium"|"high"|"max"|number|false }|"minimal"|"low"|"medium"|"high"|"max"|number|false
 ---@field thinking_budget? integer
----@field timeout integer
 
----@class flemma.config.ParametersMoonshot
----@field cache_retention "short"|"long"|"none"
----@field connect_timeout integer
----@field max_tokens string|integer
+---@class flemma.config.ParametersMoonshot : flemma.config.ParametersBase
 ---@field prompt_cache_key? string
----@field temperature? number
----@field thinking { foreign: "preserve"|"drop", level: "minimal"|"low"|"medium"|"high"|"max"|number|false }|"minimal"|"low"|"medium"|"high"|"max"|number|false
----@field timeout integer
 
----@class flemma.config.ParametersOpenai
----@field cache_retention "short"|"long"|"none"
----@field connect_timeout integer
+---@class flemma.config.ParametersOpenai : flemma.config.ParametersBase
 ---@field experimental? flemma.config.ParametersOpenaiExperimental
----@field max_tokens string|integer
 ---@field reasoning? string
 ---@field reasoning_summary? string
----@field temperature? number
----@field thinking { foreign: "preserve"|"drop", level: "minimal"|"low"|"medium"|"high"|"max"|number|false }|"minimal"|"low"|"medium"|"high"|"max"|number|false
----@field timeout integer
 
----@class flemma.config.ParametersVertex
----@field cache_retention "short"|"long"|"none"
----@field connect_timeout integer
+---@class flemma.config.ParametersVertex : flemma.config.ParametersBase
 ---@field location? string
----@field max_tokens string|integer
 ---@field project_id? string
----@field temperature? number
----@field thinking { foreign: "preserve"|"drop", level: "minimal"|"low"|"medium"|"high"|"max"|number|false }|"minimal"|"low"|"medium"|"high"|"max"|number|false
 ---@field thinking_budget? integer
----@field timeout integer
 
 ---@class flemma.config.SandboxBackends
 ---@field bwrap? flemma.config.SandboxBackendsBwrap
