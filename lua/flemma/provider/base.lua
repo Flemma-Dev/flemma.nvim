@@ -771,14 +771,57 @@ function M._emit_tool_use_block(self, name, id, arguments_json, callbacks)
   log.debug(self.metadata.name .. ".process_response_line(): Emitted tool_use block for " .. name)
 end
 
+---Check whether a thinking segment was produced by this provider.
+---@param self flemma.provider.Base
+---@param segment flemma.ast.GenericThinkingPart
+---@return boolean
+function M.is_native_thinking(self, segment)
+  return segment.signature ~= nil and segment.signature.provider == self.metadata.name
+end
+
+---Check whether a thinking segment is foreign and has usable content.
+---@param self flemma.provider.Base
+---@param segment flemma.ast.GenericThinkingPart
+---@return boolean
+function M.is_foreign_thinking(self, segment)
+  if segment.redacted then
+    return false
+  end
+  if #vim.trim(segment.content or "") == 0 then
+    return false
+  end
+  return not M.is_native_thinking(self, segment)
+end
+
+---Collect foreign thinking segments and wrap them in a single <thinking> block.
+---Returns nil if foreign thinking is disabled or no foreign segments are found.
+---@param self flemma.provider.Base
+---@param segments flemma.ast.GenericThinkingPart[]
+---@return string|nil
+function M.wrap_foreign_thinking(self, segments)
+  local thinking = self.parameters.thinking
+  if not thinking or thinking.foreign == "drop" then
+    return nil
+  end
+  local parts = {}
+  for _, seg in ipairs(segments) do
+    if seg.kind == "thinking" and M.is_foreign_thinking(self, seg) then
+      table.insert(parts, vim.trim(seg.content))
+    end
+  end
+  if #parts == 0 then
+    return nil
+  end
+  return "<thinking>\n" .. table.concat(parts, "\n\n") .. "\n</thinking>"
+end
+
 --- Emit a thinking block to the buffer.
 --- Handles content trimming, content prefix, signature attributes, and the fold-only empty tag case.
 ---@param self flemma.provider.Base
 ---@param content string Accumulated thinking text (may be empty)
 ---@param signature string|nil Signature value (provider-prepared)
----@param provider_prefix string Provider namespace for the signature attribute ("anthropic", "openai", "vertex")
 ---@param callbacks flemma.provider.Callbacks
-function M._emit_thinking_block(self, content, signature, provider_prefix, callbacks)
+function M._emit_thinking_block(self, content, signature, callbacks)
   local stripped = vim.trim(content)
   local has_content = #stripped > 0
   local has_signature = signature ~= nil and signature ~= ""
@@ -788,9 +831,10 @@ function M._emit_thinking_block(self, content, signature, provider_prefix, callb
   end
 
   local prefix = self:_get_content_prefix()
+  local provider_name = self.metadata.name
   local open_tag
   if has_signature then
-    open_tag = "<thinking " .. provider_prefix .. ':signature="' .. signature .. '">'
+    open_tag = "<thinking " .. provider_name .. ':signature="' .. signature .. '">'
   else
     open_tag = "<thinking>"
   end

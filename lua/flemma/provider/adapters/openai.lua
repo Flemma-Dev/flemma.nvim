@@ -520,7 +520,7 @@ local function emit_reasoning(self, callbacks)
   if reasoning_item then
     local summary = self._response_buffer.extra.reasoning_sink:read()
     local signature = vim.base64.encode(json.encode(reasoning_item))
-    base._emit_thinking_block(self, summary, signature, "openai", callbacks)
+    base._emit_thinking_block(self, summary, signature, callbacks)
   end
 end
 

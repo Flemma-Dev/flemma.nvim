@@ -76,10 +76,6 @@ describe("Moonshot Provider", function()
       assert.equals("max_tokens", provider:_max_tokens_key())
     end)
 
-    it("_thinking_provider_prefix should return moonshot", function()
-      local provider = moonshot.new({ model = "kimi-k2.5", max_tokens = 4096 })
-      assert.equals("moonshot", provider:_thinking_provider_prefix())
-    end)
   end)
 
   describe("build_request", function()

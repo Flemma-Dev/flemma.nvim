@@ -403,6 +403,17 @@ describe("resolve_preset", function()
     assert.are.same({ level = "low", foreign = "preserve" }, resolved.parameters.thinking)
   end)
 
+  it("coerces preset thinking=false to table form", function()
+    local presets_mod = require("flemma.presets")
+    presets_mod.setup({
+      ["$fast"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514", thinking = false },
+    })
+    config_facade.apply(config_facade.LAYERS.SETUP, { model = "$fast" })
+    local config = config_facade.materialize()
+    local resolved = normalize.resolve_preset(config)
+    assert.are.same({ level = false, foreign = "preserve" }, resolved.parameters.thinking)
+  end)
+
   it("does not mutate the original config table", function()
     local presets_mod = require("flemma.presets")
     presets_mod.setup({

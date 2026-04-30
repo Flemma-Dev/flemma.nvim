@@ -520,7 +520,6 @@ function M._process_data(self, data, _parsed, callbacks)
       self,
       accumulated_thoughts,
       self._response_buffer.extra.thought_signature,
-      "vertex",
       callbacks
     )
 

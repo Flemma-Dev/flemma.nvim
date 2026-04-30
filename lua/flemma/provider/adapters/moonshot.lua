@@ -93,14 +93,6 @@ end
 -- Extension point overrides
 -- ============================================================================
 
---- Return the provider prefix for thinking block signatures.
---- Moonshot thinking blocks use "moonshot" as the provider prefix.
----@param _self flemma.provider.Moonshot
----@return string
-function M._thinking_provider_prefix(_self)
-  return "moonshot"
-end
-
 --- Apply Moonshot-specific thinking configuration to the request body.
 --- Behaviour is driven by `meta.thinking_mode` on the model info — see the
 --- comment on `get_thinking_mode` above for the value semantics.

@@ -487,7 +487,7 @@ function M._process_data(self, data, _parsed, callbacks)
     -- Append accumulated thinking at the end (after text content)
     local accumulated = self._response_buffer.extra.thinking_sink:read()
     local signature = self._response_buffer.extra.accumulated_signature or ""
-    base._emit_thinking_block(self, accumulated, (#signature > 0) and signature or nil, "anthropic", callbacks)
+    base._emit_thinking_block(self, accumulated, (#signature > 0) and signature or nil, callbacks)
 
     -- Append redacted thinking blocks
     for _, redacted_data in ipairs(self._response_buffer.extra.redacted_thinking_blocks or {}) do

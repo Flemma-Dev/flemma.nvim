@@ -486,11 +486,6 @@ describe("OpenAI Chat Completions Base Provider", function()
       assert.equals("max_tokens", provider:_max_tokens_key())
     end)
 
-    it("_thinking_provider_prefix should return nil by default", function()
-      local provider = openai_chat._new_concrete()
-      assert.is_nil(provider:_thinking_provider_prefix())
-    end)
-
     it("_build_image_part should return standard image_url format", function()
       local provider = openai_chat._new_concrete()
       local part = {

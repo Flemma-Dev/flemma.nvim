@@ -101,9 +101,9 @@ describe("flemma.provider.base", function()
         end,
       }
 
-      base._emit_thinking_block(provider, "deep thoughts", "sig123", "anthropic", callbacks)
+      base._emit_thinking_block(provider, "deep thoughts", "sig123", callbacks)
 
-      assert.truthy(emitted:match('<thinking anthropic:signature="sig123">'))
+      assert.truthy(emitted:match('<thinking test:signature="sig123">'))
       assert.truthy(emitted:match("deep thoughts"))
       assert.truthy(emitted:match("</thinking>"))
     end)
@@ -118,7 +118,7 @@ describe("flemma.provider.base", function()
         end,
       }
 
-      base._emit_thinking_block(provider, "deep thoughts", nil, "vertex", callbacks)
+      base._emit_thinking_block(provider, "deep thoughts", nil, callbacks)
 
       assert.truthy(emitted:match("<thinking>\n"))
       assert.truthy(emitted:match("deep thoughts"))
@@ -134,9 +134,9 @@ describe("flemma.provider.base", function()
         end,
       }
 
-      base._emit_thinking_block(provider, "", "sig123", "openai", callbacks)
+      base._emit_thinking_block(provider, "", "sig123", callbacks)
 
-      assert.truthy(emitted:match('<thinking openai:signature="sig123">\n</thinking>'))
+      assert.truthy(emitted:match('<thinking test:signature="sig123">\n</thinking>'))
     end)
 
     it("does nothing when no content and no signature", function()
@@ -148,7 +148,7 @@ describe("flemma.provider.base", function()
         end,
       }
 
-      base._emit_thinking_block(provider, "", nil, "anthropic", callbacks)
+      base._emit_thinking_block(provider, "", nil, callbacks)
 
       assert.is_nil(emitted)
     end)
@@ -163,7 +163,7 @@ describe("flemma.provider.base", function()
         end,
       }
 
-      base._emit_thinking_block(provider, "thoughts", "sig", "anthropic", callbacks)
+      base._emit_thinking_block(provider, "thoughts", "sig", callbacks)
 
       -- Should start directly with <thinking, no leading newlines
       assert.truthy(emitted:match("^<thinking"))

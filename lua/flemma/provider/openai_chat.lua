@@ -66,15 +66,6 @@ function M._build_image_part(self, part)
   }
 end
 
---- Return the provider prefix for thinking block signatures.
---- Default returns nil (no thinking signature support).
---- Override for providers that support extended thinking with signatures.
----@param self flemma.provider.OpenAIChat
----@return string|nil
-function M._thinking_provider_prefix(self)
-  return nil
-end
-
 -- ============================================================================
 -- Test helper
 -- ============================================================================
@@ -427,8 +418,7 @@ end
 local function flush_thinking(self, callbacks)
   local thinking_content = self._response_buffer.extra.thinking_sink:read()
   if #vim.trim(thinking_content) > 0 then
-    local thinking_prefix = self:_thinking_provider_prefix() or self.metadata.name
-    base._emit_thinking_block(self, thinking_content, nil, thinking_prefix, callbacks)
+    base._emit_thinking_block(self, thinking_content, nil, callbacks)
   end
   self._response_buffer.extra.thinking_sink:destroy()
   self._response_buffer.extra.thinking_sink = sink.create({ name = self.metadata.name .. "/thinking" })
