@@ -522,12 +522,7 @@ function M._process_data(self, data, _parsed, callbacks)
 
     -- Emit aggregated thinking block (handles content, signature, empty-tag, and prefix)
     local accumulated_thoughts = self._response_buffer.extra.thinking_sink:read()
-    base._emit_thinking_block(
-      self,
-      accumulated_thoughts,
-      self._response_buffer.extra.thought_signature,
-      callbacks
-    )
+    base._emit_thinking_block(self, accumulated_thoughts, self._response_buffer.extra.thought_signature, callbacks)
 
     -- Reset thinking state for next potential full message
     self._response_buffer.extra.thinking_sink:destroy()
