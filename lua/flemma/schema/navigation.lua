@@ -66,4 +66,25 @@ function M.navigate_schema(root, path, opts)
   return node
 end
 
+---Recursively apply coerce transforms from a schema tree to a plain value.
+---Walks the schema, applying coerce at each level, then recursing into
+---object fields. Works on materialized values (not store ops).
+---@param node flemma.schema.Node
+---@param value any
+---@return any
+function M.coerce_value(node, value)
+  local unwrapped = M.unwrap_optional(node)
+  if unwrapped:has_coerce() then
+    value = unwrapped:apply_coerce(value, nil)
+  end
+  if value ~= nil and type(value) == "table" and unwrapped:is_object() then
+    for k, child in unwrapped:all_known_fields() do
+      if value[k] ~= nil then
+        value[k] = M.coerce_value(child, value[k])
+      end
+    end
+  end
+  return value
+end
+
 return M

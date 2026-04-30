@@ -400,7 +400,7 @@ describe("resolve_preset", function()
     local config = config_facade.materialize()
     local resolved = normalize.resolve_preset(config)
     assert.equals("claude-haiku-4-5-20250514", resolved.model)
-    assert.equals("low", resolved.parameters.thinking)
+    assert.are.same({ level = "low", foreign = "preserve" }, resolved.parameters.thinking)
   end)
 
   it("does not mutate the original config table", function()

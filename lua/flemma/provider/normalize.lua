@@ -5,9 +5,11 @@
 local M = {}
 
 local log = require("flemma.logging")
+local nav = require("flemma.schema.navigation")
 local notify = require("flemma.notify")
 local presets = require("flemma.presets")
 local registry = require("flemma.provider.registry")
+local schema_definition = require("flemma.config.schema")
 
 local FALLBACK_MAX_TOKENS = 4000
 local MIN_MAX_TOKENS = 1024
@@ -36,6 +38,11 @@ function M.resolve_preset(config)
   })
   if preset.parameters and next(preset.parameters) then
     resolved.parameters = vim.tbl_deep_extend("force", resolved.parameters or {}, preset.parameters)
+    -- Re-apply schema coercion to parameters after preset merge
+    local params_schema = nav.navigate_schema(schema_definition, "parameters", { unwrap_leaf = true })
+    if params_schema then
+      resolved.parameters = nav.coerce_value(params_schema, resolved.parameters)
+    end
   end
   return resolved
 end
