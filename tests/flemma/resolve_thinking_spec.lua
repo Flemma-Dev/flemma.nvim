@@ -190,6 +190,16 @@ describe("normalize.resolve_thinking", function()
       assert.is_false(result.enabled)
       assert.are.equal("drop", result.foreign)
     end)
+
+    it("partial table { foreign = 'drop' } keeps thinking enabled at default level", function()
+      local result = normalize.resolve_thinking({
+        thinking = { level = "high", foreign = "drop" },
+      }, caps)
+      assert.is_true(result.enabled)
+      assert.are.equal(16384, result.budget)
+      assert.are.equal("high", result.level)
+      assert.are.equal("drop", result.foreign)
+    end)
   end)
 
   describe("budget-based provider with min_thinking_budget=1 (Vertex-like)", function()
@@ -385,6 +395,16 @@ describe("normalize.resolve_thinking", function()
         thinking = { level = false, foreign = "drop" },
       }, caps)
       assert.is_false(result.enabled)
+      assert.are.equal("drop", result.foreign)
+    end)
+
+    it("partial table { foreign = 'drop' } keeps thinking enabled at default level", function()
+      local result = normalize.resolve_thinking({
+        thinking = { level = "high", foreign = "drop" },
+      }, caps)
+      assert.is_true(result.enabled)
+      assert.are.equal("high", result.effort)
+      assert.are.equal("high", result.level)
       assert.are.equal("drop", result.foreign)
     end)
 

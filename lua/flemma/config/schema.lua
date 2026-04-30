@@ -70,7 +70,15 @@ return s.object({
       unpack(thinking_level("high"))
     ):coerce(function(value, _ctx)
       if type(value) == "string" or type(value) == "number" or value == false then
-        return { level = value, foreign = "preserve" }
+        value = { level = value }
+      end
+      if type(value) == "table" then
+        if value.level == nil then
+          value.level = "high"
+        end
+        if value.foreign == nil then
+          value.foreign = "preserve"
+        end
       end
       return value
     end),

@@ -928,6 +928,57 @@ describe("flemma.schema", function()
   end)
 
   -- ---------------------------------------------------------------------------
+  -- thinking coerce — regression tests for partial table defaults
+  -- ---------------------------------------------------------------------------
+
+  describe("thinking coerce", function()
+    it("fills level default when only foreign is set", function()
+      local schema_definition = require("flemma.config.schema")
+      local nav = require("flemma.schema.navigation")
+      local thinking_schema = nav.navigate_schema(schema_definition, "parameters.thinking", { unwrap_leaf = true })
+      local result = thinking_schema:apply_coerce({ foreign = "drop" }, nil)
+      assert.are.equal("high", result.level)
+      assert.are.equal("drop", result.foreign)
+    end)
+
+    it("fills foreign default when only level is set", function()
+      local schema_definition = require("flemma.config.schema")
+      local nav = require("flemma.schema.navigation")
+      local thinking_schema = nav.navigate_schema(schema_definition, "parameters.thinking", { unwrap_leaf = true })
+      local result = thinking_schema:apply_coerce({ level = "low" }, nil)
+      assert.are.equal("low", result.level)
+      assert.are.equal("preserve", result.foreign)
+    end)
+
+    it("does not override explicit level", function()
+      local schema_definition = require("flemma.config.schema")
+      local nav = require("flemma.schema.navigation")
+      local thinking_schema = nav.navigate_schema(schema_definition, "parameters.thinking", { unwrap_leaf = true })
+      local result = thinking_schema:apply_coerce({ level = "minimal", foreign = "drop" }, nil)
+      assert.are.equal("minimal", result.level)
+      assert.are.equal("drop", result.foreign)
+    end)
+
+    it("does not override level=false", function()
+      local schema_definition = require("flemma.config.schema")
+      local nav = require("flemma.schema.navigation")
+      local thinking_schema = nav.navigate_schema(schema_definition, "parameters.thinking", { unwrap_leaf = true })
+      local result = thinking_schema:apply_coerce({ level = false, foreign = "drop" }, nil)
+      assert.are.equal(false, result.level)
+      assert.are.equal("drop", result.foreign)
+    end)
+
+    it("scalar shorthand still normalizes to table", function()
+      local schema_definition = require("flemma.config.schema")
+      local nav = require("flemma.schema.navigation")
+      local thinking_schema = nav.navigate_schema(schema_definition, "parameters.thinking", { unwrap_leaf = true })
+      local result = thinking_schema:apply_coerce("medium", nil)
+      assert.are.equal("medium", result.level)
+      assert.are.equal("preserve", result.foreign)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
   -- :allow_list()
   -- ---------------------------------------------------------------------------
 
