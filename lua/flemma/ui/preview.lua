@@ -293,7 +293,7 @@ end
 ---@param tool_name string
 ---@param input table<string, any>
 ---@param available integer Available width after "name: " prefix
----@return { label?: string, detail?: string }
+---@return flemma.StructuredToolPreview
 function M.get_tool_use_body(tool_name, input, available)
   local tool_def = tools.get(tool_name)
 
@@ -412,7 +412,8 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
 
           local separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
           if detail and remaining > separator_width then
-            local detail_text = str.truncate(detail, remaining - separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
+            local detail_text =
+              str.truncate(detail --[[@as string]], remaining - separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
             if detail_text ~= "" then
               table.insert(entry_chunks, { LABEL_DETAIL_SEPARATOR .. detail_text, "FlemmaToolDetail" })
               entry_width = entry_width + separator_width + str.strwidth(detail_text)

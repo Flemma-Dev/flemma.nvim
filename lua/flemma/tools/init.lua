@@ -232,8 +232,7 @@ function M.get_all(opts)
   if not opts.config then
     opts.config = config_facade.materialize()
   end
-  ---@cast opts { include_disabled?: boolean, config?: flemma.Config|nil }
-  return registry.get_all(opts)
+  return registry.get_all(opts --[[@as { include_disabled?: boolean, config?: flemma.Config }]])
 end
 
 --- Get tools filtered by per-buffer config.

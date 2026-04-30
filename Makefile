@@ -21,7 +21,7 @@ qa:
 	actionlint \
 		>"$$d/actionlint" 2>&1 & gate[$$!]=actionlint; \
 	VIMRUNTIME=$(VIMRUNTIME_PATH) \
-		lua-language-server --check lua/ --configpath ../.luarc-check.lua --num_threads=4 \
+		lua-language-server --check lua/ --configpath ../.luarc-check.lua --checklevel=Warning --num_threads=4 \
 		>"$$d/types" 2>&1 & gate[$$!]=types; \
 	bash contrib/scripts/lint-inline-requires.sh \
 		>"$$d/imports" 2>&1 & gate[$$!]=imports; \
@@ -46,7 +46,14 @@ qa:
 			echo ""; exit 1; \
 		fi; \
 	done; \
-	echo "qa: OK"
+	sed 's/\x1b\[[0-9;]*m//g' "$$d/types" \
+		| grep -Ev '^\s*$$|^Starting|Diagnosis completed' \
+		> "$$d/types-filtered"; \
+	if [ -s "$$d/types-filtered" ]; then \
+		echo "qa: OK (with warnings)"; echo ""; \
+		echo "--- types (warnings) ---"; \
+		cat "$$d/types-filtered"; \
+	else echo "qa: OK"; fi
 
 # Generate EmmyLua config types from the schema DSL
 types:
