@@ -258,10 +258,30 @@ function M.build_request(self, prompt, context)
           })
           log.debug("openai_chat.build_request: Added tool_call for " .. part.name .. " (" .. part.id .. ")")
         elseif part.kind == "thinking" then
-          -- Preserve reasoning_content for multi-turn thinking models
-          if part.content and #vim.trim(part.content) > 0 then
-            reasoning_content = part.content
+          -- Unsigned thinking blocks are the provider's own reasoning (Chat Completions
+          -- doesn't sign thinking); treat them as native alongside explicitly signed ones.
+          if not part.signature or base.is_native_thinking(self, part) then
+            if part.content and #vim.trim(part.content) > 0 then
+              reasoning_content = part.content
+            end
           end
+        end
+      end
+
+      -- Inject foreign thinking as text (prepend to text content).
+      -- Chat Completions doesn't sign its own thinking blocks, so unsigned thinking
+      -- is treated as native (already captured in reasoning_content above). Only
+      -- explicitly signed foreign blocks (from another provider) get injected here.
+      local signed_parts = {}
+      for _, part in ipairs(msg.parts or {}) do
+        if part.kind == "thinking" and part.signature then
+          table.insert(signed_parts, part)
+        end
+      end
+      if #signed_parts > 0 then
+        local foreign = base.wrap_foreign_thinking(self, signed_parts)
+        if foreign then
+          table.insert(text_parts, 1, foreign)
         end
       end
 
