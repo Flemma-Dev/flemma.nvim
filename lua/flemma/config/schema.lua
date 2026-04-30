@@ -37,118 +37,9 @@ end
 
 ---@type flemma.schema.ObjectNode
 return s.object({
-  highlights = s.object({
-    -- Fallback colors used when highlight groups don't define fg/bg
-    defaults = s.object({
-      dark = s.object({ bg = s.string("#000000"), fg = s.string("#ffffff") }),
-      light = s.object({ bg = s.string("#ffffff"), fg = s.string("#000000") }),
-    }),
-    system = highlight("Special"),
-    user = highlight("Normal"),
-    assistant = highlight("Normal"),
-    lua_expression = highlight("PreProc"),
-    lua_code_block = highlight("PreProc"),
-    lua_delimiter = highlight("FlemmaLuaExpression"),
-    user_file_reference = highlight("Include"),
-    thinking_tag = highlight("Comment"),
-    thinking_block = highlight({
-      dark = "Comment+bg:#000000-fg:#333333",
-      light = "Comment-bg:#000000+fg:#333333",
-    }),
-    tool_icon = highlight("FlemmaToolUseTitle"),
-    tool_name = highlight("Function"),
-    tool_use_title = highlight("Function"),
-    tool_result_title = highlight("Function"),
-    tool_result_error = highlight("DiagnosticError"),
-    tool_result_pending = highlight("DiagnosticInfo"),
-    tool_result_approved = highlight("DiagnosticOk"),
-    tool_result_rejected = highlight("DiagnosticWarn"),
-    tool_result_denied = highlight("DiagnosticError"),
-    tool_result_aborted = highlight("DiagnosticError"),
-    tool_preview = highlight("Comment"),
-    fold_preview = highlight("Comment"),
-    fold_meta = highlight("Comment"),
-    tool_detail = highlight("Comment"),
-    busy = highlight("DiagnosticWarn"),
-    role_style = s.string("bold"),
-  }),
-
-  ruler = s.object({
-    enabled = s.boolean(true),
-    char = s.string("\u{2500}"),
-    hl = highlight({ dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }),
-  }),
-
-  turns = s.object({
-    enabled = s.boolean(true),
-    padding = s.union(
-      s.object({
-        left = s.integer(0),
-        right = s.integer(1),
-      }),
-      s.integer()
-    ):coerce(function(value, _ctx)
-      if type(value) == "number" then
-        return { left = value, right = 0 }
-      end
-      if type(value) == "table" and value[1] ~= nil then
-        return { left = value[1], right = value[2] or 0 }
-      end
-      return value
-    end),
-    hl = s.string("FlemmaTurn"),
-  }),
-
-  line_highlights = s.object({
-    enabled = s.boolean(true),
-    frontmatter = highlight({ dark = "Normal+bg:#18111a", light = "Normal-bg:#18111a" }),
-    system = highlight({ dark = "Normal+bg:#101112", light = "Normal-bg:#101112" }),
-    user = highlight({ dark = "Normal+bg:#202122", light = "Normal-bg:#202122" }),
-    assistant = highlight({ dark = "Normal", light = "Normal" }),
-  }),
-
-  ui = s.object({
-    usage = s.object({
-      enabled = s.boolean(true),
-      timeout = s.integer(10000),
-      position = s.enum({
-        "top",
-        "bottom",
-        "top left",
-        "top right",
-        "bottom left",
-        "bottom right",
-      }, "top"),
-      highlight = s.string("@text.note,PmenuSel"),
-    }),
-    progress = s.object({
-      position = s.enum({
-        "top",
-        "bottom",
-        "top left",
-        "top right",
-        "bottom left",
-        "bottom right",
-      }, "bottom left"),
-      highlight = s.string("StatusLine"),
-    }),
-    pricing = s.object({
-      enabled = s.boolean(true),
-      high_cost_threshold = s.integer(30),
-    }),
-    statusline = s.object({
-      format = s.union(
-        s.string([[
-          {{ model.name }}
-          {%- if thinking.enabled then %} ({{ thinking.level }}){% end %}
-          {%- if session.cost then %} %#FlemmaStatusTextMuted#╱%* Σ{{ session.requests }} {{ format.money(session.cost) }}{% end %}
-          {%- if buffer.tokens.input and model.max_input_tokens then %} %#FlemmaStatusTextMuted#╱%* {{ format.percent(buffer.tokens.input / model.max_input_tokens, 0) }}{% end %}
-          {%- if booting then %} %#FlemmaStatusTextMuted#⧖%*{% end %}
-        ]]),
-        s.func():type_as("flemma.statusline.FormatFunction")
-      ),
-    }),
-  }),
+  -- ---------------------------------------------------------------------------
+  -- Provider & model — what to talk to and how
+  -- ---------------------------------------------------------------------------
 
   provider = s.string("anthropic"),
   model = s.optional(s.string()),
@@ -165,6 +56,30 @@ return s.object({
       return require("flemma.provider.registry").get_config_schema(key)
     end,
   }),
+
+  presets = s.map(
+    s.string():validate(function(name)
+      if not vim.startswith(name, "$") then
+        return false, ("preset key '%s' must start with '$'"):format(name)
+      end
+      return true
+    end),
+    s.union(
+      s.string(),
+      s.object({}):passthrough(),
+      s.object({
+        provider = s.optional(s.string()),
+        model = s.optional(s.string()),
+        parameters = s.optional(s.object({}):passthrough()),
+        auto_approve = s.optional(s.list(s.string())),
+      })
+    ),
+    {}
+  ),
+
+  -- ---------------------------------------------------------------------------
+  -- Tools & templating — what the model can do and how prompts are built
+  -- ---------------------------------------------------------------------------
 
   tools = s.object({
     require_approval = s.boolean(true),
@@ -239,25 +154,130 @@ return s.object({
     modules = s.list(s.loadable(), {}),
   }),
 
-  presets = s.map(
-    s.string():validate(function(name)
-      if not vim.startswith(name, "$") then
-        return false, ("preset key '%s' must start with '$'"):format(name)
-      end
-      return true
-    end),
-    s.union(
-      s.string(),
-      s.object({}):passthrough(),
+  -- ---------------------------------------------------------------------------
+  -- Buffer rendering — colors, extmarks, statuscolumn drawn inline with content
+  -- ---------------------------------------------------------------------------
+
+  highlights = s.object({
+    -- Fallback colors used when highlight groups don't define fg/bg
+    defaults = s.object({
+      dark = s.object({ bg = s.string("#000000"), fg = s.string("#ffffff") }),
+      light = s.object({ bg = s.string("#ffffff"), fg = s.string("#000000") }),
+    }),
+    system = highlight("Special"),
+    user = highlight("Normal"),
+    assistant = highlight("Normal"),
+    lua_expression = highlight("PreProc"),
+    lua_code_block = highlight("PreProc"),
+    lua_delimiter = highlight("FlemmaLuaExpression"),
+    user_file_reference = highlight("Include"),
+    thinking_tag = highlight("Comment"),
+    thinking_block = highlight({
+      dark = "Comment+bg:#000000-fg:#333333",
+      light = "Comment-bg:#000000+fg:#333333",
+    }),
+    tool_icon = highlight("FlemmaToolUseTitle"),
+    tool_name = highlight("Function"),
+    tool_use_title = highlight("Function"),
+    tool_result_title = highlight("Function"),
+    tool_result_error = highlight("DiagnosticError"),
+    tool_result_pending = highlight("DiagnosticInfo"),
+    tool_result_approved = highlight("DiagnosticOk"),
+    tool_result_rejected = highlight("DiagnosticWarn"),
+    tool_result_denied = highlight("DiagnosticError"),
+    tool_result_aborted = highlight("DiagnosticError"),
+    tool_preview = highlight("Comment"),
+    fold_preview = highlight("Comment"),
+    fold_meta = highlight("Comment"),
+    tool_detail = highlight("Comment"),
+    busy = highlight("DiagnosticWarn"),
+    role_style = s.string("bold"),
+  }),
+
+  ruler = s.object({
+    enabled = s.boolean(true),
+    char = s.string("\u{2500}"),
+    hl = highlight({ dark = "Comment-fg:#303030", light = "Comment+fg:#303030" }),
+  }),
+
+  turns = s.object({
+    enabled = s.boolean(true),
+    padding = s.union(
       s.object({
-        provider = s.optional(s.string()),
-        model = s.optional(s.string()),
-        parameters = s.optional(s.object({}):passthrough()),
-        auto_approve = s.optional(s.list(s.string())),
-      })
-    ),
-    {}
-  ),
+        left = s.integer(0),
+        right = s.integer(1),
+      }),
+      s.integer()
+    ):coerce(function(value, _ctx)
+      if type(value) == "number" then
+        return { left = value, right = 0 }
+      end
+      if type(value) == "table" and value[1] ~= nil then
+        return { left = value[1], right = value[2] or 0 }
+      end
+      return value
+    end),
+    hl = s.string("FlemmaTurn"),
+  }),
+
+  line_highlights = s.object({
+    enabled = s.boolean(true),
+    frontmatter = highlight({ dark = "Normal+bg:#18111a", light = "Normal-bg:#18111a" }),
+    system = highlight({ dark = "Normal+bg:#101112", light = "Normal-bg:#101112" }),
+    user = highlight({ dark = "Normal+bg:#202122", light = "Normal-bg:#202122" }),
+    assistant = highlight({ dark = "Normal", light = "Normal" }),
+  }),
+
+  -- ---------------------------------------------------------------------------
+  -- UI chrome — floating/overlay elements (usage bar, progress, statusline)
+  -- ---------------------------------------------------------------------------
+
+  ui = s.object({
+    usage = s.object({
+      enabled = s.boolean(true),
+      timeout = s.integer(10000),
+      position = s.enum({
+        "top",
+        "bottom",
+        "top left",
+        "top right",
+        "bottom left",
+        "bottom right",
+      }, "top"),
+      highlight = s.string("@text.note,PmenuSel"),
+    }),
+    progress = s.object({
+      position = s.enum({
+        "top",
+        "bottom",
+        "top left",
+        "top right",
+        "bottom left",
+        "bottom right",
+      }, "bottom left"),
+      highlight = s.string("StatusLine"),
+    }),
+    pricing = s.object({
+      enabled = s.boolean(true),
+      high_cost_threshold = s.integer(30),
+    }),
+    statusline = s.object({
+      format = s.union(
+        s.string([[
+          {{ model.name }}
+          {%- if thinking.enabled then %} ({{ thinking.level }}){% end %}
+          {%- if session.cost then %} %#FlemmaStatusTextMuted#╱%* Σ{{ session.requests }} {{ format.money(session.cost) }}{% end %}
+          {%- if buffer.tokens.input and model.max_input_tokens then %} %#FlemmaStatusTextMuted#╱%* {{ format.percent(buffer.tokens.input / model.max_input_tokens, 0) }}{% end %}
+          {%- if booting then %} %#FlemmaStatusTextMuted#⧖%*{% end %}
+        ]]),
+        s.func():type_as("flemma.statusline.FormatFunction")
+      ),
+    }),
+  }),
+
+  -- ---------------------------------------------------------------------------
+  -- Editing & keymaps — editor behaviour in .chat buffers
+  -- ---------------------------------------------------------------------------
 
   editing = s.object({
     auto_prompt = s.boolean(true),
@@ -277,19 +297,6 @@ return s.object({
     }),
   }),
 
-  integrations = s.object({
-    devicons = s.object({
-      enabled = s.boolean(true),
-      icon = s.string("\u{2234}"), -- ∴ U+2234 Therefore
-    }),
-  }),
-
-  logging = s.object({
-    enabled = s.boolean(false),
-    path = s.string(vim.fn.stdpath("cache") .. "/flemma.log"),
-    level = s.enum({ "TRACE", "DEBUG", "INFO", "WARN", "ERROR" }, "DEBUG"),
-  }):type_as("flemma.logging.Config"),
-
   keymaps = s.object({
     normal = s.object({
       send = s.string("<C-]>"),
@@ -307,9 +314,9 @@ return s.object({
     enabled = s.boolean(true),
   }),
 
-  diagnostics = s.object({
-    enabled = s.boolean(false),
-  }),
+  -- ---------------------------------------------------------------------------
+  -- Infrastructure — sandbox, secrets, logging, diagnostics, integrations
+  -- ---------------------------------------------------------------------------
 
   sandbox = s.object({
     enabled = s.boolean(true),
@@ -337,6 +344,23 @@ return s.object({
   secrets = s.object({
     gcloud = s.object({
       path = s.string("gcloud"),
+    }),
+  }),
+
+  logging = s.object({
+    enabled = s.boolean(false),
+    path = s.string(vim.fn.stdpath("cache") .. "/flemma.log"),
+    level = s.enum({ "TRACE", "DEBUG", "INFO", "WARN", "ERROR" }, "DEBUG"),
+  }):type_as("flemma.logging.Config"),
+
+  diagnostics = s.object({
+    enabled = s.boolean(false),
+  }),
+
+  integrations = s.object({
+    devicons = s.object({
+      enabled = s.boolean(true),
+      icon = s.string("\u{2234}"), -- ∴ U+2234 Therefore
     }),
   }),
 
