@@ -11,7 +11,7 @@ require("flemma").setup({
     temperature = nil,                       -- Optional; omitted unless explicitly set
     timeout = 600,                           -- Response timeout (seconds)
     connect_timeout = 10,                    -- Connection timeout (seconds)
-    thinking = "high",                       -- "minimal" | "low" | "medium" | "high" | "max" | number | false
+    thinking = "high",                       -- "minimal" | "low" | "medium" | "high" | "max" | number | false | { level, foreign }
     cache_retention = "short",               -- "none" | "short" | "long"
     anthropic = {
       thinking_budget = nil,                 -- Override thinking with exact budget (>= 1024)
@@ -23,6 +23,9 @@ require("flemma").setup({
     },
     openai = {
       reasoning = nil,                       -- Override thinking with explicit effort level
+      experimental = {
+        phase = true,                        -- Label assistant message phases for Responses API fidelity
+      },
     },
     moonshot = {
       prompt_cache_key = nil,                -- Optional stable key for prompt caching
@@ -241,6 +244,49 @@ Provider-specific parameters take priority over the unified `thinking` value whe
 4. Moonshot has no provider-specific override — the unified `thinking` parameter controls the binary toggle directly.
 
 This lets you set `thinking = "high"` as a cross-provider default and fine-tune specific providers when needed.
+
+### Thinking object form and cross-provider thinking
+
+The `thinking` parameter accepts a shorthand (string, number, or `false`) or an object with explicit fields:
+
+```lua
+-- Shorthand (equivalent to { level = "high", foreign = "preserve" }):
+thinking = "high"
+
+-- Object form:
+thinking = {
+  level = "high",          -- same values as the shorthand: "minimal" | "low" | "medium" | "high" | "max" | number | false
+  foreign = "preserve",    -- "preserve" (default) | "drop"
+}
+```
+
+The `foreign` field controls what happens to thinking blocks from a different provider when you switch providers mid-conversation. Thinking blocks carry a provider signature — when the current provider doesn't match the signature, those blocks are "foreign."
+
+| `foreign` value            | Behaviour                                                                                                                                                                  |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"preserve"` **(default)** | Foreign thinking blocks are injected as text wrapped in `<thinking>` tags so the new provider can see the prior reasoning. Redacted and empty blocks are silently skipped. |
+| `"drop"`                   | Foreign thinking blocks are silently removed from the prompt.                                                                                                              |
+
+This matters when you start a conversation with one provider (say, Anthropic) and switch to another (say, OpenAI) mid-conversation. With `"preserve"`, the new provider sees the old provider's reasoning as context. With `"drop"`, it sees only the visible messages.
+
+Override per-buffer via frontmatter:
+
+```lua
+flemma.opt.thinking = { level = "medium", foreign = "drop" }
+```
+
+> [!NOTE]
+> **Changed in v0.11.** In v0.10 and earlier, foreign thinking blocks were silently dropped (equivalent to `foreign = "drop"`). Starting with v0.11, the default is `"preserve"`. Set `foreign = "drop"` explicitly to restore the old behaviour.
+
+### OpenAI Responses API phase labeling
+
+When replaying conversation history through OpenAI's Responses API, Flemma labels each assistant message with a phase — `"commentary"` for messages that contain tool calls (intermediate reasoning) and `"final_answer"` for messages without tool calls. This improves multi-turn fidelity by helping the model distinguish its own reasoning phases.
+
+| Key                                    | Default | Effect                                                |
+| -------------------------------------- | ------- | ----------------------------------------------------- |
+| `parameters.openai.experimental.phase` | `true`  | Enable phase labeling on replayed assistant messages. |
+
+Phase labeling is enabled by default. Set `false` to omit phase labels from the conversation history. Use `:Flemma diagnostics:diff` with `diagnostics.enabled = true` to inspect the labeled request body.
 
 ### Editing behaviour
 

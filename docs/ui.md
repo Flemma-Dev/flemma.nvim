@@ -8,27 +8,32 @@ Flemma adapts to your colour scheme with theme-aware highlights, line background
 
 Configuration keys map to dedicated highlight groups:
 
-| Key                              | Applies to                                                               |
-| -------------------------------- | ------------------------------------------------------------------------ |
-| `highlights.system`              | System messages (`FlemmaSystem`)                                         |
-| `highlights.user`                | User messages (`FlemmaUser`)                                             |
-| `highlights.assistant`           | Assistant messages (`FlemmaAssistant`)                                   |
-| `highlights.lua_expression`      | `{{ expression }}` fragments (in `@You` and `@System` messages)          |
-| `highlights.lua_code_block`      | `{% code %}` block content (in `@You` and `@System` messages)            |
-| `highlights.lua_delimiter`       | `{{ }}` and `{% %}` delimiters including trim markers                    |
-| `highlights.user_file_reference` | `@./path` fragments                                                      |
-| `highlights.thinking_tag`        | `<thinking>` / `</thinking>` tags                                        |
-| `highlights.thinking_block`      | Content inside thinking blocks                                           |
-| `highlights.tool_icon`           | `⬡` / `⬢` icons in tool fold text (`FlemmaToolIcon`)                     |
-| `highlights.tool_name`           | Tool name in tool fold text (`FlemmaToolName`)                           |
-| `highlights.tool_use_title`      | `**Tool Use:**` title line (`FlemmaToolUseTitle`)                        |
-| `highlights.tool_result_title`   | `**Tool Result:**` title line (`FlemmaToolResultTitle`)                  |
-| `highlights.tool_result_error`   | `(error)` marker in tool results                                         |
-| `highlights.tool_preview`        | Tool preview virtual lines in pending placeholders (`FlemmaToolPreview`) |
-| `highlights.tool_detail`         | Raw technical detail in structured tool previews (`FlemmaToolDetail`)    |
-| `highlights.fold_preview`        | Content preview text in fold lines (`FlemmaFoldPreview`)                 |
-| `highlights.fold_meta`           | Line count and padding in fold lines (`FlemmaFoldMeta`)                  |
-| `highlights.busy`                | Busy indicator icon in integrations like bufferline (`FlemmaBusy`)       |
+| Key                               | Applies to                                                               |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| `highlights.system`               | System messages (`FlemmaSystem`)                                         |
+| `highlights.user`                 | User messages (`FlemmaUser`)                                             |
+| `highlights.assistant`            | Assistant messages (`FlemmaAssistant`)                                   |
+| `highlights.lua_expression`       | `{{ expression }}` fragments (in `@You` and `@System` messages)          |
+| `highlights.lua_code_block`       | `{% code %}` block content (in `@You` and `@System` messages)            |
+| `highlights.lua_delimiter`        | `{{ }}` and `{% %}` delimiters including trim markers                    |
+| `highlights.user_file_reference`  | `@./path` fragments                                                      |
+| `highlights.thinking_tag`         | `<thinking>` / `</thinking>` tags                                        |
+| `highlights.thinking_block`       | Content inside thinking blocks                                           |
+| `highlights.tool_icon`            | `⬡` / `⬢` icons in tool fold text (`FlemmaToolIcon`)                     |
+| `highlights.tool_name`            | Tool name in tool fold text (`FlemmaToolName`)                           |
+| `highlights.tool_use_title`       | `**Tool Use:**` title line (`FlemmaToolUseTitle`)                        |
+| `highlights.tool_result_title`    | `**Tool Result:**` title line (`FlemmaToolResultTitle`)                  |
+| `highlights.tool_result_error`    | `(error)` suffix on tool result headers (`FlemmaToolResultError`)        |
+| `highlights.tool_result_pending`  | `(pending)` suffix on tool result headers (`FlemmaToolResultPending`)    |
+| `highlights.tool_result_approved` | `(approved)` suffix on tool result headers (`FlemmaToolResultApproved`)  |
+| `highlights.tool_result_rejected` | `(rejected)` suffix on tool result headers (`FlemmaToolResultRejected`)  |
+| `highlights.tool_result_denied`   | `(denied)` suffix on tool result headers (`FlemmaToolResultDenied`)      |
+| `highlights.tool_result_aborted`  | `(aborted)` suffix on tool result headers (`FlemmaToolResultAborted`)    |
+| `highlights.tool_preview`         | Tool preview virtual lines in pending placeholders (`FlemmaToolPreview`) |
+| `highlights.tool_detail`          | Raw technical detail in structured tool previews (`FlemmaToolDetail`)    |
+| `highlights.fold_preview`         | Content preview text in fold lines (`FlemmaFoldPreview`)                 |
+| `highlights.fold_meta`            | Line count and padding in fold lines (`FlemmaFoldMeta`)                  |
+| `highlights.busy`                 | Busy indicator icon in integrations like bufferline (`FlemmaBusy`)       |
 
 Each value accepts a highlight name, a hex colour string, or a table of highlight attributes (`{ fg = "#ffcc00", bold = true }`).
 

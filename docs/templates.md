@@ -2,7 +2,7 @@
 
 Flemma's prompt pipeline runs through three stages: parse, evaluate, and send. Errors at any stage surface via diagnostics before the request leaves your editor.
 
-> For an overview of the `.chat` buffer format (role markers, frontmatter placement, thinking blocks), see the [Understanding `.chat` Buffers](../README.md#understanding-chat-buffers) section in the README.
+> For an overview of the `.chat` buffer format (role markers, frontmatter placement, thinking blocks), see [Why Conversations as Files?](../README.md#why-conversations-as-files) in the README.
 
 ## Frontmatter
 

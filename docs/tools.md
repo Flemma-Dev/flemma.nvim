@@ -2,7 +2,7 @@
 
 Flemma's tool system lets models request actions – run a calculation, execute a shell command, read or modify files – and receive structured results, all within the `.chat` buffer. This document covers approval, per-buffer configuration, custom tool registration, and the resolver API.
 
-For a quick overview of built-in tools and the basic workflow, see the [Tool Calling](../README.md#tool-calling) section in the README.
+For a quick overview of built-in tools and the basic workflow, see [The Agent](../README.md#the-agent) section in the README.
 
 ---
 
