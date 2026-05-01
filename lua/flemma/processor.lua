@@ -1,8 +1,9 @@
-local compiler = require("flemma.templating.compiler")
 local config = require("flemma.config")
+local readiness = require("flemma.readiness")
 local config_store = require("flemma.config.store")
 local ctxutil = require("flemma.context")
 local eval = require("flemma.templating.eval")
+local renderer = require("flemma.templating.renderer")
 local templating = require("flemma.templating")
 local codeblock_parsers = require("flemma.codeblock.parsers")
 local log = require("flemma.logging")
@@ -51,7 +52,7 @@ end
 ---@field tool_use_id string
 ---@field content string
 ---@field parts? table[] Child parts from capture (file/text); populated only for opted-in tools
----@field is_error boolean
+---@field status? flemma.ast.ToolStatus
 
 -- Part types unique to the processor stage (pre-conversion)
 ---@class flemma.processor.FilePart
@@ -130,6 +131,9 @@ local function evaluate_frontmatter_internal(doc, base_context, bufnr)
           table.insert(diagnostics, diagnostic_format.from_validation_failure(failure, fm_defaults))
         end
       else
+        if readiness.is_suspense(result) then
+          error(result)
+        end
         table.insert(
           diagnostics,
           error_to_diagnostic(result, {
@@ -306,12 +310,12 @@ function M.evaluate(doc, base_context, opts)
             input = seg.input,
           })
         elseif seg.kind == "tool_result" then
-          if not seg.status then
+          if not seg.status or seg.status == "error" then
             table.insert(parts, {
               kind = "tool_result",
               tool_use_id = seg.tool_use_id,
               content = seg.content,
-              is_error = seg.is_error,
+              status = seg.status,
             })
           end
         elseif seg.kind == "aborted" then
@@ -337,8 +341,8 @@ function M.evaluate(doc, base_context, opts)
               ast.tool_result(seg.tool_use_id, {
                 segments = {},
                 content = seg.content,
-                is_error = seg.is_error,
                 status = seg.status,
+                meta = seg.meta,
                 start_line = seg.position and seg.position.start_line,
                 end_line = seg.position and seg.position.end_line,
               })
@@ -349,8 +353,7 @@ function M.evaluate(doc, base_context, opts)
         end
       end
 
-      local compile_result = compiler.compile(prepared)
-      local exec_parts, exec_diagnostics = compiler.execute(compile_result, env)
+      local exec_parts, exec_diagnostics = renderer.render_segments(prepared, env)
       parts = exec_parts
       for _, d in ipairs(exec_diagnostics) do
         d.message_role = msg.role

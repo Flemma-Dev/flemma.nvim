@@ -8,7 +8,7 @@ describe("UI Folding", function()
     package.loaded["flemma.ui"] = nil
     package.loaded["flemma.ui.preview"] = nil
     package.loaded["flemma.ui.folding"] = nil
-    package.loaded["flemma.utilities.folding"] = nil
+    package.loaded["flemma.ui.folding.merge"] = nil
     package.loaded["flemma.ui.folding.rules.frontmatter"] = nil
     package.loaded["flemma.ui.folding.rules.thinking"] = nil
     package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
@@ -227,6 +227,7 @@ describe("UI Folding", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
+      vim.wo.conceallevel = 0
 
       local lines = {
         "```lua",
@@ -244,6 +245,7 @@ describe("UI Folding", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
       vim.bo[bufnr].filetype = "chat"
+      vim.wo.conceallevel = 0
 
       local lines = {
         "```lua",
@@ -255,6 +257,47 @@ describe("UI Folding", function()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
       assert.are.equal("<2", folding.get_fold_level(3))
+    end)
+
+    it("should skip frontmatter fold when conceallevel >= 1", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.wo.conceallevel = 2
+
+      local lines = {
+        "```lua",
+        "x = 5",
+        "```",
+        "@You:",
+        "question",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      assert.are.equal("=", folding.get_fold_level(1), "opening fence should not start a fold when conceallevel>=1")
+      assert.are.equal("=", folding.get_fold_level(3), "closing fence should not end a fold when conceallevel>=1")
+    end)
+
+    it("should invalidate fold cache when conceallevel toggles", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+      vim.wo.conceallevel = 0
+
+      local lines = {
+        "```lua",
+        "x = 5",
+        "```",
+        "@You:",
+        "question",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      assert.are.equal(">2", folding.get_fold_level(1), "sanity: fold present at conceallevel=0")
+
+      vim.wo.conceallevel = 2
+
+      assert.are.equal("=", folding.get_fold_level(1), "fold should disappear once conceallevel flips to 2")
     end)
 
     it("should return >2 for completed tool_use block start", function()
@@ -361,9 +404,9 @@ describe("UI Folding", function()
         "",
         "@You:",
         "",
-        "**Tool Result:** `toolu_01`",
+        "**Tool Result:** `toolu_01` (pending)",
         "",
-        "```flemma:tool status=pending",
+        "```",
         "```",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
@@ -388,9 +431,9 @@ describe("UI Folding", function()
         "",
         "@You:",
         "",
-        "**Tool Result:** `toolu_01`",
+        "**Tool Result:** `toolu_01` (approved)",
         "",
-        "```flemma:tool status=approved",
+        "```",
         "```",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
@@ -414,9 +457,9 @@ describe("UI Folding", function()
         "",
         "@You:",
         "",
-        "**Tool Result:** `toolu_01`",
+        "**Tool Result:** `toolu_01` (denied)",
         "",
-        "```flemma:tool status=denied",
+        "```",
         "```",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
@@ -441,9 +484,36 @@ describe("UI Folding", function()
         "",
         "@You:",
         "",
-        "**Tool Result:** `toolu_01`",
+        "**Tool Result:** `toolu_01` (rejected)",
         "",
-        "```flemma:tool status=rejected",
+        "```",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      assert.are.equal(">2", folding.get_fold_level(11))
+    end)
+
+    it("should fold tool_result with error status", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Running a tool.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "bad_cmd" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (error)",
+        "",
+        "```",
+        "command not found: bad_cmd",
         "```",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
@@ -937,9 +1007,10 @@ describe("UI Folding", function()
       assert.is_truthy(text:match("%(4 lines%)"), "Fold text should show line count")
 
       -- Verify highlight groups
-      local icon_chunk = find_chunk(chunks, "◆")
-      assert.is_not_nil(icon_chunk, "Should have icon chunk")
+      local icon_chunk = find_chunk(chunks, "⬡")
+      assert.is_not_nil(icon_chunk, "Should have tool_use icon chunk")
       assert.are.equal("FlemmaToolIcon", icon_chunk[2])
+      assert.is_nil(find_chunk(chunks, "⬢"), "tool_use should not use the tool_result icon")
 
       local title_chunk = find_chunk(chunks, "Tool Use:")
       assert.is_not_nil(title_chunk, "Should have title chunk")
@@ -1001,9 +1072,10 @@ describe("UI Folding", function()
       assert.is_truthy(text:match("%(6 lines%)"), "Fold text should show line count")
 
       -- Verify highlight groups
-      local icon_chunk = find_chunk(chunks, "◆")
-      assert.is_not_nil(icon_chunk, "Should have icon chunk")
+      local icon_chunk = find_chunk(chunks, "⬢")
+      assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
       assert.are.equal("FlemmaToolIcon", icon_chunk[2])
+      assert.is_nil(find_chunk(chunks, "⬡"), "tool_result should not use the tool_use icon")
 
       local title_chunk = find_chunk(chunks, "Tool Result:")
       assert.is_not_nil(title_chunk, "Should have title chunk")
@@ -1049,6 +1121,79 @@ describe("UI Folding", function()
 
       local meta_chunk = chunks[#chunks]
       assert.are.equal("FlemmaFoldMeta", meta_chunk[2])
+    end)
+
+    it("uses fg-only role highlight for content chunks so line_hl_group bg shows through", function()
+      -- Rationale: FlemmaUser/FlemmaSystem/FlemmaAssistant link to Normal/Special/Normal
+      -- and inherit Normal's bg. Using them on fold-text chunks would stamp Normal bg
+      -- over FlemmaLineUser/System/Assistant, creating visual discontinuity across a
+      -- folded message. The fg-only FlemmaRole* variants let line_hl_group provide
+      -- a uniform tint. Mirror of the pattern used by FlemmaThinkingFoldPreview.
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "Hello, who are you?",
+        "@Assistant:",
+        "I am Claude.",
+        "@System:",
+        "You are a helpful assistant.",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      ---Collect the hl groups of every chunk except the role name and the (N lines) suffix
+      ---@param foldstart integer
+      ---@param foldend integer
+      ---@return string[]
+      local function content_hls(foldstart, foldend)
+        vim.v.foldstart = foldstart
+        vim.v.foldend = foldend
+        local chunks = folding.get_fold_text()
+        local hls = {}
+        for i, chunk in ipairs(chunks) do
+          -- Skip ruler (i==1), role name (i==2), and final (N lines) suffix
+          if i > 2 and i < #chunks then
+            table.insert(hls, chunk[2])
+          end
+        end
+        return hls
+      end
+
+      local you_hls = content_hls(1, 2)
+      assert.is_true(#you_hls > 0, "@You fold should produce content chunks")
+      for _, hl in ipairs(you_hls) do
+        assert.are_not.equal("FlemmaUser", hl, "@You content must not use FlemmaUser (brings in Normal bg)")
+      end
+      assert.is_true(
+        vim.tbl_contains(you_hls, "FlemmaRoleUser"),
+        "@You fold should use fg-only FlemmaRoleUser for content chunks"
+      )
+
+      local asst_hls = content_hls(3, 4)
+      for _, hl in ipairs(asst_hls) do
+        assert.are_not.equal("FlemmaAssistant", hl, "@Assistant content must not use FlemmaAssistant")
+      end
+      assert.is_true(
+        vim.tbl_contains(asst_hls, "FlemmaRoleAssistant"),
+        "@Assistant fold should use fg-only FlemmaRoleAssistant for content chunks"
+      )
+
+      local sys_hls = content_hls(5, 6)
+      for _, hl in ipairs(sys_hls) do
+        assert.are_not.equal("FlemmaSystem", hl, "@System content must not use FlemmaSystem")
+      end
+      assert.is_true(
+        vim.tbl_contains(sys_hls, "FlemmaRoleSystem"),
+        "@System fold should use fg-only FlemmaRoleSystem for content chunks"
+      )
     end)
 
     it("should return chunk list for folded thinking block", function()
@@ -1153,9 +1298,9 @@ describe("UI Folding", function()
         "",
         "@You:",
         "",
-        "**Tool Result:** `toolu_01`",
+        "**Tool Result:** `toolu_01` (pending)",
         "",
-        "```flemma:tool status=pending",
+        "```",
         "```",
       }
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
@@ -1219,7 +1364,7 @@ describe("UI Folding", function()
       -- Reconfigure with thinking auto-close disabled
       package.loaded["flemma"] = nil
       package.loaded["flemma.ui.folding"] = nil
-      package.loaded["flemma.utilities.folding"] = nil
+      package.loaded["flemma.ui.folding.merge"] = nil
       package.loaded["flemma.ui.folding.rules.frontmatter"] = nil
       package.loaded["flemma.ui.folding.rules.thinking"] = nil
       package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
@@ -1262,7 +1407,7 @@ describe("UI Folding", function()
     it("should respect auto_close.tool_use = false", function()
       package.loaded["flemma"] = nil
       package.loaded["flemma.ui.folding"] = nil
-      package.loaded["flemma.utilities.folding"] = nil
+      package.loaded["flemma.ui.folding.merge"] = nil
       package.loaded["flemma.ui.folding.rules.frontmatter"] = nil
       package.loaded["flemma.ui.folding.rules.thinking"] = nil
       package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
@@ -1354,7 +1499,7 @@ describe("UI Folding", function()
       -- rather than first-writer-wins. If a thinking block starts on the
       -- same line that a message starts, >2 should beat >1 regardless of
       -- rule evaluation order.
-      local utils = require("flemma.utilities.folding")
+      local utils = require("flemma.ui.folding.merge")
       local fold_map = {}
 
       -- Simulate messages rule writing >1 first
@@ -1366,7 +1511,7 @@ describe("UI Folding", function()
     end)
 
     it("should not downgrade >2 to >1", function()
-      local utils = require("flemma.utilities.folding")
+      local utils = require("flemma.ui.folding.merge")
       local fold_map = {}
 
       -- Higher level first
@@ -1378,7 +1523,7 @@ describe("UI Folding", function()
     end)
 
     it("should keep <2 over <1 on the same line", function()
-      local utils = require("flemma.utilities.folding")
+      local utils = require("flemma.ui.folding.merge")
       local fold_map = {}
 
       utils.set_fold(fold_map, 7, "<1")
@@ -1407,7 +1552,7 @@ describe("UI Folding", function()
         name = "custom",
         auto_close = false,
         populate = function(_, fold_map)
-          local utils = require("flemma.utilities.folding")
+          local utils = require("flemma.ui.folding.merge")
           utils.set_fold(fold_map, 2, ">3")
         end,
         get_closeable_ranges = function(_)
@@ -1441,7 +1586,7 @@ describe("UI Folding", function()
         name = "late_override",
         auto_close = false,
         populate = function(_, fold_map)
-          local utils = require("flemma.utilities.folding")
+          local utils = require("flemma.ui.folding.merge")
           utils.set_fold(fold_map, 2, ">3")
         end,
         get_closeable_ranges = function(_)
@@ -1456,7 +1601,7 @@ describe("UI Folding", function()
     it("should load built-in rules lazily", function()
       -- Clear and re-require to reset state
       package.loaded["flemma.ui.folding"] = nil
-      package.loaded["flemma.utilities.folding"] = nil
+      package.loaded["flemma.ui.folding.merge"] = nil
       package.loaded["flemma.ui.folding.rules.frontmatter"] = nil
       package.loaded["flemma.ui.folding.rules.thinking"] = nil
       package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil
@@ -1527,6 +1672,7 @@ describe("UI Folding", function()
 
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.conceallevel = 0
       vim.wo.foldmethod = "expr"
       vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 1
@@ -1927,6 +2073,172 @@ describe("UI Folding", function()
     end)
   end)
 
+  describe("fold re-close after undo/redo", function()
+    -- KNOWN ISSUE (unfixed): when a user edits lines overlapping a folded
+    -- region and then undoes, Neovim reopens the fold — its open/closed
+    -- state cannot survive structural edits to the boundary lines. The
+    -- auto_closed_folds tracker then blocks the re-close because the fold
+    -- ID is still marked as "already closed once" for this buffer session.
+    --
+    -- A naive "clear tracker on undo/redo" fix was explored and rejected:
+    -- the tracker exists specifically to remember user `zo` intent, and
+    -- clearing it causes ALL user-opened folds to snap shut on the next
+    -- CursorHold — worse than the original bug. A correct fix needs to
+    -- distinguish "Neovim reopened this specific fold because undo touched
+    -- its boundary" from "user opened this with zo earlier." Neovim offers
+    -- no FoldToggled autocmd, so the distinction requires either diffing
+    -- per-fold state across the undo, or tracking user-open intent via
+    -- keymap overrides on zo/zc/zO/zM/zR/etc. Both are larger changes.
+    --
+    -- These tests document the desired behavior and are marked `pending`
+    -- until the proper fix lands.
+
+    local function skip_until_fix()
+      pending("requires per-fold user-intent tracking; see describe block comment")
+      return true
+    end
+
+    it("should re-close a fold that was reopened by undo", function()
+      if skip_until_fix() then
+        return
+      end
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "Hello",
+        "",
+        "@Assistant:",
+        "answer",
+        "",
+        '<thinking vertex:signature="sig2">',
+        "</thinking>",
+        "",
+        "@You:",
+        "follow",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      folding.setup_folding()
+      vim.wo.foldlevel = 99
+      vim.bo[bufnr].undolevels = 1000
+
+      -- Baseline: thinking fold at line 7 auto-closes.
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(7, vim.fn.foldclosed(7), "Thinking fold should be closed initially")
+
+      -- Destructive edit inside the fold: dd the <thinking> open line.
+      -- Neovim reopens the fold because its boundary was touched.
+      vim.api.nvim_win_set_cursor(0, { 7, 0 })
+      vim.cmd("normal! dd")
+      vim.cmd("silent! undo")
+      assert.are.equal(-1, vim.fn.foldclosed(7), "Neovim reopens fold after undo (precondition)")
+
+      -- fold_completed_blocks must re-close: the tracker should have been
+      -- cleared once undo regression was detected.
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(7, vim.fn.foldclosed(7), "Thinking fold should be re-closed after undo")
+    end)
+
+    it("should re-close a fold that was reopened by redo", function()
+      if skip_until_fix() then
+        return
+      end
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "Hello",
+        "",
+        "@Assistant:",
+        "answer",
+        "",
+        '<thinking vertex:signature="sig2">',
+        "</thinking>",
+        "",
+        "@You:",
+        "follow",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      folding.setup_folding()
+      vim.wo.foldlevel = 99
+      vim.bo[bufnr].undolevels = 1000
+
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(7, vim.fn.foldclosed(7), "Thinking fold should be closed initially")
+
+      -- Make an edit that Neovim can redo.
+      vim.api.nvim_win_set_cursor(0, { 7, 0 })
+      vim.cmd("normal! dd")
+      -- After dd the fold is gone; re-close it via the fix path first.
+      folding.fold_completed_blocks(bufnr)
+      vim.cmd("silent! undo")
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(7, vim.fn.foldclosed(7), "Sanity: fold re-closed after undo")
+
+      -- Now redo — fold gets reopened again.
+      vim.cmd("silent! redo")
+      vim.cmd("silent! undo")
+      assert.are.equal(-1, vim.fn.foldclosed(7), "Undo after redo reopens the fold (precondition)")
+
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(7, vim.fn.foldclosed(7), "Thinking fold should be re-closed after redo path")
+    end)
+
+    it("should not clear the tracker on a normal forward edit", function()
+      -- Guard: on normal typing, the tracker must persist so that a
+      -- user-opened fold (via zo) is NOT re-closed on the next pass.
+      local state = require("flemma.state")
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "Hello",
+        "",
+        "@Assistant:",
+        "answer",
+        "",
+        '<thinking vertex:signature="sig2">',
+        "</thinking>",
+        "",
+        "@You:",
+        "follow",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      folding.setup_folding()
+      vim.wo.foldlevel = 99
+      vim.bo[bufnr].undolevels = 1000
+
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(7, vim.fn.foldclosed(7), "Fold should be closed initially")
+
+      -- User opens the fold, then types far away. Tracker must NOT clear.
+      vim.cmd("7 foldopen")
+      vim.api.nvim_win_set_cursor(0, { 11, 7 })
+      vim.cmd("normal! aabc")
+
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(-1, vim.fn.foldclosed(7), "Fold should remain user-opened across forward edits")
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      assert.is_truthy(
+        buffer_state.auto_closed_folds and buffer_state.auto_closed_folds["thinking:2"],
+        "Tracker must retain the fold ID across forward edits"
+      )
+    end)
+  end)
+
   describe("toggle_message_fold", function()
     it("should close the message fold when cursor is inside an open message", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
@@ -2113,6 +2425,7 @@ describe("UI Folding", function()
 
       vim.cmd("new")
       vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.conceallevel = 0
       vim.wo.foldmethod = "expr"
       vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
       vim.wo.foldlevel = 99
@@ -2145,6 +2458,59 @@ describe("UI Folding", function()
       vim.api.nvim_win_set_cursor(0, { 1, 0 })
       -- Should not error
       folding.toggle_message_fold()
+    end)
+
+    it("should notify (not error) when toggling frontmatter at conceallevel>=1", function()
+      local notify = require("flemma.notify")
+      local captured = {}
+      notify._set_impl(function(notification)
+        table.insert(captured, notification)
+        return notification
+      end)
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "```lua",
+        "-- config",
+        "```",
+        "@System:",
+        "prompt",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.conceallevel = 2
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldlevel = 99
+
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+
+      -- Must not throw Vim(foldclose):E490
+      assert.has_no.errors(function()
+        folding.toggle_message_fold()
+      end)
+
+      -- Give the scheduled dispatch time to run
+      vim.wait(10, function()
+        return false
+      end)
+
+      assert.are.equal(1, #captured, "expected one notify dispatch")
+      assert.are.equal(vim.log.levels.INFO, captured[1].level)
+      assert.is_truthy(
+        captured[1].message:find("conceallevel=2"),
+        "notify message should cite the active conceallevel: " .. captured[1].message
+      )
+      assert.is_truthy(
+        captured[1].message:find("Neovim limitation"),
+        "notify message should attribute to Neovim: " .. captured[1].message
+      )
+
+      notify._reset_impl()
     end)
   end)
 end)

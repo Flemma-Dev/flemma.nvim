@@ -239,10 +239,10 @@ end)
 
 local coding_assistant
 
-describe("flemma.personalities.coding_assistant", function()
+describe("flemma.personalities.styles.coding_assistant", function()
   before_each(function()
-    package.loaded["flemma.personalities.coding_assistant"] = nil
-    coding_assistant = require("flemma.personalities.coding_assistant")
+    package.loaded["flemma.personalities.styles.coding_assistant"] = nil
+    coding_assistant = require("flemma.personalities.styles.coding_assistant")
   end)
 
   it("has a render function", function()
@@ -431,7 +431,7 @@ describe("cross-buffer personality environment isolation", function()
     package.loaded["flemma.templating.builtins.stdlib"] = nil
     package.loaded["flemma.templating.builtins.iterators"] = nil
     package.loaded["flemma.personalities"] = nil
-    package.loaded["flemma.personalities.coding_assistant"] = nil
+    package.loaded["flemma.personalities.styles.coding_assistant"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.tools.registry"] = nil
 
@@ -499,7 +499,7 @@ describe("URN dispatch in include()", function()
     package.loaded["flemma.templating.builtins.stdlib"] = nil
     package.loaded["flemma.templating.builtins.iterators"] = nil
     package.loaded["flemma.personalities"] = nil
-    package.loaded["flemma.personalities.coding_assistant"] = nil
+    package.loaded["flemma.personalities.styles.coding_assistant"] = nil
     eval = require("flemma.templating.eval")
     templating = require("flemma.templating")
     templating.setup()
@@ -542,7 +542,7 @@ describe("personality system integration", function()
     package.loaded["flemma.templating.builtins.iterators"] = nil
     package.loaded["flemma.personalities"] = nil
     package.loaded["flemma.personalities.builder"] = nil
-    package.loaded["flemma.personalities.coding_assistant"] = nil
+    package.loaded["flemma.personalities.styles.coding_assistant"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.tools.registry"] = nil
 

@@ -29,7 +29,7 @@ describe("flemma.utilities.string", function()
       assert.are.equal(4, str.strwidth("hi你"))
     end)
 
-    it("counts Unicode symbols used in notifications", function()
+    it("counts Unicode symbols used in the usage bar", function()
       -- "Σ" (U+03A3) is 1 display column
       assert.are.equal(1, str.strwidth("Σ"))
       -- "↑" (U+2191) is 1 display column
@@ -192,6 +192,37 @@ describe("flemma.utilities.string", function()
       assert.are.equal("$0.0034", str.format_money(0.0034))
       assert.are.equal("$0.005", str.format_money(0.005))
       assert.are.equal("$0.001", str.format_money(0.001))
+    end)
+  end)
+
+  describe("format_pricing_suffix", function()
+    it("formats integer per-MTok rates", function()
+      assert.are.equal("$3 input / $15 output per MTok", str.format_pricing_suffix({ input = 3, output = 15 }))
+    end)
+
+    it("formats fractional per-MTok rates with two-decimal precision", function()
+      assert.are.equal("$1.25 input / $5.50 output per MTok", str.format_pricing_suffix({ input = 1.25, output = 5.5 }))
+    end)
+  end)
+
+  describe("format_estimate", function()
+    local middot = "\xc2\xb7"
+
+    it("includes cost and per-MTok suffix when pricing is provided", function()
+      -- 5432 × 3 / 1e6 = 0.016296 → formatted as "$0.016"
+      local expected = "5,432 input tokens "
+        .. middot
+        .. " $0.016 "
+        .. middot
+        .. " claude-sonnet-4-6 ($3 input / $15 output per MTok)"
+      assert.are.equal(expected, str.format_estimate(5432, "claude-sonnet-4-6", { input = 3.0, output = 15.0 }))
+    end)
+
+    it("falls back to tokens-only output when pricing is nil", function()
+      assert.are.equal(
+        "1,234 input tokens " .. middot .. " unknown-model",
+        str.format_estimate(1234, "unknown-model", nil)
+      )
     end)
   end)
 

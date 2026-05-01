@@ -31,6 +31,9 @@ describe("Highlight", function()
     }) do
       vim.api.nvim_set_hl(0, group, {})
     end
+    -- Defensive reset: tests in this describe may install a notify capture impl
+    -- inline; ensure it doesn't leak if the test fails before its own reset runs.
+    require("flemma.notify")._reset_impl()
   end)
 
   describe("role marker highlights", function()
@@ -58,7 +61,7 @@ describe("Highlight", function()
 
     it("should apply role_style as gui attributes", function()
       flemma.setup({
-        role_style = "bold,underline",
+        highlights = { role_style = "bold,underline" },
       })
 
       local bufnr = vim.api.nvim_create_buf(false, false)
@@ -80,14 +83,15 @@ describe("Highlight", function()
     end)
 
     it("should warn on invalid role_style with 'Did you mean' suggestion", function()
+      local notify = require("flemma.notify")
       local notifications = {}
-      local original_notify_once = vim.notify_once
-      vim.notify_once = function(msg, level)
-        table.insert(notifications, { msg = msg, level = level })
-      end
+      notify._set_impl(function(notification)
+        table.insert(notifications, notification)
+        return notification
+      end)
 
       flemma.setup({
-        role_style = "bold,italics",
+        highlights = { role_style = "bold,italics" },
       })
 
       local bufnr = vim.api.nvim_create_buf(false, false)
@@ -97,12 +101,20 @@ describe("Highlight", function()
 
       highlight.apply_syntax()
 
-      vim.notify_once = original_notify_once
+      vim.wait(10, function()
+        return false
+      end)
+      notify._reset_impl()
 
       -- Should have warned about 'italics' and suggested 'italic'
       local found = false
       for _, n in ipairs(notifications) do
-        if n.msg:match("invalid role_style 'italics'") and n.msg:match("Did you mean 'italic'") then
+        if
+          n.message:match("invalid role_style 'italics'")
+          and n.message:match("Did you mean 'italic'")
+          and n.opts
+          and n.opts.once == true
+        then
           found = true
           break
         end
@@ -303,7 +315,7 @@ describe("^ contrast operator in expressions", function()
   end)
 end)
 
-describe("notification bar highlights", function()
+describe("usage bar highlights", function()
   local highlight
   local color
 
@@ -315,39 +327,36 @@ describe("notification bar highlights", function()
     package.loaded["flemma.state"] = nil
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.core"] = nil
-    -- Truly clear notification groups so default = true can re-define them.
+    -- Truly clear the usage bar groups so default = true can re-define them.
     -- nvim_set_hl(0, group, {}) leaves an empty definition that default = true
     -- treats as "already defined"; highlight clear actually removes the group.
     for _, group in ipairs({
-      "FlemmaNotificationsBar",
-      "FlemmaNotificationsSecondary",
-      "FlemmaNotificationsMuted",
-      "FlemmaNotificationsBottom",
-      "FlemmaNotificationsCacheGood",
-      "FlemmaNotificationsCacheBad",
+      "FlemmaUsageBar",
+      "FlemmaUsageBarSecondary",
+      "FlemmaUsageBarMuted",
+      "FlemmaUsageBarCacheGood",
+      "FlemmaUsageBarCacheBad",
     }) do
       vim.cmd("highlight clear " .. group)
     end
-    -- Set up PmenuSel (the fallback in default notifications.highlight list)
-    -- so the notification bar has a base group with both fg and bg
+    -- Set up PmenuSel (the fallback in default ui.usage.highlight list)
+    -- so the usage bar has a base group with both fg and bg
     vim.api.nvim_set_hl(0, "PmenuSel", { bg = 0x3c3836, fg = 0xd5c4a1 })
     vim.api.nvim_set_hl(0, "DiagnosticOk", { fg = 0x00ff00 })
     vim.api.nvim_set_hl(0, "DiagnosticWarn", { fg = 0xffff00 })
-    -- Populate config so notifications.highlight is available; enable border
-    -- so FlemmaNotificationsBottom tests can verify underline styling.
-    require("flemma").setup({ notifications = { border = "underline" } })
+    -- Populate config so ui.usage.highlight is available.
+    require("flemma").setup({})
     highlight = require("flemma.highlight")
     color = require("flemma.utilities.color")
   end)
 
   after_each(function()
     for _, group in ipairs({
-      "FlemmaNotificationsBar",
-      "FlemmaNotificationsSecondary",
-      "FlemmaNotificationsMuted",
-      "FlemmaNotificationsBottom",
-      "FlemmaNotificationsCacheGood",
-      "FlemmaNotificationsCacheBad",
+      "FlemmaUsageBar",
+      "FlemmaUsageBarSecondary",
+      "FlemmaUsageBarMuted",
+      "FlemmaUsageBarCacheGood",
+      "FlemmaUsageBarCacheBad",
     }) do
       vim.api.nvim_set_hl(0, group, {})
     end
@@ -364,62 +373,121 @@ describe("notification bar highlights", function()
     highlight.apply_syntax()
   end
 
-  it("should define FlemmaNotificationsBar with PmenuSel bg", function()
+  it("should define FlemmaUsageBar with PmenuSel bg", function()
     setup_and_apply()
-    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsBar", link = false })
-    assert.is_not_nil(hl.bg, "FlemmaNotificationsBar should have bg")
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaUsageBar", link = false })
+    assert.is_not_nil(hl.bg, "FlemmaUsageBar should have bg")
     -- Should match PmenuSel bg (0x3c3836)
     assert.are.equal(0x3c3836, hl.bg)
   end)
 
-  it("should define FlemmaNotificationsBar with PmenuSel fg", function()
+  it("should define FlemmaUsageBar with PmenuSel fg", function()
     setup_and_apply()
-    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsBar", link = false })
-    assert.is_not_nil(hl.fg, "FlemmaNotificationsBar should have fg")
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaUsageBar", link = false })
+    assert.is_not_nil(hl.fg, "FlemmaUsageBar should have fg")
     assert.are.equal(0xd5c4a1, hl.fg)
   end)
 
-  it("should define FlemmaNotificationsSecondary with same bg as bar", function()
+  it("should define FlemmaUsageBarSecondary with same bg as bar", function()
     setup_and_apply()
-    local bar_hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsBar", link = false })
-    local sec_hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsSecondary", link = false })
+    local bar_hl = vim.api.nvim_get_hl(0, { name = "FlemmaUsageBar", link = false })
+    local sec_hl = vim.api.nvim_get_hl(0, { name = "FlemmaUsageBarSecondary", link = false })
     assert.is_not_nil(sec_hl.bg)
     assert.are.equal(bar_hl.bg, sec_hl.bg)
   end)
 
-  it("should define FlemmaNotificationsMuted with same bg as bar", function()
+  it("should define FlemmaUsageBarMuted with same bg as bar", function()
     setup_and_apply()
-    local bar_hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsBar", link = false })
-    local muted_hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsMuted", link = false })
+    local bar_hl = vim.api.nvim_get_hl(0, { name = "FlemmaUsageBar", link = false })
+    local muted_hl = vim.api.nvim_get_hl(0, { name = "FlemmaUsageBarMuted", link = false })
     assert.is_not_nil(muted_hl.bg)
     assert.are.equal(bar_hl.bg, muted_hl.bg)
   end)
 
-  it("should define FlemmaNotificationsBottom with underline", function()
+  it("should define FlemmaUsageBarCacheGood with sufficient contrast", function()
     setup_and_apply()
-    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsBottom", link = false })
-    assert.is_true(hl.underline, "FlemmaNotificationsBottom should have underline")
-    assert.is_not_nil(hl.sp, "FlemmaNotificationsBottom should have sp")
-  end)
-
-  it("should define FlemmaNotificationsCacheGood with sufficient contrast", function()
-    setup_and_apply()
-    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsCacheGood", link = false })
-    assert.is_not_nil(hl.fg, "FlemmaNotificationsCacheGood should have fg")
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaUsageBarCacheGood", link = false })
+    assert.is_not_nil(hl.fg, "FlemmaUsageBarCacheGood should have fg")
     local fg_hex = string.format("#%06x", hl.fg)
     local bg_hex = string.format("#%06x", 0x3c3836)
     local ratio = color.contrast_ratio(fg_hex, bg_hex)
     assert.is_true(ratio >= 4.5, "cache good fg should have >= 4.5:1 contrast against bar bg: got " .. tostring(ratio))
   end)
 
-  it("should define FlemmaNotificationsCacheBad with sufficient contrast", function()
+  it("should define FlemmaUsageBarCacheBad with sufficient contrast", function()
     setup_and_apply()
-    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaNotificationsCacheBad", link = false })
-    assert.is_not_nil(hl.fg, "FlemmaNotificationsCacheBad should have fg")
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaUsageBarCacheBad", link = false })
+    assert.is_not_nil(hl.fg, "FlemmaUsageBarCacheBad should have fg")
     local fg_hex = string.format("#%06x", hl.fg)
     local bg_hex = string.format("#%06x", 0x3c3836)
     local ratio = color.contrast_ratio(fg_hex, bg_hex)
     assert.is_true(ratio >= 4.5, "cache bad fg should have >= 4.5:1 contrast against bar bg: got " .. tostring(ratio))
+  end)
+end)
+
+describe("FlemmaStatusTextMuted highlight", function()
+  local highlight
+  local original_background
+
+  before_each(function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.highlight"] = nil
+    package.loaded["flemma.utilities.color"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.tools"] = nil
+    package.loaded["flemma.core"] = nil
+    original_background = vim.o.background
+    vim.cmd("highlight clear FlemmaStatusTextMuted")
+    require("flemma").setup({})
+    highlight = require("flemma.highlight")
+  end)
+
+  after_each(function()
+    vim.o.background = original_background
+    vim.api.nvim_set_hl(0, "FlemmaStatusTextMuted", {})
+    vim.api.nvim_set_hl(0, "StatusLine", {})
+  end)
+
+  local function setup_and_apply()
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.bo[bufnr].filetype = "chat"
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "@Assistant:", "test" })
+    highlight.apply_syntax()
+  end
+
+  it("should preserve StatusLine's bg so embedded use stays continuous", function()
+    vim.o.background = "dark"
+    vim.api.nvim_set_hl(0, "StatusLine", { bg = 0x202020, fg = 0xe0e0e0 })
+    setup_and_apply()
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaStatusTextMuted", link = false })
+    assert.are.equal(0x202020, hl.bg)
+  end)
+
+  it("should dim fg by #666666 in dark mode (subtract)", function()
+    vim.o.background = "dark"
+    vim.api.nvim_set_hl(0, "StatusLine", { bg = 0x202020, fg = 0xe0e0e0 })
+    setup_and_apply()
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaStatusTextMuted", link = false })
+    -- 0xe0 - 0x66 = 0x7a per channel
+    assert.are.equal(0x7a7a7a, hl.fg)
+  end)
+
+  it("should dim fg by #666666 in light mode (add)", function()
+    vim.o.background = "light"
+    vim.api.nvim_set_hl(0, "StatusLine", { bg = 0xe0e0e0, fg = 0x202020 })
+    setup_and_apply()
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaStatusTextMuted", link = false })
+    -- 0x20 + 0x66 = 0x86 per channel
+    assert.are.equal(0x868686, hl.fg)
+  end)
+
+  it("should fall back to Comment when StatusLine lacks bg", function()
+    vim.api.nvim_set_hl(0, "StatusLine", { fg = 0xe0e0e0 })
+    setup_and_apply()
+    local hl = vim.api.nvim_get_hl(0, { name = "FlemmaStatusTextMuted" })
+    assert.are.equal("Comment", hl.link)
   end)
 end)
 
@@ -582,5 +650,36 @@ describe("CursorLine overlay highlights", function()
         assert.are.equal(comment_hl.fg, fold_hl.fg, "FlemmaThinkingFoldPreview fg should fall back to Comment fg")
       end
     end)
+  end)
+end)
+
+describe("flemma.highlight.resolve_first_complete", function()
+  local highlight
+
+  before_each(function()
+    package.loaded["flemma.highlight"] = nil
+    highlight = require("flemma.highlight")
+
+    vim.api.nvim_set_hl(0, "TestComplete", { fg = "#ffffff", bg = "#000000" })
+    vim.api.nvim_set_hl(0, "TestOnlyFg", { fg = "#ffffff" })
+    vim.api.nvim_set_hl(0, "TestOnlyBg", { bg = "#000000" })
+    -- NB: leave "TestMissing" unset
+  end)
+
+  it("returns the first group with both fg and bg", function()
+    assert.equals("TestComplete", highlight.resolve_first_complete({ "TestOnlyFg", "TestComplete" }))
+  end)
+
+  it("accepts a comma-separated string", function()
+    assert.equals("TestComplete", highlight.resolve_first_complete("TestOnlyFg,TestComplete"))
+  end)
+
+  it("returns nil when no candidate resolves", function()
+    assert.is_nil(highlight.resolve_first_complete({ "TestOnlyFg", "TestOnlyBg", "TestMissing" }))
+  end)
+
+  it("returns nil on empty input", function()
+    assert.is_nil(highlight.resolve_first_complete(""))
+    assert.is_nil(highlight.resolve_first_complete({}))
   end)
 end)

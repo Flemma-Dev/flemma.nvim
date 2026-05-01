@@ -7,7 +7,7 @@ describe("Folding: empty and self-closing thinking blocks", function()
     package.loaded["flemma.ui"] = nil
     package.loaded["flemma.ui.preview"] = nil
     package.loaded["flemma.ui.folding"] = nil
-    package.loaded["flemma.utilities.folding"] = nil
+    package.loaded["flemma.ui.folding.merge"] = nil
     package.loaded["flemma.ui.folding.rules.frontmatter"] = nil
     package.loaded["flemma.ui.folding.rules.thinking"] = nil
     package.loaded["flemma.ui.folding.rules.tool_blocks"] = nil

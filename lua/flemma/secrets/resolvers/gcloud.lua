@@ -31,97 +31,67 @@ function M.supports(_self, credential, ctx)
   return true
 end
 
---- Run gcloud auth print-access-token with the given binary path and optional env.
----@param path string Binary path or name (e.g. "gcloud" or "/nix/store/.../bin/gcloud")
----@param env? table<string, string>
----@return string|nil token, integer|nil exit_code
-local function run_gcloud(path, env)
-  local cmd = { path, "auth", "print-access-token" }
+---@param path string
+---@param env table<string, string>|nil
+---@param ctx flemma.secrets.Context
+---@param callback fun(result: flemma.secrets.Result|nil)
+local function run_gcloud_async(path, env, ctx, callback)
   local opts = { text = true }
   if env then
     opts.env = env
   end
-
-  local proc = vim.system(cmd, opts)
-  local result = proc:wait()
-
-  if result.code ~= 0 then
-    log.debug("gcloud: command failed with code " .. tostring(result.code))
-    return nil, result.code
-  end
-
-  local token = result.stdout
-  if not token then
-    return nil
-  end
-
-  token = token:gsub("%s+$", "")
-  if #token == 0 then
-    return nil
-  end
-
-  return token
+  vim.system({ path, "auth", "print-access-token" }, opts, function(result)
+    vim.schedule(function()
+      if result.code ~= 0 then
+        ctx:diagnostic("auth failed (exit code " .. tostring(result.code) .. ")")
+        callback(nil)
+        return
+      end
+      local token = (result.stdout or ""):gsub("%s+$", "")
+      if #token == 0 then
+        ctx:diagnostic("returned empty token")
+        callback(nil)
+        return
+      end
+      callback({ value = token, ttl = TOKEN_TTL_SECONDS })
+    end)
+  end)
 end
 
 ---@param _self flemma.secrets.resolvers.Gcloud
 ---@param credential flemma.secrets.Credential
 ---@param ctx flemma.secrets.Context
----@return flemma.secrets.Result|nil
-function M.resolve(_self, credential, ctx)
+---@param callback fun(result: flemma.secrets.Result|nil)
+function M.resolve_async(_self, credential, ctx, callback)
   local cfg = ctx:get_config()
   local path = (cfg and cfg.path) or "gcloud"
 
-  -- Try to get a service account for this service
-  local service_account = secrets.resolve({
-    kind = "service_account",
-    service = credential.service,
-  })
+  secrets.resolve_async({ kind = "service_account", service = credential.service }, function(service_account)
+    if service_account and service_account.value:match("service_account") then
+      local tmp = vim.fn.tempname()
+      local file = io.open(tmp, "w")
+      if not file then
+        log.error("gcloud: failed to create temp file for service account")
+        ctx:diagnostic("failed to create temp file for service account")
+        callback(nil)
+        return
+      end
+      file:write(service_account.value)
+      file:close()
 
-  if service_account and service_account.value:match("service_account") then
-    -- Write service account JSON to temp file
-    local tmp = vim.fn.tempname()
-    local file = io.open(tmp, "w")
-    if not file then
-      log.error("gcloud: failed to create temp file for service account")
-      ctx:diagnostic("failed to create temp file for service account")
-      return nil
-    end
-    file:write(service_account.value)
-    file:close()
-
-    local token, exit_code = run_gcloud(path, { GOOGLE_APPLICATION_CREDENTIALS = tmp })
-
-    -- Delete temp file immediately
-    os.remove(tmp)
-
-    if token then
-      log.debug("gcloud: generated access token from service account")
-      return { value = token, ttl = TOKEN_TTL_SECONDS }
+      run_gcloud_async(path, { GOOGLE_APPLICATION_CREDENTIALS = tmp }, ctx, function(result)
+        os.remove(tmp)
+        if result then
+          log.debug("gcloud: generated access token from service account (async)")
+        end
+        callback(result)
+      end)
+      return
     end
 
-    if exit_code then
-      ctx:diagnostic("auth failed (exit code " .. tostring(exit_code) .. ")")
-    else
-      ctx:diagnostic("returned empty token")
-    end
-    log.debug("gcloud: failed to generate token from service account")
-    return nil
-  end
-
-  -- Fallback: try default gcloud credentials
-  log.debug("gcloud: trying default credentials")
-  local token, exit_code = run_gcloud(path)
-  if token then
-    return { value = token, ttl = TOKEN_TTL_SECONDS }
-  end
-
-  if exit_code then
-    ctx:diagnostic("auth failed (exit code " .. tostring(exit_code) .. ")")
-  else
-    ctx:diagnostic("returned empty token")
-  end
-
-  return nil
+    log.debug("gcloud: trying default credentials (async)")
+    run_gcloud_async(path, nil, ctx, callback)
+  end)
 end
 
 return M

@@ -4,6 +4,7 @@
 ---@class flemma.personalities.Builder
 local M = {}
 
+local path_util = require("flemma.utilities.path")
 local state = require("flemma.state")
 local tools = require("flemma.tools")
 
@@ -70,7 +71,7 @@ function M.build_environment(bufnr)
   local current_file = nil
   local buffer_name = vim.api.nvim_buf_get_name(bufnr)
   if buffer_name ~= "" then
-    local relative = vim.fn.fnamemodify(buffer_name, ":.")
+    local relative = path_util.relative(buffer_name, vim.fn.getcwd())
     if relative ~= buffer_name then
       current_file = relative
     else
@@ -117,7 +118,7 @@ function M.build_project_context(base_dir, targets)
   local seen_content = {}
 
   for _, target in ipairs(targets) do
-    local path = vim.fs.normalize(base_dir .. "/" .. target)
+    local path = path_util.resolve(target, base_dir)
     if vim.fn.filereadable(path) == 1 then
       local file_handle = io.open(path, "r")
       if file_handle then

@@ -9,7 +9,7 @@ package.loaded["flemma.tools.definitions.bash"] = nil
 package.loaded["flemma.tools.definitions.read"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
 package.loaded["flemma.tools.definitions.write"] = nil
-package.loaded["flemma.provider.providers.anthropic"] = nil
+package.loaded["flemma.provider.adapters.anthropic"] = nil
 package.loaded["flemma.config"] = nil
 package.loaded["flemma.config.store"] = nil
 package.loaded["flemma.config.proxy"] = nil
@@ -19,7 +19,7 @@ package.loaded["flemma.config.schema"] = nil
 require("flemma.config").init(require("flemma.config.schema"))
 
 describe("Anthropic Provider", function()
-  local anthropic = require("flemma.provider.providers.anthropic")
+  local anthropic = require("flemma.provider.adapters.anthropic")
   local tools = require("flemma.tools")
 
   before_each(function()
@@ -528,19 +528,27 @@ describe("Anthropic Provider", function()
 
   describe("adaptive thinking", function()
     it("should use adaptive thinking for opus-4-6 models", function()
-      local p = anthropic.new({ model = "claude-opus-4-6", max_tokens = 4000, thinking = "high" })
+      local p = anthropic.new({
+        model = "claude-opus-4-6",
+        max_tokens = 4000,
+        thinking = { level = "high", foreign = "preserve" },
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
       local req = p:build_request(prompt)
 
-      assert.are.same({ type = "adaptive" }, req.thinking)
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
       assert.are.same({ effort = "high" }, req.output_config)
       assert.is_nil(req.temperature)
     end)
 
     it("should use budget_tokens for non-opus models", function()
-      local p = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 4000, thinking = "high" })
+      local p = anthropic.new({
+        model = "claude-sonnet-4-5",
+        max_tokens = 4000,
+        thinking = { level = "high", foreign = "preserve" },
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
@@ -552,63 +560,87 @@ describe("Anthropic Provider", function()
     end)
 
     it("should map effort level from thinking parameter", function()
-      local p = anthropic.new({ model = "claude-opus-4-6", max_tokens = 4000, thinking = "low" })
+      local p = anthropic.new({
+        model = "claude-opus-4-6",
+        max_tokens = 4000,
+        thinking = { level = "low", foreign = "preserve" },
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
       local req = p:build_request(prompt)
 
-      assert.are.same({ type = "adaptive" }, req.thinking)
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
       assert.are.same({ effort = "low" }, req.output_config)
     end)
 
     it("should map thinking='max' to effort='max' on opus-4-6", function()
-      local p = anthropic.new({ model = "claude-opus-4-6", max_tokens = 4000, thinking = "max" })
+      local p = anthropic.new({
+        model = "claude-opus-4-6",
+        max_tokens = 4000,
+        thinking = { level = "max", foreign = "preserve" },
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
       local req = p:build_request(prompt)
 
-      assert.are.same({ type = "adaptive" }, req.thinking)
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
       assert.are.same({ effort = "max" }, req.output_config)
     end)
 
     it("should map thinking='minimal' to effort='low' on opus-4-6", function()
-      local p = anthropic.new({ model = "claude-opus-4-6", max_tokens = 4000, thinking = "minimal" })
+      local p = anthropic.new({
+        model = "claude-opus-4-6",
+        max_tokens = 4000,
+        thinking = { level = "minimal", foreign = "preserve" },
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
       local req = p:build_request(prompt)
 
-      assert.are.same({ type = "adaptive" }, req.thinking)
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
       assert.are.same({ effort = "low" }, req.output_config)
     end)
 
     it("should use adaptive thinking for sonnet-4-6 models", function()
-      local p = anthropic.new({ model = "claude-sonnet-4-6", max_tokens = 4000, thinking = "high" })
+      local p = anthropic.new({
+        model = "claude-sonnet-4-6",
+        max_tokens = 4000,
+        thinking = { level = "high", foreign = "preserve" },
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
       local req = p:build_request(prompt)
 
-      assert.are.same({ type = "adaptive" }, req.thinking)
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
       assert.are.same({ effort = "high" }, req.output_config)
       assert.is_nil(req.temperature)
     end)
 
     it("should clamp 'max' effort to 'high' on sonnet-4-6", function()
-      local p = anthropic.new({ model = "claude-sonnet-4-6", max_tokens = 4000, thinking = "max" })
+      local p = anthropic.new({
+        model = "claude-sonnet-4-6",
+        max_tokens = 4000,
+        thinking = { level = "max", foreign = "preserve" },
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
       local req = p:build_request(prompt)
 
-      assert.are.same({ type = "adaptive" }, req.thinking)
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
       assert.are.same({ effort = "high" }, req.output_config)
     end)
 
     it("should clamp budget_tokens when budget >= max_tokens", function()
-      local p = anthropic.new({ model = "claude-sonnet-4-5", max_tokens = 4000, thinking = "max" })
+      local p = anthropic.new({
+        model = "claude-sonnet-4-5",
+        max_tokens = 4000,
+        thinking = { level = "max", foreign = "preserve" },
+      })
       local prompt = {
         history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
       }
@@ -616,6 +648,84 @@ describe("Anthropic Provider", function()
 
       assert.are.equal("enabled", req.thinking.type)
       assert.are.equal(3999, req.thinking.budget_tokens)
+    end)
+
+    it("should use adaptive thinking for opus-4-7 with display='summarized'", function()
+      local p = anthropic.new({
+        model = "claude-opus-4-7",
+        max_tokens = 16000,
+        thinking = { level = "high", foreign = "preserve" },
+      })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      -- Opus 4.7: adaptive-only (manual budget_tokens rejected), display must be explicit
+      -- so the API returns thinking text (4.7's default is "omitted")
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
+      assert.are.same({ effort = "high" }, req.output_config)
+      assert.is_nil(req.thinking.budget_tokens)
+    end)
+
+    it("should map thinking='max' to effort='max' on opus-4-7", function()
+      local p = anthropic.new({
+        model = "claude-opus-4-7",
+        max_tokens = 16000,
+        thinking = { level = "max", foreign = "preserve" },
+      })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
+      assert.are.same({ effort = "max" }, req.output_config)
+    end)
+
+    it("should route provider-specific effort='xhigh' to output_config on opus-4-7", function()
+      local p = anthropic.new({ model = "claude-opus-4-7", max_tokens = 16000, effort = "xhigh" })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      assert.are.same({ type = "adaptive", display = "summarized" }, req.thinking)
+      assert.are.same({ effort = "xhigh" }, req.output_config)
+    end)
+
+    it("should let effort override thinking on opus-4-7", function()
+      local p = anthropic.new({
+        model = "claude-opus-4-7",
+        max_tokens = 16000,
+        thinking = { level = "low", foreign = "preserve" },
+        effort = "xhigh",
+      })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      assert.are.same({ effort = "xhigh" }, req.output_config)
+    end)
+
+    it("should silently ignore effort on non-adaptive models and honor thinking", function()
+      -- On Sonnet 4.5 (budget-only), `effort` has no adaptive path to land in.
+      -- Fall through to budget-based thinking using the `thinking` param.
+      local p = anthropic.new({
+        model = "claude-sonnet-4-5",
+        max_tokens = 4000,
+        thinking = { level = "high", foreign = "preserve" },
+        effort = "xhigh",
+      })
+      local prompt = {
+        history = { { role = "user", parts = { { kind = "text", text = "test" } } } },
+      }
+      local req = p:build_request(prompt)
+
+      assert.are.equal("enabled", req.thinking.type)
+      assert.is_not_nil(req.thinking.budget_tokens)
+      assert.is_nil(req.output_config)
     end)
   end)
 end)

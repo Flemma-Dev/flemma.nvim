@@ -79,19 +79,6 @@ require("flemma").setup({
       "calculator",
     },
   },
-  highlights = {
-    system = "Comment+fg:#101010",
-    assistant = "Normal+bg:#102020",
-    thinking_block = "Normal+bg:#102020-fg:#505050",
-  },
-  ruler = {
-    hl = "Normal-fg:#606060",
-  },
-  line_highlights = {
-    user = "Normal",
-    system = "Comment+bg:#101010",
-    assistant = "Normal+bg:#102020",
-  },
   editing = {
     auto_write = true,
   },
@@ -115,7 +102,7 @@ require("lualine").setup({
       },
     },
     lualine_x = {
-      { "flemma", icon = "🧠" },
+      { "flemma", icon = "∴" },
     },
     lualine_y = {},
     lualine_z = {},

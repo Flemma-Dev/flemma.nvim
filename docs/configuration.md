@@ -11,7 +11,7 @@ require("flemma").setup({
     temperature = nil,                       -- Optional; omitted unless explicitly set
     timeout = 600,                           -- Response timeout (seconds)
     connect_timeout = 10,                    -- Connection timeout (seconds)
-    thinking = "high",                       -- "minimal" | "low" | "medium" | "high" | "max" | number | false
+    thinking = "high",                       -- "minimal" | "low" | "medium" | "high" | "max" | number | false | { level, foreign }
     cache_retention = "short",               -- "none" | "short" | "long"
     anthropic = {
       thinking_budget = nil,                 -- Override thinking with exact budget (>= 1024)
@@ -23,6 +23,9 @@ require("flemma").setup({
     },
     openai = {
       reasoning = nil,                       -- Override thinking with explicit effort level
+      experimental = {
+        phase = true,                        -- Label assistant message phases for Responses API fidelity
+      },
     },
     moonshot = {
       prompt_cache_key = nil,                -- Optional stable key for prompt caching
@@ -72,11 +75,11 @@ require("flemma").setup({
   templating = {
     modules = {},                            -- Lua module paths for environment populators (see docs/templates.md)
   },
-  defaults = {
-    dark = { bg = "#000000", fg = "#ffffff" },
-    light = { bg = "#ffffff", fg = "#000000" },
-  },
   highlights = {
+    defaults = {
+      dark = { bg = "#000000", fg = "#ffffff" },
+      light = { bg = "#ffffff", fg = "#000000" },
+    },
     system = "Special",
     user = "Normal",
     assistant = "Normal",
@@ -91,14 +94,19 @@ require("flemma").setup({
     tool_name = "Function",
     tool_use_title = "Function",
     tool_result_title = "Function",
-    tool_result_error = "DiagnosticError",
+    tool_result_error    = "DiagnosticError", -- concise `(error)` suffix on tool_result headers
+    tool_result_pending  = "DiagnosticInfo",  -- concise `(pending)` suffix
+    tool_result_approved = "DiagnosticOk",    -- concise `(approved)` suffix
+    tool_result_rejected = "DiagnosticWarn",  -- concise `(rejected)` suffix
+    tool_result_denied   = "DiagnosticError", -- concise `(denied)` suffix
+    tool_result_aborted  = "DiagnosticError", -- concise `(aborted)` suffix
     tool_preview = "Comment",
     tool_detail = "Comment",                 -- Raw technical detail in structured tool previews
     fold_preview = "Comment",
     fold_meta = "Comment",
     busy = "DiagnosticWarn",                 -- Busy indicator icon in integrations (e.g., bufferline)
+    role_style = "bold",                     -- Comma-separated GUI attributes for role names
   },
-  role_style = "bold",
   ruler = {
     enabled = true,
     char = "─",
@@ -106,7 +114,7 @@ require("flemma").setup({
   },
   turns = {
     enabled = true,
-    padding = { left = 1, right = 0 },
+    padding = { left = 0, right = 1 },
     hl = "FlemmaTurn",
   },
   line_highlights = {
@@ -116,30 +124,29 @@ require("flemma").setup({
     user = { dark = "Normal", light = "Normal" },
     assistant = { dark = "Normal+bg:#102020", light = "Normal-bg:#102020" },
   },
-  notifications = {
-    enabled = true,                            -- Set false to suppress all notifications
-    timeout = 10000,                           -- Milliseconds before auto-dismiss (0 = persistent)
-    limit = 1,                                 -- Maximum stacked notifications per buffer
-    position = "overlay",                      -- "overlay" (pinned to window top)
-    zindex = 30,                               -- Floating window z-index (above nvim-treesitter-context)
-    highlight = "@text.note,PmenuSel",         -- Highlight group(s) for bar colours; first with both fg+bg wins
-    border = false,                            -- Bottom border style, or false to disable
+  ui = {
+    usage = {
+      enabled = true,                          -- Show the usage bar after each request
+      timeout = 10000,                         -- Milliseconds before auto-dismiss (0 = persistent)
+      position = "top",                        -- "top" | "bottom" | "top left" | "top right" | "bottom left" | "bottom right"
+      highlight = "@text.note,PmenuSel",       -- Highlight group(s) for bar colours; first with both fg+bg wins
+    },
+    progress = {
+      position = "bottom left",                -- Same anchor enum as ui.usage.position
+      highlight = "StatusLine",                -- Highlight group(s) for the progress bar; first with both fg+bg wins
+    },
+    pricing = { enabled = true },
+    statusline = {
+      format = "{{ model.name }}...",          -- Lua template string or function; see docs/integrations.md for variables/syntax and lua/flemma/config/schema.lua for the shipped default
+    },
   },
-  progress = {
-    highlight = "StatusLine",                  -- Highlight group(s) for the progress bar; first with both fg+bg is used
-    zindex = 50,                               -- Progress bar sits above notifications (zindex 30)
-  },
-  pricing = { enabled = true },
-  statusline = {
-    format = '#{model}#{?#{thinking}, (#{thinking}),}#{?#{booting}, ⏳,}', -- tmux-style format string (see docs/integrations.md)
-  },
-  text_object = "m",                         -- "m" or false to disable
   editing = {
     auto_prompt = true,                      -- Prepend @You: to empty .chat buffers on open
     disable_textwidth = true,
     auto_write = false,                      -- Write buffer after each request
     manage_updatetime = true,                -- Lower updatetime in chat buffers
     foldlevel = 1,                           -- 0=all closed, 1=thinking collapsed, 99=all open
+    conceal = "2nv",                         -- "{level}{cursor}" — hide markdown syntax by default; false/nil to opt out
     auto_close = {
       thinking = true,                       -- Auto-close thinking blocks when they become terminal
       tool_use = true,                       -- Auto-close tool_use blocks when completed
@@ -191,10 +198,12 @@ require("flemma").setup({
       message_next = "]m",
       message_prev = "[m",
       fold_toggle = "<Space>",               -- Toggle fold; false to disable
+      conceal_toggle = "<Space><Space>",     -- Toggle conceal level; false to disable
     },
     insert = {
       send = "<C-]>",                        -- Same hybrid behaviour, re-enters insert after
     },
+    text_object = "m",                       -- "m" or false to disable
   },
   experimental = {
     lsp = vim.lsp ~= nil,                   -- In-process LSP for .chat buffers (hover, go-to-definition)
@@ -205,7 +214,7 @@ require("flemma").setup({
 
 ## Option details
 
-This section explains options that benefit from more context than an inline comment provides. For UI-related options (highlights, line highlights, turns, ruler, notifications), see [docs/ui.md](ui.md) for detailed explanations and examples.
+This section explains options that benefit from more context than an inline comment provides. For UI-related options (highlights, line highlights, turns, ruler, usage bar, progress bar), see [docs/ui.md](ui.md) for detailed explanations and examples.
 
 ### Thinking parameter mapping
 
@@ -236,6 +245,49 @@ Provider-specific parameters take priority over the unified `thinking` value whe
 
 This lets you set `thinking = "high"` as a cross-provider default and fine-tune specific providers when needed.
 
+### Thinking object form and cross-provider thinking
+
+The `thinking` parameter accepts a shorthand (string, number, or `false`) or an object with explicit fields:
+
+```lua
+-- Shorthand (equivalent to { level = "high", foreign = "preserve" }):
+thinking = "high"
+
+-- Object form:
+thinking = {
+  level = "high",          -- same values as the shorthand: "minimal" | "low" | "medium" | "high" | "max" | number | false
+  foreign = "preserve",    -- "preserve" (default) | "drop"
+}
+```
+
+The `foreign` field controls what happens to thinking blocks from a different provider when you switch providers mid-conversation. Thinking blocks carry a provider signature — when the current provider doesn't match the signature, those blocks are "foreign."
+
+| `foreign` value            | Behaviour                                                                                                                                                                  |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"preserve"` **(default)** | Foreign thinking blocks are injected as text wrapped in `<thinking>` tags so the new provider can see the prior reasoning. Redacted and empty blocks are silently skipped. |
+| `"drop"`                   | Foreign thinking blocks are silently removed from the prompt.                                                                                                              |
+
+This matters when you start a conversation with one provider (say, Anthropic) and switch to another (say, OpenAI) mid-conversation. With `"preserve"`, the new provider sees the old provider's reasoning as context. With `"drop"`, it sees only the visible messages.
+
+Override per-buffer via frontmatter:
+
+```lua
+flemma.opt.thinking = { level = "medium", foreign = "drop" }
+```
+
+> [!NOTE]
+> **Changed in v0.11.** In v0.10 and earlier, foreign thinking blocks were silently dropped (equivalent to `foreign = "drop"`). Starting with v0.11, the default is `"preserve"`. Set `foreign = "drop"` explicitly to restore the old behaviour.
+
+### OpenAI Responses API phase labeling
+
+When replaying conversation history through OpenAI's Responses API, Flemma labels each assistant message with a phase — `"commentary"` for messages that contain tool calls (intermediate reasoning) and `"final_answer"` for messages without tool calls. This improves multi-turn fidelity by helping the model distinguish its own reasoning phases.
+
+| Key                                    | Default | Effect                                                |
+| -------------------------------------- | ------- | ----------------------------------------------------- |
+| `parameters.openai.experimental.phase` | `true`  | Enable phase labeling on replayed assistant messages. |
+
+Phase labeling is enabled by default. Set `false` to omit phase labels from the conversation history. Use `:Flemma diagnostics:diff` with `diagnostics.enabled = true` to inspect the labeled request body.
+
 ### Editing behaviour
 
 | Key                         | Default | Effect                                                                                                                                                                                                                |
@@ -245,28 +297,28 @@ This lets you set `thinking = "high"` as a cross-provider default and fine-tune 
 | `editing.auto_write`        | `false` | When `true`, automatically writes the buffer to disk after each completed request.                                                                                                                                    |
 | `editing.manage_updatetime` | `true`  | Lowers `updatetime` to 100ms while a chat buffer is focused (enables responsive `CursorHold` events for UI updates). The original value is restored on `BufLeave`, with reference counting for multiple chat buffers. |
 | `editing.foldlevel`         | `1`     | Initial fold level: `0` = all folds closed, `1` = thinking blocks and frontmatter collapsed, `99` = all folds open.                                                                                                   |
+| `editing.conceal`           | `"2nv"` | Compact `{conceallevel}{concealcursor}` override applied to chat windows. See [docs/conceal.md](conceal.md) for format and the `line_highlights` interaction caveat.                                                  |
 | `editing.auto_close.*`      | varies  | Auto-close (fold) blocks when they reach a terminal state. See [Auto-close behaviour](#auto-close-behaviour) below.                                                                                                   |
 
-### Notification options
+### Usage bar options
 
-The `notifications` key accepts a table with these fields:
+The `ui.usage` key accepts a table with these fields:
 
 | Key         | Default                 | Effect                                                                                                                                                    |
 | ----------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `enabled`   | `true`                  | Set `false` to suppress all notification bars.                                                                                                            |
-| `timeout`   | `10000`                 | Milliseconds before auto-dismiss. Set `0` for persistent notifications.                                                                                   |
-| `limit`     | `1`                     | Maximum stacked notifications per buffer. Oldest are dismissed when the limit is exceeded.                                                                |
-| `position`  | `"overlay"`             | Notification placement. Currently only `"overlay"` (pinned to the top of the chat window).                                                                |
-| `zindex`    | `30`                    | Floating window z-index for notification bars (above nvim-treesitter-context).                                                                            |
+| `enabled`   | `true`                  | Set `false` to suppress the usage bar entirely.                                                                                                           |
+| `timeout`   | `10000`                 | Milliseconds before auto-dismiss. Set `0` for a persistent bar.                                                                                           |
+| `position`  | `"top"`                 | Anchor edge of the chat window. One of `"top"`, `"bottom"`, `"top left"`, `"top right"`, `"bottom left"`, or `"bottom right"`.                            |
 | `highlight` | `"@text.note,PmenuSel"` | Comma-separated highlight groups to derive bar colours from. The first group that provides both `fg` and `bg` is used; remaining groups act as fallbacks. |
-| `border`    | `false`                 | Bottom border style: `"underline"`, `"underdouble"`, `"undercurl"`, `"underdotted"`, `"underdashed"`, or `false` to disable.                              |
+
+**Migration from 0.10 and earlier:** the top-level `notifications` and `progress` config keys moved under `ui`. Rename `notifications.*` keys to `ui.usage.*` (drop the removed `limit`, `border`, `zindex` keys, and replace the old `position = "overlay"` with the new anchor enum — e.g. `"top"`). Rename `progress.*` to `ui.progress.*` (drop `zindex`; add `position` to pick an anchor edge). The `:Flemma notification:recall` command is now `:Flemma usage:recall`, and the `FlemmaNotifications*` highlight groups are renamed to `FlemmaUsageBar*` (see [docs/ui.md](ui.md#usage-bar)). Stacking and the bottom-border feature were removed — each buffer now owns at most one active usage bar.
 
 ### Keymaps and hybrid dispatch
 
 The `send` keymap (<kbd>Ctrl-]</kbd>) is a hybrid dispatch with a three-phase cycle:
 
 1. **Inject:** If the response contains `**Tool Use:**` blocks without corresponding results, insert empty `**Tool Result:**` placeholders for review.
-2. **Execute:** If there are tool result placeholders with a `flemma:tool` status (`approved`, `denied`, `rejected`), process them accordingly. `pending` blocks pause the cycle for user review.
+2. **Execute:** If there are tool result placeholders with a lifecycle status suffix (`approved`, `denied`, `rejected`), process them accordingly. `pending` blocks pause the cycle for user review.
 3. **Send:** If no tools are pending, send the conversation to the provider.
 
 Each press of <kbd>Ctrl-]</kbd> advances to the next applicable phase. In insert mode, <kbd>Ctrl-]</kbd> behaves identically but re-enters insert mode when the operation finishes.
@@ -290,7 +342,7 @@ Autopilot turns Flemma into an autonomous agent. After each LLM response contain
 | `tools.autopilot.enabled`   | `true`  | Enable the autonomous execute-and-resend loop. Set `false` to restore the manual three-phase <kbd>Ctrl-]</kbd> cycle.                                                 |
 | `tools.autopilot.max_turns` | `100`   | Maximum consecutive LLM turns before autopilot stops and emits a warning. Prevents runaway loops when a model repeatedly calls tools without converging on an answer. |
 
-When a tool requires user approval, autopilot injects a `flemma:tool status=pending` placeholder and pauses the loop. The buffer is unlocked at this point, so you can review the tool call. Press <kbd>Ctrl-]</kbd> to approve and resume. If you paste output inside a `pending` block, <kbd>Ctrl-]</kbd> treats it as a user-provided result – the `flemma:tool` fence is stripped and your content is sent to the model. If you edit the content of an `approved` block, Flemma detects your changes, skips execution to protect your edits, and warns so you can review.
+When a tool requires user approval, autopilot injects a tool_result placeholder with a `(pending)` header suffix and pauses the loop. The buffer is unlocked at this point, so you can review the tool call. Press <kbd>Ctrl-]</kbd> to approve and resume. If you paste output inside a `(pending)` block, <kbd>Ctrl-]</kbd> treats it as a user-provided result – the `(pending)` suffix is cleared from the header and your content is sent to the model. If you edit the content of an `(approved)` block, Flemma detects your changes, skips execution to protect your edits, and warns so you can review.
 
 Press <kbd>Ctrl-C</kbd> at any point to cancel the active request or tool execution. Cancellation fully disarms autopilot, so pressing <kbd>Ctrl-]</kbd> afterwards starts a fresh send rather than resuming the interrupted loop.
 
@@ -378,12 +430,12 @@ Override per-buffer via `flemma.opt.tools.max_concurrent` in frontmatter.
 
 ### Progress bar
 
-A persistent progress indicator appears as a floating bar while a request is streaming. It shows the current phase (thinking, streaming text, tool input) and repositions automatically if the target line scrolls off-screen.
+A persistent progress indicator appears as a floating bar while a request is streaming. It shows the current phase (thinking, streaming text, tool input) and re-renders automatically on window resize.
 
-| Key                  | Default        | Effect                                                                  |
-| -------------------- | -------------- | ----------------------------------------------------------------------- |
-| `progress.highlight` | `"StatusLine"` | Highlight group(s) for the progress bar; first with both fg+bg is used. |
-| `progress.zindex`    | `50`           | Floating window z-index (above notifications at 30).                    |
+| Key                     | Default         | Effect                                                                                                                         |
+| ----------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `ui.progress.position`  | `"bottom left"` | Anchor edge of the chat window. One of `"top"`, `"bottom"`, `"top left"`, `"top right"`, `"bottom left"`, or `"bottom right"`. |
+| `ui.progress.highlight` | `"StatusLine"`  | Highlight group(s) for the progress bar; first with both fg+bg is used.                                                        |
 
 ### Diagnostics
 

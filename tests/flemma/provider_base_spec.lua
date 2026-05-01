@@ -101,9 +101,9 @@ describe("flemma.provider.base", function()
         end,
       }
 
-      base._emit_thinking_block(provider, "deep thoughts", "sig123", "anthropic", callbacks)
+      base._emit_thinking_block(provider, "deep thoughts", "sig123", callbacks)
 
-      assert.truthy(emitted:match('<thinking anthropic:signature="sig123">'))
+      assert.truthy(emitted:match('<thinking test:signature="sig123">'))
       assert.truthy(emitted:match("deep thoughts"))
       assert.truthy(emitted:match("</thinking>"))
     end)
@@ -118,7 +118,7 @@ describe("flemma.provider.base", function()
         end,
       }
 
-      base._emit_thinking_block(provider, "deep thoughts", nil, "vertex", callbacks)
+      base._emit_thinking_block(provider, "deep thoughts", nil, callbacks)
 
       assert.truthy(emitted:match("<thinking>\n"))
       assert.truthy(emitted:match("deep thoughts"))
@@ -134,9 +134,9 @@ describe("flemma.provider.base", function()
         end,
       }
 
-      base._emit_thinking_block(provider, "", "sig123", "openai", callbacks)
+      base._emit_thinking_block(provider, "", "sig123", callbacks)
 
-      assert.truthy(emitted:match('<thinking openai:signature="sig123">\n</thinking>'))
+      assert.truthy(emitted:match('<thinking test:signature="sig123">\n</thinking>'))
     end)
 
     it("does nothing when no content and no signature", function()
@@ -148,7 +148,7 @@ describe("flemma.provider.base", function()
         end,
       }
 
-      base._emit_thinking_block(provider, "", nil, "anthropic", callbacks)
+      base._emit_thinking_block(provider, "", nil, callbacks)
 
       assert.is_nil(emitted)
     end)
@@ -163,7 +163,7 @@ describe("flemma.provider.base", function()
         end,
       }
 
-      base._emit_thinking_block(provider, "thoughts", "sig", "anthropic", callbacks)
+      base._emit_thinking_block(provider, "thoughts", "sig", callbacks)
 
       -- Should start directly with <thinking, no leading newlines
       assert.truthy(emitted:match("^<thinking"))
@@ -290,6 +290,29 @@ describe("flemma.provider.base", function()
 
       -- Non-SSE line should not error
       provider:process_response_line("not an sse line", {})
+    end)
+
+    it("does not double-emit on_error when non-SSE JSON error is re-checked in finalize_response", function()
+      local provider = make_provider()
+      function provider:_process_data() end
+      local error_calls = {}
+      local callbacks = {
+        on_error = function(msg)
+          table.insert(error_calls, msg)
+        end,
+      }
+
+      -- Simulate a single-line non-SSE JSON error body (e.g. Anthropic 429)
+      provider:process_response_line(
+        '{"type":"error","error":{"type":"rate_limit_error","message":"rate limit exceeded"}}',
+        callbacks
+      )
+
+      -- After streaming, finalize_response runs _check_buffered_response. Since
+      -- the error was already emitted from the non-SSE line, it must not fire again.
+      base.finalize_response(provider, 0, callbacks)
+
+      assert.equals(1, #error_calls, "on_error should fire exactly once, got " .. #error_calls)
     end)
 
     it("handles [DONE] gracefully", function()

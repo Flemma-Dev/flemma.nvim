@@ -3,10 +3,12 @@
 --- registered resolvers compete (in priority order) to fulfill them.
 local M = {}
 
-local registry = require("flemma.secrets.registry")
 local cache = require("flemma.secrets.cache")
-local log = require("flemma.logging")
 local context = require("flemma.secrets.context")
+local log = require("flemma.logging")
+local notify = require("flemma.notify")
+local readiness = require("flemma.readiness")
+local registry = require("flemma.secrets.registry")
 
 ---@class flemma.secrets.Credential
 ---@field kind string
@@ -31,9 +33,8 @@ local function cache_key(kind, service)
   return kind .. ":" .. service
 end
 
---- Resolve a credential. Checks cache first, then tries resolvers in priority order.
 ---@param credential flemma.secrets.Credential
----@return flemma.secrets.Result|nil result, flemma.secrets.ResolverDiagnostic[]|nil diagnostics
+---@return flemma.secrets.Result
 function M.resolve(credential)
   local key = cache_key(credential.kind, credential.service)
 
@@ -43,26 +44,72 @@ function M.resolve(credential)
     return cached
   end
 
+  local boundary = readiness.get_or_create_boundary("secrets:" .. key, function(done)
+    M.resolve_async(credential, function(result, diagnostics)
+      if result then
+        done({ ok = true })
+      else
+        done({ ok = false, diagnostics = diagnostics })
+      end
+    end)
+  end)
+
+  error(
+    readiness.Suspense.new(
+      "Resolving " .. (credential.description or (credential.kind .. " for " .. credential.service)) .. "\u{2026}",
+      boundary
+    )
+  )
+end
+
+---@param credential flemma.secrets.Credential
+---@param callback fun(result: flemma.secrets.Result|nil, diagnostics: flemma.secrets.ResolverDiagnostic[]|nil)
+function M.resolve_async(credential, callback)
+  local key = cache_key(credential.kind, credential.service)
+  local cached = cache.get(key)
+  if cached then
+    vim.schedule(function()
+      callback(cached, nil)
+    end)
+    return
+  end
   local all_diagnostics = {}
   local sorted = registry.get_all_sorted()
-  for _, resolver in ipairs(sorted) do
-    local ctx = context.new(resolver.name)
-    if resolver:supports(credential, ctx) then
-      log.debug("secrets.resolve(): trying resolver " .. resolver.name .. " for " .. key)
-      local result = resolver:resolve(credential, ctx)
-      if result then
-        log.debug("secrets.resolve(): resolved by " .. resolver.name)
-        cache.set(key, result, credential)
-        return result
+  local index = 1
+
+  local function try_next()
+    while index <= #sorted do
+      local resolver = sorted[index]
+      index = index + 1
+      local ctx = context.new(resolver.name)
+      if resolver:supports(credential, ctx) then
+        if type(resolver.resolve_async) == "function" then
+          resolver:resolve_async(credential, ctx, function(result)
+            vim.list_extend(all_diagnostics, ctx:get_diagnostics())
+            if result then
+              cache.set(key, result, credential)
+              callback(result, nil)
+            else
+              try_next()
+            end
+          end)
+          return
+        end
+        local result = resolver:resolve(credential, ctx)
+        vim.list_extend(all_diagnostics, ctx:get_diagnostics())
+        if result then
+          cache.set(key, result, credential)
+          callback(result, nil)
+          return
+        end
+      else
+        vim.list_extend(all_diagnostics, ctx:get_diagnostics())
       end
     end
-    vim.list_extend(all_diagnostics, ctx:get_diagnostics())
+    callback(nil, #all_diagnostics > 0 and all_diagnostics or nil)
   end
 
-  local description = credential.description or (credential.kind .. " for " .. credential.service)
-  log.debug("secrets.resolve(): no resolver could fulfill: " .. description)
-
-  return nil, #all_diagnostics > 0 and all_diagnostics or nil
+  try_next()
 end
 
 --- Invalidate a specific cached credential.
@@ -88,13 +135,13 @@ function M.register(source, resolver)
   else
     local ok, mod = pcall(require, source)
     if not ok then
-      vim.notify("Flemma: failed to load secrets resolver: " .. source, vim.log.levels.ERROR)
+      notify.error("failed to load secrets resolver: " .. source)
       log.error("secrets.register(): " .. tostring(mod))
       return
     end
     ---@cast mod flemma.secrets.Resolver
     if not mod.name then
-      vim.notify("Flemma: secrets resolver module missing 'name' field: " .. source, vim.log.levels.ERROR)
+      notify.error("secrets resolver module missing 'name' field: " .. source)
       return
     end
     registry.register(mod.name, mod)

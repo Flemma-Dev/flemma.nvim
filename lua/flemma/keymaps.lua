@@ -8,7 +8,9 @@ local core = require("flemma.core")
 local cursor = require("flemma.cursor")
 local executor = require("flemma.tools.executor")
 local navigation = require("flemma.navigation")
+local notify = require("flemma.notify")
 local textobject = require("flemma.textobject")
+local buffer_utils = require("flemma.utilities.buffer")
 local folding = require("flemma.ui.folding")
 local ui = require("flemma.ui")
 
@@ -74,7 +76,7 @@ M.setup = function()
 
             local ok, err = executor.execute_at_cursor(bufnr)
             if not ok then
-              vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+              notify.error(err or "Execution failed")
             end
           end, { buffer = true, desc = "Execute Flemma tool at cursor" })
         end
@@ -84,7 +86,7 @@ M.setup = function()
             local bufnr = vim.api.nvim_get_current_buf()
 
             if not executor.cancel_for_buffer(bufnr) then
-              vim.notify("Flemma: Nothing to cancel", vim.log.levels.INFO)
+              notify.info("Nothing to cancel")
             end
           end, { buffer = true, desc = "Cancel Flemma Request or Tool" })
         end
@@ -122,8 +124,27 @@ M.setup = function()
           end
         end
 
+        -- Conceal toggle keymap (skip when the key starts with mapleader,
+        -- or when editing.conceal is not configured)
+        local conceal_toggle_key = config.keymaps.normal.conceal_toggle
+        if conceal_toggle_key then
+          local leader = vim.g.mapleader or "\\"
+          if not vim.startswith(vim.keycode(conceal_toggle_key), vim.keycode(leader)) then
+            local cfg = config_facade.get()
+            local has_conceal = cfg and cfg.editing and cfg.editing.conceal ~= nil and cfg.editing.conceal ~= false
+            if has_conceal then
+              vim.keymap.set(
+                "n",
+                conceal_toggle_key,
+                ui.toggle_conceal,
+                { buffer = true, desc = "Toggle conceal level" }
+              )
+            end
+          end
+        end
+
         -- Set up text objects with configured key
-        textobject.setup({ text_object = config.text_object })
+        textobject.setup({ text_object = config.keymaps.text_object })
 
         -- Insert-mode : auto-newline for role markers
         vim.keymap.set("i", ":", function()
@@ -174,7 +195,7 @@ M.setup = function()
         if config.keymaps.insert.send then
           vim.keymap.set("i", config.keymaps.insert.send, function()
             local bufnr = vim.api.nvim_get_current_buf()
-            ui.buffer_cmd(bufnr, "stopinsert")
+            buffer_utils.buffer_cmd(bufnr, "stopinsert")
             -- Defer to next event loop iteration so stopinsert takes effect
             -- and we exit any textlock context (e.g., Copilot's keymap wrapper)
             vim.schedule(function()
@@ -182,7 +203,7 @@ M.setup = function()
                 bufnr = bufnr,
                 user_initiated = true,
                 on_request_complete = function()
-                  ui.buffer_cmd(bufnr, "startinsert!")
+                  buffer_utils.buffer_cmd(bufnr, "startinsert!")
                 end,
               })
             end)

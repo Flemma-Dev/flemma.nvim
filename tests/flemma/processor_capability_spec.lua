@@ -41,7 +41,6 @@ describe("Processor: capability-gated tool result evaluation", function()
       ast.tool_result(tool_use_id, {
         segments = result_segments,
         content = content,
-        is_error = false,
         start_line = 2,
         end_line = 4,
       }),
@@ -134,7 +133,6 @@ describe("Processor: capability-gated tool result evaluation", function()
       ast.tool_result("orphan_id", {
         segments = { ast.text("content", nil) },
         content = "orphan fallback",
-        is_error = false,
         start_line = 1,
         end_line = 2,
       }),

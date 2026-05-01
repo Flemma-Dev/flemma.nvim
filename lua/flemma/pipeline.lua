@@ -11,8 +11,9 @@ local M = {}
 ---@field position flemma.ast.Position|nil
 
 --- Validate that all tool_uses have matching resolved tool_results.
---- A tool_result with a non-nil status (e.g., pending, approved) is treated as
---- unresolved — only status=nil means the result is final.
+--- A tool_result with a lifecycle status (pending, approved, denied, rejected,
+--- aborted) is treated as unresolved. status=nil and status="error" both count
+--- as final results ready for the provider.
 ---@param doc flemma.ast.DocumentNode
 ---@return flemma.pipeline.UnresolvedTool[]
 local function validate_tool_results(doc)
@@ -21,7 +22,8 @@ local function validate_tool_results(doc)
   local unresolved = {}
   for _, sibling in pairs(siblings) do
     if sibling.use then
-      if not sibling.result or sibling.result.status then
+      local status = sibling.result and sibling.result.status
+      if not sibling.result or (status and status ~= "error") then
         table.insert(unresolved, {
           id = sibling.use.id,
           name = sibling.use.name,

@@ -3,13 +3,14 @@ Output assets/flemma_cast.mp4
 Set Shell bash
 Set Width 1920
 Set Height 1080
-Set Framerate 60
+Set Framerate 30
 Set Padding 8
 Set Theme "Catppuccin Mocha"
 Set FontFamily "IBM Plex Mono"
 Set FontSize 32
 Set LetterSpacing 0
 Set LineHeight 1
+Set PlaybackSpeed 1.0
 
 Hide
 Type@0ms "cd .vapor/aurora/"

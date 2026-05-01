@@ -3,6 +3,7 @@
 ---@class flemma.Commands
 local M = {}
 
+local notify = require("flemma.notify")
 local string_utils = require("flemma.utilities.string")
 
 ---@class flemma.commands.ActionContext
@@ -27,10 +28,7 @@ local function setup_commands()
     end
     if level then
       if not log.is_valid_level(level) then
-        vim.notify(
-          "Flemma: Invalid log level '" .. level .. "'. Valid levels: TRACE, DEBUG, INFO, WARN, ERROR",
-          vim.log.levels.ERROR
-        )
+        notify.error("Invalid log level '" .. level .. "'. Valid levels: TRACE, DEBUG, INFO, WARN, ERROR")
         return
       end
       log.configure({ level = level:upper() })
@@ -38,16 +36,16 @@ local function setup_commands()
     log.set_enabled(enable)
     if enable then
       local level_display = log.get_level()
-      vim.notify("Flemma: Logging enabled (level: " .. level_display .. ") - " .. log.get_path())
+      notify.info("Logging enabled (level: " .. level_display .. ") - " .. log.get_path())
     else
-      vim.notify("Flemma: Logging disabled")
+      notify.info("Logging disabled")
     end
   end
 
   local function open_log()
     local log = require("flemma.logging")
     if not log.is_enabled() then
-      vim.notify("Flemma: Logging is currently disabled", vim.log.levels.WARN)
+      notify.warn("Logging is currently disabled")
       vim.defer_fn(function()
         vim.cmd("tabedit " .. require("flemma.logging").get_path())
       end, 1000)
@@ -68,23 +66,20 @@ local function setup_commands()
       return function(...)
         local ok, err = pcall(value, ...)
         if not ok then
-          vim.notify(("Flemma: %s callback failed: %s"):format(label, err), vim.log.levels.ERROR)
+          notify.error(("%s callback failed: %s"):format(label, err))
         end
       end
     end
 
     if type(value) ~= "string" then
-      vim.notify(
-        ("Flemma: %s expects a string or function, received %s"):format(label, type(value)),
-        vim.log.levels.WARN
-      )
+      notify.warn(("%s expects a string or function, received %s"):format(label, type(value)))
       return nil
     end
 
     return function()
       local ok, err = pcall(vim.cmd --[[@as function]], value)
       if not ok then
-        vim.notify(("Flemma: %s command failed: %s"):format(label, err), vim.log.levels.ERROR)
+        notify.error(("%s command failed: %s"):format(label, err))
       end
     end
   end
@@ -198,27 +193,27 @@ local function setup_commands()
     action = function()
       local bufnr = vim.api.nvim_get_current_buf()
       if not require("flemma.tools.executor").cancel_for_buffer(bufnr) then
-        vim.notify("Flemma: Nothing to cancel", vim.log.levels.INFO)
+        notify.info("Nothing to cancel")
       end
     end,
   }
 
   command_tree.children.import = {
     action = function()
-      local cfg = require("flemma.config").get()
+      local bufnr = vim.api.nvim_get_current_buf()
+      local cfg = require("flemma.config").get(bufnr)
       local provider_module_path = require("flemma.provider.registry").get(cfg.provider)
       if not provider_module_path then
-        vim.notify("Flemma import: No provider configured", vim.log.levels.ERROR)
+        notify.error("No provider configured. Use :Flemma switch to select one.")
         return
       end
 
       local provider_module = require("flemma.loader").load(provider_module_path)
       if not provider_module or not provider_module.try_import_from_buffer then
-        vim.notify("Flemma import: Current provider does not support importing", vim.log.levels.ERROR)
+        notify.error("Current provider does not support chat imports.")
         return
       end
 
-      local bufnr = vim.api.nvim_get_current_buf()
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
       local chat_content = provider_module.try_import_from_buffer(lines)
@@ -248,20 +243,20 @@ local function setup_commands()
 
         vim.ui.select(providers, { prompt = "Select Provider:" }, function(selected_provider)
           if not selected_provider then
-            vim.notify("Flemma: Provider selection cancelled", vim.log.levels.INFO)
+            notify.info("Provider selection cancelled")
             return
           end
 
           local models = provider_registry.models[selected_provider] or {}
           if type(models) ~= "table" or #models == 0 then
-            vim.notify("Flemma: No models found for provider " .. selected_provider, vim.log.levels.WARN)
+            notify.warn("No models found for provider " .. selected_provider)
             core.switch_provider(selected_provider, nil, {}, { bufnr = bufnr })
             return
           end
 
           vim.ui.select(models, { prompt = "Select Model for " .. selected_provider .. ":" }, function(selected_model)
             if not selected_model then
-              vim.notify("Flemma: Model selection cancelled", vim.log.levels.INFO)
+              notify.info("Model selection cancelled")
               return
             end
             core.switch_provider(selected_provider, selected_model, {}, { bufnr = bufnr })
@@ -274,7 +269,7 @@ local function setup_commands()
       if first_arg and vim.startswith(first_arg, "$") then
         local preset = presets.get(first_arg)
         if not preset then
-          vim.notify(("Flemma: Unknown preset '%s'"):format(first_arg), vim.log.levels.WARN)
+          notify.warn(("Unknown preset '%s'"):format(first_arg))
           return
         end
 
@@ -318,12 +313,8 @@ local function setup_commands()
             ignored[#ignored + 1] = extracted_overrides.positionals[i]
           end
           if #ignored > 0 then
-            vim.notify(
-              ("Flemma: Ignoring extra positional arguments for preset '%s': %s"):format(
-                first_arg,
-                table.concat(ignored, ", ")
-              ),
-              vim.log.levels.WARN
+            notify.warn(
+              ("Ignoring extra positional arguments for preset '%s': %s"):format(first_arg, table.concat(ignored, ", "))
             )
           end
         end
@@ -343,15 +334,12 @@ local function setup_commands()
       local provider = extracted.provider
 
       if not provider then
-        vim.notify("Flemma: Provider name required (use :Flemma switch <provider>)", vim.log.levels.WARN)
+        notify.warn("Provider name required (use :Flemma switch <provider>)")
         return
       end
 
       if #extracted.extra_positionals > 0 then
-        vim.notify(
-          ("Flemma: Ignoring extra positional arguments: %s"):format(table.concat(extracted.extra_positionals, ", ")),
-          vim.log.levels.WARN
-        )
+        notify.warn(("Ignoring extra positional arguments: %s"):format(table.concat(extracted.extra_positionals, ", ")))
       end
 
       local parameters = {}
@@ -425,14 +413,14 @@ local function setup_commands()
         action = function()
           local w = require("flemma.config").writer(nil, require("flemma.config").LAYERS.RUNTIME)
           w.diagnostics.enabled = true
-          vim.notify("Flemma: Diagnostics enabled", vim.log.levels.INFO)
+          notify.info("Diagnostics enabled")
         end,
       },
       disable = {
         action = function()
           local w = require("flemma.config").writer(nil, require("flemma.config").LAYERS.RUNTIME)
           w.diagnostics.enabled = false
-          vim.notify("Flemma: Diagnostics disabled", vim.log.levels.INFO)
+          notify.info("Diagnostics disabled")
         end,
       },
     },
@@ -449,11 +437,67 @@ local function setup_commands()
     },
   }
 
-  command_tree.children.notification = {
+  command_tree.children.usage = {
     children = {
       recall = {
         action = function()
-          require("flemma.notifications").recall_last()
+          require("flemma.usage").recall_last()
+        end,
+      },
+      estimate = {
+        action = function()
+          local bufnr = vim.api.nvim_get_current_buf()
+          local cfg = require("flemma.config").get(bufnr)
+          local provider_registry = require("flemma.provider.registry")
+          local readiness = require("flemma.readiness")
+          local provider_module_path = provider_registry.get(cfg.provider)
+          if not provider_module_path then
+            notify.error("No provider configured. Use :Flemma switch to select one.")
+            return
+          end
+
+          local provider_module = require("flemma.loader").load(provider_module_path)
+          if not provider_module or not provider_module.try_estimate_usage then
+            notify.error("Current provider does not support usage estimates.")
+            return
+          end
+
+          local function on_result(result)
+            if result.err then
+              notify.error("Estimate failed: " .. result.err)
+              return
+            end
+            local response = result.response
+            local model_info = provider_registry.get_model_info(cfg.provider, response.model)
+            local pricing = model_info and model_info.pricing
+            notify.info(string_utils.format_estimate(response.tokens, response.model, pricing))
+          end
+
+          local diagnostic_format = require("flemma.utilities.diagnostic")
+
+          local function attempt()
+            local ok, err = pcall(provider_module.try_estimate_usage, bufnr, on_result)
+            if ok then
+              return
+            end
+            if not readiness.is_suspense(err) then
+              notify.error("Estimate failed: " .. tostring(err))
+              return
+            end
+            ---@cast err flemma.readiness.Suspense
+            local deferred = notify.delay(600).info(err.message)
+            err.boundary:subscribe(function(boundary_result)
+              deferred.cancel()
+              if not boundary_result or not boundary_result.ok then
+                local diag_msg =
+                  diagnostic_format.format_resolver_diagnostics(boundary_result and boundary_result.diagnostics)
+                notify.error("Estimate failed: " .. (diag_msg or err.message))
+                return
+              end
+              attempt()
+            end)
+          end
+          attempt()
         end,
       },
     },
@@ -464,13 +508,13 @@ local function setup_commands()
       enable = {
         action = function()
           require("flemma.autopilot").set_enabled(true)
-          vim.notify("Flemma: Autopilot enabled", vim.log.levels.INFO)
+          notify.info("Autopilot enabled")
         end,
       },
       disable = {
         action = function()
           require("flemma.autopilot").set_enabled(false)
-          vim.notify("Flemma: Autopilot disabled", vim.log.levels.INFO)
+          notify.info("Autopilot disabled")
         end,
       },
       status = {
@@ -488,17 +532,17 @@ local function setup_commands()
           local sandbox = require("flemma.sandbox")
           local ok, err = sandbox.validate_backend()
           if not ok then
-            vim.notify("Flemma: Cannot enable sandbox: " .. err, vim.log.levels.ERROR)
+            notify.error("Cannot enable sandbox: " .. err)
             return
           end
           sandbox.set_enabled(true)
-          vim.notify("Flemma: Sandbox enabled", vim.log.levels.INFO)
+          notify.info("Sandbox enabled")
         end,
       },
       disable = {
         action = function()
           require("flemma.sandbox").set_enabled(false)
-          vim.notify("Flemma: Sandbox disabled", vim.log.levels.INFO)
+          notify.info("Sandbox disabled")
         end,
       },
       status = {
@@ -541,7 +585,31 @@ local function setup_commands()
 
           local ok, err = require("flemma.tools.executor").execute_at_cursor(bufnr)
           if not ok then
-            vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+            notify.error(err or "Execution failed")
+          end
+        end,
+      },
+      approve = {
+        action = function()
+          local bufnr = vim.api.nvim_get_current_buf()
+
+          local ok, err = require("flemma.tools.executor").approve_at_cursor(bufnr)
+          if not ok then
+            notify.error(err or "Approve failed")
+          end
+        end,
+      },
+      reject = {
+        action = function(context)
+          local bufnr = vim.api.nvim_get_current_buf()
+          local message = nil
+          if context.extra_args and #context.extra_args > 0 then
+            message = table.concat(context.extra_args, " ")
+          end
+
+          local ok, err = require("flemma.tools.executor").reject_at_cursor(bufnr, message)
+          if not ok then
+            notify.error(err or "Reject failed")
           end
         end,
       },
@@ -551,9 +619,9 @@ local function setup_commands()
 
           local cancelled = require("flemma.tools.executor").cancel_at_cursor(bufnr)
           if cancelled then
-            vim.notify("Flemma: Tool execution cancelled", vim.log.levels.INFO)
+            notify.info("Tool execution cancelled")
           else
-            vim.notify("Flemma: No pending tool executions", vim.log.levels.INFO)
+            notify.info("No pending tool executions")
           end
         end,
       },
@@ -562,7 +630,7 @@ local function setup_commands()
           local bufnr = vim.api.nvim_get_current_buf()
 
           require("flemma.tools.executor").cancel_all(bufnr)
-          vim.notify("Flemma: All tool executions cancelled", vim.log.levels.INFO)
+          notify.info("All tool executions cancelled")
         end,
       },
       list = {
@@ -571,19 +639,19 @@ local function setup_commands()
 
           local pending = require("flemma.tools.executor").get_pending(bufnr)
           if #pending == 0 then
-            vim.notify("Flemma: No pending tool executions", vim.log.levels.INFO)
+            notify.info("No pending tool executions")
           else
             table.sort(pending, function(a, b)
               return a.started_at < b.started_at
             end)
-            local lines = { "Flemma: Pending tool executions:" }
+            local lines = { "Pending tool executions:" }
             for _, p in ipairs(pending) do
               table.insert(
                 lines,
                 string.format("  %s (%s) - started %ds ago", p.tool_name, p.tool_id, os.time() - p.started_at)
               )
             end
-            vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO)
+            notify.info(table.concat(lines, "\n"))
           end
         end,
       },
@@ -705,7 +773,7 @@ local function setup_commands()
   ---@param opts table
   local function run_command(fargs, opts)
     if #fargs == 0 then
-      vim.notify("Flemma: Available commands → " .. table.concat(available_commands, ", "), vim.log.levels.INFO)
+      notify.info("Available commands → " .. table.concat(available_commands, ", "))
       return
     end
 
@@ -713,23 +781,20 @@ local function setup_commands()
     local node = resolve_command(command_token)
     if not node then
       local suggestion = string_utils.closest_match(command_token, available_commands)
-      local message = ("Flemma: Unknown command '%s'"):format(command_token)
+      local message = ("Unknown command '%s'"):format(command_token)
       if suggestion then
         message = message .. (". Did you mean '%s'?"):format(suggestion)
       end
-      vim.notify(message, vim.log.levels.ERROR)
+      notify.error(message)
       return
     end
 
     if not node.action then
       local child_names = list_child_names(node, command_token)
       if #child_names == 0 then
-        vim.notify(("Flemma: '%s' is not invokable"):format(command_token), vim.log.levels.WARN)
+        notify.warn(("'%s' is not invokable"):format(command_token))
       else
-        vim.notify(
-          ("Flemma: '%s' expects a sub-command (%s)"):format(command_token, table.concat(child_names, ", ")),
-          vim.log.levels.INFO
-        )
+        notify.info(("'%s' expects a sub-command (%s)"):format(command_token, table.concat(child_names, ", ")))
       end
       return
     end

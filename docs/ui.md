@@ -8,27 +8,32 @@ Flemma adapts to your colour scheme with theme-aware highlights, line background
 
 Configuration keys map to dedicated highlight groups:
 
-| Key                              | Applies to                                                               |
-| -------------------------------- | ------------------------------------------------------------------------ |
-| `highlights.system`              | System messages (`FlemmaSystem`)                                         |
-| `highlights.user`                | User messages (`FlemmaUser`)                                             |
-| `highlights.assistant`           | Assistant messages (`FlemmaAssistant`)                                   |
-| `highlights.lua_expression`      | `{{ expression }}` fragments (in `@You` and `@System` messages)          |
-| `highlights.lua_code_block`      | `{% code %}` block content (in `@You` and `@System` messages)            |
-| `highlights.lua_delimiter`       | `{{ }}` and `{% %}` delimiters including trim markers                    |
-| `highlights.user_file_reference` | `@./path` fragments                                                      |
-| `highlights.thinking_tag`        | `<thinking>` / `</thinking>` tags                                        |
-| `highlights.thinking_block`      | Content inside thinking blocks                                           |
-| `highlights.tool_icon`           | `◆`/`◇` icon in tool fold text (`FlemmaToolIcon`)                        |
-| `highlights.tool_name`           | Tool name in tool fold text (`FlemmaToolName`)                           |
-| `highlights.tool_use_title`      | `**Tool Use:**` title line (`FlemmaToolUseTitle`)                        |
-| `highlights.tool_result_title`   | `**Tool Result:**` title line (`FlemmaToolResultTitle`)                  |
-| `highlights.tool_result_error`   | `(error)` marker in tool results                                         |
-| `highlights.tool_preview`        | Tool preview virtual lines in pending placeholders (`FlemmaToolPreview`) |
-| `highlights.tool_detail`         | Raw technical detail in structured tool previews (`FlemmaToolDetail`)    |
-| `highlights.fold_preview`        | Content preview text in fold lines (`FlemmaFoldPreview`)                 |
-| `highlights.fold_meta`           | Line count and padding in fold lines (`FlemmaFoldMeta`)                  |
-| `highlights.busy`                | Busy indicator icon in integrations like bufferline (`FlemmaBusy`)       |
+| Key                               | Applies to                                                               |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| `highlights.system`               | System messages (`FlemmaSystem`)                                         |
+| `highlights.user`                 | User messages (`FlemmaUser`)                                             |
+| `highlights.assistant`            | Assistant messages (`FlemmaAssistant`)                                   |
+| `highlights.lua_expression`       | `{{ expression }}` fragments (in `@You` and `@System` messages)          |
+| `highlights.lua_code_block`       | `{% code %}` block content (in `@You` and `@System` messages)            |
+| `highlights.lua_delimiter`        | `{{ }}` and `{% %}` delimiters including trim markers                    |
+| `highlights.user_file_reference`  | `@./path` fragments                                                      |
+| `highlights.thinking_tag`         | `<thinking>` / `</thinking>` tags                                        |
+| `highlights.thinking_block`       | Content inside thinking blocks                                           |
+| `highlights.tool_icon`            | `⬡` / `⬢` icons in tool fold text (`FlemmaToolIcon`)                     |
+| `highlights.tool_name`            | Tool name in tool fold text (`FlemmaToolName`)                           |
+| `highlights.tool_use_title`       | `**Tool Use:**` title line (`FlemmaToolUseTitle`)                        |
+| `highlights.tool_result_title`    | `**Tool Result:**` title line (`FlemmaToolResultTitle`)                  |
+| `highlights.tool_result_error`    | `(error)` suffix on tool result headers (`FlemmaToolResultError`)        |
+| `highlights.tool_result_pending`  | `(pending)` suffix on tool result headers (`FlemmaToolResultPending`)    |
+| `highlights.tool_result_approved` | `(approved)` suffix on tool result headers (`FlemmaToolResultApproved`)  |
+| `highlights.tool_result_rejected` | `(rejected)` suffix on tool result headers (`FlemmaToolResultRejected`)  |
+| `highlights.tool_result_denied`   | `(denied)` suffix on tool result headers (`FlemmaToolResultDenied`)      |
+| `highlights.tool_result_aborted`  | `(aborted)` suffix on tool result headers (`FlemmaToolResultAborted`)    |
+| `highlights.tool_preview`         | Tool preview virtual lines in pending placeholders (`FlemmaToolPreview`) |
+| `highlights.tool_detail`          | Raw technical detail in structured tool previews (`FlemmaToolDetail`)    |
+| `highlights.fold_preview`         | Content preview text in fold lines (`FlemmaFoldPreview`)                 |
+| `highlights.fold_meta`            | Line count and padding in fold lines (`FlemmaFoldMeta`)                  |
+| `highlights.busy`                 | Busy indicator icon in integrations like bufferline (`FlemmaBusy`)       |
 
 Each value accepts a highlight name, a hex colour string, or a table of highlight attributes (`{ fg = "#ffcc00", bold = true }`).
 
@@ -78,7 +83,7 @@ Composes with blend operations – blends are applied first, then contrast is en
 "DiffChange-fg:#222222^fg:4.5"
 ```
 
-> **Scope:** The `^` operator requires a background context provided by the caller. Currently only the notification bar highlight setup provides this context. Using `^` in user-facing config values (e.g., `ruler.hl`) has no effect – the operator is silently ignored when no background context is available.
+> **Scope:** The `^` operator requires a background context provided by the caller. Currently only the usage bar highlight setup provides this context. Using `^` in user-facing config values (e.g., `ruler.hl`) has no effect – the operator is silently ignored when no background context is available.
 
 **Fallback chains** try groups in order, separated by commas. Only the last group in the chain uses the configured `defaults` when the attribute is missing:
 
@@ -87,12 +92,14 @@ Composes with blend operations – blends are applied first, then contrast is en
 "FooBar+bg:#201020,Normal+bg:#101010"
 ```
 
-The `defaults` table provides the ultimate fallback values:
+The `highlights.defaults` table provides the ultimate fallback values:
 
 ```lua
-defaults = {
-  dark = { bg = "#000000", fg = "#ffffff" },
-  light = { bg = "#ffffff", fg = "#000000" },
+highlights = {
+  defaults = {
+    dark = { bg = "#000000", fg = "#ffffff" },
+    light = { bg = "#ffffff", fg = "#000000" },
+  },
 }
 ```
 
@@ -110,7 +117,7 @@ line_highlights = {
 }
 ```
 
-Role markers (`@You:`, `@System:`, `@Assistant:`) must appear on their own line – content starts on the next line. The `role_style` option (comma-separated GUI attributes such as `"bold,underline"`, default `"bold"`) applies styling to the role name text only (not the ruler), and Flemma validates the attributes on startup, warning on invalid values with typo suggestions.
+Role markers (`@You:`, `@System:`, `@Assistant:`) must appear on their own line – content starts on the next line. The `highlights.role_style` option (comma-separated GUI attributes such as `"bold,underline"`, default `"bold"`) applies styling to the role name text only (not the ruler), and Flemma validates the attributes on startup, warning on invalid values with typo suggestions.
 
 ## Rulers
 
@@ -133,7 +140,7 @@ Turn indicators use the statuscolumn to visually group contiguous request/respon
 ```lua
 turns = {
   enabled = true,
-  padding = { left = 1, right = 0 },   -- also accepts a number (left only) or tuple {L, R}
+  padding = { left = 0, right = 1 },   -- also accepts a number (left only) or tuple {L, R}
   hl = "FlemmaTurn",                   -- links to FlemmaRuler by default
 }
 ```
@@ -156,7 +163,7 @@ When the model enters a thinking/reasoning phase, the spinner animation is repla
 
 ### Booting indicator
 
-When async tool sources (registered via `tools.modules` or `tools.register()` with a resolve function) are still loading, Flemma shows a booting state. The `#{booting}` statusline variable (default: `⏳`) is non-empty during this phase and clears once all sources resolve. A `FlemmaBootComplete` User autocmd fires when booting finishes. If you send a request while booting, the buffer shows "Waiting for tool definitions to load…" and auto-sends once everything resolves.
+When async tool sources (registered via `tools.modules` or `tools.register()` with a resolve function) are still loading, Flemma shows a booting state. The `booting` statusline variable is `true` during this phase and becomes `false` once all sources resolve. A `FlemmaBootComplete` User autocmd fires when booting finishes. If you send a request while booting, the buffer shows "Waiting for tool definitions to load…" and auto-sends once everything resolves.
 
 ### Tool execution indicators
 
@@ -164,7 +171,7 @@ During tool execution, an animated braille spinner appears next to the `**Tool R
 
 ### Tool previews
 
-When tool calls are pending approval, Flemma renders a virtual line inside each empty `flemma:tool` placeholder showing a compact summary of what the tool will do. This lets you review and approve tools without scrolling back to the `**Tool Use:**` block.
+When tool calls are pending approval, Flemma renders a virtual line inside each empty tool_result placeholder fence showing a compact summary of what the tool will do. This lets you review and approve tools without scrolling back to the `**Tool Use:**` block.
 
 Previews dynamically size to the editor's text area width (window width minus sign, number, and fold columns) and truncate with `…` when the content exceeds available space. Built-in tools return structured previews with a **label** (the LLM's stated intent, shown italic) and **detail** (the raw command or path, shown dimmer), separated by an em-dash: `bash: running tests — $ make test`. When width is limited, detail truncates first to preserve the label. Custom tools can provide their own via `format_preview` on the tool definition. Tools without a custom formatter get a generic key-value summary.
 
@@ -186,42 +193,46 @@ The initial fold level is controlled by `editing.foldlevel` (default: `1`, which
 Collapsed folds show a preview of their content with per-segment syntax highlighting. Neovim's `foldtext` returns `{text, hl_group}` tuples so each part of the fold line uses its own highlight group. The format varies by content type:
 
 - **Messages:** `─ Role preview... (N lines)` when rulers are enabled (default), or `@Role: preview... (N lines)` otherwise – role name uses `FlemmaRole{Role}Name`, preview uses `FlemmaFoldPreview`, line count uses `FlemmaFoldMeta`, ruler char uses `FlemmaRuler`.
-- **Tool Use:** `◆ Tool Use: name: label — detail (N lines)` – icon uses `FlemmaToolIcon`, title uses `FlemmaToolUseTitle`, name uses `FlemmaToolName`, label uses `FlemmaToolLabel` (italic), detail uses `FlemmaToolDetail`, meta uses `FlemmaFoldMeta`. When the tool's `format_preview` returns a structured `{ label, detail }`, the label shows the LLM's stated intent and detail shows the raw technical summary. When only detail is available, it falls back to the previous format.
-- **Tool Result:** `◆ Tool Result: name: label — detail (N lines)` – same structure as tool use but with `FlemmaToolResultTitle`. Errors show `(error)` with `FlemmaToolResultError`.
+- **Tool Use:** `⬡ Tool Use: name: label — detail (N lines)` – icon (hollow hexagon) uses `FlemmaToolIcon`, title uses `FlemmaToolUseTitle`, name uses `FlemmaToolName`, label uses `FlemmaToolLabel` (italic), detail uses `FlemmaToolDetail`, meta uses `FlemmaFoldMeta`. When the tool's `format_preview` returns a structured `{ label, detail }`, the label shows the LLM's stated intent and detail shows the raw technical summary. When only detail is available, it falls back to the previous format.
+- **Tool Result:** `⬢ Tool Result: name: label — detail (N lines)` – same structure as tool use but with a filled hexagon icon and `FlemmaToolResultTitle`. Errors show `(error)` with `FlemmaToolResultError`.
 - **Thinking blocks:** `<thinking preview...> (N lines)` – shows `<thinking redacted>` for redacted blocks, or `<thinking provider>` for blocks with a provider signature. Uses `FlemmaThinkingTag` for delimiters and `FlemmaThinkingFoldPreview` for content (fg-only, so the background comes from the line highlight extmark and correctly blends with CursorLine).
 - **Frontmatter:** ` ```language preview... ``` (N lines) ` – uses `FlemmaFoldMeta` for fences and `FlemmaFoldPreview` for content.
 
-## Notifications
+## Usage bar
 
-Completed requests show a single-line notification bar pinned to the top of the chat window. The bar displays model, provider, token counts, cost, and cache statistics – all rendered using priority-based truncation so content degrades gracefully in narrow terminals. Higher-priority items (model name, cost) survive; lower-priority items (individual token breakdowns) are dropped first.
+Completed requests show a single-line usage bar anchored to one of the chat window's edges. The bar displays model, provider, token counts, cost, and cache statistics – all rendered using priority-based truncation so content degrades gracefully in narrow terminals. Higher-priority items (model name, cost) survive; lower-priority items (individual token breakdowns) are dropped first.
 
 ```lua
-notifications = {
-  enabled = true,                          -- set to false to suppress all notification bars
-  timeout = 10000,                         -- milliseconds before auto-dismiss (0 = persistent)
-  limit = 1,                               -- maximum stacked notifications per buffer
-  position = "overlay",                    -- "overlay" (pinned to window top)
-  zindex = 30,                             -- floating window z-index (above nvim-treesitter-context)
-  highlight = "@text.note, PmenuSel",      -- highlight group(s) for bar colours; first with both fg+bg wins
-  border = false,                          -- bottom border style, or false to disable
+ui = {
+  usage = {
+    enabled = true,                        -- set to false to suppress the usage bar
+    timeout = 10000,                       -- milliseconds before auto-dismiss (0 = persistent)
+    position = "top",                      -- one of: top, bottom, top left, top right,
+                                           --          bottom left, bottom right
+    highlight = "@text.note,PmenuSel",     -- highlight group(s) for bar colours; first with both fg+bg wins
+  },
 }
 ```
 
 The `highlight` option accepts a comma-separated list of highlight group names. Flemma tries each in order and uses the first one that provides both `fg` and `bg` attributes. This lets you specify preferred groups with fallbacks for colorschemes that may not define them all.
 
-Notification bars derive all colours from the resolved highlight group using three foreground tiers against a shared background:
+The usage bar derives all colours from the resolved highlight group using three foreground tiers against a shared background:
 
-| Tier      | Group                          | Used by                                  |
-| --------- | ------------------------------ | ---------------------------------------- |
-| Primary   | `FlemmaNotificationsBar`       | Model name, cost                         |
-| Secondary | `FlemmaNotificationsSecondary` | Token counts, cache label, request count |
-| Muted     | `FlemmaNotificationsMuted`     | Provider, separators, session label      |
+| Tier      | Group                     | Used by                                  |
+| --------- | ------------------------- | ---------------------------------------- |
+| Primary   | `FlemmaUsageBar`          | Model name, cost                         |
+| Secondary | `FlemmaUsageBarSecondary` | Token counts, cache label, request count |
+| Muted     | `FlemmaUsageBarMuted`     | Provider, separators, session label      |
 
-Cache hit percentage uses semantic colours (`DiagnosticOk` / `DiagnosticWarn`) with automatic WCAG contrast enforcement against the bar background. The bottom-most bar has a border (`FlemmaNotificationsBottom`) whose style is controlled by the `border` option – set to `"underdouble"`, `"undercurl"`, `"underdotted"`, `"underdashed"`, or `false` to disable. The border colour matches the muted tier fg for a uniform appearance with the `│` separators.
+Cache hit percentage uses semantic colours through `FlemmaUsageBarCacheGood` (links to `DiagnosticOk`) and `FlemmaUsageBarCacheBad` (links to `DiagnosticWarn`) with automatic WCAG contrast enforcement against the bar background.
 
-Bars stack vertically when multiple are active – the most recent appears at the top, older ones shift down. Each `.chat` buffer has its own notification stack. Notifications for hidden buffers are queued and shown when the buffer becomes visible. Bars re-render automatically on window resize to reflow content for the new width. Recall the most recent notification with `:Flemma notification:recall`.
+Each `.chat` buffer owns at most one active usage bar — a new request dismisses the previous bar before rendering the next. Bars re-render automatically on window resize to reflow content for the new width. Recall the most recent usage bar with `:Flemma usage:recall`.
 
-See `lua/flemma/notifications.lua` for the full implementation.
+Before sending, preview the cost of the next request with `:Flemma usage:estimate`. The command delegates to the active provider — Anthropic (`POST /v1/messages/count_tokens`), OpenAI (`POST /v1/responses/input_tokens`), Google Vertex AI (`{model}:countTokens`), and Moonshot (`POST /v1/tokenizers/estimate-token-count`) implement it today. Each sends the exact body a real request would produce, with provider-specific counting-only fields removed, and reports input tokens, estimated cost, and the model's per-MTok rates as a single `notify.info` line. Output cost is intentionally not projected: we have no way to know how long the model will talk before it starts.
+
+For OpenAI, neither the public token-counting/API docs nor live curl probes of successful responses exposed billing, quota, or rate-limit metadata for the token-count endpoint. Flemma therefore treats estimates conservatively as real API requests that may count against account limits. The default statusline includes these debounced estimates; custom statusline formats only get them if they reference `buffer.tokens.input`. Estimates are deduped and suppressed while a chat request is already in flight.
+
+See `lua/flemma/usage.lua` for the driver and `lua/flemma/ui/bar/` for the shared Bar rendering class.
 
 ## Extmark priority
 
@@ -240,12 +251,15 @@ This hierarchy is defined in `lua/flemma/ui/init.lua` and is not user-configurab
 
 ## Progress bar
 
-While a request is streaming, Flemma shows a persistent progress indicator as a floating bar anchored to the assistant's response line. The bar displays the current phase (thinking, streaming text, receiving tool input) and repositions automatically if the target line scrolls off-screen. When the response line is visible in the window, the progress bar appears inline; when it scrolls out of view, a floating indicator appears so you always know what Flemma is doing.
+While a request is streaming, Flemma shows a persistent progress indicator as a floating bar anchored to one of the chat window's edges. The bar displays the current phase (thinking, streaming text, receiving tool input) and re-renders automatically on window resize.
 
 ```lua
-progress = {
-  highlight = "StatusLine",  -- highlight group(s); first with both fg+bg is used
-  zindex = 50,               -- above notifications (zindex 30)
+ui = {
+  progress = {
+    position = "bottom left",  -- one of: top, bottom, top left, top right,
+                               --          bottom left, bottom right
+    highlight = "StatusLine",  -- highlight group(s); first with both fg+bg is used
+  },
 }
 ```
 

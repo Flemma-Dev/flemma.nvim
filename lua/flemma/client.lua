@@ -2,6 +2,7 @@
 --- Handles all HTTP requests and transport mechanisms
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local notify = require("flemma.notify")
 local sink = require("flemma.sink")
 local version = require("flemma.version")
 
@@ -47,8 +48,12 @@ function M.find_fixture_for_endpoint(endpoint)
   return nil
 end
 
+---@class flemma.client.BodyFileOptions
+---@field request_body table<string, any>
+---@field trailing_keys? string[]
+
 ---Create temporary file for request body
----@param opts flemma.client.RequestOptions
+---@param opts flemma.client.BodyFileOptions
 ---@return string|nil tmp_file, string|nil err, string|nil raw_json
 local function create_tmp_file(opts)
   -- Create temporary file for request body
@@ -167,13 +172,11 @@ end
 ---@field on_request_complete? fun(code: number) Called when the HTTP request process exits
 
 --- Request options for send_request
----@class flemma.client.RequestOptions
----@field request_body table<string, any> The JSON request body to send
+---@class flemma.client.RequestOptions : flemma.client.BodyFileOptions
 ---@field headers string[] Array of HTTP headers
 ---@field endpoint string The API endpoint URL
 ---@field parameters flemma.provider.Parameters Provider parameters (for timeouts, model name, etc.)
 ---@field callbacks flemma.client.RequestCallbacks Callback functions for handling responses
----@field trailing_keys? string[] Keys to place last in JSON serialization for cache-friendly ordering
 ---@field process_response_line_fn? fun(line: string, callbacks: flemma.client.RequestCallbacks) Function to process each response line
 ---@field finalize_response_fn? fun(code: number, callbacks: flemma.client.RequestCallbacks) Function to finalize provider response processing
 ---@field on_response_headers_fn? fun(headers: table<string, string[]>) Called with parsed HTTP response headers (lowercase keys)
@@ -338,6 +341,122 @@ function M.send_request(opts)
   return job_id
 end
 
+---@class flemma.client.JsonRequestOptions : flemma.client.BodyFileOptions
+---@field headers string[]
+---@field endpoint string
+---@field parameters flemma.provider.Parameters Provider parameters (for timeouts)
+
+---One-shot HTTP request that accumulates the full response body into a string.
+---Non-streaming alternative to `M.send_request` — intended for small probe
+---endpoints (e.g., Anthropic's count_tokens). When a fixture is registered for
+---the endpoint, its body is streamed via `cat` (no HTTP headers to skip).
+---
+---`on_body` is invoked exactly once, whether the job succeeded or failed.
+---The body string has no HTTP headers and no trailing framing — parsing is the
+---caller's responsibility (e.g. via `flemma.utilities.json.decode`).
+---@param opts flemma.client.JsonRequestOptions
+---@param on_body fun(body: string|nil, exit_code: integer, err: string|nil)
+---@return integer|nil job_id
+function M.send_json_request(opts, on_body)
+  local fixture_path = M.find_fixture_for_endpoint(opts.endpoint)
+
+  local tmp_file, tmp_err = create_tmp_file(opts)
+  if not tmp_file then
+    on_body(nil, -1, tmp_err or "Failed to create temporary file")
+    return nil
+  end
+
+  local cmd
+  if fixture_path then
+    cmd = { "cat", fixture_path }
+    log.debug("send_json_request(): Using fixture for endpoint " .. opts.endpoint .. ": " .. fixture_path)
+    log.debug("send_json_request(): ... $ " .. table.concat(cmd, " "))
+  else
+    cmd = M.prepare_curl_command(tmp_file, opts.headers, opts.endpoint, opts.parameters)
+    log.debug("send_json_request(): Sending request to endpoint: " .. opts.endpoint)
+    local curl_cmd_log = format_curl_command_for_log(cmd)
+    curl_cmd_log = curl_cmd_log:gsub(vim.fn.escape(tmp_file, "%-%."), "request.json")
+    log.debug("send_json_request(): ... $ " .. curl_cmd_log)
+    log.debug("send_json_request(): ... @request.json <<< " .. json.encode(opts.request_body))
+  end
+
+  -- Line framing state. curl -i prefixes the body with HTTP headers separated
+  -- by a blank line; skip them. Fixtures are body-only, so no skipping.
+  local parsing_headers = not fixture_path
+  local trailing = ""
+  local body_lines = {} ---@type string[]
+  local stderr_buffer = ""
+
+  local job_id = vim.fn.jobstart(cmd, {
+    detach = true,
+    on_stdout = function(_, data)
+      if not data then
+        return
+      end
+      data[1] = trailing .. data[1]
+      trailing = data[#data]
+      for i = 1, #data - 1 do
+        local line = data[i]
+        if parsing_headers then
+          local stripped = line:gsub("\r$", "")
+          if stripped == "" then
+            parsing_headers = false
+          end
+          -- Discard header lines up to (and including) the separator.
+        else
+          if #line > 0 then
+            log.trace("send_json_request(): on_stdout: " .. line)
+          end
+          table.insert(body_lines, line)
+        end
+      end
+    end,
+    on_stderr = function(_, data)
+      if not data then
+        return
+      end
+      local is_eof = (#data == 1 and data[1] == "")
+      data[1] = stderr_buffer .. data[1]
+      stderr_buffer = data[#data]
+      for i = 1, #data - 1 do
+        local line = data[i]
+        if line and #line > 0 then
+          log.warn("send_json_request(): stderr: " .. line)
+        end
+      end
+      if is_eof and #stderr_buffer > 0 then
+        log.warn("send_json_request(): stderr: " .. stderr_buffer)
+        stderr_buffer = ""
+      end
+    end,
+    on_exit = function(_, code)
+      os.remove(tmp_file)
+
+      -- Flush any trailing bytes that weren't terminated with a newline.
+      if #trailing > 0 then
+        if parsing_headers then
+          log.warn("send_json_request(): Stream ended during header parsing: " .. trailing)
+          parsing_headers = false
+        else
+          log.trace("send_json_request(): on_stdout: " .. trailing)
+        end
+        table.insert(body_lines, trailing)
+        trailing = ""
+      end
+
+      if code ~= 0 then
+        log.info("send_json_request(): on_exit: Request completed with exit code: " .. tostring(code))
+      else
+        log.debug("send_json_request(): on_exit: Request completed with exit code: 0")
+      end
+
+      on_body(table.concat(body_lines, "\n"), code, nil)
+    end,
+  })
+
+  return job_id
+end
+
 ---Cancel ongoing request
 ---@param job_id integer|nil
 ---@return boolean cancelled
@@ -351,7 +470,7 @@ function M.cancel_request(job_id)
 
   if not ok then
     log.warn("Failed to get job PID for cancellation (job may have already completed): " .. tostring(job_id))
-    vim.notify("Flemma: Request already completed or terminated", vim.log.levels.WARN)
+    notify.warn("Request already completed or terminated")
     return false
   end
 

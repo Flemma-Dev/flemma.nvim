@@ -156,7 +156,7 @@ describe("Read Tool", function()
   end)
 
   describe("binary detection", function()
-    local png_fixture = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":h") .. "/../fixtures/sample.png"
+    local png_fixture = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h") .. "/../fixtures/sample.png"
 
     it("has template_tool_result capability", function()
       assert.is_not_nil(read_def.capabilities)
@@ -197,6 +197,34 @@ describe("Read Tool", function()
       -- Output must start with @./
       assert.is_truthy(result.output:match("^@%./"), "expected ./ prefix, got: " .. tostring(result.output))
       assert.is_truthy(result.output:match(";type=image/png$"))
+    end)
+
+    it("emits @// prefix for absolute path in file reference", function()
+      local result = read_def.execute({ label = "test", path = png_fixture }, ctx)
+      assert.is_true(result.success)
+      assert.is_truthy(
+        result.output:match("^@//"),
+        "expected @// prefix for absolute path, got: " .. tostring(result.output)
+      )
+      assert.is_truthy(result.output:match(";type=image/png$"))
+    end)
+
+    it("URL-encodes spaces in file reference path", function()
+      local spaced_png = test_dir .. "/image (1).png"
+      vim.fn.system("cp " .. vim.fn.shellescape(png_fixture) .. " " .. vim.fn.shellescape(spaced_png))
+
+      local test_ctx = require("flemma.tools.executor").build_execution_context({
+        bufnr = bufnr,
+        cwd = test_dir,
+        timeout = 30,
+        tool_name = "read",
+        __dirname = test_dir,
+      })
+
+      local result = read_def.execute({ label = "test", path = "image (1).png" }, test_ctx)
+      assert.is_true(result.success)
+      assert.is_truthy(result.output:match("%%20"), "expected URL-encoded space, got: " .. tostring(result.output))
+      assert.is_falsy(result.output:match(" "), "should not contain literal spaces in file reference")
     end)
 
     it("returns normal text content for .lua file", function()
@@ -242,8 +270,11 @@ describe("Read Tool", function()
       -- a ~/ input path should be emitted as @~/ directly (not computed relative)
       local result = read_def.execute({ label = "test", path = png_fixture }, tilde_ctx)
       assert.is_true(result.success)
-      -- Non-tilde paths get @./ prefix
-      assert.is_truthy(result.output:match("^@%./"))
+      -- Absolute paths get @// prefix (the // convention signals absolute)
+      assert.is_truthy(
+        result.output:match("^@//"),
+        "expected @// prefix for absolute path, got: " .. tostring(result.output)
+      )
 
       -- Verify that ~/ paths would be preserved: the code checks vim.startswith(ref_path, "~/")
       -- and skips the ./ prefix. We test this by checking the code path exists

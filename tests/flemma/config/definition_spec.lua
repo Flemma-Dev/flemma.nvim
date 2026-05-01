@@ -40,7 +40,7 @@ describe("config.schema.definition", function()
       assert.equals(600, cfg.parameters.timeout)
       assert.equals(10, cfg.parameters.connect_timeout)
       assert.equals("short", cfg.parameters.cache_retention)
-      assert.equals("high", cfg.parameters.thinking)
+      assert.are.same({ level = "high", foreign = "preserve" }, cfg.parameters.thinking)
     end)
 
     it("materializes highlight defaults (string)", function()
@@ -54,8 +54,8 @@ describe("config.schema.definition", function()
       local cfg = config_facade.get()
       local tb = cfg.highlights.thinking_block
       assert.is_table(tb)
-      assert.equals("Comment+bg:#102020-fg:#111111", tb.dark)
-      assert.equals("Comment-bg:#102020+fg:#111111", tb.light)
+      assert.equals("Comment+bg:#000000-fg:#333333", tb.dark)
+      assert.equals("Comment-bg:#000000+fg:#333333", tb.light)
     end)
 
     it("materializes ruler defaults", function()
@@ -67,8 +67,8 @@ describe("config.schema.definition", function()
     it("materializes turns defaults", function()
       local cfg = config_facade.get()
       assert.is_true(cfg.turns.enabled)
-      assert.equals(1, cfg.turns.padding.left)
-      assert.equals(0, cfg.turns.padding.right)
+      assert.equals(0, cfg.turns.padding.left)
+      assert.equals(1, cfg.turns.padding.right)
       assert.equals("FlemmaTurn", cfg.turns.hl)
     end)
 
@@ -78,31 +78,26 @@ describe("config.schema.definition", function()
       assert.is_table(cfg.line_highlights.frontmatter)
     end)
 
-    it("materializes notifications defaults", function()
+    it("materializes ui.usage defaults", function()
       local cfg = config_facade.get()
-      assert.is_true(cfg.notifications.enabled)
-      assert.equals(10000, cfg.notifications.timeout)
-      assert.equals(1, cfg.notifications.limit)
-      assert.equals("overlay", cfg.notifications.position)
-      assert.equals(30, cfg.notifications.zindex)
-      assert.is_false(cfg.notifications.border)
+      assert.is_true(cfg.ui.usage.enabled)
+      assert.equals(10000, cfg.ui.usage.timeout)
     end)
 
     it("materializes progress defaults", function()
       local cfg = config_facade.get()
-      assert.equals("StatusLine", cfg.progress.highlight)
-      assert.equals(50, cfg.progress.zindex)
+      assert.equals("StatusLine", cfg.ui.progress.highlight)
     end)
 
     it("materializes pricing defaults", function()
       local cfg = config_facade.get()
-      assert.is_true(cfg.pricing.enabled)
+      assert.is_true(cfg.ui.pricing.enabled)
     end)
 
     it("materializes statusline defaults", function()
       local cfg = config_facade.get()
-      assert.is_string(cfg.statusline.format)
-      assert.truthy(cfg.statusline.format:find("#{model}"))
+      assert.is_string(cfg.ui.statusline.format)
+      assert.truthy(cfg.ui.statusline.format:find("model.name", 1, true))
     end)
 
     it("materializes tools auto_approve default as unexpanded preset", function()
@@ -136,7 +131,7 @@ describe("config.schema.definition", function()
 
     it("materializes text_object default", function()
       local cfg = config_facade.get()
-      assert.equals("m", cfg.text_object)
+      assert.equals("m", cfg.keymaps.text_object)
     end)
 
     it("materializes editing defaults", function()
@@ -169,6 +164,7 @@ describe("config.schema.definition", function()
       assert.equals("]m", cfg.keymaps.normal.message_next)
       assert.equals("[m", cfg.keymaps.normal.message_prev)
       assert.equals("<Space>", cfg.keymaps.normal.fold_toggle)
+      assert.equals("<Space><Space>", cfg.keymaps.normal.conceal_toggle)
       assert.equals("<C-]>", cfg.keymaps.insert.send)
     end)
 
@@ -215,25 +211,25 @@ describe("config.schema.definition", function()
     end)
 
     it("materializes OpenAI reasoning_summary default after registration", function()
-      provider_reg.register("flemma.provider.providers.openai")
+      provider_reg.register("flemma.provider.adapters.openai")
       local cfg = config_facade.get()
       assert.equals("auto", cfg.parameters.openai.reasoning_summary)
     end)
 
     it("materializes Vertex location default after registration", function()
-      provider_reg.register("flemma.provider.providers.vertex")
+      provider_reg.register("flemma.provider.adapters.vertex")
       local cfg = config_facade.get()
       assert.equals("global", cfg.parameters.vertex.location)
     end)
 
     it("does not materialize Anthropic defaults (all optional, no defaults)", function()
-      provider_reg.register("flemma.provider.providers.anthropic")
+      provider_reg.register("flemma.provider.adapters.anthropic")
       local cfg = config_facade.get()
       assert.is_nil(cfg.parameters.anthropic.thinking_budget)
     end)
 
     it("does not materialize Vertex project_id (optional, no default)", function()
-      provider_reg.register("flemma.provider.providers.vertex")
+      provider_reg.register("flemma.provider.adapters.vertex")
       local cfg = config_facade.get()
       assert.is_nil(cfg.parameters.vertex.project_id)
     end)
@@ -298,13 +294,13 @@ describe("config.schema.definition", function()
     end)
 
     it("accepts text_object = false", function()
-      config_facade.apply(config_facade.LAYERS.SETUP, { text_object = false })
+      config_facade.apply(config_facade.LAYERS.SETUP, { keymaps = { text_object = false } })
       local cfg = config_facade.get()
-      assert.is_false(cfg.text_object)
+      assert.is_false(cfg.keymaps.text_object)
     end)
 
     it("rejects text_object = true", function()
-      local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, { text_object = true })
+      local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, { keymaps = { text_object = true } })
       assert.is_true(ok)
       assert.is_truthy(errors)
       assert.truthy(errors[1]:find("no union branch matched"))
@@ -318,14 +314,6 @@ describe("config.schema.definition", function()
       assert.is_false(cfg.keymaps.normal.fold_toggle)
     end)
 
-    it("accepts notification border string override", function()
-      config_facade.apply(config_facade.LAYERS.SETUP, {
-        notifications = { border = "underline" },
-      })
-      local cfg = config_facade.get()
-      assert.equals("underline", cfg.notifications.border)
-    end)
-
     it("rejects unknown top-level key", function()
       local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, { nonexistent = true })
       assert.is_true(ok)
@@ -337,7 +325,7 @@ describe("config.schema.definition", function()
       package.loaded["flemma.provider.registry"] = nil
       local provider_reg = require("flemma.provider.registry")
       provider_reg.clear()
-      provider_reg.register("flemma.provider.providers.anthropic")
+      provider_reg.register("flemma.provider.adapters.anthropic")
       config_facade.apply(config_facade.LAYERS.SETUP, {
         parameters = { anthropic = { thinking_budget = 2048 } },
       })
@@ -439,24 +427,19 @@ describe("config.schema.definition", function()
 
     it("all top-level fields are navigable", function()
       local expected_fields = {
-        "defaults",
         "highlights",
-        "role_style",
         "ruler",
         "turns",
         "line_highlights",
-        "notifications",
-        "progress",
-        "pricing",
-        "statusline",
+        "ui",
         "provider",
         "model",
         "parameters",
         "tools",
         "templating",
         "presets",
-        "text_object",
         "editing",
+        "integrations",
         "logging",
         "keymaps",
         "diagnostics",
@@ -474,9 +457,9 @@ describe("config.schema.definition", function()
       package.loaded["flemma.provider.registry"] = nil
       local provider_reg = require("flemma.provider.registry")
       provider_reg.clear()
-      provider_reg.register("flemma.provider.providers.anthropic")
-      provider_reg.register("flemma.provider.providers.openai")
-      provider_reg.register("flemma.provider.providers.vertex")
+      provider_reg.register("flemma.provider.adapters.anthropic")
+      provider_reg.register("flemma.provider.adapters.openai")
+      provider_reg.register("flemma.provider.adapters.vertex")
       local params = schema:get_child_schema("parameters")
       assert.is_not_nil(params:get_child_schema("anthropic"))
       assert.is_not_nil(params:get_child_schema("openai"))
@@ -603,7 +586,7 @@ describe("config.schema.definition", function()
       it("resolves custom provider config schema via registry", function()
         local s = require("flemma.schema")
         provider_reg.register("custom", {
-          module = "flemma.provider.providers.anthropic",
+          module = "flemma.provider.adapters.anthropic",
           capabilities = {
             supports_reasoning = false,
             supports_thinking_budget = false,
@@ -632,7 +615,7 @@ describe("config.schema.definition", function()
       end)
 
       it("built-in provider schemas work after registration", function()
-        provider_reg.register("flemma.provider.providers.anthropic")
+        provider_reg.register("flemma.provider.adapters.anthropic")
         config_facade.apply(config_facade.LAYERS.SETUP, {
           parameters = { anthropic = { thinking_budget = 4096 } },
         })
@@ -642,7 +625,7 @@ describe("config.schema.definition", function()
       it("rejects unknown field on custom provider schema", function()
         local s = require("flemma.schema")
         provider_reg.register("custom", {
-          module = "flemma.provider.providers.anthropic",
+          module = "flemma.provider.adapters.anthropic",
           capabilities = {
             supports_reasoning = false,
             supports_thinking_budget = false,
@@ -808,7 +791,7 @@ describe("config.schema.definition", function()
 
         local s = require("flemma.schema")
         provider_reg.register("my_provider", {
-          module = "flemma.provider.providers.anthropic",
+          module = "flemma.provider.adapters.anthropic",
           capabilities = {
             supports_reasoning = false,
             supports_thinking_budget = false,

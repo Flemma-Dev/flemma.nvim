@@ -4,6 +4,7 @@
 local M = {}
 
 local parser = require("flemma.parser")
+local notify = require("flemma.notify")
 local roles = require("flemma.utilities.roles")
 local ast = require("flemma.ast")
 
@@ -131,14 +132,14 @@ end
 ---@field status flemma.ast.ToolStatus
 ---@field content string
 ---@field has_content boolean Whether the tool_result block contains non-empty user content
----@field is_error boolean
----@field tool_result { start_line: integer, fence_line?: integer } Position of the matching tool_result block
+---@field tool_result { start_line: integer } Position of the matching tool_result block
 ---@field aborted_message? string The message from the abort marker (for aborted blocks)
 
----Find all tool_result segments with a `flemma:tool` status, grouped by status.
+---Find all tool_result segments awaiting lifecycle processing, grouped by status.
 ---Each entry pairs the tool_result metadata with its matching tool_use context.
 ---Results with status=approved that have non-empty content are excluded from the
----groups (content-overwrite protection) and warned about.
+---groups (content-overwrite protection) and warned about. Errored (status="error")
+---and completed (status=nil) results are excluded — they are not actionable.
 ---@param bufnr integer Buffer number
 ---@return table<flemma.ast.ToolStatus, flemma.tools.ToolBlockContext[]> groups
 function M.resolve_all_tool_blocks(bufnr)
@@ -150,7 +151,7 @@ function M.resolve_all_tool_blocks(bufnr)
   local conflict_count = 0
 
   for _, sibling in pairs(siblings) do
-    if sibling.result and sibling.result.status and sibling.use then
+    if sibling.result and sibling.result.status and sibling.result.status ~= "error" and sibling.use then
       local tu = sibling.use
       ---@cast tu flemma.ast.ToolUseSegment
       local result = sibling.result
@@ -171,8 +172,7 @@ function M.resolve_all_tool_blocks(bufnr)
         status = result_status,
         content = result.content,
         has_content = result.content ~= "",
-        is_error = result.is_error,
-        tool_result = { start_line = result.position.start_line, fence_line = result.fence_line },
+        tool_result = { start_line = result.position.start_line },
         aborted_message = aborted_message,
       }
 
@@ -188,12 +188,10 @@ function M.resolve_all_tool_blocks(bufnr)
   end
 
   if conflict_count > 0 then
-    vim.notify(
-      "Flemma: "
-        .. conflict_count
-        .. " tool result(s) have edited content inside an approved flemma:tool block – "
-        .. "skipping execution to protect your edits. Remove the flemma:tool fence to send your content.",
-      vim.log.levels.WARN
+    notify.warn(
+      conflict_count
+        .. " tool result(s) have edited content inside an approved tool block – "
+        .. "skipping execution to protect your edits. Remove the (approved) status from the header to send your content."
     )
   end
 

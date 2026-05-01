@@ -64,6 +64,38 @@ describe("flemma.models", function()
       assert.are.equal("xhigh", info.thinking_effort_map.max)
     end)
 
+    it("openai gpt-5.2-pro maps unsupported low efforts to medium", function()
+      local info = registry.get_model_info("openai", "gpt-5.2-pro")
+      assert.is_not_nil(info.meta)
+      assert.is_true(info.meta.reasoning_effort)
+      assert.is_not_nil(info.thinking_effort_map)
+      assert.are.equal("medium", info.thinking_effort_map.minimal)
+      assert.are.equal("medium", info.thinking_effort_map.low)
+      assert.are.equal("xhigh", info.thinking_effort_map.max)
+    end)
+
+    it("openai gpt-5.4-pro maps unsupported low efforts to medium", function()
+      local info = registry.get_model_info("openai", "gpt-5.4-pro")
+      assert.is_not_nil(info.meta)
+      assert.is_true(info.meta.reasoning_effort)
+      assert.is_not_nil(info.thinking_effort_map)
+      assert.are.equal("medium", info.thinking_effort_map.minimal)
+      assert.are.equal("medium", info.thinking_effort_map.low)
+      assert.are.equal("xhigh", info.thinking_effort_map.max)
+    end)
+
+    it("openai gpt-5-pro maps every effort to high", function()
+      local info = registry.get_model_info("openai", "gpt-5-pro")
+      assert.is_not_nil(info.meta)
+      assert.is_true(info.meta.reasoning_effort)
+      assert.is_not_nil(info.thinking_effort_map)
+      assert.are.equal("high", info.thinking_effort_map.minimal)
+      assert.are.equal("high", info.thinking_effort_map.low)
+      assert.are.equal("high", info.thinking_effort_map.medium)
+      assert.are.equal("high", info.thinking_effort_map.high)
+      assert.are.equal("high", info.thinking_effort_map.max)
+    end)
+
     it("openai gpt-5 maps minimal to minimal (native support)", function()
       local info = registry.get_model_info("openai", "gpt-5")
       assert.are.equal("minimal", info.thinking_effort_map.minimal)
@@ -133,13 +165,13 @@ describe("flemma.models", function()
   describe("high_cost_threshold", function()
     it("is available via config", function()
       local config = require("flemma.config")
-      local threshold = config.materialize().pricing.high_cost_threshold
+      local threshold = config.materialize().ui.pricing.high_cost_threshold
       assert.is_number(threshold)
     end)
 
     it("claude-opus-4-6 sits exactly at the boundary and does not exceed it", function()
       local config = require("flemma.config")
-      local threshold = config.materialize().pricing.high_cost_threshold
+      local threshold = config.materialize().ui.pricing.high_cost_threshold
       local pricing = registry.get_model_info("anthropic", "claude-opus-4-6").pricing
       local combined = pricing.input + pricing.output
       assert.are.equal(30, combined)
@@ -148,7 +180,7 @@ describe("flemma.models", function()
 
     it("expensive models exceed the threshold", function()
       local config = require("flemma.config")
-      local threshold = config.materialize().pricing.high_cost_threshold
+      local threshold = config.materialize().ui.pricing.high_cost_threshold
       local pricing = registry.get_model_info("openai", "gpt-5.4-pro").pricing
       local combined = pricing.input + pricing.output
       assert.is_true(combined > threshold)

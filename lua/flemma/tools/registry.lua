@@ -63,7 +63,8 @@ local M = {}
 ---@field output? string|table Result output (string or JSON-encodable table)
 ---@field error? string Error message (when success=false)
 
-local registry_utils = require("flemma.registry")
+local notify = require("flemma.notify")
+local registry_utils = require("flemma.utilities.registry")
 local string_utils = require("flemma.utilities.string")
 
 ---@type table<string, flemma.tools.ToolDefinition>
@@ -75,10 +76,7 @@ local tools = {}
 function M.register(name, definition)
   registry_utils.validate_name(name, "tool")
   if tools[name] and tools[name] ~= definition then
-    vim.notify(
-      string.format("Flemma: tool '%s' redefined (previously registered, now overwritten)", name),
-      vim.log.levels.WARN
-    )
+    notify.warn(string.format("tool '%s' redefined (previously registered, now overwritten)", name))
   end
   tools[name] = definition
 end

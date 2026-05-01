@@ -77,8 +77,12 @@ Capabilities contract (registered via `registry.register`)
 Missing boolean capabilities default to `false` at registration time.
 ]]
 
+local bridge = require("flemma.bridge")
+local client = require("flemma.client")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
+local notify = require("flemma.notify")
+local readiness = require("flemma.readiness")
 local secrets = require("flemma.secrets")
 local sink = require("flemma.sink")
 local tool_names = require("flemma.utilities.tools")
@@ -97,11 +101,12 @@ local tool_names = require("flemma.utilities.tools")
 ---@field on_response_complete fun() Called when the AI response content is complete
 ---@field on_content fun(text: string) Called when response content is received
 ---@field on_thinking? fun(text: string) Called when thinking/reasoning content is received (optional)
+---@field on_tool_call_start? fun(name: string) Called when a tool call block begins (optional, for progress display)
 ---@field on_tool_input? fun(delta: string) Called when tool input JSON delta is received (optional, for progress tracking)
 
 ---@class flemma.provider.ProviderState
 
---- Flattened per-provider parameters (result of normalize.flatten_parameters).
+--- Merged per-provider parameters (result of normalize.merge_parameters).
 --- Provider-specific sub-tables (e.g. `vertex`, `openai`) are merged to top level.
 ---@class flemma.provider.Parameters
 ---@field model string Model name (always present after initialization)
@@ -117,6 +122,15 @@ local tool_names = require("flemma.utilities.tools")
 ---@field extra table<string, any>
 ---@field content string
 
+---@class flemma.provider.DiagnosticOperation
+---@field op "append"
+---@field path string
+---@field value any
+
+---@class flemma.provider.Diagnostics
+---@field actual flemma.provider.DiagnosticOperation[]
+---@field expected flemma.provider.DiagnosticOperation[]
+
 ---@class flemma.provider.Base
 ---@field parameters flemma.provider.Parameters
 ---@field state flemma.provider.ProviderState
@@ -124,7 +138,7 @@ local tool_names = require("flemma.utilities.tools")
 ---@field api_version? string
 ---@field metadata? flemma.provider.Metadata
 ---@field get_credential fun(self): flemma.secrets.Credential Credential descriptor (providers must override)
----@field get_api_key fun(self): string|nil, flemma.secrets.ResolverDiagnostic[]|nil Resolve credentials via secrets module
+---@field get_api_key fun(self): string|nil Resolve credentials via secrets module
 ---@field _response_buffer? flemma.provider.ResponseBuffer
 ---@field _response_headers? table<string, string[]>
 local M = {}
@@ -169,15 +183,11 @@ function M.get_credential(self)
   error("get_credential() must be implemented by provider")
 end
 
---- Resolve credentials via the secrets module using the provider's credential descriptor.
 ---@param self flemma.provider.Base
----@return string|nil value, flemma.secrets.ResolverDiagnostic[]|nil diagnostics
+---@return string|nil
 function M.get_api_key(self)
-  local result, diagnostics = secrets.resolve(self:get_credential())
-  if result then
-    return result.value
-  end
-  return nil, diagnostics
+  local result = secrets.resolve(self:get_credential())
+  return result and result.value or nil
 end
 
 --- @abstract
@@ -296,8 +306,8 @@ end
 --- Validate provider-specific parameters.
 --- Override to collect warnings about invalid or unsupported parameter combinations.
 --- Return true with no warnings for clean validation, or true + warnings array for
---- advisories. The caller (core.lua) handles logging and vim.notify — providers
---- never call vim.notify or log.warn from this method.
+--- advisories. The caller (core.lua) handles logging and flemma.notify — providers
+--- never call notify or log.warn from this method.
 ---@param model_name string The model name
 ---@param parameters table<string, any> The parameters to validate
 ---@return boolean success Always true (warnings don't fail validation)
@@ -337,8 +347,14 @@ function M.extract_json_response_error(self, data)
 
   -- Try common error patterns in order of likelihood
 
-  -- Pattern 1: { error: { message: "..." } } (OpenAI, Anthropic style)
+  -- Pattern 1: { error: { message: "..." } } (OpenAI, Anthropic style).
+  -- When `error.type` is also present (e.g. "authentication_error",
+  -- "invalid_request_error") prefix it so the caller can distinguish auth
+  -- from validation at a glance without reaching into the raw payload.
   if data.error and type(data.error) == "table" and data.error.message then
+    if type(data.error.type) == "string" and data.error.type ~= "" then
+      return data.error.type .. " — " .. data.error.message
+    end
     return data.error.message
   end
 
@@ -570,6 +586,36 @@ function M._new_response_buffer(self)
   }
 end
 
+---@param self flemma.provider.Base
+---@param enabled boolean
+function M._diagnostics_start(self, enabled)
+  if not self._response_buffer then
+    self:_new_response_buffer()
+  end
+  self._response_buffer.extra.diagnostics = enabled and {
+    actual = {},
+    expected = {},
+  } or nil
+end
+
+---@param self flemma.provider.Base
+---@param side "actual"|"expected"
+---@param path string
+---@param value any
+function M._diagnostics_append(self, side, path, value)
+  local diagnostics = self._response_buffer and self._response_buffer.extra and self._response_buffer.extra.diagnostics
+    or nil
+  if type(diagnostics) ~= "table" or type(diagnostics[side]) ~= "table" then
+    return
+  end
+
+  table.insert(diagnostics[side], {
+    op = "append",
+    path = path,
+    value = value,
+  })
+end
+
 --- Buffer a non-processable response line for later analysis
 ---@param self flemma.provider.Base
 ---@param line string
@@ -635,11 +681,6 @@ end
 ---@param callbacks flemma.provider.Callbacks Table of callback functions
 ---@return boolean handled True if the line was successfully parsed as an error
 function M._handle_non_sse_line(self, line, callbacks)
-  log.trace("base.handle_non_sse_line(): Received non-SSE line, buffering: " .. line)
-
-  -- Buffer the line for later analysis
-  self:_buffer_response_line(line)
-
   -- Try parsing as a direct JSON error response (for single-line errors)
   local ok, error_data = pcall(json.decode, line)
   if ok and error_data and type(error_data) == "table" then
@@ -651,6 +692,10 @@ function M._handle_non_sse_line(self, line, callbacks)
     end
   end
 
+  -- Couldn't emit from this line alone — buffer it so _check_buffered_response
+  -- can analyse the accumulated body (e.g. multi-line JSON) during finalize.
+  log.trace("base.handle_non_sse_line(): Received non-SSE line, buffering: " .. line)
+  self:_buffer_response_line(line)
   return false
 end
 
@@ -726,14 +771,57 @@ function M._emit_tool_use_block(self, name, id, arguments_json, callbacks)
   log.debug(self.metadata.name .. ".process_response_line(): Emitted tool_use block for " .. name)
 end
 
+---Check whether a thinking segment was produced by this provider.
+---@param self flemma.provider.Base
+---@param segment flemma.ast.GenericThinkingPart
+---@return boolean
+function M.is_native_thinking(self, segment)
+  return segment.signature ~= nil and segment.signature.provider == self.metadata.name
+end
+
+---Check whether a thinking segment is foreign and has usable content.
+---@param self flemma.provider.Base
+---@param segment flemma.ast.GenericThinkingPart
+---@return boolean
+function M.is_foreign_thinking(self, segment)
+  if segment.redacted then
+    return false
+  end
+  if #vim.trim(segment.content or "") == 0 then
+    return false
+  end
+  return not self:is_native_thinking(segment)
+end
+
+---Collect foreign thinking segments and wrap them in a single <thinking> block.
+---Returns nil if foreign thinking is disabled or no foreign segments are found.
+---@param self flemma.provider.Base
+---@param segments flemma.ast.GenericThinkingPart[]
+---@return string|nil
+function M.wrap_foreign_thinking(self, segments)
+  local thinking = self.parameters.thinking
+  if not thinking or thinking.foreign == "drop" then
+    return nil
+  end
+  local parts = {}
+  for _, seg in ipairs(segments) do
+    if seg.kind == "thinking" and M.is_foreign_thinking(self, seg) then
+      table.insert(parts, vim.trim(seg.content))
+    end
+  end
+  if #parts == 0 then
+    return nil
+  end
+  return "<thinking>\n" .. table.concat(parts, "\n\n") .. "\n</thinking>"
+end
+
 --- Emit a thinking block to the buffer.
 --- Handles content trimming, content prefix, signature attributes, and the fold-only empty tag case.
 ---@param self flemma.provider.Base
 ---@param content string Accumulated thinking text (may be empty)
 ---@param signature string|nil Signature value (provider-prepared)
----@param provider_prefix string Provider namespace for the signature attribute ("anthropic", "openai", "vertex")
 ---@param callbacks flemma.provider.Callbacks
-function M._emit_thinking_block(self, content, signature, provider_prefix, callbacks)
+function M._emit_thinking_block(self, content, signature, callbacks)
   local stripped = vim.trim(content)
   local has_content = #stripped > 0
   local has_signature = signature ~= nil and signature ~= ""
@@ -743,9 +831,10 @@ function M._emit_thinking_block(self, content, signature, provider_prefix, callb
   end
 
   local prefix = self:_get_content_prefix()
+  local provider_name = self.metadata.name
   local open_tag
   if has_signature then
-    open_tag = "<thinking " .. provider_prefix .. ':signature="' .. signature .. '">'
+    open_tag = "<thinking " .. provider_name .. ':signature="' .. signature .. '">'
   else
     open_tag = "<thinking>"
   end
@@ -778,9 +867,7 @@ end
 ---@param callbacks flemma.provider.Callbacks
 function M._warn_truncated(self, callbacks)
   log.warn(self.metadata.name .. ".process_response_line(): Response truncated (max_tokens)")
-  vim.schedule(function()
-    vim.notify("Flemma: Response truncated \u{2013} model reached max output tokens", vim.log.levels.WARN)
-  end)
+  notify.warn("Response truncated \u{2013} model reached max output tokens")
   if callbacks.on_response_complete then
     callbacks.on_response_complete()
   end
@@ -830,6 +917,92 @@ function M._inject_orphan_results(self, pending, format_fn)
     )
   end
   return results
+end
+
+-- ============================================================================
+-- Shared count-tokens orchestration
+-- ============================================================================
+
+---@class flemma.provider.CountTokensSpec
+---@field bufnr integer
+---@field endpoint string|fun(provider: flemma.provider.Base): string
+---@field transform_body fun(body: table): table
+---@field parse_response fun(parsed: table): integer|nil, string|nil
+---@field cache_key_prefix string
+---@field error_label string
+
+---@param spec flemma.provider.CountTokensSpec
+---@param on_result flemma.usage.EstimateCallback
+function M.send_count_tokens(spec, on_result)
+  local prompt, context, provider, _evaluated, failure = bridge.build_prompt_and_provider(spec.bufnr)
+  if failure then
+    on_result({ err = failure.message })
+    return
+  end
+  ---@cast prompt flemma.pipeline.Prompt
+  ---@cast context flemma.Context
+  ---@cast provider flemma.provider.Base
+
+  local endpoint = type(spec.endpoint) == "function" and spec.endpoint(provider) or spec.endpoint
+  ---@cast endpoint string
+
+  local fixture_path = client.find_fixture_for_endpoint(endpoint)
+  local headers
+  if fixture_path then
+    headers = { "content-type: application/json" }
+  else
+    headers = provider:get_request_headers()
+  end
+  ---@cast headers string[]
+
+  local build_ok, body = pcall(provider.build_request, provider, prompt, context)
+  if not build_ok then
+    if readiness.is_suspense(body) then
+      error(body)
+    end
+    on_result({ err = "Build request failed: " .. tostring(body) })
+    return
+  end
+  body = spec.transform_body(body)
+
+  client.send_json_request({
+    endpoint = endpoint,
+    headers = headers,
+    request_body = body,
+    parameters = provider.parameters,
+    trailing_keys = provider:get_trailing_keys(),
+  }, function(response_body, exit_code, curl_err)
+    if curl_err or exit_code ~= 0 or not response_body or response_body == "" then
+      on_result({ err = curl_err or ("curl exit code " .. tostring(exit_code)) })
+      return
+    end
+    local ok_p, parsed = pcall(json.decode, response_body)
+    if not ok_p or type(parsed) ~= "table" then
+      on_result({ err = "could not parse response" })
+      return
+    end
+    if parsed.error or parsed.type == "error" or (vim.islist(parsed) and parsed[1] and parsed[1].error) then
+      on_result({ err = provider:extract_json_response_error(parsed) or ("unknown " .. spec.error_label .. " error") })
+      return
+    end
+    local tokens, perr = spec.parse_response(parsed)
+    if perr then
+      on_result({ err = perr })
+      return
+    end
+    if type(tokens) ~= "number" then
+      on_result({ err = "missing token count in response" })
+      return
+    end
+    local model = provider.parameters.model
+    on_result({
+      response = {
+        tokens = tokens,
+        cache_key = spec.cache_key_prefix .. ":" .. model,
+        model = model,
+      },
+    })
+  end)
 end
 
 return M

@@ -2,7 +2,7 @@
 
 Flemma's prompt pipeline runs through three stages: parse, evaluate, and send. Errors at any stage surface via diagnostics before the request leaves your editor.
 
-> For an overview of the `.chat` buffer format (role markers, frontmatter placement, thinking blocks), see the [Understanding `.chat` Buffers](../README.md#understanding-chat-buffers) section in the README.
+> For an overview of the `.chat` buffer format (role markers, frontmatter placement, thinking blocks), see [Why Conversations as Files?](../README.md#why-conversations-as-files) in the README.
 
 ## Frontmatter
 
@@ -42,7 +42,7 @@ require("flemma.codeblock.parsers").register("yaml", function(code, context)
 end)
 ```
 
-Parsers are lazy-loaded on first use and cached for the session. See `lua/flemma/codeblock/parsers.lua` for the built-in implementations.
+Parsers are lazy-loaded on first use and cached for the session. See `lua/flemma/codeblock/parsers/` for the built-in implementations.
 
 ### Per-buffer overrides with `flemma.opt`
 
@@ -425,7 +425,7 @@ All diagnostics include position information (line and column) for precise error
 
 ## Referencing local files
 
-Embed local context with `@./relative/path` (or `@../up-one/path`). Flemma handles:
+Embed local context with `@./relative/path` (or `@../up-one/path`, `@~/home/path`, `@//absolute/path`). Flemma handles:
 
 1. Resolving the path against the `.chat` file's directory.
 2. Detecting the MIME type via the `file` CLI or the extension fallback (see `lua/flemma/mime.lua` for the full extension map).
@@ -440,10 +440,14 @@ OCR this screenshot @./artifacts/failure.png.
 
 @You:
 Compare these specs: @./specs/v1.pdf and @./specs/v2.pdf.
+
+@You:
+Check the logs at @//var/log/app.log.
 ```
 
 ### Syntax details
 
+- **Path prefixes:** `@./` and `@../` resolve relative to the `.chat` file's directory. `@~/` resolves relative to `$HOME`. `@//` denotes an absolute path (`@//tmp/file` resolves to `/tmp/file`).
 - **Trailing punctuation** (`.`, `)`, `,`, etc.) is stripped automatically so you can write natural prose around references.
 - **MIME override:** append `;type=<mime>` to force a specific MIME type, as in the Lua example above.
 - **URL-encoded paths:** percent-encoded characters are decoded before file resolution. `@./my%20report.txt` resolves to `my report.txt`.

@@ -44,4 +44,48 @@ function M.get_last_line(bufnr)
   return content, line_count
 end
 
+---Get the gutter width (line number, sign column, fold column) for a window.
+---Returns 0 when the window id is invalid.
+---@param winid integer Window handle
+---@return integer
+function M.get_gutter_width(winid)
+  local info = vim.fn.getwininfo(winid)
+  if info and info[1] then
+    return info[1].textoff
+  end
+  return 0
+end
+
+---Execute a command in the context of a buffer's window.
+---No-op when the buffer is not displayed in any window.
+---@param bufnr integer Buffer handle
+---@param cmd string Command to execute
+function M.buffer_cmd(bufnr, cmd)
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid == -1 then
+    return
+  end
+  vim.fn.win_execute(winid, "noautocmd " .. cmd)
+end
+
+---@class flemma.utilities.buffer.ScratchOpts
+---@field bufhidden? "wipe"|"hide" Default "wipe"
+---@field modifiable? boolean Default true
+---@field undolevels? integer Default -1 (disable undo)
+
+---Create a scratch buffer with Flemma's standard options for floating-window content.
+---@param opts? flemma.utilities.buffer.ScratchOpts
+---@return integer bufnr
+function M.create_scratch_buffer(opts)
+  opts = opts or {}
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  vim.bo[bufnr].buftype = "nofile"
+  vim.bo[bufnr].bufhidden = opts.bufhidden or "wipe"
+  vim.bo[bufnr].undolevels = opts.undolevels or -1
+  if opts.modifiable == false then
+    vim.bo[bufnr].modifiable = false
+  end
+  return bufnr
+end
+
 return M

@@ -1,8 +1,8 @@
-<h1><img src="https://images.weserv.nl/?url=avatars.githubusercontent.com%2Fu%2F231013899%3Fs%3D400%26v%3D4&mask=circle" width="38" height="38" valign="bottom" alt="Flemma's logo"> Flemma</h1>
+<h1><img src="https://images.weserv.nl/?url=avatars.githubusercontent.com%2Fu%2F231013899%3Fs%3D400%26v%3D4&mask=circle" width="38" height="38" align="left" valign="bottom" alt="Flemma's logo"> Flemma</h1>
 
 **An AI workspace inside Neovim where every conversation is a document you own.**
 
-https://github.com/user-attachments/assets/cd1c509d-faea-48e1-bd4d-d01e234d6856
+https://github.com/user-attachments/assets/b0a7375d-24c7-48c7-afe1-4dc9ab3db5eb
 
 > [!IMPORTANT]
 > **Actively Evolving.** [See the roadmap](ROADMAP.md) for what's coming next. Pin a tag if you need a stable target.
@@ -124,7 +124,7 @@ Four built-in providers. Switch at any time -- even mid-conversation:
 | **Anthropic** | `claude-sonnet-4-6`      |
 | **OpenAI**    | `gpt-5.4`                |
 | **Vertex AI** | `gemini-3.1-pro-preview` |
-| **Moonshot**  | `kimi-k2.5`              |
+| **Moonshot**  | `kimi-k2.6`              |
 
 All four support extended thinking/reasoning through a single `thinking` parameter that Flemma maps to each provider's native format. Set `thinking = "high"` once and it works everywhere -- see the [full mapping table](docs/configuration.md#thinking-parameter-mapping) in configuration.md. Prompt caching is handled automatically -- read more in [prompt-caching.md](docs/prompt-caching.md).
 
@@ -223,6 +223,8 @@ All commands live under `:Flemma` with tab completion. Misspelled commands get d
 | `switch ...`                             | Change provider, model, or parameters                                       |
 | `status [verbose]`                       | Show runtime status and resolved configuration                              |
 | `import`                                 | Import from Claude Workbench format (see [importing.md](docs/importing.md)) |
+| `usage:estimate`                         | Estimate input tokens and cost for the next send                            |
+| `usage:recall`                           | Re-show the most recent usage bar                                           |
 | `autopilot:enable\|disable\|status`      | Toggle or inspect autonomous mode                                           |
 | `sandbox:enable\|disable\|status`        | Toggle or inspect sandboxing                                                |
 | `tool:execute\|cancel\|cancel-all\|list` | Manage tool executions                                                      |
@@ -284,7 +286,7 @@ Flemma is designed to be extended. Everything plugs in through clean registries:
 - **Template system** -- Lua/JSON per-file configuration, inline expressions, file includes, composable system prompts. Read more in [templates.md](docs/templates.md).
 - **Personalities** -- dynamic system prompt generators that assemble tools, environment, and project context (reads `CLAUDE.md`, `.cursorrules`, etc.). Read more in [personalities.md](docs/personalities.md).
 
-Integrations with lualine and bufferline.nvim are documented in [integrations.md](docs/integrations.md). nvim-web-devicons gets a `.chat` file icon automatically.
+Integrations with lualine, bufferline.nvim, and nvim-treesitter-context are documented in [integrations.md](docs/integrations.md). nvim-web-devicons gets a `.chat` file icon automatically.
 
 ---
 
@@ -294,7 +296,7 @@ After each response, a floating notification shows the model name, token counts,
 
 Messages fold cleanly: thinking blocks and tool calls collapse automatically so you can focus on the conversation. Press <kbd>Space</kbd> to toggle a message fold, `za` for individual blocks. Rulers separate messages visually, and line highlights give each role a subtle background tint. Everything adapts to your colour scheme.
 
-Flemma ships integrations for lualine (model and cost in the statusline) and bufferline (busy indicator on `.chat` tabs). Read more in [ui.md](docs/ui.md) and [integrations.md](docs/integrations.md).
+Flemma ships integrations for lualine (model and cost in the statusline), bufferline (busy indicator on `.chat` tabs), and nvim-treesitter-context (skip the sticky-context window on `.chat` buffers). Read more in [ui.md](docs/ui.md) and [integrations.md](docs/integrations.md).
 
 ---
 
@@ -356,7 +358,7 @@ Yes. Register custom tools, approval resolvers, credential resolvers, sandbox ba
 <details>
 <summary><strong>Who made this?</strong></summary>
 
-[<img src="https://images.weserv.nl/?url=gravatar.com%2Favatar%2Fea3f8f366bb2aa0855db031884e3a8e8%3Fs%3D400%26d%3Drobohash%26r%3Dg&mask=circle" valign="middle" width="18" height="18" alt="Photo of @StanAngeloff">&thinsp;@StanAngeloff](https://github.com/StanAngeloff). Flemma started as a personal tool for thinking, writing, and experimenting with AI inside Neovim. It's been used for everything from architecture documents and project planning to bedtime stories.
+[<img src="https://images.weserv.nl/?url=gravatar.com%2Favatar%2Fea3f8f366bb2aa0855db031884e3a8e8%3Fs%3D400%26d%3Drobohash%26r%3Dg&mask=circle" valign="middle" align="left" width="18" height="18" alt="Photo of @StanAngeloff">&thinsp;@StanAngeloff](https://github.com/StanAngeloff). Flemma started as a personal tool for thinking, writing, and experimenting with AI inside Neovim. It's been used for everything from architecture documents and project planning to bedtime stories.
 
 </details>
 

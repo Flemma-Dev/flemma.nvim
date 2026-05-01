@@ -120,6 +120,29 @@ describe("flemma.templating.compiler", function()
       assert.truthy(text:find("after"))
     end)
 
+    it("re-raises readiness suspense from expression evaluation", function()
+      local readiness = require("flemma.readiness")
+      readiness._reset_for_tests()
+      local boundary = readiness.get_or_create_boundary("test:expr", function(done)
+        done()
+      end)
+
+      local segments = {
+        ast.expression(" raise_suspense() ", { start_line = 1 }),
+      }
+      local result = compiler.compile(segments)
+      local env = {
+        __filename = "test.chat",
+        raise_suspense = function()
+          error(readiness.Suspense.new("test suspend", boundary))
+        end,
+      }
+      local ok, err = pcall(compiler.execute, result, env)
+      assert.is_false(ok)
+      assert.is_true(readiness.is_suspense(err))
+      assert.equals("test suspend", err.message)
+    end)
+
     it("code block controls output", function()
       local segments = {
         ast.code(" if true then ", { start_line = 1 }),
@@ -374,7 +397,6 @@ describe("flemma.templating.compiler", function()
         ast.tool_result("id_cap", {
           segments = inner,
           content = "captured text",
-          is_error = false,
           start_line = 1,
           end_line = 3,
         }),
@@ -388,7 +410,7 @@ describe("flemma.templating.compiler", function()
       assert.equals(1, #parts)
       assert.equals("tool_result", parts[1].kind)
       assert.equals("id_cap", parts[1].tool_use_id)
-      assert.is_false(parts[1].is_error)
+      assert.is_nil(parts[1].status)
       assert.equals("captured text", parts[1].content)
       assert.equals(1, #parts[1].parts)
       assert.equals("text", parts[1].parts[1].kind)

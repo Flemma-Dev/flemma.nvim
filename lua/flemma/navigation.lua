@@ -8,8 +8,10 @@ local ctxutil = require("flemma.context")
 local cursor = require("flemma.cursor")
 local diagnostic_format = require("flemma.utilities.diagnostic")
 local eval = require("flemma.templating.eval")
+local path_util = require("flemma.utilities.path")
 local templating = require("flemma.templating")
 local log = require("flemma.logging")
+local notify = require("flemma.notify")
 local parser = require("flemma.parser")
 local processor = require("flemma.processor")
 local symbols = require("flemma.symbols")
@@ -91,12 +93,12 @@ function M.resolve_include_path(bufnr, lnum, col)
   for _, diag in ipairs(fm.diagnostics) do
     if diag.severity == "error" and not diag.validation then
       log.debug("navigation: frontmatter error: " .. (diag.error or "unknown"))
-      local lines = { "Flemma:", " " .. diagnostic_format.format_message(diag) }
+      local lines = { " " .. diagnostic_format.format_message(diag) }
       local loc = diagnostic_format.format_location(diag)
       if loc then
         table.insert(lines, "   " .. loc)
       end
-      vim.notify(table.concat(lines, "\n"), vim.log.levels.WARN)
+      notify.warn(table.concat(lines, "\n"))
       break
     end
   end
@@ -117,7 +119,7 @@ function M.resolve_include_path(bufnr, lnum, col)
     if relative_path:sub(1, #eval.URN_PREFIX) == eval.URN_PREFIX then
       return nil
     end
-    return { [symbols.SOURCE_PATH] = eval.resolve_include_target(relative_path, env.__dirname) }
+    return { [symbols.SOURCE_PATH] = path_util.resolve(relative_path, env.__dirname) }
   end
 
   -- Evaluate the expression — our path-only include() returns a table tagged
@@ -130,12 +132,12 @@ function M.resolve_include_path(bufnr, lnum, col)
     diag.expression = diag.expression or seg.code
     diag.position = diag.position or seg.position
     log.debug("navigation: expression eval failed: " .. (diag.error or "unknown"))
-    local lines = { "Flemma:", " " .. diagnostic_format.format_message(diag) }
+    local lines = { " " .. diagnostic_format.format_message(diag) }
     local loc = diagnostic_format.format_location(diag)
     if loc then
       table.insert(lines, "   " .. loc)
     end
-    vim.notify(table.concat(lines, "\n"), vim.log.levels.WARN)
+    notify.warn(table.concat(lines, "\n"))
     return nil
   end
 

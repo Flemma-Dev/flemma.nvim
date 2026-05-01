@@ -1,3 +1,11 @@
+local notify = require("flemma.notify")
+
+local function flush_schedule()
+  vim.wait(10, function()
+    return false
+  end)
+end
+
 describe("flemma.diagnostics", function()
   local diagnostics
 
@@ -255,6 +263,102 @@ describe("flemma.diagnostics", function()
     end)
   end)
 
+  describe("compare_extra", function()
+    it("compares expected and actual provider diagnostics recursively", function()
+      local comparison = diagnostics.compare_extra({
+        openai = {
+          assistant_message_phases = { "final_answer" },
+        },
+      }, {
+        openai = {
+          assistant_message_phases = { "commentary" },
+        },
+      })
+
+      assert.is_not_nil(comparison)
+      assert.is_false(comparison.ok)
+      assert.is_true(comparison.changes[1]:match("assistant_message_phases%[1%]") ~= nil)
+    end)
+
+    it("returns nil when either side is absent", function()
+      assert.is_nil(diagnostics.compare_extra({ openai = {} }, nil))
+      assert.is_nil(diagnostics.compare_extra(nil, { openai = {} }))
+    end)
+
+    it("returns nil when expected baseline is empty (no prior expectations)", function()
+      assert.is_nil(diagnostics.compare_extra({}, {
+        { op = "append", path = "openai.assistant_message_phases", value = "final_answer" },
+      }))
+    end)
+
+    it("materializes append-only diagnostic operation logs before comparing", function()
+      local comparison = diagnostics.compare_extra({
+        { op = "append", path = "openai.assistant_message_phases", value = "final_answer" },
+      }, {
+        { op = "append", path = "openai.assistant_message_phases", value = "final_answer" },
+      })
+
+      assert.is_not_nil(comparison)
+      assert.is_true(comparison.ok)
+      assert.same({
+        openai = {
+          assistant_message_phases = { "final_answer" },
+        },
+      }, comparison.actual)
+    end)
+
+    it("compares expected metadata against the current actual tail", function()
+      local comparison = diagnostics.compare_extra({
+        { op = "append", path = "openai.assistant_message_phases", value = "final_answer" },
+      }, {
+        { op = "append", path = "openai.assistant_message_phases", value = "commentary" },
+        { op = "append", path = "openai.assistant_message_phases", value = "final_answer" },
+      })
+
+      assert.is_not_nil(comparison)
+      assert.is_true(comparison.ok)
+      assert.same({
+        openai = {
+          assistant_message_phases = { "final_answer" },
+        },
+      }, comparison.actual)
+    end)
+
+    it("preserves actual keys not present in expected", function()
+      local comparison = diagnostics.compare_extra({
+        openai = {
+          assistant_message_phases = { "final_answer" },
+        },
+      }, {
+        openai = {
+          assistant_message_phases = { "final_answer" },
+          extra_field = "some_value",
+        },
+      })
+
+      assert.is_not_nil(comparison)
+      assert.is_false(comparison.ok)
+      assert.equals("some_value", comparison.actual.openai.extra_field)
+    end)
+  end)
+
+  describe("next_expected", function()
+    it("returns response expectations for the next request baseline", function()
+      local expected = diagnostics.next_expected({
+        actual = {
+          { op = "append", path = "openai.assistant_message_phases", value = "commentary" },
+        },
+        expected = {
+          { op = "append", path = "openai.assistant_message_phases", value = "final_answer" },
+        },
+      })
+
+      assert.same({
+        { op = "append", path = "openai.assistant_message_phases", value = "final_answer" },
+      }, expected)
+    end)
+  end)
+
   describe("map_byte_to_path", function()
     it("maps a byte offset inside a top-level key", function()
       local input = '{"model":"gpt-4","system":"hello"}'
@@ -321,14 +425,17 @@ describe("flemma.diagnostics", function()
       diagnostics = require("flemma.diagnostics")
       local bufnr = vim.api.nvim_create_buf(false, true)
 
-      -- Intercept vim.notify to detect warnings
+      -- Drain any pending notifications from prior tests before installing the spy.
+      flush_schedule()
+
+      -- Intercept flemma.notify to detect warnings
       local notified = false
-      local original_notify = vim.notify
-      vim.notify = function(msg, level)
-        if level == vim.log.levels.WARN and msg:match("Cache break") then
+      notify._set_impl(function(notification)
+        if notification.level == vim.log.levels.WARN and notification.message:match("Cache break") then
           notified = true
         end
-      end
+        return notification
+      end)
 
       local turn1 = '{"model":"gpt-4","messages":[{"role":"user","content":"hi"}]}'
       local turn2 =
@@ -337,7 +444,8 @@ describe("flemma.diagnostics", function()
       diagnostics.record_and_compare(bufnr, turn1)
       diagnostics.record_and_compare(bufnr, turn2)
 
-      vim.notify = original_notify
+      flush_schedule()
+      notify._reset_impl()
       assert.is_false(notified, "Should not warn when messages are only appended")
 
       vim.api.nvim_buf_delete(bufnr, { force = true })
@@ -351,13 +459,16 @@ describe("flemma.diagnostics", function()
       diagnostics = require("flemma.diagnostics")
       local bufnr = vim.api.nvim_create_buf(false, true)
 
+      -- Drain any pending notifications from prior tests before installing the spy.
+      flush_schedule()
+
       local notified = false
-      local original_notify = vim.notify
-      vim.notify = function(msg, level)
-        if level == vim.log.levels.WARN and msg:match("Cache break") then
+      notify._set_impl(function(notification)
+        if notification.level == vim.log.levels.WARN and notification.message:match("Cache break") then
           notified = true
         end
-      end
+        return notification
+      end)
 
       -- tools come before messages — appending tools breaks the prefix for messages
       local turn1 = '{"tools":[{"name":"bash"}],"messages":[{"role":"user","content":"hi"}]}'
@@ -366,7 +477,8 @@ describe("flemma.diagnostics", function()
       diagnostics.record_and_compare(bufnr, turn1)
       diagnostics.record_and_compare(bufnr, turn2)
 
-      vim.notify = original_notify
+      flush_schedule()
+      notify._reset_impl()
       assert.is_true(notified, "Should warn when tools are appended (prefix broken for messages)")
 
       vim.api.nvim_buf_delete(bufnr, { force = true })

@@ -9,7 +9,6 @@
 ---@field get_config fun(self): T|nil
 
 ---@class flemma.Config
----@field defaults flemma.config.Defaults
 ---@field diagnostics flemma.config.Diagnostics
 ---@field editing flemma.config.Editing
 ---@field experimental flemma.config.Experimental
@@ -20,25 +19,16 @@
 ---@field logging flemma.logging.Config
 ---@field lsp flemma.config.Lsp
 ---@field model? string
----@field notifications flemma.config.Notifications
 ---@field parameters flemma.config.Parameters
----@field presets table<string, string|{  }|{ auto_approve: string[], model: string, parameters: {  }, provider: string }>
----@field pricing flemma.config.Pricing
----@field progress flemma.config.Progress
+---@field presets table<string, string|{  }|{ auto_approve: string[], model: string, parameters: flemma.config.ParametersBase, provider: string }>
 ---@field provider string
----@field role_style string
 ---@field ruler flemma.config.Ruler
 ---@field sandbox flemma.config.Sandbox
 ---@field secrets flemma.config.Secrets
----@field statusline flemma.config.Statusline
 ---@field templating flemma.config.Templating
----@field text_object string|false
 ---@field tools flemma.config.Tools
 ---@field turns flemma.config.Turns
-
----@class flemma.config.Defaults
----@field dark flemma.config.DefaultsDark
----@field light flemma.config.DefaultsLight
+---@field ui flemma.config.Ui
 
 ---@class flemma.config.Diagnostics
 ---@field enabled boolean
@@ -47,6 +37,7 @@
 ---@field auto_close flemma.config.EditingAutoClose
 ---@field auto_prompt boolean
 ---@field auto_write boolean
+---@field conceal? string|integer|false
 ---@field disable_textwidth boolean
 ---@field foldlevel integer
 ---@field manage_updatetime boolean
@@ -56,11 +47,13 @@
 ---@class flemma.config.Highlights
 ---@field assistant flemma.config.HighlightValue
 ---@field busy flemma.config.HighlightValue
+---@field defaults flemma.config.HighlightsDefaults
 ---@field fold_meta flemma.config.HighlightValue
 ---@field fold_preview flemma.config.HighlightValue
 ---@field lua_code_block flemma.config.HighlightValue
 ---@field lua_delimiter flemma.config.HighlightValue
 ---@field lua_expression flemma.config.HighlightValue
+---@field role_style string
 ---@field system flemma.config.HighlightValue
 ---@field thinking_block flemma.config.HighlightValue
 ---@field thinking_tag flemma.config.HighlightValue
@@ -68,7 +61,12 @@
 ---@field tool_icon flemma.config.HighlightValue
 ---@field tool_name flemma.config.HighlightValue
 ---@field tool_preview flemma.config.HighlightValue
+---@field tool_result_aborted flemma.config.HighlightValue
+---@field tool_result_approved flemma.config.HighlightValue
+---@field tool_result_denied flemma.config.HighlightValue
 ---@field tool_result_error flemma.config.HighlightValue
+---@field tool_result_pending flemma.config.HighlightValue
+---@field tool_result_rejected flemma.config.HighlightValue
 ---@field tool_result_title flemma.config.HighlightValue
 ---@field tool_use_title flemma.config.HighlightValue
 ---@field user flemma.config.HighlightValue
@@ -81,6 +79,7 @@
 ---@field enabled boolean
 ---@field insert flemma.config.KeymapsInsert
 ---@field normal flemma.config.KeymapsNormal
+---@field text_object string|false
 
 ---@class flemma.config.LineHighlights
 ---@field assistant flemma.config.HighlightValue
@@ -92,35 +91,20 @@
 ---@class flemma.config.Lsp
 ---@field enabled boolean
 
----@class flemma.config.Notifications
----@field border false|"underline"|"underdouble"|"undercurl"|"underdotted"|"underdashed"
----@field enabled boolean
----@field highlight string
----@field limit integer
----@field position "overlay"
----@field timeout integer
----@field zindex integer
-
----@class flemma.config.Parameters
----@field anthropic? flemma.config.ParametersAnthropic
+---@class flemma.config.ParametersBase
 ---@field cache_retention "short"|"long"|"none"
 ---@field connect_timeout integer
 ---@field max_tokens string|integer
+---@field temperature? number
+---@field thinking { foreign: "preserve"|"drop", level: "minimal"|"low"|"medium"|"high"|"max"|number|false }|"minimal"|"low"|"medium"|"high"|"max"|number|false
+---@field timeout integer
+
+---@class flemma.config.Parameters : flemma.config.ParametersBase
+---@field anthropic? flemma.config.ParametersAnthropic
 ---@field moonshot? flemma.config.ParametersMoonshot
 ---@field openai? flemma.config.ParametersOpenai
----@field temperature? number
----@field thinking "minimal"|"low"|"medium"|"high"|"max"|number|false
----@field timeout integer
 ---@field vertex? flemma.config.ParametersVertex
 ---@field [string] table|nil
-
----@class flemma.config.Pricing
----@field enabled boolean
----@field high_cost_threshold integer
-
----@class flemma.config.Progress
----@field highlight string
----@field zindex integer
 
 ---@class flemma.config.Ruler
 ---@field char string
@@ -135,9 +119,6 @@
 
 ---@class flemma.config.Secrets
 ---@field gcloud flemma.config.SecretsGcloud
-
----@class flemma.config.Statusline
----@field format string
 
 ---@class flemma.config.Templating
 ---@field modules string[]
@@ -165,19 +146,21 @@
 ---@field hl string
 ---@field padding { left: integer, right: integer }|integer
 
----@class flemma.config.DefaultsDark
----@field bg string
----@field fg string
-
----@class flemma.config.DefaultsLight
----@field bg string
----@field fg string
+---@class flemma.config.Ui
+---@field pricing flemma.config.UiPricing
+---@field progress flemma.config.UiProgress
+---@field statusline flemma.config.UiStatusline
+---@field usage flemma.config.UiUsage
 
 ---@class flemma.config.EditingAutoClose
 ---@field frontmatter boolean
 ---@field thinking boolean
 ---@field tool_result boolean
 ---@field tool_use boolean
+
+---@class flemma.config.HighlightsDefaults
+---@field dark flemma.config.HighlightsDefaultsDark
+---@field light flemma.config.HighlightsDefaultsLight
 
 ---@class flemma.config.IntegrationsDevicons
 ---@field enabled boolean
@@ -188,23 +171,26 @@
 
 ---@class flemma.config.KeymapsNormal
 ---@field cancel string
+---@field conceal_toggle string|false
 ---@field fold_toggle string|false
 ---@field message_next string
 ---@field message_prev string
 ---@field send string
 ---@field tool_execute string
 
----@class flemma.config.ParametersAnthropic
+---@class flemma.config.ParametersAnthropic : flemma.config.ParametersBase
+---@field effort? "low"|"medium"|"high"|"xhigh"|"max"
 ---@field thinking_budget? integer
 
----@class flemma.config.ParametersMoonshot
+---@class flemma.config.ParametersMoonshot : flemma.config.ParametersBase
 ---@field prompt_cache_key? string
 
----@class flemma.config.ParametersOpenai
+---@class flemma.config.ParametersOpenai : flemma.config.ParametersBase
+---@field experimental? flemma.config.ParametersOpenaiExperimental
 ---@field reasoning? string
 ---@field reasoning_summary? string
 
----@class flemma.config.ParametersVertex
+---@class flemma.config.ParametersVertex : flemma.config.ParametersBase
 ---@field location? string
 ---@field project_id? string
 ---@field thinking_budget? integer
@@ -251,6 +237,34 @@
 
 ---@class flemma.config.ToolsTruncate
 ---@field output_path_format string
+
+---@class flemma.config.UiPricing
+---@field enabled boolean
+---@field high_cost_threshold integer
+
+---@class flemma.config.UiProgress
+---@field highlight string
+---@field position "top"|"bottom"|"top left"|"top right"|"bottom left"|"bottom right"
+
+---@class flemma.config.UiStatusline
+---@field format string|flemma.statusline.FormatFunction
+
+---@class flemma.config.UiUsage
+---@field enabled boolean
+---@field highlight string
+---@field position "top"|"bottom"|"top left"|"top right"|"bottom left"|"bottom right"
+---@field timeout integer
+
+---@class flemma.config.HighlightsDefaultsDark
+---@field bg string
+---@field fg string
+
+---@class flemma.config.HighlightsDefaultsLight
+---@field bg string
+---@field fg string
+
+---@class flemma.config.ParametersOpenaiExperimental
+---@field phase boolean
 
 ---@class flemma.config.SandboxBackendsBwrap
 ---@field extra_args string[]

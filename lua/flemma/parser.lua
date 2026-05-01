@@ -2,8 +2,8 @@ local ast = require("flemma.ast")
 local codeblock = require("flemma.codeblock")
 local modeline = require("flemma.utilities.modeline")
 local roles = require("flemma.utilities.roles")
-local scanner = require("flemma.parser.scanner")
 local state = require("flemma.state")
+local template_parser = require("flemma.templating.parser")
 
 ---@class flemma.Parser
 local M = {}
@@ -18,8 +18,8 @@ local post_parse_hook = nil
 ---@field resume_line integer 1-indexed buffer line where incremental parsing resumes (first line NOT in snapshot)
 
 local TOOL_USE_PATTERN = "^%*%*Tool Use:%*%*%s*`([^`]+)`%s*%(`([^)]+)`%)"
-local TOOL_RESULT_PATTERN = "^%*%*Tool Result:%*%*%s*`([^`]+)`"
-local TOOL_RESULT_ERROR_PATTERN = "%s*%(error%)%s*$"
+local TOOL_RESULT_PATTERN = "^%*%*Tool Result:%*%*%s*`([^`]+)`(.*)$"
+local TOOL_RESULT_SUFFIX_PATTERN = "^%s*%((.*)%)%s*$"
 local ABORTED_PATTERN = "^<!%-%-%s*flemma:aborted:%s*(.-)%s*%-%->$"
 
 ---@type table<string, flemma.ast.ToolStatus>
@@ -29,155 +29,51 @@ local TOOL_STATUS_MAP = {
   rejected = "rejected",
   denied = "denied",
   aborted = "aborted",
+  error = "error",
   reject = "rejected",
   deny = "denied",
 }
 
---- Unified segment parser: parse text for {{ }} expressions
---- Returns array of AST segments (text, expression)
---- Note: <thinking> tags are NOT parsed here - only in @Assistant messages
---- Note: @./ and @~/ file references are handled by the preprocessor rewriter, not here
----@param text string|nil
----@param base_line integer|nil 1-indexed line number for accurate position tracking
----@return flemma.ast.Segment[]
-local function parse_segments(text, base_line)
-  local segments = {}
-  if text == "" or text == nil then
-    return segments
-  end
-  base_line = base_line or 0
-
-  local idx = 1
-  local s = text
-
-  local function char_to_line_col(pos)
-    -- Count newlines up to pos to determine line and column
-    local line = base_line
-    local last_newline = 0
-    for i = 1, pos - 1 do
-      if s:sub(i, i) == "\n" then
-        line = line + 1
-        last_newline = i
-      end
-    end
-    local col = pos - last_newline
-    return line, col
+--- Extract a known `flemma.ast.ToolStatus` from parsed header-suffix tokens,
+--- returning the remainder as meta for round-tripping. Explicit `status=<known>`
+--- wins over positional upgrade; unrecognized keys/positionals are preserved.
+---@param tokens flemma.utilities.modeline.ParsedTokens|nil
+---@return flemma.ast.ToolStatus|nil status
+---@return table<string, any>|nil meta nil when no extras remain
+local function extract_status(tokens)
+  if not tokens then
+    return nil, nil
   end
 
-  local function emit_text(str, char_start)
-    if str and #str > 0 then
-      local start_line, start_col = char_to_line_col(char_start)
-      local end_line = start_line
-      local end_col = start_col + #str - 1
-      -- Count newlines to compute end position (matches runner convention:
-      -- trailing \n means end_line is bumped, end_col is length after last \n)
-      for i = 1, #str do
-        if str:sub(i, i) == "\n" then
-          end_line = end_line + 1
-        end
-      end
-      if end_line > start_line then
-        local last_newline = str:find("\n[^\n]*$")
-        end_col = #str - last_newline
-      end
-      table.insert(
-        segments,
-        ast.text(str, {
-          start_line = start_line,
-          start_col = start_col,
-          end_line = end_line,
-          end_col = end_col,
-        })
-      )
+  local status = nil
+  if type(tokens.status) == "string" and TOOL_STATUS_MAP[tokens.status] then
+    status = TOOL_STATUS_MAP[tokens.status]
+  end
+
+  local meta = {}
+  for key, value in pairs(tokens) do
+    if type(key) == "string" and not (key == "status" and status) then
+      meta[key] = value
     end
   end
 
-  while idx <= #s do
-    -- Find next opening delimiter: {{ or {%
-    local expr_start = s:find("{{", idx, true)
-    local code_start = s:find("{%%", idx) -- pattern mode: %% matches literal %
-
-    -- Pick whichever comes first
-    local next_start, is_code
-    if expr_start and code_start then
-      if code_start < expr_start then
-        next_start = code_start
-        is_code = true
-      else
-        next_start = expr_start
-        is_code = false
-      end
-    elseif code_start then
-      next_start = code_start
-      is_code = true
-    elseif expr_start then
-      next_start = expr_start
-      is_code = false
+  local meta_positional = 0
+  local index = 1
+  while tokens[index] ~= nil do
+    local value = tokens[index]
+    if not status and type(value) == "string" and TOOL_STATUS_MAP[value] then
+      status = TOOL_STATUS_MAP[value]
     else
-      -- No more delimiters — emit remaining text
-      emit_text(s:sub(idx), idx)
-      break
+      meta_positional = meta_positional + 1
+      meta[meta_positional] = value
     end
-
-    -- Emit preceding text
-    emit_text(s:sub(idx, next_start - 1), idx)
-
-    -- Detect trim-before: {{- or {%-
-    local trim_before = false
-    local content_offset = 2 -- skip {{ or {%
-    if s:sub(next_start + 2, next_start + 2) == "-" then
-      trim_before = true
-      content_offset = 3
-    end
-
-    -- Find closing delimiter (string-aware, brace-balanced)
-    local close_mode = is_code and "code" or "expression"
-    local close_start, close_end = scanner.find_closing(s, next_start + content_offset, close_mode)
-
-    if not close_start then
-      -- Unclosed delimiter — emit rest as text (graceful degradation)
-      emit_text(s:sub(next_start), next_start)
-      break
-    end
-
-    -- Detect trim-after: -%} or -}}
-    local trim_after = s:sub(close_start, close_start) == "-"
-
-    -- Extract content between delimiters
-    local content_start = next_start + content_offset
-    local content_end = close_start - 1
-    local content = s:sub(content_start, content_end)
-
-    -- Build position
-    local start_line, start_col = char_to_line_col(next_start)
-    local end_line, end_col = char_to_line_col(close_end)
-
-    local pos = {
-      start_line = start_line,
-      start_col = start_col,
-      end_line = end_line,
-      end_col = end_col,
-    }
-
-    -- Build trim opts (only include if true to match nil-means-absent convention)
-    local opts = nil
-    if trim_before or trim_after then
-      opts = {
-        trim_before = trim_before or nil,
-        trim_after = trim_after or nil,
-      }
-    end
-
-    if is_code then
-      table.insert(segments, ast.code(content, pos, opts))
-    else
-      table.insert(segments, ast.expression(content, pos, opts))
-    end
-
-    idx = close_end + 1
+    index = index + 1
   end
 
-  return segments
+  if next(meta) == nil then
+    return status, nil
+  end
+  return status, meta
 end
 
 --- Parse user messages - handle **Tool Result:** blocks and regular content
@@ -203,7 +99,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
     end
     local text = table.concat(accum_lines, "\n")
     if #text > 0 then
-      local parsed = parse_segments(text, accum_start_line)
+      local parsed = template_parser.parse_segments(text, accum_start_line)
       for _, seg in ipairs(parsed) do
         table.insert(segments, seg)
       end
@@ -217,10 +113,12 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
     local current_line_num = base_line_num + i - 1
 
     -- Check for **Tool Result:** marker
-    local tool_use_id = line:match(TOOL_RESULT_PATTERN)
+    local tool_use_id, raw_suffix = line:match(TOOL_RESULT_PATTERN)
     if tool_use_id then
       flush_accum()
-      local is_error = line:match(TOOL_RESULT_ERROR_PATTERN) ~= nil
+      local suffix_inner = raw_suffix and raw_suffix:match(TOOL_RESULT_SUFFIX_PATTERN)
+      local suffix_tokens = suffix_inner and modeline.parse(suffix_inner) or nil
+      local result_status, result_meta = extract_status(suffix_tokens)
       local result_start_line = current_line_num
 
       -- Skip blank lines to find content
@@ -234,40 +132,26 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
       local block, block_end = codeblock.parse_fenced_block(lines, content_start)
 
       if block then
-        if block.language == "flemma:tool" then
-          -- Tool status placeholder — parse info string for status
-          local parsed = modeline.parse(block.info or "")
-          local tool_status = TOOL_STATUS_MAP[parsed.status] or "pending"
+        -- Lifecycle placeholders (pending/approved/denied/rejected/aborted) skip
+        -- template-segment parsing; normal results (status=nil or status="error")
+        -- get `{{ expressions }}` inside their fence parsed.
+        local parse_inner = result_status == nil or result_status == "error"
+        local inner_segments = parse_inner
+            and template_parser.parse_segments(block.content, base_line_num + content_start)
+          or {}
 
-          table.insert(
-            segments,
-            ast.tool_result(tool_use_id, {
-              segments = {},
-              content = block.content,
-              is_error = is_error,
-              status = tool_status,
-              start_line = result_start_line,
-              end_line = base_line_num + block_end - 1,
-              fence_line = base_line_num + content_start - 1,
-            })
-          )
-          i = block_end + 1
-        else
-          -- Regular fenced block: parse fence content as template segments
-          local inner_segments = parse_segments(block.content, base_line_num + content_start)
-
-          table.insert(
-            segments,
-            ast.tool_result(tool_use_id, {
-              segments = inner_segments,
-              content = block.content,
-              is_error = is_error,
-              start_line = result_start_line,
-              end_line = base_line_num + block_end - 1,
-            })
-          )
-          i = block_end + 1
-        end
+        table.insert(
+          segments,
+          ast.tool_result(tool_use_id, {
+            segments = inner_segments,
+            content = block.content,
+            status = result_status,
+            meta = result_meta,
+            start_line = result_start_line,
+            end_line = base_line_num + block_end - 1,
+          })
+        )
+        i = block_end + 1
       elseif has_fence_opener then
         -- Started a fence but didn't close it properly - this is an error
         table.insert(diagnostics, {
@@ -602,7 +486,7 @@ local function parse_message(lines, start_idx, line_offset, diagnostics)
   else
     -- Other roles (System, etc.) - parse {{ }} expressions
     local content = table.concat(content_lines, "\n")
-    segments = parse_segments(content, content_start_line)
+    segments = template_parser.parse_segments(content, content_start_line)
   end
 
   local msg = ast.message(role, segments, {
@@ -656,7 +540,7 @@ end
 ---@param text string|nil
 ---@return flemma.ast.Segment[]
 function M.parse_inline_content(text)
-  return parse_segments(text or "")
+  return template_parser.parse_segments(text or "")
 end
 
 ---Register a post-parse hook that transforms the AST after parsing.

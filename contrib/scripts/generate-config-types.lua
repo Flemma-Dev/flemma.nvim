@@ -8,6 +8,9 @@
 local schema_types = require("flemma.schema.types")
 local navigation = require("flemma.schema.navigation")
 
+---@type fun(path: string, node: flemma.schema.ObjectNode, class_name: string)?
+local enqueue_referenced_object
+
 -- ---------------------------------------------------------------------------
 -- Schema node type detection helpers
 -- ---------------------------------------------------------------------------
@@ -217,6 +220,13 @@ local function node_to_type(node, class_name_for_objects)
   end
 
   if is_object_node(node) then
+    ---@cast node flemma.schema.ObjectNode
+    if node._class_as then
+      if enqueue_referenced_object then
+        enqueue_referenced_object("", node, node._class_as)
+      end
+      return node._class_as
+    end
     if class_name_for_objects then
       return class_name_for_objects
     end
@@ -335,6 +345,18 @@ local function enqueue_class(path, node, class_name)
   table.insert(class_queue, { path = path, node = node, class_name = class_name })
 end
 
+enqueue_referenced_object = enqueue_class
+
+---@param node flemma.schema.ObjectNode
+---@return string?
+local function enqueue_parent_class(node)
+  if not node._extends or not node._extends._class_as then
+    return nil
+  end
+  enqueue_class("", node._extends, node._extends._class_as)
+  return node._extends._class_as
+end
+
 ---@param parent_path string
 ---@param field_name string
 ---@param child_node flemma.schema.ObjectNode
@@ -343,8 +365,13 @@ local function resolve_child_class(parent_path, field_name, child_node)
   if child_node._type_as then
     return child_node._type_as
   end
+  if child_node._class_as then
+    enqueue_class("", child_node, child_node._class_as)
+    return child_node._class_as
+  end
   local child_path = parent_path ~= "" and (parent_path .. "." .. field_name) or field_name
   local class_name = derive_class_name(child_path)
+  enqueue_parent_class(child_node)
   enqueue_class(child_path, child_node, class_name)
   return class_name
 end
@@ -355,7 +382,12 @@ end
 ---@param node flemma.schema.ObjectNode
 ---@param class_name string
 local function emit_class(path, node, class_name)
-  emit("---@class " .. class_name)
+  local parent_class_name = enqueue_parent_class(node)
+  if parent_class_name then
+    emit("---@class " .. class_name .. " : " .. parent_class_name)
+  else
+    emit("---@class " .. class_name)
+  end
 
   -- Collect all fields: static + DISCOVER-cached
   local field_names = {}
@@ -390,7 +422,13 @@ local function emit_class(path, node, class_name)
       type_str = node_to_type(unwrapped)
     end
 
-    emit("---@field " .. name .. suffix .. " " .. type_str)
+    local is_inherited_field = parent_class_name
+      and node._extends
+      and node._extends:has_field(name)
+      and not (node._extension_fields and node._extension_fields[name])
+    if not is_inherited_field then
+      emit("---@field " .. name .. suffix .. " " .. type_str)
+    end
   end
 
   -- Open-ended indexer for objects with DISCOVER

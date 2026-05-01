@@ -1,6 +1,6 @@
 --- Test file for Moonshot AI provider functionality
 describe("Moonshot Provider", function()
-  local moonshot = require("flemma.provider.providers.moonshot")
+  local moonshot = require("flemma.provider.adapters.moonshot")
   local make_prompt = require("tests.utilities.prompt").make_prompt
 
   after_each(function()
@@ -75,11 +75,6 @@ describe("Moonshot Provider", function()
       local provider = moonshot.new({ model = "kimi-k2.5", max_tokens = 4096 })
       assert.equals("max_tokens", provider:_max_tokens_key())
     end)
-
-    it("_thinking_provider_prefix should return moonshot", function()
-      local provider = moonshot.new({ model = "kimi-k2.5", max_tokens = 4096 })
-      assert.equals("moonshot", provider:_thinking_provider_prefix())
-    end)
   end)
 
   describe("build_request", function()
@@ -128,7 +123,7 @@ describe("Moonshot Provider", function()
         local provider = moonshot.new({
           model = "kimi-k2.5",
           max_tokens = 4096,
-          thinking = "enabled",
+          thinking = { level = "enabled", foreign = "preserve" },
         })
         local prompt = make_prompt({ { type = "You", content = "Think about this" } })
         local request_body = provider:build_request(prompt)
@@ -156,7 +151,7 @@ describe("Moonshot Provider", function()
           model = "kimi-k2.5",
           max_tokens = 4096,
           temperature = 0.3,
-          thinking = "high",
+          thinking = { level = "high", foreign = "preserve" },
         })
         local prompt = make_prompt({ { type = "You", content = "Hello" } })
         local request_body = provider:build_request(prompt)
@@ -208,7 +203,7 @@ describe("Moonshot Provider", function()
         local provider = moonshot.new({
           model = "kimi-k2-thinking",
           max_tokens = 4096,
-          thinking = false,
+          thinking = { level = false, foreign = "preserve" },
         })
         local prompt = make_prompt({ { type = "You", content = "Hello" } })
         local request_body = provider:build_request(prompt)
@@ -351,7 +346,8 @@ describe("Moonshot Provider", function()
       -- E2E: parse real buffer text through AST → pipeline → build_request and verify
       -- reasoning_content survives the full chain. Unlike Anthropic/OpenAI which strip
       -- thinking without provider-specific signatures, Moonshot REQUIRES the full text.
-      local provider = moonshot.new({ model = "kimi-k2.5", max_tokens = 32768, thinking = "high" })
+      local provider =
+        moonshot.new({ model = "kimi-k2.5", max_tokens = 32768, thinking = { level = "high", foreign = "preserve" } })
 
       local lines = {
         "@You:",
@@ -399,7 +395,8 @@ describe("Moonshot Provider", function()
 
     it("should preserve reasoning_content alongside tool_calls from buffer", function()
       -- E2E: multi-step tool calling with thinking — parse from buffer format
-      local provider = moonshot.new({ model = "kimi-k2.5", max_tokens = 32768, thinking = "high" })
+      local provider =
+        moonshot.new({ model = "kimi-k2.5", max_tokens = 32768, thinking = { level = "high", foreign = "preserve" } })
 
       local lines = {
         "@You:",

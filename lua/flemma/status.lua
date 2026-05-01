@@ -109,7 +109,7 @@ end
 ---@param bufnr integer
 ---@return { merged: table<string, any>, sources: table<string, string>, resolved_max_tokens: integer|nil, resolved_thinking: string|nil }
 local function collect_parameters(config, bufnr)
-  local base_merged = normalize.flatten_parameters(config.provider, config)
+  local base_merged = normalize.merge_parameters(config.provider, config)
 
   -- Build source map for each flattened parameter key.
   -- Provider-specific path takes precedence over general path (same as flatten).
@@ -1238,7 +1238,7 @@ local function format_tools_section(b, data, is_last, verbose)
   -- booting indicator (kept stable across refreshes to avoid layout jumps)
   if t.booting then
     b:leaf(false)
-    b:put("⏳ loading async tool sources…", "FlemmaStatusBooting")
+    b:put("⧖ loading async tool sources…", "FlemmaStatusBooting")
     b:nl()
   elseif t.boot_completed then
     b:leaf(false)
@@ -1826,7 +1826,7 @@ function M.collect(bufnr)
   end
 
   -- Materialize after frontmatter evaluation so all layers are included.
-  -- materialize() is needed because flatten_parameters uses pairs().
+  -- materialize() is needed because merge_parameters uses pairs().
   -- resolve_preset() expands $-prefixed model references to concrete values.
   local config = normalize.resolve_preset(config_facade.materialize(bufnr))
 

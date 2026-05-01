@@ -10,16 +10,17 @@ Flemma emits [User autocmds](https://neovim.io/doc/user/autocmd.html#User) at li
 
 ### Available events
 
-| Event name         | Autocmd pattern         | Payload fields                                                       | When it fires                                        |
-| ------------------ | ----------------------- | -------------------------------------------------------------------- | ---------------------------------------------------- |
-| `request:sending`  | `FlemmaRequestSending`  | `bufnr`                                                              | Just before an API request is sent                   |
-| `request:finished` | `FlemmaRequestFinished` | `bufnr`, `status` (`"completed"`, `"cancelled"`, or `"errored"`)     | After an API request completes (any outcome)         |
-| `tool:executing`   | `FlemmaToolExecuting`   | `bufnr`, `tool_name`, `tool_id`                                      | When a tool invocation starts execution              |
-| `tool:finished`    | `FlemmaToolFinished`    | `bufnr`, `tool_name`, `tool_id`, `status` (`"success"` or `"error"`) | When a tool invocation completes                     |
-| `config:updated`   | `FlemmaConfigUpdated`   | _(none)_                                                             | After runtime configuration changes (see note below) |
-| `boot:complete`    | `FlemmaBootComplete`    | _(none)_                                                             | After all async tool sources finish loading          |
-| `sink:created`     | `FlemmaSinkCreated`     | `bufnr`, `name`                                                      | When a new output buffer (sink) is created           |
-| `sink:destroyed`   | `FlemmaSinkDestroyed`   | `bufnr`, `name`                                                      | When an output buffer (sink) is destroyed            |
+| Event name         | Autocmd pattern         | Payload fields                                                                                                                                          | When it fires                                        |
+| ------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `request:sending`  | `FlemmaRequestSending`  | `bufnr`                                                                                                                                                 | Just before an API request is sent                   |
+| `request:finished` | `FlemmaRequestFinished` | `bufnr`, `status` (`"completed"`, `"cancelled"`, or `"errored"`), `request?` (`flemma.session.Request` — present on completed status with pricing info) | After an API request completes (any outcome)         |
+| `tool:executing`   | `FlemmaToolExecuting`   | `bufnr`, `tool_name`, `tool_id`                                                                                                                         | When a tool invocation starts execution              |
+| `tool:finished`    | `FlemmaToolFinished`    | `bufnr`, `tool_name`, `tool_id`, `status` (`"success"` or `"error"`)                                                                                    | When a tool invocation completes                     |
+| `usage:estimated`  | `FlemmaUsageEstimated`  | `bufnr`                                                                                                                                                 | When a buffer's token estimate cache changes         |
+| `config:updated`   | `FlemmaConfigUpdated`   | _(none)_                                                                                                                                                | After runtime configuration changes (see note below) |
+| `boot:complete`    | `FlemmaBootComplete`    | _(none)_                                                                                                                                                | After all async tool sources finish loading          |
+| `sink:created`     | `FlemmaSinkCreated`     | `bufnr`, `name`                                                                                                                                         | When a new output buffer (sink) is created           |
+| `sink:destroyed`   | `FlemmaSinkDestroyed`   | `bufnr`, `name`                                                                                                                                         | When an output buffer (sink) is destroyed            |
 
 > [!WARNING]
 > The **`config:updated`** event is not yet dispatched consistently across all config mutation paths. Today it only fires from `:Flemma switch` (provider switching). Other mutations — frontmatter changes, programmatic `config.apply()` calls — do not emit it yet. Treat it as a best-effort signal for now.

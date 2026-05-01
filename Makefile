@@ -1,15 +1,16 @@
-.PHONY: default changeset qa develop screencast types
+.PHONY: default format qa develop screencast types
 
 SHELL := $(shell which bash)
 VIMRUNTIME_PATH = $(shell dirname $(shell dirname $(shell readlink -f $(shell which nvim))))/share/nvim/runtime
+override PROJECT_ROOT := $(CURDIR)
 
 default:
 	@echo "Usage: make [$(shell cat ${MAKEFILE_LIST} | grep -E '^[a-zA-Z_-]+:' | sed 's/:.*//g' | grep -v '^default' | tr '\n' '|' | sed 's/|$$//')]"
 	@cat ${MAKEFILE_LIST} | grep -B1 -E '^[a-zA-Z_-]+:' | sed 's/:.*//' | sed 's/^# *//' | tac | grep -v '^--' | sed 'N;s/\n/ - /' | grep -v '^default' | tac | sed 's/^/  /'
 
-# Create a new changeset
-changeset:
-	pnpm changeset
+# Format the entire codebase
+format:
+	treefmt
 
 # Run all quality gates — parallel, bail on first failure
 qa:
@@ -20,11 +21,15 @@ qa:
 	actionlint \
 		>"$$d/actionlint" 2>&1 & gate[$$!]=actionlint; \
 	VIMRUNTIME=$(VIMRUNTIME_PATH) \
-		lua-language-server --check lua/ --configpath ../.luarc-check.lua \
+		lua-language-server --check lua/ --configpath ../.luarc-check.lua --checklevel=Warning --num_threads=4 \
 		>"$$d/types" 2>&1 & gate[$$!]=types; \
 	bash contrib/scripts/lint-inline-requires.sh \
 		>"$$d/imports" 2>&1 & gate[$$!]=imports; \
-	nvim --headless --noplugin -u tests/minimal.vim \
+	bash contrib/scripts/lint-no-vim-notify.sh \
+		>"$$d/notify" 2>&1 & gate[$$!]=notify; \
+	bash contrib/scripts/lint-pcall-rethrow.sh \
+		>"$$d/pcall-rethrow" 2>&1 & gate[$$!]=pcall-rethrow; \
+	PROJECT_ROOT=$(PROJECT_ROOT) nvim --headless --noplugin -u tests/minimal.vim \
 		-c "PlenaryBustedDirectory tests/flemma/ {minimal_init = 'tests/minimal_init.lua'}" \
 		>"$$d/test" 2>&1 & gate[$$!]=test; \
 	while (( $${#gate[@]} )); do \
@@ -41,7 +46,14 @@ qa:
 			echo ""; exit 1; \
 		fi; \
 	done; \
-	echo "qa: OK"
+	sed 's/\x1b\[[0-9;]*m//g' "$$d/types" \
+		| grep -Ev '^\s*$$|^Starting|Diagnosis completed' \
+		> "$$d/types-filtered"; \
+	if [ -s "$$d/types-filtered" ]; then \
+		echo "qa: OK (with warnings)"; echo ""; \
+		echo "--- types (warnings) ---"; \
+		cat "$$d/types-filtered"; \
+	else echo "qa: OK"; fi
 
 # Generate EmmyLua config types from the schema DSL
 types:
@@ -66,9 +78,9 @@ develop:
 			model = \"\$$haiku\",														\
 			parameters = { thinking = \"minimal\" },									\
 			presets = {																	\
-				[\"\$$gpt\"] = \"openai gpt-5.4\",										\
+				[\"\$$gpt\"] = \"openai gpt-5.4-mini\",									\
 				[\"\$$haiku\"] = \"anthropic claude-haiku-4-5\",						\
-				[\"\$$kimi\"] = \"moonshot kimi-k2.5\",									\
+				[\"\$$kimi\"] = \"moonshot kimi-k2.6\",									\
 			},																			\
 			diagnostics = { enabled = true },											\
 			logging = { enabled = true, level = \"TRACE\" },							\
@@ -102,25 +114,7 @@ screencast: .vapor/catppuccin/nvim.git .vapor/NStefan002/screenkey.nvim.git
 	 export XDG_STATE_HOME=`pwd`/.vapor/state ;\
 	 nvim --headless +"TSInstallSync markdown markdown_inline lua json" +qa && \
 	 vhs contrib/vhs/flemma_cast.tape
-	ffmpeg -hide_banner -y \
-		-ss 00:00:14 \
-		-i assets/flemma_cast.mp4 \
-		-vframes 1 -q:v 2 \
-		.vapor/poster.jpg
-	ffmpeg -hide_banner -y \
-		-loop 1 \
-		-i .vapor/poster.jpg \
-		-vframes 1 -r 60 \
-		-c:v libx264 -pix_fmt yuv420p \
-		.vapor/poster.mp4
-	printf 'file $(CURDIR)/.vapor/poster.mp4\nfile $(CURDIR)/assets/flemma_cast.mp4\n' \
-		> .vapor/concat_list.txt
-	ffmpeg -hide_banner -y \
-		-f concat -safe 0 \
-		-i .vapor/concat_list.txt \
-		-c copy \
-		.vapor/flemma_cast_with_poster.mp4
-	mv .vapor/flemma_cast_with_poster.mp4 assets/flemma_cast.mp4
+	@contrib/scripts/screencast-poster.sh assets/flemma_cast.mp4
 
 .vapor/catppuccin/nvim.git .vapor/NStefan002/screenkey.nvim.git:
 	@mkdir -p $(dir $@)

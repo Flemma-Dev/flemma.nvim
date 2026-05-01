@@ -1,6 +1,6 @@
 --- Test file for OpenAI Chat Completions base provider functionality
 describe("OpenAI Chat Completions Base Provider", function()
-  local openai_chat = require("flemma.provider.providers.openai_chat")
+  local openai_chat = require("flemma.provider.openai_chat")
   local json = require("flemma.utilities.json")
   local make_prompt = require("tests.utilities.prompt").make_prompt
 
@@ -484,11 +484,6 @@ describe("OpenAI Chat Completions Base Provider", function()
     it("_max_tokens_key should return max_tokens by default", function()
       local provider = openai_chat._new_concrete()
       assert.equals("max_tokens", provider:_max_tokens_key())
-    end)
-
-    it("_thinking_provider_prefix should return nil by default", function()
-      local provider = openai_chat._new_concrete()
-      assert.is_nil(provider:_thinking_provider_prefix())
     end)
 
     it("_build_image_part should return standard image_url format", function()

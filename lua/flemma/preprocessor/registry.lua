@@ -4,7 +4,7 @@
 local M = {}
 
 local loader = require("flemma.loader")
-local registry_utils = require("flemma.registry")
+local registry_utils = require("flemma.utilities.registry")
 
 ---@type table<string, flemma.preprocessor.Rewriter>
 local rewriters = {}

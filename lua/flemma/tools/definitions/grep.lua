@@ -8,6 +8,7 @@
 local M = {}
 
 local json = require("flemma.utilities.json")
+local path_util = require("flemma.utilities.path")
 local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
 local sink_module = require("flemma.sink")
@@ -181,10 +182,8 @@ M.definitions = {
       local search_path = input.path
       if not search_path or search_path == "" then
         search_path = "."
-      elseif vim.startswith(search_path, ctx.cwd .. "/") then
-        search_path = "." .. search_path:sub(#ctx.cwd + 1)
-      elseif search_path == ctx.cwd then
-        search_path = "."
+      else
+        search_path = path_util.relative(search_path, ctx.cwd)
       end
 
       -- Gather exclude patterns from config

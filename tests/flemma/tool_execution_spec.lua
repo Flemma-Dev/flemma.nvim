@@ -1767,9 +1767,9 @@ describe("Tool Executor", function()
         "```",
         "",
         "@You:",
-        "**Tool Result:** `toolu_arm_test`",
+        "**Tool Result:** `toolu_arm_test` (pending)",
         "",
-        "```flemma:tool status=pending",
+        "```",
         "```",
       })
 
@@ -1781,7 +1781,7 @@ describe("Tool Executor", function()
         row = 0,
         col = 0,
       })
-      -- Position cursor on the flemma:tool line
+      -- Position cursor on the tool_result placeholder line
       vim.api.nvim_win_set_cursor(winid, { 10, 0 })
 
       -- Simulate paused state (as advance_phase2 would set)
@@ -1798,7 +1798,7 @@ describe("Tool Executor", function()
       -- (either to "sending" or stayed "armed" then advanced)
       local final_state = ap.get_state(bufnr)
       -- The tool completed synchronously, so on_tools_complete fired,
-      -- saw no more flemma:tool blocks, and set state to "sending"
+      -- saw no more lifecycle-status tool_result blocks, and set state to "sending"
       assert.equals("sending", final_state)
 
       vim.api.nvim_win_close(winid, true)
@@ -1824,9 +1824,9 @@ describe("Tool Executor", function()
         "```",
         "",
         "@You:",
-        "**Tool Result:** `toolu_no_arm`",
+        "**Tool Result:** `toolu_no_arm` (pending)",
         "",
-        "```flemma:tool status=pending",
+        "```",
         "```",
       })
 
@@ -1870,9 +1870,9 @@ describe("Tool Executor", function()
         "```",
         "",
         "@You:",
-        "**Tool Result:** `toolu_reject_arm`",
+        "**Tool Result:** `toolu_reject_arm` (pending)",
         "",
-        "```flemma:tool status=pending",
+        "```",
         "```",
       })
 
@@ -1900,9 +1900,9 @@ describe("Tool Executor", function()
         "```",
         "",
         "@You:",
-        "**Tool Result:** `toolu_reject_arm`",
+        "**Tool Result:** `toolu_reject_arm` (rejected)",
         "",
-        "```flemma:tool status=rejected",
+        "```",
         "User does not want this.",
         "```",
       })
@@ -1941,9 +1941,9 @@ describe("Tool Executor", function()
         "```",
         "",
         "@You:",
-        "**Tool Result:** `toolu_deny_arm`",
+        "**Tool Result:** `toolu_deny_arm` (pending)",
         "",
-        "```flemma:tool status=pending",
+        "```",
         "```",
       })
 
@@ -1971,9 +1971,9 @@ describe("Tool Executor", function()
         "```",
         "",
         "@You:",
-        "**Tool Result:** `toolu_deny_arm`",
+        "**Tool Result:** `toolu_deny_arm` (denied)",
         "",
-        "```flemma:tool status=denied",
+        "```",
         "```",
       })
       vim.api.nvim_win_set_cursor(winid, { 10, 0 })
@@ -2082,5 +2082,149 @@ describe("Executor count_running", function()
   it("returns 0 when no tools are executing", function()
     local bufnr = create_buffer({ "@You:", "test" })
     assert.equals(0, executor_module.count_running(bufnr))
+  end)
+end)
+
+describe("Executor approve_at_cursor / reject_at_cursor", function()
+  local executor_module
+
+  before_each(function()
+    package.loaded["flemma.tools.executor"] = nil
+    executor_module = require("flemma.tools.executor")
+  end)
+
+  after_each(function()
+    vim.cmd("silent! %bdelete!")
+  end)
+
+  --- Helper: set up a buffer containing a pending tool and open a window with
+  --- the cursor on the **Tool Result:** header so the *_at_cursor helpers can
+  --- resolve the tool context.
+  ---@return integer bufnr, integer winid
+  local function setup_pending_tool()
+    local bufnr = create_buffer({
+      "@Assistant:",
+      "Doing something:",
+      "",
+      "**Tool Use:** `calculator` (`toolu_cursor`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You:",
+      "**Tool Result:** `toolu_cursor` (pending)",
+      "",
+      "```",
+      "```",
+    })
+    local winid = vim.api.nvim_open_win(bufnr, true, {
+      relative = "editor",
+      width = 80,
+      height = 20,
+      row = 0,
+      col = 0,
+    })
+    vim.api.nvim_win_set_cursor(winid, { 10, 0 })
+    return bufnr, winid
+  end
+
+  it("approve_at_cursor rewrites the header to (approved)", function()
+    local bufnr, winid = setup_pending_tool()
+
+    local ok, err = executor_module.approve_at_cursor(bufnr)
+    assert.is_true(ok)
+    assert.is_nil(err)
+
+    local lines = get_lines(bufnr)
+    assert.equals("**Tool Result:** `toolu_cursor` (approved)", lines[10])
+    assert.equals("", lines[11])
+    assert.equals("```", lines[12])
+    assert.equals("```", lines[13])
+
+    vim.api.nvim_win_close(winid, true)
+  end)
+
+  it("reject_at_cursor with no message rewrites the header to (rejected) and leaves fence empty", function()
+    local bufnr, winid = setup_pending_tool()
+
+    local ok, err = executor_module.reject_at_cursor(bufnr)
+    assert.is_true(ok)
+    assert.is_nil(err)
+
+    local lines = get_lines(bufnr)
+    assert.equals("**Tool Result:** `toolu_cursor` (rejected)", lines[10])
+    assert.equals("", lines[11])
+    assert.equals("```", lines[12])
+    assert.equals("```", lines[13])
+
+    vim.api.nvim_win_close(winid, true)
+  end)
+
+  it("reject_at_cursor with a message sets (rejected) and writes the message into the fence", function()
+    local bufnr, winid = setup_pending_tool()
+
+    local ok, err = executor_module.reject_at_cursor(bufnr, "I do not want this.")
+    assert.is_true(ok)
+    assert.is_nil(err)
+
+    local lines = get_lines(bufnr)
+    assert.equals("**Tool Result:** `toolu_cursor` (rejected)", lines[10])
+    assert.equals("", lines[11])
+    assert.equals("```", lines[12])
+    assert.equals("I do not want this.", lines[13])
+    assert.equals("```", lines[14])
+
+    vim.api.nvim_win_close(winid, true)
+  end)
+
+  it("approve_at_cursor errors when the tool has already completed", function()
+    local bufnr = create_buffer({
+      "@Assistant:",
+      "Doing something:",
+      "",
+      "**Tool Use:** `calculator` (`toolu_done`)",
+      "```json",
+      '{ "expression": "2+2" }',
+      "```",
+      "",
+      "@You:",
+      "**Tool Result:** `toolu_done`",
+      "",
+      "```",
+      "4",
+      "```",
+    })
+    local winid = vim.api.nvim_open_win(bufnr, true, {
+      relative = "editor",
+      width = 80,
+      height = 20,
+      row = 0,
+      col = 0,
+    })
+    vim.api.nvim_win_set_cursor(winid, { 10, 0 })
+
+    local ok, err = executor_module.approve_at_cursor(bufnr)
+    assert.is_false(ok)
+    assert.is_truthy(err and err:match("already completed"))
+
+    vim.api.nvim_win_close(winid, true)
+  end)
+
+  it("reject_at_cursor errors when there is no tool at cursor", function()
+    local bufnr = create_buffer({ "@You:", "just a message" })
+    local winid = vim.api.nvim_open_win(bufnr, true, {
+      relative = "editor",
+      width = 80,
+      height = 20,
+      row = 0,
+      col = 0,
+    })
+    vim.api.nvim_win_set_cursor(winid, { 2, 0 })
+
+    local ok, err = executor_module.reject_at_cursor(bufnr)
+    assert.is_false(ok)
+    assert.is_truthy(err)
+
+    vim.api.nvim_win_close(winid, true)
   end)
 end)

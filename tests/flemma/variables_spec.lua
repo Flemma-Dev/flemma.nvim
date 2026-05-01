@@ -117,9 +117,9 @@ describe("utilities.variables", function()
       assert.equals(home .. "/.local/share/flemma", result)
     end)
 
-    it("leaves #{...} format expressions untouched", function()
-      local result = variables.expand_inline("${FLEMMA_TEST_UNSET_VAR_3:-/tmp}/flemma_#{source}_#{id}.txt")
-      assert.equals("/tmp/flemma_#{source}_#{id}.txt", result)
+    it("leaves {{...}} template expressions untouched", function()
+      local result = variables.expand_inline("${FLEMMA_TEST_UNSET_VAR_3:-/tmp}/flemma_{{ source }}_{{ id }}.txt")
+      assert.equals("/tmp/flemma_{{ source }}_{{ id }}.txt", result)
     end)
 
     it("handles multiple expansions in one string", function()

@@ -55,11 +55,10 @@ local M = {}
 ---@class flemma.ast.ToolResultSegment
 ---@field kind "tool_result"
 ---@field tool_use_id string
----@field is_error boolean
 ---@field segments flemma.ast.Segment[]
 ---@field content string
 ---@field status? flemma.ast.ToolStatus
----@field fence_line? integer 1-based line number of the fence opener (only for flemma:tool blocks)
+---@field meta? table<string, any> Extra key=value tokens from the header modeline, preserved for round-tripping
 ---@field position flemma.ast.Position
 
 ---@class flemma.ast.AbortedSegment
@@ -127,7 +126,7 @@ local M = {}
 ---@field name string
 ---@field input table<string, any>
 
----@alias flemma.ast.ToolStatus "pending"|"approved"|"rejected"|"denied"|"aborted"
+---@alias flemma.ast.ToolStatus "pending"|"approved"|"rejected"|"denied"|"aborted"|"error"
 
 ---@class flemma.ast.GenericToolResultPart
 ---@field kind "tool_result"
@@ -239,7 +238,7 @@ function M.tool_use(id, name, input, pos)
 end
 
 ---@param tool_use_id string
----@param opts? { segments?: flemma.ast.Segment[], content?: string, is_error?: boolean, status?: flemma.ast.ToolStatus, start_line?: integer, end_line?: integer, fence_line?: integer }
+---@param opts? { segments?: flemma.ast.Segment[], content?: string, status?: flemma.ast.ToolStatus, meta?: table<string, any>, start_line?: integer, end_line?: integer }
 ---@return flemma.ast.ToolResultSegment
 function M.tool_result(tool_use_id, opts)
   opts = opts or {}
@@ -248,9 +247,8 @@ function M.tool_result(tool_use_id, opts)
     tool_use_id = tool_use_id,
     segments = opts.segments or {},
     content = opts.content or "",
-    is_error = opts.is_error or false,
     status = opts.status,
-    fence_line = opts.fence_line,
+    meta = opts.meta,
     position = { start_line = opts.start_line, end_line = opts.end_line },
   }
 end
@@ -365,7 +363,7 @@ function M.to_generic_parts(evaluated_parts, source_file)
         kind = "tool_result",
         tool_use_id = p.tool_use_id,
         parts = tool_parts,
-        is_error = p.is_error,
+        is_error = p.status == "error",
       })
     end
   end

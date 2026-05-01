@@ -4,6 +4,8 @@
 local M = {}
 
 local json = require("flemma.utilities.json")
+local log = require("flemma.logging")
+local notify = require("flemma.notify")
 local state = require("flemma.state")
 
 local INDENT = "  "
@@ -267,6 +269,170 @@ local function diff_values(old, new, path, changes)
   end
 end
 
+---@class flemma.diagnostics.ExtraComparison
+---@field ok boolean
+---@field expected table
+---@field actual table
+---@field changes string[]
+
+---@param root table
+---@param path string
+---@param value any
+local function append_path(root, path, value)
+  local current = root
+  local segments = vim.split(path, ".", { plain = true })
+  for index, segment in ipairs(segments) do
+    if index == #segments then
+      current[segment] = current[segment] or {}
+      table.insert(current[segment], value)
+    else
+      current[segment] = current[segment] or {}
+      current = current[segment]
+    end
+  end
+end
+
+---@param value table
+---@return table
+local function materialize_extra(value)
+  if not vim.islist(value) then
+    return value
+  end
+
+  local result = {}
+  for _, operation in ipairs(value) do
+    if type(operation) == "table" and operation.op == "append" and type(operation.path) == "string" then
+      append_path(result, operation.path, operation.value)
+    end
+  end
+  return result
+end
+
+-- Baseline expectations match the tail of the current actual list because new
+-- conversation messages are appended; trim the head so only overlapping items compare.
+---@param expected any
+---@param actual any
+---@return any
+local function align_actual_to_expected(expected, actual)
+  if type(expected) ~= "table" or type(actual) ~= "table" then
+    return actual
+  end
+
+  if vim.islist(expected) and vim.islist(actual) then
+    if #actual <= #expected then
+      return actual
+    end
+    local aligned = {}
+    local start = #actual - #expected + 1
+    for index = start, #actual do
+      table.insert(aligned, actual[index])
+    end
+    return aligned
+  end
+
+  local aligned = {}
+  for key, expected_value in pairs(expected) do
+    aligned[key] = align_actual_to_expected(expected_value, actual[key])
+  end
+  for key, actual_value in pairs(actual) do
+    if expected[key] == nil then
+      aligned[key] = actual_value
+    end
+  end
+  return aligned
+end
+
+---@param extra table|nil
+---@return table|nil
+function M.next_expected(extra)
+  if type(extra) ~= "table" then
+    return nil
+  end
+  return extra.expected
+end
+
+---@param expected table|nil
+---@param actual table|nil
+---@return flemma.diagnostics.ExtraComparison|nil
+function M.compare_extra(expected, actual)
+  if type(expected) ~= "table" or type(actual) ~= "table" then
+    return nil
+  end
+
+  expected = materialize_extra(expected)
+  if vim.tbl_isempty(expected) then
+    return nil
+  end
+  actual = materialize_extra(actual)
+  actual = align_actual_to_expected(expected, actual)
+
+  local changes = {}
+  diff_values(expected, actual, "diagnostics", changes)
+  return {
+    ok = #changes == 0,
+    expected = expected,
+    actual = actual,
+    changes = changes,
+  }
+end
+
+---@param comparison flemma.diagnostics.ExtraComparison|nil
+---@return string[]|nil
+local function extra_mismatch_lines(comparison)
+  if not comparison or comparison.ok then
+    return nil
+  end
+
+  return {
+    "Provider replay metadata mismatch",
+    "Changes:",
+    "  • " .. table.concat(comparison.changes, "\n  • "),
+  }
+end
+
+---@param cache_lines string[]|nil
+---@param extra_comparison flemma.diagnostics.ExtraComparison|nil
+local function notify_diagnostics(cache_lines, extra_comparison)
+  local sections = {}
+  if cache_lines then
+    vim.list_extend(sections, cache_lines)
+  end
+
+  local extra_lines = extra_mismatch_lines(extra_comparison)
+  if extra_lines then
+    if #sections > 0 then
+      table.insert(sections, "")
+    end
+    vim.list_extend(sections, extra_lines)
+    log.warn("[diagnostics]: Provider replay metadata mismatch: " .. encode_sorted(extra_comparison, 0))
+  end
+
+  if #sections == 0 then
+    return
+  end
+
+  table.insert(sections, "")
+  table.insert(sections, "Run :Flemma diagnostics:diff for full diff")
+  notify.warn("[diagnostics]: " .. table.concat(sections, "\n"))
+end
+
+---@param raw_json string
+---@param extra table|nil
+---@return string
+local function format_request_with_extra(raw_json, extra)
+  if not extra then
+    return M.pretty_print_raw(raw_json)
+  end
+
+  local ok, decoded = pcall(json.decode, raw_json)
+  if not ok or type(decoded) ~= "table" then
+    return M.pretty_print_raw(raw_json)
+  end
+
+  decoded["flemma:diagnostics"] = extra
+  return encode_sorted(decoded, 0)
+end
+
 ---Analyze structural changes between two JSON request strings.
 ---Returns a list of human-readable change descriptions, or nil if previous is nil.
 ---@param previous string|nil
@@ -399,21 +565,22 @@ function M.open_diff(bufnr, normalized)
   local current = buffer_state.diagnostics_current_request
 
   if not current then
-    vim.notify(
-      "Flemma: No request data available. Send at least one request with diagnostics enabled.",
-      vim.log.levels.WARN
-    )
+    notify.warn("No request data available. Send at least one request with diagnostics enabled.")
     return
   end
 
   if not previous then
-    vim.notify("Flemma: Only one request recorded. Send another request to compare.", vim.log.levels.WARN)
+    notify.warn("Only one request recorded. Send another request to compare.")
     return
   end
 
+  local extra_comparison = buffer_state.diagnostics_current_extra_comparison
+  local previous_extra = extra_comparison and not extra_comparison.ok and extra_comparison.expected or nil
+  local current_extra = extra_comparison and not extra_comparison.ok and extra_comparison.actual or nil
   local format_fn = normalized and M.pretty_print_normalized or M.pretty_print_raw
-  local previous_formatted = format_fn(previous)
-  local current_formatted = format_fn(current)
+  local previous_formatted = previous_extra and format_request_with_extra(previous, previous_extra)
+    or format_fn(previous)
+  local current_formatted = current_extra and format_request_with_extra(current, current_extra) or format_fn(current)
 
   local prev_lines = vim.split(previous_formatted, "\n", { plain = true })
   local curr_lines = vim.split(current_formatted, "\n", { plain = true })
@@ -433,9 +600,10 @@ function M.open_diff(bufnr, normalized)
     vim.bo[buf].modifiable = false
   end
 
-  local mode_label = normalized and "normalized" or "raw"
-  vim.api.nvim_buf_set_name(buf_prev, "Flemma: Previous Request (" .. mode_label .. ")")
-  vim.api.nvim_buf_set_name(buf_curr, "Flemma: Current Request (" .. mode_label .. ")")
+  local mode_label = normalized and "normalized request" or "request"
+  local extra_label = extra_comparison and not extra_comparison.ok and " + diagnostics" or ""
+  vim.api.nvim_buf_set_name(buf_prev, "Flemma: Previous " .. mode_label .. extra_label)
+  vim.api.nvim_buf_set_name(buf_curr, "Flemma: Current " .. mode_label .. extra_label)
 
   -- Open in a new tab with diff mode
   vim.cmd("tabnew")
@@ -447,18 +615,23 @@ function M.open_diff(bufnr, normalized)
 end
 
 ---Record a request and run comparison against the previous one.
----Called after each response completes when diagnostics is enabled.
+---Called when request JSON is serialized and diagnostics is enabled.
 ---@param bufnr integer
 ---@param raw_json string The raw JSON request body
-function M.record_and_compare(bufnr, raw_json)
+---@param extra? table Provider-owned request diagnostics (`actual`/`expected`)
+function M.record_and_compare(bufnr, raw_json, extra)
   local buffer_state = state.get_buffer_state(bufnr)
 
   -- Rotate: current becomes previous
   buffer_state.diagnostics_previous_request = buffer_state.diagnostics_current_request
   buffer_state.diagnostics_current_request = raw_json
+  buffer_state.diagnostics_current_extra_comparison =
+    M.compare_extra(buffer_state.diagnostics_baseline_extra, extra and extra.actual)
 
   local previous = buffer_state.diagnostics_previous_request
+  local extra_comparison = buffer_state.diagnostics_current_extra_comparison
   if not previous then
+    notify_diagnostics(nil, extra_comparison)
     return -- First request, nothing to compare
   end
 
@@ -466,6 +639,7 @@ function M.record_and_compare(bufnr, raw_json)
   local divergence = M.find_prefix_divergence(previous, raw_json)
   if not divergence then
     -- Prefix intact — good for caching
+    notify_diagnostics(nil, extra_comparison)
     return
   end
 
@@ -490,37 +664,26 @@ function M.record_and_compare(bufnr, raw_json)
       -- since substantive content (messages) follows the divergence point.
       local previous_tail = previous:sub(divergence.byte_offset)
       if previous_tail:match("^[%]%}%s]*$") then
+        notify_diagnostics(nil, extra_comparison)
         return
       end
     end
 
     -- Build notification with all changes (including appends when they're not tail-safe)
     local change_descriptions = #breaking_changes > 0 and breaking_changes or structural_changes
-    vim.notify(
-      "Flemma [diagnostics]: Cache break detected"
-        .. "\nPrefix diverged at byte "
-        .. divergence.byte_offset
-        .. " (in "
-        .. path
-        .. ")"
-        .. "\nChanges:\n  • "
-        .. table.concat(change_descriptions, "\n  • ")
-        .. "\n\nRun :Flemma diagnostics:diff for full diff",
-      vim.log.levels.WARN
-    )
+    notify_diagnostics({
+      "Cache break detected",
+      "Prefix diverged at byte " .. divergence.byte_offset .. " (in " .. path .. ")",
+      "Changes:",
+      "  • " .. table.concat(change_descriptions, "\n  • "),
+    }, extra_comparison)
   else
     -- No structural changes at all but bytes diverged — serialization non-determinism
-    vim.notify(
-      "Flemma [diagnostics]: Cache break detected"
-        .. "\nPrefix diverged at byte "
-        .. divergence.byte_offset
-        .. " (in "
-        .. path
-        .. ")"
-        .. "\nLikely cause: JSON serialization non-determinism (key ordering)"
-        .. "\n\nRun :Flemma diagnostics:diff for full diff",
-      vim.log.levels.WARN
-    )
+    notify_diagnostics({
+      "Cache break detected",
+      "Prefix diverged at byte " .. divergence.byte_offset .. " (in " .. path .. ")",
+      "Likely cause: JSON serialization non-determinism (key ordering)",
+    }, extra_comparison)
   end
 end
 

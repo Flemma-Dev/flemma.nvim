@@ -1,6 +1,8 @@
---- Shared diagnostic formatting for vim.notify and status view.
+--- Shared diagnostic formatting for flemma.notify and status view.
 ---@class flemma.utilities.Diagnostic
 local M = {}
+
+local path_util = require("flemma.utilities.path")
 
 local ICON_ERROR = "⊘"
 local ICON_WARN = "⚠"
@@ -26,7 +28,7 @@ function M.format_path(path)
   if not path or path == "N/A" then
     return ""
   end
-  return vim.fn.fnamemodify(path, ":.")
+  return path_util.relative(path, vim.fn.getcwd())
 end
 
 ---Format a position as `:line` or `:line:col`.
@@ -151,6 +153,19 @@ function M.sort(diagnostics)
     return a.severity == "error"
   end)
   return sorted
+end
+
+---@param diagnostics flemma.secrets.ResolverDiagnostic[]|nil
+---@return string|nil
+function M.format_resolver_diagnostics(diagnostics)
+  if not diagnostics or #diagnostics == 0 then
+    return nil
+  end
+  local lines = {}
+  for _, d in ipairs(diagnostics) do
+    table.insert(lines, "  [" .. d.resolver .. "] " .. d.message)
+  end
+  return table.concat(lines, "\n")
 end
 
 return M

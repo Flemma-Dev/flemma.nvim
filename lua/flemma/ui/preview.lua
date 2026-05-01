@@ -6,6 +6,7 @@ local M = {}
 local query = require("flemma.ast.query")
 local str = require("flemma.utilities.string")
 local display = require("flemma.utilities.display")
+local buffer = require("flemma.utilities.buffer")
 local tools = require("flemma.tools")
 
 ---Normalise a raw format_preview return to a StructuredToolPreview.
@@ -40,11 +41,7 @@ function M.get_text_area_width(winid)
     return DEFAULT_MAX_LENGTH
   end
   local total = vim.api.nvim_win_get_width(winid)
-  local info = vim.fn.getwininfo(winid)
-  if info and #info > 0 then
-    return total - (info[1].textoff or 0)
-  end
-  return total
+  return total - buffer.get_gutter_width(winid)
 end
 
 ---Generate a truncated preview string from content
@@ -296,7 +293,7 @@ end
 ---@param tool_name string
 ---@param input table<string, any>
 ---@param available integer Available width after "name: " prefix
----@return { label?: string, detail?: string }
+---@return flemma.StructuredToolPreview
 function M.get_tool_use_body(tool_name, input, available)
   local tool_def = tools.get(tool_name)
 
@@ -415,7 +412,8 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
 
           local separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
           if detail and remaining > separator_width then
-            local detail_text = str.truncate(detail, remaining - separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
+            local detail_text =
+              str.truncate(detail --[[@as string]], remaining - separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
             if detail_text ~= "" then
               table.insert(entry_chunks, { LABEL_DETAIL_SEPARATOR .. detail_text, "FlemmaToolDetail" })
               entry_width = entry_width + separator_width + str.strwidth(detail_text)
@@ -440,7 +438,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       end
       local name_result_width = str.strwidth(tool_name)
       local prefix_width = name_result_width + #": "
-      if result_seg.is_error then
+      if result_seg.status == "error" then
         prefix_width = prefix_width + #"(error) "
       end
 
@@ -450,7 +448,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       table.insert(entry_chunks, { ": ", "FlemmaFoldPreview" })
       entry_width = entry_width + #": "
 
-      if result_seg.is_error then
+      if result_seg.status == "error" then
         table.insert(entry_chunks, { "(error) ", "FlemmaToolResultError" })
         entry_width = entry_width + #"(error) "
       end
@@ -474,7 +472,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       else
         -- No label: show content only (backward-compat highlight)
         local body = M.format_content_preview(result_seg.content, remaining)
-        if body ~= "" or result_seg.is_error then
+        if body ~= "" or result_seg.status == "error" then
           if body ~= "" then
             table.insert(entry_chunks, { body, "FlemmaFoldPreview" })
             entry_width = entry_width + str.strwidth(body)

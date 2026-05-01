@@ -84,7 +84,7 @@ local function handle_hover(params)
       seg_detail = seg_detail .. " name=" .. seg.name .. " id=" .. seg.id
     elseif seg.kind == "tool_result" then
       ---@cast seg flemma.ast.ToolResultSegment
-      seg_detail = seg_detail .. " tool_use_id=" .. seg.tool_use_id .. " error=" .. tostring(seg.is_error)
+      seg_detail = seg_detail .. " tool_use_id=" .. seg.tool_use_id .. " status=" .. tostring(seg.status)
     elseif seg.kind == "thinking" then
       ---@cast seg flemma.ast.ThinkingSegment
       seg_detail = seg_detail .. " len=" .. #seg.content .. " redacted=" .. tostring(seg.redacted or false)

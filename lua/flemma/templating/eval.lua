@@ -12,7 +12,6 @@
 ---@class flemma.templating.Eval
 local M = {}
 
-local compiler = require("flemma.templating.compiler")
 local templating = require("flemma.templating")
 local emittable = require("flemma.emittable")
 local log = require("flemma.logging")
@@ -20,7 +19,9 @@ local mime_util = require("flemma.mime")
 local parser = require("flemma.parser")
 local personality_builder = require("flemma.personalities.builder")
 local personality_registry = require("flemma.personalities")
+local renderer = require("flemma.templating.renderer")
 local state = require("flemma.state")
+local path_util = require("flemma.utilities.path")
 local str = require("flemma.utilities.string")
 local symbols = require("flemma.symbols")
 
@@ -98,23 +99,6 @@ local function read_file(path, opts)
   return data, nil
 end
 
----Resolve a relative include path against a directory.
----Absolute paths are normalized as-is; relative paths are joined with dirname.
----@param relative_path string The path from the include() call
----@param dirname? string The directory to resolve relative paths against
----@return string resolved_path Normalized absolute or relative path
-function M.resolve_include_target(relative_path, dirname)
-  if relative_path:sub(1, 1) == "/" then
-    return vim.fs.normalize(relative_path)
-  elseif vim.startswith(relative_path, "~/") then
-    return vim.fs.normalize(vim.fn.expand(relative_path))
-  elseif dirname then
-    return vim.fs.normalize(dirname .. "/" .. relative_path)
-  else
-    return relative_path
-  end
-end
-
 --- Build the include() closure for a given environment.
 --- The include_stack is threaded through closures — not stored on the env.
 ---@param env flemma.templating.eval.Environment The environment where include() will be installed
@@ -154,7 +138,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
       return emittable.composite_include_part({ rendered })
     end
 
-    local target_path = M.resolve_include_target(relative_path, env.__dirname)
+    local target_path = path_util.resolve(relative_path, env.__dirname)
 
     -- Check file exists
     if vim.fn.filereadable(target_path) ~= 1 then
@@ -232,7 +216,7 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
     -- Create isolated child environment (does NOT inherit user variables)
     local child_env = create_env_fn()
     child_env.__filename = target_path
-    child_env.__dirname = vim.fn.fnamemodify(target_path, ":h")
+    child_env.__dirname = path_util.dirname(target_path)
 
     -- Inject caller-provided arguments: only string keys are template variables.
     -- Symbol keys (BINARY, MIME) are include() control flags, not variables.
@@ -269,12 +253,12 @@ local function install_include(env, include_stack, eval_expr_fn, create_env_fn)
       return unpack(results)
     end
 
-    -- Compile and execute via compiler
-    local compile_result = compiler.compile(segments)
-    if compile_result.error then
-      log.debug("eval: include() compile error in " .. target_path .. ": " .. compile_result.error)
+    -- Compile and execute via the shared renderer
+    local render, render_result = renderer.compile_segments(segments)
+    if render_result.error then
+      log.debug("eval: include() compile error in " .. target_path .. ": " .. render_result.error)
     end
-    local compiled_parts, compile_diagnostics = compiler.execute(compile_result, child_env)
+    local compiled_parts, compile_diagnostics = render(child_env)
 
     -- Re-throw fatal diagnostics (severity "error") so include errors propagate
     -- to the caller. The custom pcall above ensures expression errors are promoted
@@ -355,12 +339,12 @@ function M.execute_frontmatter(code, env_param)
     initial_keys[k] = true
   end
 
-  local chunk, load_err = load(code, "frontmatter", "t", env)
-  if not chunk then
+  local compiled_fn, load_err = load(code, "frontmatter", "t", env)
+  if not compiled_fn then
     error({ type = "frontmatter", error = load_err })
   end
 
-  local ok, exec_err = pcall(chunk)
+  local ok, exec_err = pcall(compiled_fn)
   if not ok then
     if type(exec_err) == "table" and exec_err.type then
       error(exec_err)
@@ -397,12 +381,12 @@ function M.eval_expression(expr, env)
     expr = "return " .. expr
   end
 
-  local chunk, parse_err = load(expr, "expression", "t", env)
-  if not chunk then
+  local compiled_fn, parse_err = load(expr, "expression", "t", env)
+  if not compiled_fn then
     error(string.format("Parse error in '%s' for expression '{{%s}}': %s", (env.__filename or "N/A"), expr, parse_err))
   end
 
-  local ok, eval_result = pcall(chunk)
+  local ok, eval_result = pcall(compiled_fn)
   if not ok then
     if type(eval_result) == "table" and eval_result.type then
       error(eval_result)

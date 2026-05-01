@@ -5,6 +5,23 @@
 return {
   default = "claude-sonnet-4-6",
   models = {
+    -- Claude Opus 4.7 — adaptive thinking only (manual budget_tokens is rejected with 400)
+    ["claude-opus-4-7"] = {
+      pricing = {
+        input = 5.0,
+        output = 25.0,
+        cache_read = 0.50,
+        cache_write = 6.25,
+      },
+      max_input_tokens = 1000000,
+      max_output_tokens = 128000,
+      thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
+      min_thinking_budget = 1024,
+      min_cache_tokens = 2048,
+      meta = { adaptive_thinking = true },
+      thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" },
+    },
+
     -- Claude Opus 4.6
     ["claude-opus-4-6"] = {
       pricing = {
@@ -18,7 +35,7 @@ return {
       thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
       min_thinking_budget = 1024,
       min_cache_tokens = 2048,
-      supports_adaptive_thinking = true,
+      meta = { adaptive_thinking = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "max" },
     },
 
@@ -35,7 +52,7 @@ return {
       thinking_budgets = { minimal = 1024, low = 2048, medium = 8192, high = 16384 },
       min_thinking_budget = 1024,
       min_cache_tokens = 2048,
-      supports_adaptive_thinking = true,
+      meta = { adaptive_thinking = true },
       thinking_effort_map = { minimal = "low", low = "low", medium = "medium", high = "high", max = "high" },
     },
 

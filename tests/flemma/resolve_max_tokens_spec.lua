@@ -52,6 +52,20 @@ describe("flemma.provider.normalize.resolve_max_tokens", function()
     assert.equals(64000, params.max_tokens)
   end)
 
+  it("raises integer below model minimum", function()
+    -- kimi-k2.6 has min_output_tokens = 16000
+    local params = { max_tokens = 8000 }
+    normalize.resolve_max_tokens("moonshot", "kimi-k2.6", params)
+    assert.equals(16000, params.max_tokens)
+  end)
+
+  it("percentage respects model minimum floor", function()
+    -- kimi-k2.6 has max=65536, min=16000; 10% of 65536 = 6553 → raised to 16000
+    local params = { max_tokens = "10%" }
+    normalize.resolve_max_tokens("moonshot", "kimi-k2.6", params)
+    assert.equals(16000, params.max_tokens)
+  end)
+
   it("passes through integer with unknown model (no data to clamp)", function()
     local params = { max_tokens = 999999 }
     normalize.resolve_max_tokens("anthropic", "custom-model", params)
@@ -62,7 +76,7 @@ describe("flemma.provider.normalize.resolve_max_tokens", function()
     -- Register a custom provider with a model that has pricing but no max_output_tokens
     local registry = require("flemma.provider.registry")
     registry.register("partial", {
-      module = "flemma.provider.providers.openai",
+      module = "flemma.provider.adapters.openai",
       capabilities = {
         supports_reasoning = false,
         supports_thinking_budget = false,

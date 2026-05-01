@@ -22,7 +22,7 @@ describe("provider registration", function()
   describe("register()", function()
     it("adds a provider recognized by has(), get(), supported_providers()", function()
       registry.register("custom", {
-        module = "flemma.provider.providers.openai",
+        module = "flemma.provider.adapters.openai",
         capabilities = {
           supports_reasoning = false,
           supports_thinking_budget = false,
@@ -32,7 +32,7 @@ describe("provider registration", function()
       })
 
       assert.is_true(registry.has("custom"))
-      assert.are.equal("flemma.provider.providers.openai", registry.get("custom"))
+      assert.are.equal("flemma.provider.adapters.openai", registry.get("custom"))
       assert.are.equal("Custom", registry.get_display_name("custom"))
 
       local supported = registry.supported_providers()
@@ -48,7 +48,7 @@ describe("provider registration", function()
 
     it("populates defaults and models when models are provided", function()
       registry.register("custom", {
-        module = "flemma.provider.providers.openai",
+        module = "flemma.provider.adapters.openai",
         capabilities = {
           supports_reasoning = false,
           supports_thinking_budget = false,
@@ -73,7 +73,7 @@ describe("provider registration", function()
   describe("is_provider_model() without models", function()
     it("accepts any model string for a registered provider with no model list", function()
       registry.register("minimal", {
-        module = "flemma.provider.providers.openai",
+        module = "flemma.provider.adapters.openai",
         capabilities = {
           supports_reasoning = false,
           supports_thinking_budget = false,
@@ -88,7 +88,7 @@ describe("provider registration", function()
 
     it("returns false for nil model_name even with no model list", function()
       registry.register("minimal", {
-        module = "flemma.provider.providers.openai",
+        module = "flemma.provider.adapters.openai",
         capabilities = {
           supports_reasoning = false,
           supports_thinking_budget = false,
@@ -157,7 +157,7 @@ describe("provider registration", function()
   describe("unregister()", function()
     it("removes a provider and returns true", function()
       registry.register("custom", {
-        module = "flemma.provider.providers.openai",
+        module = "flemma.provider.adapters.openai",
         capabilities = {
           supports_reasoning = false,
           supports_thinking_budget = false,
@@ -177,7 +177,7 @@ describe("provider registration", function()
 
     it("cleans up defaults and models", function()
       registry.register("custom", {
-        module = "flemma.provider.providers.openai",
+        module = "flemma.provider.adapters.openai",
         capabilities = {
           supports_reasoning = false,
           supports_thinking_budget = false,
@@ -201,7 +201,7 @@ describe("provider registration", function()
       assert.is_not_nil(all["anthropic"])
       assert.is_not_nil(all["openai"])
       assert.is_not_nil(all["vertex"])
-      assert.are.equal("flemma.provider.providers.anthropic", all["anthropic"].module)
+      assert.are.equal("flemma.provider.adapters.anthropic", all["anthropic"].module)
     end)
 
     it("returns a deep copy (mutations do not affect registry)", function()
@@ -236,7 +236,7 @@ describe("provider registration", function()
   end)
 end)
 
-describe("flatten_parameters with facade", function()
+describe("merge_parameters with facade", function()
   local config_facade = require("flemma.config")
   local schema_definition = require("flemma.config.schema")
 
@@ -256,7 +256,7 @@ describe("flatten_parameters with facade", function()
 
   it("schema defaults provide base parameter values", function()
     local config = config_facade.materialize()
-    local flat = normalize.flatten_parameters("anthropic", config)
+    local flat = normalize.merge_parameters("anthropic", config)
     -- Schema defaults should be present
     assert.are.equal("50%", flat.max_tokens)
     assert.is_nil(flat.temperature)
@@ -269,7 +269,7 @@ describe("flatten_parameters with facade", function()
       parameters = { max_tokens = 8000, cache_retention = "long" },
     })
     local config = config_facade.materialize()
-    local flat = normalize.flatten_parameters("anthropic", config)
+    local flat = normalize.merge_parameters("anthropic", config)
     assert.are.equal(8000, flat.max_tokens)
     assert.are.equal("long", flat.cache_retention)
   end)
@@ -279,14 +279,14 @@ describe("flatten_parameters with facade", function()
       parameters = { anthropic = { thinking_budget = 4096 } },
     })
     local config = config_facade.materialize()
-    local flat = normalize.flatten_parameters("anthropic", config)
+    local flat = normalize.merge_parameters("anthropic", config)
     assert.are.equal(4096, flat.thinking_budget)
   end)
 
   it("provider-specific values override general values with same key", function()
     -- The openai schema has reasoning_summary defaulting to "auto"
     local config = config_facade.materialize()
-    local flat = normalize.flatten_parameters("openai", config)
+    local flat = normalize.merge_parameters("openai", config)
     assert.are.equal("auto", flat.reasoning_summary)
   end)
 
@@ -295,7 +295,7 @@ describe("flatten_parameters with facade", function()
       parameters = { cache_retention = "long" },
     })
     local config = config_facade.materialize()
-    local flat = normalize.flatten_parameters("openai", config)
+    local flat = normalize.merge_parameters("openai", config)
     assert.are.equal("long", flat.cache_retention)
   end)
 
@@ -307,7 +307,7 @@ describe("flatten_parameters with facade", function()
       parameters = { cache_retention = "long" },
     })
     local config = config_facade.materialize()
-    local flat = normalize.flatten_parameters("anthropic", config)
+    local flat = normalize.merge_parameters("anthropic", config)
     assert.are.equal("long", flat.cache_retention)
   end)
 
@@ -321,7 +321,7 @@ describe("flatten_parameters with facade", function()
       parameters = { vertex = { location = "europe-west1" } },
     })
     local config = config_facade.materialize()
-    local flat = normalize.flatten_parameters("vertex", config)
+    local flat = normalize.merge_parameters("vertex", config)
     assert.are.equal("europe-west1", flat.location)
     assert.are.equal("my-project", flat.project_id)
   end)
@@ -334,7 +334,7 @@ describe("flatten_parameters with facade", function()
       parameters = { vertex = { project_id = "new-project" } },
     })
     local config = config_facade.materialize()
-    local flat = normalize.flatten_parameters("vertex", config)
+    local flat = normalize.merge_parameters("vertex", config)
     assert.are.equal("new-project", flat.project_id)
     assert.are.equal("us-central1", flat.location)
   end)
@@ -342,7 +342,7 @@ describe("flatten_parameters with facade", function()
   it("model is included from top-level config", function()
     config_facade.apply(config_facade.LAYERS.SETUP, { model = "claude-sonnet-4-5" })
     local config = config_facade.materialize()
-    local flat = normalize.flatten_parameters("anthropic", config)
+    local flat = normalize.merge_parameters("anthropic", config)
     assert.are.equal("claude-sonnet-4-5", flat.model)
   end)
 end)
@@ -400,7 +400,18 @@ describe("resolve_preset", function()
     local config = config_facade.materialize()
     local resolved = normalize.resolve_preset(config)
     assert.equals("claude-haiku-4-5-20250514", resolved.model)
-    assert.equals("low", resolved.parameters.thinking)
+    assert.are.same({ level = "low", foreign = "preserve" }, resolved.parameters.thinking)
+  end)
+
+  it("coerces preset thinking=false to table form", function()
+    local presets_mod = require("flemma.presets")
+    presets_mod.setup({
+      ["$fast"] = { provider = "anthropic", model = "claude-haiku-4-5-20250514", thinking = false },
+    })
+    config_facade.apply(config_facade.LAYERS.SETUP, { model = "$fast" })
+    local config = config_facade.materialize()
+    local resolved = normalize.resolve_preset(config)
+    assert.are.same({ level = false, foreign = "preserve" }, resolved.parameters.thinking)
   end)
 
   it("does not mutate the original config table", function()

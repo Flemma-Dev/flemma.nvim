@@ -610,6 +610,9 @@ end
 ---@field _discover_cache table<string, flemma.schema.Node> Cached results
 ---@field _strict boolean Whether unknown keys are rejected (default true)
 ---@field _list_schema? flemma.schema.Node Item schema for the list part (set via :allow_list())
+---@field _class_as? string Named EmmyLua class emitted for this object
+---@field _extends? flemma.schema.ObjectNode Base object used to build this object via :extend()
+---@field _extension_fields? table<string, boolean> Fields added or overridden by :extend()
 local ObjectNode = setmetatable({}, { __index = Node })
 ObjectNode.__index = ObjectNode
 
@@ -758,6 +761,16 @@ function ObjectNode:passthrough()
   return self
 end
 
+--- Name this object for generated EmmyLua annotations.
+--- Unlike Node:type_as(), this does not replace validation semantics; it only
+--- gives the type generator a stable class name to emit and reference.
+---@param class_name string Fully-qualified EmmyLua class name
+---@return flemma.schema.ObjectNode self
+function ObjectNode:class_as(class_name)
+  self._class_as = class_name
+  return self
+end
+
 --- Enable list operations on this object's own path.
 --- The object retains its named fields for sub-path navigation while also
 --- accepting list ops (set with array, append, remove, prepend) validated
@@ -781,6 +794,64 @@ function ObjectNode:get_list_item_schema()
   return self._list_schema
 end
 
+--- Create a new ObjectNode by cloning self and merging additional fields.
+--- Accepts an ObjectNode (merges its fields), a raw table (processed like
+--- the s.object() constructor argument, including symbol keys), or nil (clone).
+---@param other table?
+---@return flemma.schema.ObjectNode
+function ObjectNode:extend(other)
+  if other ~= nil and type(other) ~= "table" then
+    error("ObjectNode:extend(): expected ObjectNode, table, or nil — got " .. type(other), 2)
+  end
+  local node = setmetatable({}, ObjectNode)
+  -- Clone self
+  node._fields = {}
+  for k, v in pairs(self._fields) do
+    node._fields[k] = v
+  end
+  node._aliases = {}
+  for k, v in pairs(self._aliases) do
+    node._aliases[k] = v
+  end
+  node._discover = self._discover
+  node._discover_cache = {}
+  node._strict = self._strict
+  node._list_schema = self._list_schema
+  node._coerce = self._coerce
+  node._description = self._description
+  node._type_as = self._type_as
+  node._class_as = self._class_as
+  node._extends = self._extends
+  node._extension_fields = self._extension_fields and vim.tbl_extend("force", {}, self._extension_fields) or nil
+  if other == nil then
+    return node
+  end
+  node._class_as = nil
+  node._extends = self
+  node._extension_fields = {}
+  -- Merge other
+  if getmetatable(other) == ObjectNode then
+    for k, v in pairs(other._fields) do
+      node._fields[k] = v
+      node._extension_fields[k] = true
+    end
+  else
+    for k, v in pairs(other) do
+      if k == symbols.ALIASES then
+        for ak, av in pairs(v) do
+          node._aliases[ak] = av
+        end
+      elseif k == symbols.DISCOVER then
+        node._discover = v
+      else
+        node._fields[k] = v
+        node._extension_fields[k] = true
+      end
+    end
+  end
+  return node
+end
+
 --- Construct an ObjectNode from a fields table.
 --- The fields table may include symbol keys:
 ---   [symbols.ALIASES] = { alias = "canonical.path" }
@@ -794,6 +865,9 @@ function ObjectNode.new(fields)
   node._discover = nil
   node._discover_cache = {}
   node._strict = true
+  node._class_as = nil
+  node._extends = nil
+  node._extension_fields = nil
 
   for k, v in pairs(fields) do
     if k == symbols.ALIASES then

@@ -18,7 +18,7 @@ package.loaded["flemma.config.store"] = nil
 package.loaded["flemma.config.proxy"] = nil
 package.loaded["flemma.config.schema"] = nil
 
-local stub = require("luassert.stub")
+local notify = require("flemma.notify")
 local config_facade = require("flemma.config")
 local schema = require("flemma.config.schema")
 local state = require("flemma.state")
@@ -153,9 +153,9 @@ describe("Tool concurrency gating in Phase 2", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_03`",
+      "**Tool Result:** `toolu_03` (approved)",
       "",
-      "```flemma:tool status=approved",
+      "```",
       "```",
     })
 
@@ -203,9 +203,9 @@ describe("Tool concurrency gating in Phase 2", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_03`",
+      "**Tool Result:** `toolu_03` (approved)",
       "",
-      "```flemma:tool status=approved",
+      "```",
       "```",
     })
 
@@ -230,9 +230,9 @@ describe("Tool concurrency gating in Phase 2", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_06`",
+      "**Tool Result:** `toolu_06` (approved)",
       "",
-      "```flemma:tool status=approved",
+      "```",
       "```",
     })
 
@@ -341,24 +341,24 @@ describe("Tool concurrency gating in Phase 2", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_11`",
+      "**Tool Result:** `toolu_11` (approved)",
       "",
-      "```flemma:tool status=approved",
+      "```",
       "```",
       "",
-      "**Tool Result:** `toolu_12`",
+      "**Tool Result:** `toolu_12` (approved)",
       "",
-      "```flemma:tool status=approved",
+      "```",
       "```",
       "",
-      "**Tool Result:** `toolu_13`",
+      "**Tool Result:** `toolu_13` (approved)",
       "",
-      "```flemma:tool status=approved",
+      "```",
       "```",
       "",
-      "**Tool Result:** `toolu_14`",
+      "**Tool Result:** `toolu_14` (approved)",
       "",
-      "```flemma:tool status=approved",
+      "```",
       "```",
     })
 
@@ -388,9 +388,9 @@ describe("Tool concurrency gating in Phase 2", function()
         "```",
         "",
         "@You:",
-        "**Tool Result:** `toolu_21`",
+        "**Tool Result:** `toolu_21` (approved)",
         "",
-        "```flemma:tool status=approved",
+        "```",
         "```",
       })
       -- Fill both concurrency slots so the gate fires on the very first approved block
@@ -421,33 +421,45 @@ describe("Tool concurrency gating in Phase 2", function()
     end
 
     -- Case 1: user_initiated=true — expect a throttle notification
-    local notify_spy = stub(vim, "notify")
+    local captured1 = {}
+    notify._set_impl(function(notification)
+      table.insert(captured1, notification)
+      return notification
+    end)
     local bufnr_initiated = make_throttled_buffer()
     core.send_or_execute({ bufnr = bufnr_initiated, user_initiated = true })
+    vim.wait(10, function()
+      return false
+    end)
+    notify._reset_impl()
 
     local throttle_seen = false
-    for _, call in ipairs(notify_spy.calls) do
-      local msg = call.refs[1]
-      if msg and msg:match("Executing") and msg:match("max_concurrent") then
+    for _, n in ipairs(captured1) do
+      if n.message:match("Executing") and n.message:match("max_concurrent") then
         throttle_seen = true
       end
     end
     assert.is_true(throttle_seen, "Expected throttle notification when user_initiated=true")
-    notify_spy:revert()
 
     -- Case 2: user_initiated omitted — throttle notification must NOT fire
-    local notify_spy2 = stub(vim, "notify")
+    local captured2 = {}
+    notify._set_impl(function(notification)
+      table.insert(captured2, notification)
+      return notification
+    end)
     local bufnr_silent = make_throttled_buffer()
     core.send_or_execute({ bufnr = bufnr_silent })
+    vim.wait(10, function()
+      return false
+    end)
+    notify._reset_impl()
 
     local throttle_seen_silent = false
-    for _, call in ipairs(notify_spy2.calls) do
-      local msg = call.refs[1]
-      if msg and msg:match("Executing") and msg:match("max_concurrent") then
+    for _, n in ipairs(captured2) do
+      if n.message:match("Executing") and n.message:match("max_concurrent") then
         throttle_seen_silent = true
       end
     end
     assert.is_false(throttle_seen_silent, "Expected no throttle notification when user_initiated is nil")
-    notify_spy2:revert()
   end)
 end)

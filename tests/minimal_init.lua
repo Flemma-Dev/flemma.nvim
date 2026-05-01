@@ -1,5 +1,5 @@
 -- Add the project root to the runtime path to find the 'lua' directory
-vim.opt.rtp:append(os.getenv("PROJECT_ROOT"))
+vim.opt.rtp:prepend(os.getenv("PROJECT_ROOT"))
 
 -- Turn off swapfile during tests
 vim.opt.swapfile = false
@@ -99,3 +99,9 @@ end
 
 -- Initialize the plugin with default settings
 require("flemma").setup({})
+
+-- Suppress flemma.notify dispatches by default. Specs that want to inspect
+-- notifications override this by calling _set_impl in their before_each.
+require("flemma.notify")._set_impl(function(notification)
+  return notification
+end)

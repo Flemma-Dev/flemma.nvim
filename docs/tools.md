@@ -2,7 +2,7 @@
 
 Flemma's tool system lets models request actions – run a calculation, execute a shell command, read or modify files – and receive structured results, all within the `.chat` buffer. This document covers approval, per-buffer configuration, custom tool registration, and the resolver API.
 
-For a quick overview of built-in tools and the basic workflow, see the [Tool Calling](../README.md#tool-calling) section in the README.
+For a quick overview of built-in tools and the basic workflow, see [The Agent](../README.md#the-agent) section in the README.
 
 ---
 
@@ -29,40 +29,46 @@ The cursor moves to the first `pending` placeholder so you can review it.
 - **`rejected`** → an error result is injected, using any content you wrote inside the block as the error message.
 - **`pending`** → blocks the cycle. The cursor moves here and Flemma waits for you to act.
 
-**Phase 3 – Send.** When no `flemma:tool` placeholders remain (every tool has a real result), the next <kbd>Ctrl-]</kbd> sends the conversation to the provider.
+**Phase 3 – Send.** When no lifecycle-status placeholders remain (every tool has a real result), the next <kbd>Ctrl-]</kbd> sends the conversation to the provider.
 
 With [autopilot](configuration.md#autopilot) enabled (the default), Phases 1–3 chain automatically for approved tools. You only interact when a tool lands on `pending`.
 
-### Tool status blocks
+### Tool status suffix
 
-Each placeholder is a fenced code block with a `flemma:tool` language tag and a status in its info string:
+Each placeholder carries its status in a parenthesized suffix on the `**Tool Result:**` header. The fenced block below the header is a plain code block — empty for pending placeholders, populated for errors or resolved results:
 
 ````
-**Tool Result:** `toolu_01`
+**Tool Result:** `toolu_01` (pending)
 
-```flemma:tool status=pending
+```
 ```
 ````
 
-You can **edit the status directly** in the buffer. This is the primary way to interact with pending tools:
+The suffix is modeline-parseable: a bare word like `(pending)` upgrades to `status=pending`; explicit keys like `(status=pending sandbox=false)` mix status with future metadata. Unrecognized tokens round-trip through the `meta` field on the tool_result AST node.
 
-- **Approve:** change `status=pending` to `status=approved`, then press <kbd>Ctrl-]</kbd>.
-- **Reject:** change `status=pending` to `status=rejected`, then press <kbd>Ctrl-]</kbd>. Flemma injects an error result telling the model the tool was rejected.
-- **Reject with a message:** change the status to `rejected` and type your reason inside the block – the model sees your text as the error:
+You can **edit the status directly** in the header. This is the primary way to interact with pending tools:
+
+- **Approve:** change `(pending)` to `(approved)`, then press <kbd>Ctrl-]</kbd>.
+- **Reject:** change `(pending)` to `(rejected)`, then press <kbd>Ctrl-]</kbd>. Flemma injects an error result telling the model the tool was rejected.
+- **Reject with a message:** change the status to `rejected` and type your reason inside the fence – the model sees your text as the error:
 
   ````
-  ```flemma:tool status=rejected
+  **Tool Result:** `toolu_01` (rejected)
+
+  ```
   I don't want to run rm -rf on my home directory.
   ```
   ````
 
 - **Execute one tool:** press <kbd>Alt-Enter</kbd> on any tool block to execute or resolve it immediately (works for `approved`, `pending`, `rejected`, and `denied`).
+- **Approve via command:** `:Flemma tool:approve` toggles the tool under the cursor to `(approved)` without executing it – the next <kbd>Ctrl-]</kbd> runs it.
+- **Reject via command:** `:Flemma tool:reject` toggles the tool under the cursor to `(rejected)`. Append an optional message (`:Flemma tool:reject do not run rm -rf`) and it's written into the fence as the rejection reason the model will see.
 
 ### Content-overwrite protection
 
-If you paste or type output inside a `pending` block, Flemma treats it as a user-provided result: on <kbd>Ctrl-]</kbd> the `flemma:tool` fence is stripped and your content is sent to the model as a normal tool result. This is useful when you run a command manually and want to provide the output yourself.
+If you paste or type output inside a `pending` block, Flemma treats it as a user-provided result: on <kbd>Ctrl-]</kbd> the `(pending)` suffix is cleared from the header and your content is sent to the model as a normal tool result. This is useful when you run a command manually and want to provide the output yourself.
 
-If you edit the content inside an `approved` block, Flemma skips execution to protect your edits – a warning is shown and the cycle pauses so you can review. Remove the `flemma:tool` fence manually to send your content.
+If you edit the content inside an `approved` block, Flemma skips execution to protect your edits – a warning is shown and the cycle pauses so you can review. Clear the `(approved)` suffix from the header manually to send your content.
 
 ### Configuring approval
 
@@ -180,7 +186,7 @@ Set `tools.max_concurrent = 0` for unlimited concurrency. Override per-buffer vi
 
 ## Tool previews
 
-When a tool call is pending approval, its `flemma:tool` placeholder block is empty – you'd normally need to scroll up to the `**Tool Use:**` block to see what the tool will do. Tool previews eliminate that: Flemma renders a virtual line inside each empty placeholder showing a compact summary of the tool call.
+When a tool call is pending approval, its tool_result placeholder fence is empty – you'd normally need to scroll up to the `**Tool Use:**` block to see what the tool will do. Tool previews eliminate that: Flemma renders a virtual line inside each empty placeholder showing a compact summary of the tool call.
 
 For example, a pending `read` tool might show:
 

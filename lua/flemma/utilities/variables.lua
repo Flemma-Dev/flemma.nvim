@@ -24,13 +24,12 @@ function M.clear()
   resolvers = {}
 end
 
---- Expand ~ at the start of a string to $HOME.
+--- Expand ~ at the start of a string to the home directory.
 ---@param value string
 ---@return string
 local function expand_tilde(value)
-  if value:sub(1, 1) == "~" then
-    local home = os.getenv("HOME") or ""
-    return home .. value:sub(2)
+  if vim.startswith(value, "~/") or value == "~" then
+    return vim.fn.expand(value)
   end
   return value
 end

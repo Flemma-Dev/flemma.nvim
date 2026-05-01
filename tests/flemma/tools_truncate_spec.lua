@@ -45,7 +45,7 @@ describe("tools.truncate", function()
         source = "tool",
         id = "test_123",
         bufnr = 0,
-        output_path_format = dir .. "/flemma_#{source}_#{id}.txt",
+        output_path_format = dir .. "/flemma_{{ source }}_{{ id }}.txt",
       }, overrides)
     end
 
@@ -115,7 +115,7 @@ describe("tools.truncate", function()
       assert.is_truthy(result.content:find("Full output:"))
     end)
 
-    it("uses #{source} and #{id} in output path", function()
+    it("uses source and id in output path", function()
       local lines = {}
       for i = 1, base_truncate.MAX_LINES + 10 do
         lines[i] = "line " .. i
@@ -137,7 +137,7 @@ describe("tools.truncate", function()
       local base = vim.fn.tempname()
       local result = tools_truncate.truncate_with_overflow(
         string.rep("x", base_truncate.MAX_BYTES + 1000),
-        make_opts({ output_path_format = base .. "/deep/nested/flemma_#{source}_#{id}.txt" })
+        make_opts({ output_path_format = base .. "/deep/nested/flemma_{{ source }}_{{ id }}.txt" })
       )
 
       assert.is_truthy(result.overflow_path)
@@ -147,7 +147,7 @@ describe("tools.truncate", function()
     it("omits Full output suffix when file write fails", function()
       local result = tools_truncate.truncate_with_overflow(
         string.rep("x", base_truncate.MAX_BYTES + 1000),
-        make_opts({ output_path_format = "/dev/null/impossible/flemma_#{source}_#{id}.txt" })
+        make_opts({ output_path_format = "/dev/null/impossible/flemma_{{ source }}_{{ id }}.txt" })
       )
 
       assert.is_true(result.truncated)

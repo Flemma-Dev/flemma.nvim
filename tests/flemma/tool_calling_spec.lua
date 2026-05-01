@@ -10,9 +10,9 @@ package.loaded["flemma.tools.definitions.grep"] = nil
 package.loaded["flemma.tools.definitions.find"] = nil
 package.loaded["flemma.tools.definitions.ls"] = nil
 package.loaded["flemma.utilities.truncate"] = nil
-package.loaded["flemma.provider.providers.anthropic"] = nil
-package.loaded["flemma.provider.providers.openai"] = nil
-package.loaded["flemma.provider.providers.vertex"] = nil
+package.loaded["flemma.provider.adapters.anthropic"] = nil
+package.loaded["flemma.provider.adapters.openai"] = nil
+package.loaded["flemma.provider.adapters.vertex"] = nil
 
 local ast = require("flemma.ast")
 local client = require("flemma.client")
@@ -238,13 +238,13 @@ describe("AST Tool Nodes", function()
     assert.equals("tool_result", node.kind)
     assert.equals("toolu_123", node.tool_use_id)
     assert.equals("42", node.content)
-    assert.equals(false, node.is_error)
+    assert.is_nil(node.status)
   end)
 
   it("creates tool_result error node", function()
-    local node = ast.tool_result("toolu_123", { content = "Division by zero", is_error = true, start_line = 10 })
+    local node = ast.tool_result("toolu_123", { content = "Division by zero", status = "error", start_line = 10 })
     assert.equals("tool_result", node.kind)
-    assert.equals(true, node.is_error)
+    assert.equals("error", node.status)
   end)
 end)
 
@@ -288,7 +288,7 @@ describe("Parser Tool Blocks", function()
     assert.is_not_nil(tool_result, "Should have tool_result segment")
     assert.equals("toolu_01A09q90qw90lq917835lgs0", tool_result.tool_use_id)
     assert.equals("105", tool_result.content)
-    assert.equals(false, tool_result.is_error)
+    assert.is_nil(tool_result.status)
   end)
 
   it("parses tool_result with JSON code block", function()
@@ -324,7 +324,7 @@ describe("Parser Tool Blocks", function()
 
     assert.is_not_nil(tool_result)
     assert.equals("toolu_01PLAIN123", tool_result.tool_use_id)
-    assert.equals(false, tool_result.is_error)
+    assert.is_nil(tool_result.status)
     assert.equals("this is a result of a tool\nwith multiple lines", tool_result.content)
   end)
 
@@ -343,7 +343,7 @@ describe("Parser Tool Blocks", function()
 
     assert.is_not_nil(tool_result)
     assert.equals("toolu_01ERROR123", tool_result.tool_use_id)
-    assert.equals(true, tool_result.is_error)
+    assert.equals("error", tool_result.status)
     assert.is_true(tool_result.content:match("Division by zero") ~= nil)
   end)
 
@@ -450,7 +450,7 @@ describe("Processor Tool Parts", function()
         has_tool_result = true
         assert.equals("toolu_01A09q90qw90lq917835lgs0", p.tool_use_id)
         assert.equals("105", p.content)
-        assert.equals(false, p.is_error)
+        assert.is_nil(p.status)
       end
     end
     assert.is_true(has_tool_result, "Should have tool_result part")
@@ -458,7 +458,7 @@ describe("Processor Tool Parts", function()
 end)
 
 describe("Anthropic Provider Tool Support", function()
-  local anthropic = require("flemma.provider.providers.anthropic")
+  local anthropic = require("flemma.provider.adapters.anthropic")
 
   before_each(function()
     tools.clear()
@@ -578,7 +578,7 @@ end)
 describe("Anthropic Streaming Tool Use Response", function()
   -- Provider contract test: validates SSE parsing at the provider level.
   -- See the "(integration)" describe block below for full-chain coverage.
-  local anthropic = require("flemma.provider.providers.anthropic")
+  local anthropic = require("flemma.provider.adapters.anthropic")
 
   before_each(function()
     tools.clear()
@@ -686,9 +686,9 @@ describe("Anthropic Streaming Tool Use Response (integration)", function()
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
-    package.loaded["flemma.provider.providers.anthropic"] = nil
-    package.loaded["flemma.provider.providers.openai"] = nil
-    package.loaded["flemma.provider.providers.vertex"] = nil
+    package.loaded["flemma.provider.adapters.anthropic"] = nil
+    package.loaded["flemma.provider.adapters.openai"] = nil
+    package.loaded["flemma.provider.adapters.vertex"] = nil
     flemma = require("flemma")
     flemma.setup({ parameters = { thinking = false } })
     tools = require("flemma.tools")
@@ -750,7 +750,7 @@ describe("Anthropic Streaming Tool Use Response (integration)", function()
 end)
 
 describe("Request Body Validation", function()
-  local anthropic = require("flemma.provider.providers.anthropic")
+  local anthropic = require("flemma.provider.adapters.anthropic")
 
   before_each(function()
     tools.clear()
@@ -828,7 +828,7 @@ end)
 -- ============================================================================
 
 describe("OpenAI Provider Request Building with Tools", function()
-  local openai = require("flemma.provider.providers.openai")
+  local openai = require("flemma.provider.adapters.openai")
 
   before_each(function()
     tools.clear()
@@ -962,7 +962,7 @@ end)
 describe("OpenAI Streaming Tool Use Response", function()
   -- Provider contract test: validates SSE parsing at the provider level.
   -- See the "(integration)" describe block below for full-chain coverage.
-  local openai = require("flemma.provider.providers.openai")
+  local openai = require("flemma.provider.adapters.openai")
 
   before_each(function()
     tools.clear()
@@ -1050,9 +1050,9 @@ describe("OpenAI Streaming Tool Use Response (integration)", function()
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
-    package.loaded["flemma.provider.providers.anthropic"] = nil
-    package.loaded["flemma.provider.providers.openai"] = nil
-    package.loaded["flemma.provider.providers.vertex"] = nil
+    package.loaded["flemma.provider.adapters.anthropic"] = nil
+    package.loaded["flemma.provider.adapters.openai"] = nil
+    package.loaded["flemma.provider.adapters.vertex"] = nil
     flemma = require("flemma")
     flemma.setup({ parameters = { thinking = false } })
     core = require("flemma.core")
@@ -1099,7 +1099,7 @@ describe("OpenAI Streaming Tool Use Response (integration)", function()
 end)
 
 describe("OpenAI Request Body Validation with Tools", function()
-  local openai = require("flemma.provider.providers.openai")
+  local openai = require("flemma.provider.adapters.openai")
 
   before_each(function()
     tools.clear()
@@ -1158,7 +1158,7 @@ describe("OpenAI Request Body Validation with Tools", function()
 end)
 
 describe("Vertex AI Provider Request Building with Tools", function()
-  local vertex = require("flemma.provider.providers.vertex")
+  local vertex = require("flemma.provider.adapters.vertex")
 
   before_each(function()
     tools.clear()
@@ -1317,7 +1317,7 @@ end)
 describe("Vertex AI Streaming Tool Use Response", function()
   -- Provider contract test: validates SSE parsing at the provider level.
   -- See the "(integration)" describe block below for full-chain coverage.
-  local vertex = require("flemma.provider.providers.vertex")
+  local vertex = require("flemma.provider.adapters.vertex")
 
   before_each(function()
     tools.clear()
@@ -1423,9 +1423,9 @@ describe("Vertex AI Streaming Function Call Response (integration)", function()
     package.loaded["flemma.core"] = nil
     package.loaded["flemma.provider.normalize"] = nil
     package.loaded["flemma.provider.registry"] = nil
-    package.loaded["flemma.provider.providers.anthropic"] = nil
-    package.loaded["flemma.provider.providers.openai"] = nil
-    package.loaded["flemma.provider.providers.vertex"] = nil
+    package.loaded["flemma.provider.adapters.anthropic"] = nil
+    package.loaded["flemma.provider.adapters.openai"] = nil
+    package.loaded["flemma.provider.adapters.vertex"] = nil
     flemma = require("flemma")
     flemma.setup({ parameters = { thinking = false } })
     core = require("flemma.core")
@@ -1478,7 +1478,7 @@ describe("Vertex AI Streaming Function Call Response (integration)", function()
 end)
 
 describe("Anthropic Thinking Signature and Redacted Thinking Round-Trip", function()
-  local anthropic = require("flemma.provider.providers.anthropic")
+  local anthropic = require("flemma.provider.adapters.anthropic")
 
   it("preserves redacted thinking through parse → pipeline → build_request", function()
     local provider = anthropic.new({
@@ -1571,7 +1571,7 @@ end)
 describe("Vertex AI Thought Signature Support", function()
   -- Provider contract test: validates SSE parsing at the provider level.
   -- See the "(integration)" describe block below for full-chain coverage.
-  local vertex = require("flemma.provider.providers.vertex")
+  local vertex = require("flemma.provider.adapters.vertex")
 
   before_each(function()
     tools.clear()
@@ -1844,7 +1844,7 @@ describe("Vertex AI Thought Signature Support", function()
 end)
 
 describe("Vertex AI Request Body Validation with Tools", function()
-  local vertex = require("flemma.provider.providers.vertex")
+  local vertex = require("flemma.provider.adapters.vertex")
 
   before_each(function()
     tools.clear()
@@ -1987,7 +1987,7 @@ describe("Base Provider Tool ID Normalization", function()
 end)
 
 describe("Anthropic Provider with Vertex URN IDs", function()
-  local anthropic = require("flemma.provider.providers.anthropic")
+  local anthropic = require("flemma.provider.adapters.anthropic")
 
   before_each(function()
     tools.clear()
@@ -2068,7 +2068,7 @@ describe("Anthropic Provider with Vertex URN IDs", function()
 end)
 
 describe("OpenAI Provider with Vertex URN IDs", function()
-  local openai = require("flemma.provider.providers.openai")
+  local openai = require("flemma.provider.adapters.openai")
 
   before_each(function()
     tools.clear()
@@ -2310,9 +2310,9 @@ end)
 -- ============================================================================
 
 describe("Orphaned tool call synthetic injection", function()
-  local anthropic = require("flemma.provider.providers.anthropic")
-  local openai = require("flemma.provider.providers.openai")
-  local vertex = require("flemma.provider.providers.vertex")
+  local anthropic = require("flemma.provider.adapters.anthropic")
+  local openai = require("flemma.provider.adapters.openai")
+  local vertex = require("flemma.provider.adapters.vertex")
 
   before_each(function()
     tools.clear()

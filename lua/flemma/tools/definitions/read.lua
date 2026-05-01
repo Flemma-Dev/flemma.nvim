@@ -11,6 +11,7 @@ local M = {}
 local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
 local mime = require("flemma.mime")
+local encoding = require("flemma.utilities.encoding")
 
 M.definitions = {
   {
@@ -72,11 +73,15 @@ M.definitions = {
       local mime_type = mime.detect(path)
       if mime_type and mime.is_binary(mime_type) then
         local ref_path = input.path
-        -- ~/ paths are emitted as-is (the preprocessor handles @~/ references)
-        -- Other relative paths get ./ prefix for the preprocessor pattern
-        if not vim.startswith(ref_path, "~/") and not ref_path:match("^%.%.?/") then
+        if vim.startswith(ref_path, "/") then
+          -- Absolute paths use the @// convention (// signals absolute)
+          ref_path = "/" .. ref_path
+        elseif not vim.startswith(ref_path, "~/") and not ref_path:match("^%.%.?/") then
+          -- Other relative paths get ./ prefix for the preprocessor pattern
+          -- (~/ paths are emitted as-is; the preprocessor handles @~/ references)
           ref_path = "./" .. ref_path
         end
+        ref_path = encoding.url_encode_subset(ref_path)
         return {
           success = true,
           output = "@" .. ref_path .. ";type=" .. mime_type,

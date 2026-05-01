@@ -1,6 +1,6 @@
 --- Test file for OpenAI provider functionality
 describe("OpenAI Provider", function()
-  local openai = require("flemma.provider.providers.openai")
+  local openai = require("flemma.provider.adapters.openai")
   local make_prompt = require("tests.utilities.prompt").make_prompt
 
   after_each(function()
@@ -118,7 +118,7 @@ describe("OpenAI Provider", function()
       local provider = openai.new({
         model = "o3",
         max_tokens = 4000,
-        thinking = "max",
+        thinking = { level = "max", foreign = "preserve" },
       })
 
       local messages = {
@@ -136,7 +136,7 @@ describe("OpenAI Provider", function()
       local provider = openai.new({
         model = "gpt-5.2",
         max_tokens = 4000,
-        thinking = "max",
+        thinking = { level = "max", foreign = "preserve" },
       })
 
       local messages = {
@@ -154,7 +154,7 @@ describe("OpenAI Provider", function()
       local provider = openai.new({
         model = "o3",
         max_tokens = 4000,
-        thinking = "minimal",
+        thinking = { level = "minimal", foreign = "preserve" },
       })
 
       local messages = {
@@ -166,6 +166,137 @@ describe("OpenAI Provider", function()
 
       assert.is_not_nil(request_body.reasoning)
       assert.equals("low", request_body.reasoning.effort)
+    end)
+
+    it("should omit reasoning for non-reasoning models even when configured", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1000,
+        temperature = 0.5,
+        reasoning = "high",
+        thinking = { level = "high", foreign = "preserve" },
+      })
+
+      local messages = {
+        { type = "You", content = "Hello" },
+      }
+
+      local prompt = make_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.equals(1000, request_body.max_output_tokens)
+      assert.equals(0.5, request_body.temperature)
+      assert.is_nil(request_body.reasoning)
+      assert.is_nil(request_body.include)
+    end)
+
+    it("should send reasoning.effort='none' when thinking=false on reasoning models", function()
+      local provider = openai.new({
+        model = "gpt-5.5",
+        max_tokens = 4000,
+        thinking = { level = false, foreign = "preserve" },
+      })
+
+      local messages = {
+        { type = "You", content = "Hello" },
+      }
+
+      local prompt = make_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.is_not_nil(request_body.reasoning, "Should include reasoning block even when disabled")
+      assert.equals("none", request_body.reasoning.effort)
+      assert.is_nil(request_body.reasoning.summary, "Disabled reasoning should not include summary")
+      assert.is_nil(request_body.include, "Disabled reasoning should not request encrypted content")
+    end)
+
+    it("should omit reasoning when thinking is nil on reasoning models", function()
+      local provider = openai.new({
+        model = "o3",
+        max_tokens = 4000,
+      })
+
+      local messages = {
+        { type = "You", content = "Hello" },
+      }
+
+      local prompt = make_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.is_nil(request_body.reasoning, "Nil thinking should omit reasoning (use model default)")
+    end)
+
+    it("should still omit reasoning for non-reasoning models when thinking=false", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1000,
+        temperature = 0.5,
+        thinking = { level = false, foreign = "preserve" },
+      })
+
+      local messages = {
+        { type = "You", content = "Hello" },
+      }
+
+      local prompt = make_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.is_nil(request_body.reasoning, "Non-reasoning models should not get reasoning block")
+      assert.equals(0.5, request_body.temperature)
+    end)
+
+    it("should clamp gpt-5-pro reasoning to high", function()
+      local provider = openai.new({
+        model = "gpt-5-pro",
+        max_tokens = 4000,
+        reasoning = "low",
+      })
+
+      local messages = {
+        { type = "You", content = "Solve this problem" },
+      }
+
+      local prompt = make_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.is_not_nil(request_body.reasoning)
+      assert.equals("high", request_body.reasoning.effort)
+    end)
+
+    it("should clamp low reasoning to medium for pro models without low support", function()
+      local provider = openai.new({
+        model = "gpt-5.4-pro",
+        max_tokens = 4000,
+        thinking = { level = "low", foreign = "preserve" },
+      })
+
+      local messages = {
+        { type = "You", content = "Solve this problem" },
+      }
+
+      local prompt = make_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.is_not_nil(request_body.reasoning)
+      assert.equals("medium", request_body.reasoning.effort)
+    end)
+
+    it("should map max reasoning to xhigh for pro models with xhigh support", function()
+      local provider = openai.new({
+        model = "gpt-5.2-pro",
+        max_tokens = 4000,
+        thinking = { level = "max", foreign = "preserve" },
+      })
+
+      local messages = {
+        { type = "You", content = "Solve this problem" },
+      }
+
+      local prompt = make_prompt(messages)
+      local request_body = provider:build_request(prompt)
+
+      assert.is_not_nil(request_body.reasoning)
+      assert.equals("xhigh", request_body.reasoning.effort)
     end)
 
     it("should use custom reasoning_summary when configured", function()
@@ -286,6 +417,189 @@ describe("OpenAI Provider", function()
       assert.equals(1, #assistant_msg.content)
       assert.equals("output_text", assistant_msg.content[1].type)
       assert.equals("Let me check that.", assistant_msg.content[1].text)
+    end)
+
+    it("should label assistant messages with tool uses as commentary", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1000,
+        temperature = 0.7,
+      })
+
+      local prompt = {
+        system = nil,
+        history = {
+          { role = "user", parts = { { kind = "text", text = "Calculate 2+2" } } },
+          {
+            role = "assistant",
+            parts = {
+              { kind = "text", text = "Let me calculate that." },
+              { kind = "tool_use", id = "call_abc", name = "calculator", input = { expression = "2+2" } },
+            },
+          },
+        },
+      }
+
+      local request_body = provider:build_request(prompt)
+      local assistant_msg = nil
+      for _, item in ipairs(request_body.input) do
+        if item.type == "message" and item.role == "assistant" then
+          assistant_msg = item
+          break
+        end
+      end
+
+      assert.is_not_nil(assistant_msg)
+      assert.equals("commentary", assistant_msg.phase)
+    end)
+
+    it("should label assistant messages without tool uses as final_answer", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1000,
+        temperature = 0.7,
+      })
+
+      local prompt = {
+        system = nil,
+        history = {
+          { role = "user", parts = { { kind = "text", text = "Hello" } } },
+          {
+            role = "assistant",
+            parts = {
+              { kind = "text", text = "Hello there." },
+            },
+          },
+        },
+      }
+
+      local request_body = provider:build_request(prompt)
+      local assistant_msg = nil
+      for _, item in ipairs(request_body.input) do
+        if item.type == "message" and item.role == "assistant" then
+          assistant_msg = item
+          break
+        end
+      end
+
+      assert.is_not_nil(assistant_msg)
+      assert.equals("final_answer", assistant_msg.phase)
+    end)
+
+    it("should omit assistant message phases when experimental.phase=false", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1000,
+        temperature = 0.7,
+        experimental = { phase = false },
+      })
+
+      local prompt = {
+        system = nil,
+        history = {
+          { role = "user", parts = { { kind = "text", text = "Hello" } } },
+          {
+            role = "assistant",
+            parts = {
+              { kind = "text", text = "Hello there." },
+            },
+          },
+        },
+      }
+
+      local request_body = provider:build_request(prompt)
+      local assistant_msg = nil
+      for _, item in ipairs(request_body.input) do
+        if item.type == "message" and item.role == "assistant" then
+          assistant_msg = item
+          break
+        end
+      end
+
+      assert.is_not_nil(assistant_msg)
+      assert.is_nil(assistant_msg.phase)
+    end)
+
+    it("should label tool preambles and final answers across turns", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1000,
+        temperature = 0.7,
+      })
+
+      local prompt = {
+        system = nil,
+        history = {
+          { role = "user", parts = { { kind = "text", text = "Calculate 2+2" } } },
+          {
+            role = "assistant",
+            parts = {
+              { kind = "text", text = "I'll calculate it." },
+              { kind = "tool_use", id = "call_abc", name = "calculator", input = { expression = "2+2" } },
+            },
+          },
+          {
+            role = "user",
+            parts = {
+              {
+                kind = "tool_result",
+                tool_use_id = "call_abc",
+                parts = { { kind = "text", text = "4" } },
+                is_error = false,
+              },
+            },
+          },
+          {
+            role = "assistant",
+            parts = {
+              { kind = "text", text = "The answer is 4." },
+            },
+          },
+        },
+      }
+
+      local request_body = provider:build_request(prompt)
+      local phases = {}
+      for _, item in ipairs(request_body.input) do
+        if item.type == "message" and item.role == "assistant" then
+          table.insert(phases, item.phase)
+        end
+      end
+
+      assert.same({ "commentary", "final_answer" }, phases)
+    end)
+
+    it("should label all split assistant text segments as commentary when the source message uses tools", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1000,
+        temperature = 0.7,
+      })
+
+      local prompt = {
+        system = nil,
+        history = {
+          { role = "user", parts = { { kind = "text", text = "Calculate 2+2" } } },
+          {
+            role = "assistant",
+            parts = {
+              { kind = "text", text = "First text." },
+              { kind = "tool_use", id = "call_abc", name = "calculator", input = { expression = "2+2" } },
+              { kind = "text", text = "Second text." },
+            },
+          },
+        },
+      }
+
+      local request_body = provider:build_request(prompt)
+      local phases = {}
+      for _, item in ipairs(request_body.input) do
+        if item.type == "message" and item.role == "assistant" then
+          table.insert(phases, item.phase)
+        end
+      end
+
+      assert.same({ "commentary", "commentary" }, phases)
     end)
 
     it("should add status=completed on function_call items", function()
@@ -918,6 +1232,66 @@ describe("OpenAI Provider", function()
         accumulated_content:find(original_json, 1, true),
         "Original JSON formatting should be preserved in buffer output"
       )
+    end)
+
+    it("should capture response message phases in provider diagnostics", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1024,
+        temperature = 0,
+      })
+      provider:build_request({
+        system = nil,
+        history = {
+          { role = "user", parts = { { kind = "text", text = "Hello" } } },
+        },
+      })
+
+      local callbacks = {
+        on_content = function() end,
+        on_response_complete = function() end,
+        on_error = function() end,
+      }
+
+      provider:process_response_line(
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_123","phase":"final_answer","status":"completed"}}',
+        callbacks
+      )
+
+      assert.same({
+        {
+          op = "append",
+          path = "openai.assistant_message_phases",
+          value = "final_answer",
+        },
+      }, provider._response_buffer.extra.diagnostics.expected)
+    end)
+
+    it("should not capture response phases from function_call items", function()
+      local provider = openai.new({
+        model = "gpt-4o",
+        max_tokens = 1024,
+        temperature = 0,
+      })
+      provider:build_request({
+        system = nil,
+        history = {
+          { role = "user", parts = { { kind = "text", text = "Hello" } } },
+        },
+      })
+
+      local callbacks = {
+        on_content = function() end,
+        on_response_complete = function() end,
+        on_error = function() end,
+      }
+
+      provider:process_response_line(
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_abc","name":"calculator","arguments":"{}","status":"completed"}}',
+        callbacks
+      )
+
+      assert.same({}, provider._response_buffer.extra.diagnostics.expected)
     end)
   end)
 

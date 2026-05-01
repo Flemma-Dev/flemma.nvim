@@ -13,7 +13,7 @@ local config_facade = require("flemma.config")
 local config_schema = require("flemma.config.schema")
 local parser = require("flemma.parser")
 
---- Helper: get pending non-error, empty tool blocks awaiting execution.
+--- Helper: get pending, empty tool blocks awaiting execution.
 --- Blocks with user-filled content are not awaiting execution — the user
 --- already provided the result.
 ---@param bufnr integer
@@ -23,7 +23,7 @@ local function get_awaiting_execution(bufnr)
   local pending = groups["pending"] or {}
   local awaiting = {}
   for _, ctx in ipairs(pending) do
-    if not ctx.is_error and not ctx.has_content then
+    if not ctx.has_content then
       table.insert(awaiting, ctx)
     end
   end
@@ -358,7 +358,7 @@ describe("Autopilot on_tools_complete", function()
     autopilot.cleanup_buffer(bufnr)
   end)
 
-  it("pauses when flemma:tool status=pending blocks remain", function()
+  it("pauses when (pending) tool_result blocks remain", function()
     config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
@@ -373,9 +373,9 @@ describe("Autopilot on_tools_complete", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "```",
     })
 
@@ -385,7 +385,7 @@ describe("Autopilot on_tools_complete", function()
     autopilot.cleanup_buffer(bufnr)
   end)
 
-  it("schedules send when flemma:tool status=approved blocks remain", function()
+  it("schedules send when (approved) tool_result blocks remain", function()
     config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     local bufnr = create_buffer({
       "@You:",
@@ -400,9 +400,9 @@ describe("Autopilot on_tools_complete", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (approved)",
       "",
-      "```flemma:tool status=approved",
+      "```",
       "```",
     })
 
@@ -482,7 +482,7 @@ describe("Autopilot on_tools_complete", function()
   it("prioritizes approved blocks over pending blocks when both exist", function()
     config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     -- Simulate buffer state after Phase 2 executed first tool with max_concurrent=1:
-    -- - toolu_01 completed (result injected, no flemma:tool fence)
+    -- - toolu_01 completed (result injected, no (pending) suffix)
     -- - toolu_02 still approved (throttled, never executed)
     -- - toolu_03 pending (needs user approval)
     local bufnr = create_buffer({
@@ -514,14 +514,14 @@ describe("Autopilot on_tools_complete", function()
       "4",
       "```",
       "",
-      "**Tool Result:** `toolu_02`",
+      "**Tool Result:** `toolu_02` (approved)",
       "",
-      "```flemma:tool status=approved",
+      "```",
       "```",
       "",
-      "**Tool Result:** `toolu_03`",
+      "**Tool Result:** `toolu_03` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "```",
     })
 
@@ -559,9 +559,9 @@ describe("Autopilot on_tools_complete", function()
       "4",
       "```",
       "",
-      "**Tool Result:** `toolu_02`",
+      "**Tool Result:** `toolu_02` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "```",
     })
 
@@ -582,7 +582,7 @@ describe("Autopilot conflict detection", function()
     vim.cmd("silent! %bdelete!")
   end)
 
-  it("parser sets content on flemma:tool with user-edited content", function()
+  it("parser sets content on (pending) tool_result with user-edited content", function()
     local bufnr = create_buffer({
       "@Assistant:",
       "Tool call.",
@@ -593,9 +593,9 @@ describe("Autopilot conflict detection", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "User typed something here",
       "```",
     })
@@ -609,7 +609,7 @@ describe("Autopilot conflict detection", function()
     assert.equals("User typed something here", seg.content)
   end)
 
-  it("parser sets empty content on empty flemma:tool", function()
+  it("parser sets empty content on empty (approved) tool_result fence", function()
     local bufnr = create_buffer({
       "@Assistant:",
       "Tool call.",
@@ -620,9 +620,9 @@ describe("Autopilot conflict detection", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (approved)",
       "",
-      "```flemma:tool status=approved",
+      "```",
       "```",
     })
 
@@ -650,15 +650,15 @@ describe("Autopilot conflict detection", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "I edited this one",
       "```",
       "",
-      "**Tool Result:** `toolu_02`",
+      "**Tool Result:** `toolu_02` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "```",
     })
 
@@ -679,9 +679,9 @@ describe("Autopilot conflict detection", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "Edited content",
       "```",
     })
@@ -715,7 +715,7 @@ describe("Autopilot all-denied edge case", function()
   it("on_tools_complete continues after all tools denied (results injected, no pending)", function()
     config_facade.apply(config_facade.LAYERS.SETUP, { tools = { autopilot = { enabled = true } } })
     -- Simulate buffer state after all tools were denied: tool_results are present
-    -- with error content, no flemma:tool markers
+    -- with error content, no (status) suffix in header
     local bufnr = create_buffer({
       "@You:",
       "Run the calculator",
@@ -809,9 +809,9 @@ describe("Autopilot on_tools_complete ignored when not armed", function()
       "```",
       "",
       "@You:",
-      "**Tool Result:** `toolu_01`",
+      "**Tool Result:** `toolu_01` (pending)",
       "",
-      "```flemma:tool status=pending",
+      "```",
       "```",
     })
     autopilot.on_tools_complete(bufnr)
@@ -1023,15 +1023,16 @@ end)
 -- Its completion calls maybe_unlock_buffer → autopilot.on_tools_complete (state
 -- is already "armed" from on_response_complete), which schedules send_or_execute.
 -- That scheduled call runs after the for loop and finds the async tool's stale
--- flemma:tool status=approved fence (executor.execute called inject_placeholder,
+-- (approved) header suffix (executor.execute called inject_placeholder,
 -- which returned early without modifying the buffer), triggering a duplicate
 -- executor.execute → "Tool ... is already executing" error notification.
 
 describe("Autopilot race condition: sync + async tool dispatch", function()
   local client = require("flemma.client")
+  local notify = require("flemma.notify")
   local flemma_mod
   local tools_registry
-  local orig_notify
+  local captured_notifications = {}
 
   before_each(function()
     package.loaded["flemma"] = nil
@@ -1061,11 +1062,15 @@ describe("Autopilot race condition: sync + async tool dispatch", function()
       },
     })
 
-    orig_notify = vim.notify
+    captured_notifications = {}
+    notify._set_impl(function(notification)
+      table.insert(captured_notifications, notification)
+      return notification
+    end)
   end)
 
   after_each(function()
-    vim.notify = orig_notify
+    notify._reset_impl()
     client.clear_fixtures()
     vim.cmd("silent! %bdelete!")
   end)
@@ -1085,7 +1090,7 @@ describe("Autopilot race condition: sync + async tool dispatch", function()
     })
 
     -- Async tool: holds its callback so it stays in pending_executions.
-    -- Its flemma:tool status=approved fence remains in the buffer during the
+    -- Its (approved) header suffix remains in the buffer during the
     -- race window, which is what the stale send_or_execute incorrectly picks up.
     local async_callbacks = {}
     tools_registry.register("test_async", {
@@ -1109,14 +1114,6 @@ describe("Autopilot race condition: sync + async tool dispatch", function()
       "tests/fixtures/tool_calling/anthropic_multi_tool_race_streaming.txt"
     )
 
-    local race_errors = {}
-    vim.notify = function(msg, level, ...)
-      if type(msg) == "string" and msg:match("already executing") then
-        table.insert(race_errors, msg)
-      end
-      return orig_notify(msg, level, ...)
-    end
-
     vim.cmd("Flemma send")
 
     -- Wait until the async tool has been dispatched (callback captured).
@@ -1132,6 +1129,12 @@ describe("Autopilot race condition: sync + async tool dispatch", function()
       return false
     end)
 
+    local race_errors = {}
+    for _, n in ipairs(captured_notifications) do
+      if n.message:match("already executing") then
+        table.insert(race_errors, n.message)
+      end
+    end
     assert.equals(0, #race_errors, "Race condition: " .. (race_errors[1] or "none"))
 
     -- Resolve the async tool so executor cleanup runs cleanly.
@@ -1183,14 +1186,6 @@ describe("Autopilot race condition: sync + async tool dispatch", function()
       "tests/fixtures/tool_calling/anthropic_multi_tool_race_streaming.txt"
     )
 
-    local send_errors = {}
-    vim.notify = function(msg, level, ...)
-      if type(msg) == "string" and msg:match("Cannot send while tool execution is in progress") then
-        table.insert(send_errors, msg)
-      end
-      return orig_notify(msg, level, ...)
-    end
-
     vim.cmd("Flemma send")
 
     -- Wait until the async tool has been dispatched (callback captured).
@@ -1205,6 +1200,12 @@ describe("Autopilot race condition: sync + async tool dispatch", function()
       return false
     end)
 
+    local send_errors = {}
+    for _, n in ipairs(captured_notifications) do
+      if n.message:match("Cannot send while tool execution is in progress") then
+        table.insert(send_errors, n.message)
+      end
+    end
     assert.equals(0, #send_errors, "Race condition: " .. (send_errors[1] or "none"))
 
     -- Resolve the async tool so executor cleanup runs cleanly.
@@ -1227,9 +1228,9 @@ end)
 
 describe("Autopilot max_concurrent throttle with mixed approval", function()
   local client = require("flemma.client")
+  local notify = require("flemma.notify")
   local flemma_mod
   local tools_registry
-  local orig_notify
 
   before_each(function()
     package.loaded["flemma"] = nil
@@ -1249,11 +1250,13 @@ describe("Autopilot max_concurrent throttle with mixed approval", function()
     autopilot = require("flemma.autopilot")
     tools_registry = require("flemma.tools.registry")
 
-    orig_notify = vim.notify
+    notify._set_impl(function(notification)
+      return notification
+    end)
   end)
 
   after_each(function()
-    vim.notify = orig_notify
+    notify._reset_impl()
     client.clear_fixtures()
     vim.cmd("silent! %bdelete!")
   end)

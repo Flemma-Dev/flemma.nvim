@@ -12,7 +12,7 @@ describe("flemma.usage", function()
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.pricing"] = nil
     package.loaded["flemma.session"] = nil
-    package.loaded["flemma.bar"] = nil
+    package.loaded["flemma.ui.bar.layout"] = nil
 
     config_facade = require("flemma.config")
     local schema = require("flemma.config.schema")
@@ -122,8 +122,8 @@ describe("flemma.usage", function()
     end)
   end)
 
-  describe("format_notification", function()
-    it("should render request data as a single line", function()
+  describe("build_segments", function()
+    it("should build identity segment from request", function()
       local request = session_module.Request.new({
         provider = "openai",
         model = "gpt-4o",
@@ -133,19 +133,100 @@ describe("flemma.usage", function()
         output_price = 10.00,
       })
 
-      local result = usage.format_notification(request, nil, 120)
+      local segments = usage.build_segments(request, nil)
 
-      -- Single line (no newlines in content portion)
-      local content = result.text:match("^(.-)%s*$") -- trim trailing spaces
-      assert.has_no_match("\n", content)
-      assert.has_match("gpt%-4o", result.text)
-      assert.has_match("%(openai%)", result.text)
-      assert.has_match("%$", result.text)
-      assert.has_match("100\xE2\x86\x91", result.text)
-      assert.has_match("50\xE2\x86\x93", result.text)
+      -- Find identity segment
+      local identity = nil
+      for _, segment in ipairs(segments) do
+        if segment.key == "identity" then
+          identity = segment
+        end
+      end
+
+      assert.is_not_nil(identity)
+
+      -- Find model_name item
+      local model_item = nil
+      for _, item in ipairs(identity.items) do
+        if item.key == "model_name" then
+          model_item = item
+        end
+      end
+
+      assert.is_not_nil(model_item)
+      assert.are.equal("gpt-4o", model_item.text)
+      assert.are.equal(110, model_item.priority)
     end)
 
-    it("should format request and session", function()
+    it("should build request segment with cost and cache", function()
+      local request = session_module.Request.new({
+        provider = "anthropic",
+        model = "claude-sonnet-4-5",
+        input_tokens = 100,
+        output_tokens = 200,
+        input_price = 3.00,
+        output_price = 15.00,
+        cache_read_input_tokens = 400,
+        cache_creation_input_tokens = 0,
+      })
+
+      local segments = usage.build_segments(request, nil)
+
+      local request_segment = nil
+      for _, segment in ipairs(segments) do
+        if segment.key == "request" then
+          request_segment = segment
+        end
+      end
+
+      assert.is_not_nil(request_segment)
+
+      -- Should have cost, cache, input tokens, output tokens
+      local keys = {}
+      for _, item in ipairs(request_segment.items) do
+        keys[item.key] = item
+      end
+
+      assert.is_not_nil(keys["request_cost"])
+      assert.has_match("%$", keys["request_cost"].text)
+
+      assert.is_not_nil(keys["cache_percent"])
+      assert.has_match("80%%", keys["cache_percent"].text)
+      assert.is_not_nil(keys["cache_percent"].highlight)
+      assert.are.equal("FlemmaUsageBarCacheGood", keys["cache_percent"].highlight.group)
+    end)
+
+    it("should not include cost items when pricing disabled", function()
+      config_facade.init(require("flemma.config.schema"))
+      config_facade.apply(config_facade.LAYERS.SETUP, {
+        ui = { pricing = { enabled = false } },
+      })
+
+      local request = session_module.Request.new({
+        provider = "openai",
+        model = "gpt-4o",
+        input_tokens = 100,
+        output_tokens = 50,
+        input_price = 2.50,
+        output_price = 10.00,
+      })
+
+      local segments = usage.build_segments(request, nil)
+
+      local request_segment = nil
+      for _, segment in ipairs(segments) do
+        if segment.key == "request" then
+          request_segment = segment
+        end
+      end
+
+      -- Should not have cost item
+      for _, item in ipairs(request_segment.items) do
+        assert.is_not_equal("request_cost", item.key)
+      end
+    end)
+
+    it("should build session segment with label", function()
       local request = session_module.Request.new({
         provider = "openai",
         model = "gpt-4o",
@@ -166,104 +247,31 @@ describe("flemma.usage", function()
         output_price = 10.00,
       })
 
-      local result = usage.format_notification(request, session, 150)
+      local segments = usage.build_segments(request, session)
 
-      assert.has_match("gpt%-4o", result.text)
-      assert.has_match("Σ1", result.text)
-    end)
-
-    it("should return empty result when both args are nil", function()
-      local result = usage.format_notification(nil, nil, 120)
-      assert.are.equal("", result.text)
-      assert.are.equal(0, #result.highlights)
-    end)
-
-    it("should not include costs when pricing disabled", function()
-      config_facade.init(require("flemma.config.schema"))
-      config_facade.apply(config_facade.LAYERS.SETUP, {
-        pricing = { enabled = false },
-      })
-
-      local request = session_module.Request.new({
-        provider = "openai",
-        model = "gpt-4o",
-        input_tokens = 1000000,
-        output_tokens = 500000,
-        input_price = 3.00,
-        output_price = 15.00,
-      })
-
-      local result = usage.format_notification(request, nil, 120)
-
-      assert.has_no_match("%$", result.text)
-      assert.has_match("\xE2\x86\x91", result.text)
-      assert.has_match("\xE2\x86\x93", result.text)
-    end)
-
-    it("should show model from request not config", function()
-      local request = session_module.Request.new({
-        provider = "anthropic",
-        model = "claude-sonnet-4-5",
-        input_tokens = 100,
-        output_tokens = 50,
-        input_price = 3.00,
-        output_price = 15.00,
-      })
-
-      local result = usage.format_notification(request, nil, 120)
-
-      assert.has_match("claude%-sonnet%-4%-5", result.text)
-      assert.has_no_match("gpt%-4o", result.text)
-    end)
-
-    it("should include cache highlights", function()
-      local request = session_module.Request.new({
-        provider = "anthropic",
-        model = "claude-sonnet-4-5",
-        input_tokens = 100,
-        output_tokens = 200,
-        input_price = 3.00,
-        output_price = 15.00,
-        cache_read_input_tokens = 400,
-        cache_creation_input_tokens = 0,
-      })
-
-      local result = usage.format_notification(request, nil, 120)
-
-      assert.has_match("80%%", result.text)
-      local found_good = false
-      for _, highlight in ipairs(result.highlights) do
-        if highlight.group == "FlemmaNotificationsCacheGood" then
-          found_good = true
+      local session_segment = nil
+      for _, segment in ipairs(segments) do
+        if segment.key == "session" then
+          session_segment = segment
         end
       end
-      assert.is_true(found_good)
+
+      assert.is_not_nil(session_segment)
+      assert.has_match("^Σ%d+$", session_segment.label)
     end)
 
-    it("should highlight cache warning for low hit rate", function()
-      local request = session_module.Request.new({
-        provider = "anthropic",
-        model = "claude-sonnet-4-5",
-        input_tokens = 400,
-        output_tokens = 200,
-        input_price = 3.00,
-        output_price = 15.00,
-        cache_read_input_tokens = 100,
-      })
-
-      local result = usage.format_notification(request, nil, 120)
-
-      assert.has_match("20%%", result.text)
-      local found_bad = false
-      for _, highlight in ipairs(result.highlights) do
-        if highlight.group == "FlemmaNotificationsCacheBad" then
-          found_bad = true
-        end
-      end
-      assert.is_true(found_bad)
+    it("should return empty table when both request and session are nil", function()
+      local segments = usage.build_segments(nil, nil)
+      assert.are.equal(0, #segments)
     end)
 
-    it("should include thinking tokens", function()
+    it("should return empty table when session has no requests and request is nil", function()
+      local session = session_module.Session.new()
+      local segments = usage.build_segments(nil, session)
+      assert.are.equal(0, #segments)
+    end)
+
+    it("should include thinking tokens item when present", function()
       local request = session_module.Request.new({
         provider = "openai",
         model = "o1",
@@ -275,25 +283,148 @@ describe("flemma.usage", function()
         output_has_thoughts = true,
       })
 
-      local result = usage.format_notification(request, nil, 120)
+      local segments = usage.build_segments(request, nil)
 
-      assert.has_match("25\xE2\x81\x82", result.text)
+      local request_segment = nil
+      for _, segment in ipairs(segments) do
+        if segment.key == "request" then
+          request_segment = segment
+        end
+      end
+
+      local thinking_item = nil
+      for _, item in ipairs(request_segment.items) do
+        if item.key == "thinking_tokens" then
+          thinking_item = item
+        end
+      end
+
+      assert.is_not_nil(thinking_item)
+      assert.has_match("25\xE2\x81\x82", thinking_item.text)
+      assert.are.equal(50, thinking_item.priority)
+    end)
+  end)
+end)
+
+describe("flemma.usage driver", function()
+  local usage
+  local bar_mock
+
+  before_each(function()
+    package.loaded["flemma.ui.bar"] = nil
+    package.loaded["flemma.usage"] = nil
+    package.loaded["flemma.state"] = nil
+    bar_mock = require("tests.utilities.bar_mock").install_as_flemma_ui_bar()
+    usage = require("flemma.usage")
+  end)
+
+  describe("show", function()
+    it("is a no-op when ui.usage.enabled is false", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+
+      -- Override config.get so the enabled flag is false for this test.
+      -- (The project's test-config override idiom is monkey-patching
+      -- flemma.config.get within the spec; same pattern is used in
+      -- state_management_spec.lua.)
+      local config_mod = require("flemma.config")
+      local orig_get = config_mod.get
+      config_mod.get = function(b)
+        local cfg = orig_get(b)
+        local patched = vim.tbl_deep_extend("force", cfg, { ui = { usage = { enabled = false } } })
+        return patched
+      end
+
+      usage.show(bufnr, nil)
+      config_mod.get = orig_get
+      assert.equals(0, #bar_mock._handles)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
-    it("should format large numbers with commas", function()
-      local session = session_module.Session.new()
-      session:add_request({
-        provider = "openai",
-        model = "gpt-4o",
-        input_tokens = 20449,
-        output_tokens = 4271,
-        input_price = 2.50,
-        output_price = 10.00,
-      })
+    it("creates a Bar at ui.usage.position with layout.PREFIX icon", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "x" })
+      vim.api.nvim_set_current_buf(bufnr)
+      -- Provide a fake request whose build_segments produces a non-empty list
+      local fake_request = {
+        model = "test-model",
+        provider = "test",
+        thoughts_tokens = 0,
+        cache_read_input_tokens = 0,
+        get_total_input_tokens = function()
+          return 100
+        end,
+        get_total_output_tokens = function()
+          return 50
+        end,
+        get_total_cost = function()
+          return 0.01
+        end,
+      }
+      usage.show(bufnr, fake_request)
+      assert.is_true(vim.wait(200, function()
+        return #bar_mock._handles > 0
+      end))
+      assert.equals(1, #bar_mock._handles)
+      local opts = bar_mock._handles[1].opts
+      assert.equals(bufnr, opts.bufnr)
+      assert.equals("top", opts.position)
+      local layout = require("flemma.ui.bar.layout")
+      assert.equals(layout.PREFIX, opts.icon)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
 
-      local result = usage.format_notification(nil, session, 120)
+  describe("cleanup_buffer", function()
+    it("dismisses active bar and stops timer", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "x" })
+      vim.api.nvim_set_current_buf(bufnr)
+      local fake_request = {
+        model = "test-model",
+        provider = "test",
+        thoughts_tokens = 0,
+        cache_read_input_tokens = 0,
+        get_total_input_tokens = function()
+          return 100
+        end,
+        get_total_output_tokens = function()
+          return 50
+        end,
+        get_total_cost = function()
+          return 0.01
+        end,
+      }
+      usage.show(bufnr, fake_request)
+      assert.is_true(vim.wait(200, function()
+        return #bar_mock._handles > 0
+      end))
+      assert.is_false(bar_mock._handles[1]:is_dismissed())
+      usage.cleanup_buffer(bufnr)
+      assert.is_true(bar_mock._handles[1]:is_dismissed())
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
 
-      assert.has_match("20,449", result.text)
+  describe("recall_last", function()
+    it("warns when buffer has no filepath", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(bufnr)
+      local notify = require("flemma.notify")
+      local warned = false
+      notify._set_impl(function(notification)
+        if notification.level == vim.log.levels.WARN then
+          warned = true
+        end
+        return notification
+      end)
+      usage.recall_last()
+      -- notify.warn defers the dispatch via vim.schedule; let it run.
+      vim.wait(50, function()
+        return warned
+      end)
+      notify._reset_impl()
+      assert.is_true(warned)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
   end)
 end)

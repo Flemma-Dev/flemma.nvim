@@ -11,6 +11,7 @@
 local M = {}
 
 local log = require("flemma.logging")
+local notify = require("flemma.notify")
 
 ---@alias flemma.hooks.Name
 ---| "request:sending"
@@ -21,6 +22,7 @@ local log = require("flemma.logging")
 ---| "sink:created"
 ---| "sink:destroyed"
 ---| "config:updated"
+---| "usage:estimated"
 
 ---@class flemma.hooks.RequestSendingData
 ---@field bufnr integer
@@ -28,6 +30,7 @@ local log = require("flemma.logging")
 ---@class flemma.hooks.RequestFinishedData
 ---@field bufnr integer
 ---@field status "completed" | "cancelled" | "errored"
+---@field request? flemma.session.Request The recorded session entry (present when status is "completed" and provider pricing was available)
 
 ---@class flemma.hooks.ToolExecutingData
 ---@field bufnr integer
@@ -51,6 +54,9 @@ local log = require("flemma.logging")
 ---@field name string
 
 ---@class flemma.hooks.ConfigUpdatedData -- no fields; hook carries no payload
+
+---@class flemma.hooks.UsageEstimatedData
+---@field bufnr integer
 
 local PREFIX = "Flemma"
 
@@ -82,7 +88,7 @@ end
 ---
 ---The name is transformed from "domain:action" format to a
 ---"Flemma<Domain><Action>" autocmd pattern. Errors in consumer
----handlers are caught and surfaced via log + vim.notify.
+---handlers are caught and surfaced via log + flemma.notify.
 ---@overload fun(name: "request:sending", data: flemma.hooks.RequestSendingData)
 ---@overload fun(name: "request:finished", data: flemma.hooks.RequestFinishedData)
 ---@overload fun(name: "tool:executing", data: flemma.hooks.ToolExecutingData)
@@ -91,6 +97,7 @@ end
 ---@overload fun(name: "sink:created", data: flemma.hooks.SinkCreatedData)
 ---@overload fun(name: "sink:destroyed", data: flemma.hooks.SinkDestroyedData)
 ---@overload fun(name: "config:updated", data?: flemma.hooks.ConfigUpdatedData)
+---@overload fun(name: "usage:estimated", data: flemma.hooks.UsageEstimatedData)
 ---@param name flemma.hooks.Name Hook name in "domain:action" format
 ---@param data? table Payload passed to autocmd handlers via ev.data
 function M.dispatch(name, data)
@@ -102,7 +109,7 @@ function M.dispatch(name, data)
   if not ok then
     local message = string.format("hook '%s' handler error: %s", name, tostring(err))
     log.warn(message)
-    vim.notify("Flemma: " .. message, vim.log.levels.WARN)
+    notify.warn(message)
   end
 end
 

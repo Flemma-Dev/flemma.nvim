@@ -2,7 +2,7 @@
 ---@class flemma.ui.folding.rules.Messages : flemma.ui.folding.FoldRule
 local M = {}
 
-local utils = require("flemma.utilities.folding")
+local utils = require("flemma.ui.folding.merge")
 
 M.name = "messages"
 M.auto_close = false

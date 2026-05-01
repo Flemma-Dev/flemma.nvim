@@ -7,6 +7,8 @@ local config_facade = require("flemma.config")
 local hooks = require("flemma.hooks")
 local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
+local notify = require("flemma.notify")
+local readiness = require("flemma.readiness")
 local registry = require("flemma.tools.registry")
 
 local BUILTIN_TOOLS = {
@@ -75,9 +77,7 @@ function M.register_async(resolve_fn, opts)
     completed = true
 
     if err then
-      vim.schedule(function()
-        vim.notify("Flemma: Async tool source failed: " .. err, vim.log.levels.WARN)
-      end)
+      notify.warn("Async tool source failed: " .. err)
     end
 
     pending_sources = pending_sources - 1
@@ -232,8 +232,7 @@ function M.get_all(opts)
   if not opts.config then
     opts.config = config_facade.materialize()
   end
-  ---@cast opts { include_disabled?: boolean, config?: flemma.Config|nil }
-  return registry.get_all(opts)
+  return registry.get_all(opts --[[@as { include_disabled?: boolean, config?: flemma.Config }]])
 end
 
 --- Get tools filtered by per-buffer config.
@@ -244,6 +243,14 @@ end
 ---@param bufnr? integer Buffer number for per-buffer config resolution
 ---@return table<string, flemma.tools.ToolDefinition>
 function M.get_for_prompt(bufnr)
+  if pending_sources > 0 then
+    local boundary = readiness.get_or_create_boundary("tools:loaded", function(done)
+      M.on_ready(function()
+        done({ ok = true })
+      end)
+    end)
+    error(readiness.Suspense.new("Waiting for tool definitions to load\u{2026}", boundary))
+  end
   ensure_modules_loaded()
   if bufnr then
     local tools_info = config_facade.inspect(bufnr, "tools")

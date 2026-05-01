@@ -3,9 +3,9 @@ describe("provider.get_trailing_keys", function()
 
   before_each(function()
     package.loaded["flemma.provider.base"] = nil
-    package.loaded["flemma.provider.providers.anthropic"] = nil
-    package.loaded["flemma.provider.providers.openai"] = nil
-    package.loaded["flemma.provider.providers.vertex"] = nil
+    package.loaded["flemma.provider.adapters.anthropic"] = nil
+    package.loaded["flemma.provider.adapters.openai"] = nil
+    package.loaded["flemma.provider.adapters.vertex"] = nil
     base = require("flemma.provider.base")
   end)
 
@@ -26,7 +26,7 @@ describe("provider.get_trailing_keys", function()
 
   describe("Anthropic provider", function()
     it("returns system, tools, messages as trailing keys", function()
-      local anthropic = require("flemma.provider.providers.anthropic")
+      local anthropic = require("flemma.provider.adapters.anthropic")
       local provider = anthropic.new({ model = "claude-sonnet-4-20250514" })
       local keys = provider:get_trailing_keys()
       assert.are.same({ "system", "tools", "messages" }, keys)
@@ -35,7 +35,7 @@ describe("provider.get_trailing_keys", function()
 
   describe("OpenAI provider", function()
     it("returns tools, input as trailing keys", function()
-      local openai = require("flemma.provider.providers.openai")
+      local openai = require("flemma.provider.adapters.openai")
       local provider = openai.new({ model = "gpt-4o" })
       local keys = provider:get_trailing_keys()
       assert.are.same({ "tools", "input" }, keys)
@@ -44,7 +44,7 @@ describe("provider.get_trailing_keys", function()
 
   describe("Vertex provider", function()
     it("returns tools, contents as trailing keys", function()
-      local vertex = require("flemma.provider.providers.vertex")
+      local vertex = require("flemma.provider.adapters.vertex")
       local provider = vertex.new({ model = "gemini-2.5-pro" })
       local keys = provider:get_trailing_keys()
       assert.are.same({ "tools", "contents" }, keys)

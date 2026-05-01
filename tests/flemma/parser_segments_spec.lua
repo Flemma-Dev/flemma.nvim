@@ -50,8 +50,8 @@ describe("tool result segment parsing", function()
 
   it("preserves status blocks without segment parsing", function()
     local lines = {
-      "**Tool Result:** `tool_789`",
-      "```flemma:tool status=pending",
+      "**Tool Result:** `tool_789` (pending)",
+      "```",
       "",
       "```",
     }
@@ -72,7 +72,7 @@ describe("tool result segment parsing", function()
     local segments = parse_user_message_segments(lines)
 
     local tr = segments[1]
-    assert.is_true(tr.is_error)
+    assert.equals("error", tr.status)
     assert.equals("Something went wrong", tr.content)
   end)
 end)

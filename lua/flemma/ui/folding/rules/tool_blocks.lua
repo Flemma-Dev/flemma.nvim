@@ -2,22 +2,22 @@
 ---@class flemma.ui.folding.rules.ToolBlocks : flemma.ui.folding.FoldRule
 local M = {}
 
-local utils = require("flemma.utilities.folding")
+local utils = require("flemma.ui.folding.merge")
 local ast = require("flemma.ast")
 
 M.name = "tool_blocks"
 M.auto_close = true
 
 ---Determine if a tool_result segment is in a terminal (foldable) state.
----Terminal: no status with content (completed), denied, rejected, aborted.
+---Terminal: no status with content (completed), error, denied, rejected, aborted.
 ---In-flight: pending, approved, no status with empty content (executing).
 ---@param seg flemma.ast.ToolResultSegment
 ---@return boolean
 local function is_tool_result_terminal(seg)
-  if seg.status then
+  if seg.status and seg.status ~= "error" then
     return seg.status == "denied" or seg.status == "rejected" or seg.status == "aborted"
   end
-  return seg.content ~= ""
+  return seg.status == "error" or seg.content ~= ""
 end
 
 ---Check if a tool segment should be folded.

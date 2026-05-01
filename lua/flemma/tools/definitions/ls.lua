@@ -8,24 +8,13 @@ local M = {}
 -- Runtime code inside execute() must use ctx.truncate instead.
 local s = require("flemma.schema")
 local truncate = require("flemma.utilities.truncate")
+local path_util = require("flemma.utilities.path")
 
 ---Maximum recursion depth allowed
 local MAX_DEPTH = 10
 
 ---Default entry limit
 local DEFAULT_LIMIT = 500
-
----Resolve a path against the working directory.
----Absolute paths pass through; relative paths are prepended with cwd.
----@param path string The input path
----@param cwd string The working directory
----@return string resolved_path
-local function resolve_path(path, cwd)
-  if vim.startswith(path, "/") then
-    return path
-  end
-  return cwd .. "/" .. path
-end
 
 ---Collect directory entries up to a limit, sorting directories first then files.
 ---Breaks out of iteration early when the limit is reached.
@@ -136,7 +125,7 @@ M.definitions = {
       end
 
       -- Resolve relative paths against cwd (not __dirname)
-      path = resolve_path(path, ctx.cwd)
+      path = path_util.resolve(path, ctx.cwd)
 
       -- Validate directory exists
       if vim.fn.isdirectory(path) ~= 1 then

@@ -28,6 +28,13 @@ std = "luajit+nvim"
 cache = true
 max_line_length = false
 
+-- Skip vendored reference clones in contrib/ (e.g. neovim source, plugin repos) —
+-- they aren't part of Flemma and include non-UTF-8 legacy fixtures
+-- and intentionally-broken test samples that break parsers.
+exclude_files = {
+  "contrib/**/*.lua",
+}
+
 -- Allow unused `self` everywhere — Lua OOP convention for base class and
 -- interface methods that define the signature but don't use `self`.
 -- Allow `_`-prefixed variables to be unused (standard Lua convention for
@@ -45,7 +52,11 @@ files["lua/flemma/provider/base.lua"] = {
 }
 
 -- Provider implementations have intentional empty branches for skipping `thinking` nodes
-files["lua/flemma/provider/providers/*.lua"] = {
+files["lua/flemma/provider/adapters/*.lua"] = {
+  ignore = { "542" }, -- empty if branches (intentional skip patterns)
+}
+
+files["lua/flemma/provider/openai_chat.lua"] = {
   ignore = { "542" }, -- empty if branches (intentional skip patterns)
 }
 

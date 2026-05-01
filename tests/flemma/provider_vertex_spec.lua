@@ -9,10 +9,10 @@ package.loaded["flemma.tools.definitions.bash"] = nil
 package.loaded["flemma.tools.definitions.read"] = nil
 package.loaded["flemma.tools.definitions.edit"] = nil
 package.loaded["flemma.tools.definitions.write"] = nil
-package.loaded["flemma.provider.providers.vertex"] = nil
+package.loaded["flemma.provider.adapters.vertex"] = nil
 
 describe("Vertex AI Provider", function()
-  local vertex = require("flemma.provider.providers.vertex")
+  local vertex = require("flemma.provider.adapters.vertex")
   local tools = require("flemma.tools")
 
   before_each(function()
@@ -215,6 +215,37 @@ describe("Vertex AI Provider", function()
       assert.is_nil(error_message, "STOP should not trigger on_error")
     end)
 
+    it("should not surface error on empty response with STOP finish reason", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        project_id = "test-project",
+        location = "us-central1",
+        max_tokens = 4000,
+      })
+
+      local error_message = nil
+      local callbacks = {
+        on_content = function() end,
+        on_usage = function() end,
+        on_response_complete = function() end,
+        on_error = function(msg)
+          error_message = msg
+        end,
+      }
+
+      -- Gemini returns empty text with STOP (e.g., trailing empty user turn)
+      local line = 'data: {"candidates":[{"content":{"parts":[{"text":""}],"role":"model"},"finishReason":"STOP"}]}'
+      provider:process_response_line(line, callbacks)
+
+      -- Simulate the trailing empty line that arrives after SSE data
+      provider:process_response_line("", callbacks)
+
+      -- finalize_response should NOT produce a spurious error
+      provider:finalize_response(0, callbacks)
+
+      assert.is_nil(error_message, "Empty STOP response should not trigger on_error during finalize")
+    end)
+
     it("should complete with warning on MAX_TOKENS finish reason", function()
       local provider = vertex.new({
         model = "gemini-2.5-pro",
@@ -369,6 +400,70 @@ describe("Vertex AI Provider", function()
     end)
   end)
 
+  describe("functionResponse name in build_request", function()
+    it("should use part.name for tool results with non-Vertex IDs", function()
+      local provider = vertex.new({
+        model = "gemini-2.5-pro",
+        max_tokens = 4000,
+        project_id = "test-project",
+        location = "us-central1",
+      })
+
+      ---@type flemma.provider.Prompt
+      local prompt = {
+        history = {
+          {
+            role = "user",
+            parts = { { kind = "text", text = "run calc" } },
+          },
+          {
+            role = "assistant",
+            parts = {
+              {
+                kind = "tool_use",
+                name = "calculator_async",
+                id = "toolu_01ABC123",
+                input = { expression = "2+2", delay = 2000 },
+              },
+            },
+          },
+          {
+            role = "user",
+            parts = {
+              {
+                kind = "tool_result",
+                tool_use_id = "toolu_01ABC123",
+                name = "calculator_async",
+                is_error = false,
+                parts = { { kind = "text", text = "4" } },
+              },
+            },
+          },
+        },
+        system = "You are a calculator.",
+        pending_tool_calls = {},
+        bufnr = 0,
+      }
+
+      local req = provider:build_request(prompt)
+
+      -- Find the user message that contains the functionResponse
+      local function_response_name
+      for _, content in ipairs(req.contents) do
+        if content.role == "user" then
+          for _, part in ipairs(content.parts) do
+            if part.functionResponse then
+              function_response_name = part.functionResponse.name
+            end
+          end
+        end
+      end
+
+      assert.is_not_nil(function_response_name, "Expected a functionResponse in the request")
+      assert.equals("calculator_async", function_response_name)
+    end)
+  end)
+
   describe("thinkingConfig in build_request", function()
     local parser = require("flemma.parser")
     local pipeline = require("flemma.pipeline")
@@ -380,7 +475,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = "high",
+        thinking = { level = "high", foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -399,7 +494,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = "high",
+        thinking = { level = "high", foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -418,7 +513,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = "low",
+        thinking = { level = "low", foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -434,7 +529,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = "medium",
+        thinking = { level = "medium", foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -450,7 +545,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = "minimal",
+        thinking = { level = "minimal", foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -466,7 +561,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = "max",
+        thinking = { level = "max", foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -482,7 +577,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = "medium",
+        thinking = { level = "medium", foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -498,7 +593,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = "low",
+        thinking = { level = "low", foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -514,7 +609,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = "minimal",
+        thinking = { level = "minimal", foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -530,7 +625,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = 4096,
+        thinking = { level = 4096, foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -548,7 +643,7 @@ describe("Vertex AI Provider", function()
         max_tokens = 4000,
         project_id = "test-project",
         location = "us-central1",
-        thinking = 4096,
+        thinking = { level = 4096, foreign = "preserve" },
       })
 
       local lines = { "@You:", "Hello" }
@@ -689,18 +784,22 @@ describe("Vertex AI Provider", function()
 
   describe("get_api_key via secrets module", function()
     local secrets_module = require("flemma.secrets")
+    local secrets_cache = require("flemma.secrets.cache")
 
     before_each(function()
       secrets_module.invalidate_all()
     end)
 
     after_each(function()
-      vim.env.VERTEX_AI_ACCESS_TOKEN = nil
       secrets_module.invalidate_all()
     end)
 
-    it("should resolve access token from environment via secrets", function()
-      vim.env.VERTEX_AI_ACCESS_TOKEN = "ya29.env-token"
+    it("should resolve access token from cache via secrets", function()
+      secrets_cache.set(
+        "access_token:vertex",
+        { value = "ya29.env-token" },
+        { kind = "access_token", service = "vertex" }
+      )
       local provider = vertex.new({
         model = "gemini-2.5-pro",
         project_id = "test-project",
@@ -712,7 +811,11 @@ describe("Vertex AI Provider", function()
     end)
 
     it("should use cached secret on subsequent calls", function()
-      vim.env.VERTEX_AI_ACCESS_TOKEN = "ya29.cached-token"
+      secrets_cache.set(
+        "access_token:vertex",
+        { value = "ya29.cached-token" },
+        { kind = "access_token", service = "vertex" }
+      )
       local provider = vertex.new({
         model = "gemini-2.5-pro",
         project_id = "test-project",
@@ -722,8 +825,6 @@ describe("Vertex AI Provider", function()
       local first = provider:get_api_key()
       assert.equals("ya29.cached-token", first)
 
-      -- Change the env var; the secrets cache should return the cached value
-      vim.env.VERTEX_AI_ACCESS_TOKEN = "ya29.different-token"
       local second = provider:get_api_key()
       assert.equals("ya29.cached-token", second)
     end)

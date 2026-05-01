@@ -7,7 +7,7 @@ Flemma can sandbox tool execution so that shell commands run inside a constraine
 
 Sandboxing is enabled by default. On platforms where no backend is available (e.g., macOS), Flemma silently falls back to unsandboxed execution – no configuration changes needed.
 
-For a quick overview of the tool system and approval workflow, see [Tool Calling](../README.md#tool-calling) in the README.
+For a quick overview of the tool system and approval workflow, see [The Agent](../README.md#the-agent) in the README.
 
 ---
 

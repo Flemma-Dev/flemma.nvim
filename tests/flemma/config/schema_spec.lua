@@ -928,6 +928,200 @@ describe("flemma.schema", function()
   end)
 
   -- ---------------------------------------------------------------------------
+  -- thinking coerce — regression tests for partial table defaults
+  -- ---------------------------------------------------------------------------
+
+  describe("thinking coerce", function()
+    it("fills level default when only foreign is set", function()
+      local schema_definition = require("flemma.config.schema")
+      local nav = require("flemma.schema.navigation")
+      local thinking_schema = nav.navigate_schema(schema_definition, "parameters.thinking", { unwrap_leaf = true })
+      local result = thinking_schema:apply_coerce({ foreign = "drop" }, nil)
+      assert.are.equal("high", result.level)
+      assert.are.equal("drop", result.foreign)
+    end)
+
+    it("fills foreign default when only level is set", function()
+      local schema_definition = require("flemma.config.schema")
+      local nav = require("flemma.schema.navigation")
+      local thinking_schema = nav.navigate_schema(schema_definition, "parameters.thinking", { unwrap_leaf = true })
+      local result = thinking_schema:apply_coerce({ level = "low" }, nil)
+      assert.are.equal("low", result.level)
+      assert.are.equal("preserve", result.foreign)
+    end)
+
+    it("does not override explicit level", function()
+      local schema_definition = require("flemma.config.schema")
+      local nav = require("flemma.schema.navigation")
+      local thinking_schema = nav.navigate_schema(schema_definition, "parameters.thinking", { unwrap_leaf = true })
+      local result = thinking_schema:apply_coerce({ level = "minimal", foreign = "drop" }, nil)
+      assert.are.equal("minimal", result.level)
+      assert.are.equal("drop", result.foreign)
+    end)
+
+    it("does not override level=false", function()
+      local schema_definition = require("flemma.config.schema")
+      local nav = require("flemma.schema.navigation")
+      local thinking_schema = nav.navigate_schema(schema_definition, "parameters.thinking", { unwrap_leaf = true })
+      local result = thinking_schema:apply_coerce({ level = false, foreign = "drop" }, nil)
+      assert.are.equal(false, result.level)
+      assert.are.equal("drop", result.foreign)
+    end)
+
+    it("scalar shorthand still normalizes to table", function()
+      local schema_definition = require("flemma.config.schema")
+      local nav = require("flemma.schema.navigation")
+      local thinking_schema = nav.navigate_schema(schema_definition, "parameters.thinking", { unwrap_leaf = true })
+      local result = thinking_schema:apply_coerce("medium", nil)
+      assert.are.equal("medium", result.level)
+      assert.are.equal("preserve", result.foreign)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
+  -- :extend()
+  -- ---------------------------------------------------------------------------
+
+  describe(":extend()", function()
+    it("returns a new ObjectNode with merged fields", function()
+      local base = s.object({ name = s.string("base") })
+      local extended = base:extend({ count = s.integer(42) })
+      assert.not_equals(base, extended)
+      assert.is_not_nil(extended:get_child_schema("name"))
+      assert.is_not_nil(extended:get_child_schema("count"))
+    end)
+
+    it("records named base class provenance for generated types", function()
+      local base = s.object({ name = s.string("base") }):class_as("test.Base")
+      local extended = base:extend({ count = s.integer(42) })
+      assert.equals("test.Base", base._class_as)
+      assert.is_nil(extended._class_as)
+      assert.equals(base, extended._extends)
+      assert.is_true(extended._extension_fields.count)
+      assert.is_nil(extended._extension_fields.name)
+    end)
+
+    it("extension fields override base fields", function()
+      local base = s.object({ name = s.string("base") })
+      local extended = base:extend({ name = s.string("overridden") })
+      assert.equals("overridden", extended:materialize().name)
+    end)
+
+    it("does not mutate the original", function()
+      local base = s.object({ name = s.string("base") })
+      base:extend({ count = s.integer(42) })
+      assert.is_nil(base:get_child_schema("count"))
+    end)
+
+    it("accepts an ObjectNode and merges its fields", function()
+      local base = s.object({ name = s.string("base") })
+      local other = s.object({ count = s.integer(42) })
+      local extended = base:extend(other)
+      assert.is_not_nil(extended:get_child_schema("name"))
+      assert.is_not_nil(extended:get_child_schema("count"))
+    end)
+
+    it("ObjectNode fields override base fields", function()
+      local base = s.object({ name = s.string("base") })
+      local other = s.object({ name = s.string("from_other") })
+      local extended = base:extend(other)
+      assert.equals("from_other", extended:materialize().name)
+    end)
+
+    it("preserves DISCOVER from base", function()
+      local discovered = s.integer(0)
+      local base = s.object({
+        [symbols.DISCOVER] = function(key)
+          if key == "dynamic" then
+            return discovered
+          end
+        end,
+      })
+      local extended = base:extend({ name = s.string() })
+      assert.equals(discovered, extended:get_child_schema("dynamic"))
+    end)
+
+    it("raw table DISCOVER replaces base DISCOVER", function()
+      local base = s.object({
+        [symbols.DISCOVER] = function(_key)
+          return s.string()
+        end,
+      })
+      local replacement = s.integer()
+      local extended = base:extend({
+        [symbols.DISCOVER] = function(_key)
+          return replacement
+        end,
+      })
+      assert.equals(replacement, extended:get_child_schema("anything"))
+    end)
+
+    it("nil returns a clone", function()
+      local base = s.object({ name = s.string("base") })
+      local cloned = base:extend(nil)
+      assert.not_equals(base, cloned)
+      assert.equals("base", cloned:materialize().name)
+    end)
+
+    it("errors on non-table non-nil argument", function()
+      local base = s.object({})
+      assert.has_error(function()
+        base:extend(42)
+      end)
+      assert.has_error(function()
+        base:extend("bad")
+      end)
+      assert.has_error(function()
+        base:extend(true)
+      end)
+    end)
+
+    it("preserves strictness from base", function()
+      local base = s.object({}):passthrough()
+      local extended = base:extend({ name = s.string() })
+      assert.is_true(extended:validate_value({ unknown_key = "allowed" }))
+    end)
+
+    it("preserves coerce from base", function()
+      local base = s.object({ enabled = s.boolean(true) }):coerce(function(value, _ctx)
+        if type(value) == "boolean" then
+          return { enabled = value }
+        end
+        return value
+      end)
+      local extended = base:extend({ extra = s.string() })
+      assert.same({ enabled = false }, extended:apply_coerce(false, nil))
+    end)
+
+    it("merges aliases from raw table", function()
+      local base = s.object({
+        auto_approve = s.list(s.string(), {}),
+        [symbols.ALIASES] = { approve = "auto_approve" },
+      })
+      local extended = base:extend({
+        [symbols.ALIASES] = { aa = "auto_approve" },
+      })
+      assert.equals("auto_approve", extended:resolve_alias("approve"))
+      assert.equals("auto_approve", extended:resolve_alias("aa"))
+    end)
+
+    it("starts with fresh DISCOVER cache", function()
+      local call_count = 0
+      local base = s.object({
+        [symbols.DISCOVER] = function(_key)
+          call_count = call_count + 1
+          return s.string()
+        end,
+      })
+      base:get_child_schema("foo")
+      assert.equals(1, call_count)
+      local extended = base:extend({ name = s.string() })
+      extended:get_child_schema("foo")
+      assert.equals(2, call_count)
+    end)
+  end)
+
+  -- ---------------------------------------------------------------------------
   -- :allow_list()
   -- ---------------------------------------------------------------------------
 

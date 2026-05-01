@@ -8,7 +8,8 @@ local ast = require("flemma.ast")
 local emittable = require("flemma.emittable")
 local json = require("flemma.utilities.json")
 local log = require("flemma.logging")
-local preproc_utils = require("flemma.preprocessor.utilities")
+local encoding = require("flemma.utilities.encoding")
+local readiness = require("flemma.readiness")
 
 ---@class flemma.templating.compiler.LineMapEntry
 ---@field lnum integer Buffer line number (1-based)
@@ -16,6 +17,7 @@ local preproc_utils = require("flemma.preprocessor.utilities")
 ---@class flemma.templating.compiler.CompilationResult
 ---@field line_map flemma.templating.compiler.LineMapEntry[] Generated-line → buffer-line mapping
 ---@field source string The generated Lua source
+---@field compiled_fn function|nil The compiled Lua function, present when syntax validation succeeds
 ---@field segments flemma.ast.Segment[] Original segment list (for __emit_part references)
 ---@field error string|nil Syntax error from load() validation (non-nil means invalid code)
 
@@ -23,7 +25,7 @@ local preproc_utils = require("flemma.preprocessor.utilities")
 ---@param str string
 ---@return string
 local function escape_lua_string(str)
-  return preproc_utils.lua_string_escape(str)
+  return encoding.lua_string_escape(str)
 end
 
 --- Get the buffer line for a segment (best-effort).
@@ -80,10 +82,11 @@ end
 ---
 --- The generated code uses the following environment entries:
 ---   __emit(value)                — output builder (text, emittable, table, etc.)
+---   __emit_expr(value)           — output for expression results (applies __expr_transform if set)
 ---   __emit_part(segment)         — pass-through for structural segments
 ---   __emit_expr_error(err, idx)  — report expression evaluation failures
 ---   __segments                   — the original segment array (for index references)
----   __capture_start()             — redirect subsequent __emit calls into a sub-collector
+---   __capture_start()            — redirect subsequent __emit calls into a sub-collector
 ---   __capture_end()              — restore previous collector; return captured parts[]
 ---@param segments flemma.ast.Segment[]
 ---@return flemma.templating.compiler.CompilationResult
@@ -126,7 +129,7 @@ function M.compile(segments)
       add_line_fn(
         "do local __ok,__v=pcall(function() return ("
           .. segment.code
-          .. ") end); if __ok then __emit(__v) else __emit('"
+          .. ") end); if __ok then __emit_expr(__v) else __emit('"
           .. escaped_raw
           .. "'); __emit_expr_error(__v, "
           .. error_ref
@@ -156,21 +159,22 @@ function M.compile(segments)
           "__emit_part({ kind = 'tool_result', tool_use_id = "
             .. var
             .. ".tool_use_id, "
-            .. "is_error = "
+            .. "status = "
             .. var
-            .. ".is_error, content = "
+            .. ".status, content = "
             .. var
             .. ".content, "
             .. "parts = __capture_end() }) end",
           lnum
         )
       else
+        local status_literal = segment.status and ("'" .. escape_lua_string(segment.status) .. "'") or "nil"
         add_line_fn(
           "__emit_part({ kind = 'tool_result', tool_use_id = '"
             .. escape_lua_string(segment.tool_use_id)
             .. "', "
-            .. "is_error = "
-            .. tostring(segment.is_error)
+            .. "status = "
+            .. status_literal
             .. ", content = '"
             .. escape_lua_string(segment.content)
             .. "', "
@@ -196,7 +200,7 @@ function M.compile(segments)
   local source = table.concat(lines, "\n")
 
   -- Syntax-check only (no env needed). execute() re-loads with the real env.
-  local _, load_err = load(source, "template", "t")
+  local compiled_fn, load_err = load(source, "template", "t")
 
   if load_err then
     log.debug("compiler: syntax error in compiled template: " .. load_err)
@@ -207,6 +211,7 @@ function M.compile(segments)
   return {
     line_map = line_map,
     source = source,
+    compiled_fn = compiled_fn,
     segments = segments,
     error = load_err,
   }
@@ -234,12 +239,12 @@ end
 local function structural_segment_to_part(segment)
   if segment.kind == "tool_result" then
     ---@cast segment flemma.ast.ToolResultSegment
-    if not segment.status then
+    if not segment.status or segment.status == "error" then
       return {
         kind = "tool_result",
         tool_use_id = segment.tool_use_id,
         content = segment.content,
-        is_error = segment.is_error,
+        status = segment.status,
       }
     end
   elseif segment.kind == "tool_use" then
@@ -359,6 +364,24 @@ function M.execute(result, env)
     end
   end
 
+  -- __emit_expr: output primitive for expression results.
+  -- When env.__expr_transform is set, applies it before emitting.
+  -- Emittable values bypass the transform (they own their output semantics).
+  -- Uses rawget to bypass strict __index on create_env() tables.
+  ---@param value any
+  local function emit_expr(value)
+    if value == nil then
+      return
+    end
+    local transform = rawget(env, "__expr_transform")
+    if transform and not emittable.is_emittable(value) then
+      local text = to_text(value)
+      text_accum[#text_accum + 1] = transform(text) or ""
+      return
+    end
+    emit(value)
+  end
+
   -- __emit_part: pass-through for structural segments, or directly for capture-assembled tables
   ---@param segment flemma.ast.Segment|table
   local function emit_part(segment)
@@ -405,6 +428,9 @@ function M.execute(result, env)
   ---@param err any
   ---@param segment_index integer
   local function emit_expr_error(err, segment_index)
+    if readiness.is_suspense(err) then
+      error(err)
+    end
     local segment = result.segments[segment_index]
     local defaults = {
       position = segment and segment.position or nil,
@@ -446,8 +472,9 @@ function M.execute(result, env)
     env.error = error
   end
 
-  -- Install __emit, __emit_part, __emit_expr_error, __segments, __capture_start, __capture_end on env
+  -- Install __emit, __emit_expr, __emit_part, __emit_expr_error, __segments, __capture_start, __capture_end on env
   env.__emit = emit
+  env.__emit_expr = emit_expr
   env.__emit_part = emit_part
   env.__emit_expr_error = emit_expr_error
   env.__segments = result.segments
@@ -461,9 +488,16 @@ function M.execute(result, env)
     end
   end
 
-  -- Load source with the execution environment
-  local chunk, load_err = load(result.source, "template", "t", env)
-  if not chunk then
+  -- Load source with the execution environment. compile() stores the parsed Lua
+  -- function; setfenv lets callers reuse that function with a fresh env per render.
+  local compiled_fn = result.compiled_fn
+  local load_err = nil ---@type string|nil
+  if compiled_fn then
+    setfenv(compiled_fn, env)
+  else
+    compiled_fn, load_err = load(result.source, "template", "t", env)
+  end
+  if not compiled_fn then
     local err_line = parse_error_line(load_err or "")
     local lnum = lookup_lnum(result.line_map, err_line)
     table.insert(diagnostics, {
@@ -474,6 +508,7 @@ function M.execute(result, env)
       source_file = env.__filename or "N/A",
     })
     env.__emit = nil
+    env.__emit_expr = nil
     env.__emit_part = nil
     env.__emit_expr_error = nil
     env.__segments = nil
@@ -483,8 +518,11 @@ function M.execute(result, env)
   end
 
   -- Execute
-  local ok, err = pcall(chunk)
+  local ok, err = pcall(compiled_fn)
   if not ok then
+    if readiness.is_suspense(err) then
+      error(err)
+    end
     if type(err) == "table" and err.type then
       -- Structured error (from include, config proxy, etc.): preserve as-is
       if not err.severity then
@@ -508,6 +546,7 @@ function M.execute(result, env)
       })
     end
     env.__emit = nil
+    env.__emit_expr = nil
     env.__emit_part = nil
     env.__emit_expr_error = nil
     env.__segments = nil

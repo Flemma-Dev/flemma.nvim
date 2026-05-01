@@ -6,12 +6,15 @@ local M = {}
 local config_facade = require("flemma.config")
 local loader = require("flemma.loader")
 local log = require("flemma.logging")
+local notify = require("flemma.notify")
+local readiness = require("flemma.readiness")
 local secrets = require("flemma.secrets")
 local state = require("flemma.state")
 local normalize = require("flemma.provider.normalize")
 local buffer_utils = require("flemma.utilities.buffer")
 local editing = require("flemma.buffer.editing")
 local writequeue = require("flemma.buffer.writequeue")
+local activity = require("flemma.ui.activity")
 local ui = require("flemma.ui")
 local registry = require("flemma.provider.registry")
 local autopilot = require("flemma.autopilot")
@@ -22,14 +25,13 @@ local diagnostic_format = require("flemma.utilities.diagnostic")
 local diagnostics_module = require("flemma.diagnostics")
 local executor = require("flemma.tools.executor")
 local injector = require("flemma.tools.injector")
-local notifications = require("flemma.notifications")
+local path_util = require("flemma.utilities.path")
 local parser = require("flemma.parser")
 local pipeline = require("flemma.pipeline")
 local processor = require("flemma.processor")
 local session_module = require("flemma.session")
 local tool_approval = require("flemma.tools.approval")
 local tool_context = require("flemma.tools.context")
-local tools_module = require("flemma.tools")
 local cursor = require("flemma.cursor")
 local hooks = require("flemma.hooks")
 local preprocessor = require("flemma.preprocessor")
@@ -44,6 +46,17 @@ local DEFAULT_MAX_CONCURRENT = 2
 
 -- For testing purposes
 local last_request_body_for_testing = nil
+
+---@param buffer_state flemma.state.BufferState
+local function clear_diagnostics(buffer_state)
+  -- Diagnostics baselines are provider-specific; comparing requests across
+  -- providers would produce spurious cache and metadata drift warnings.
+  buffer_state.diagnostics_baseline_provider = nil
+  buffer_state.diagnostics_previous_request = nil
+  buffer_state.diagnostics_current_request = nil
+  buffer_state.diagnostics_baseline_extra = nil
+  buffer_state.diagnostics_current_extra_comparison = nil
+end
 
 --- The parameters schema node, used to distinguish static (general) fields
 --- from DISCOVER-resolved (provider-specific) fields.
@@ -111,12 +124,12 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
   -- Validate provider
   if not registry.has(provider_name) then
     local err = string.format(
-      "Flemma: Unknown provider '%s'. Supported providers are: %s",
+      "Unknown provider '%s'. Supported providers are: %s",
       tostring(provider_name),
       table.concat(registry.supported_providers(), ", ")
     )
     log.error("initialize_provider(): " .. err)
-    vim.notify(err, vim.log.levels.ERROR)
+    notify.error(err)
     return false, {}
   end
 
@@ -144,7 +157,7 @@ local function initialize_provider(provider_name, model_name, explicit_params, l
   local param_warnings = {}
   if validated_model then
     local resolved_config = config_facade.materialize()
-    local flat_params = normalize.flatten_parameters(resolved_provider, resolved_config)
+    local flat_params = normalize.merge_parameters(resolved_provider, resolved_config)
     normalize.resolve_max_tokens(resolved_provider, validated_model, flat_params)
     local provider_module_path = registry.get(resolved_provider)
     if provider_module_path then
@@ -182,16 +195,14 @@ function M.initialize_provider(provider_name, model_name, explicit_params, layer
     local resolved = registry.resolve(provider_name) or provider_name
     local validated_model = config_facade.get().model
     local model_desc = validated_model and (" with model '" .. validated_model .. "'") or ""
-    local lines = { "Flemma: Initialized '" .. resolved .. "'" .. model_desc }
+    local lines = { "Initialized '" .. resolved .. "'" .. model_desc }
     if model_fallback then
       table.insert(lines, "  ⚠ " .. model_fallback)
     end
     for _, w in ipairs(param_warnings) do
       table.insert(lines, "  • " .. w)
     end
-    vim.schedule(function()
-      vim.notify(table.concat(lines, "\n"), vim.log.levels.WARN)
-    end)
+    notify.warn(table.concat(lines, "\n"))
   end
   return success
 end
@@ -206,7 +217,7 @@ end
 ---@return true|nil success True on success, nil on failure
 function M.switch_provider(provider_name, model_name, parameters, opts)
   if not provider_name then
-    vim.notify("Flemma: Provider name is required", vim.log.levels.ERROR)
+    notify.error("Provider name is required")
     return
   end
 
@@ -229,10 +240,7 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
   -- Invalidate cached API keys — credentials don't carry across providers
   secrets.invalidate_all()
 
-  -- Clear diagnostics request history — cache state doesn't carry across providers,
-  -- so comparing requests from different providers would produce spurious warnings.
-  buffer_state.diagnostics_previous_request = nil
-  buffer_state.diagnostics_current_request = nil
+  clear_diagnostics(buffer_state)
 
   -- Evaluate frontmatter so L40 is populated before comparing. Without this,
   -- buffers that haven't sent yet would have empty L40 and the override check
@@ -244,7 +252,7 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
   local global_config = config_facade.get()
   local buffer_config = config_facade.get(bufnr)
   local model_info = global_config.model and (" with model '" .. global_config.model .. "'") or ""
-  local header = "Flemma: Switched to '" .. global_config.provider .. "'" .. model_info
+  local header = "Switched to '" .. global_config.provider .. "'" .. model_info
   ---@type string[]
   local lines = {}
   local notify_level = vim.log.levels.INFO
@@ -257,20 +265,13 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
 
   -- High-cost warning
   local model_entry = global_config.model and registry.get_model_info(global_config.provider, global_config.model)
-  local high_cost_threshold = global_config.pricing.high_cost_threshold
+  local high_cost_threshold = global_config.ui.pricing.high_cost_threshold
   if
     model_entry
     and model_entry.pricing
     and model_entry.pricing.input + model_entry.pricing.output > high_cost_threshold
   then
-    table.insert(
-      lines,
-      "  ⚠ Billed at "
-        .. str.format_money(model_entry.pricing.input)
-        .. " input / "
-        .. str.format_money(model_entry.pricing.output)
-        .. " output per MTok"
-    )
+    table.insert(lines, "  ⚠ Billed at " .. str.format_pricing_suffix(model_entry.pricing))
     notify_level = vim.log.levels.WARN
   end
 
@@ -296,7 +297,7 @@ function M.switch_provider(provider_name, model_name, parameters, opts)
     header = header .. "."
   end
   table.insert(lines, 1, header)
-  vim.notify(table.concat(lines, "\n"), notify_level)
+  notify.notify(table.concat(lines, "\n"), notify_level)
 
   hooks.dispatch("config:updated")
 
@@ -308,6 +309,14 @@ end
 function M.cancel_request(opts)
   local bufnr = (opts and opts.bufnr) or vim.api.nvim_get_current_buf()
   local buffer_state = state.get_buffer_state(bufnr)
+
+  if buffer_state.pending_send then
+    buffer_state.pending_send.subscription:cancel()
+    buffer_state.pending_send = nil
+    state.unlock_buffer(bufnr)
+    notify.info("Cancelled queued send.")
+    return
+  end
 
   if buffer_state.current_request then
     log.info("cancel_request(): job_id = " .. tostring(buffer_state.current_request))
@@ -332,14 +341,14 @@ function M.cancel_request(opts)
       if last_line_content == "@Assistant:" then
         -- No content received — clean up progress placeholder (empty @Assistant: block)
         log.debug("cancel_request(): ... Cleaning up empty @Assistant: progress placeholder")
-        ui.cleanup_progress(bufnr)
+        activity.cleanup_progress(bufnr, ui.update_ui)
       else
         -- Content was received — mark the response as aborted
-        ui.cleanup_progress(bufnr)
+        activity.cleanup_progress(bufnr, ui.update_ui)
         buffer_utils.with_modifiable(bufnr, function()
           local last_content, line_count = buffer_utils.get_last_line(bufnr)
           local separator = (last_content == "") and {} or { "" }
-          ui.buffer_cmd(bufnr, "undojoin")
+          buffer_utils.buffer_cmd(bufnr, "undojoin")
           vim.api.nvim_buf_set_lines(
             bufnr,
             line_count,
@@ -356,11 +365,11 @@ function M.cancel_request(opts)
       -- Disarm autopilot on cancellation
       autopilot.disarm(bufnr)
 
-      local msg = "Flemma: Request cancelled"
+      local msg = "Request cancelled"
       if log.is_enabled() then
         msg = msg .. ". See " .. log.get_path() .. " for details"
       end
-      vim.notify(msg, vim.log.levels.INFO)
+      notify.info(msg)
       -- Force UI update after cancellation
       ui.update_ui(bufnr)
       hooks.dispatch("request:finished", { bufnr = bufnr, status = "cancelled" })
@@ -375,7 +384,7 @@ function M.cancel_request(opts)
   end
 end
 
----Phase 2 (Execute): Process flemma:tool blocks by status.
+---Phase 2 (Execute): Process tool_result blocks by lifecycle status.
 ---Called from Phase 1 via vim.schedule (undo boundary) or directly when Phase 1 has nothing.
 ---@param opts { on_request_complete?: fun(), bufnr: integer, evaluated_frontmatter?: flemma.processor.EvaluatedFrontmatter, user_initiated?: boolean }
 local function advance_phase2(opts)
@@ -397,14 +406,14 @@ local function advance_phase2(opts)
   local tool_blocks = tool_context.resolve_all_tool_blocks(bufnr)
 
   -- Resolve user-filled pending blocks: the user pasted output into a
-  -- flemma:tool status=pending block. Strip the fence info string so the
-  -- content becomes a normal resolved tool_result sent to the provider.
+  -- (pending) tool_result placeholder. Clear the header status suffix so
+  -- the content becomes a normal resolved tool_result sent to the provider.
   local pending = tool_blocks["pending"] or {}
   for _, ctx in ipairs(pending) do
     if ctx.has_content then
-      local ok, err = injector.strip_fence_info_string(bufnr, ctx.tool_id)
+      local ok, err = injector.clear_header_status(bufnr, ctx.tool_id)
       if not ok then
-        log.warn("Failed to strip fence info string for " .. ctx.tool_id .. ": " .. (err or "unknown"))
+        log.warn("Failed to clear header status for " .. ctx.tool_id .. ": " .. (err or "unknown"))
       end
     end
   end
@@ -450,16 +459,15 @@ local function advance_phase2(opts)
     end
     local ok, err = executor.execute(bufnr, ctx)
     if not ok then
-      vim.notify("Flemma: " .. (err or "Execution failed"), vim.log.levels.ERROR)
+      notify.error(err or "Execution failed")
     else
       executed_count = executed_count + 1
     end
   end
 
   if throttled and opts.user_initiated then
-    vim.notify(
-      "Flemma: Executing " .. executed_count .. "/" .. #approved .. " tools (max_concurrent=" .. max_concurrent .. ")",
-      vim.log.levels.INFO
+    notify.info(
+      "Executing " .. executed_count .. "/" .. #approved .. " tools (max_concurrent=" .. max_concurrent .. ")"
     )
   end
 
@@ -536,7 +544,7 @@ local function advance_phase2(opts)
     return
   end
 
-  -- Phase 3: No flemma:tool blocks remain and no unmatched tool_uses → send to provider
+  -- Phase 3: No lifecycle-status tool_result blocks remain and no unmatched tool_uses → send to provider
   M.send_to_provider({
     on_request_complete = opts.on_request_complete,
     bufnr = opts.bufnr,
@@ -546,9 +554,9 @@ local function advance_phase2(opts)
 end
 
 ---Unified dispatch: three-phase advance algorithm.
----Phase 1 (Categorize): Find unmatched tool_use blocks → run approval → inject flemma:tool placeholders.
----Phase 2 (Execute): Process flemma:tool blocks by status (approved/denied/rejected/pending).
----Phase 3 (Continue): No tool blocks remain → send to provider.
+---Phase 1 (Categorize): Find unmatched tool_use blocks → run approval → inject tool_result placeholders with a (status) suffix.
+---Phase 2 (Execute): Process tool_result blocks by lifecycle status (approved/denied/rejected/pending).
+---Phase 3 (Continue): No lifecycle-status blocks remain → send to provider.
 ---Both <C-]> and autopilot call this same function.
 ---@param opts? { on_request_complete?: fun(), bufnr?: integer, user_initiated?: boolean }
 function M.send_or_execute(opts)
@@ -558,7 +566,7 @@ function M.send_or_execute(opts)
   -- Early guard: reject immediately if a provider request is already in flight.
   local buffer_state = state.get_buffer_state(bufnr)
   if buffer_state.current_request then
-    vim.notify("Flemma: A request is already in progress. Use <C-c> to cancel it first.", vim.log.levels.WARN)
+    notify.warn("A request is already in progress. Use <C-c> to cancel it first.")
     return
   end
 
@@ -583,7 +591,7 @@ function M.send_or_execute(opts)
   local evaluated_frontmatter = processor.evaluate_frontmatter(doc, context, bufnr)
   buffer_state.frontmatter_eval_code = evaluated_frontmatter.frontmatter_code
   -- Validation failures are merged into diagnostics below for unified rendering
-  -- (they flow through the same vim.notify formatter as other diagnostics).
+  -- (they flow through the same flemma.notify formatter as other diagnostics).
 
   -- Phase 1: Categorize — find tool_use blocks without matching tool_result
   local pending = tool_context.resolve_all_pending(bufnr)
@@ -650,13 +658,77 @@ function M.send_or_execute(opts)
   end
 
   -- Phase 1 had nothing to categorize — run Phase 2 directly
-  -- (handles existing flemma:tool blocks from a previous Phase 1)
+  -- (handles existing lifecycle-status tool_result blocks from a previous Phase 1)
   advance_phase2({
     on_request_complete = opts.on_request_complete,
     bufnr = bufnr,
     evaluated_frontmatter = evaluated_frontmatter,
     user_initiated = opts.user_initiated,
   })
+end
+
+---@class flemma.core.BuildPromptFailure
+---@field code "empty_buffer"|"no_provider"|"no_messages"|"unknown_provider"
+---@field message string
+
+---Build the prompt, context, and request-scoped provider for a buffer.
+---Pure — no buffer lock, no progress UI, no HTTP side effects. Callers decide
+---how to surface failures. `send_to_provider` uses this for the per-request
+---build chain; `try_estimate_usage` uses the same helper for the count-tokens
+---probe so both produce an identical request body.
+---@param bufnr integer
+---@param opts? { evaluated_frontmatter?: flemma.processor.EvaluatedFrontmatter }
+---@return flemma.pipeline.Prompt|nil prompt
+---@return flemma.Context|nil context
+---@return flemma.provider.Base|nil provider
+---@return flemma.processor.EvaluatedResult|nil evaluated
+---@return flemma.core.BuildPromptFailure|nil failure
+function M.build_prompt_and_provider(bufnr, opts)
+  opts = opts or {}
+
+  local doc = parser.get_parsed_document(bufnr)
+  if #doc.messages == 0 and not doc.frontmatter then
+    return nil, nil, nil, nil, { code = "empty_buffer", message = "Empty buffer — nothing to send." }
+  end
+
+  if not config_facade.get(bufnr).provider then
+    return nil,
+      nil,
+      nil,
+      nil,
+      { code = "no_provider", message = "No provider configured. Use :Flemma switch to select one." }
+  end
+
+  local context = context_module.from_buffer(bufnr)
+  local prompt, evaluated = pipeline.run(doc, context, {
+    evaluated_frontmatter = opts.evaluated_frontmatter,
+    bufnr = bufnr,
+  })
+
+  if #prompt.history == 0 then
+    return nil, nil, nil, nil, { code = "no_messages", message = "No messages found in buffer." }
+  end
+
+  local effective_bufnr = prompt.bufnr
+  local cfg = normalize.resolve_preset(config_facade.materialize(effective_bufnr))
+  local provider_key = cfg.provider
+  local flat_params = normalize.merge_parameters(provider_key, cfg)
+  normalize.resolve_max_tokens(provider_key, cfg.model, flat_params)
+
+  local provider_module_path = registry.get(provider_key)
+  if not provider_module_path then
+    return nil,
+      nil,
+      nil,
+      nil,
+      {
+        code = "unknown_provider",
+        message = "Unknown provider '" .. tostring(provider_key) .. "'.",
+      }
+  end
+
+  local provider = loader.load(provider_module_path).new(flat_params)
+  return prompt, context, provider, evaluated, nil
 end
 
 ---Handle the AI provider interaction
@@ -668,33 +740,58 @@ function M.send_to_provider(opts)
 
   -- Check if there's already a request in progress
   if buffer_state.current_request then
-    vim.notify("Flemma: A request is already in progress. Use <C-c> to cancel it first.", vim.log.levels.WARN)
+    notify.warn("A request is already in progress. Use <C-c> to cancel it first.")
     return
   end
 
   -- Check if tool executions are in progress (mutually exclusive with API requests)
   local pending_tools = executor.get_pending(bufnr)
   if #pending_tools > 0 then
-    vim.notify("Flemma: Cannot send while tool execution is in progress.", vim.log.levels.WARN)
+    notify.warn("Cannot send while tool execution is in progress.")
     return
   end
 
-  -- Gate on async tool sources being ready
-  if not tools_module.is_ready() then
-    vim.notify("Flemma: Waiting for tool definitions to load…", vim.log.levels.WARN)
-    if buffer_state.waiting_for_tools then
-      return -- already queued
-    end
-    buffer_state.waiting_for_tools = true
-    local target_bufnr = bufnr
-    tools_module.on_ready(function()
-      buffer_state.waiting_for_tools = false
-      if vim.api.nvim_buf_is_valid(target_bufnr) then
-        M.send_to_provider(opts)
-      end
-    end)
+  if buffer_state.pending_send then
+    buffer_state.pending_send.opts = opts
     return
   end
+
+  local function attempt()
+    local current_opts = buffer_state.pending_send and buffer_state.pending_send.opts or opts
+    local ok, err = pcall(M._run_send_pipeline, bufnr, current_opts)
+    if ok then
+      buffer_state.pending_send = nil
+      return
+    end
+    if not readiness.is_suspense(err) then
+      buffer_state.pending_send = nil
+      state.unlock_buffer(bufnr)
+      notify.error(tostring(err))
+      return
+    end
+    ---@cast err flemma.readiness.Suspense
+    local deferred = notify.delay(600).warn(err.message)
+    local sub = err.boundary:subscribe(function(result)
+      deferred.cancel()
+      if not result or not result.ok then
+        buffer_state.pending_send = nil
+        state.unlock_buffer(bufnr)
+        local diag_msg = diagnostic_format.format_resolver_diagnostics(result and result.diagnostics)
+        notify.error("Could not satisfy dependency: " .. (diag_msg or err.message))
+        return
+      end
+      attempt()
+    end)
+    buffer_state.pending_send = { subscription = sub, opts = current_opts }
+  end
+
+  attempt()
+end
+
+---@param bufnr integer
+---@param opts table
+function M._run_send_pipeline(bufnr, opts)
+  local buffer_state = state.get_buffer_state(bufnr)
 
   log.info("send_to_provider(): Starting new request for buffer " .. bufnr)
   buffer_state.request_cancelled = false
@@ -703,40 +800,30 @@ function M.send_to_provider(opts)
   -- Make the buffer non-modifiable to prevent user edits during request
   state.lock_buffer(bufnr)
 
-  -- Parse buffer via cached AST (single buffer read + parse, reused below)
-  local doc = parser.get_parsed_document(bufnr)
-
-  -- Check if buffer has content
-  if #doc.messages == 0 and not doc.frontmatter then
-    log.warn("send_to_provider(): Empty buffer - nothing to send")
-    state.unlock_buffer(bufnr)
-    return
-  end
-
-  -- Verify a provider is configured (instance is created later, after frontmatter evaluation)
-  if not config_facade.get(bufnr).provider then
-    log.error("send_to_provider(): No provider configured")
-    vim.notify("Flemma: No provider configured. Use :Flemma switch to select one.", vim.log.levels.ERROR)
-    state.unlock_buffer(bufnr)
-    return
-  end
-
-  -- Create context ONCE for the entire pipeline (used by frontmatter, @./file refs, etc.)
-  local context = context_module.from_buffer(bufnr)
-
-  -- Run the pipeline with the pre-parsed document. If frontmatter was already
-  -- evaluated by send_or_execute, reuse it to avoid re-executing frontmatter code.
-  local prompt, evaluated = pipeline.run(doc, context, {
+  local prompt, context, current_provider, evaluated, build_failure = M.build_prompt_and_provider(bufnr, {
     evaluated_frontmatter = opts.evaluated_frontmatter,
-    bufnr = bufnr,
   })
 
-  if #prompt.history == 0 then
-    log.warn("send_to_provider(): No messages found in buffer")
-    vim.notify("Flemma: No messages found in buffer.", vim.log.levels.WARN)
+  if build_failure then
     state.unlock_buffer(bufnr)
+    if build_failure.code == "empty_buffer" then
+      log.warn("send_to_provider(): " .. build_failure.message)
+    elseif build_failure.code == "no_provider" then
+      log.error("send_to_provider(): No provider configured")
+      notify.error(build_failure.message)
+    elseif build_failure.code == "no_messages" then
+      log.warn("send_to_provider(): No messages found in buffer")
+      notify.warn(build_failure.message)
+    elseif build_failure.code == "unknown_provider" then
+      log.error("send_to_provider(): " .. build_failure.message)
+      notify.error(build_failure.message)
+    end
     return
   end
+  ---@cast prompt flemma.pipeline.Prompt
+  ---@cast context flemma.Context
+  ---@cast current_provider flemma.provider.Base
+  ---@cast evaluated flemma.processor.EvaluatedResult
 
   log.debug("send_to_provider(): Processed messages count: " .. #prompt.history)
 
@@ -756,7 +843,10 @@ function M.send_to_provider(opts)
       end
     end
 
-    local diagnostic_lines = {}
+    -- Leading blank so the first entry sits below the "Flemma:" title prefix
+    -- that vim.notify's default adapter prepends; multi-line diagnostics
+    -- otherwise collapse onto the prefix line.
+    local diagnostic_lines = { "" }
     local MAX_DIAGNOSTICS = 10
     local sorted = diagnostic_format.sort(diagnostics)
 
@@ -794,7 +884,7 @@ function M.send_to_provider(opts)
     end
 
     local level = has_errors and vim.log.levels.ERROR or vim.log.levels.WARN
-    vim.notify("Flemma diagnostics:\n" .. table.concat(diagnostic_lines, "\n"), level)
+    notify.notify(table.concat(diagnostic_lines, "\n"), level)
     log.warn("send_to_provider(): Diagnostics occurred: " .. #diagnostics .. " total")
 
     -- Block request if there are critical errors (frontmatter parsing failures)
@@ -808,27 +898,6 @@ function M.send_to_provider(opts)
   log.debug("send_to_provider(): Prompt history for provider: " .. log.inspect(prompt.history))
   log.debug("send_to_provider(): System instruction: " .. log.inspect(prompt.system))
 
-  -- Create a request-scoped provider with per-buffer params (includes frontmatter layer).
-  -- The provider lives only for this request — captured in closures, GC'd after completion.
-  ---@type flemma.provider.Base
-  local current_provider
-  do
-    local effective_bufnr = prompt.bufnr
-    local cfg = normalize.resolve_preset(config_facade.materialize(effective_bufnr))
-    local provider_key = cfg.provider
-    local flat_params = normalize.flatten_parameters(provider_key, cfg)
-    normalize.resolve_max_tokens(provider_key, cfg.model, flat_params)
-
-    local provider_module_path = registry.get(provider_key)
-    if not provider_module_path then
-      log.error("send_to_provider(): Unknown provider: " .. tostring(provider_key))
-      vim.notify("Flemma: Unknown provider '" .. tostring(provider_key) .. "'.", vim.log.levels.ERROR)
-      state.unlock_buffer(bufnr)
-      return
-    end
-    current_provider = loader.load(provider_module_path).new(flat_params)
-  end
-
   -- Validate provider (endpoint, API key, headers) and build request body.
   -- Wrapped in pcall so any provider error unlocks the buffer cleanly.
   local prep_ok, prep_result = pcall(function()
@@ -841,16 +910,6 @@ function M.send_to_provider(opts)
 
     local headers
     if not fixture_path then
-      local api_key, api_key_diagnostics = current_provider:get_api_key()
-      if not api_key then
-        local msg = "No API key available for provider '" .. config_facade.get(bufnr).provider .. "'."
-        if api_key_diagnostics then
-          for _, d in ipairs(api_key_diagnostics) do
-            msg = msg .. "\n  [" .. d.resolver .. "] " .. d.message
-          end
-        end
-        error(msg, 0)
-      end
       headers = current_provider:get_request_headers()
       if not headers then
         error("Provider did not return request headers.", 0)
@@ -865,7 +924,11 @@ function M.send_to_provider(opts)
   end)
 
   if not prep_ok then
-    vim.notify("Flemma: " .. tostring(prep_result), vim.log.levels.ERROR)
+    if readiness.is_suspense(prep_result) then
+      state.unlock_buffer(bufnr)
+      error(prep_result)
+    end
+    notify.error(tostring(prep_result))
     state.unlock_buffer(bufnr)
     return
   end
@@ -874,6 +937,7 @@ function M.send_to_provider(opts)
   local headers = prep_result.headers
   local request_body = prep_result.request_body
   local trailing_keys = prep_result.trailing_keys
+  local request_provider_name = config_facade.get(bufnr).provider
   last_request_body_for_testing = request_body -- Store for testing
 
   -- Capture timeout now so the on_request_complete closure doesn't read stale proxy state
@@ -882,7 +946,7 @@ function M.send_to_provider(opts)
   -- Log the request details (using the provider's stored model)
   log.debug(
     "send_to_provider(): Sending request for provider "
-      .. log.inspect(config_facade.get(bufnr).provider)
+      .. log.inspect(request_provider_name)
       .. " with model "
       .. log.inspect(current_provider.parameters.model)
   )
@@ -892,12 +956,13 @@ function M.send_to_provider(opts)
   parser.create_ast_snapshot_before_send(bufnr)
 
   ---@type integer|nil
-  local progress_timer = ui.start_progress(bufnr, { force = opts.user_initiated, timeout = effective_timeout or 600 })
+  local progress_timer =
+    activity.start_progress(bufnr, { force = opts.user_initiated, timeout = effective_timeout or 600 }, ui.update_ui)
   local response_started = false
 
   -- Reset in-flight usage tracking for this buffer
   -- Include the provider's output_has_thoughts flag so usage.lua can display correctly
-  local provider_capabilities = registry.get_capabilities(config_facade.get(bufnr).provider)
+  local provider_capabilities = registry.get_capabilities(request_provider_name)
   buffer_state.inflight_usage = {
     input_tokens = 0,
     output_tokens = 0,
@@ -910,6 +975,12 @@ function M.send_to_provider(opts)
   -- Capture request start time for duration tracking (before callbacks so closures can see it)
   local request_started_at = session_module.now()
 
+  -- Populated by on_response_complete once the session entry is recorded,
+  -- then read by on_request_complete so the request:finished hook can carry
+  -- the just-recorded request in its payload.
+  ---@type flemma.session.Request|nil
+  local latest_request = nil
+
   -- Set up callbacks for the provider
   local callbacks = {
     on_error = function(msg)
@@ -917,7 +988,7 @@ function M.send_to_provider(opts)
         if progress_timer then
           vim.fn.timer_stop(progress_timer)
         end
-        ui.cleanup_progress(bufnr)
+        activity.cleanup_progress(bufnr, ui.update_ui)
         buffer_state.current_request = nil
         parser.clear_ast_snapshot_before_send(bufnr)
         buffer_state.api_error_occurred = true -- Set flag indicating API error
@@ -927,7 +998,7 @@ function M.send_to_provider(opts)
         -- Auto-write on error if enabled
         editing.auto_write(bufnr)
 
-        local notify_msg = "Flemma: " .. msg
+        local notify_msg = msg
         if current_provider:is_context_overflow(msg) then
           notify_msg = notify_msg
             .. "\n\nYour conversation is too long for this model."
@@ -946,7 +1017,7 @@ function M.send_to_provider(opts)
         if log.is_enabled() then
           notify_msg = notify_msg .. "\nSee " .. log.get_path() .. " for details"
         end
-        vim.notify(notify_msg, vim.log.levels.ERROR)
+        notify.error(notify_msg)
       end)
     end,
 
@@ -978,7 +1049,7 @@ function M.send_to_provider(opts)
         local bufname = vim.api.nvim_buf_get_name(bufnr)
         if bufname and bufname ~= "" then
           -- Resolve to canonical path (handles symlinks, .. etc.)
-          filepath = vim.loop.fs_realpath(bufname) or bufname
+          filepath = path_util.realpath(bufname)
         end
 
         -- Add request to session with pricing snapshot
@@ -1006,20 +1077,18 @@ function M.send_to_provider(opts)
             cache_write_price = pricing_info.cache_write,
           })
 
-          -- Use the just-created Request for the notification
-          local latest_request = session:get_latest_request()
-          local segments = usage.build_segments(latest_request, session)
-          if #segments > 0 then
-            notifications.show(segments, bufnr)
-          end
+          -- Use the just-created Request for the usage bar
+          latest_request = session:get_latest_request()
+          usage.show(bufnr, latest_request)
         end
 
-        -- Diagnostics: compare request with previous
+        -- Diagnostics: publish expectations for the next request only after
+        -- this response completes.
         if config.diagnostics and config.diagnostics.enabled then
-          local raw_json_str = buffer_state._diagnostics_raw_json
-          if raw_json_str then
-            diagnostics_module.record_and_compare(bufnr, raw_json_str)
-            buffer_state._diagnostics_raw_json = nil
+          local response_extra = current_provider._response_buffer and current_provider._response_buffer.extra
+          local response_diagnostics = response_extra and response_extra.diagnostics
+          if buffer_state.diagnostics_baseline_provider == request_provider_name then
+            buffer_state.diagnostics_baseline_extra = diagnostics_module.next_expected(response_diagnostics)
           end
         end
 
@@ -1074,7 +1143,7 @@ function M.send_to_provider(opts)
             if placeholder == "@Assistant:" then
               local lc = vim.api.nvim_buf_line_count(bufnr)
               local prev_content = lc > 1 and buffer_utils.get_line(bufnr, lc - 1) or nil
-              ui.buffer_cmd(bufnr, "undojoin")
+              buffer_utils.buffer_cmd(bufnr, "undojoin")
               if prev_content and prev_content:match("%S") then
                 vim.api.nvim_buf_set_lines(bufnr, lc - 1, lc, false, { "" })
               else
@@ -1094,23 +1163,23 @@ function M.send_to_provider(opts)
 
               if content_lines[1]:match("^%*%*Tool Use:%*%*") then
                 -- Tool use header on its own line so the block is independently foldable
-                ui.buffer_cmd(bufnr, "undojoin")
+                buffer_utils.buffer_cmd(bufnr, "undojoin")
                 vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant:", "", content_lines[1] })
                 header_lines = 3
               elseif content_lines[1]:match("^```") then
                 -- Code fence on its own line (no blank separator needed)
-                ui.buffer_cmd(bufnr, "undojoin")
+                buffer_utils.buffer_cmd(bufnr, "undojoin")
                 vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant:", content_lines[1] })
                 header_lines = 2
               else
-                ui.buffer_cmd(bufnr, "undojoin")
+                buffer_utils.buffer_cmd(bufnr, "undojoin")
                 vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { "@Assistant:", content_lines[1] })
                 header_lines = 2
               end
 
               -- Add remaining lines if any
               if #content_lines > 1 then
-                ui.buffer_cmd(bufnr, "undojoin")
+                buffer_utils.buffer_cmd(bufnr, "undojoin")
                 vim.api.nvim_buf_set_lines(
                   bufnr,
                   last_line + header_lines,
@@ -1125,7 +1194,7 @@ function M.send_to_provider(opts)
 
               if #content_lines == 1 then
                 -- Just append to the last line
-                ui.buffer_cmd(bufnr, "undojoin")
+                buffer_utils.buffer_cmd(bufnr, "undojoin")
                 vim.api.nvim_buf_set_lines(
                   bufnr,
                   last_line - 1,
@@ -1135,7 +1204,7 @@ function M.send_to_provider(opts)
                 )
               else
                 -- First chunk goes to the end of the last line
-                ui.buffer_cmd(bufnr, "undojoin")
+                buffer_utils.buffer_cmd(bufnr, "undojoin")
                 vim.api.nvim_buf_set_lines(
                   bufnr,
                   last_line - 1,
@@ -1145,7 +1214,7 @@ function M.send_to_provider(opts)
                 )
 
                 -- Remaining lines get added as new lines
-                ui.buffer_cmd(bufnr, "undojoin")
+                buffer_utils.buffer_cmd(bufnr, "undojoin")
                 vim.api.nvim_buf_set_lines(bufnr, last_line, last_line, false, { unpack(content_lines, 2) })
               end
             end
@@ -1161,6 +1230,12 @@ function M.send_to_provider(opts)
             ui.update_ui(bufnr)
           end
         end)
+      end)
+    end,
+
+    on_tool_call_start = function(name)
+      vim.schedule(function()
+        buffer_state.progress_tool_name = name
       end)
     end,
 
@@ -1204,7 +1279,7 @@ function M.send_to_provider(opts)
             )
             buffer_state.api_error_occurred = false -- Reset flag for next request
             if not response_started then
-              ui.cleanup_progress(bufnr)
+              activity.cleanup_progress(bufnr, ui.update_ui)
             end
             editing.auto_write(bufnr) -- Still auto-write if configured
             ui.update_ui(bufnr) -- Update UI
@@ -1216,13 +1291,13 @@ function M.send_to_provider(opts)
           -- On the happy path the @Assistant: placeholder has real content, so
           -- cleanup_progress won't remove any buffer lines — it only removes a
           -- bare "@Assistant:" placeholder.
-          ui.cleanup_progress(bufnr)
+          activity.cleanup_progress(bufnr, ui.update_ui)
 
           if not response_started then
             log.warn(
               "send_to_provider(): on_request_complete: cURL success (code 0), no API error, but no response content was processed."
             )
-            vim.notify("Flemma: Request completed but no response was received.", vim.log.levels.WARN)
+            notify.warn("Request completed but no response was received.")
           end
 
           -- Add new "@You:" prompt for the next message (buffer is already modifiable)
@@ -1238,7 +1313,7 @@ function M.send_to_provider(opts)
             cursor_line_offset = 3
           end
 
-          ui.buffer_cmd(bufnr, "undojoin")
+          buffer_utils.buffer_cmd(bufnr, "undojoin")
           vim.api.nvim_buf_set_lines(bufnr, last_line_idx, last_line_idx, false, lines_to_insert)
 
           -- Position cursor on the blank content line after @You:
@@ -1255,36 +1330,33 @@ function M.send_to_provider(opts)
           -- Hook autopilot: check if assistant response contains tool_use
           autopilot.on_response_complete(bufnr)
 
-          hooks.dispatch("request:finished", { bufnr = bufnr, status = "completed" })
+          hooks.dispatch("request:finished", { bufnr = bufnr, status = "completed", request = latest_request })
         else
           -- cURL request failed (exit code ~= 0)
           -- Buffer is already set to modifiable = true
-          ui.cleanup_progress(bufnr)
+          activity.cleanup_progress(bufnr, ui.update_ui)
 
           local error_msg
           if code == 6 then -- CURLE_COULDNT_RESOLVE_HOST
-            error_msg =
-              string.format("Flemma: cURL could not resolve host (exit code %d). Check network or hostname.", code)
+            error_msg = string.format("cURL could not resolve host (exit code %d). Check network or hostname.", code)
           elseif code == 7 then -- CURLE_COULDNT_CONNECT
-            error_msg = string.format(
-              "Flemma: cURL could not connect to host (exit code %d). Check network or if the host is up.",
-              code
-            )
+            error_msg =
+              string.format("cURL could not connect to host (exit code %d). Check network or if the host is up.", code)
           elseif code == 28 then -- cURL timeout error
             local timeout_value = effective_timeout -- Captured before async callback
             error_msg = string.format(
-              "Flemma: cURL request timed out (exit code %d). Timeout is %s seconds.",
+              "cURL request timed out (exit code %d). Timeout is %s seconds.",
               code,
               tostring(timeout_value)
             )
           else -- Other cURL errors
-            error_msg = string.format("Flemma: cURL request failed (exit code %d).", code)
+            error_msg = string.format("cURL request failed (exit code %d).", code)
           end
 
           if log.is_enabled() then
             error_msg = error_msg .. " See " .. log.get_path() .. " for details."
           end
-          vim.notify(error_msg, vim.log.levels.ERROR)
+          notify.error(error_msg)
 
           editing.auto_write(bufnr) -- Auto-write if enabled, even on error
           ui.update_ui(bufnr) -- Update UI to remove any artifacts
@@ -1316,10 +1388,15 @@ function M.send_to_provider(opts)
       current_provider:set_response_headers(response_headers)
     end,
     on_raw_json = function(raw_json_str)
-      -- Store for diagnostics — will be compared after response completes
+      -- Compare diagnostics as soon as the exact request bytes are known.
       local cfg = config_facade.get(bufnr)
       if cfg.diagnostics and cfg.diagnostics.enabled then
-        buffer_state._diagnostics_raw_json = raw_json_str
+        if buffer_state.diagnostics_baseline_provider ~= request_provider_name then
+          clear_diagnostics(buffer_state)
+          buffer_state.diagnostics_baseline_provider = request_provider_name
+        end
+        local build_extra = current_provider._response_buffer and current_provider._response_buffer.extra
+        diagnostics_module.record_and_compare(bufnr, raw_json_str, build_extra and build_extra.diagnostics or nil)
       end
     end,
   })
@@ -1331,7 +1408,7 @@ function M.send_to_provider(opts)
       vim.fn.timer_stop(progress_timer)
       buffer_state.progress_timer = nil
     end
-    ui.cleanup_progress(bufnr)
+    activity.cleanup_progress(bufnr, ui.update_ui)
     parser.clear_ast_snapshot_before_send(bufnr)
     state.unlock_buffer(bufnr)
     return
@@ -1356,5 +1433,14 @@ end
 bridge.register("send_or_execute", M.send_or_execute)
 bridge.register("cancel_request", M.cancel_request)
 bridge.register("update_ui", M.update_ui)
+bridge.register("build_prompt_and_provider", M.build_prompt_and_provider)
+
+state.register_cleanup("core.pending_send", function(bufnr)
+  local bs = state.get_buffer_state(bufnr)
+  if bs.pending_send then
+    bs.pending_send.subscription:cancel()
+    bs.pending_send = nil
+  end
+end)
 
 return M
