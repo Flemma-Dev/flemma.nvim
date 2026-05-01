@@ -358,7 +358,7 @@ Yes. Register custom tools, approval resolvers, credential resolvers, sandbox ba
 <details>
 <summary><strong>Who made this?</strong></summary>
 
-[<img src="https://images.weserv.nl/?url=gravatar.com%2Favatar%2Fea3f8f366bb2aa0855db031884e3a8e8%3Fs%3D400%26d%3Drobohash%26r%3Dg&mask=circle" valign="middle" width="18" height="18" alt="Photo of @StanAngeloff">&thinsp;@StanAngeloff](https://github.com/StanAngeloff). Flemma started as a personal tool for thinking, writing, and experimenting with AI inside Neovim. It's been used for everything from architecture documents and project planning to bedtime stories.
+[<img src="https://images.weserv.nl/?url=gravatar.com%2Favatar%2Fea3f8f366bb2aa0855db031884e3a8e8%3Fs%3D400%26d%3Drobohash%26r%3Dg&mask=circle" valign="middle" align="left" width="18" height="18" alt="Photo of @StanAngeloff">&thinsp;@StanAngeloff](https://github.com/StanAngeloff). Flemma started as a personal tool for thinking, writing, and experimenting with AI inside Neovim. It's been used for everything from architecture documents and project planning to bedtime stories.
 
 </details>
 
