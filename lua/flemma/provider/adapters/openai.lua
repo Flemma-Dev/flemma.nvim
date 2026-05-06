@@ -364,7 +364,7 @@ function M.build_request(self, prompt, context)
       type = "function",
       name = base.encode_tool_name(definition.name),
       description = tools_module.build_description(definition),
-      parameters = tools_module.to_json_schema(definition),
+      parameters = tools_module.to_json_schema_for_prompt(definition),
     }
     if definition.strict == true then
       tool_entry.strict = true

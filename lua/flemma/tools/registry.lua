@@ -50,6 +50,7 @@ local M = {}
 ---@field input_schema flemma.tools.JSONSchema|flemma.schema.Node JSON Schema table or schema DSL node (serialized via to_json_schema())
 ---@field output_schema? flemma.tools.JSONSchema JSON Schema for the tool output (used in description)
 ---@field async? boolean True if execute takes a callback (default false)
+---@field backgroundable? boolean Set to false to prevent background execution even though tool is async (default true for async tools)
 ---@field enabled? boolean|fun(config: flemma.Config): boolean Set to false to exclude from API requests by default (still executable, can be enabled via flemma.opt.tools). When a function, evaluated at query time with the resolved config.
 ---@field executable? boolean Set to false to disable execution
 ---@field execute? fun(input: table<string, any>, context: flemma.tools.ExecutionContext, callback?: fun(result: flemma.tools.ExecutionResult)): any Executor function (sync returns ExecutionResult, async returns cancel fn or nil)

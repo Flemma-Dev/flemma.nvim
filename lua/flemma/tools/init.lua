@@ -22,6 +22,13 @@ local BUILTIN_TOOLS = {
   "flemma.tools.definitions.mcporter",
 }
 
+local BACKGROUND_PARAM_DESCRIPTION = "Set to true to run this tool in the background. "
+  .. "The conversation continues immediately with a placeholder; the actual result is delivered "
+  .. "as a separate message later \u{2014} you cannot access it until then. Default to foreground. "
+  .. "Use background only when you have other meaningful work to do while waiting and no upcoming "
+  .. "tool call or decision depends on this result, even indirectly. Avoid backgrounding all tool "
+  .. "calls in a single response \u{2014} keep at least one foreground result to act on."
+
 --------------------------------------------------------------------------------
 -- Async source tracking
 --------------------------------------------------------------------------------
@@ -220,6 +227,24 @@ function M.to_json_schema(definition)
     return schema:to_json_schema()
   end
   return schema --[[@as flemma.tools.JSONSchema]]
+end
+
+---Serialize a tool's input_schema for prompt inclusion, injecting the
+---`background` parameter for async tools that haven't opted out.
+---@param definition flemma.tools.ToolDefinition
+---@return flemma.tools.JSONSchema
+function M.to_json_schema_for_prompt(definition)
+  local schema = M.to_json_schema(definition)
+  if definition.async and definition.backgroundable ~= false then
+    schema = vim.deepcopy(schema)
+    schema.properties = schema.properties or {}
+    schema.properties.background = {
+      type = "boolean",
+      default = false,
+      description = BACKGROUND_PARAM_DESCRIPTION,
+    }
+  end
+  return schema
 end
 
 ---Get all registered tools (excludes disabled tools by default).
