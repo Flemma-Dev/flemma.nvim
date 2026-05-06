@@ -127,4 +127,74 @@ describe("executor background filtering", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
   end)
+
+  describe("generate_job_id", function()
+    it("returns a string starting with bg_ followed by 5 alphanumeric chars", function()
+      local executor = require("flemma.tools.executor")
+      local id = executor.generate_job_id()
+      assert.is_string(id)
+      assert.truthy(id:match("^bg_[a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9]$"))
+    end)
+
+    it("generates unique IDs", function()
+      local executor = require("flemma.tools.executor")
+      local ids = {}
+      for _ = 1, 50 do
+        local id = executor.generate_job_id()
+        assert.is_nil(ids[id], "duplicate job_id: " .. id)
+        ids[id] = true
+      end
+    end)
+  end)
+
+  describe("completion queue", function()
+    it("enqueues and dequeues background completions", function()
+      local executor = require("flemma.tools.executor")
+      local bufnr = vim.api.nvim_create_buf(false, true)
+
+      assert.is_false(executor.has_background_completions(bufnr))
+
+      executor.enqueue_background_completion(bufnr, {
+        job_id = "bg_abc12",
+        tool_id = "tool_01",
+        tool_name = "bash",
+        result = { success = true, output = "hello" },
+      })
+
+      assert.is_true(executor.has_background_completions(bufnr))
+
+      local items = executor.drain_background_completions(bufnr)
+      assert.equals(1, #items)
+      assert.equals("bg_abc12", items[1].job_id)
+      assert.equals("tool_01", items[1].tool_id)
+      assert.is_true(items[1].result.success)
+
+      assert.is_false(executor.has_background_completions(bufnr))
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("preserves FIFO order", function()
+      local executor = require("flemma.tools.executor")
+      local bufnr = vim.api.nvim_create_buf(false, true)
+
+      executor.enqueue_background_completion(bufnr, {
+        job_id = "bg_first",
+        tool_id = "t1",
+        tool_name = "bash",
+        result = { success = true, output = "a" },
+      })
+      executor.enqueue_background_completion(bufnr, {
+        job_id = "bg_second",
+        tool_id = "t2",
+        tool_name = "bash",
+        result = { success = true, output = "b" },
+      })
+
+      local items = executor.drain_background_completions(bufnr)
+      assert.equals(2, #items)
+      assert.equals("bg_first", items[1].job_id)
+      assert.equals("bg_second", items[2].job_id)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
 end)

@@ -25,6 +25,9 @@ local ui = require("flemma.ui")
 local variables = require("flemma.utilities.variables")
 local writequeue = require("flemma.buffer.writequeue")
 
+local JOB_ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
+local JOB_ID_LENGTH = 5
+
 ---@class flemma.tools.PendingExecution
 ---@field tool_id string
 ---@field tool_name string
@@ -37,6 +40,13 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field placeholder_modified boolean
 ---@field job_id string|nil Background job ID; presence implies this is a background execution
 
+---@class flemma.tools.BackgroundCompletion
+---@field job_id string
+---@field tool_id string
+---@field tool_name string
+---@field result flemma.tools.ExecutionResult
+---@field completed_at integer Not in spec; implementation detail for future diagnostics/ordering
+
 ---Get or initialize the pending executions map for a buffer
 ---@param bufnr integer
 ---@return table<string, flemma.tools.PendingExecution>
@@ -46,6 +56,57 @@ local function get_buffer_pending(bufnr)
     buffer_state.pending_executions = {}
   end
   return buffer_state.pending_executions
+end
+
+---Get or initialize the completion queue for a buffer.
+---@param bufnr integer
+---@return flemma.tools.BackgroundCompletion[]
+local function get_completion_queue(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  if not buffer_state.completion_queue then
+    buffer_state.completion_queue = {}
+  end
+  return buffer_state.completion_queue
+end
+
+---Generate a random unique background job identifier (e.g. "bg_k7x2m").
+---Relies on Neovim seeding math.randomseed(vim.uv.hrtime()) at startup.
+---@return string
+function M.generate_job_id()
+  local parts = { "bg_" }
+  for _ = 1, JOB_ID_LENGTH do
+    local idx = math.random(1, #JOB_ID_CHARS)
+    parts[#parts + 1] = JOB_ID_CHARS:sub(idx, idx)
+  end
+  return table.concat(parts)
+end
+
+---Enqueue a completed background tool result for later delivery.
+---@param bufnr integer
+---@param item flemma.tools.BackgroundCompletion
+function M.enqueue_background_completion(bufnr, item)
+  local queue = get_completion_queue(bufnr)
+  item.completed_at = item.completed_at or os.time()
+  table.insert(queue, item)
+end
+
+---Check whether any background completions are waiting for delivery.
+---@param bufnr integer
+---@return boolean
+function M.has_background_completions(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  local queue = buffer_state.completion_queue
+  return queue ~= nil and #queue > 0
+end
+
+---Drain and return all queued background completions in FIFO order.
+---@param bufnr integer
+---@return flemma.tools.BackgroundCompletion[]
+function M.drain_background_completions(bufnr)
+  local buffer_state = state.get_buffer_state(bufnr)
+  local queue = buffer_state.completion_queue or {}
+  buffer_state.completion_queue = {}
+  return queue
 end
 
 ---Count tools currently occupying execution slots for a buffer.
