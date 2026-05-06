@@ -35,6 +35,7 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field started_at integer timestamp
 ---@field completed boolean
 ---@field placeholder_modified boolean
+---@field job_id string|nil Background job ID; presence implies this is a background execution
 
 ---Get or initialize the pending executions map for a buffer
 ---@param bufnr integer
@@ -61,8 +62,10 @@ function M.count_running(bufnr)
     return 0
   end
   local n = 0
-  for _ in pairs(pending) do
-    n = n + 1
+  for _, entry in pairs(pending) do
+    if not entry.job_id then
+      n = n + 1
+    end
   end
   return n
 end
@@ -553,7 +556,7 @@ function M.get_pending(bufnr)
 
   local result = {}
   for _, entry in pairs(pending) do
-    if not entry.completed then
+    if not entry.completed and not entry.job_id then
       table.insert(result, entry)
     end
   end

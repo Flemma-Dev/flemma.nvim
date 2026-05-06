@@ -16,11 +16,20 @@ local tool_context = require("flemma.tools.context")
 
 ---Check whether tool executions are currently in progress for a buffer.
 ---Reads directly from state to avoid circular dependency with executor module.
+---Excludes background entries (those with job_id); only foreground tools count.
 ---@param bufnr integer
 ---@return boolean
 local function has_executing_tools(bufnr)
   local pending = state.get_buffer_state(bufnr).pending_executions
-  return pending ~= nil and next(pending) ~= nil
+  if not pending then
+    return false
+  end
+  for _, entry in pairs(pending) do
+    if not entry.job_id then
+      return true
+    end
+  end
+  return false
 end
 
 ---@class flemma.autopilot.BufferState
