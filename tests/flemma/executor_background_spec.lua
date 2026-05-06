@@ -1,5 +1,25 @@
 describe("executor background filtering", function()
   local state
+  local tool_exec_ns = vim.api.nvim_create_namespace("flemma_tool_execution")
+
+  ---@param bufnr integer
+  ---@return table<integer, string>
+  local function get_tool_extmarks(bufnr)
+    local marks = vim.api.nvim_buf_get_extmarks(bufnr, tool_exec_ns, 0, -1, { details = true })
+    local result = {}
+    for _, mark in ipairs(marks) do
+      local line_idx = mark[2]
+      local details = mark[4]
+      local text = ""
+      if details.virt_text then
+        for _, chunk in ipairs(details.virt_text) do
+          text = text .. chunk[1]
+        end
+      end
+      result[line_idx] = text
+    end
+    return result
+  end
 
   before_each(function()
     package.loaded["flemma.state"] = nil
@@ -322,6 +342,7 @@ describe("executor background filtering", function()
 
       local joined = table.concat(lines, "\n")
       assert.truthy(joined:match("Running in background%."))
+      assert.same({}, get_tool_extmarks(bufnr))
 
       if entry.cancel_fn then
         pcall(entry.cancel_fn)
@@ -412,6 +433,55 @@ describe("executor background filtering", function()
       assert.truthy(joined:match("Running in background%."))
 
       assert.is_false(buffer_state.locked)
+      assert.same({}, get_tool_extmarks(bufnr))
+
+      buffer_state.pending_executions = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("clears an existing execution indicator when backgrounding mid-flight", function()
+      local executor = require("flemma.tools.executor")
+      local indicators = require("flemma.ui.indicators")
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_mid`)",
+        "",
+        "```json",
+        '{"command": "sleep 60"}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_mid`",
+        "",
+        "```",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.pending_executions = {
+        ["tool_mid"] = {
+          tool_id = "tool_mid",
+          tool_name = "bash",
+          bufnr = bufnr,
+          start_line = 2,
+          end_line = 6,
+          cancel_fn = function() end,
+          started_at = 0,
+          completed = false,
+          placeholder_modified = true,
+        },
+      }
+      indicators.show_tool_indicator(bufnr, "tool_mid", 9)
+      assert.truthy(next(get_tool_extmarks(bufnr)))
+
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.api.nvim_win_set_cursor(0, { 9, 0 })
+
+      local ok, err = executor.background_at_cursor(bufnr)
+      assert.is_true(ok, err)
+      assert.same({}, get_tool_extmarks(bufnr))
 
       buffer_state.pending_executions = nil
       vim.api.nvim_buf_delete(bufnr, { force = true })
