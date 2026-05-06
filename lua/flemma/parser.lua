@@ -19,6 +19,7 @@ local post_parse_hook = nil
 
 local TOOL_USE_PATTERN = "^%*%*Tool Use:%*%*%s*`([^`]+)`%s*%(`([^)]+)`%)"
 local TOOL_RESULT_PATTERN = "^%*%*Tool Result:%*%*%s*`([^`]+)`(.*)$"
+local BACKGROUND_COMPLETED_PATTERN = "^%*%*Background Tool Completed:%*%*%s*`([^`]+)`(.*)$"
 local TOOL_RESULT_SUFFIX_PATTERN = "^%s*%((.*)%)%s*$"
 local ABORTED_PATTERN = "^<!%-%-%s*flemma:aborted:%s*(.-)%s*%-%->$"
 
@@ -112,9 +113,47 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
     local line = lines[i]
     local current_line_num = base_line_num + i - 1
 
-    -- Check for **Tool Result:** marker
-    local tool_use_id, raw_suffix = line:match(TOOL_RESULT_PATTERN)
-    if tool_use_id then
+    -- Check for **Background Tool Completed:** marker
+    local background_job_id, background_raw_suffix = line:match(BACKGROUND_COMPLETED_PATTERN)
+    if background_job_id then
+      flush_accum()
+      local background_suffix_inner = background_raw_suffix and background_raw_suffix:match(TOOL_RESULT_SUFFIX_PATTERN)
+      local background_tokens = background_suffix_inner and modeline.parse(background_suffix_inner) or nil
+      local background_status, background_meta = extract_status(background_tokens)
+      local background_start_line = current_line_num
+
+      local content_start = codeblock.skip_blank_lines(lines, i + 1)
+      local block, block_end = codeblock.parse_fenced_block(lines, content_start)
+
+      if block then
+        table.insert(
+          segments,
+          ast.background_tool_completed(background_job_id, {
+            content = block.content,
+            status = background_status == "error" and "error" or nil,
+            meta = background_meta,
+            start_line = background_start_line,
+            end_line = base_line_num + block_end - 1,
+          })
+        )
+        i = block_end + 1
+      else
+        table.insert(
+          segments,
+          ast.background_tool_completed(background_job_id, {
+            content = "",
+            status = background_status == "error" and "error" or nil,
+            meta = background_meta,
+            start_line = background_start_line,
+            end_line = current_line_num,
+          })
+        )
+        i = i + 1
+      end
+    else
+      -- Check for **Tool Result:** marker
+      local tool_use_id, raw_suffix = line:match(TOOL_RESULT_PATTERN)
+      if tool_use_id then
       flush_accum()
       local suffix_inner = raw_suffix and raw_suffix:match(TOOL_RESULT_SUFFIX_PATTERN)
       local suffix_tokens = suffix_inner and modeline.parse(suffix_inner) or nil
@@ -177,13 +216,14 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
         -- Skip to next line and continue
         i = content_start
       end
-    else
-      -- Regular content line — accumulate for batch parsing
-      if #accum_lines == 0 then
-        accum_start_line = current_line_num
+      else
+        -- Regular content line — accumulate for batch parsing
+        if #accum_lines == 0 then
+          accum_start_line = current_line_num
+        end
+        table.insert(accum_lines, line)
+        i = i + 1
       end
-      table.insert(accum_lines, line)
-      i = i + 1
     end
   end
 

@@ -66,7 +66,15 @@ local M = {}
 ---@field message string
 ---@field position flemma.ast.Position
 
----@alias flemma.ast.Segment flemma.ast.TextSegment|flemma.ast.ExpressionSegment|flemma.ast.CodeSegment|flemma.ast.ThinkingSegment|flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|flemma.ast.AbortedSegment
+---@class flemma.ast.BackgroundToolCompletedSegment
+---@field kind "background_tool_completed"
+---@field job_id string
+---@field content string
+---@field status? "error"
+---@field meta? table<string, any>
+---@field position flemma.ast.Position
+
+---@alias flemma.ast.Segment flemma.ast.TextSegment|flemma.ast.ExpressionSegment|flemma.ast.CodeSegment|flemma.ast.ThinkingSegment|flemma.ast.ToolUseSegment|flemma.ast.ToolResultSegment|flemma.ast.AbortedSegment|flemma.ast.BackgroundToolCompletedSegment
 
 ---@class flemma.ast.Diagnostic
 ---@field type string Diagnostic category. Internal types are unprefixed (e.g., "frontmatter", "expression", "file"). Custom types from symbols.DIAGNOSTICS must use the "custom:" prefix (e.g., "custom:file_drift").
@@ -260,6 +268,21 @@ function M.aborted(message, pos)
   return { kind = "aborted", message = message, position = pos }
 end
 
+---@param job_id string
+---@param opts? { content?: string, status?: "error", meta?: table<string, any>, start_line?: integer, end_line?: integer }
+---@return flemma.ast.BackgroundToolCompletedSegment
+function M.background_tool_completed(job_id, opts)
+  opts = opts or {}
+  return {
+    kind = "background_tool_completed",
+    job_id = job_id,
+    content = opts.content or "",
+    status = opts.status,
+    meta = opts.meta,
+    position = { start_line = opts.start_line, end_line = opts.end_line },
+  }
+end
+
 --- Convert a file part to its generic representation based on MIME type.
 --- Handles image/*, application/pdf, text/*, and unsupported types.
 ---@param file_part table The file part with mime_type, data, filename, position fields
@@ -365,6 +388,11 @@ function M.to_generic_parts(evaluated_parts, source_file)
         parts = tool_parts,
         is_error = p.status == "error",
       })
+    elseif p.kind == "background_tool_completed" then
+      ---@cast p flemma.ast.BackgroundToolCompletedSegment
+      if p.content and #p.content > 0 then
+        table.insert(parts, { kind = "text", text = p.content, _bg_job_id = p.job_id })
+      end
     end
   end
   return parts, diagnostics
