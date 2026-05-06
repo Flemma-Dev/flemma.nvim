@@ -733,6 +733,7 @@ function M.background_at_cursor(bufnr)
 
   local content_ok, content_err = injector.set_fence_content(bufnr, ctx.tool_id, "Running in background.")
   if not content_ok then
+    injector.clear_header_status(bufnr, ctx.tool_id)
     entry.job_id = nil
     return false, content_err
   end

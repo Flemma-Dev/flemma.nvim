@@ -170,6 +170,8 @@ function M.run(doc, context, opts)
         local info = job_id_to_tool[part._bg_job_id]
         if info then
           part.text = "[Background result for " .. info.tool_name .. " (" .. info.tool_use_id .. ")]\n" .. part.text
+        else
+          part.text = "[Background result for unknown tool (job: " .. part._bg_job_id .. ")]\n" .. part.text
         end
         part._bg_job_id = nil
       end

@@ -82,4 +82,56 @@ describe("background tool completed parsing", function()
       assert.equals("bg_k7x2m", generic_parts[1]._bg_job_id)
     end)
   end)
+
+  describe("pipeline enrichment", function()
+    it("prefixes background completion text with the originating tool context", function()
+      local context = require("flemma.context")
+      local pipeline = require("flemma.pipeline")
+      local lines = {
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_01`)",
+        "",
+        "```json",
+        '{"command": "make qa"}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_01` (job=bg_k7x2m)",
+        "",
+        "```",
+        "Running in background.",
+        "```",
+        "",
+        "@You:",
+        "**Background Tool Completed:** `bg_k7x2m`",
+        "",
+        "```",
+        "qa: OK",
+        "```",
+      }
+
+      local prompt = pipeline.run(parser.parse_lines(lines), context.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
+      local text = prompt.history[#prompt.history].parts[1].text
+      assert.truthy(text:match("%[Background result for bash %(tool_01%)%]"))
+      assert.truthy(text:match("qa: OK"))
+    end)
+
+    it("prefixes unresolved background completion text with job context", function()
+      local context = require("flemma.context")
+      local pipeline = require("flemma.pipeline")
+      local lines = {
+        "@You:",
+        "**Background Tool Completed:** `bg_lost1`",
+        "",
+        "```",
+        "late output",
+        "```",
+      }
+
+      local prompt = pipeline.run(parser.parse_lines(lines), context.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
+      local text = prompt.history[1].parts[1].text
+      assert.truthy(text:match("%[Background result for unknown tool %(job: bg_lost1%)%]"))
+      assert.truthy(text:match("late output"))
+    end)
+  end)
 end)

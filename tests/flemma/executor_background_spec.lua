@@ -416,5 +416,62 @@ describe("executor background filtering", function()
       buffer_state.pending_executions = nil
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
+
+    it("rolls back header metadata when content update fails", function()
+      local executor = require("flemma.tools.executor")
+      local injector = require("flemma.tools.injector")
+      local original_set_fence_content = injector.set_fence_content
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_mid`)",
+        "",
+        "```json",
+        '{"command": "sleep 60"}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_mid`",
+        "",
+        "```",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.pending_executions = {
+        ["tool_mid"] = {
+          tool_id = "tool_mid",
+          tool_name = "bash",
+          bufnr = bufnr,
+          start_line = 2,
+          end_line = 6,
+          cancel_fn = function() end,
+          started_at = 0,
+          completed = false,
+          placeholder_modified = true,
+        },
+      }
+
+      injector.set_fence_content = function()
+        return false, "forced failure"
+      end
+
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.api.nvim_win_set_cursor(0, { 9, 0 })
+
+      local ok, err = executor.background_at_cursor(bufnr)
+      injector.set_fence_content = original_set_fence_content
+
+      assert.is_false(ok)
+      assert.truthy(err:match("forced failure"))
+      assert.is_nil(buffer_state.pending_executions["tool_mid"].job_id)
+
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      assert.equals("**Tool Result:** `tool_mid`", lines[9])
+
+      buffer_state.pending_executions = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
   end)
 end)
