@@ -252,4 +252,82 @@ describe("executor background filtering", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
   end)
+
+  describe("execute with background option", function()
+    it("allocates job_id and writes background placeholder", function()
+      local executor = require("flemma.tools.executor")
+      local registry = require("flemma.tools.registry")
+      registry.clear()
+      registry.register("test_bg_tool", {
+        name = "test_bg_tool",
+        description = "Test tool",
+        async = true,
+        input_schema = { type = "object", properties = { cmd = { type = "string" } } },
+        execute = function()
+          return function() end
+        end,
+      })
+
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        "**Tool Use:** `test_bg_tool` (`tool_bg_01`)",
+        "",
+        "```json",
+        '{"cmd": "long task"}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_bg_01` (approved)",
+        "",
+        "```",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+
+      ---@type flemma.tools.ToolContext
+      local context = {
+        tool_id = "tool_bg_01",
+        tool_name = "test_bg_tool",
+        input = { cmd = "long task" },
+        node = {
+          kind = "tool_use",
+          id = "tool_bg_01",
+          name = "test_bg_tool",
+          input = {},
+          position = { start_line = 2, end_line = 6 },
+        },
+        start_line = 2,
+        end_line = 6,
+      }
+
+      local ok, err = executor.execute(bufnr, context, { background = true })
+      assert.is_true(ok, err)
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      local entry = buffer_state.pending_executions["tool_bg_01"]
+      assert.truthy(entry)
+      assert.truthy(entry.job_id)
+      assert.truthy(entry.job_id:match("^bg_"))
+
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      local header_found = false
+      for _, line in ipairs(lines) do
+        if line:match("Tool Result.*tool_bg_01.*job=") then
+          header_found = true
+          break
+        end
+      end
+      assert.is_true(header_found, "Expected job= in tool_result header")
+
+      local joined = table.concat(lines, "\n")
+      assert.truthy(joined:match("Running in background%."))
+
+      if entry.cancel_fn then
+        pcall(entry.cancel_fn)
+      end
+      buffer_state.pending_executions = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
 end)

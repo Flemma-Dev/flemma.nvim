@@ -408,9 +408,11 @@ end
 ---Execute a tool call
 ---@param bufnr integer
 ---@param context flemma.tools.ToolContext
+---@param opts? { background?: boolean }
 ---@return boolean success
 ---@return string|nil error
-function M.execute(bufnr, context)
+function M.execute(bufnr, context, opts)
+  opts = opts or {}
   local tool_id = context.tool_id
   local tool_name = context.tool_name
 
@@ -452,6 +454,9 @@ function M.execute(bufnr, context)
     completed = false,
     placeholder_modified = false,
   }
+  if opts.background then
+    pending[tool_id].job_id = M.generate_job_id()
+  end
 
   -- Lock buffer to prevent user edits during execution
   state.lock_buffer(bufnr)
@@ -481,6 +486,12 @@ function M.execute(bufnr, context)
   -- clear_header_status is a no-op when the header has no suffix.
   if placeholder_opts and not placeholder_opts.modified then
     injector.clear_header_status(bufnr, tool_id)
+  end
+
+  if opts.background and pending[tool_id] and pending[tool_id].job_id then
+    local job_id = pending[tool_id].job_id --[[@as string]]
+    injector.set_header_modeline(bufnr, tool_id, "job=" .. job_id)
+    injector.set_fence_content(bufnr, tool_id, "Running in background.")
   end
 
   -- Show execution indicator

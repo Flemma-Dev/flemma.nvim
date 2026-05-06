@@ -457,7 +457,12 @@ local function advance_phase2(opts)
       throttled = true
       break
     end
-    local ok, err = executor.execute(bufnr, ctx)
+    local is_background = ctx.input.background == true
+    if is_background then
+      ctx.input = vim.tbl_extend("keep", {}, ctx.input)
+      ctx.input.background = nil
+    end
+    local ok, err = executor.execute(bufnr, ctx, { background = is_background })
     if not ok then
       notify.error(err or "Execution failed")
     else
