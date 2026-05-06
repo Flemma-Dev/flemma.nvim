@@ -1495,6 +1495,16 @@ bridge.register("send_or_execute", M.send_or_execute)
 bridge.register("cancel_request", M.cancel_request)
 bridge.register("update_ui", M.update_ui)
 bridge.register("build_prompt_and_provider", M.build_prompt_and_provider)
+bridge.register("drain_background_completions", function(bufnr)
+  local drained, safe = drain_and_inject_completions(bufnr)
+  if drained > 0 and safe and autopilot.is_enabled(bufnr) then
+    vim.schedule(function()
+      if vim.api.nvim_buf_is_valid(bufnr) then
+        M.send_or_execute({ bufnr = bufnr })
+      end
+    end)
+  end
+end)
 
 state.register_cleanup("core.pending_send", function(bufnr)
   local bs = state.get_buffer_state(bufnr)

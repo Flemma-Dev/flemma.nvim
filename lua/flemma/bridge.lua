@@ -59,4 +59,10 @@ function M.auto_prompt(bufnr)
   handlers.auto_prompt(bufnr)
 end
 
+---@param bufnr integer
+function M.drain_background_completions(bufnr)
+  assert(handlers.drain_background_completions, "bridge: drain_background_completions not registered")
+  handlers.drain_background_completions(bufnr)
+end
+
 return M

@@ -271,6 +271,62 @@ describe("executor background filtering", function()
 
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
+
+    it("schedules drain via bridge when conversation is idle", function()
+      local executor = require("flemma.tools.executor")
+      local bridge = require("flemma.bridge")
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_drain`)",
+        "",
+        "```json",
+        '{"command": "sleep 30"}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_drain` (job=bg_drain)",
+        "",
+        "```",
+        "Running in background.",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.pending_executions = {
+        ["tool_drain"] = {
+          tool_id = "tool_drain",
+          tool_name = "bash",
+          bufnr = bufnr,
+          start_line = 2,
+          end_line = 6,
+          started_at = 0,
+          completed = false,
+          placeholder_modified = true,
+          job_id = "bg_drain",
+        },
+      }
+      buffer_state.current_request = nil
+
+      local drain_called_with = nil
+      local original = bridge.drain_background_completions
+      bridge.drain_background_completions = function(b)
+        drain_called_with = b
+      end
+
+      executor._test_do_completion(bufnr, "tool_drain", { success = true, output = "done" })
+
+      vim.wait(100, function()
+        return drain_called_with ~= nil
+      end)
+
+      assert.equals(bufnr, drain_called_with)
+
+      bridge.drain_background_completions = original
+      buffer_state.pending_executions = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
   end)
 
   describe("execute with background option", function()

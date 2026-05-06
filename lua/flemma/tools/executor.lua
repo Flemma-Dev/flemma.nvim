@@ -231,6 +231,16 @@ local function do_completion(bufnr, tool_id, result, opts)
       status = result.success and "success" or "error",
     })
     log.debug("executor: background tool " .. tool_id .. " (job=" .. entry.job_id .. ") completed, queued for delivery")
+
+    vim.schedule(function()
+      if not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+      end
+      local bs = state.get_buffer_state(bufnr)
+      if not bs.current_request and M.count_running(bufnr) == 0 then
+        bridge.drain_background_completions(bufnr)
+      end
+    end)
     return
   end
 
