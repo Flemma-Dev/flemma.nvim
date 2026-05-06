@@ -6,6 +6,7 @@ local M = {}
 local buffer = require("flemma.utilities.buffer")
 local codeblock = require("flemma.codeblock")
 local json = require("flemma.utilities.json")
+local log = require("flemma.logging")
 local ast = require("flemma.ast")
 local parser = require("flemma.parser")
 local roles = require("flemma.utilities.roles")
@@ -432,6 +433,7 @@ end
 ---@return integer case 1, 2, or 3
 function M.append_background_completion(bufnr, job_id, result)
   if not vim.api.nvim_buf_is_valid(bufnr) then
+    log.warn("injector: append_background_completion skipped, buffer " .. bufnr .. " invalid")
     return 1
   end
 
@@ -461,6 +463,9 @@ function M.append_background_completion(bufnr, job_id, result)
       end
       table.insert(block, "")
       set_lines(bufnr, insert_at, insert_at, block)
+      log.debug(
+        "injector: appended " .. job_id .. " (case=3 user-typing, inserted before @You at line " .. insert_at .. ")"
+      )
       return 3
     end
 
@@ -470,6 +475,7 @@ function M.append_background_completion(bufnr, job_id, result)
       table.insert(block, line)
     end
     set_lines(bufnr, you_end, you_end, block)
+    log.debug("injector: appended " .. job_id .. " (case=1 into existing @You at line " .. you_end .. ")")
     return 1
   end
 
@@ -486,6 +492,7 @@ function M.append_background_completion(bufnr, job_id, result)
     table.insert(block, line)
   end
   set_lines(bufnr, total, total, block)
+  log.debug("injector: appended " .. job_id .. " (case=2 new @You block at line " .. total .. ")")
   return 2
 end
 

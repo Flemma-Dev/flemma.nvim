@@ -237,8 +237,20 @@ local function do_completion(bufnr, tool_id, result, opts)
         return
       end
       local bs = state.get_buffer_state(bufnr)
-      if not bs.current_request and M.count_running(bufnr) == 0 then
+      local fg_count = M.count_running(bufnr)
+      if not bs.current_request and fg_count == 0 then
+        log.debug("executor: conversation idle, triggering background drain for buffer " .. bufnr)
         bridge.drain_background_completions(bufnr)
+      else
+        log.debug(
+          "executor: deferring background drain for buffer "
+            .. bufnr
+            .. " (request_active="
+            .. tostring(bs.current_request ~= nil)
+            .. " foreground_tools="
+            .. fg_count
+            .. ")"
+        )
       end
     end)
     return
@@ -467,6 +479,9 @@ function M.execute(bufnr, context, opts)
   }
   if opts.background then
     pending[tool_id].job_id = M.generate_job_id()
+    log.debug(
+      "executor: allocated job_id " .. pending[tool_id].job_id .. " for " .. tool_id .. " (" .. tool_name .. ")"
+    )
   end
 
   -- Lock buffer to prevent user edits during execution
@@ -501,8 +516,15 @@ function M.execute(bufnr, context, opts)
 
   if opts.background and pending[tool_id] and pending[tool_id].job_id then
     local job_id = pending[tool_id].job_id --[[@as string]]
-    injector.set_header_modeline(bufnr, tool_id, "job=" .. job_id)
-    injector.set_fence_content(bufnr, tool_id, "Running in background.")
+    local h_ok, h_err = injector.set_header_modeline(bufnr, tool_id, "job=" .. job_id)
+    if not h_ok then
+      log.warn("executor: failed to set background header for " .. tool_id .. ": " .. (h_err or "unknown"))
+    end
+    local f_ok, f_err = injector.set_fence_content(bufnr, tool_id, "Running in background.")
+    if not f_ok then
+      log.warn("executor: failed to set background placeholder for " .. tool_id .. ": " .. (f_err or "unknown"))
+    end
+    log.debug("executor: wrote background placeholder for " .. tool_id .. " (job=" .. job_id .. ")")
   end
 
   -- Show execution indicator
@@ -738,12 +760,18 @@ function M.background_at_cursor(bufnr)
 
   local header_ok, header_err = injector.set_header_modeline(bufnr, ctx.tool_id, "job=" .. job_id)
   if not header_ok then
+    log.warn(
+      "executor: background_at_cursor failed to update header for " .. ctx.tool_id .. ": " .. (header_err or "unknown")
+    )
     entry.job_id = nil
     return false, "Failed to update header: " .. (header_err or "unknown")
   end
 
   local content_ok, content_err = injector.set_fence_content(bufnr, ctx.tool_id, "Running in background.")
   if not content_ok then
+    log.warn(
+      "executor: background_at_cursor failed to set fence for " .. ctx.tool_id .. ": " .. (content_err or "unknown")
+    )
     injector.clear_header_status(bufnr, ctx.tool_id)
     entry.job_id = nil
     return false, content_err
@@ -755,6 +783,7 @@ function M.background_at_cursor(bufnr)
   log.info("executor: backgrounded tool " .. ctx.tool_id .. " as " .. job_id)
 
   if M.count_running(bufnr) == 0 then
+    log.debug("executor: all foreground tools clear after backgrounding, scheduling send for buffer " .. bufnr)
     vim.schedule(function()
       if vim.api.nvim_buf_is_valid(bufnr) then
         bridge.send_or_execute({ bufnr = bufnr })
@@ -769,6 +798,7 @@ end
 ---@param bufnr integer
 ---@return integer count Number of orphans resolved
 function M.scan_orphaned_background_jobs(bufnr)
+  log.debug("executor: scanning for orphaned background jobs in buffer " .. bufnr)
   local doc = parser.get_parsed_document(bufnr)
 
   local completed_jobs = {}
@@ -804,7 +834,14 @@ function M.scan_orphaned_background_jobs(bufnr)
     end
   end
 
+  if #orphans > 0 then
+    log.info("executor: found " .. #orphans .. " orphaned background job(s) in buffer " .. bufnr)
+  else
+    log.trace("executor: no orphaned background jobs in buffer " .. bufnr)
+  end
+
   for _, job_id in ipairs(orphans) do
+    log.debug("executor: resolving orphan " .. job_id .. " with error completion")
     injector.append_background_completion(bufnr, job_id, {
       success = false,
       error = "Background job lost: session ended before completion.",

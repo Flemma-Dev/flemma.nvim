@@ -1,5 +1,6 @@
 local processor = require("flemma.processor")
 local ast = require("flemma.ast")
+local log = require("flemma.logging")
 local roles = require("flemma.utilities.roles")
 
 ---@class flemma.Pipeline
@@ -169,8 +170,20 @@ function M.run(doc, context, opts)
       if part.kind == "text" and part._bg_job_id then
         local info = job_id_to_tool[part._bg_job_id]
         if info then
+          log.trace(
+            "pipeline: enriching background completion "
+              .. part._bg_job_id
+              .. " → "
+              .. info.tool_name
+              .. " ("
+              .. info.tool_use_id
+              .. ")"
+          )
           part.text = "[Background result for " .. info.tool_name .. " (" .. info.tool_use_id .. ")]\n" .. part.text
         else
+          log.warn(
+            "pipeline: no tool_result found for background job " .. part._bg_job_id .. ", using fallback enrichment"
+          )
           part.text = "[Background result for unknown tool (job: " .. part._bg_job_id .. ")]\n" .. part.text
         end
         part._bg_job_id = nil

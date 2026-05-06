@@ -7,6 +7,7 @@ local config_facade = require("flemma.config")
 local hooks = require("flemma.hooks")
 local json = require("flemma.utilities.json")
 local loader = require("flemma.loader")
+local log = require("flemma.logging")
 local notify = require("flemma.notify")
 local readiness = require("flemma.readiness")
 local registry = require("flemma.tools.registry")
@@ -243,6 +244,7 @@ function M.to_json_schema_for_prompt(definition)
       default = false,
       description = BACKGROUND_PARAM_DESCRIPTION,
     }
+    log.trace("tools: injected background parameter into schema for " .. definition.name)
   end
   return schema
 end

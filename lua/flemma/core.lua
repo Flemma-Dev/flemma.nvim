@@ -50,16 +50,30 @@ local DEFAULT_MAX_CONCURRENT = 2
 ---@return boolean safe_to_continue False when user content was in progress
 local function drain_and_inject_completions(bufnr)
   if not executor.has_background_completions(bufnr) then
+    log.trace("drain_and_inject_completions(): no pending completions for buffer " .. bufnr)
     return 0, true
   end
 
   local items = executor.drain_background_completions(bufnr)
+  log.debug("drain_and_inject_completions(): draining " .. #items .. " completion(s) for buffer " .. bufnr)
   local user_is_typing = false
 
   for _, item in ipairs(items) do
     local placement_case = injector.append_background_completion(bufnr, item.job_id, item.result)
+    log.debug(
+      "drain_and_inject_completions(): injected "
+        .. item.job_id
+        .. " ("
+        .. item.tool_name
+        .. ", "
+        .. item.tool_id
+        .. ") case="
+        .. placement_case
+        .. (item.result.success and "" or " [error]")
+    )
     if placement_case == 3 then
       user_is_typing = true
+      log.debug("drain_and_inject_completions(): user is typing in last @You block, skipping auto-continue")
     end
 
     local buffer_state = state.get_buffer_state(bufnr)
@@ -501,6 +515,7 @@ local function advance_phase2(opts)
     if is_background then
       ctx.input = vim.tbl_extend("keep", {}, ctx.input)
       ctx.input.background = nil
+      log.debug("advance_phase2: tool " .. ctx.tool_id .. " (" .. ctx.tool_name .. ") requested background execution")
     end
     local ok, err = executor.execute(bufnr, ctx, { background = is_background })
     if not ok then
@@ -616,6 +631,7 @@ function M.send_or_execute(opts)
   end
 
   if opts.user_initiated then
+    log.trace("send_or_execute(): user-initiated send, draining background completions first")
     drain_and_inject_completions(bufnr)
   end
 
@@ -1382,12 +1398,23 @@ function M._run_send_pipeline(bufnr, opts)
           if autopilot.get_state(bufnr) == "idle" then
             hooks.dispatch("conversation:idle", { bufnr = bufnr })
             local drained, safe = drain_and_inject_completions(bufnr)
-            if drained > 0 and safe and autopilot.is_enabled(bufnr) then
-              vim.schedule(function()
-                if vim.api.nvim_buf_is_valid(bufnr) then
-                  M.send_or_execute({ bufnr = bufnr })
-                end
-              end)
+            if drained > 0 then
+              log.debug(
+                "conversation:idle: drained "
+                  .. drained
+                  .. " background completion(s), safe="
+                  .. tostring(safe)
+                  .. " autopilot="
+                  .. tostring(autopilot.is_enabled(bufnr))
+              )
+              if safe and autopilot.is_enabled(bufnr) then
+                log.debug("conversation:idle: scheduling auto-continue after background drain")
+                vim.schedule(function()
+                  if vim.api.nvim_buf_is_valid(bufnr) then
+                    M.send_or_execute({ bufnr = bufnr })
+                  end
+                end)
+              end
             end
           end
 
@@ -1496,13 +1523,25 @@ bridge.register("cancel_request", M.cancel_request)
 bridge.register("update_ui", M.update_ui)
 bridge.register("build_prompt_and_provider", M.build_prompt_and_provider)
 bridge.register("drain_background_completions", function(bufnr)
+  log.debug("bridge.drain_background_completions(): triggered for buffer " .. bufnr)
   local drained, safe = drain_and_inject_completions(bufnr)
-  if drained > 0 and safe and autopilot.is_enabled(bufnr) then
-    vim.schedule(function()
-      if vim.api.nvim_buf_is_valid(bufnr) then
-        M.send_or_execute({ bufnr = bufnr })
-      end
-    end)
+  if drained > 0 then
+    log.debug(
+      "bridge.drain_background_completions(): drained "
+        .. drained
+        .. " completion(s), safe="
+        .. tostring(safe)
+        .. " autopilot="
+        .. tostring(autopilot.is_enabled(bufnr))
+    )
+    if safe and autopilot.is_enabled(bufnr) then
+      log.debug("bridge.drain_background_completions(): scheduling auto-continue for buffer " .. bufnr)
+      vim.schedule(function()
+        if vim.api.nvim_buf_is_valid(bufnr) then
+          M.send_or_execute({ bufnr = bufnr })
+        end
+      end)
+    end
   end
 end)
 

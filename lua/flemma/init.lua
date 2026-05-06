@@ -207,11 +207,33 @@ M.setup = function(user_opts)
   vim.api.nvim_create_autocmd("VimLeavePre", {
     group = background_lifecycle_group,
     callback = function()
-      for bufnr, _ in state.each_buffer_state() do
+      local buf_count = 0
+      for bufnr, bs in state.each_buffer_state() do
+        local has_request = bs.current_request ~= nil
+        local bg_count = 0
+        if bs.pending_executions then
+          for _, entry in pairs(bs.pending_executions) do
+            if entry.job_id then
+              bg_count = bg_count + 1
+            end
+          end
+        end
+        if has_request or bg_count > 0 then
+          log.info(
+            "VimLeavePre: buffer "
+              .. bufnr
+              .. " — cancelling request="
+              .. tostring(has_request)
+              .. " background_jobs="
+              .. bg_count
+          )
+        end
         bridge.cancel_request({ bufnr = bufnr })
         executor.cancel_all(bufnr)
         editing.auto_write(bufnr)
+        buf_count = buf_count + 1
       end
+      log.info("VimLeavePre: cleaned up " .. buf_count .. " buffer(s)")
     end,
   })
   vim.api.nvim_create_autocmd("BufReadPost", {
