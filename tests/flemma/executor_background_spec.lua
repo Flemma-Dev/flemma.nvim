@@ -197,4 +197,59 @@ describe("executor background filtering", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
   end)
+
+  describe("do_completion routing", function()
+    it("routes background completion to queue instead of injecting", function()
+      local executor = require("flemma.tools.executor")
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_01`)",
+        "",
+        "```json",
+        '{"command": "sleep 10"}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_01` (job=bg_abc12)",
+        "",
+        "```",
+        "Running in background.",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.pending_executions = {
+        ["tool_01"] = {
+          tool_id = "tool_01",
+          tool_name = "bash",
+          bufnr = bufnr,
+          start_line = 2,
+          end_line = 6,
+          started_at = 0,
+          completed = false,
+          placeholder_modified = true,
+          job_id = "bg_abc12",
+        },
+      }
+
+      executor._test_do_completion(bufnr, "tool_01", { success = true, output = "hello world" })
+
+      assert.is_true(executor.has_background_completions(bufnr))
+      local items = executor.drain_background_completions(bufnr)
+      assert.equals(1, #items)
+      assert.equals("bg_abc12", items[1].job_id)
+      assert.is_true(items[1].result.success)
+
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      local joined = table.concat(lines, "\n")
+      assert.truthy(joined:match("Running in background"))
+      assert.is_falsy(joined:match("hello world"))
+
+      assert.truthy(buffer_state.pending_executions["tool_01"])
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
 end)

@@ -45,7 +45,7 @@ local JOB_ID_LENGTH = 5
 ---@field tool_id string
 ---@field tool_name string
 ---@field result flemma.tools.ExecutionResult
----@field completed_at integer Not in spec; implementation detail for future diagnostics/ordering
+---@field completed_at? integer Not in spec; implementation detail for future diagnostics/ordering
 
 ---Get or initialize the pending executions map for a buffer
 ---@param bufnr integer
@@ -214,6 +214,24 @@ local function do_completion(bufnr, tool_id, result, opts)
 
   local pending = get_buffer_pending(bufnr)
   local entry = pending[tool_id]
+
+  if entry and entry.job_id then
+    entry.completed = true
+    M.enqueue_background_completion(bufnr, {
+      job_id = entry.job_id,
+      tool_id = tool_id,
+      tool_name = entry.tool_name,
+      result = result,
+    })
+    hooks.dispatch("tool:finished", {
+      bufnr = bufnr,
+      tool_name = entry.tool_name,
+      tool_id = tool_id,
+      status = result.success and "success" or "error",
+    })
+    log.debug("executor: background tool " .. tool_id .. " (job=" .. entry.job_id .. ") completed, queued for delivery")
+    return
+  end
 
   -- For async tools, join with placeholder injection as a single undo step
   -- only when the placeholder actually modified the buffer.
@@ -809,5 +827,14 @@ end
 state.register_cleanup("executor", function(bufnr)
   M.cleanup_buffer(bufnr)
 end)
+
+---@private
+---@param bufnr integer
+---@param tool_id string
+---@param result flemma.tools.ExecutionResult
+---@param opts? { async?: boolean }
+function M._test_do_completion(bufnr, tool_id, result, opts)
+  do_completion(bufnr, tool_id, result, opts)
+end
 
 return M
