@@ -752,6 +752,55 @@ function M.background_at_cursor(bufnr)
   return true, nil
 end
 
+---Scan for orphaned background tool_results and inject error completion blocks.
+---@param bufnr integer
+---@return integer count Number of orphans resolved
+function M.scan_orphaned_background_jobs(bufnr)
+  local doc = parser.get_parsed_document(bufnr)
+
+  local completed_jobs = {}
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "background_tool_completed" then
+        ---@cast seg flemma.ast.BackgroundToolCompletedSegment
+        completed_jobs[seg.job_id] = true
+      end
+    end
+  end
+
+  local buffer_state = state.get_buffer_state(bufnr)
+  local active_jobs = {}
+  if buffer_state.pending_executions then
+    for _, entry in pairs(buffer_state.pending_executions) do
+      if entry.job_id then
+        active_jobs[entry.job_id] = true
+      end
+    end
+  end
+
+  local orphans = {}
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "tool_result" and seg.meta and seg.meta.job then
+        ---@cast seg flemma.ast.ToolResultSegment
+        local job_id = seg.meta.job
+        if not completed_jobs[job_id] and not active_jobs[job_id] then
+          table.insert(orphans, job_id)
+        end
+      end
+    end
+  end
+
+  for _, job_id in ipairs(orphans) do
+    injector.append_background_completion(bufnr, job_id, {
+      success = false,
+      error = "Background job lost: session ended before completion.",
+    })
+  end
+
+  return #orphans
+end
+
 ---Locate the tool_result placeholder for the tool at the cursor position. Returns
 ---the parsed `ctx` and the matching `flemma.ast.ToolResultSegment` when the tool
 ---has a lifecycle status suffix (pending/approved/denied/rejected/aborted). Errors

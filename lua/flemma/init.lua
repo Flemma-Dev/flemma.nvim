@@ -8,8 +8,10 @@ local schema_definition = require("flemma.config.schema")
 local log = require("flemma.logging")
 local notify = require("flemma.notify")
 local core = require("flemma.core")
+local bridge = require("flemma.bridge")
 local presets = require("flemma.presets")
 local state = require("flemma.state")
+local editing = require("flemma.buffer.editing")
 local ui = require("flemma.ui")
 local commands = require("flemma.commands")
 local keymaps = require("flemma.keymaps")
@@ -19,6 +21,7 @@ local loader = require("flemma.loader")
 local personalities = require("flemma.personalities")
 local secrets = require("flemma.secrets")
 local tools = require("flemma.tools")
+local executor = require("flemma.tools.executor")
 local preprocessor = require("flemma.preprocessor")
 local templating = require("flemma.templating")
 local tools_approval = require("flemma.tools.approval")
@@ -199,6 +202,32 @@ M.setup = function(user_opts)
 
   -- Set up chat filetype handling
   ui.setup_chat_filetype_autocmds()
+
+  local background_lifecycle_group = vim.api.nvim_create_augroup("FlemmaBackgroundLifecycle", { clear = true })
+  vim.api.nvim_create_autocmd("VimLeavePre", {
+    group = background_lifecycle_group,
+    callback = function()
+      for bufnr, _ in state.each_buffer_state() do
+        bridge.cancel_request({ bufnr = bufnr })
+        executor.cancel_all(bufnr)
+        editing.auto_write(bufnr)
+      end
+    end,
+  })
+  vim.api.nvim_create_autocmd("BufReadPost", {
+    group = background_lifecycle_group,
+    pattern = "*.chat",
+    callback = function(ev)
+      vim.schedule(function()
+        if vim.api.nvim_buf_is_valid(ev.buf) then
+          local count = executor.scan_orphaned_background_jobs(ev.buf)
+          if count > 0 then
+            notify.info(count .. " orphaned background job(s) resolved.")
+          end
+        end
+      end)
+    end,
+  })
 
   -- Initialize templating registry with built-in populators
   templating.setup()
