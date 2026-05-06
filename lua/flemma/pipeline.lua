@@ -124,6 +124,20 @@ function M.run(doc, context, opts)
   -- Strip when tool_use parts are present — trailing text after tool_use blocks
   -- violates the Anthropic API constraint, and the abort info is already conveyed
   -- through the status=aborted tool_result placeholders.
+  local job_id_to_tool = {}
+  for _, msg in ipairs(doc.messages) do
+    for _, seg in ipairs(msg.segments) do
+      if seg.kind == "tool_result" and seg.meta and seg.meta.job then
+        ---@cast seg flemma.ast.ToolResultSegment
+        local info = tool_use_index[seg.tool_use_id]
+        job_id_to_tool[seg.meta.job] = {
+          tool_use_id = seg.tool_use_id,
+          tool_name = info and info.name or "unknown",
+        }
+      end
+    end
+  end
+
   for _, entry in ipairs(collected) do
     if entry.role == "assistant" then
       local keep_aborted = true
@@ -148,6 +162,16 @@ function M.run(doc, context, opts)
         if info then
           part.name = info.name
         end
+      end
+    end
+
+    for _, part in ipairs(parts) do
+      if part.kind == "text" and part._bg_job_id then
+        local info = job_id_to_tool[part._bg_job_id]
+        if info then
+          part.text = "[Background result for " .. info.tool_name .. " (" .. info.tool_use_id .. ")]\n" .. part.text
+        end
+        part._bg_job_id = nil
       end
     end
 

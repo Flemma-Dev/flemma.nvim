@@ -95,6 +95,7 @@ local M = {}
 ---@class flemma.ast.GenericTextPart
 ---@field kind "text"
 ---@field text string
+---@field _bg_job_id? string Internal marker for background completion enrichment
 
 ---@class flemma.ast.GenericBinaryPart
 ---@field mime_type string

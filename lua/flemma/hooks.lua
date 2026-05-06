@@ -23,6 +23,8 @@ local notify = require("flemma.notify")
 ---| "sink:destroyed"
 ---| "config:updated"
 ---| "usage:estimated"
+---| "conversation:idle"
+---| "background:completed"
 
 ---@class flemma.hooks.RequestSendingData
 ---@field bufnr integer
@@ -57,6 +59,16 @@ local notify = require("flemma.notify")
 
 ---@class flemma.hooks.UsageEstimatedData
 ---@field bufnr integer
+
+---@class flemma.hooks.ConversationIdleData
+---@field bufnr integer
+
+---@class flemma.hooks.BackgroundCompletedData
+---@field bufnr integer
+---@field job_id string
+---@field tool_id string
+---@field tool_name string
+---@field success boolean
 
 local PREFIX = "Flemma"
 
@@ -98,6 +110,8 @@ end
 ---@overload fun(name: "sink:destroyed", data: flemma.hooks.SinkDestroyedData)
 ---@overload fun(name: "config:updated", data?: flemma.hooks.ConfigUpdatedData)
 ---@overload fun(name: "usage:estimated", data: flemma.hooks.UsageEstimatedData)
+---@overload fun(name: "conversation:idle", data: flemma.hooks.ConversationIdleData)
+---@overload fun(name: "background:completed", data: flemma.hooks.BackgroundCompletedData)
 ---@param name flemma.hooks.Name Hook name in "domain:action" format
 ---@param data? table Payload passed to autocmd handlers via ev.data
 function M.dispatch(name, data)

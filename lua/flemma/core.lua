@@ -44,6 +44,46 @@ local schema_definition = require("flemma.config.schema")
 local ABORT_MESSAGE = "Response interrupted by the user."
 local DEFAULT_MAX_CONCURRENT = 2
 
+---Drain background completion queue and inject results into the buffer.
+---@param bufnr integer
+---@return integer count Number of completions injected
+---@return boolean safe_to_continue False when user content was in progress
+local function drain_and_inject_completions(bufnr)
+  if not executor.has_background_completions(bufnr) then
+    return 0, true
+  end
+
+  local items = executor.drain_background_completions(bufnr)
+  local user_is_typing = false
+
+  for _, item in ipairs(items) do
+    local placement_case = injector.append_background_completion(bufnr, item.job_id, item.result)
+    if placement_case == 3 then
+      user_is_typing = true
+    end
+
+    local buffer_state = state.get_buffer_state(bufnr)
+    if buffer_state.pending_executions then
+      buffer_state.pending_executions[item.tool_id] = nil
+    end
+
+    hooks.dispatch("background:completed", {
+      bufnr = bufnr,
+      job_id = item.job_id,
+      tool_id = item.tool_id,
+      tool_name = item.tool_name,
+      success = item.result.success,
+    })
+  end
+
+  if #items > 0 then
+    editing.auto_write(bufnr)
+    ui.update_ui(bufnr)
+  end
+
+  return #items, not user_is_typing
+end
+
 -- For testing purposes
 local last_request_body_for_testing = nil
 
@@ -573,6 +613,10 @@ function M.send_or_execute(opts)
   if buffer_state.current_request then
     notify.warn("A request is already in progress. Use <C-c> to cancel it first.")
     return
+  end
+
+  if opts.user_initiated then
+    drain_and_inject_completions(bufnr)
   end
 
   -- Evaluate frontmatter once per dispatch cycle. The result is threaded through
@@ -1334,6 +1378,18 @@ function M._run_send_pipeline(bufnr, opts)
 
           -- Hook autopilot: check if assistant response contains tool_use
           autopilot.on_response_complete(bufnr)
+
+          if autopilot.get_state(bufnr) == "idle" then
+            hooks.dispatch("conversation:idle", { bufnr = bufnr })
+            local drained, safe = drain_and_inject_completions(bufnr)
+            if drained > 0 and safe and autopilot.is_enabled(bufnr) then
+              vim.schedule(function()
+                if vim.api.nvim_buf_is_valid(bufnr) then
+                  M.send_or_execute({ bufnr = bufnr })
+                end
+              end)
+            end
+          end
 
           hooks.dispatch("request:finished", { bufnr = bufnr, status = "completed", request = latest_request })
         else
