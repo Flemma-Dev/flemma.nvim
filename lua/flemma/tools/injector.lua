@@ -362,6 +362,32 @@ function M.clear_header_status(bufnr, tool_id)
   return M.set_header_status(bufnr, tool_id, nil)
 end
 
+---Set a modeline suffix on a tool_result header with arbitrary key=value content.
+---@param bufnr integer
+---@param tool_id string
+---@param modeline_content string Raw modeline content (e.g. "job=bg_k7x2m")
+---@return boolean success
+---@return string|nil error_message
+function M.set_header_modeline(bufnr, tool_id, modeline_content)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return false, "Buffer is no longer valid"
+  end
+
+  local doc = parser.get_parsed_document(bufnr)
+
+  local tool_use_seg = find_tool_use_by_id(doc, tool_id)
+  local seg = tool_use_seg and ast.find_tool_sibling(doc, tool_use_seg) or nil
+  if not seg or seg.kind ~= "tool_result" then
+    return false, "Tool result not found: " .. tool_id
+  end
+  ---@cast seg flemma.ast.ToolResultSegment
+
+  local header_line_0 = seg.position.start_line - 1
+  local header_text = ("**Tool Result:** `%s` (%s)"):format(tool_id, modeline_content)
+  set_lines(bufnr, header_line_0, header_line_0 + 1, { header_text })
+  return true, nil
+end
+
 ---Replace the fenced body of a tool_result block with new content, leaving the
 ---`**Tool Result:**` header (and its `(status)` suffix) untouched. Fence size
 ---is recomputed for the new content so nested backticks stay safe.
@@ -397,6 +423,70 @@ function M.set_fence_content(bufnr, tool_id, content)
   local end_line = seg.position.end_line --[[@as integer]]
   set_lines(bufnr, header_line_0 + 1, end_line, new_lines)
   return true, nil
+end
+
+---Append a **Background Tool Completed:** block to the buffer.
+---@param bufnr integer
+---@param job_id string
+---@param result flemma.tools.ExecutionResult
+---@return integer case 1, 2, or 3
+function M.append_background_completion(bufnr, job_id, result)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return 1
+  end
+
+  local content_lines, is_error = format_result_lines(result)
+  local header = ("**Background Tool Completed:** `%s`"):format(job_id)
+  if is_error then
+    header = header .. " (error)"
+  end
+
+  local doc = parser.get_parsed_document(bufnr)
+  local last_msg = #doc.messages > 0 and doc.messages[#doc.messages] or nil
+
+  if last_msg and roles.is_user(last_msg.role) then
+    local has_user_content = false
+    for _, seg in ipairs(last_msg.segments) do
+      if seg.kind == "text" and seg.value:match("%S") then
+        has_user_content = true
+        break
+      end
+    end
+
+    if has_user_content then
+      local insert_at = last_msg.position.start_line - 1
+      local block = { "@You:", header }
+      for _, line in ipairs(content_lines) do
+        table.insert(block, line)
+      end
+      table.insert(block, "")
+      set_lines(bufnr, insert_at, insert_at, block)
+      return 3
+    end
+
+    local you_end = last_msg.position.end_line --[[@as integer]]
+    local block = { header }
+    for _, line in ipairs(content_lines) do
+      table.insert(block, line)
+    end
+    set_lines(bufnr, you_end, you_end, block)
+    return 1
+  end
+
+  local total = vim.api.nvim_buf_line_count(bufnr)
+  local last_content = buffer.get_last_line(bufnr)
+  local separator = last_content == "" and {} or { "" }
+  local block = {}
+  for _, line in ipairs(separator) do
+    table.insert(block, line)
+  end
+  table.insert(block, "@You:")
+  table.insert(block, header)
+  for _, line in ipairs(content_lines) do
+    table.insert(block, line)
+  end
+  set_lines(bufnr, total, total, block)
+  return 2
 end
 
 return M
