@@ -2,7 +2,7 @@
 --- Execute bash commands and return stdout/stderr
 --- Truncation logic ported from pi by Mario Zechner (https://github.com/badlogic/pi-mono)
 --- Original: MIT License, Copyright (c) 2025 Mario Zechner
----@class flemma.tools.definitions.Bash
+---@class flemma.tools.definitions.builtin.Bash
 ---@field definitions flemma.tools.ToolDefinition[]
 local M = {}
 

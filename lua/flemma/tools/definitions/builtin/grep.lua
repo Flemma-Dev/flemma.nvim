@@ -1,6 +1,6 @@
 --- Grep tool definition
 --- Search file contents using ripgrep or grep with structured output
----@class flemma.tools.definitions.Grep
+---@class flemma.tools.definitions.builtin.Grep
 ---@field definitions flemma.tools.ToolDefinition[]
 ---@field _reset_backend_cache fun() Reset cached backend for testing
 ---@field _translate_ere_pattern fun(pattern: string): string Translate shorthand character classes for ERE (exposed for testing)

@@ -5,8 +5,8 @@ describe("mcporter", function()
   local mcporter
 
   before_each(function()
-    package.loaded["flemma.tools.definitions.mcporter"] = nil
-    mcporter = require("flemma.tools.definitions.mcporter")
+    package.loaded["flemma.tools.definitions.builtin.mcporter"] = nil
+    mcporter = require("flemma.tools.definitions.builtin.mcporter")
   end)
 
   describe("_glob_match", function()
@@ -279,8 +279,8 @@ describe("mcporter", function()
     local tools = require("flemma.tools")
 
     before_each(function()
-      package.loaded["flemma.tools.definitions.mcporter"] = nil
-      mcporter = require("flemma.tools.definitions.mcporter")
+      package.loaded["flemma.tools.definitions.builtin.mcporter"] = nil
+      mcporter = require("flemma.tools.definitions.builtin.mcporter")
       tools.clear()
       vim.env.MCPORTER_FIXTURE_DIR = vim.fn.fnamemodify("tests/fixtures/mcporter", ":p")
     end)

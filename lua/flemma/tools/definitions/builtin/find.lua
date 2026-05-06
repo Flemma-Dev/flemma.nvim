@@ -1,6 +1,6 @@
 --- Find file tool definition
 --- Locate files by glob pattern using fd, git ls-files, or GNU find
----@class flemma.tools.definitions.Find
+---@class flemma.tools.definitions.builtin.Find
 ---@field definitions flemma.tools.ToolDefinition[]
 ---@field _reset_backend_cache fun() Reset cached backend detection (for testing)
 ---@field _build_command fun(backend: "fd"|"git"|"find", pattern: string, search_path: string, exclude: string[]): string[] Build command array for the given backend (exposed for testing)

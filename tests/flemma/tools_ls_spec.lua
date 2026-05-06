@@ -4,11 +4,11 @@ package.loaded["flemma.tools"] = nil
 package.loaded["flemma.tools.approval"] = nil
 package.loaded["flemma.tools.registry"] = nil
 package.loaded["flemma.tools.executor"] = nil
-package.loaded["flemma.tools.definitions.ls"] = nil
+package.loaded["flemma.tools.definitions.builtin.ls"] = nil
 package.loaded["flemma.utilities.truncate"] = nil
 
 local executor = require("flemma.tools.executor")
-local ls_module = require("flemma.tools.definitions.ls")
+local ls_module = require("flemma.tools.definitions.builtin.ls")
 
 describe("Ls Tool", function()
   local ls_def, fixture_dir, bufnr, ctx

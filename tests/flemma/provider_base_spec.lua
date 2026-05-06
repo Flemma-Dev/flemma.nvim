@@ -336,10 +336,10 @@ describe("flemma.tools.get_sorted_for_prompt", function()
     package.loaded["flemma.tools"] = nil
     package.loaded["flemma.tools.approval"] = nil
     package.loaded["flemma.tools.registry"] = nil
-    package.loaded["flemma.tools.definitions.bash"] = nil
-    package.loaded["flemma.tools.definitions.read"] = nil
-    package.loaded["flemma.tools.definitions.edit"] = nil
-    package.loaded["flemma.tools.definitions.write"] = nil
+    package.loaded["flemma.tools.definitions.builtin.bash"] = nil
+    package.loaded["flemma.tools.definitions.builtin.read"] = nil
+    package.loaded["flemma.tools.definitions.builtin.edit"] = nil
+    package.loaded["flemma.tools.definitions.builtin.write"] = nil
     tools = require("flemma.tools")
     tools.clear()
     tools.setup()

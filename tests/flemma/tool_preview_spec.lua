@@ -475,10 +475,10 @@ describe("Tool Preview", function()
       package.loaded["flemma.tools.registry"] = nil
       package.loaded["flemma.tools"] = nil
       package.loaded["extras.flemma.tools.calculator"] = nil
-      package.loaded["flemma.tools.definitions.bash"] = nil
-      package.loaded["flemma.tools.definitions.read"] = nil
-      package.loaded["flemma.tools.definitions.edit"] = nil
-      package.loaded["flemma.tools.definitions.write"] = nil
+      package.loaded["flemma.tools.definitions.builtin.bash"] = nil
+      package.loaded["flemma.tools.definitions.builtin.read"] = nil
+      package.loaded["flemma.tools.definitions.builtin.edit"] = nil
+      package.loaded["flemma.tools.definitions.builtin.write"] = nil
 
       require("flemma").setup({})
       require("flemma.tools").register("extras.flemma.tools.calculator")

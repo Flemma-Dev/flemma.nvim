@@ -6,7 +6,7 @@ local path_util = require("flemma.utilities.path")
 local s = require("flemma.schema")
 local str = require("flemma.utilities.string")
 
----@class flemma.tools.definitions.Write
+---@class flemma.tools.definitions.builtin.Write
 ---@field definitions flemma.tools.ToolDefinition[]
 local M = {}
 

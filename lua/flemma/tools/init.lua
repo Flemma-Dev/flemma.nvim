@@ -13,14 +13,14 @@ local readiness = require("flemma.readiness")
 local registry = require("flemma.tools.registry")
 
 local BUILTIN_TOOLS = {
-  "flemma.tools.definitions.bash",
-  "flemma.tools.definitions.read",
-  "flemma.tools.definitions.edit",
-  "flemma.tools.definitions.write",
-  "flemma.tools.definitions.grep",
-  "flemma.tools.definitions.find",
-  "flemma.tools.definitions.ls",
-  "flemma.tools.definitions.mcporter",
+  "flemma.tools.definitions.builtin.bash",
+  "flemma.tools.definitions.builtin.read",
+  "flemma.tools.definitions.builtin.edit",
+  "flemma.tools.definitions.builtin.write",
+  "flemma.tools.definitions.builtin.grep",
+  "flemma.tools.definitions.builtin.find",
+  "flemma.tools.definitions.builtin.ls",
+  "flemma.tools.definitions.builtin.mcporter",
 }
 
 local BACKGROUND_PARAM_DESCRIPTION = "Set to true to run this tool in the background. "

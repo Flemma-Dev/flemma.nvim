@@ -512,7 +512,7 @@ describe("config.schema.definition", function()
 
     describe("tool DISCOVER", function()
       it("resolves bash tool config schema", function()
-        tools_module.register("flemma.tools.definitions.bash")
+        tools_module.register("flemma.tools.definitions.builtin.bash")
         config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { bash = { shell = "zsh" } },
         })
@@ -520,7 +520,7 @@ describe("config.schema.definition", function()
       end)
 
       it("resolves bash cwd and env config", function()
-        tools_module.register("flemma.tools.definitions.bash")
+        tools_module.register("flemma.tools.definitions.builtin.bash")
         config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { bash = { cwd = "/home", env = { PATH = "/usr/bin" } } },
         })
@@ -530,7 +530,7 @@ describe("config.schema.definition", function()
       end)
 
       it("resolves grep tool config with exclude list", function()
-        tools_module.register("flemma.tools.definitions.grep")
+        tools_module.register("flemma.tools.definitions.builtin.grep")
         config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { grep = { exclude = { "node_modules", ".git" } } },
         })
@@ -538,7 +538,7 @@ describe("config.schema.definition", function()
       end)
 
       it("resolves find tool config schema", function()
-        tools_module.register("flemma.tools.definitions.find")
+        tools_module.register("flemma.tools.definitions.builtin.find")
         config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { find = { cwd = "/home" } },
         })
@@ -546,7 +546,7 @@ describe("config.schema.definition", function()
       end)
 
       it("resolves ls tool config schema", function()
-        tools_module.register("flemma.tools.definitions.ls")
+        tools_module.register("flemma.tools.definitions.builtin.ls")
         config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { ls = { cwd = "/var" } },
         })
@@ -554,7 +554,7 @@ describe("config.schema.definition", function()
       end)
 
       it("rejects unknown field on discovered tool schema", function()
-        tools_module.register("flemma.tools.definitions.bash")
+        tools_module.register("flemma.tools.definitions.builtin.bash")
         local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { bash = { nonexistent = "value" } },
         })
@@ -564,7 +564,7 @@ describe("config.schema.definition", function()
       end)
 
       it("rejects invalid type on discovered tool schema field", function()
-        tools_module.register("flemma.tools.definitions.bash")
+        tools_module.register("flemma.tools.definitions.builtin.bash")
         local ok, errors = config_facade.apply(config_facade.LAYERS.SETUP, {
           tools = { bash = { shell = 42 } },
         })
@@ -743,7 +743,7 @@ describe("config.schema.definition", function()
         assert.is_not_nil(deferred)
         assert.equals(1, #deferred)
 
-        tools_module.register("flemma.tools.definitions.bash")
+        tools_module.register("flemma.tools.definitions.builtin.bash")
 
         local failures = config_facade.apply_deferred(config_facade.LAYERS.SETUP, deferred)
         assert.is_nil(failures)
@@ -772,8 +772,8 @@ describe("config.schema.definition", function()
         assert.is_not_nil(deferred)
         assert.equals(2, #deferred)
 
-        tools_module.register("flemma.tools.definitions.bash")
-        tools_module.register("flemma.tools.definitions.grep")
+        tools_module.register("flemma.tools.definitions.builtin.bash")
+        tools_module.register("flemma.tools.definitions.builtin.grep")
 
         local failures = config_facade.apply_deferred(config_facade.LAYERS.SETUP, deferred)
         assert.is_nil(failures)

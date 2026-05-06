@@ -1,10 +1,10 @@
 --- Tests for find tool definition
 
-package.loaded["flemma.tools.definitions.find"] = nil
+package.loaded["flemma.tools.definitions.builtin.find"] = nil
 package.loaded["flemma.utilities.truncate"] = nil
 package.loaded["flemma.sink"] = nil
 
-local find_module = require("flemma.tools.definitions.find")
+local find_module = require("flemma.tools.definitions.builtin.find")
 local executor = require("flemma.tools.executor")
 
 describe("Find Tool", function()
