@@ -427,6 +427,37 @@ describe("Approval Setup", function()
     end)
   end)
 
+  describe("with glob patterns in auto_approve", function()
+    it("approves tools matching a wildcard pattern", function()
+      set_config_and_setup({ tools = { auto_approve = { "flemma:*" } } })
+
+      assert.equals("approve", approval.resolve("flemma:job_status", {}, { bufnr = 1, tool_id = "t1" }))
+      assert.equals("approve", approval.resolve("flemma:future_tool", {}, { bufnr = 1, tool_id = "t2" }))
+    end)
+
+    it("does not approve tools outside the glob pattern", function()
+      set_config_and_setup({ tools = { auto_approve = { "flemma:*" } } })
+
+      assert.equals("require_approval", approval.resolve("bash", { command = "ls" }, { bufnr = 1, tool_id = "t1" }))
+    end)
+
+    it("mixes exact matches with glob patterns", function()
+      set_config_and_setup({ tools = { auto_approve = { "read", "flemma:*" } } })
+
+      assert.equals("approve", approval.resolve("read", {}, { bufnr = 1, tool_id = "t1" }))
+      assert.equals("approve", approval.resolve("flemma:job_status", {}, { bufnr = 1, tool_id = "t2" }))
+      assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = 1, tool_id = "t3" }))
+    end)
+
+    it("supports MCP-style namespace patterns", function()
+      set_config_and_setup({ tools = { auto_approve = { "slack:*" } } })
+
+      assert.equals("approve", approval.resolve("slack:channels_list", {}, { bufnr = 1, tool_id = "t1" }))
+      assert.equals("approve", approval.resolve("slack:send_message", {}, { bufnr = 1, tool_id = "t2" }))
+      assert.equals("require_approval", approval.resolve("github:create_pr", {}, { bufnr = 1, tool_id = "t3" }))
+    end)
+  end)
+
   describe("with function auto_approve", function()
     it("registers urn:flemma:approval:config resolver at priority 100", function()
       set_config_and_setup({

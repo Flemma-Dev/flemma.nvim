@@ -24,6 +24,8 @@ local indicators = require("flemma.ui.indicators")
 local ui = require("flemma.ui")
 local variables = require("flemma.utilities.variables")
 local writequeue = require("flemma.buffer.writequeue")
+local messages = require("flemma.messages")
+local tools_module = require("flemma.tools")
 
 local JOB_ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
 local JOB_ID_LENGTH = 5
@@ -46,6 +48,15 @@ local JOB_ID_LENGTH = 5
 ---@field tool_name string
 ---@field result flemma.tools.ExecutionResult
 ---@field completed_at? integer Not in spec; implementation detail for future diagnostics/ordering
+
+---Check whether a named tool is available for a buffer's resolved tool set.
+---@param name string Tool name to check
+---@param bufnr integer Buffer number
+---@return boolean
+local function is_tool_available(name, bufnr)
+  local available = tools_module.get_for_prompt(bufnr)
+  return available[name] ~= nil
+end
 
 ---Get or initialize the pending executions map for a buffer
 ---@param bufnr integer
@@ -537,7 +548,13 @@ function M.execute(bufnr, context, opts)
     if not h_ok then
       log.warn("executor: failed to set background header for " .. tool_id .. ": " .. (h_err or "unknown"))
     end
-    local f_ok, f_err = injector.set_fence_content(bufnr, tool_id, "Running in background.")
+    local placeholder_text
+    if is_tool_available("flemma:job_status", bufnr) then
+      placeholder_text = messages.render("background_available", { job_id = job_id })
+    else
+      placeholder_text = messages.render("background_unavailable", {})
+    end
+    local f_ok, f_err = injector.set_fence_content(bufnr, tool_id, placeholder_text or "Running in background.")
     if not f_ok then
       log.warn("executor: failed to set background placeholder for " .. tool_id .. ": " .. (f_err or "unknown"))
     end
@@ -784,7 +801,14 @@ function M.background_at_cursor(bufnr)
     return false, "Failed to update header: " .. (header_err or "unknown")
   end
 
-  local content_ok, content_err = injector.set_fence_content(bufnr, ctx.tool_id, "Running in background.")
+  local bg_placeholder_text
+  if is_tool_available("flemma:job_status", bufnr) then
+    bg_placeholder_text = messages.render("background_available", { job_id = job_id })
+  else
+    bg_placeholder_text = messages.render("background_unavailable", {})
+  end
+  local content_ok, content_err =
+    injector.set_fence_content(bufnr, ctx.tool_id, bg_placeholder_text or "Running in background.")
   if not content_ok then
     log.warn(
       "executor: background_at_cursor failed to set fence for " .. ctx.tool_id .. ": " .. (content_err or "unknown")
