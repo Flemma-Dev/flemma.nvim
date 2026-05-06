@@ -154,68 +154,68 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
       -- Check for **Tool Result:** marker
       local tool_use_id, raw_suffix = line:match(TOOL_RESULT_PATTERN)
       if tool_use_id then
-      flush_accum()
-      local suffix_inner = raw_suffix and raw_suffix:match(TOOL_RESULT_SUFFIX_PATTERN)
-      local suffix_tokens = suffix_inner and modeline.parse(suffix_inner) or nil
-      local result_status, result_meta = extract_status(suffix_tokens)
-      local result_start_line = current_line_num
+        flush_accum()
+        local suffix_inner = raw_suffix and raw_suffix:match(TOOL_RESULT_SUFFIX_PATTERN)
+        local suffix_tokens = suffix_inner and modeline.parse(suffix_inner) or nil
+        local result_status, result_meta = extract_status(suffix_tokens)
+        local result_start_line = current_line_num
 
-      -- Skip blank lines to find content
-      local content_start = codeblock.skip_blank_lines(lines, i + 1)
+        -- Skip blank lines to find content
+        local content_start = codeblock.skip_blank_lines(lines, i + 1)
 
-      -- Check if line starts with backticks (fence opener)
-      local content_line = lines[content_start]
-      local has_fence_opener = content_line and content_line:match("^`+")
+        -- Check if line starts with backticks (fence opener)
+        local content_line = lines[content_start]
+        local has_fence_opener = content_line and content_line:match("^`+")
 
-      -- Try to parse a fenced code block
-      local block, block_end = codeblock.parse_fenced_block(lines, content_start)
+        -- Try to parse a fenced code block
+        local block, block_end = codeblock.parse_fenced_block(lines, content_start)
 
-      if block then
-        -- Lifecycle placeholders (pending/approved/denied/rejected/aborted) skip
-        -- template-segment parsing; normal results (status=nil or status="error")
-        -- get `{{ expressions }}` inside their fence parsed.
-        local parse_inner = result_status == nil or result_status == "error"
-        local inner_segments = parse_inner
-            and template_parser.parse_segments(block.content, base_line_num + content_start)
-          or {}
+        if block then
+          -- Lifecycle placeholders (pending/approved/denied/rejected/aborted) skip
+          -- template-segment parsing; normal results (status=nil or status="error")
+          -- get `{{ expressions }}` inside their fence parsed.
+          local parse_inner = result_status == nil or result_status == "error"
+          local inner_segments = parse_inner
+              and template_parser.parse_segments(block.content, base_line_num + content_start)
+            or {}
 
-        table.insert(
-          segments,
-          ast.tool_result(tool_use_id, {
-            segments = inner_segments,
-            content = block.content,
-            status = result_status,
-            meta = result_meta,
-            start_line = result_start_line,
-            end_line = base_line_num + block_end - 1,
+          table.insert(
+            segments,
+            ast.tool_result(tool_use_id, {
+              segments = inner_segments,
+              content = block.content,
+              status = result_status,
+              meta = result_meta,
+              start_line = result_start_line,
+              end_line = base_line_num + block_end - 1,
+            })
+          )
+          i = block_end + 1
+        elseif has_fence_opener then
+          -- Started a fence but didn't close it properly - this is an error
+          table.insert(diagnostics, {
+            type = "tool_result",
+            severity = "warning",
+            error = "Unclosed fenced code block in tool result (missing closing fence)",
+            position = { start_line = result_start_line },
           })
-        )
-        i = block_end + 1
-      elseif has_fence_opener then
-        -- Started a fence but didn't close it properly - this is an error
-        table.insert(diagnostics, {
-          type = "tool_result",
-          severity = "warning",
-          error = "Unclosed fenced code block in tool result (missing closing fence)",
-          position = { start_line = result_start_line },
-        })
-        -- Skip to end of message (next @Role: marker) to avoid parsing garbage
-        local j = content_start + 1
-        while j <= #lines and not lines[j]:match("^@[%w]+:%s*$") do
-          j = j + 1
+          -- Skip to end of message (next @Role: marker) to avoid parsing garbage
+          local j = content_start + 1
+          while j <= #lines and not lines[j]:match("^@[%w]+:%s*$") do
+            j = j + 1
+          end
+          i = j
+        else
+          -- No fence at all - tool results require a fenced code block
+          table.insert(diagnostics, {
+            type = "tool_result",
+            severity = "warning",
+            error = "Tool result requires a fenced code block",
+            position = { start_line = result_start_line },
+          })
+          -- Skip to next line and continue
+          i = content_start
         end
-        i = j
-      else
-        -- No fence at all - tool results require a fenced code block
-        table.insert(diagnostics, {
-          type = "tool_result",
-          severity = "warning",
-          error = "Tool result requires a fenced code block",
-          position = { start_line = result_start_line },
-        })
-        -- Skip to next line and continue
-        i = content_start
-      end
       else
         -- Regular content line — accumulate for batch parsing
         if #accum_lines == 0 then
