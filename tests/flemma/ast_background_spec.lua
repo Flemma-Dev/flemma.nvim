@@ -110,7 +110,8 @@ describe("background tool completed parsing", function()
         "```",
       }
 
-      local prompt = pipeline.run(parser.parse_lines(lines), context.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
+      local prompt =
+        pipeline.run(parser.parse_lines(lines), context.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local text = prompt.history[#prompt.history].parts[1].text
       assert.truthy(text:match("%[Background result for bash %(tool_01%)%]"))
       assert.truthy(text:match("qa: OK"))
@@ -128,7 +129,8 @@ describe("background tool completed parsing", function()
         "```",
       }
 
-      local prompt = pipeline.run(parser.parse_lines(lines), context.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
+      local prompt =
+        pipeline.run(parser.parse_lines(lines), context.from_file("tests/fixtures/doc.chat"), { bufnr = 0 })
       local text = prompt.history[1].parts[1].text
       assert.truthy(text:match("%[Background result for unknown tool %(job: bg_lost1%)%]"))
       assert.truthy(text:match("late output"))
