@@ -309,6 +309,23 @@ local function do_completion(bufnr, tool_id, result, opts)
   -- Auto-write after tool result injection so the buffer is saved between
   -- tool executions, not only after the next send_to_provider() completes.
   editing.auto_write(bufnr)
+
+  if M.has_background_completions(bufnr) then
+    vim.schedule(function()
+      if not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+      end
+      local bs = state.get_buffer_state(bufnr)
+      local fg_count = M.count_running(bufnr)
+      if not bs.current_request and fg_count == 0 then
+        log.debug(
+          "executor: foreground tool done, conversation idle with pending background completions, triggering drain for buffer "
+            .. bufnr
+        )
+        bridge.drain_background_completions(bufnr)
+      end
+    end)
+  end
 end
 
 ---Handle completion of a tool execution (success or error)
