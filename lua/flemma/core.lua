@@ -1395,7 +1395,14 @@ function M._run_send_pipeline(bufnr, opts)
           -- Hook autopilot: check if assistant response contains tool_use
           autopilot.on_response_complete(bufnr)
 
-          if autopilot.get_state(bufnr) == "idle" then
+          local ap_state = autopilot.get_state(bufnr)
+          log.debug(
+            "send_to_provider(): post-response autopilot state="
+              .. ap_state
+              .. " has_bg_completions="
+              .. tostring(executor.has_background_completions(bufnr))
+          )
+          if ap_state == "idle" then
             hooks.dispatch("conversation:idle", { bufnr = bufnr })
             local drained, safe = drain_and_inject_completions(bufnr)
             if drained > 0 then

@@ -125,7 +125,13 @@ function M.on_response_complete(bufnr)
   end
 
   if not has_tool_use then
-    log.debug("autopilot: no tool_use in last assistant message, staying idle")
+    local bs = get_state(bufnr)
+    if bs.state ~= "idle" then
+      log.debug("autopilot: no tool_use in last assistant message, transitioning " .. bs.state .. " → idle")
+      bs.state = "idle"
+    else
+      log.debug("autopilot: no tool_use in last assistant message, staying idle")
+    end
     return
   end
 
