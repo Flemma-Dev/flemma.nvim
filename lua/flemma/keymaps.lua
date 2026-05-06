@@ -81,6 +81,19 @@ M.setup = function()
           end, { buffer = true, desc = "Execute Flemma tool at cursor" })
         end
 
+        if config.keymaps.normal.tool_background then
+          vim.keymap.set("n", config.keymaps.normal.tool_background, function()
+            local bufnr = vim.api.nvim_get_current_buf()
+
+            local ok, err = executor.background_at_cursor(bufnr)
+            if not ok then
+              notify.error(err or "Failed to background tool")
+            else
+              notify.info("Tool moved to background.")
+            end
+          end, { buffer = true, desc = "Move Flemma tool to background" })
+        end
+
         if config.keymaps.normal.cancel then
           vim.keymap.set("n", config.keymaps.normal.cancel, function()
             local bufnr = vim.api.nvim_get_current_buf()

@@ -330,4 +330,91 @@ describe("executor background filtering", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
   end)
+
+  describe("background_at_cursor", function()
+    it("returns error when tool is not running", function()
+      local executor = require("flemma.tools.executor")
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_01`)",
+        "",
+        "```json",
+        '{"command": "ls"}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_01`",
+        "",
+        "```",
+        "done",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.api.nvim_win_set_cursor(0, { 9, 0 })
+      local ok, err = executor.background_at_cursor(bufnr)
+      assert.is_false(ok)
+      assert.truthy(err)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("backgrounds a running foreground tool", function()
+      local executor = require("flemma.tools.executor")
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_mid`)",
+        "",
+        "```json",
+        '{"command": "sleep 60"}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_mid`",
+        "",
+        "```",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.pending_executions = {
+        ["tool_mid"] = {
+          tool_id = "tool_mid",
+          tool_name = "bash",
+          bufnr = bufnr,
+          start_line = 2,
+          end_line = 6,
+          cancel_fn = function() end,
+          started_at = 0,
+          completed = false,
+          placeholder_modified = true,
+        },
+      }
+      buffer_state.locked = true
+
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.api.nvim_win_set_cursor(0, { 9, 0 })
+
+      local ok, err = executor.background_at_cursor(bufnr)
+      assert.is_true(ok, err)
+
+      local entry = buffer_state.pending_executions["tool_mid"]
+      assert.truthy(entry.job_id)
+
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      local header_line = lines[9]
+      assert.truthy(header_line:match("job="), "Expected job= in header: " .. header_line)
+
+      local joined = table.concat(lines, "\n")
+      assert.truthy(joined:match("Running in background%."))
+
+      assert.is_false(buffer_state.locked)
+
+      buffer_state.pending_executions = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
 end)

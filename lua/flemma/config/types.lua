@@ -176,6 +176,7 @@
 ---@field message_next string
 ---@field message_prev string
 ---@field send string
+---@field tool_background string
 ---@field tool_execute string
 
 ---@class flemma.config.ParametersAnthropic : flemma.config.ParametersBase

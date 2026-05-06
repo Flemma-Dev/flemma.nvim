@@ -589,6 +589,18 @@ local function setup_commands()
           end
         end,
       },
+      background = {
+        action = function()
+          local bufnr = vim.api.nvim_get_current_buf()
+
+          local ok, err = require("flemma.tools.executor").background_at_cursor(bufnr)
+          if not ok then
+            notify.error(err or "Failed to background tool")
+          else
+            notify.info("Tool moved to background.")
+          end
+        end,
+      },
       approve = {
         action = function()
           local bufnr = vim.api.nvim_get_current_buf()

@@ -699,6 +699,59 @@ function M.cancel_at_cursor(bufnr)
   return false
 end
 
+---Background the foreground tool at cursor position.
+---@param bufnr integer
+---@return boolean success
+---@return string|nil error
+function M.background_at_cursor(bufnr)
+  local cursor_pos = vim.api.nvim_win_get_cursor(0)
+  local ctx, err = tool_context.resolve(bufnr, { row = cursor_pos[1], col = cursor_pos[2] })
+  if not ctx then
+    return false, err or "No tool call found at cursor"
+  end
+
+  local pending = get_buffer_pending(bufnr)
+  local entry = pending[ctx.tool_id]
+  if not entry then
+    return false, "Tool " .. ctx.tool_id .. " is not currently executing"
+  end
+  if entry.completed then
+    return false, "Tool " .. ctx.tool_id .. " has already completed"
+  end
+  if entry.job_id then
+    return false, "Tool " .. ctx.tool_id .. " is already running in background"
+  end
+
+  entry.job_id = M.generate_job_id()
+  local job_id = entry.job_id --[[@as string]]
+
+  local header_ok, header_err = injector.set_header_modeline(bufnr, ctx.tool_id, "job=" .. job_id)
+  if not header_ok then
+    entry.job_id = nil
+    return false, "Failed to update header: " .. (header_err or "unknown")
+  end
+
+  local content_ok, content_err = injector.set_fence_content(bufnr, ctx.tool_id, "Running in background.")
+  if not content_ok then
+    entry.job_id = nil
+    return false, content_err
+  end
+
+  maybe_unlock_buffer(bufnr)
+  ui.update_ui(bufnr)
+  log.info("executor: backgrounded tool " .. ctx.tool_id .. " as " .. job_id)
+
+  if M.count_running(bufnr) == 0 then
+    vim.schedule(function()
+      if vim.api.nvim_buf_is_valid(bufnr) then
+        bridge.send_or_execute({ bufnr = bufnr })
+      end
+    end)
+  end
+
+  return true, nil
+end
+
 ---Locate the tool_result placeholder for the tool at the cursor position. Returns
 ---the parsed `ctx` and the matching `flemma.ast.ToolResultSegment` when the tool
 ---has a lifecycle status suffix (pending/approved/denied/rejected/aborted). Errors

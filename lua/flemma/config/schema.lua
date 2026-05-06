@@ -345,6 +345,7 @@ return s.object({
       send = s.string("<C-]>"),
       cancel = s.string("<C-c>"),
       tool_execute = s.string("<M-CR>"),
+      tool_background = s.string("<M-b>"),
       message_next = s.string("]m"),
       message_prev = s.string("[m"),
       fold_toggle = s.union(s.string("<Space>"), s.literal(false)),
