@@ -1074,7 +1074,7 @@ describe("UI Folding", function()
       -- Verify highlight groups
       local icon_chunk = find_chunk(chunks, "⬢")
       assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
-      assert.are.equal("FlemmaToolIcon", icon_chunk[2])
+      assert.are.equal("FlemmaToolSuccess", icon_chunk[2])
       assert.is_nil(find_chunk(chunks, "⬡"), "tool_result should not use the tool_use icon")
 
       local title_chunk = find_chunk(chunks, "Tool Result:")
@@ -1084,6 +1084,88 @@ describe("UI Folding", function()
       local meta_chunk = chunks[#chunks]
       assert.is_truthy(meta_chunk[1]:match("%(6 lines%)"), "Last chunk should be line count")
       assert.are.equal("FlemmaFoldMeta", meta_chunk[2])
+    end)
+
+    it("should use FlemmaToolError highlight for error tool_result icon", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Checking.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "ls" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (error)",
+        "",
+        "```",
+        "Command failed: permission denied",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      vim.cmd("11,15 foldclose")
+
+      vim.v.foldstart = 11
+      vim.v.foldend = 15
+      local chunks = folding.get_fold_text()
+
+      local icon_chunk = find_chunk(chunks, "⬢")
+      assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
+      assert.are.equal("FlemmaToolError", icon_chunk[2])
+    end)
+
+    it("should use FlemmaToolIcon highlight for denied tool_result icon", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Checking.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "rm -rf /" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (denied)",
+        "",
+        "```",
+        "Tool execution was denied by user.",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      vim.cmd("11,15 foldclose")
+
+      vim.v.foldstart = 11
+      vim.v.foldend = 15
+      local chunks = folding.get_fold_text()
+
+      local icon_chunk = find_chunk(chunks, "⬢")
+      assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
+      assert.are.equal("FlemmaToolIcon", icon_chunk[2], "Denied should keep default FlemmaToolIcon")
     end)
 
     it("should return chunk list for folded message", function()

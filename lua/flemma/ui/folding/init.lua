@@ -338,9 +338,16 @@ function M.get_fold_text()
       local tool_name = tool_info and tool_info.name or "result"
       local tool_label = tool_info and tool_info.label
 
+      local icon_hl = "FlemmaToolIcon"
+      if tool_seg.status == "error" then
+        icon_hl = "FlemmaToolError"
+      elseif not tool_seg.status and tool_seg.content ~= "" then
+        icon_hl = "FlemmaToolSuccess"
+      end
+
       ---@type {[1]:string, [2]:string}[]
       local chunks = {
-        { TOOL_RESULT_ICON .. " ", "FlemmaToolIcon" },
+        { TOOL_RESULT_ICON .. " ", icon_hl },
         { "Tool Result: ", "FlemmaToolResultTitle" },
         { tool_name, "FlemmaToolName" },
       }
