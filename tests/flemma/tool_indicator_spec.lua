@@ -58,7 +58,13 @@ end
 --- @param line_idx integer 0-based
 --- @return { prefix?: string, prefix_hl?: string, eol?: string, eol_hl?: string }
 local function get_extmark_parts(bufnr, line_idx)
-  local marks = vim.api.nvim_buf_get_extmarks(bufnr, tool_exec_ns, { line_idx, 0 }, { line_idx, -1 }, { details = true })
+  local marks = vim.api.nvim_buf_get_extmarks(
+    bufnr,
+    tool_exec_ns,
+    { line_idx, 0 },
+    { line_idx, -1 },
+    { details = true }
+  )
   local parts = {}
   for _, mark in ipairs(marks) do
     local details = mark[4]
