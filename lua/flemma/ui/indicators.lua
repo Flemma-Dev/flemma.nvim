@@ -43,6 +43,30 @@ local function get_extmark_line(bufnr, extmark_id)
   return nil
 end
 
+---Move an extmark to the target line when Neovim drifted it away.
+---@param bufnr integer
+---@param extmark_id integer
+---@param target_line integer
+---@param virt_text_pos string
+local function reposition_extmark(bufnr, extmark_id, target_line, virt_text_pos)
+  local current_line = get_extmark_line(bufnr, extmark_id)
+  if not current_line or current_line == target_line then
+    return
+  end
+
+  local ok, pos = pcall(vim.api.nvim_buf_get_extmark_by_id, bufnr, tool_exec_ns, extmark_id, { details = true })
+  if ok and pos and #pos >= 3 then
+    pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, target_line, 0, {
+      id = extmark_id,
+      virt_text = pos[3].virt_text,
+      virt_text_pos = virt_text_pos,
+      hl_mode = "combine",
+      priority = PRIORITY_TOOL_EXECUTION,
+      spell = false,
+    })
+  end
+end
+
 ---Check whether a tool_id has an active indicator. Used by tool previews
 ---to decide visibility when the header status suffix has been cleared.
 ---@param bufnr integer
@@ -261,39 +285,9 @@ function M.reposition_tool_indicators(bufnr)
     local sibling = siblings[tool_id]
     local target_line = sibling and sibling.result and (sibling.result.position.start_line - 1) or nil
     if target_line then
-      local current_line = get_extmark_line(bufnr, ind.prefix_extmark_id)
-      if current_line and current_line ~= target_line then
-        local ok, pos =
-          pcall(vim.api.nvim_buf_get_extmark_by_id, bufnr, tool_exec_ns, ind.prefix_extmark_id, { details = true })
-        if ok and pos and #pos >= 3 then
-          pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, target_line, 0, {
-            id = ind.prefix_extmark_id,
-            virt_text = pos[3].virt_text,
-            virt_text_pos = "inline",
-            hl_mode = "combine",
-            priority = PRIORITY_TOOL_EXECUTION,
-            spell = false,
-          })
-        end
-        if ind.status_extmark_id then
-          local s_ok, s_pos = pcall(
-            vim.api.nvim_buf_get_extmark_by_id,
-            bufnr,
-            tool_exec_ns,
-            ind.status_extmark_id,
-            { details = true }
-          )
-          if s_ok and s_pos and #s_pos >= 3 then
-            pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, target_line, 0, {
-              id = ind.status_extmark_id,
-              virt_text = s_pos[3].virt_text,
-              virt_text_pos = "eol",
-              hl_mode = "combine",
-              priority = PRIORITY_TOOL_EXECUTION,
-              spell = false,
-            })
-          end
-        end
+      reposition_extmark(bufnr, ind.prefix_extmark_id, target_line, "inline")
+      if ind.status_extmark_id then
+        reposition_extmark(bufnr, ind.status_extmark_id, target_line, "eol")
       end
     end
   end
@@ -331,6 +325,7 @@ function M.schedule_tool_indicator_clear(bufnr, tool_id, delay_ms)
       pcall(vim.api.nvim_buf_del_extmark, bufnr, tool_exec_ns, current.status_extmark_id)
       current.status_extmark_id = nil
     end
+    indicators[tool_id] = nil
   end
 
   vim.defer_fn(function()

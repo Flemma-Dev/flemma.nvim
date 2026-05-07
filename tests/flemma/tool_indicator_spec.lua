@@ -334,6 +334,54 @@ describe("Tool Indicator Extmark Placement", function()
 
       indicators.clear_all_tool_indicators(bufnr)
     end)
+
+    it("corrects displaced EOL extmark when prefix is already on the header", function()
+      local bufnr = create_buffer({
+        "@Assistant:",
+        "Running tool:",
+        "",
+        "**Tool Use:** `calculator` (`toolu_01`)",
+        "```json",
+        '{ "expression": "1+1" }',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "```",
+        "spare line",
+      })
+
+      indicators.show_tool_indicator(bufnr, "toolu_01", 10)
+
+      local eol_extmark_id ---@type integer|nil
+      local marks = vim.api.nvim_buf_get_extmarks(bufnr, tool_exec_ns, { 9, 0 }, { 9, -1 }, { details = true })
+      for _, mark in ipairs(marks) do
+        local details = mark[4]
+        if details.virt_text_pos == "eol" then
+          eol_extmark_id = mark[1]
+          pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, 10, 0, {
+            id = eol_extmark_id,
+            virt_text = details.virt_text,
+            virt_text_pos = "eol",
+            hl_mode = "combine",
+          })
+        end
+      end
+
+      assert.is_not_nil(eol_extmark_id, "EOL extmark should exist")
+
+      indicators.reposition_tool_indicators(bufnr)
+
+      local header_parts = get_extmark_parts(bufnr, 9)
+      local drift_parts = get_extmark_parts(bufnr, 10)
+      assert.is_not_nil(header_parts.prefix, "Prefix should remain on the header")
+      assert.is_not_nil(header_parts.eol, "EOL extmark should be restored to the header")
+      assert.is_nil(drift_parts.eol, "EOL extmark should no longer be on the drifted line")
+
+      indicators.clear_all_tool_indicators(bufnr)
+    end)
   end)
 
   describe("two-extmark indicator model", function()
@@ -459,6 +507,28 @@ describe("Tool Indicator Extmark Placement", function()
       indicators.update_tool_indicator(bufnr, "toolu_01", true)
 
       assert.is_true(indicators.has_indicator(bufnr, "toolu_01"))
+    end)
+
+    it("has_indicator returns false after scheduled status clear fires", function()
+      local bufnr = create_buffer({
+        "@You:",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "```",
+      })
+
+      indicators.show_tool_indicator(bufnr, "toolu_01", 2)
+      indicators.update_tool_indicator(bufnr, "toolu_01", true)
+      indicators.schedule_tool_indicator_clear(bufnr, "toolu_01", 10)
+
+      vim.wait(100, function()
+        return not indicators.has_indicator(bufnr, "toolu_01")
+      end, 10)
+
+      assert.is_false(indicators.has_indicator(bufnr, "toolu_01"))
+
+      indicators.clear_all_tool_indicators(bufnr)
     end)
   end)
 end)
