@@ -521,6 +521,71 @@ describe("UI Folding", function()
       assert.are.equal(">2", folding.get_fold_level(11))
     end)
 
+    it("should NOT fold tool_result with background job and no completion", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Running tool in background.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "sleep 10" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (job=bg_abc12)",
+        "",
+        "```",
+        "Running in background.",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      -- tool_result has content and a job modeline but no BackgroundToolCompleted
+      local fold_level = folding.get_fold_level(11)
+      assert.are_not.equal(">2", fold_level, "Background job without completion should NOT fold")
+    end)
+
+    it("should fold tool_result with background job once completion exists", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "Running tool in background.",
+        "",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{ "command": "sleep 10" }',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (job=bg_abc12)",
+        "",
+        "```",
+        "actual result here",
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Background Tool Completed:** `bg_abc12`",
+        "",
+        "```",
+        "actual result here",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      local fold_level = folding.get_fold_level(11)
+      assert.are.equal(">2", fold_level, "Background job with completion should fold")
+    end)
+
     it("should NOT fold tool_use without a matching tool_result", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.api.nvim_set_current_buf(bufnr)
