@@ -29,7 +29,7 @@ local function create_buffer(lines)
 end
 
 --- Helper: get all extmarks in the tool_exec namespace for a buffer
---- Returns a map of 0-based line -> extmark virtual text content
+--- Returns a map of 0-based line -> concatenated extmark virtual text content
 --- @param bufnr integer
 --- @return table<integer, string> line_idx -> virt_text string
 local function get_tool_extmarks(bufnr)
@@ -44,9 +44,41 @@ local function get_tool_extmarks(bufnr)
         text = text .. chunk[1]
       end
     end
-    result[line_idx] = text
+    if result[line_idx] then
+      result[line_idx] = result[line_idx] .. text
+    else
+      result[line_idx] = text
+    end
   end
   return result
+end
+
+--- Helper: get extmarks on a line split by position type (inline vs eol)
+--- @param bufnr integer
+--- @param line_idx integer 0-based
+--- @return { prefix?: string, prefix_hl?: string, eol?: string, eol_hl?: string }
+local function get_extmark_parts(bufnr, line_idx)
+  local marks = vim.api.nvim_buf_get_extmarks(bufnr, tool_exec_ns, { line_idx, 0 }, { line_idx, -1 }, { details = true })
+  local parts = {}
+  for _, mark in ipairs(marks) do
+    local details = mark[4]
+    local text = ""
+    local hl = nil
+    if details.virt_text then
+      for _, chunk in ipairs(details.virt_text) do
+        text = text .. chunk[1]
+        hl = hl or chunk[2]
+      end
+    end
+    if details.virt_text_pos == "inline" then
+      parts.prefix = text
+      parts.prefix_hl = hl
+    elseif details.virt_text_pos == "eol" then
+      parts.eol = text
+      parts.eol_hl = hl
+    end
+  end
+  return parts
 end
 
 -- ============================================================================
@@ -301,6 +333,132 @@ describe("Tool Indicator Extmark Placement", function()
       assert.is_not_nil(marks[line_02], "Tool 2 extmark on its header after result injection")
 
       indicators.clear_all_tool_indicators(bufnr)
+    end)
+  end)
+
+  describe("two-extmark indicator model", function()
+    it("show_pending creates inline prefix and EOL extmarks", function()
+      local bufnr = create_buffer({
+        "@You:",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "```",
+      })
+
+      indicators.show_pending_tool_indicator(bufnr, "toolu_01", 2)
+
+      local parts = get_extmark_parts(bufnr, 1)
+      assert.is_not_nil(parts.prefix, "Should have inline prefix extmark")
+      assert.is_truthy(parts.prefix:match("⬢"), "Prefix should be ⬢ dot")
+      assert.are.equal("FlemmaToolPending", parts.prefix_hl)
+      assert.is_not_nil(parts.eol, "Should have EOL status extmark")
+      assert.is_truthy(parts.eol:match("⏸"), "EOL should contain ⏸")
+      assert.is_truthy(parts.eol:match("Pending"), "EOL should contain Pending")
+      assert.are.equal("FlemmaToolPending", parts.eol_hl)
+
+      indicators.clear_all_tool_indicators(bufnr)
+    end)
+
+    it("show_tool_indicator creates spinner prefix and Executing EOL", function()
+      local bufnr = create_buffer({
+        "@You:",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "```",
+      })
+
+      indicators.show_tool_indicator(bufnr, "toolu_01", 2)
+
+      local parts = get_extmark_parts(bufnr, 1)
+      assert.is_not_nil(parts.prefix, "Should have inline prefix extmark")
+      assert.are.equal("FlemmaToolExecuting", parts.prefix_hl, "Prefix should use FlemmaToolExecuting")
+      assert.is_not_nil(parts.eol, "Should have EOL status extmark")
+      assert.is_truthy(parts.eol:match("⧖"), "EOL should contain ⧖")
+      assert.is_truthy(parts.eol:match("Executing"), "EOL should contain Executing")
+      assert.are.equal("FlemmaToolExecuting", parts.eol_hl)
+
+      indicators.clear_all_tool_indicators(bufnr)
+    end)
+
+    it("update_tool_indicator transitions to success state", function()
+      local bufnr = create_buffer({
+        "@You:",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "```",
+      })
+
+      indicators.show_tool_indicator(bufnr, "toolu_01", 2)
+      indicators.update_tool_indicator(bufnr, "toolu_01", true)
+
+      local parts = get_extmark_parts(bufnr, 1)
+      assert.is_not_nil(parts.prefix, "Should have inline prefix")
+      assert.is_truthy(parts.prefix:match("⬢"), "Prefix should be ⬢ dot")
+      assert.are.equal("FlemmaToolSuccess", parts.prefix_hl)
+      assert.is_not_nil(parts.eol, "Should have EOL status")
+      assert.is_truthy(parts.eol:match("✔"), "EOL should contain ✔")
+      assert.is_truthy(parts.eol:match("Complete"), "EOL should contain Complete")
+      assert.are.equal("FlemmaToolSuccess", parts.eol_hl)
+
+      indicators.clear_all_tool_indicators(bufnr)
+    end)
+
+    it("update_tool_indicator transitions to error state", function()
+      local bufnr = create_buffer({
+        "@You:",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "```",
+      })
+
+      indicators.show_tool_indicator(bufnr, "toolu_01", 2)
+      indicators.update_tool_indicator(bufnr, "toolu_01", false)
+
+      local parts = get_extmark_parts(bufnr, 1)
+      assert.is_not_nil(parts.prefix, "Should have inline prefix")
+      assert.is_truthy(parts.prefix:match("⬢"), "Prefix should be ⬢ dot")
+      assert.are.equal("FlemmaToolError", parts.prefix_hl)
+      assert.is_not_nil(parts.eol, "Should have EOL status")
+      assert.is_truthy(parts.eol:match("⚠"), "EOL should contain ⚠")
+      assert.is_truthy(parts.eol:match("Failed"), "EOL should contain Failed")
+      assert.are.equal("FlemmaToolError", parts.eol_hl)
+
+      indicators.clear_all_tool_indicators(bufnr)
+    end)
+
+    it("clear_tool_indicator removes both extmarks", function()
+      local bufnr = create_buffer({
+        "@You:",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "```",
+      })
+
+      indicators.show_tool_indicator(bufnr, "toolu_01", 2)
+      indicators.clear_tool_indicator(bufnr, "toolu_01")
+
+      local marks = vim.api.nvim_buf_get_extmarks(bufnr, tool_exec_ns, 0, -1, {})
+      assert.are.equal(0, #marks, "All extmarks should be removed")
+    end)
+
+    it("has_indicator returns true after completion (prefix persists)", function()
+      local bufnr = create_buffer({
+        "@You:",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "```",
+      })
+
+      indicators.show_tool_indicator(bufnr, "toolu_01", 2)
+      indicators.update_tool_indicator(bufnr, "toolu_01", true)
+
+      assert.is_true(indicators.has_indicator(bufnr, "toolu_01"))
     end)
   end)
 end)
