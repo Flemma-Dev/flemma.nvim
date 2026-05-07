@@ -228,7 +228,8 @@ local function do_completion(bufnr, tool_id, result, opts)
 
   if entry and entry.job_id then
     entry.completed = true
-    indicators.clear_tool_indicator(bufnr, tool_id)
+    indicators.update_tool_indicator(bufnr, tool_id, result.success)
+    indicators.schedule_tool_indicator_clear(bufnr, tool_id, 1500)
     M.enqueue_background_completion(bufnr, {
       job_id = entry.job_id,
       tool_id = tool_id,
@@ -563,7 +564,7 @@ function M.execute(bufnr, context, opts)
 
   -- Show execution indicator
   local config = config_facade.materialize(bufnr)
-  if not opts.background and (not config.tools or config.tools.show_spinner ~= false) then
+  if not config.tools or config.tools.show_spinner ~= false then
     indicators.show_tool_indicator(bufnr, tool_id, header_line)
   end
 
@@ -818,7 +819,6 @@ function M.background_at_cursor(bufnr)
     return false, content_err
   end
 
-  indicators.clear_tool_indicator(bufnr, ctx.tool_id)
   maybe_unlock_buffer(bufnr)
   ui.update_ui(bufnr)
   log.info("executor: backgrounded tool " .. ctx.tool_id .. " as " .. job_id)

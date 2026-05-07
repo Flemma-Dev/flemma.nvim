@@ -16,7 +16,11 @@ describe("executor background filtering", function()
           text = text .. chunk[1]
         end
       end
-      result[line_idx] = text
+      if result[line_idx] then
+        result[line_idx] = result[line_idx] .. text
+      else
+        result[line_idx] = text
+      end
     end
     return result
   end
@@ -398,7 +402,9 @@ describe("executor background filtering", function()
 
       local joined = table.concat(lines, "\n")
       assert.truthy(joined:match("Running in background%."))
-      assert.same({}, get_tool_extmarks(bufnr))
+      local extmarks = get_tool_extmarks(bufnr)
+      assert.truthy(next(extmarks), "background execution should keep the spinner indicator visible")
+      assert.truthy(extmarks[8]:match("Executing"), "background execution should show Executing status")
 
       if entry.cancel_fn then
         pcall(entry.cancel_fn)
@@ -495,7 +501,7 @@ describe("executor background filtering", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
-    it("clears an existing execution indicator when backgrounding mid-flight", function()
+    it("keeps an existing execution indicator when backgrounding mid-flight", function()
       local executor = require("flemma.tools.executor")
       local indicators = require("flemma.ui.indicators")
       local bufnr = vim.api.nvim_create_buf(false, true)
@@ -537,7 +543,9 @@ describe("executor background filtering", function()
 
       local ok, err = executor.background_at_cursor(bufnr)
       assert.is_true(ok, err)
-      assert.same({}, get_tool_extmarks(bufnr))
+      local extmarks = get_tool_extmarks(bufnr)
+      assert.truthy(next(extmarks), "backgrounding should keep the spinner indicator visible")
+      assert.truthy(extmarks[13]:match("Executing"), "backgrounded tool should still show Executing status")
 
       buffer_state.pending_executions = nil
       vim.api.nvim_buf_delete(bufnr, { force = true })
