@@ -5,6 +5,19 @@ package.loaded["flemma.tools.definitions.harness.job_status"] = nil
 
 local state = require("flemma.state")
 local json = require("flemma.utilities.json")
+local parser = require("flemma.parser")
+
+---Build a minimal execution context with get_parsed_document support.
+---@param bufnr integer
+---@return table
+local function make_ctx(bufnr)
+  return {
+    bufnr = bufnr,
+    get_parsed_document = function(self)
+      return parser.get_parsed_document(self.bufnr)
+    end,
+  }
+end
 
 describe("flemma:job_status", function()
   local job_status_module
@@ -12,6 +25,8 @@ describe("flemma:job_status", function()
 
   before_each(function()
     package.loaded["flemma.tools.definitions.harness.job_status"] = nil
+    package.loaded["flemma.parser"] = nil
+    parser = require("flemma.parser")
     job_status_module = require("flemma.tools.definitions.harness.job_status")
     execute = job_status_module.definitions[1].execute
   end)
@@ -45,7 +60,7 @@ describe("flemma:job_status", function()
         },
       }
 
-      local result = execute({ job_id = "bg_abc12" }, { bufnr = bufnr })
+      local result = execute({ job_id = "bg_abc12" }, make_ctx(bufnr))
       assert.is_true(result.success)
       local data = json.decode(result.output)
       assert.equals("running", data.status)
@@ -74,7 +89,7 @@ describe("flemma:job_status", function()
         },
       }
 
-      local result = execute({ job_id = "bg_def34" }, { bufnr = bufnr })
+      local result = execute({ job_id = "bg_def34" }, make_ctx(bufnr))
       assert.is_true(result.success)
       local data = json.decode(result.output)
       assert.equals("queued", data.status)
@@ -98,7 +113,7 @@ describe("flemma:job_status", function()
         },
       }
 
-      local result = execute({ job_id = "bg_queue1" }, { bufnr = bufnr })
+      local result = execute({ job_id = "bg_queue1" }, make_ctx(bufnr))
       assert.is_true(result.success)
       local data = json.decode(result.output)
       assert.equals("queued", data.status)
@@ -109,17 +124,44 @@ describe("flemma:job_status", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
-    it("returns 'delivered' for a job not found anywhere", function()
+    it("returns 'completed' when job result is present in buffer", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@You:",
+        "**Background Tool Completed:** `bg_done1`",
+        "",
+        "```",
+        "all tests passed",
+        "```",
+      })
       local buffer_state = state.get_buffer_state(bufnr)
       buffer_state.pending_executions = {}
       buffer_state.completion_queue = {}
 
-      local result = execute({ job_id = "bg_gone99" }, { bufnr = bufnr })
+      local result = execute({ job_id = "bg_done1" }, make_ctx(bufnr))
       assert.is_true(result.success)
       local data = json.decode(result.output)
-      assert.equals("delivered", data.status)
-      assert.equals("bg_gone99", data.job_id)
+      assert.equals("completed", data.status)
+      assert.equals("bg_done1", data.job_id)
+
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("returns 'completed (removed from conversation)' when job result was removed", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@You:",
+        "Hello",
+      })
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.pending_executions = {}
+      buffer_state.completion_queue = {}
+
+      local result = execute({ job_id = "bg_undone1" }, make_ctx(bufnr))
+      assert.is_true(result.success)
+      local data = json.decode(result.output)
+      assert.equals("completed (removed from conversation)", data.status)
+      assert.equals("bg_undone1", data.job_id)
 
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
@@ -140,10 +182,10 @@ describe("flemma:job_status", function()
         },
       }
 
-      local result = execute({ job_id = "bg_nope" }, { bufnr = bufnr })
+      local result = execute({ job_id = "bg_nope" }, make_ctx(bufnr))
       assert.is_true(result.success)
       local data = json.decode(result.output)
-      assert.equals("delivered", data.status)
+      assert.equals("completed (removed from conversation)", data.status)
 
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
@@ -173,7 +215,7 @@ describe("flemma:job_status", function()
         },
       }
 
-      local result = execute({ job_id = "bg_both" }, { bufnr = bufnr })
+      local result = execute({ job_id = "bg_both" }, make_ctx(bufnr))
       local data = json.decode(result.output)
       assert.equals("running", data.status)
 

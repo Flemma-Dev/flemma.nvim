@@ -33,6 +33,7 @@ local M = {}
 ---@field truncate flemma.tools.Truncate Truncation utilities (lazy-loaded)
 ---@field path flemma.tools.PathContext Path resolution utilities (lazy-loaded)
 ---@field get_config fun(self: flemma.tools.ExecutionContext): table? Tool-specific config subtree (read-only copy of config.tools[tool_name])
+---@field get_parsed_document fun(self: flemma.tools.ExecutionContext): flemma.ast.DocumentNode Parsed AST for the current buffer
 
 ---@class flemma.StructuredToolPreview
 ---@field label? string  Human-readable intent — shown italic, truncated last

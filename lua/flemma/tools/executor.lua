@@ -397,6 +397,11 @@ function M.build_execution_context(params)
     __filename = params.__filename,
   }
 
+  ---@return flemma.ast.DocumentNode
+  function context:get_parsed_document()
+    return parser.get_parsed_document(bufnr)
+  end
+
   ---Get tool-specific config subtree (read-only copy).
   ---Returns config.tools[tool_name] via vim.deepcopy, or nil if no subtree exists.
   ---@return table|nil

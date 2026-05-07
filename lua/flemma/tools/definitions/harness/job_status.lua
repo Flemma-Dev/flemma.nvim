@@ -13,7 +13,7 @@ M.definitions = {
   {
     name = "flemma:job_status",
     description = "Check the status of a background job. "
-      .. "Returns whether the job is still running, queued for delivery, or already delivered. "
+      .. "Returns whether the job is still running, queued for delivery, or already completed. "
       .. "Use this to check on long-running background tasks instead of retrying them.",
     strict = true,
     async = false,
@@ -67,11 +67,26 @@ M.definitions = {
         end
       end
 
-      log.debug("flemma:job_status: job " .. job_id .. " → delivered (not found in pending or queue)")
+      local doc = ctx:get_parsed_document()
+      local found_in_buffer = false
+      for _, msg in ipairs(doc.messages) do
+        for _, seg in ipairs(msg.segments) do
+          if seg.kind == "background_tool_completed" and seg.job_id == job_id then
+            found_in_buffer = true
+            break
+          end
+        end
+        if found_in_buffer then
+          break
+        end
+      end
+
+      local status = found_in_buffer and "completed" or "completed (removed from conversation)"
+      log.debug("flemma:job_status: job " .. job_id .. " → " .. status)
       return {
         success = true,
         output = json.encode({
-          status = "delivered",
+          status = status,
           job_id = job_id,
           tool_id = nil,
           tool_name = nil,
