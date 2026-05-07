@@ -492,7 +492,7 @@ describe("Tool Preview", function()
 
     it("calculator_async shows expression and delay", function()
       local result = ui_preview.format_tool_preview("calculator_async", { expression = "sqrt(16)", delay = 500 })
-      assert.are.equal("calculator_async: sqrt(16)  # 500ms", result)
+      assert.are.equal("calculator_async: sqrt(16) — ⏲500ms", result)
     end)
 
     it("calculator_async omits delay when nil", function()
@@ -500,9 +500,9 @@ describe("Tool Preview", function()
       assert.are.equal("calculator_async: 1+1", result)
     end)
 
-    it("bash shows label — $ command with label", function()
+    it("bash shows $ command — label with label", function()
       local result = ui_preview.format_tool_preview("bash", { command = "ls -la /tmp", label = "list files" })
-      assert.are.equal("bash: list files — $ ls -la /tmp", result)
+      assert.are.equal("bash: $ ls -la /tmp — list files", result)
     end)
 
     it("bash omits label when not provided", function()
@@ -510,12 +510,12 @@ describe("Tool Preview", function()
       assert.are.equal("bash: $ echo hello", result)
     end)
 
-    it("read shows label — path with offset and limit", function()
+    it("read shows path — label with offset and limit", function()
       local result = ui_preview.format_tool_preview(
         "read",
         { path = "./src/main.lua", offset = 10, limit = 50, label = "read config" }
       )
-      assert.are.equal("read: read config — ./src/main.lua  +10,50", result)
+      assert.are.equal("read: ./src/main.lua  +10,50 — read config", result)
     end)
 
     it("read shows path with offset only", function()
@@ -528,17 +528,17 @@ describe("Tool Preview", function()
       assert.are.equal("read: ./src/main.lua  +0,50", result)
     end)
 
-    it("read shows label — path without offset or limit", function()
+    it("read shows path — label without offset or limit", function()
       local result = ui_preview.format_tool_preview("read", { path = "./src/main.lua", label = "check file" })
-      assert.are.equal("read: check file — ./src/main.lua", result)
+      assert.are.equal("read: ./src/main.lua — check file", result)
     end)
 
-    it("edit shows label — path with label", function()
+    it("edit shows path — label with label", function()
       local result = ui_preview.format_tool_preview(
         "edit",
         { path = "./src/main.lua", oldText = "foo", newText = "bar", label = "fix typo" }
       )
-      assert.are.equal("edit: fix typo — ./src/main.lua", result)
+      assert.are.equal("edit: ./src/main.lua — fix typo", result)
     end)
 
     it("edit shows plain path without label", function()
@@ -547,11 +547,11 @@ describe("Tool Preview", function()
       assert.are.equal("edit: ./src/main.lua", result)
     end)
 
-    it("write shows label — path with byte size and label", function()
+    it("write shows path — label with byte size and label", function()
       local content = string.rep("x", 1536)
       local result =
         ui_preview.format_tool_preview("write", { path = "./src/main.lua", content = content, label = "create module" })
-      assert.are.equal("write: create module — ./src/main.lua  (1.5KB)", result)
+      assert.are.equal("write: ./src/main.lua  (1.5KB) — create module", result)
     end)
 
     it("write shows bytes for small content", function()
@@ -559,10 +559,10 @@ describe("Tool Preview", function()
       assert.are.equal("write: ./readme.txt  (5B)", result)
     end)
 
-    it("write shows label — path with size when content is empty", function()
+    it("write shows path — label with size when content is empty", function()
       local result =
         ui_preview.format_tool_preview("write", { path = "./empty.txt", content = "", label = "create empty" })
-      assert.are.equal("write: create empty — ./empty.txt  (0B)", result)
+      assert.are.equal("write: ./empty.txt  (0B) — create empty", result)
     end)
   end)
 end)

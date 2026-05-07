@@ -301,8 +301,8 @@ function M.get_fold_text()
         + str.strwidth(" ") -- trailing space before suffix
         + str.strwidth(suffix)
       local separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
-      if label then
-        fixed_chrome = fixed_chrome + str.strwidth(label) + separator_width -- label + em-dash separator
+      if detail then
+        fixed_chrome = fixed_chrome + str.strwidth(detail) + separator_width
       end
       local available = text_width - fixed_chrome
 
@@ -311,19 +311,18 @@ function M.get_fold_text()
       if label or detail then
         table.insert(chunks, { ": ", "FlemmaToolName" })
 
-        if label then
-          table.insert(chunks, { label, "FlemmaToolLabel" })
-          if detail and available > 0 then
-            local detail_text = str.truncate(detail, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
-            if detail_text ~= "" then
-              table.insert(chunks, { LABEL_DETAIL_SEPARATOR .. detail_text, "FlemmaToolDetail" })
+        if detail then
+          table.insert(chunks, { detail, "FlemmaToolDetail" })
+          if label and available > 0 then
+            local label_text = str.truncate(label, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
+            if label_text ~= "" then
+              table.insert(chunks, { LABEL_DETAIL_SEPARATOR .. label_text, "FlemmaToolLabel" })
             end
           end
         else
-          -- No label: show detail only (reclaim separator space)
-          local detail_text =
-            str.truncate(detail --[[@as string]], available + separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
-          table.insert(chunks, { detail_text, "FlemmaToolDetail" })
+          local label_text =
+            str.truncate(label --[[@as string]], available + separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
+          table.insert(chunks, { label_text, "FlemmaToolLabel" })
         end
         table.insert(chunks, { " ", "FlemmaFoldPreview" })
       else
@@ -362,9 +361,6 @@ function M.get_fold_text()
         fixed_chrome = fixed_chrome + str.strwidth("(error) ")
       end
       local result_separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
-      if tool_label then
-        fixed_chrome = fixed_chrome + str.strwidth(tool_label) + result_separator_width -- label + em-dash separator
-      end
       local available = text_width - fixed_chrome
 
       table.insert(chunks, { ": ", "FlemmaFoldPreview" })
@@ -372,19 +368,29 @@ function M.get_fold_text()
         table.insert(chunks, { "(error) ", "FlemmaToolResultError" })
       end
 
+      local body = preview.format_content_preview(tool_seg.content, available)
       if tool_label then
-        table.insert(chunks, { tool_label, "FlemmaToolLabel" })
-        if available > 0 then
-          local body = preview.format_content_preview(tool_seg.content, available)
-          if body ~= "" then
-            table.insert(chunks, { LABEL_DETAIL_SEPARATOR .. body, "FlemmaToolDetail" })
+        if body ~= "" then
+          local body_text = str.truncate(body, available - result_separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
+          if body_text ~= "" then
+            table.insert(chunks, { body_text, "FlemmaFoldPreview" })
+            available = available - str.strwidth(body_text)
+          end
+          if available > result_separator_width then
+            local label_text =
+              str.truncate(tool_label, available - result_separator_width, CONTENT_PREVIEW_TRUNCATION_MARKER)
+            if label_text ~= "" then
+              table.insert(chunks, { LABEL_DETAIL_SEPARATOR .. label_text, "FlemmaToolLabel" })
+            end
+          end
+        else
+          local label_text = str.truncate(tool_label, available, CONTENT_PREVIEW_TRUNCATION_MARKER)
+          if label_text ~= "" then
+            table.insert(chunks, { label_text, "FlemmaToolLabel" })
           end
         end
-      else
-        local body = preview.format_content_preview(tool_seg.content, available)
-        if body ~= "" then
-          table.insert(chunks, { body, "FlemmaFoldPreview" })
-        end
+      elseif body ~= "" then
+        table.insert(chunks, { body, "FlemmaFoldPreview" })
       end
 
       table.insert(chunks, { " ", "FlemmaFoldPreview" })

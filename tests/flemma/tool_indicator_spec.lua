@@ -360,6 +360,7 @@ describe("Tool Indicator Extmark Placement", function()
       })
 
       indicators.show_tool_indicator(bufnr, "toolu_01", 10)
+      indicators.update_tool_indicator(bufnr, "toolu_01", true)
 
       local eol_extmark_id ---@type integer|nil
       local marks = vim.api.nvim_buf_get_extmarks(bufnr, tool_exec_ns, { 9, 0 }, { 9, -1 }, { details = true })
@@ -414,7 +415,7 @@ describe("Tool Indicator Extmark Placement", function()
       indicators.clear_all_tool_indicators(bufnr)
     end)
 
-    it("show_tool_indicator creates spinner prefix and Executing EOL", function()
+    it("show_tool_indicator creates EOL spinner only (no prefix)", function()
       local bufnr = create_buffer({
         "@You:",
         "**Tool Result:** `toolu_01`",
@@ -426,10 +427,8 @@ describe("Tool Indicator Extmark Placement", function()
       indicators.show_tool_indicator(bufnr, "toolu_01", 2)
 
       local parts = get_extmark_parts(bufnr, 1)
-      assert.is_not_nil(parts.prefix, "Should have inline prefix extmark")
-      assert.are.equal("FlemmaToolExecuting", parts.prefix_hl, "Prefix should use FlemmaToolExecuting")
+      assert.is_nil(parts.prefix, "Should NOT have inline prefix during execution")
       assert.is_not_nil(parts.eol, "Should have EOL status extmark")
-      assert.is_truthy(parts.eol:match("⧖"), "EOL should contain ⧖")
       assert.is_truthy(parts.eol:match("Executing"), "EOL should contain Executing")
       assert.are.equal("FlemmaToolExecuting", parts.eol_hl)
 
@@ -533,6 +532,9 @@ describe("Tool Indicator Extmark Placement", function()
       end, 10)
 
       assert.is_false(indicators.has_indicator(bufnr, "toolu_01"))
+
+      local marks = vim.api.nvim_buf_get_extmarks(bufnr, tool_exec_ns, 0, -1, {})
+      assert.are.equal(0, #marks, "scheduled clear must remove both extmarks to avoid ghost dots")
 
       indicators.clear_all_tool_indicators(bufnr)
     end)

@@ -819,6 +819,7 @@ function M.background_at_cursor(bufnr)
     return false, content_err
   end
 
+  indicators.reposition_tool_indicators(bufnr)
   maybe_unlock_buffer(bufnr)
   ui.update_ui(bufnr)
   log.info("executor: backgrounded tool " .. ctx.tool_id .. " as " .. job_id)

@@ -545,7 +545,9 @@ describe("executor background filtering", function()
       assert.is_true(ok, err)
       local extmarks = get_tool_extmarks(bufnr)
       assert.truthy(next(extmarks), "backgrounding should keep the spinner indicator visible")
-      assert.truthy(extmarks[13]:match("Executing"), "backgrounded tool should still show Executing status")
+      local header_line = 8
+      assert.truthy(extmarks[header_line], "indicator should be on the tool result header line")
+      assert.truthy(extmarks[header_line]:match("Executing"), "backgrounded tool should still show Executing status")
 
       buffer_state.pending_executions = nil
       vim.api.nvim_buf_delete(bufnr, { force = true })
