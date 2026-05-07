@@ -1,7 +1,7 @@
 --- Tool execution indicators (pending, spinner, complete/error).
---- Each tool call gets two extmarks on its result header line:
----   - Inline prefix (col 0): dot or animated spinner — persistent across state transitions
----   - EOL status text: state label — auto-clears after completion
+--- Pending/completion states use two extmarks: inline prefix (⬢ dot) + EOL status text.
+--- Executing state uses a single EOL extmark with animated spinner.
+--- Both extmarks are removed after the completion flash (schedule_tool_indicator_clear).
 ---@class flemma.ui.Indicators
 local M = {}
 
@@ -17,7 +17,7 @@ local tool_exec_ns = vim.api.nvim_create_namespace("flemma_tool_execution")
 
 ---@class flemma.ui.ToolIndicator
 ---@field prefix_extmark_id integer
----@field status_extmark_id integer|nil
+---@field status_extmark_id integer
 ---@field timer integer|nil
 
 ---Get or initialize the tool indicators table for a buffer
@@ -286,7 +286,10 @@ function M.reposition_tool_indicators(bufnr)
     local sibling = siblings[tool_id]
     local target_line = sibling and sibling.result and (sibling.result.position.start_line - 1) or nil
     if target_line then
-      reposition_extmark(bufnr, ind.prefix_extmark_id, target_line, "inline")
+      local has_separate_prefix = ind.prefix_extmark_id ~= ind.status_extmark_id
+      if has_separate_prefix then
+        reposition_extmark(bufnr, ind.prefix_extmark_id, target_line, "inline")
+      end
       if ind.status_extmark_id then
         reposition_extmark(bufnr, ind.status_extmark_id, target_line, "eol")
       end
@@ -295,7 +298,7 @@ function M.reposition_tool_indicators(bufnr)
 end
 
 --- Schedule indicator clear after a delay, or immediately on user edit.
---- Only clears the EOL status extmark — the prefix dot persists permanently.
+--- Clears both extmarks (prefix and EOL) and removes the indicator entry.
 --- Uses prefix_extmark_id guard to avoid clearing a newer indicator if tool is re-executed.
 --- The on_lines listener only fires when the buffer is idle (not locked by tool
 --- execution and no active API request), so programmatic edits from other tool

@@ -389,6 +389,42 @@ describe("Tool Indicator Extmark Placement", function()
 
       indicators.clear_all_tool_indicators(bufnr)
     end)
+
+    it("repositions executing spinner without corrupting EOL to inline", function()
+      local bufnr = create_buffer({
+        "@Assistant:",
+        "Running tool:",
+        "",
+        "**Tool Use:** `calculator` (`toolu_01`)",
+        "```json",
+        '{ "expression": "1+1" }',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `toolu_01`",
+        "",
+        "```",
+        "```",
+        "spare line",
+      })
+
+      indicators.show_tool_indicator(bufnr, "toolu_01", 10)
+
+      pcall(vim.api.nvim_buf_set_extmark, bufnr, tool_exec_ns, 12, 0, {
+        id = vim.api.nvim_buf_get_extmarks(bufnr, tool_exec_ns, 0, -1, {})[1][1],
+        virt_text = { { " ⠋ Executing…", "FlemmaToolExecuting" } },
+        virt_text_pos = "eol",
+        hl_mode = "combine",
+      })
+
+      indicators.reposition_tool_indicators(bufnr)
+
+      local header_parts = get_extmark_parts(bufnr, 9)
+      assert.is_not_nil(header_parts.eol, "EOL spinner should be restored to header line")
+      assert.is_nil(header_parts.prefix, "Should NOT have inline prefix during execution")
+
+      indicators.clear_all_tool_indicators(bufnr)
+    end)
   end)
 
   describe("two-extmark indicator model", function()
