@@ -617,7 +617,11 @@ local function safe_foldclose(winid, start_lnum, end_lnum)
   local fold_level = vim.api.nvim_win_call(winid, function()
     return vim.fn.foldlevel(start_lnum)
   end)
-  if not fold_level or fold_level <= 0 then
+  -- All auto-closeable ranges are level-2 folds (tool blocks, thinking,
+  -- job results, frontmatter). If foldlevel is only 1, the inner fold
+  -- hasn't been established yet (foldexpr is lazy) and :foldclose would
+  -- close the enclosing level-1 message fold instead.
+  if not fold_level or fold_level < 2 then
     return false
   end
   local fold_closed = vim.api.nvim_win_call(winid, function()
@@ -651,6 +655,9 @@ function M.fold_completed_blocks(bufnr)
   if winid == -1 then
     log.debug("fold_completed_blocks(): Buffer " .. bufnr .. " has no window. Cannot close folds.")
     return
+  end
+  if buffer_state.fold_completed_tick ~= tick then
+    buffer_state.pending_folds_retried = nil
   end
   buffer_state.fold_completed_tick = tick
 
@@ -694,9 +701,25 @@ function M.fold_completed_blocks(bufnr)
 
   -- Track pending folds for retry on subsequent calls
   buffer_state.pending_folds = next(pending) ~= nil and pending or nil
+  if not buffer_state.pending_folds then
+    buffer_state.pending_folds_retried = nil
+  end
 
   if #new_folds > 0 then
     log.debug("fold_completed_blocks(): Auto-closed " .. #new_folds .. " fold(s) in buffer " .. bufnr)
+  end
+
+  -- When folds fail because foldexpr hasn't been re-evaluated yet (newly
+  -- inserted lines have foldlevel=0), schedule a single deferred retry so
+  -- they close after Vim processes the pending redraw.
+  if buffer_state.pending_folds and not buffer_state.pending_folds_retried then
+    buffer_state.pending_folds_retried = true
+    vim.schedule(function()
+      if not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+      end
+      M.fold_completed_blocks(bufnr)
+    end)
   end
 end
 

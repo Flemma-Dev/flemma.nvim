@@ -2578,6 +2578,109 @@ describe("UI Folding", function()
       folding.fold_completed_blocks(bufnr)
       assert.are.equal(3, vim.fn.foldclosed(3), "Thinking fold should be closed after returning to buffer")
     end)
+
+    it("should auto-close job_result blocks injected mid-session", function()
+      -- Reproduces the real-world bug: background jobs complete while the
+      -- user is typing, job_result blocks are injected into the buffer, then
+      -- update_ui calls invalidate_folds + fold_completed_blocks. Because
+      -- foldexpr evaluation is lazy (only on redraw), the newly inserted
+      -- lines have foldlevel=0 when safe_foldclose checks them, so the
+      -- job_result folds fail to close.
+      --
+      -- The fix: fold_completed_blocks schedules a deferred retry when
+      -- pending folds remain. This test verifies the fold closes within a
+      -- short window after the initial (failed) attempt.
+      local injector = require("flemma.tools.injector")
+
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      -- Initial buffer: completed tool results with background job placeholders,
+      -- then user typing in the last @You block.
+      local lines = {
+        "@Assistant:",
+        "Here are the results.",
+        "",
+        '**Tool Use:** `bash` (`toolu_01`)',
+        "```json",
+        '{"command":"sleep 10 && df -h","background":true}',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (job=job_fold1)",
+        "",
+        "```",
+        "Running as a background job `job_fold1`.",
+        "```",
+        "",
+        "@You:",
+        "I'm typing here while jobs run",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      folding.setup_folding()
+      vim.wo.foldlevel = 99
+
+      -- Baseline: tool_use and tool_result are NOT terminal yet (job pending)
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(-1, vim.fn.foldclosed(4), "Sanity: tool_use should not fold while job is pending")
+      assert.are.equal(-1, vim.fn.foldclosed(11), "Sanity: tool_result should not fold while job is pending")
+
+      -- Simulate job completion: inject a job_result block before the user's @You
+      -- (case 3: user is typing). This is what injector.append_job_result does.
+      injector.append_job_result(bufnr, "job_fold1", {
+        success = true,
+        output = "Filesystem  Size  Used Avail\n/dev/sda1   900G  281G  573G",
+      })
+
+      -- Verify job result was inserted
+      local buf_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      local found_job = false
+      local job_result_line = nil
+      for i, line in ipairs(buf_lines) do
+        if line:match("%*%*Job Result:%*%*%s*`job_fold1`") then
+          found_job = true
+          job_result_line = i
+          break
+        end
+      end
+      assert.is_true(found_job, "Job result should be in the buffer after injection")
+
+      -- Sabotage foldmethod to simulate the race: after injection + invalidation,
+      -- Vim hasn't re-evaluated foldexpr yet, so foldlevel() returns 0 for
+      -- the new lines. We simulate this by switching to manual + deleting folds.
+      vim.wo.foldmethod = "manual"
+      vim.cmd("normal! zE")
+
+      -- Now call fold_completed_blocks — safe_foldclose will fail for the new
+      -- job_result (foldlevel=0), putting it in pending_folds.
+      folding.fold_completed_blocks(bufnr)
+      assert.are.equal(
+        -1,
+        vim.fn.foldclosed(job_result_line),
+        "Sanity: job_result fold should fail on first attempt (simulated lazy eval)"
+      )
+
+      -- Restore proper foldmethod (simulates Vim completing fold evaluation
+      -- on the next redraw cycle).
+      folding.setup_folding()
+      vim.wo.foldlevel = 99
+
+      -- The deferred retry should close the pending job_result fold.
+      -- Wait for the scheduled callback to fire.
+      vim.wait(100, function()
+        return vim.fn.foldclosed(job_result_line) ~= -1
+      end)
+
+      assert.are.not_equal(
+        -1,
+        vim.fn.foldclosed(job_result_line),
+        "Job result block should be auto-folded after deferred retry (line " .. tostring(job_result_line) .. ")"
+      )
+    end)
   end)
 
   describe("fold re-close after undo/redo", function()
