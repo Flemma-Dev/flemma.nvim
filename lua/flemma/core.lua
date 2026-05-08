@@ -1563,7 +1563,8 @@ bridge.register("drain_job_completions", function(bufnr)
         .. tostring(autopilot.is_enabled(bufnr))
     )
     local ap_state = autopilot.get_state(bufnr)
-    if safe and autopilot.is_enabled(bufnr) and ap_state ~= "idle" then
+    local disarmed = autopilot.was_disarmed(bufnr)
+    if safe and autopilot.is_enabled(bufnr) and not disarmed then
       log.debug(
         "bridge.drain_job_completions(): scheduling auto-continue for buffer "
           .. bufnr
@@ -1578,8 +1579,8 @@ bridge.register("drain_job_completions", function(bufnr)
       end)
     elseif not safe then
       log.debug("bridge.drain_job_completions(): skipping auto-continue (user is typing)")
-    elseif ap_state == "idle" then
-      log.debug("bridge.drain_job_completions(): skipping auto-continue (autopilot idle, likely disarmed)")
+    elseif disarmed then
+      log.debug("bridge.drain_job_completions(): skipping auto-continue (autopilot disarmed)")
     end
   end
 end)

@@ -324,4 +324,84 @@ describe("job completion drain", function()
 
     core.send_or_execute = real_send
   end)
+
+  it("auto-continues when autopilot went idle naturally and background jobs complete later", function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.core"] = nil
+    package.loaded["flemma.tools.executor"] = nil
+    package.loaded["flemma.tools.injector"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.bridge"] = nil
+    package.loaded["flemma.autopilot"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
+    package.loaded["flemma.ui"] = nil
+    package.loaded["flemma.ui.folding"] = nil
+    package.loaded["flemma.parser"] = nil
+
+    local flemma = require("flemma")
+    flemma.setup({ tools = { autopilot = { enabled = true } } })
+    local executor = require("flemma.tools.executor")
+    local ap = require("flemma.autopilot")
+    local bridge = require("flemma.bridge")
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@Assistant:",
+      "Your background jobs are running.",
+      "",
+      "@You:",
+      "",
+    })
+    vim.bo[bufnr].filetype = "chat"
+
+    vim.cmd("new")
+    vim.api.nvim_set_current_buf(bufnr)
+
+    -- Simulate the exact scenario from the bug:
+    -- 1. Autopilot was armed (tool_use in response)
+    -- 2. on_response_complete found no tool_use in the NEXT response → natural idle
+    -- This is NOT a disarm — the model just didn't use tools this turn.
+    ap.arm(bufnr)
+    ap.on_response_complete(bufnr)
+    assert.equals("idle", ap.get_state(bufnr))
+
+    -- Background job completes after the response finished
+    executor.enqueue_job_completion(bufnr, {
+      job_id = "job_late1",
+      tool_id = "tool_01",
+      tool_name = "bash",
+      result = { success = true, output = "late job output" },
+    })
+
+    local core = require("flemma.core")
+    local send_called = false
+    local real_send = core.send_or_execute
+    core.send_or_execute = function()
+      send_called = true
+    end
+
+    bridge.drain_job_completions(bufnr)
+
+    -- The job result should be injected into the buffer
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local joined = table.concat(lines, "\n")
+    assert.truthy(joined:match("%*%*Job Result:%*%*%s*`job_late1`"), "Job result should be in the buffer")
+
+    -- Allow any scheduled callbacks to fire
+    vim.wait(50, function()
+      return send_called
+    end)
+
+    -- Critical: send_or_execute MUST be called — the background job result
+    -- needs to be sent back to the model for it to see the output.
+    assert.is_true(
+      send_called,
+      "Autopilot must auto-continue when idle naturally (not disarmed) and background jobs arrive"
+    )
+
+    core.send_or_execute = real_send
+  end)
 end)
