@@ -385,6 +385,13 @@ function M.cancel_request(opts)
   local bufnr = (opts and opts.bufnr) or vim.api.nvim_get_current_buf()
   local buffer_state = state.get_buffer_state(bufnr)
 
+  if buffer_state.resume_delay_timer then
+    buffer_state.resume_delay_timer:stop()
+    buffer_state.resume_delay_timer = nil
+    notify.info("Cancelled pending auto-continue.")
+    return
+  end
+
   if buffer_state.pending_send then
     buffer_state.pending_send.subscription:cancel()
     buffer_state.pending_send = nil
@@ -1565,18 +1572,52 @@ bridge.register("drain_job_completions", function(bufnr)
     local ap_state = autopilot.get_state(bufnr)
     local disarmed = autopilot.was_disarmed(bufnr)
     if safe and autopilot.is_enabled(bufnr) and not disarmed then
+      local bs = state.get_buffer_state(bufnr)
+      local delay_ms = (ap_state == "idle") and config_facade.get(bufnr).tools.autopilot.resume_delay or 0
       log.debug(
         "bridge.drain_job_completions(): scheduling auto-continue for buffer "
           .. bufnr
           .. " (autopilot="
           .. ap_state
-          .. ")"
+          .. " resume_delay="
+          .. delay_ms
+          .. "ms)"
       )
-      vim.schedule(function()
-        if vim.api.nvim_buf_is_valid(bufnr) then
-          M.send_or_execute({ bufnr = bufnr })
+      if delay_ms > 0 then
+        if bs.resume_delay_timer then
+          bs.resume_delay_timer:stop()
+          bs.resume_delay_timer:close()
         end
-      end)
+        local timer = assert(vim.uv.new_timer())
+        bs.resume_delay_timer = timer
+        timer:start(
+          delay_ms,
+          0,
+          vim.schedule_wrap(function()
+            bs.resume_delay_timer = nil
+            timer:stop()
+            timer:close()
+            if not vim.api.nvim_buf_is_valid(bufnr) or autopilot.was_disarmed(bufnr) then
+              return
+            end
+            local win = vim.fn.bufwinid(bufnr)
+            if win == vim.api.nvim_get_current_win() then
+              local mode = vim.fn.mode()
+              if mode == "i" or mode == "R" then
+                log.debug("resume_delay: user entered insert mode during delay, skipping auto-continue")
+                return
+              end
+            end
+            M.send_or_execute({ bufnr = bufnr })
+          end)
+        )
+      else
+        vim.schedule(function()
+          if vim.api.nvim_buf_is_valid(bufnr) then
+            M.send_or_execute({ bufnr = bufnr })
+          end
+        end)
+      end
     elseif not safe then
       log.debug("bridge.drain_job_completions(): skipping auto-continue (user is typing)")
     elseif disarmed then
@@ -1590,6 +1631,15 @@ state.register_cleanup("core.pending_send", function(bufnr)
   if bs.pending_send then
     bs.pending_send.subscription:cancel()
     bs.pending_send = nil
+  end
+end)
+
+state.register_cleanup("core.resume_delay_timer", function(bufnr)
+  local bs = state.get_buffer_state(bufnr)
+  if bs.resume_delay_timer then
+    bs.resume_delay_timer:stop()
+    bs.resume_delay_timer:close()
+    bs.resume_delay_timer = nil
   end
 end)
 

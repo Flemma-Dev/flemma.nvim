@@ -149,6 +149,7 @@ return s.object({
     autopilot = s.object({
       enabled = s.boolean(true),
       max_turns = s.integer(100),
+      resume_delay = s.integer(1000),
     }):coerce(function(value, _ctx)
       if type(value) == "boolean" then
         return { enabled = value }

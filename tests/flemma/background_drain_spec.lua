@@ -342,7 +342,7 @@ describe("job completion drain", function()
     package.loaded["flemma.parser"] = nil
 
     local flemma = require("flemma")
-    flemma.setup({ tools = { autopilot = { enabled = true } } })
+    flemma.setup({ tools = { autopilot = { enabled = true, resume_delay = 0 } } })
     local executor = require("flemma.tools.executor")
     local ap = require("flemma.autopilot")
     local bridge = require("flemma.bridge")
@@ -401,6 +401,231 @@ describe("job completion drain", function()
       send_called,
       "Autopilot must auto-continue when idle naturally (not disarmed) and background jobs arrive"
     )
+
+    core.send_or_execute = real_send
+  end)
+
+  it("debounces auto-continue with resume_delay when autopilot is idle", function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.core"] = nil
+    package.loaded["flemma.tools.executor"] = nil
+    package.loaded["flemma.tools.injector"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.bridge"] = nil
+    package.loaded["flemma.autopilot"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
+    package.loaded["flemma.ui"] = nil
+    package.loaded["flemma.ui.folding"] = nil
+    package.loaded["flemma.parser"] = nil
+
+    local flemma = require("flemma")
+    flemma.setup({ tools = { autopilot = { enabled = true, resume_delay = 200 } } })
+    local executor = require("flemma.tools.executor")
+    local ap = require("flemma.autopilot")
+    local bridge = require("flemma.bridge")
+    local st = require("flemma.state")
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@Assistant:",
+      "Your background jobs are running.",
+      "",
+      "@You:",
+      "",
+    })
+    vim.bo[bufnr].filetype = "chat"
+
+    vim.cmd("new")
+    vim.api.nvim_set_current_buf(bufnr)
+
+    ap.arm(bufnr)
+    ap.on_response_complete(bufnr)
+
+    executor.enqueue_job_completion(bufnr, {
+      job_id = "job_cool1",
+      tool_id = "tool_01",
+      tool_name = "bash",
+      result = { success = true, output = "first job" },
+    })
+
+    local core = require("flemma.core")
+    local send_count = 0
+    local real_send = core.send_or_execute
+    core.send_or_execute = function()
+      send_count = send_count + 1
+    end
+
+    bridge.drain_job_completions(bufnr)
+
+    -- Timer should be set but send should NOT have fired yet
+    assert.truthy(st.get_buffer_state(bufnr).resume_delay_timer, "Resume delay timer should be active")
+    assert.equals(0, send_count, "send_or_execute must not fire immediately during resume delay")
+
+    -- Second job arrives before resume delay expires — timer should reset (debounce)
+    executor.enqueue_job_completion(bufnr, {
+      job_id = "job_cool2",
+      tool_id = "tool_02",
+      tool_name = "bash",
+      result = { success = true, output = "second job" },
+    })
+    bridge.drain_job_completions(bufnr)
+    assert.equals(0, send_count, "send_or_execute must not fire before resume delay expires")
+
+    -- Wait for resume delay to expire
+    vim.wait(400, function()
+      return send_count > 0
+    end)
+
+    assert.equals(1, send_count, "send_or_execute should fire exactly once after debounce")
+    assert.is_nil(st.get_buffer_state(bufnr).resume_delay_timer, "Timer should be cleaned up after firing")
+
+    core.send_or_execute = real_send
+  end)
+
+  it("Ctrl+C cancels pending resume delay timer", function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.core"] = nil
+    package.loaded["flemma.tools.executor"] = nil
+    package.loaded["flemma.tools.injector"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.bridge"] = nil
+    package.loaded["flemma.autopilot"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
+    package.loaded["flemma.ui"] = nil
+    package.loaded["flemma.ui.folding"] = nil
+    package.loaded["flemma.parser"] = nil
+
+    local flemma = require("flemma")
+    flemma.setup({ tools = { autopilot = { enabled = true, resume_delay = 500 } } })
+    local executor = require("flemma.tools.executor")
+    local ap = require("flemma.autopilot")
+    local bridge = require("flemma.bridge")
+    local st = require("flemma.state")
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@Assistant:",
+      "Done.",
+      "",
+      "@You:",
+      "",
+    })
+    vim.bo[bufnr].filetype = "chat"
+
+    vim.cmd("new")
+    vim.api.nvim_set_current_buf(bufnr)
+
+    ap.arm(bufnr)
+    ap.on_response_complete(bufnr)
+
+    executor.enqueue_job_completion(bufnr, {
+      job_id = "job_cancel1",
+      tool_id = "tool_01",
+      tool_name = "bash",
+      result = { success = true, output = "will be cancelled" },
+    })
+
+    local core = require("flemma.core")
+    local send_called = false
+    local real_send = core.send_or_execute
+    core.send_or_execute = function()
+      send_called = true
+    end
+
+    bridge.drain_job_completions(bufnr)
+    assert.truthy(st.get_buffer_state(bufnr).resume_delay_timer, "Resume delay timer should be active")
+
+    -- User presses Ctrl+C → cancel_request
+    core.cancel_request({ bufnr = bufnr })
+    assert.is_nil(st.get_buffer_state(bufnr).resume_delay_timer, "Timer should be cancelled by Ctrl+C")
+
+    -- Wait past the resume delay — send should NOT fire
+    vim.wait(700, function()
+      return send_called
+    end)
+
+    assert.is_false(send_called, "send_or_execute must not fire after Ctrl+C cancels resume delay")
+
+    core.send_or_execute = real_send
+  end)
+
+  it("does not auto-continue when user enters insert mode during resume delay", function()
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.core"] = nil
+    package.loaded["flemma.tools.executor"] = nil
+    package.loaded["flemma.tools.injector"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.bridge"] = nil
+    package.loaded["flemma.autopilot"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
+    package.loaded["flemma.ui"] = nil
+    package.loaded["flemma.ui.folding"] = nil
+    package.loaded["flemma.parser"] = nil
+
+    local flemma = require("flemma")
+    flemma.setup({ tools = { autopilot = { enabled = true, resume_delay = 200 } } })
+    local executor = require("flemma.tools.executor")
+    local ap = require("flemma.autopilot")
+    local bridge = require("flemma.bridge")
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@Assistant:",
+      "Done.",
+      "",
+      "@You:",
+      "",
+    })
+    vim.bo[bufnr].filetype = "chat"
+
+    vim.cmd("new")
+    vim.api.nvim_set_current_buf(bufnr)
+
+    ap.arm(bufnr)
+    ap.on_response_complete(bufnr)
+
+    executor.enqueue_job_completion(bufnr, {
+      job_id = "job_insert_delay1",
+      tool_id = "tool_01",
+      tool_name = "bash",
+      result = { success = true, output = "job finished" },
+    })
+
+    local core = require("flemma.core")
+    local send_called = false
+    local real_send = core.send_or_execute
+    core.send_or_execute = function()
+      send_called = true
+    end
+
+    -- Drain starts the timer (user was in normal mode at drain time)
+    bridge.drain_job_completions(bufnr)
+
+    -- User enters insert mode during the resume delay window
+    local real_mode = vim.fn.mode
+    vim.fn.mode = function()
+      return "i"
+    end
+
+    -- Wait for the timer to fire
+    vim.wait(400, function()
+      return send_called
+    end)
+
+    vim.fn.mode = real_mode
+
+    -- send_or_execute must NOT fire — user is in insert mode, locking the
+    -- buffer would cause E21: Cannot make changes, 'modifiable' is off
+    assert.is_false(send_called, "Autopilot must not auto-continue when user entered insert mode during resume delay")
 
     core.send_or_execute = real_send
   end)

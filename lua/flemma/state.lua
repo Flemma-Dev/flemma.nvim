@@ -24,6 +24,7 @@ local writequeue = require("flemma.buffer.writequeue")
 ---@field inflight_usage flemma.state.InflightUsage Token counters accumulated during streaming
 ---@field locked boolean Whether the buffer is locked (non-modifiable) for request/tool execution
 ---@field pending_send? { subscription: flemma.readiness.Subscription, opts: table } Queued send awaiting async readiness
+---@field resume_delay_timer? uv.uv_timer_t Debounce timer for auto-continue after background job drain
 ---@field ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached parsed AST
 ---@field raw_ast_cache? { changedtick: integer, document: flemma.ast.DocumentNode } Cached raw (pre-rewriter) AST
 ---@field ast_snapshot_before_send? flemma.parser.Snapshot Frozen AST for incremental parsing during streaming

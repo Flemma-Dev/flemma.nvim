@@ -214,6 +214,7 @@
 ---@class flemma.config.ToolsAutopilot
 ---@field enabled boolean
 ---@field max_turns integer
+---@field resume_delay integer
 
 ---@class flemma.config.ToolsBash
 ---@field cwd? string
