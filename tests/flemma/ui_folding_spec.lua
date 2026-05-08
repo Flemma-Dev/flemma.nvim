@@ -1181,7 +1181,7 @@ describe("UI Folding", function()
       -- Verify highlight groups
       local icon_chunk = find_chunk(chunks, "⬢")
       assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
-      assert.are.equal("FlemmaToolSuccess", icon_chunk[2])
+      assert.are.equal("FlemmaToolIconSuccess", icon_chunk[2])
       assert.is_nil(find_chunk(chunks, "⬡"), "tool_result should not use the tool_use icon")
 
       local title_chunk = find_chunk(chunks, "Tool Result:")
@@ -1231,7 +1231,7 @@ describe("UI Folding", function()
 
       local icon_chunk = find_chunk(chunks, "⬢")
       assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
-      assert.are.equal("FlemmaToolError", icon_chunk[2])
+      assert.are.equal("FlemmaToolIconError", icon_chunk[2])
     end)
 
     it("should use FlemmaToolIcon highlight for denied tool_result icon", function()

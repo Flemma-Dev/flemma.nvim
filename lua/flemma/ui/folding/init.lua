@@ -339,9 +339,9 @@ function M.get_fold_text()
 
       local icon_hl = "FlemmaToolIcon"
       if tool_seg.status == "error" then
-        icon_hl = "FlemmaToolError"
+        icon_hl = "FlemmaToolIconError"
       elseif not tool_seg.status and tool_seg.content ~= "" then
-        icon_hl = "FlemmaToolSuccess"
+        icon_hl = "FlemmaToolIconSuccess"
       end
 
       ---@type {[1]:string, [2]:string}[]
@@ -400,9 +400,9 @@ function M.get_fold_text()
       ---@cast tool_seg flemma.ast.JobResultSegment
       local icon_hl = "FlemmaToolIcon"
       if tool_seg.status == "error" then
-        icon_hl = "FlemmaToolError"
+        icon_hl = "FlemmaToolIconError"
       elseif tool_seg.content ~= "" then
-        icon_hl = "FlemmaToolSuccess"
+        icon_hl = "FlemmaToolIconSuccess"
       end
 
       ---@type {[1]:string, [2]:string}[]

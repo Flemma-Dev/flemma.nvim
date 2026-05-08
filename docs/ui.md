@@ -169,23 +169,25 @@ When async tool sources (registered via `tools.modules` or `tools.register()` wi
 
 During tool execution, an animated braille spinner appears next to the `**Tool Result:**` block using the tool phase frames (a falling sand animation at 200ms intervals). When execution completes, the indicator changes to `✓ Complete` or `✗ Failed`. Indicators reposition automatically if the buffer is modified during execution and clear on the next buffer edit.
 
-Four highlight groups control indicator and fold icon colours by status:
+Eight highlight groups control indicator colours — four for the inline `⬢` icon and four for the EOL status text:
 
-| Group                 | Default link            | When it's used                             |
-| --------------------- | ----------------------- | ------------------------------------------ |
-| `FlemmaToolPending`   | `FlemmaToolResultTitle` | Pending indicator (inline `⬢` + EOL `⏸`)  |
-| `FlemmaToolExecuting` | `FlemmaToolResultTitle` | Executing spinner                          |
-| `FlemmaToolSuccess`   | `FlemmaToolResultTitle` | Completion indicator + fold `⬢` on success |
-| `FlemmaToolError`     | `DiagnosticError`       | Failure indicator + fold `⬢` on error      |
+| Group                     | Default link            | When it's used                      |
+| ------------------------- | ----------------------- | ----------------------------------- |
+| `FlemmaToolIconPending`   | `FlemmaToolResultTitle` | Inline `⬢` on pending tools        |
+| `FlemmaToolIconExecuting` | `FlemmaToolResultTitle` | _(not shown — no prefix when executing)_ |
+| `FlemmaToolIconSuccess`   | `FlemmaToolResultTitle` | Inline `⬢` + fold icon on success  |
+| `FlemmaToolIconError`     | `DiagnosticError`       | Inline `⬢` + fold icon on error    |
+| `FlemmaToolPending`       | `DiagnosticHint`        | EOL `⏸ Pending` text               |
+| `FlemmaToolExecuting`     | `DiagnosticInfo`        | EOL spinner + `Executing…` text     |
+| `FlemmaToolSuccess`       | `DiagnosticOk`          | EOL `✔ Complete` text               |
+| `FlemmaToolError`         | `DiagnosticError`       | EOL `⚠ Failed` text                |
 
-By default, non-error states inherit the `Tool Result:` header colour so indicators blend with the surrounding text. To make each status visually distinct:
+By default, icon colours match the `Tool Result:` header while status text uses semantic Diagnostic colours. Override any group to customise:
 
 ```lua
--- After Flemma loads (e.g., in a ColorScheme autocmd or after setup)
-vim.api.nvim_set_hl(0, "FlemmaToolPending",   { link = "DiagnosticHint" })
-vim.api.nvim_set_hl(0, "FlemmaToolExecuting", { link = "DiagnosticInfo" })
-vim.api.nvim_set_hl(0, "FlemmaToolSuccess",   { link = "DiagnosticOk" })
--- FlemmaToolError already uses DiagnosticError
+-- Make icons match status colours instead of the header
+vim.api.nvim_set_hl(0, "FlemmaToolIconSuccess", { link = "DiagnosticOk" })
+vim.api.nvim_set_hl(0, "FlemmaToolIconError",   { link = "DiagnosticError" })
 ```
 
 ### Tool previews

@@ -453,10 +453,15 @@ M.apply_syntax = function()
   -- FlemmaToolDetail: dimmer highlight for raw technical detail in folds.
   set_highlight("FlemmaToolDetail", syntax_config.highlights.tool_detail)
 
-  -- Tool execution indicator highlights
-  set_highlight("FlemmaToolPending", { link = "FlemmaToolResultTitle", default = true })
-  set_highlight("FlemmaToolExecuting", { link = "FlemmaToolResultTitle", default = true })
-  set_highlight("FlemmaToolSuccess", { link = "FlemmaToolResultTitle", default = true })
+  -- Tool indicator icon highlights (inline ⬢ prefix and fold icon)
+  set_highlight("FlemmaToolIconPending", { link = "FlemmaToolResultTitle", default = true })
+  set_highlight("FlemmaToolIconExecuting", { link = "FlemmaToolResultTitle", default = true })
+  set_highlight("FlemmaToolIconSuccess", { link = "FlemmaToolResultTitle", default = true })
+  set_highlight("FlemmaToolIconError", { link = "DiagnosticError", default = true })
+  -- Tool indicator status highlights (EOL text)
+  set_highlight("FlemmaToolPending", { link = "DiagnosticHint", default = true })
+  set_highlight("FlemmaToolExecuting", { link = "DiagnosticInfo", default = true })
+  set_highlight("FlemmaToolSuccess", { link = "DiagnosticOk", default = true })
   set_highlight("FlemmaToolError", { link = "DiagnosticError", default = true })
 
   -- Integration busy indicator highlight

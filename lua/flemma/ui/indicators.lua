@@ -92,7 +92,7 @@ function M.show_pending_tool_indicator(bufnr, tool_id, header_line)
   local line_idx = header_line - 1
 
   local prefix_id = vim.api.nvim_buf_set_extmark(bufnr, tool_exec_ns, line_idx, 0, {
-    virt_text = { { TOOL_RESULT_ICON .. " ", "FlemmaToolPending" } },
+    virt_text = { { TOOL_RESULT_ICON .. " ", "FlemmaToolIconPending" } },
     virt_text_pos = "inline",
     hl_mode = "combine",
     priority = PRIORITY_TOOL_EXECUTION,
@@ -204,11 +204,11 @@ function M.update_tool_indicator(bufnr, tool_id, success)
 
   local prefix_hl, status_text, status_hl
   if success then
-    prefix_hl = "FlemmaToolSuccess"
+    prefix_hl = "FlemmaToolIconSuccess"
     status_text = " ✔ Complete"
     status_hl = "FlemmaToolSuccess"
   else
-    prefix_hl = "FlemmaToolError"
+    prefix_hl = "FlemmaToolIconError"
     status_text = " ⚠ Failed"
     status_hl = "FlemmaToolError"
   end
@@ -260,11 +260,11 @@ function M.show_job_result_indicator(bufnr, job_id, header_line, success)
   local line_idx = header_line - 1
   local prefix_hl, status_text, status_hl
   if success then
-    prefix_hl = "FlemmaToolSuccess"
+    prefix_hl = "FlemmaToolIconSuccess"
     status_text = " ✔ Complete"
     status_hl = "FlemmaToolSuccess"
   else
-    prefix_hl = "FlemmaToolError"
+    prefix_hl = "FlemmaToolIconError"
     status_text = " ⚠ Failed"
     status_hl = "FlemmaToolError"
   end
