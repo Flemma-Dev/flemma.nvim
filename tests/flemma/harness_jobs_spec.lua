@@ -1,7 +1,7 @@
---- Tests for flemma:job_status harness tool
+--- Tests for flemma:jobs:status harness tool
 
 package.loaded["flemma.state"] = nil
-package.loaded["flemma.tools.definitions.harness.job_status"] = nil
+package.loaded["flemma.tools.definitions.harness.jobs"] = nil
 
 local state = require("flemma.state")
 local json = require("flemma.utilities.json")
@@ -19,25 +19,25 @@ local function make_ctx(bufnr)
   }
 end
 
-describe("flemma:job_status", function()
-  local job_status_module
+describe("flemma:jobs:status", function()
+  local jobs_module
   local execute
 
   before_each(function()
-    package.loaded["flemma.tools.definitions.harness.job_status"] = nil
+    package.loaded["flemma.tools.definitions.harness.jobs"] = nil
     package.loaded["flemma.parser"] = nil
     parser = require("flemma.parser")
-    job_status_module = require("flemma.tools.definitions.harness.job_status")
-    execute = job_status_module.definitions[1].execute
+    jobs_module = require("flemma.tools.definitions.harness.jobs")
+    execute = jobs_module.definitions[1].execute
   end)
 
   it("exports a single definition with correct name", function()
-    assert.equals(1, #job_status_module.definitions)
-    assert.equals("flemma:job_status", job_status_module.definitions[1].name)
+    assert.equals(1, #jobs_module.definitions)
+    assert.equals("flemma:jobs:status", jobs_module.definitions[1].name)
   end)
 
   it("is synchronous and not backgroundable", function()
-    local definition = job_status_module.definitions[1]
+    local definition = jobs_module.definitions[1]
     assert.is_false(definition.async)
     assert.is_false(definition.backgroundable)
   end)

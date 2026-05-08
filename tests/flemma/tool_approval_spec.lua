@@ -431,7 +431,7 @@ describe("Approval Setup", function()
     it("approves tools matching a wildcard pattern", function()
       set_config_and_setup({ tools = { auto_approve = { "flemma:*" } } })
 
-      assert.equals("approve", approval.resolve("flemma:job_status", {}, { bufnr = 1, tool_id = "t1" }))
+      assert.equals("approve", approval.resolve("flemma:jobs:status", {}, { bufnr = 1, tool_id = "t1" }))
       assert.equals("approve", approval.resolve("flemma:future_tool", {}, { bufnr = 1, tool_id = "t2" }))
     end)
 
@@ -445,7 +445,7 @@ describe("Approval Setup", function()
       set_config_and_setup({ tools = { auto_approve = { "read", "flemma:*" } } })
 
       assert.equals("approve", approval.resolve("read", {}, { bufnr = 1, tool_id = "t1" }))
-      assert.equals("approve", approval.resolve("flemma:job_status", {}, { bufnr = 1, tool_id = "t2" }))
+      assert.equals("approve", approval.resolve("flemma:jobs:status", {}, { bufnr = 1, tool_id = "t2" }))
       assert.equals("require_approval", approval.resolve("bash", {}, { bufnr = 1, tool_id = "t3" }))
     end)
 

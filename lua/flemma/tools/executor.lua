@@ -555,7 +555,7 @@ function M.execute(bufnr, context, opts)
       log.warn("executor: failed to set background header for " .. tool_id .. ": " .. (h_err or "unknown"))
     end
     local placeholder_text
-    if is_tool_available("flemma:job_status", bufnr) then
+    if is_tool_available("flemma:jobs:status", bufnr) then
       placeholder_text = messages.render("background_available", { job_id = job_id })
     else
       placeholder_text = messages.render("background_unavailable", {})
@@ -815,7 +815,7 @@ function M.background_at_cursor(bufnr)
   end
 
   local job_placeholder_text
-  if is_tool_available("flemma:job_status", bufnr) then
+  if is_tool_available("flemma:jobs:status", bufnr) then
     job_placeholder_text = messages.render("background_available", { job_id = job_id })
   else
     job_placeholder_text = messages.render("background_unavailable", {})

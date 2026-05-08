@@ -1,6 +1,6 @@
---- Harness tool: flemma:job_status
---- Allows the LLM to query the status of a background job by its job ID
----@class flemma.tools.definitions.harness.JobStatus
+--- Harness tools: flemma:jobs:*
+--- Allows the LLM to query the status of background jobs
+---@class flemma.tools.definitions.harness.Jobs
 ---@field definitions flemma.tools.ToolDefinition[]
 local M = {}
 
@@ -12,7 +12,7 @@ local state = require("flemma.state")
 
 M.definitions = {
   {
-    name = "flemma:job_status",
+    name = "flemma:jobs:status",
     description = "Check the status of a background job. "
       .. "Returns whether the job is still running, queued for delivery, or already completed. "
       .. "Use this to check on long-running background tasks instead of retrying them.",
@@ -28,7 +28,7 @@ M.definitions = {
     execute = function(input, ctx)
       local bufnr = ctx.bufnr
       local job_id = input.job_id
-      log.debug("flemma:job_status: querying job " .. job_id .. " for buffer " .. bufnr)
+      log.debug("flemma:jobs:status: querying job " .. job_id .. " for buffer " .. bufnr)
 
       local buffer_state = state.get_buffer_state(bufnr)
       local pending = buffer_state.pending_executions or {}
@@ -37,7 +37,7 @@ M.definitions = {
         if entry.job_id == job_id then
           local elapsed = os.time() - entry.started_at
           local status = entry.completed and "queued" or "running"
-          log.debug("flemma:job_status: job " .. job_id .. " → " .. status .. " (elapsed=" .. elapsed .. "s)")
+          log.debug("flemma:jobs:status: job " .. job_id .. " → " .. status .. " (elapsed=" .. elapsed .. "s)")
           return {
             success = true,
             output = json.encode({
@@ -54,7 +54,7 @@ M.definitions = {
       local queue = buffer_state.delivery_queue or {}
       for _, delivery in ipairs(queue) do
         if delivery.job_id == job_id then
-          log.debug("flemma:job_status: job " .. job_id .. " → queued (in delivery_queue)")
+          log.debug("flemma:jobs:status: job " .. job_id .. " → queued (in delivery_queue)")
           return {
             success = true,
             output = json.encode({
@@ -72,7 +72,7 @@ M.definitions = {
       local found_in_buffer = query.find_job_result(doc, job_id) ~= nil
 
       local status = found_in_buffer and "completed" or "completed (removed from conversation)"
-      log.debug("flemma:job_status: job " .. job_id .. " → " .. status)
+      log.debug("flemma:jobs:status: job " .. job_id .. " → " .. status)
       return {
         success = true,
         output = json.encode({

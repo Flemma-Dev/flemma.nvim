@@ -21,7 +21,7 @@ local BUILTIN_TOOLS = {
   "flemma.tools.definitions.builtin.find",
   "flemma.tools.definitions.builtin.ls",
   "flemma.tools.definitions.builtin.mcporter",
-  "flemma.tools.definitions.harness.job_status",
+  "flemma.tools.definitions.harness.jobs",
 }
 
 local BACKGROUND_PARAM_DESCRIPTION = "Set to true to run this tool in the background. "
