@@ -50,17 +50,17 @@ M.definitions = {
         end
       end
 
-      local queue = buffer_state.completion_queue or {}
-      for _, completion in ipairs(queue) do
-        if completion.job_id == job_id then
-          log.debug("flemma:job_status: job " .. job_id .. " → queued (in completion_queue)")
+      local queue = buffer_state.delivery_queue or {}
+      for _, delivery in ipairs(queue) do
+        if delivery.job_id == job_id then
+          log.debug("flemma:job_status: job " .. job_id .. " → queued (in delivery_queue)")
           return {
             success = true,
             output = json.encode({
               status = "queued",
               job_id = job_id,
-              tool_id = completion.tool_id,
-              tool_name = completion.tool_name,
+              tool_id = delivery.tool_id,
+              tool_name = delivery.tool_name,
               elapsed_seconds = 0,
             }),
           }

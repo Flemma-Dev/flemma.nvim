@@ -281,7 +281,7 @@ describe("Bufferline integration", function()
 
       -- Tool finishes (count=1, still busy)
       vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaToolFinished",
+        pattern = "FlemmaToolCompleted",
         data = { bufnr = bufnr, tool_name = "bash", tool_id = "t1", status = "success" },
       })
       assert.are.equal("󰔟", bufferline_integration.get_element_icon(opts))
@@ -329,7 +329,7 @@ describe("Bufferline integration", function()
       assert.are.equal("󰔟", bufferline_integration.get_element_icon(opts))
 
       vim.api.nvim_exec_autocmds("User", {
-        pattern = "FlemmaToolFinished",
+        pattern = "FlemmaToolCompleted",
         data = { bufnr = bufnr, tool_name = "read", tool_id = "t2", status = "success" },
       })
       assert.is_nil(bufferline_integration.get_element_icon(opts))

@@ -280,7 +280,7 @@ Flemma is designed to be extended. Everything plugs in through clean registries:
 
 - **Custom tools** -- define your own with `require("flemma.tools").register()`. Read more in [tools.md](docs/tools.md#registering-custom-tools).
 - **Approval policies** -- priority-based resolver chain for tool approval. Read more in [tools.md](docs/tools.md#approval-resolvers).
-- **Hooks** -- lifecycle events (`FlemmaRequestSending`, `FlemmaToolFinished`, etc.) as standard `User` autocmds. Read more in [extending.md](docs/extending.md).
+- **Hooks** -- lifecycle events (`FlemmaRequestSending`, `FlemmaToolCompleted`, etc.) as standard `User` autocmds. Read more in [extending.md](docs/extending.md).
 - **Custom providers** -- inherit from the base class or `openai_chat` for compatible APIs. Read more in [extending.md](docs/extending.md).
 - **Sandbox backends** -- add platform-specific sandboxing beyond Bubblewrap. Read more in [sandbox.md](docs/sandbox.md#custom-backends).
 - **Template system** -- Lua/JSON per-file configuration, inline expressions, file includes, composable system prompts. Read more in [templates.md](docs/templates.md).

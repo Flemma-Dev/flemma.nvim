@@ -7,7 +7,7 @@ describe("background lifecycle", function()
     executor = require("flemma.tools.executor")
   end)
 
-  describe("scan_orphaned_background_jobs", function()
+  describe("resolve_orphaned_jobs", function()
     it("detects orphaned job tool_result and injects error completion", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
@@ -27,7 +27,7 @@ describe("background lifecycle", function()
       })
       vim.bo[bufnr].filetype = "chat"
 
-      local count = executor.scan_orphaned_background_jobs(bufnr)
+      local count = executor.resolve_orphaned_jobs(bufnr)
       assert.equals(1, count)
 
       local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
@@ -63,7 +63,7 @@ describe("background lifecycle", function()
       })
       vim.bo[bufnr].filetype = "chat"
 
-      local count = executor.scan_orphaned_background_jobs(bufnr)
+      local count = executor.resolve_orphaned_jobs(bufnr)
       assert.equals(0, count)
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
@@ -103,7 +103,7 @@ describe("background lifecycle", function()
         },
       }
 
-      local count = executor.scan_orphaned_background_jobs(bufnr)
+      local count = executor.resolve_orphaned_jobs(bufnr)
       assert.equals(0, count)
 
       buffer_state.pending_executions = nil

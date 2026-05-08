@@ -17,7 +17,7 @@ local notify = require("flemma.notify")
 ---| "request:sending"
 ---| "request:finished"
 ---| "tool:executing"
----| "tool:finished"
+---| "tool:completed"
 ---| "boot:complete"
 ---| "sink:created"
 ---| "sink:destroyed"
@@ -39,7 +39,7 @@ local notify = require("flemma.notify")
 ---@field tool_name string
 ---@field tool_id string
 
----@class flemma.hooks.ToolFinishedData
+---@class flemma.hooks.ToolCompletedData
 ---@field bufnr integer
 ---@field tool_name string
 ---@field tool_id string
@@ -104,7 +104,7 @@ end
 ---@overload fun(name: "request:sending", data: flemma.hooks.RequestSendingData)
 ---@overload fun(name: "request:finished", data: flemma.hooks.RequestFinishedData)
 ---@overload fun(name: "tool:executing", data: flemma.hooks.ToolExecutingData)
----@overload fun(name: "tool:finished", data: flemma.hooks.ToolFinishedData)
+---@overload fun(name: "tool:completed", data: flemma.hooks.ToolCompletedData)
 ---@overload fun(name: "boot:complete", data?: flemma.hooks.BootCompleteData)
 ---@overload fun(name: "sink:created", data: flemma.hooks.SinkCreatedData)
 ---@overload fun(name: "sink:destroyed", data: flemma.hooks.SinkDestroyedData)

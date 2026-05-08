@@ -1399,7 +1399,7 @@ function M._run_send_pipeline(bufnr, opts)
           log.debug(
             "send_to_provider(): post-response autopilot state="
               .. ap_state
-              .. " has_bg_completions="
+              .. " has_job_completions="
               .. tostring(executor.has_job_completions(bufnr))
           )
           if ap_state == "idle" then

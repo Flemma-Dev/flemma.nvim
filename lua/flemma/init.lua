@@ -242,7 +242,7 @@ M.setup = function(user_opts)
     callback = function(ev)
       vim.schedule(function()
         if vim.api.nvim_buf_is_valid(ev.buf) then
-          local count = executor.scan_orphaned_background_jobs(ev.buf)
+          local count = executor.resolve_orphaned_jobs(ev.buf)
           if count > 0 then
             notify.info(count .. " orphaned job(s) resolved.")
           end

@@ -57,7 +57,7 @@ vim.api.nvim_create_autocmd("User", {
 
 vim.api.nvim_create_autocmd("User", {
   group = augroup,
-  pattern = { "FlemmaRequestFinished", "FlemmaToolFinished" },
+  pattern = { "FlemmaRequestFinished", "FlemmaToolCompleted" },
   callback = function(ev)
     if not ev.data or not ev.data.bufnr then
       return

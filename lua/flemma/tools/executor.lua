@@ -42,7 +42,7 @@ local JOB_ID_LENGTH = 8
 ---@field placeholder_modified boolean
 ---@field job_id string|nil Background job ID; presence implies this is a background execution
 
----@class flemma.tools.JobCompletion
+---@class flemma.tools.JobDelivery
 ---@field job_id string
 ---@field tool_id string
 ---@field tool_name string
@@ -71,13 +71,13 @@ end
 
 ---Get or initialize the completion queue for a buffer.
 ---@param bufnr integer
----@return flemma.tools.JobCompletion[]
-local function get_completion_queue(bufnr)
+---@return flemma.tools.JobDelivery[]
+local function get_delivery_queue(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
-  if not buffer_state.completion_queue then
-    buffer_state.completion_queue = {}
+  if not buffer_state.delivery_queue then
+    buffer_state.delivery_queue = {}
   end
-  return buffer_state.completion_queue
+  return buffer_state.delivery_queue
 end
 
 ---Generate a random unique background job identifier (e.g. "bg_k7x2m").
@@ -94,9 +94,9 @@ end
 
 ---Enqueue a completed job result for later delivery.
 ---@param bufnr integer
----@param item flemma.tools.JobCompletion
+---@param item flemma.tools.JobDelivery
 function M.enqueue_job_completion(bufnr, item)
-  local queue = get_completion_queue(bufnr)
+  local queue = get_delivery_queue(bufnr)
   item.completed_at = item.completed_at or os.time()
   table.insert(queue, item)
 end
@@ -106,17 +106,17 @@ end
 ---@return boolean
 function M.has_job_completions(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
-  local queue = buffer_state.completion_queue
+  local queue = buffer_state.delivery_queue
   return queue ~= nil and #queue > 0
 end
 
 ---Drain and return all queued job completions in FIFO order.
 ---@param bufnr integer
----@return flemma.tools.JobCompletion[]
+---@return flemma.tools.JobDelivery[]
 function M.drain_job_completions(bufnr)
   local buffer_state = state.get_buffer_state(bufnr)
-  local queue = buffer_state.completion_queue or {}
-  buffer_state.completion_queue = {}
+  local queue = buffer_state.delivery_queue or {}
+  buffer_state.delivery_queue = {}
   return queue
 end
 
@@ -236,7 +236,7 @@ local function do_completion(bufnr, tool_id, result, opts)
       tool_name = entry.tool_name,
       result = result,
     })
-    hooks.dispatch("tool:finished", {
+    hooks.dispatch("tool:completed", {
       bufnr = bufnr,
       tool_name = entry.tool_name,
       tool_id = tool_id,
@@ -283,7 +283,7 @@ local function do_completion(bufnr, tool_id, result, opts)
     log.error("executor: Failed to inject result for " .. tool_id .. ": " .. (err or "unknown"))
   end
 
-  hooks.dispatch("tool:finished", {
+  hooks.dispatch("tool:completed", {
     bufnr = bufnr,
     tool_name = entry and entry.tool_name or "unknown",
     tool_id = tool_id,
@@ -841,10 +841,10 @@ function M.background_at_cursor(bufnr)
   return true, nil
 end
 
----Scan for orphaned job tool_results and inject error completion blocks.
+---Resolve orphaned job results by injecting error blocks.
 ---@param bufnr integer
 ---@return integer count Number of orphans resolved
-function M.scan_orphaned_background_jobs(bufnr)
+function M.resolve_orphaned_jobs(bufnr)
   log.debug("executor: scanning for orphaned background jobs in buffer " .. bufnr)
   local doc = parser.get_parsed_document(bufnr)
 
@@ -1043,7 +1043,7 @@ end)
 ---@param tool_id string
 ---@param result flemma.tools.ExecutionResult
 ---@param opts? { async?: boolean }
-function M._test_do_completion(bufnr, tool_id, result, opts)
+function M._test_complete_execution(bufnr, tool_id, result, opts)
   do_completion(bufnr, tool_id, result, opts)
 end
 

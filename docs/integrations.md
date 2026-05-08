@@ -186,7 +186,7 @@ The module listens to four Flemma hooks via User autocmds:
 | `FlemmaRequestSending`  | Increment busy counter |
 | `FlemmaToolExecuting`   | Increment busy counter |
 | `FlemmaRequestFinished` | Decrement busy counter |
-| `FlemmaToolFinished`    | Decrement busy counter |
+| `FlemmaToolCompleted`   | Decrement busy counter |
 
 A buffer shows the busy icon while its counter is above zero. This handles overlapping request and tool lifecycles naturally. When a buffer is wiped, its counter is cleared.
 

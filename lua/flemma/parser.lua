@@ -20,7 +20,7 @@ local post_parse_hook = nil
 local TOOL_USE_PATTERN = "^%*%*Tool Use:%*%*%s*`([^`]+)`%s*%(`([^)]+)`%)"
 local TOOL_RESULT_PATTERN = "^%*%*Tool Result:%*%*%s*`([^`]+)`(.*)$"
 local JOB_RESULT_PATTERN = "^%*%*Job Result:%*%*%s*`([^`]+)`(.*)$"
-local TOOL_RESULT_SUFFIX_PATTERN = "^%s*%((.*)%)%s*$"
+local RESULT_SUFFIX_PATTERN = "^%s*%((.*)%)%s*$"
 local ABORTED_PATTERN = "^<!%-%-%s*flemma:aborted:%s*(.-)%s*%-%->$"
 
 ---@type table<string, flemma.ast.ToolStatus>
@@ -117,7 +117,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
     local job_result_id, job_result_raw_suffix = line:match(JOB_RESULT_PATTERN)
     if job_result_id then
       flush_accum()
-      local job_result_suffix_inner = job_result_raw_suffix and job_result_raw_suffix:match(TOOL_RESULT_SUFFIX_PATTERN)
+      local job_result_suffix_inner = job_result_raw_suffix and job_result_raw_suffix:match(RESULT_SUFFIX_PATTERN)
       local job_result_tokens = job_result_suffix_inner and modeline.parse(job_result_suffix_inner) or nil
       local job_result_status, job_result_meta = extract_status(job_result_tokens)
       local job_result_start_line = current_line_num
@@ -155,7 +155,7 @@ local function parse_user_segments(lines, base_line_num, diagnostics)
       local tool_use_id, raw_suffix = line:match(TOOL_RESULT_PATTERN)
       if tool_use_id then
         flush_accum()
-        local suffix_inner = raw_suffix and raw_suffix:match(TOOL_RESULT_SUFFIX_PATTERN)
+        local suffix_inner = raw_suffix and raw_suffix:match(RESULT_SUFFIX_PATTERN)
         local suffix_tokens = suffix_inner and modeline.parse(suffix_inner) or nil
         local result_status, result_meta = extract_status(suffix_tokens)
         local result_start_line = current_line_num

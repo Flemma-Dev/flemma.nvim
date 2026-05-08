@@ -258,7 +258,7 @@ describe("executor background filtering", function()
         },
       }
 
-      executor._test_do_completion(bufnr, "tool_01", { success = true, output = "hello world" })
+      executor._test_complete_execution(bufnr, "tool_01", { success = true, output = "hello world" })
 
       assert.is_true(executor.has_job_completions(bufnr))
       local items = executor.drain_job_completions(bufnr)
@@ -319,7 +319,7 @@ describe("executor background filtering", function()
         drain_called_with = b
       end
 
-      executor._test_do_completion(bufnr, "tool_drain", { success = true, output = "done" })
+      executor._test_complete_execution(bufnr, "tool_drain", { success = true, output = "done" })
 
       vim.wait(100, function()
         return drain_called_with ~= nil

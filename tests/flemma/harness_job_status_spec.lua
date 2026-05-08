@@ -104,7 +104,7 @@ describe("flemma:job_status", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
       local buffer_state = state.get_buffer_state(bufnr)
       buffer_state.pending_executions = {}
-      buffer_state.completion_queue = {
+      buffer_state.delivery_queue = {
         {
           job_id = "bg_queue1",
           tool_id = "tool_q1",
@@ -136,7 +136,7 @@ describe("flemma:job_status", function()
       })
       local buffer_state = state.get_buffer_state(bufnr)
       buffer_state.pending_executions = {}
-      buffer_state.completion_queue = {}
+      buffer_state.delivery_queue = {}
 
       local result = execute({ job_id = "bg_done1" }, make_ctx(bufnr))
       assert.is_true(result.success)
@@ -155,7 +155,7 @@ describe("flemma:job_status", function()
       })
       local buffer_state = state.get_buffer_state(bufnr)
       buffer_state.pending_executions = {}
-      buffer_state.completion_queue = {}
+      buffer_state.delivery_queue = {}
 
       local result = execute({ job_id = "bg_undone1" }, make_ctx(bufnr))
       assert.is_true(result.success)
@@ -190,7 +190,7 @@ describe("flemma:job_status", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
-    it("checks pending_executions before completion_queue", function()
+    it("checks pending_executions before delivery_queue", function()
       local bufnr = vim.api.nvim_create_buf(false, true)
       local buffer_state = state.get_buffer_state(bufnr)
       buffer_state.pending_executions = {
@@ -206,7 +206,7 @@ describe("flemma:job_status", function()
           job_id = "bg_both",
         },
       }
-      buffer_state.completion_queue = {
+      buffer_state.delivery_queue = {
         {
           job_id = "bg_both",
           tool_id = "tool_both",
