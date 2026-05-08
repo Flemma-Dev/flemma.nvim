@@ -352,16 +352,48 @@ local function parse_conceal_override(value)
   return { level = tonumber(level_str), cursor = cursor_chars or "" }
 end
 
+---Re-open frontmatter fold if auto-closed after a conceallevel change.
+---When conceallevel drops to 0, the frontmatter fold rule starts emitting
+---fold entries (it suppresses them at conceallevel >= 1 because Neovim's
+---`conceal_lines` hides the fold placeholder). The OptionSet autocmd
+---invalidates the fold map, and the newly created level-2 frontmatter fold
+---auto-closes. Re-opening it keeps the transition transparent.
+---@param bufnr integer
+---@param winid integer
+local function reopen_frontmatter_fold(bufnr, winid)
+  local doc = parser.get_parsed_document(bufnr)
+  if doc.frontmatter then
+    local fm_start = doc.frontmatter.position.start_line
+    local closed = vim.fn.foldclosed(fm_start)
+    if closed ~= -1 then
+      vim.api.nvim_win_call(winid, function()
+        vim.cmd(fm_start .. "foldopen")
+      end)
+    end
+  end
+end
+
+---Set conceallevel for the current window. Returns false if `editing.conceal`
+---is unset/false (no-op).
+---@param level integer
+---@return boolean applied
+local function set_conceal_level(level)
+  local winid = vim.api.nvim_get_current_win()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local cfg = config_facade.get(bufnr)
+  local parsed = cfg and cfg.editing and parse_conceal_override(cfg.editing.conceal)
+  if not parsed then
+    return false
+  end
+  vim.api.nvim_set_option_value("conceallevel", level, { win = winid, scope = "local" })
+  if level == 0 then
+    reopen_frontmatter_fold(bufnr, winid)
+  end
+  return true
+end
+
 ---Toggle conceallevel between 0 and the configured level for the current
 ---window. No-op when `editing.conceal` is unset or false.
----
----When toggling from the configured level down to 0, the frontmatter fold
----rule starts emitting fold entries (it suppresses them at conceallevel >= 1
----because Neovim's `conceal_lines` hides the fold placeholder). The
----OptionSet autocmd invalidates the fold map, and because the window's
----foldlevel is typically 1, the newly created level-2 frontmatter fold
----auto-closes — collapsing the block under the cursor. We re-open it
----after the toggle so the transition feels transparent.
 function M.toggle_conceal()
   local winid = vim.api.nvim_get_current_win()
   local bufnr = vim.api.nvim_get_current_buf()
@@ -372,23 +404,28 @@ function M.toggle_conceal()
   end
   local current = vim.api.nvim_get_option_value("conceallevel", { win = winid, scope = "local" })
   if current == parsed.level then
-    vim.api.nvim_set_option_value("conceallevel", 0, { win = winid, scope = "local" })
-    -- The OptionSet autocmd has already fired synchronously, rebuilding the
-    -- fold map. The frontmatter fold (level 2) was just created and auto-closed
-    -- by foldlevel. Re-open it so the toggle doesn't collapse the block.
-    local doc = parser.get_parsed_document(bufnr)
-    if doc.frontmatter then
-      local fm_start = doc.frontmatter.position.start_line
-      local closed = vim.fn.foldclosed(fm_start)
-      if closed ~= -1 then
-        vim.api.nvim_win_call(winid, function()
-          vim.cmd(fm_start .. "foldopen")
-        end)
-      end
-    end
+    set_conceal_level(0)
   else
-    vim.api.nvim_set_option_value("conceallevel", parsed.level, { win = winid, scope = "local" })
+    set_conceal_level(parsed.level)
   end
+end
+
+---Enable conceal (set to configured level). No-op when `editing.conceal` is
+---unset or false.
+function M.enable_conceal()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local cfg = config_facade.get(bufnr)
+  local parsed = cfg and cfg.editing and parse_conceal_override(cfg.editing.conceal)
+  if not parsed then
+    return
+  end
+  set_conceal_level(parsed.level)
+end
+
+---Disable conceal (set conceallevel to 0). No-op when `editing.conceal` is
+---unset or false.
+function M.disable_conceal()
+  set_conceal_level(0)
 end
 
 ---Apply window-local settings for a chat buffer displayed in a window.

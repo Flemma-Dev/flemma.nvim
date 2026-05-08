@@ -137,21 +137,21 @@ M.setup = function()
           end
         end
 
-        -- Conceal toggle keymap (skip when the key starts with mapleader,
-        -- or when editing.conceal is not configured)
-        local conceal_toggle_key = config.keymaps.normal.conceal_toggle
-        if conceal_toggle_key then
-          local leader = vim.g.mapleader or "\\"
-          if not vim.startswith(vim.keycode(conceal_toggle_key), vim.keycode(leader)) then
-            local cfg = config_facade.get()
-            local has_conceal = cfg and cfg.editing and cfg.editing.conceal ~= nil and cfg.editing.conceal ~= false
-            if has_conceal then
-              vim.keymap.set(
-                "n",
-                conceal_toggle_key,
-                ui.toggle_conceal,
-                { buffer = true, desc = "Toggle conceal level" }
-              )
+        -- Conceal keymaps (toggle / on / off) — only when editing.conceal is configured
+        local cfg_for_conceal = config_facade.get()
+        local has_conceal = cfg_for_conceal
+          and cfg_for_conceal.editing
+          and cfg_for_conceal.editing.conceal ~= nil
+          and cfg_for_conceal.editing.conceal ~= false
+        if has_conceal then
+          local conceal_maps = {
+            { key = config.keymaps.normal.conceal_toggle, fn = ui.toggle_conceal, desc = "Toggle conceal level" },
+            { key = config.keymaps.normal.conceal_on, fn = ui.enable_conceal, desc = "Enable conceal" },
+            { key = config.keymaps.normal.conceal_off, fn = ui.disable_conceal, desc = "Disable conceal" },
+          }
+          for _, m in ipairs(conceal_maps) do
+            if m.key then
+              vim.keymap.set("n", m.key, m.fn, { buffer = true, desc = m.desc })
             end
           end
         end

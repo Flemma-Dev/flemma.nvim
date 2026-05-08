@@ -172,6 +172,8 @@
 
 ---@class flemma.config.KeymapsNormal
 ---@field cancel string
+---@field conceal_off string|false
+---@field conceal_on string|false
 ---@field conceal_toggle string|false
 ---@field fold_toggle string|false
 ---@field message_next string
