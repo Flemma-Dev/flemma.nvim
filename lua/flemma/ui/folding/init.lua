@@ -336,11 +336,12 @@ function M.get_fold_text()
       local tool_info = tool_use_index[tool_seg.tool_use_id]
       local tool_name = tool_info and tool_info.name or "result"
       local tool_label = tool_info and tool_info.label
+      local effective_status = query.effective_tool_result_status(tool_seg, doc)
 
       local icon_hl = "FlemmaToolIcon"
-      if tool_seg.status == "error" then
+      if effective_status == "error" then
         icon_hl = "FlemmaToolIconError"
-      elseif not tool_seg.status and tool_seg.content ~= "" then
+      elseif not effective_status and tool_seg.content ~= "" then
         icon_hl = "FlemmaToolIconSuccess"
       end
 
@@ -357,14 +358,14 @@ function M.get_fold_text()
         + str.strwidth(": ")
         + str.strwidth(" ") -- trailing space before suffix
         + str.strwidth(suffix)
-      if tool_seg.status == "error" then
+      if effective_status == "error" then
         fixed_chrome = fixed_chrome + str.strwidth("(error) ")
       end
       local result_separator_width = str.strwidth(LABEL_DETAIL_SEPARATOR)
       local available = text_width - fixed_chrome
 
       table.insert(chunks, { ": ", "FlemmaFoldPreview" })
-      if tool_seg.status == "error" then
+      if effective_status == "error" then
         table.insert(chunks, { "(error) ", "FlemmaToolResultError" })
       end
 

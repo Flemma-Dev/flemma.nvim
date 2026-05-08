@@ -868,14 +868,18 @@ function M.resolve_orphaned_jobs(bufnr)
     end
   end
 
+  ---@type { job_id: string, tool_use_id: string }[]
   local orphans = {}
   for _, msg in ipairs(doc.messages) do
     for _, seg in ipairs(msg.segments) do
       if seg.kind == "tool_result" and seg.meta and seg.meta.job then
         ---@cast seg flemma.ast.ToolResultSegment
-        local job_id = seg.meta.job
+        local job_id = seg.meta.job --[[@as string]]
         if not completed_jobs[job_id] and not active_jobs[job_id] then
-          table.insert(orphans, job_id)
+          table.insert(orphans, {
+            job_id = job_id,
+            tool_use_id = seg.tool_use_id,
+          })
         end
       end
     end
@@ -887,9 +891,10 @@ function M.resolve_orphaned_jobs(bufnr)
     log.trace("executor: no orphaned background jobs in buffer " .. bufnr)
   end
 
-  for _, job_id in ipairs(orphans) do
-    log.debug("executor: resolving orphan " .. job_id .. " with error completion")
-    injector.append_job_result(bufnr, job_id, {
+  for _, orphan in ipairs(orphans) do
+    log.debug("executor: resolving orphan " .. orphan.job_id .. " with error completion")
+    injector.set_header_modeline(bufnr, orphan.tool_use_id, "error job=" .. orphan.job_id)
+    injector.append_job_result(bufnr, orphan.job_id, {
       success = false,
       error = "Job lost: session ended before completion.",
     })

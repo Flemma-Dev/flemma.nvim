@@ -66,6 +66,25 @@ function M.find_message_at_line(doc, lnum)
   return nil
 end
 
+---Resolve the effective status of a tool_result segment.
+---For tool_results linked to a job (meta.job), inherits the job's error
+---status when the job_result has been delivered to the buffer.
+---@param seg flemma.ast.ToolResultSegment
+---@param doc flemma.ast.DocumentNode
+---@return flemma.ast.ToolStatus|nil
+function M.effective_tool_result_status(seg, doc)
+  if seg.status then
+    return seg.status
+  end
+  if seg.meta and seg.meta.job then
+    local job_seg = M.find_job_result(doc, seg.meta.job --[[@as string]])
+    if job_seg and job_seg.status then
+      return job_seg.status
+    end
+  end
+  return nil
+end
+
 ---@class flemma.ast.ToolUseInfo
 ---@field name string Tool name
 ---@field label? string Human-readable label from input.label, if present

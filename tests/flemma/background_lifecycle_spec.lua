@@ -34,6 +34,7 @@ describe("background lifecycle", function()
       local joined = table.concat(lines, "\n")
       assert.truthy(joined:match("%*%*Job Result:%*%*%s*`job_lost1`%s*%(error%)"))
       assert.truthy(joined:match("Job lost: session ended before completion"))
+      assert.truthy(joined:match("%*%*Tool Result:%*%*%s*`tool_01`%s*%(error job=job_lost1%)"))
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 

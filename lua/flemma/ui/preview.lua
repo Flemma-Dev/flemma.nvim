@@ -436,6 +436,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       local tool_info = tool_use_index and tool_use_index[result_seg.tool_use_id]
       local tool_name = tool_info and tool_info.name or "result"
       local tool_label = tool_info and tool_info.label
+      local effective_status = doc and query.effective_tool_result_status(result_seg, doc) or result_seg.status
       local width_for_result = available - remainder_reserve
       if width_for_result < MIN_TOOL_PREVIEW_WIDTH then
         add_overflow(#entries - i + 1)
@@ -443,7 +444,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       end
       local name_result_width = str.strwidth(tool_name)
       local prefix_width = name_result_width + #": "
-      if result_seg.status == "error" then
+      if effective_status == "error" then
         prefix_width = prefix_width + #"(error) "
       end
 
@@ -453,7 +454,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
       table.insert(entry_chunks, { ": ", "FlemmaFoldPreview" })
       entry_width = entry_width + #": "
 
-      if result_seg.status == "error" then
+      if effective_status == "error" then
         table.insert(entry_chunks, { "(error) ", "FlemmaToolResultError" })
         entry_width = entry_width + #"(error) "
       end
@@ -482,7 +483,7 @@ function M.format_message_fold_preview(msg, max_length, doc, content_hl)
           entry_width = entry_width + str.strwidth(label_text)
         end
       else
-        if body ~= "" or result_seg.status == "error" then
+        if body ~= "" or effective_status == "error" then
           if body ~= "" then
             table.insert(entry_chunks, { body, "FlemmaFoldPreview" })
             entry_width = entry_width + str.strwidth(body)
