@@ -105,6 +105,17 @@ local function drain_and_inject_completions(bufnr)
     ui.update_ui(bufnr)
   end
 
+  -- Insert mode in the target buffer means the user intends to type, even if
+  -- the @You block is still empty (case 1). Without this guard, autopilot
+  -- would lock the buffer while the user is mid-keystroke → E21.
+  if not user_is_typing and vim.fn.bufwinid(bufnr) == vim.api.nvim_get_current_win() then
+    local mode = vim.fn.mode()
+    if mode == "i" or mode == "R" then
+      user_is_typing = true
+      log.debug("drain_and_inject_completions(): user is in insert mode, treating as typing")
+    end
+  end
+
   return #items, not user_is_typing
 end
 

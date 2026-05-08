@@ -167,4 +167,91 @@ describe("job completion drain", function()
 
     vim.api.nvim_clear_autocmds({ pattern = "FlemmaJobCompleted" })
   end)
+
+  it("does not auto-continue when user is in insert mode in an empty @You block", function()
+    -- Reproduces the E21 bug: user enters insert mode in the empty @You prompt,
+    -- hasn't typed anything yet. A background job completes and gets injected
+    -- as case 1 (empty @You). Without the insert-mode guard, safe=true and
+    -- autopilot schedules send_or_execute, which locks the buffer while the
+    -- user is still in insert mode → E21: Cannot make changes.
+    package.loaded["flemma"] = nil
+    package.loaded["flemma.core"] = nil
+    package.loaded["flemma.tools.executor"] = nil
+    package.loaded["flemma.tools.injector"] = nil
+    package.loaded["flemma.state"] = nil
+    package.loaded["flemma.bridge"] = nil
+    package.loaded["flemma.autopilot"] = nil
+    package.loaded["flemma.config"] = nil
+    package.loaded["flemma.config.store"] = nil
+    package.loaded["flemma.config.proxy"] = nil
+    package.loaded["flemma.config.schema"] = nil
+    package.loaded["flemma.ui"] = nil
+    package.loaded["flemma.ui.folding"] = nil
+    package.loaded["flemma.parser"] = nil
+
+    local flemma = require("flemma")
+    flemma.setup({ tools = { autopilot = { enabled = true } } })
+    local executor = require("flemma.tools.executor")
+    local bridge = require("flemma.bridge")
+
+    local bufnr = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+      "@Assistant:",
+      "Done.",
+      "",
+      "@You:",
+      "",
+    })
+    vim.bo[bufnr].filetype = "chat"
+
+    -- Display the buffer in a window so bufwinid() returns a valid window
+    vim.cmd("new")
+    vim.api.nvim_set_current_buf(bufnr)
+
+    -- Enqueue a job completion
+    executor.enqueue_job_completion(bufnr, {
+      job_id = "job_insert1",
+      tool_id = "tool_01",
+      tool_name = "bash",
+      result = { success = true, output = "hello world" },
+    })
+
+    -- Simulate insert mode. Plenary's headless runner cannot sustain real
+    -- insert mode across Lua calls, so we stub vim.fn.mode() for the
+    -- duration of the drain call.
+    local real_mode = vim.fn.mode
+    vim.fn.mode = function()
+      return "i"
+    end
+
+    -- Intercept send_or_execute to detect if autopilot tried to auto-continue.
+    local core = require("flemma.core")
+    local send_called = false
+    local real_send = core.send_or_execute
+    core.send_or_execute = function(...)
+      send_called = true
+      return real_send(...)
+    end
+
+    -- Trigger drain — this is the real code path from executor → bridge → core
+    bridge.drain_job_completions(bufnr)
+
+    vim.fn.mode = real_mode
+
+    -- The job result should be injected into the buffer
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local joined = table.concat(lines, "\n")
+    assert.truthy(joined:match("%*%*Job Result:%*%*%s*`job_insert1`"), "Job result should be in the buffer")
+
+    -- Allow any scheduled callbacks (the auto-continue vim.schedule) to fire
+    vim.wait(50, function()
+      return send_called
+    end)
+
+    -- Critical: send_or_execute must NOT have been called. If it was, the
+    -- buffer would have been locked while the user was in insert mode → E21.
+    assert.is_false(send_called, "Autopilot must not auto-continue when user is in insert mode")
+
+    core.send_or_execute = real_send
+  end)
 end)
