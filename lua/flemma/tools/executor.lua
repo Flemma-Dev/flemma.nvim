@@ -836,8 +836,9 @@ function M.background_at_cursor(bufnr)
   ui.update_ui(bufnr)
   log.info("executor: backgrounded tool " .. ctx.tool_id .. " as " .. job_id)
 
-  if M.count_running(bufnr) == 0 then
-    log.debug("executor: all foreground tools clear after backgrounding, scheduling send for buffer " .. bufnr)
+  local ap_state = autopilot.get_state(bufnr)
+  if M.count_running(bufnr) == 0 and ap_state ~= "sending" then
+    log.debug("executor: all foreground tools clear after backgrounding (autopilot=" .. ap_state .. "), scheduling send for buffer " .. bufnr)
     vim.schedule(function()
       if vim.api.nvim_buf_is_valid(bufnr) then
         bridge.send_or_execute({ bufnr = bufnr })

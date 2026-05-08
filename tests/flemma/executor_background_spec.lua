@@ -553,6 +553,71 @@ describe("executor background filtering", function()
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
 
+    it("does not double-schedule send_or_execute when autopilot is armed", function()
+      local executor = require("flemma.tools.executor")
+      local bridge = require("flemma.bridge")
+      local autopilot = require("flemma.autopilot")
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "@Assistant:",
+        "**Tool Use:** `bash` (`tool_bg`)",
+        "",
+        "```json",
+        '{"command": "sleep 60"}',
+        "```",
+        "",
+        "@You:",
+        "**Tool Result:** `tool_bg`",
+        "",
+        "```",
+        "```",
+      })
+      vim.bo[bufnr].filetype = "chat"
+
+      local buffer_state = state.get_buffer_state(bufnr)
+      buffer_state.pending_executions = {
+        ["tool_bg"] = {
+          tool_id = "tool_bg",
+          tool_name = "bash",
+          bufnr = bufnr,
+          start_line = 2,
+          end_line = 6,
+          cancel_fn = function() end,
+          started_at = 0,
+          completed = false,
+          placeholder_modified = true,
+        },
+      }
+
+      autopilot.set_enabled(true)
+      autopilot.arm(bufnr)
+
+      local send_call_count = 0
+      local original_send = bridge.send_or_execute
+      bridge.send_or_execute = function(opts)
+        if opts and opts.bufnr == bufnr then
+          send_call_count = send_call_count + 1
+        end
+      end
+
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.api.nvim_win_set_cursor(0, { 9, 0 })
+
+      local ok, err = executor.background_at_cursor(bufnr)
+      assert.is_true(ok, err)
+
+      vim.wait(100, function()
+        return send_call_count > 0
+      end)
+
+      assert.equals(1, send_call_count, "send_or_execute should be scheduled exactly once, got " .. send_call_count)
+
+      bridge.send_or_execute = original_send
+      autopilot.disarm(bufnr)
+      buffer_state.pending_executions = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
     it("rolls back header metadata when content update fails", function()
       local executor = require("flemma.tools.executor")
       local injector = require("flemma.tools.injector")
