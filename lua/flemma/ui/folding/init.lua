@@ -709,14 +709,19 @@ function M.fold_completed_blocks(bufnr)
     log.debug("fold_completed_blocks(): Auto-closed " .. #new_folds .. " fold(s) in buffer " .. bufnr)
   end
 
-  -- When folds fail because foldexpr hasn't been re-evaluated yet (newly
-  -- inserted lines have foldlevel=0), schedule a single deferred retry so
-  -- they close after Vim processes the pending redraw.
+  -- When folds fail because foldexpr hasn't been fully evaluated yet
+  -- (newly inserted lines lack fold boundaries), schedule a single
+  -- deferred retry. The :redraw forces Vim to evaluate foldexpr for all
+  -- visible lines, establishing the fold boundaries that :foldclose needs.
   if buffer_state.pending_folds and not buffer_state.pending_folds_retried then
     buffer_state.pending_folds_retried = true
     vim.schedule(function()
       if not vim.api.nvim_buf_is_valid(bufnr) then
         return
+      end
+      local retry_winid = vim.fn.bufwinid(bufnr)
+      if retry_winid ~= -1 then
+        vim.fn.win_execute(retry_winid, "redraw")
       end
       M.fold_completed_blocks(bufnr)
     end)
