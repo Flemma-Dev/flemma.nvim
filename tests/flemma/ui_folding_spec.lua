@@ -1426,6 +1426,143 @@ describe("UI Folding", function()
       )
     end)
 
+    it("should return chunk list for folded job_result block", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "",
+        "**Job Result:** `job_abc12`",
+        "",
+        "```",
+        "file1.txt",
+        "file2.txt",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      vim.cmd("3,8 foldclose")
+
+      vim.v.foldstart = 3
+      vim.v.foldend = 8
+      local chunks = folding.get_fold_text()
+
+      assert.is_table(chunks, "get_fold_text should return a table of chunks")
+
+      local text = chunks_to_string(chunks)
+      assert.is_truthy(text:match("Job Result: "), "Fold text should contain 'Job Result: '")
+      assert.is_truthy(text:match("job_abc12"), "Fold text should contain job ID")
+      assert.is_truthy(text:match("file1%.txt"), "Fold text should preview result content")
+
+      local icon_chunk = find_chunk(chunks, "⬢")
+      assert.is_not_nil(icon_chunk, "Should have job_result icon chunk")
+      assert.are.equal("FlemmaToolIconSuccess", icon_chunk[2])
+
+      local title_chunk = find_chunk(chunks, "Job Result:")
+      assert.is_not_nil(title_chunk, "Should have title chunk")
+      assert.are.equal("FlemmaJobResultTitle", title_chunk[2])
+
+      local id_chunk = find_chunk(chunks, "job_abc12")
+      assert.is_not_nil(id_chunk, "Should have job ID chunk")
+      assert.are.equal("FlemmaToolName", id_chunk[2])
+    end)
+
+    it("should use FlemmaToolIconError for error job_result fold text", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@You:",
+        "",
+        "**Job Result:** `job_abc12` (error)",
+        "",
+        "```",
+        "Job lost: session ended",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      vim.cmd("3,7 foldclose")
+
+      vim.v.foldstart = 3
+      vim.v.foldend = 7
+      local chunks = folding.get_fold_text()
+
+      local icon_chunk = find_chunk(chunks, "⬢")
+      assert.is_not_nil(icon_chunk, "Should have job_result icon chunk")
+      assert.are.equal("FlemmaToolIconError", icon_chunk[2])
+
+      local error_chunk = find_chunk(chunks, "%(error%)")
+      assert.is_not_nil(error_chunk, "Should have error marker chunk")
+      assert.are.equal("FlemmaToolResultError", error_chunk[2])
+    end)
+
+    it("should propagate job_result error to linked tool_result fold icon", function()
+      local bufnr = vim.api.nvim_create_buf(false, false)
+      vim.bo[bufnr].filetype = "chat"
+
+      local lines = {
+        "@Assistant:",
+        "**Tool Use:** `bash` (`toolu_01`)",
+        "```json",
+        '{"command": "sleep 999"}',
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Tool Result:** `toolu_01` (job=job_err1)",
+        "",
+        "```",
+        "Running in background.",
+        "```",
+        "",
+        "@You:",
+        "",
+        "**Job Result:** `job_err1` (error)",
+        "",
+        "```",
+        "Job failed: timeout",
+        "```",
+      }
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+      vim.cmd("new")
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require('flemma.ui.folding').get_fold_level(v:lnum)"
+      vim.wo.foldtext = "v:lua.require('flemma.ui.folding').get_fold_text()"
+      vim.wo.foldlevel = 99
+
+      vim.cmd("9,13 foldclose")
+
+      vim.v.foldstart = 9
+      vim.v.foldend = 13
+      local chunks = folding.get_fold_text()
+
+      local icon_chunk = find_chunk(chunks, "⬢")
+      assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
+      assert.are.equal("FlemmaToolIconError", icon_chunk[2], "Should propagate error from linked job_result")
+
+      local error_chunk = find_chunk(chunks, "%(error%)")
+      assert.is_not_nil(error_chunk, "Should have (error) prefix from effective status")
+      assert.are.equal("FlemmaToolResultError", error_chunk[2])
+    end)
+
     it("should return chunk list for folded message", function()
       local bufnr = vim.api.nvim_create_buf(false, false)
       vim.bo[bufnr].filetype = "chat"

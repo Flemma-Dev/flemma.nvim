@@ -575,4 +575,113 @@ describe("Tool Indicator Extmark Placement", function()
       indicators.clear_all_tool_indicators(bufnr)
     end)
   end)
+
+  describe("job result indicators", function()
+    it("show_job_result_indicator creates success extmarks", function()
+      local bufnr = create_buffer({
+        "@You:",
+        "**Job Result:** `job_abc12`",
+        "",
+        "```",
+        "result content",
+        "```",
+      })
+
+      indicators.show_job_result_indicator(bufnr, "job_abc12", 2, true)
+
+      local parts = get_extmark_parts(bufnr, 1)
+      assert.is_not_nil(parts.prefix, "Should have inline prefix extmark")
+      assert.is_truthy(parts.prefix:match("⬢"), "Prefix should be ⬢ dot")
+      assert.are.equal("FlemmaToolIconSuccess", parts.prefix_hl)
+      assert.is_not_nil(parts.eol, "Should have EOL status extmark")
+      assert.is_truthy(parts.eol:match("✔"), "EOL should contain ✔")
+      assert.is_truthy(parts.eol:match("Complete"), "EOL should contain Complete")
+      assert.are.equal("FlemmaToolSuccess", parts.eol_hl)
+
+      indicators.clear_all_tool_indicators(bufnr)
+    end)
+
+    it("show_job_result_indicator creates error extmarks", function()
+      local bufnr = create_buffer({
+        "@You:",
+        "**Job Result:** `job_abc12`",
+        "",
+        "```",
+        "result content",
+        "```",
+      })
+
+      indicators.show_job_result_indicator(bufnr, "job_abc12", 2, false)
+
+      local parts = get_extmark_parts(bufnr, 1)
+      assert.is_not_nil(parts.prefix, "Should have inline prefix extmark")
+      assert.is_truthy(parts.prefix:match("⬢"), "Prefix should be ⬢ dot")
+      assert.are.equal("FlemmaToolIconError", parts.prefix_hl)
+      assert.is_not_nil(parts.eol, "Should have EOL status extmark")
+      assert.is_truthy(parts.eol:match("⚠"), "EOL should contain ⚠")
+      assert.is_truthy(parts.eol:match("Failed"), "EOL should contain Failed")
+      assert.are.equal("FlemmaToolError", parts.eol_hl)
+
+      indicators.clear_all_tool_indicators(bufnr)
+    end)
+
+    it("has_indicator returns true for job_result indicator", function()
+      local bufnr = create_buffer({
+        "@You:",
+        "**Job Result:** `job_abc12`",
+        "",
+        "```",
+        "result content",
+        "```",
+      })
+
+      indicators.show_job_result_indicator(bufnr, "job_abc12", 2, true)
+
+      assert.is_true(indicators.has_indicator(bufnr, "job_abc12"))
+
+      indicators.clear_all_tool_indicators(bufnr)
+    end)
+
+    it("clear_tool_indicator removes job_result extmarks", function()
+      local bufnr = create_buffer({
+        "@You:",
+        "**Job Result:** `job_abc12`",
+        "",
+        "```",
+        "result content",
+        "```",
+      })
+
+      indicators.show_job_result_indicator(bufnr, "job_abc12", 2, true)
+      indicators.clear_tool_indicator(bufnr, "job_abc12")
+
+      local marks = vim.api.nvim_buf_get_extmarks(bufnr, tool_exec_ns, 0, -1, {})
+      assert.are.equal(0, #marks, "All extmarks should be removed")
+    end)
+
+    it("schedule_tool_indicator_clear removes job_result indicator after delay", function()
+      local bufnr = create_buffer({
+        "@You:",
+        "**Job Result:** `job_abc12`",
+        "",
+        "```",
+        "result content",
+        "```",
+      })
+
+      indicators.show_job_result_indicator(bufnr, "job_abc12", 2, true)
+      indicators.schedule_tool_indicator_clear(bufnr, "job_abc12", 10)
+
+      vim.wait(100, function()
+        return not indicators.has_indicator(bufnr, "job_abc12")
+      end, 10)
+
+      assert.is_false(indicators.has_indicator(bufnr, "job_abc12"))
+
+      local marks = vim.api.nvim_buf_get_extmarks(bufnr, tool_exec_ns, 0, -1, {})
+      assert.are.equal(0, #marks, "scheduled clear must remove both extmarks")
+
+      indicators.clear_all_tool_indicators(bufnr)
+    end)
+  end)
 end)

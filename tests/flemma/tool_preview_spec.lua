@@ -1261,6 +1261,64 @@ describe("format_message_fold_preview with tool results", function()
     assert.is_truthy(result:match("Please continue"), "Should show text")
     assert.is_truthy(result:match(" | "), "Should have pipe separator")
   end)
+
+  it("shows job_result preview in @You message", function()
+    local you_msg = make_message("You", {
+      ast.job_result("job_abc", { content = "ls output", start_line = 3, end_line = 8 }),
+    })
+    local doc = make_doc({ you_msg })
+
+    local chunks = preview_mod.format_message_fold_preview(you_msg, 80, doc, "FlemmaUser")
+    local result = chunks_to_string(chunks)
+    assert.is_truthy(result:match("ls output"), "Should show job result content")
+  end)
+
+  it("shows error marker for error job_result", function()
+    local you_msg = make_message("You", {
+      ast.job_result("job_abc", { content = "timeout", status = "error", start_line = 3, end_line = 8 }),
+    })
+    local doc = make_doc({ you_msg })
+
+    local chunks = preview_mod.format_message_fold_preview(you_msg, 80, doc, "FlemmaUser")
+    local error_chunk = find_chunk(chunks, "%(error%)")
+    assert.is_not_nil(error_chunk, "Should have error marker for error job_result")
+    assert.are.equal("FlemmaToolResultError", error_chunk[2])
+  end)
+
+  it("tool_result shows error when linked job_result has error", function()
+    local assistant_msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "sleep 999" }, { start_line = 2, end_line = 5 }),
+    })
+    local you_msg = make_message("You", {
+      ast.tool_result("t1", { content = "running", start_line = 7, end_line = 12, meta = { job = "job_err" } }),
+    })
+    local job_msg = make_message("You", {
+      ast.job_result("job_err", { status = "error", content = "failed", start_line = 14, end_line = 19 }),
+    })
+    local doc = make_doc({ assistant_msg, you_msg, job_msg })
+
+    local chunks = preview_mod.format_message_fold_preview(you_msg, 80, doc, "FlemmaUser")
+    local error_chunk = find_chunk(chunks, "%(error%)")
+    assert.is_not_nil(error_chunk, "Should propagate error from linked job_result")
+    assert.are.equal("FlemmaToolResultError", error_chunk[2])
+  end)
+
+  it("tool_result shows no error when linked job_result succeeded", function()
+    local assistant_msg = make_message("Assistant", {
+      ast.tool_use("t1", "bash", { command = "ls" }, { start_line = 2, end_line = 5 }),
+    })
+    local you_msg = make_message("You", {
+      ast.tool_result("t1", { content = "running", start_line = 7, end_line = 12, meta = { job = "job_ok" } }),
+    })
+    local job_msg = make_message("You", {
+      ast.job_result("job_ok", { content = "done", start_line = 14, end_line = 19 }),
+    })
+    local doc = make_doc({ assistant_msg, you_msg, job_msg })
+
+    local chunks = preview_mod.format_message_fold_preview(you_msg, 80, doc, "FlemmaUser")
+    local error_chunk = find_chunk(chunks, "%(error%)")
+    assert.is_nil(error_chunk, "Should NOT show error when linked job_result succeeded")
+  end)
 end)
 
 describe("multibyte display-width safety", function()
