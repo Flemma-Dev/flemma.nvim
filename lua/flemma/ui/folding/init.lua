@@ -409,7 +409,7 @@ function M.get_fold_text()
       ---@type {[1]:string, [2]:string}[]
       local chunks = {
         { TOOL_RESULT_ICON .. " ", icon_hl },
-        { "Job Result: ", "FlemmaToolResultTitle" },
+        { "Job Result: ", "FlemmaJobResultTitle" },
         { tool_seg.job_id, "FlemmaToolName" },
       }
 

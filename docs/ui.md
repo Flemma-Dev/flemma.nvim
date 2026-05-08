@@ -37,6 +37,25 @@ Configuration keys map to dedicated highlight groups:
 
 Each value accepts a highlight name, a hex colour string, or a table of highlight attributes (`{ fg = "#ffcc00", bold = true }`).
 
+### Job result highlights
+
+`**Job Result:**` headers use their own syntax groups, each linked to the corresponding tool result group by default:
+
+| Group                     | Links to                   |
+| ------------------------- | -------------------------- |
+| `FlemmaJobResultTitle`    | `FlemmaToolResultTitle`    |
+| `FlemmaJobResultError`    | `FlemmaToolResultError`    |
+| `FlemmaJobResultPending`  | `FlemmaToolResultPending`  |
+| `FlemmaJobResultApproved` | `FlemmaToolResultApproved` |
+| `FlemmaJobResultRejected` | `FlemmaToolResultRejected` |
+| `FlemmaJobResultDenied`   | `FlemmaToolResultDenied`   |
+| `FlemmaJobResultAborted`  | `FlemmaToolResultAborted`  |
+
+Override any group to style job results independently from tool results.
+
+> [!NOTE]
+> Fold text uses `FlemmaJobResultTitle` for the title, but indicators currently use the `FlemmaTool*` groups directly for both tool and job results.
+
 ## Theme-aware values
 
 Any highlight value can be theme-aware using `{ dark = ..., light = ... }`. Flemma detects `vim.o.background` and picks the matching branch:

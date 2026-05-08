@@ -440,6 +440,15 @@ M.apply_syntax = function()
   set_highlight("FlemmaToolResultAborted", syntax_config.highlights.tool_result_aborted)
   set_highlight("FlemmaToolPreview", syntax_config.highlights.tool_preview)
 
+  -- Job result syntax highlights (linked to tool result counterparts)
+  set_highlight("FlemmaJobResultTitle", { link = "FlemmaToolResultTitle", default = true })
+  set_highlight("FlemmaJobResultError", { link = "FlemmaToolResultError", default = true })
+  set_highlight("FlemmaJobResultPending", { link = "FlemmaToolResultPending", default = true })
+  set_highlight("FlemmaJobResultApproved", { link = "FlemmaToolResultApproved", default = true })
+  set_highlight("FlemmaJobResultRejected", { link = "FlemmaToolResultRejected", default = true })
+  set_highlight("FlemmaJobResultDenied", { link = "FlemmaToolResultDenied", default = true })
+  set_highlight("FlemmaJobResultAborted", { link = "FlemmaToolResultAborted", default = true })
+
   -- Set highlight for fold text segments
   set_highlight("FlemmaFoldPreview", syntax_config.highlights.fold_preview)
   set_highlight("FlemmaFoldMeta", syntax_config.highlights.fold_meta)
