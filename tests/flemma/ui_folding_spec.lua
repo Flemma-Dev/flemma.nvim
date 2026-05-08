@@ -1373,7 +1373,11 @@ describe("UI Folding", function()
 
       local icon_chunk = find_chunk(chunks, "⬢")
       assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
-      assert.are.equal("FlemmaToolIconSuccess", icon_chunk[2], "tool_result linked to successful job should show success icon")
+      assert.are.equal(
+        "FlemmaToolIconSuccess",
+        icon_chunk[2],
+        "tool_result linked to successful job should show success icon"
+      )
     end)
 
     it("should keep FlemmaToolIconSuccess for tool_result with pending job", function()
@@ -1415,7 +1419,11 @@ describe("UI Folding", function()
 
       local icon_chunk = find_chunk(chunks, "⬢")
       assert.is_not_nil(icon_chunk, "Should have tool_result icon chunk")
-      assert.are.equal("FlemmaToolIconSuccess", icon_chunk[2], "Pending job should not change icon (content is non-empty)")
+      assert.are.equal(
+        "FlemmaToolIconSuccess",
+        icon_chunk[2],
+        "Pending job should not change icon (content is non-empty)"
+      )
     end)
 
     it("should return chunk list for folded message", function()

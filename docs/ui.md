@@ -171,16 +171,16 @@ During tool execution, an animated braille spinner appears next to the `**Tool R
 
 Eight highlight groups control indicator colours — four for the inline `⬢` icon and four for the EOL status text:
 
-| Group                     | Default link            | When it's used                      |
-| ------------------------- | ----------------------- | ----------------------------------- |
-| `FlemmaToolIconPending`   | `FlemmaToolResultTitle` | Inline `⬢` on pending tools        |
+| Group                     | Default link            | When it's used                           |
+| ------------------------- | ----------------------- | ---------------------------------------- |
+| `FlemmaToolIconPending`   | `FlemmaToolResultTitle` | Inline `⬢` on pending tools              |
 | `FlemmaToolIconExecuting` | `FlemmaToolResultTitle` | _(not shown — no prefix when executing)_ |
-| `FlemmaToolIconSuccess`   | `FlemmaToolResultTitle` | Inline `⬢` + fold icon on success  |
-| `FlemmaToolIconError`     | `DiagnosticError`       | Inline `⬢` + fold icon on error    |
-| `FlemmaToolPending`       | `DiagnosticHint`        | EOL `⏸ Pending` text               |
-| `FlemmaToolExecuting`     | `DiagnosticInfo`        | EOL spinner + `Executing…` text     |
-| `FlemmaToolSuccess`       | `DiagnosticOk`          | EOL `✔ Complete` text               |
-| `FlemmaToolError`         | `DiagnosticError`       | EOL `⚠ Failed` text                |
+| `FlemmaToolIconSuccess`   | `FlemmaToolResultTitle` | Inline `⬢` + fold icon on success        |
+| `FlemmaToolIconError`     | `DiagnosticError`       | Inline `⬢` + fold icon on error          |
+| `FlemmaToolPending`       | `DiagnosticHint`        | EOL `⏸ Pending` text                    |
+| `FlemmaToolExecuting`     | `DiagnosticInfo`        | EOL spinner + `Executing…` text          |
+| `FlemmaToolSuccess`       | `DiagnosticOk`          | EOL `✔ Complete` text                   |
+| `FlemmaToolError`         | `DiagnosticError`       | EOL `⚠ Failed` text                     |
 
 By default, icon colours match the `Tool Result:` header while status text uses semantic Diagnostic colours. Override any group to customise:
 
