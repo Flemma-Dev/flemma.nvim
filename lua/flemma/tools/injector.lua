@@ -75,6 +75,31 @@ local function get_tool_results_in_message(msg)
   return results
 end
 
+--- Get all job_result segments in a message
+---@param msg flemma.ast.MessageNode
+---@return flemma.ast.JobResultSegment[]
+local function get_job_results_in_message(msg)
+  local results = {}
+  for _, seg in ipairs(msg.segments) do
+    if seg.kind == "job_result" then
+      table.insert(results, seg)
+    end
+  end
+  return results
+end
+
+--- Check whether a message contains non-whitespace user-authored text
+---@param msg flemma.ast.MessageNode
+---@return boolean
+local function message_has_user_content(msg)
+  for _, seg in ipairs(msg.segments) do
+    if seg.kind == "text" and seg.value:match("%S") then
+      return true
+    end
+  end
+  return false
+end
+
 --- Format result content into lines for buffer insertion
 --- @param result table ExecutionResult {success, output, error}
 --- @return string[] lines, boolean is_error
@@ -447,17 +472,27 @@ function M.append_job_result(bufnr, job_id, result)
   local last_msg = #doc.messages > 0 and doc.messages[#doc.messages] or nil
 
   if last_msg and roles.is_user(last_msg.role) then
-    local has_user_content = false
-    for _, seg in ipairs(last_msg.segments) do
-      if seg.kind == "text" and seg.value:match("%S") then
-        has_user_content = true
-        break
+    if message_has_user_content(last_msg) then
+      local prev_msg = #doc.messages >= 2 and doc.messages[#doc.messages - 1] or nil
+      if
+        prev_msg
+        and roles.is_user(prev_msg.role)
+        and #get_job_results_in_message(prev_msg) > 0
+        and not message_has_user_content(prev_msg)
+      then
+        local prev_end = prev_msg.position.end_line --[[@as integer]]
+        local block = { header }
+        for _, line in ipairs(content_lines) do
+          table.insert(block, line)
+        end
+        table.insert(block, "")
+        set_lines(bufnr, prev_end, prev_end, block)
+        log.debug("injector: appended " .. job_id .. " (case=3 merged into job-result @You at line " .. prev_end .. ")")
+        return 3
       end
-    end
 
-    if has_user_content then
       local insert_at = last_msg.position.start_line - 1
-      local block = { "@You:", header }
+      local block = { "@You:", "", header }
       for _, line in ipairs(content_lines) do
         table.insert(block, line)
       end
@@ -470,7 +505,11 @@ function M.append_job_result(bufnr, job_id, result)
     end
 
     local you_end = last_msg.position.end_line --[[@as integer]]
-    local block = { header }
+    local block = {}
+    if #get_job_results_in_message(last_msg) > 0 then
+      table.insert(block, "")
+    end
+    table.insert(block, header)
     for _, line in ipairs(content_lines) do
       table.insert(block, line)
     end
@@ -487,6 +526,7 @@ function M.append_job_result(bufnr, job_id, result)
     table.insert(block, line)
   end
   table.insert(block, "@You:")
+  table.insert(block, "")
   table.insert(block, header)
   for _, line in ipairs(content_lines) do
     table.insert(block, line)
